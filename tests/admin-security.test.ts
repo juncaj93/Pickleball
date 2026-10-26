@@ -39,6 +39,44 @@ describe('admin access', () => {
     expect((await c.call('GET', '/api/admin/dashboard')).status).toBe(200);
   });
 
+  it('keeps the lockout in the database, so a server restart does not reset it', async () => {
+    const ctx = await setupGroup();
+    const c = ctx.app.client();
+    for (let i = 0; i < 5; i++) await c.call('POST', '/api/admin/login', { pin: '000000' });
+    const stored = ctx.app.db.raw.prepare('SELECT COUNT(*) AS n FROM login_attempts WHERE succeeded = 0').get() as { n: number };
+    expect(stored.n).toBe(5);
+    // A "restarted" server: fresh environment object and a fresh browser, same database.
+    ctx.app.env = { DB: ctx.app.db, SETUP_TOKEN: ctx.app.env.SETUP_TOKEN };
+    const fresh = ctx.app.client();
+    expect((await fresh.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(429);
+  });
+
+  it('allows at most five guesses even when they all arrive at once', async () => {
+    const ctx = await setupGroup();
+    const c = ctx.app.client();
+    const burst = await Promise.all(Array.from({ length: 30 }, () => c.call('POST', '/api/admin/login', { pin: '000000' })));
+    let pinChecks = burst.filter((r) => r.status === 401).length;
+    expect(pinChecks).toBeLessThanOrEqual(5);
+    expect(burst.filter((r) => r.status === 429).length).toBe(30 - pinChecks);
+    // Keep guessing one at a time: the total number of real PIN checks still stops at five.
+    for (let i = 0; i < 10; i++) {
+      if ((await c.call('POST', '/api/admin/login', { pin: '000000' })).status === 401) pinChecks++;
+    }
+    expect(pinChecks).toBe(5);
+    expect((await c.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(429);
+  });
+
+  it('caps wrong guesses across all devices at twenty per 15 minutes', async () => {
+    const ctx = await setupGroup();
+    const c = ctx.app.client();
+    for (let i = 0; i < 20; i++) {
+      const res = await c.call('POST', '/api/admin/login', { pin: '000000' }, { 'CF-Connecting-IP': `203.0.113.${i}` });
+      expect(res.status).toBe(401);
+    }
+    const another = await c.call('POST', '/api/admin/login', { pin: '000000' }, { 'CF-Connecting-IP': '198.51.100.7' });
+    expect(another.status).toBe(429);
+  });
+
   it('never sends the PIN or its hash to the browser', async () => {
     const ctx = await setupGroup();
     const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');

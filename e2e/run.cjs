@@ -3,6 +3,11 @@
  *
  *   npm run test:e2e
  *
+ * Against a deployed copy instead (it creates a group there, so only point
+ * this at a throwaway test site, never the real one):
+ *
+ *   E2E_BASE_URL=https://example.pages.dev E2E_SETUP_TOKEN=... npm run test:e2e
+ *
  * Needs Playwright with Chromium available (`npx playwright install chromium`
  * if it isn't already on your machine).
  */
@@ -13,8 +18,9 @@ const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = 5199;
-const BASE = `http://localhost:${PORT}`;
-const SETUP_TOKEN = 'e2e-setup-token-0123456789';
+const REMOTE = process.env.E2E_BASE_URL ? process.env.E2E_BASE_URL.replace(/\/$/, '') : null;
+const BASE = REMOTE ?? `http://localhost:${PORT}`;
+const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? 'e2e-setup-token-0123456789';
 const PIN = '482913';
 const SHOTS = path.join(__dirname, 'screenshots');
 
@@ -59,16 +65,19 @@ async function main() {
   rmSync(SHOTS, { recursive: true, force: true });
   mkdirSync(SHOTS, { recursive: true });
 
-  const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
-    cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
   let serverLog = '';
-  server.stdout.on('data', (d) => (serverLog += d));
-  server.stderr.on('data', (d) => (serverLog += d));
+  const server = REMOTE
+    ? null
+    : spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
+        cwd: ROOT,
+        env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN },
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+  server?.stdout.on('data', (d) => (serverLog += d));
+  server?.stderr.on('data', (d) => (serverLog += d));
 
-  const browser = await chromium.launch();
+  const proxy = REMOTE && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {};
+  const browser = await chromium.launch(proxy);
   const pageErrors = [];
   const phone = (width = 390) => ({
     viewport: { width, height: 844 },
@@ -403,7 +412,7 @@ async function main() {
     });
   } finally {
     await browser.close();
-    server.kill();
+    server?.kill();
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

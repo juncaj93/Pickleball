@@ -12,10 +12,23 @@ function clientKey(ctx: Ctx): string {
   return ctx.req.headers.get('CF-Connecting-IP') ?? 'local';
 }
 
-/** Rejects with 429 after too many wrong PINs, per device and overall. */
-async function assertNotLocked(ctx: Ctx) {
+/**
+ * The lockout lives in the database, so restarts and separate server
+ * instances all share it. Each attempt is written down as a failure *before*
+ * the PIN is checked, then counted. A burst of simultaneous guesses therefore
+ * sees every other guess in the burst, and at most five PIN checks per
+ * device (twenty overall) can happen in any 15 minutes.
+ */
+export async function adminLogin(ctx: Ctx, pin: string): Promise<GroupRow> {
+  const group = await getGroup(ctx.db);
+  if (!group) throw new HttpError(404, 'not_set_up', 'The group has not been set up yet.');
+  const attemptId = newId();
+  await ctx.db
+    .prepare('INSERT INTO login_attempts (id, client_key, succeeded, attempted_at) VALUES (?, ?, 0, ?)')
+    .bind(attemptId, clientKey(ctx), ctx.nowIso)
+    .run();
   const since = new Date(ctx.nowMs - LOCKOUT_WINDOW_MS).toISOString();
-  const row = await ctx.db
+  const counts = await ctx.db
     .prepare(
       `SELECT
          SUM(CASE WHEN client_key = ? THEN 1 ELSE 0 END) AS mine,
@@ -24,25 +37,19 @@ async function assertNotLocked(ctx: Ctx) {
     )
     .bind(clientKey(ctx), since)
     .first<{ mine: number | null; total: number }>();
-  if ((row?.mine ?? 0) >= MAX_FAILS_PER_CLIENT || (row?.total ?? 0) >= MAX_FAILS_GLOBAL) {
+  if ((counts?.mine ?? 0) > MAX_FAILS_PER_CLIENT || (counts?.total ?? 0) > MAX_FAILS_GLOBAL) {
+    // A blocked try isn't a guess, so it doesn't extend the lockout.
+    await ctx.db.prepare('DELETE FROM login_attempts WHERE id = ?').bind(attemptId).run();
     throw new HttpError(429, 'locked_out', 'Too many wrong PINs. Wait 15 minutes and try again.');
   }
-}
 
-export async function adminLogin(ctx: Ctx, pin: string): Promise<GroupRow> {
-  await assertNotLocked(ctx);
-  const group = await getGroup(ctx.db);
-  if (!group) throw new HttpError(404, 'not_set_up', 'The group has not been set up yet.');
   const ok = await verifyPin(pin, group.admin_pin_hash);
-  await ctx.db
-    .prepare('INSERT INTO login_attempts (id, client_key, succeeded, attempted_at) VALUES (?, ?, ?, ?)')
-    .bind(newId(), clientKey(ctx), ok ? 1 : 0, ctx.nowIso)
-    .run();
   await ctx.db
     .prepare('DELETE FROM login_attempts WHERE attempted_at < ?')
     .bind(new Date(ctx.nowMs - 86_400_000).toISOString())
     .run();
   if (!ok) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
+  await ctx.db.prepare('UPDATE login_attempts SET succeeded = 1 WHERE id = ?').bind(attemptId).run();
   await startAdminSession(ctx, group.id);
   return group;
 }
