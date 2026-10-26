@@ -49,7 +49,7 @@ describe('admin access', () => {
     }
     const stored = ctx.app.db.raw.prepare('SELECT admin_pin_hash FROM groups').get() as { admin_pin_hash: string };
     expect(stored.admin_pin_hash).not.toContain(PIN);
-    expect(stored.admin_pin_hash).toMatch(/^pbkdf2-sha256\$100000\$/);
+    expect(stored.admin_pin_hash).toMatch(/^pbkdf2-sha256\$20000\$/);
   });
 
   it('changes the PIN and signs out other organizer devices', async () => {

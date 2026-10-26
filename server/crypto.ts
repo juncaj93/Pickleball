@@ -38,8 +38,10 @@ export function timingSafeEqual(a: string, b: string): boolean {
   return diff === 0;
 }
 
-// Cloudflare Workers caps PBKDF2 at 100,000 iterations.
-const PBKDF2_ITERATIONS = 100_000;
+// Kept modest so a login fits the Workers Free plan's 10 ms CPU budget.
+// The real defense for a short PIN is the login lockout in auth.ts; the
+// iteration count is stored in each hash, so it can be raised later.
+const PBKDF2_ITERATIONS = 20_000;
 
 async function pbkdf2(pin: string, salt: Uint8Array<ArrayBuffer>, iterations: number): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey('raw', encoder.encode(pin), 'PBKDF2', false, ['deriveBits']);
