@@ -149,3 +149,26 @@ export function useNow(intervalMs = 60_000): number {
   }, [intervalMs]);
   return now;
 }
+
+// ---------- Light / dark mode (per phone) ----------
+
+export type ThemeChoice = 'system' | 'light' | 'dark';
+
+export function getTheme(): ThemeChoice {
+  const t = storageGet('pb_theme');
+  return t === 'light' || t === 'dark' ? t : 'system';
+}
+
+export function setTheme(choice: ThemeChoice) {
+  if (choice === 'system') {
+    try {
+      localStorage.removeItem('pb_theme');
+    } catch {
+      /* ignore */
+    }
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    storageSet('pb_theme', choice);
+    document.documentElement.setAttribute('data-theme', choice);
+  }
+}

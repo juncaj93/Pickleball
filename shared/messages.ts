@@ -63,3 +63,12 @@ export function smsHref(phone: string | null, body: string, isIOS: boolean): str
   const sep = isIOS ? '&' : '?';
   return `sms:${to}${sep}body=${encodeURIComponent(body)}`;
 }
+
+/** "(248) 555-1234" for US numbers; anything else is shown as typed. */
+export function formatPhone(phone: string | null | undefined): string {
+  if (!phone) return '';
+  const digits = phone.replace(/\D/g, '');
+  const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
+  if (ten.length !== 10 || (phone.trim().startsWith('+') && !phone.trim().startsWith('+1'))) return phone.trim();
+  return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}

@@ -44,7 +44,7 @@ export function playerSessionView(
     waitlist: waitlist.map((r) => ({ name: r.display_name })),
     openSpots: canceled || started ? 0 : Math.max(0, SPOTS_PER_SESSION - confirmed.length),
     confirmationOpen:
-      !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.confirmationLeadHours * 3600_000,
+      !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
     mine: mine
       ? {
           status: mine.status,

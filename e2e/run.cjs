@@ -46,6 +46,8 @@ function assert(cond, msg) {
 
 /** Bottom tab bar button (card buttons can share the same label). */
 const tab = (page, name) => page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: new RegExp(`^${name}`) });
+/** Session cards on the organizer Home (attention cards above them are articles too). */
+const sessionCards = (page) => page.locator('section[aria-labelledby="sessions-title"] article');
 
 async function waitForServer() {
   for (let i = 0; i < 60; i++) {
@@ -72,7 +74,18 @@ async function main() {
         cwd: ROOT,
         env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN },
         stdio: ['ignore', 'pipe', 'pipe'],
+        // Own process group, so stopping it also stops the Vite process npx starts.
+        detached: true,
       });
+  const stopServer = () => {
+    if (!server) return;
+    try {
+      process.kill(-server.pid, 'SIGTERM');
+    } catch {
+      /* already gone */
+    }
+  };
+  process.on('exit', stopServer);
   server?.stdout.on('data', (d) => (serverLog += d));
   server?.stderr.on('data', (d) => (serverLog += d));
 
@@ -87,8 +100,8 @@ async function main() {
     userAgent:
       'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
   });
-  async function newPage(width) {
-    const ctx = await browser.newContext(phone(width));
+  async function newPage(width, colorScheme = 'light') {
+    const ctx = await browser.newContext({ ...phone(width), colorScheme });
     await ctx.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: BASE });
     const page = await ctx.newPage();
     page.setDefaultTimeout(10000);
@@ -124,15 +137,76 @@ async function main() {
       await admin.getByText('Share this link with your players').waitFor();
       playerLink = (await admin.locator('code.link').textContent()).trim();
       assert(/\/g\/[A-Za-z0-9_-]{20,}$/.test(playerLink), `unexpected link ${playerLink}`);
-      await admin.getByText('never sends texts by itself').waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'setup-done.png'), fullPage: true });
     });
 
-    await check('organizer dashboard says texts are not sent automatically', async () => {
+    await check('first visit shows one small dismissible notice, and no blue boxes', async () => {
       await admin.getByRole('button', { name: 'Go to the organizer dashboard' }).click();
-      await admin.getByText('Texts are never sent automatically').first().waitFor();
-      await admin.getByText('Alerts only appear when you open this page').waitFor();
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-todo.png'), fullPage: true });
+      const note = admin.getByRole('note');
+      await note.getByText('never sends texts or alerts by itself').waitFor();
+      assert((await admin.getByText('Texts are never sent automatically').count()) === 0, 'old blue box still shown');
+      assert((await admin.getByText('Times shown in Eastern time').count()) === 0, 'old header line still shown');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-home.png'), fullPage: true });
+      await note.getByRole('button', { name: 'Dismiss' }).click();
+      await admin.reload();
+      await tab(admin, 'Home').waitFor();
+      assert((await admin.getByRole('note').count()) === 0, 'notice came back after dismissing');
+    });
+
+    await check('floating tab pill has exactly Home, Players, Settings', async () => {
+      const nav = admin.getByRole('navigation', { name: 'Organizer sections' });
+      const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim());
+      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Settings']), `tabs were ${labels}`);
+      const box = await nav.boundingBox();
+      const vw = admin.viewportSize().width;
+      assert(box.x > 8 && box.x + box.width < vw - 8, 'pill should float clear of the screen edges');
+      const radius = await nav.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius));
+      assert(radius >= 24, 'pill should be fully rounded');
+      assert((await nav.locator('svg').count()) === 3, 'expected three drawn icons');
+      const bg = await admin.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor]);
+      assert(bg[0] === bg[1] && bg[0] !== 'rgba(0, 0, 0, 0)', `page background not set on html: ${bg}`);
+    });
+
+    await check('Settings: check-in hours field clears, retypes, and is checked on Save', async () => {
+      await tab(admin, 'Settings').click();
+      const field = admin.getByLabel(/Day-before check-in/);
+      assert((await field.getAttribute('inputmode')) === 'numeric', 'should show the number keypad');
+      await field.fill('');
+      assert((await field.inputValue()) === '', 'field should stay empty, not jump to 0');
+      await field.pressSequentially('24');
+      assert((await field.inputValue()) === '24', `typing gave ${await field.inputValue()}`);
+      await field.fill('');
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.getByText('Enter a whole number from 1 to 72.').waitFor();
+      await field.fill('24');
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      assert((await admin.getByText('Warn before cancellation deadline').count()) === 0, 'old setting still shown');
+      assert((await admin.getByLabel(/Plan sessions ahead/).isVisible()) === false, 'Advanced should start collapsed');
+      await admin.getByText('Advanced').click();
+      await admin.getByLabel(/Plan sessions ahead/).waitFor();
+    });
+
+    await check('Settings: dark mode follows the phone, or Light / Dark', async () => {
+      const bgOf = () => admin.evaluate(() => getComputedStyle(document.body).backgroundColor);
+      const light = await bgOf();
+      await admin.getByRole('button', { name: 'Dark', exact: true }).click();
+      const dark = await bgOf();
+      assert(light !== dark, 'Dark did not change the colors');
+      await admin.reload();
+      await tab(admin, 'Home').waitFor();
+      assert((await bgOf()) === dark, 'Dark was not remembered after reload');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-dark.png'), fullPage: true });
+      await tab(admin, 'Settings').click();
+      await admin.getByRole('button', { name: 'System', exact: true }).click();
+      assert((await bgOf()) === light, 'System should follow the (light) phone setting');
+      await tab(admin, 'Home').click();
+    });
+
+    await check('Players screen formats phone numbers like (313) 555-0100', async () => {
+      await tab(admin, 'Players').click();
+      await admin.getByText('(313) 555-0100').waitFor();
+      await tab(admin, 'Home').click();
     });
 
     console.log('Players');
@@ -174,14 +248,14 @@ async function main() {
     console.log('Booking & payments');
     await check('organizer records a booking with cost and deadline', async () => {
       await admin.reload();
-      await tab(admin, 'Sessions').click();
-      const card = admin.locator('article').first();
+      const card = sessionCards(admin).first();
       await card.getByRole('button', { name: 'Edit booking' }).click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByRole('button', { name: 'Booked', exact: true }).click();
       await sheet.getByLabel('Venue', { exact: true }).fill('Rec Center Court 2');
       await sheet.getByLabel('Reservation number').fill('R-1042');
       await sheet.getByLabel('Actual court cost').fill('45.01');
+      await sheet.getByText(/Deadline: .*8:00 AM E[DS]T/).waitFor();
       await sheet.getByRole('button', { name: /Fill in 12 hours before start/ }).click();
       await sheet.getByText(/Deadline: .*8:00 AM E[DS]T/).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
@@ -192,7 +266,7 @@ async function main() {
     });
 
     await check('cost splits into shares that add up ($45.01 → 11.26 + 3×11.25)', async () => {
-      const card = admin.locator('article').first();
+      const card = sessionCards(admin).first();
       await card.getByRole('button', { name: 'Payments' }).click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByText('Share $11.26').waitFor();
@@ -263,8 +337,7 @@ async function main() {
     let links = {};
     await check('organizer prepares substitute invitations', async () => {
       await admin.reload();
-      await tab(admin, 'Sessions').click();
-      const card = admin.locator('article').first();
+      const card = sessionCards(admin).first();
       await card.getByRole('button', { name: 'Invite substitutes' }).click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByText('Emery').first().waitFor();
@@ -300,9 +373,21 @@ async function main() {
       await admin.keyboard.press('Escape');
     });
 
-    console.log('Cancel');
+    console.log('Reschedule & cancel');
+    await check('organizer can move a session to a new time', async () => {
+      const card = sessionCards(admin).first();
+      await card.getByRole('button', { name: 'Reschedule' }).click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByLabel('Start').fill('19:30');
+      await sheet.getByText(/New time: .*7:30–10:00 PM E[DS]T/).waitFor();
+      await sheet.getByRole('button', { name: 'Move session' }).click();
+      await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
+      await card.getByText(/7:30–10:00 PM E[DS]T/).waitFor();
+    });
+
     await check('canceling needs confirmation and warns it does not cancel the court', async () => {
-      const card = admin.locator('article').nth(1);
+      const card = sessionCards(admin).nth(1);
+      await card.getByRole('button', { name: 'Show actions' }).click().catch(() => {});
       await card.getByRole('button', { name: 'Cancel session' }).click();
       const dlg = admin.locator('dialog[open]');
       await dlg.getByText('This does not cancel your court').waitFor();
@@ -352,15 +437,15 @@ async function main() {
     });
 
     await check('times show in Eastern 12-hour format, never UTC', async () => {
-      await tab(admin, 'Sessions').click();
+      await tab(admin, 'Home').click();
       const text = await admin.locator('main').innerText();
       assert(/8:00–10:00 PM E[DS]T/.test(text), 'missing Eastern time range');
       assert(!/UTC|GMT|\d{2}:\d{2}:\d{2}/.test(text), 'found UTC or 24h time');
     });
 
-    for (const width of [360, 375, 390, 430]) {
-      await check(`no sideways scrolling at ${width}px (player, organizer, link page)`, async () => {
-        const p = await newPage(width);
+    for (const [width, scheme] of [[360, 'light'], [375, 'dark'], [390, 'light'], [430, 'dark'], [360, 'dark'], [430, 'light']]) {
+      await check(`no sideways scrolling at ${width}px in ${scheme} mode (player, organizer, link page)`, async () => {
+        const p = await newPage(width, scheme);
         const urls = [playerLink, `${BASE}/admin`, links.Frankie];
         for (const url of urls) {
           await p.goto(url);
@@ -373,7 +458,7 @@ async function main() {
         await p.locator('article').first().waitFor();
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(overflow <= 0, `player home overflows by ${overflow}px`);
-        await p.screenshot({ path: path.join(SHOTS, `player-${width}.png`), fullPage: false });
+        await p.screenshot({ path: path.join(SHOTS, `player-${width}-${scheme}.png`), fullPage: false });
       });
     }
 
@@ -382,13 +467,13 @@ async function main() {
       const p = await ctx.newPage();
       await p.setViewportSize({ width: 360, height: 780 });
       await p.goto(`${BASE}/admin`);
-      for (const name of ['To do', 'Sessions', 'Payments', 'Players', 'Settings']) {
+      for (const name of ['Home', 'Players', 'Settings']) {
         await tab(p, name).click();
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(overflow <= 0, `${name} overflows by ${overflow}px`);
       }
-      await tab(p, 'Sessions').click();
-      await p.screenshot({ path: path.join(SHOTS, 'admin-sessions-360.png'), fullPage: true });
+      await tab(p, 'Home').click();
+      await p.screenshot({ path: path.join(SHOTS, 'admin-home-360.png'), fullPage: true });
     });
 
     await check('bad links show a clear error state', async () => {
@@ -412,7 +497,7 @@ async function main() {
     });
   } finally {
     await browser.close();
-    server?.kill();
+    stopServer();
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

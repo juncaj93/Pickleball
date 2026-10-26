@@ -12,16 +12,15 @@ export interface StatusInput {
   cancellationDeadlineAt: string | null;
   adminDecision: AdminDecision;
   confirmedCount: number;
-  unconfirmedAttendanceCount: number; // confirmed players who haven't tapped "Confirm I'm in"
+  unconfirmedAttendanceCount: number; // confirmed players who haven't checked in yet
 }
 
 export type StatusLabel =
   | 'canceled'
   | 'completed'
   | 'in_progress'
-  | 'decision_needed'
   | 'deadline_passed'
-  | 'deadline_approaching'
+  | 'short_on_players'
   | 'needs_booking'
   | 'court_unavailable'
   | 'needs_players'
@@ -31,9 +30,8 @@ export const STATUS_TEXT: Record<StatusLabel, string> = {
   canceled: 'Canceled',
   completed: 'Played',
   in_progress: 'Playing now',
-  decision_needed: 'Decision needed',
   deadline_passed: 'Deadline passed',
-  deadline_approaching: 'Deadline approaching',
+  short_on_players: 'Short on players',
   needs_booking: 'Needs booking',
   court_unavailable: 'Court not available',
   needs_players: 'Needs players',
@@ -46,9 +44,8 @@ export const STATUS_TONE: Record<StatusLabel, Tone> = {
   canceled: 'muted',
   completed: 'muted',
   in_progress: 'ok',
-  decision_needed: 'danger',
   deadline_passed: 'danger',
-  deadline_approaching: 'warn',
+  short_on_players: 'warn',
   needs_booking: 'warn',
   court_unavailable: 'danger',
   needs_players: 'info',
@@ -64,11 +61,12 @@ export interface SessionFlags {
   courtUnavailable: boolean;
   underfilled: boolean;
   openSpots: number;
-  noDeadlineRecorded: boolean;
-  inWarningWindow: boolean;
+  /** The day-before check-in has started (default 24 hours before play). */
+  inCheckIn: boolean;
   deadlinePassed: boolean;
-  decisionNeeded: boolean;
-  confirmationsDue: boolean;
+  /** Needs players inside the check-in window, and the organizer hasn't chosen to keep it as is. */
+  shortOnPlayers: boolean;
+  checkInsDue: boolean;
 }
 
 export interface SessionState {
@@ -85,6 +83,11 @@ const DAY = 24 * HOUR;
  * Derive a session's status from stored timestamps and counts. Called every
  * time a page loads, so nothing depends on a page having stayed open or a
  * background job having run.
+ *
+ * The flow: at the check-in mark (24 hours before by default) the session is
+ * flagged if it needs players and check-in texts become due. Until the
+ * cancellation deadline (12 hours before by default) the organizer can
+ * reschedule or cancel. After that it shows "Deadline passed".
  */
 export function computeSessionState(s: StatusInput, nowMs: number, settings: GroupSettings): SessionState {
   const start = Date.parse(s.startsAt);
@@ -94,12 +97,12 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const started = nowMs >= start;
   const live = !canceled && !started;
   const bookingWindowOpen = nowMs >= start - settings.bookingLeadDays * DAY;
-  const booked = s.bookingStatus === 'booked';
   const openSpots = Math.max(0, SPOTS_PER_SESSION - s.confirmedCount);
   const underfilled = live && openSpots > 0;
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
-  const inWarningWindow = live && booked && deadline !== null && nowMs >= deadline - settings.warningWindowHours * HOUR;
-  const deadlinePassed = live && booked && deadline !== null && nowMs >= deadline;
+  const inCheckIn = live && nowMs >= start - settings.checkInHours * HOUR;
+  const deadlinePassed = live && deadline !== null && nowMs >= deadline;
+  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep';
 
   const flags: SessionFlags = {
     canceled,
@@ -110,21 +113,18 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
     courtUnavailable: live && s.bookingStatus === 'unavailable',
     underfilled,
     openSpots: live ? openSpots : 0,
-    noDeadlineRecorded: live && booked && deadline === null,
-    inWarningWindow,
+    inCheckIn,
     deadlinePassed,
-    decisionNeeded: underfilled && inWarningWindow && s.adminDecision === null,
-    confirmationsDue:
-      live && nowMs >= start - settings.confirmationLeadHours * HOUR && s.unconfirmedAttendanceCount > 0,
+    shortOnPlayers,
+    checkInsDue: inCheckIn && s.unconfirmedAttendanceCount > 0,
   };
 
   let label: StatusLabel;
   if (canceled) label = 'canceled';
   else if (past) label = 'completed';
   else if (started) label = 'in_progress';
-  else if (flags.decisionNeeded) label = 'decision_needed';
-  else if (underfilled && deadlinePassed) label = 'deadline_passed';
-  else if (underfilled && inWarningWindow) label = 'deadline_approaching';
+  else if (shortOnPlayers && deadlinePassed) label = 'deadline_passed';
+  else if (shortOnPlayers) label = 'short_on_players';
   else if (flags.needsBooking) label = 'needs_booking';
   else if (flags.courtUnavailable) label = 'court_unavailable';
   else if (underfilled) label = 'needs_players';

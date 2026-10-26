@@ -57,6 +57,7 @@ route('POST', '/api/admin/players', admin.createPlayer);
 route('PUT', '/api/admin/players/:id', admin.updatePlayer);
 route('POST', '/api/admin/sessions/generate', (ctx) => admin.generateSessions(ctx));
 route('PUT', '/api/admin/sessions/:id/booking', admin.updateBooking);
+route('PUT', '/api/admin/sessions/:id/time', admin.reschedule);
 route('POST', '/api/admin/sessions/:id/decision', admin.decide);
 route('POST', '/api/admin/sessions/:id/roster', admin.editRoster);
 route('POST', '/api/admin/sessions/:id/payment', admin.setPayment);

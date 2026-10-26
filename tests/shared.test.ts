@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { formatCents, parseDollars, splitCost } from '../shared/money';
 import { planSessions } from '../shared/schedule';
-import { DEFAULT_SETTINGS } from '../shared/settings';
+import { DEFAULT_SETTINGS, normalizeSettings } from '../shared/settings';
 import { computeSessionState, type StatusInput } from '../shared/status';
 import {
   formatDateTime,
@@ -138,41 +138,60 @@ describe('session status', () => {
     expect(at(planned, start - 14 * DAY).label).toBe('needs_booking');
   });
 
-  it('warns about underfilled sessions using the stored deadline and window', () => {
-    const deadline = Date.parse(base.cancellationDeadlineAt!);
-    expect(at({ confirmedCount: 3 }, deadline - 19 * HOUR).label).toBe('needs_players');
-    const inWindow = at({ confirmedCount: 3 }, deadline - 17 * HOUR);
-    expect(inWindow.label).toBe('decision_needed');
-    expect(inWindow.flags.decisionNeeded).toBe(true);
-    // A full session near the deadline is fine.
-    expect(at({ confirmedCount: 4 }, deadline - HOUR).label).toBe('on_track');
+  it('runs the 24-hour check-in, then the 12-hour cancellation deadline', () => {
+    // 3 of 4 going. Before the check-in mark it just needs players.
+    expect(at({ confirmedCount: 3 }, start - 25 * HOUR).label).toBe('needs_players');
+    expect(at({ confirmedCount: 3 }, start - 25 * HOUR).flags.shortOnPlayers).toBe(false);
+    // From 24 hours before: flagged, check-in texts due, still before the deadline.
+    const checkIn = at({ confirmedCount: 3 }, start - 24 * HOUR);
+    expect(checkIn.label).toBe('short_on_players');
+    expect(checkIn.flags.inCheckIn).toBe(true);
+    expect(checkIn.flags.checkInsDue).toBe(true);
+    expect(checkIn.flags.deadlinePassed).toBe(false);
+    expect(at({ confirmedCount: 3 }, start - 12 * HOUR - 60_000).label).toBe('short_on_players');
+    // From 12 hours before: deadline passed.
+    const after = at({ confirmedCount: 3 }, start - 12 * HOUR);
+    expect(after.label).toBe('deadline_passed');
+    expect(after.flags.deadlinePassed).toBe(true);
+    // A full session never gets flagged.
+    expect(at({ confirmedCount: 4 }, start - 2 * HOUR).label).toBe('on_track');
   });
 
-  it('uses whatever deadline the organizer entered, not a 12-hour rule', () => {
-    const custom = new Date(start - 48 * HOUR).toISOString();
-    const state = at({ confirmedCount: 2, cancellationDeadlineAt: custom }, start - 60 * HOUR);
-    expect(state.flags.inWarningWindow).toBe(true);
-    expect(at({ confirmedCount: 2, cancellationDeadlineAt: custom }, start - 70 * HOUR).flags.inWarningWindow).toBe(false);
+  it('uses each booking\'s own deadline', () => {
+    const custom = new Date(start - 20 * HOUR).toISOString();
+    expect(at({ confirmedCount: 2, cancellationDeadlineAt: custom }, start - 21 * HOUR).flags.deadlinePassed).toBe(false);
+    expect(at({ confirmedCount: 2, cancellationDeadlineAt: custom }, start - 19 * HOUR).label).toBe('deadline_passed');
   });
 
-  it('shows deadline approaching after a decision, and deadline passed afterwards', () => {
-    const deadline = Date.parse(base.cancellationDeadlineAt!);
-    expect(at({ confirmedCount: 3, adminDecision: 'try_fill' }, deadline - HOUR).label).toBe('deadline_approaching');
-    expect(at({ confirmedCount: 3, adminDecision: 'keep' }, deadline + HOUR).label).toBe('deadline_passed');
-    expect(at({ confirmedCount: 3, adminDecision: 'keep' }, deadline + HOUR).flags.deadlinePassed).toBe(true);
+  it('follows the check-in hours setting', () => {
+    const settings = { ...DEFAULT_SETTINGS, checkInHours: 36 };
+    const state = computeSessionState({ ...base, confirmedCount: 2 }, start - 30 * HOUR, settings);
+    expect(state.label).toBe('short_on_players');
+    expect(at({ confirmedCount: 2 }, start - 30 * HOUR).label).toBe('needs_players');
   });
 
-  it('makes confirmation reminders due 24 hours before play', () => {
-    expect(at({}, start - 25 * HOUR).flags.confirmationsDue).toBe(false);
-    expect(at({}, start - 24 * HOUR).flags.confirmationsDue).toBe(true);
-    expect(at({ unconfirmedAttendanceCount: 0 }, start - 2 * HOUR).flags.confirmationsDue).toBe(false);
+  it('stops flagging once the organizer keeps it as is', () => {
+    expect(at({ confirmedCount: 3, adminDecision: 'keep' }, start - 20 * HOUR).flags.shortOnPlayers).toBe(false);
+    expect(at({ confirmedCount: 3, adminDecision: 'keep' }, start - 20 * HOUR).label).toBe('needs_players');
+  });
+
+  it('makes check-in texts due 24 hours before play', () => {
+    expect(at({}, start - 25 * HOUR).flags.checkInsDue).toBe(false);
+    expect(at({}, start - 24 * HOUR).flags.checkInsDue).toBe(true);
+    expect(at({ unconfirmedAttendanceCount: 0 }, start - 2 * HOUR).flags.checkInsDue).toBe(false);
   });
 
   it('marks canceled sessions and stops other flags', () => {
     const s = at({ status: 'canceled', confirmedCount: 1 }, start - HOUR);
     expect(s.label).toBe('canceled');
-    expect(s.flags.decisionNeeded).toBe(false);
-    expect(s.flags.confirmationsDue).toBe(false);
+    expect(s.flags.shortOnPlayers).toBe(false);
+    expect(s.flags.checkInsDue).toBe(false);
+  });
+
+  it('reads older saved settings', () => {
+    expect(normalizeSettings({ confirmationLeadHours: 30, warningWindowHours: 18 }).checkInHours).toBe(30);
+    expect(normalizeSettings({}).checkInHours).toBe(24);
+    expect(normalizeSettings({ checkInHours: 500 }).checkInHours).toBe(72);
   });
 });
 

@@ -9,6 +9,7 @@ import { HttpError } from './http';
 import {
   audit,
   confirmedOf,
+  defaultDeadline,
   ensureSessions,
   getPlayers,
   getSession,
@@ -165,6 +166,36 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     .bind(decision, ctx.nowIso, ctx.nowIso, session.id)
     .run();
   await audit(ctx.db, group.id, session.id, `decision_${decision}`, {}, ctx.nowIso);
+  return { ok: true, changed: true };
+}
+
+/** Move a session to a new date or time. Its deadline resets to the default for the new time. */
+export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
+  const startsAt = v.isoTime(body.startsAt, 'startsAt');
+  const endsAt = v.isoTime(body.endsAt, 'endsAt');
+  if (!startsAt || !endsAt) throw new HttpError(400, 'invalid_time', 'Pick a date, start time, and end time.');
+  const length = Date.parse(endsAt) - Date.parse(startsAt);
+  if (length <= 0) throw new HttpError(400, 'invalid_time', 'The end time must be after the start time.');
+  if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A session can be at most 6 hours long.');
+  if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
+  if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
+  const deadline = defaultDeadline(startsAt, settingsOf(group));
+  try {
+    await ctx.db
+      .prepare(
+        `UPDATE sessions SET starts_at = ?, ends_at = ?, cancellation_deadline_at = ?, admin_decision = NULL, decision_at = NULL, updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(startsAt, endsAt, deadline, ctx.nowIso, session.id)
+      .run();
+  } catch (err) {
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'time_taken', "There's already a session at that time.");
+    throw err;
+  }
+  await audit(ctx.db, group.id, session.id, 'session_rescheduled', { from: session.starts_at, to: startsAt }, ctx.nowIso);
   return { ok: true, changed: true };
 }
 

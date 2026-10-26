@@ -214,30 +214,59 @@ describe('booking, deadlines, and decisions', () => {
     expect(flagged.length).toBe(4);
   });
 
-  it('asks for a decision when underfilled near the stored deadline', async () => {
+  it('gives every session a 12-hour cancellation deadline by default', async () => {
+    const ctx = await setupGroup();
+    for (const x of ctx.dashboard.sessions) {
+      expect(Date.parse(x.startsAt) - Date.parse(x.cancellationDeadlineAt)).toBe(12 * HOUR);
+    }
+  });
+
+  it('flags a short session at the 24-hour check-in, then shows deadline passed at 12 hours', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey']) {
       await (await playerPhone(ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {});
     }
-    const deadline = Date.parse(s.startsAt) - 12 * HOUR;
     await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/booking`, {
       bookingStatus: 'booked',
-      courtCostCents: 4800,
-      cancellationDeadlineAt: new Date(deadline).toISOString(),
+      cancellationDeadlineAt: s.cancellationDeadlineAt,
     });
     const load = async () =>
       (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((x: any) => x.id === s.id);
+    const start = Date.parse(s.startsAt);
 
-    ctx.app.now = deadline - 20 * HOUR;
+    ctx.app.now = start - 30 * HOUR;
     expect((await load()).state.label).toBe('needs_players');
-    ctx.app.now = deadline - 10 * HOUR;
-    expect((await load()).state.label).toBe('decision_needed');
+    ctx.app.now = start - 23 * HOUR;
+    const checkIn = await load();
+    expect(checkIn.state.label).toBe('short_on_players');
+    expect(checkIn.state.flags.checkInsDue).toBe(true);
+    ctx.app.now = start - 11 * HOUR;
+    expect((await load()).state.label).toBe('deadline_passed');
 
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'keep' });
-    expect((await load()).state.label).toBe('deadline_approaching');
-    ctx.app.now = deadline + HOUR;
-    expect((await load()).state.label).toBe('deadline_passed');
+    expect((await load()).state.flags.shortOnPlayers).toBe(false);
+  });
+
+  it('moves a session to a new time, resets its deadline, and never re-creates the old slot', async () => {
+    const ctx = await setupGroup();
+    const s = await firstSession(ctx);
+    const newStart = new Date(Date.parse(s.startsAt) + DAY + HOUR).toISOString();
+    const newEnd = new Date(Date.parse(newStart) + 2 * HOUR).toISOString();
+    const res = await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: newStart, endsAt: newEnd });
+    expect(res.data).toEqual({ ok: true, changed: true });
+    const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
+    const moved = dash.data.sessions.find((x: any) => x.id === s.id);
+    expect(moved).toMatchObject({ startsAt: newStart, endsAt: newEnd });
+    expect(Date.parse(newStart) - Date.parse(moved.cancellationDeadlineAt)).toBe(12 * HOUR);
+    expect(dash.data.sessions).toHaveLength(12);
+    expect(dash.data.audit[0]).toMatchObject({ action: 'session_rescheduled', sessionId: s.id });
+
+    const bad = await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: newEnd, endsAt: newStart });
+    expect(bad.status).toBe(400);
+    const other = dash.data.sessions[1];
+    const clash = await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: other.startsAt, endsAt: other.endsAt });
+    expect(clash.status).toBe(409);
   });
 
   it('requires confirmation to cancel, records who and when, and can reopen', async () => {

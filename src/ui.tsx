@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import type { Tone } from '../shared/status';
-import { copyText, isIOS } from './lib';
+import { copyText, isIOS, storageGet, storageSet } from './lib';
 import { smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -229,10 +229,98 @@ export function SmsDraft({ to, phone, body }: { to: string; phone: string | null
   );
 }
 
-export function NotSentNote() {
+/** A small heads-up shown once per phone, the first time someone opens the site. */
+export function FirstVisitNotice({ children }: { children: ReactNode }) {
+  const [show, setShow] = useState(() => !storageGet('pb_seen_intro'));
+  if (!show) return null;
   return (
-    <Notice tone="info" title="Texts are never sent automatically">
-      The site writes each message. You review it and press send in your phone's Messages app.
-    </Notice>
+    <div className="hint-banner" role="note">
+      <p>{children}</p>
+      <button
+        className="icon-btn"
+        aria-label="Dismiss"
+        onClick={() => {
+          storageSet('pb_seen_intro', '1');
+          setShow(false);
+        }}
+      >
+        ✕
+      </button>
+    </div>
   );
 }
+
+/**
+ * A whole-number field that behaves like a normal text box: it can be
+ * cleared and retyped, shows the number keypad, and is only checked when
+ * the form is saved (see parseWhole).
+ */
+export function NumberField({
+  label,
+  hint,
+  value,
+  onChange,
+  error,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string | null;
+}) {
+  const id = useId();
+  return (
+    <label className="field" htmlFor={id}>
+      {label}
+      {hint && <span className="hint">{hint}</span>}
+      <input
+        id={id}
+        type="text"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        autoComplete="off"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={error ? true : undefined}
+      />
+      {error && <span className="field-error">{error}</span>}
+    </label>
+  );
+}
+
+/** Read a NumberField's text on save. Returns an error message or the number. */
+export function parseWhole(text: string, min: number, max: number): { value: number } | { error: string } {
+  const t = text.trim();
+  if (!/^\d+$/.test(t)) return { error: `Enter a whole number from ${min} to ${max}.` };
+  const n = Number(t);
+  if (n < min || n > max) return { error: `Enter a number from ${min} to ${max}.` };
+  return { value: n };
+}
+
+// ---------- Icons (one stroke style, drawn to match) ----------
+
+const ICON = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
+
+export const HomeIcon = () => (
+  <svg {...ICON}>
+    <path d="M3.5 10.5 12 3.8l8.5 6.7" />
+    <path d="M5.8 9v10.2h12.4V9" />
+    <path d="M10 19.2v-5.4h4v5.4" />
+  </svg>
+);
+
+export const PeopleIcon = () => (
+  <svg {...ICON}>
+    <circle cx="9" cy="8.5" r="3.2" />
+    <path d="M3.2 19.2c.6-3.2 3-5 5.8-5s5.2 1.8 5.8 5" />
+    <circle cx="16.8" cy="9.3" r="2.6" />
+    <path d="M16.4 14.3c2.3.1 4 1.6 4.5 4.3" />
+  </svg>
+);
+
+export const GearIcon = () => (
+  <svg {...ICON}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" />
+  </svg>
+);
