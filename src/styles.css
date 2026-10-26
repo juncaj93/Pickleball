@@ -28,8 +28,10 @@
   color-scheme: light;
 }
 
+/* Dark mode: follows the phone unless Settings picks Light or Dark
+   (public/theme.js sets data-theme on <html> before the page draws). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --bg: #0e1411;
     --surface: #17201b;
     --surface-2: #1d2722;
@@ -38,8 +40,8 @@
     --line: #2b3730;
     --court: #1d5a43;
     --court-deep: #0f2e22;
-    --primary: #c9e83c;
-    --primary-ink: #13200f;
+    --primary: #23784f;
+    --primary-ink: #ffffff;
     --focus: #c9e83c;
     --ok-fg: #8fe0ad;
     --ok-bg: #163222;
@@ -56,6 +58,32 @@
   }
 }
 
+:root[data-theme='dark'] {
+  --bg: #0e1411;
+  --surface: #17201b;
+  --surface-2: #1d2722;
+  --ink: #edf1ec;
+  --ink-2: #a8b4ac;
+  --line: #2b3730;
+  --court: #1d5a43;
+  --court-deep: #0f2e22;
+  --primary: #23784f;
+  --primary-ink: #ffffff;
+  --focus: #c9e83c;
+  --ok-fg: #8fe0ad;
+  --ok-bg: #163222;
+  --warn-fg: #f4cd70;
+  --warn-bg: #382a0b;
+  --danger-fg: #ffaba1;
+  --danger-bg: #3c1916;
+  --info-fg: #a8c7f4;
+  --info-bg: #162943;
+  --muted-fg: #b3b9b5;
+  --muted-bg: #252c28;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  color-scheme: dark;
+}
+
 *,
 *::before,
 *::after {
@@ -64,10 +92,13 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* Safari paints this behind its toolbars and overscroll, so no gray shows. */
+  background: var(--bg);
 }
 
 body {
   margin: 0;
+  min-height: 100dvh;
   background: var(--bg);
   color: var(--ink);
   font-family: var(--body);
@@ -189,7 +220,7 @@ a {
 }
 
 .page.has-tabs {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 96px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 112px);
 }
 
 .stack {
@@ -445,6 +476,8 @@ input[type='url'],
 input[type='password'],
 input[type='number'],
 input[type='datetime-local'],
+input[type='date'],
+input[type='time'],
 input[type='search'],
 select,
 textarea {
@@ -560,70 +593,67 @@ textarea:focus {
   flex: none;
 }
 
-/* ---------- Tabs ---------- */
+/* ---------- Floating tab pill ---------- */
 
 .tabbar {
   position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-top: 1px solid var(--line);
-  padding-bottom: env(safe-area-inset-bottom);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  width: min(360px, calc(100% - 32px));
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: blur(20px) saturate(1.5);
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 10px 30px rgb(10 20 15 / 18%), 0 1px 3px rgb(10 20 15 / 10%);
+  padding: 6px;
   z-index: 10;
 }
 
 .tabbar ul {
   list-style: none;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  max-width: 640px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
 }
 
 .tabbar button {
   width: 100%;
-  min-height: 56px;
+  min-height: 52px;
   border: 0;
+  border-radius: 999px;
   background: none;
   font: inherit;
-  font-size: 0.72rem;
-  font-weight: 600;
+  font-size: 0.74rem;
+  font-weight: 650;
   color: var(--ink-2);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   cursor: pointer;
   position: relative;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .tabbar button[aria-current='page'] {
-  color: var(--ink);
+  background: var(--court);
+  color: #fff;
 }
 
-.tabbar button[aria-current='page'] .tab-icon {
-  background: var(--ball);
-  color: #13200f;
-}
-
-.tab-icon {
-  width: 34px;
-  height: 24px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  font-size: 0.85rem;
+.tabbar svg {
+  width: 22px;
+  height: 22px;
 }
 
 .badge {
   position: absolute;
-  top: 6px;
-  left: calc(50% + 8px);
+  top: 4px;
+  left: calc(50% + 6px);
   min-width: 18px;
   height: 18px;
   border-radius: 999px;
@@ -756,7 +786,7 @@ dialog.sheet::backdrop {
   position: fixed;
   left: 16px;
   right: 16px;
-  bottom: calc(env(safe-area-inset-bottom) + 76px);
+  bottom: calc(env(safe-area-inset-bottom) + 88px);
   max-width: 480px;
   margin: 0 auto;
   background: var(--ink);
@@ -819,5 +849,69 @@ code.link {
   background: var(--surface-2);
   border: 1px solid var(--line);
   overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+/* ---------- First-visit notice ---------- */
+
+.hint-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 6px 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+
+.hint-banner p {
+  flex: 1;
+  padding-top: 2px;
+}
+
+.hint-banner .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 1rem;
+}
+
+/* ---------- Settings disclosure ---------- */
+
+details.advanced > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 650;
+  list-style: none;
+}
+
+details.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.advanced > summary::after {
+  content: '+';
+  font-size: 1.3rem;
+  color: var(--ink-2);
+}
+
+details.advanced[open] > summary::after {
+  content: '\2212';
+}
+
+details.advanced[open] > summary {
+  margin-bottom: 12px;
+}
+
+.field-error {
+  color: var(--danger-fg);
+  font-weight: 500;
   font-size: 0.85rem;
 }

@@ -18,10 +18,10 @@ import {
   toLocalInputValue,
 } from '../../../shared/time';
 import { api, ApiError, safeHref, useNow } from '../../lib';
-import { Chip, ConfirmDialog, Notice, NotSentNote, Sheet, SmsDraft, useToast } from '../../ui';
+import { Chip, ConfirmDialog, Notice, Sheet, SmsDraft, useToast } from '../../ui';
 import { type AdminCtx, deadlineLine } from '../Admin';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -96,7 +96,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           </>
         )}
       </dl>
-      {s.state.flags.underfilled && s.state.flags.inWarningWindow && <DecisionPanel ctx={ctx} s={s} />}
+      {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
       {!expanded && (
         <button className="btn small ghost" onClick={() => setExpanded(true)} aria-expanded="false">
           Show actions
@@ -114,7 +114,12 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
         </button>
         {live && (
           <button className="btn small secondary" onClick={() => ctx.open('reminders', s.id)}>
-            Prepare reminders
+            Texts
+          </button>
+        )}
+        {live && (
+          <button className="btn small secondary" onClick={() => ctx.open('reschedule', s.id)}>
+            Reschedule
           </button>
         )}
         {live && s.state.flags.openSpots > 0 && (
@@ -132,47 +137,49 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   );
 }
 
-/** Shown when a session is short near its venue deadline. The site never decides for you. */
-export function DecisionPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+/**
+ * Shown from the day-before check-in when a session needs players. Until the
+ * cancellation deadline the organizer can fill, reschedule, or cancel. The
+ * site never decides for them.
+ */
+export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const now = useNow();
   const { busy, error, run } = useAction(ctx);
   const passed = s.state.flags.deadlinePassed;
-  const decide = (decision: 'try_fill' | 'keep') =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/decision`, { decision }), decision === 'keep' ? 'Keeping the session' : 'Marked: trying to fill');
+  const booked = s.bookingStatus === 'booked';
+  const open = s.state.flags.openSpots;
   return (
     <div className="stack">
-      <Notice tone={passed ? 'danger' : 'warn'} title={passed ? 'Deadline passed' : `${4 - s.confirmedCount} spot${s.confirmedCount === 3 ? '' : 's'} open near the deadline`}>
-        {passed
-          ? 'The venue cancellation deadline has passed. Canceling now may not be free.'
-          : `Cancel the court by ${deadlineLine(s, tz, now)} if you won't play.`}
-        {s.adminDecision && (
-          <div className="small" style={{ marginTop: 4 }}>
-            Your choice: {s.adminDecision === 'keep' ? 'keep the session' : 'trying to fill'}
-            {s.decisionAt ? ` (${formatRelative(s.decisionAt, now)})` : ''}
-          </div>
-        )}
-      </Notice>
+      <p className="small">
+        <strong>{s.confirmedCount}/4 going.</strong> {open} spot{open === 1 ? '' : 's'} open.{' '}
+        {s.cancellationDeadlineAt &&
+          (passed
+            ? booked
+              ? 'The cancellation deadline passed, so canceling the court may not be free.'
+              : 'The cancellation deadline passed.'
+            : `Reschedule or cancel by ${deadlineLine(s, tz, now)}.`)}
+      </p>
       {error && <Notice tone="danger">{error}</Notice>}
-      <div className="btn-row">
-        <button
-          className="btn small"
-          disabled={busy}
-          onClick={async () => {
-            if (s.adminDecision !== 'try_fill') await decide('try_fill');
-            ctx.open('invite', s.id);
-          }}
-        >
-          Try to fill
+      <div className="action-strip">
+        <button className="btn small" disabled={busy} onClick={() => ctx.open('invite', s.id)}>
+          Invite people
         </button>
-        <button className="btn small secondary" disabled={busy || s.adminDecision === 'keep'} onClick={() => decide('keep')}>
-          Keep session
+        <button className="btn small secondary" disabled={busy} onClick={() => ctx.open('reschedule', s.id)}>
+          Reschedule
         </button>
         <button className="btn small danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
           Cancel session
         </button>
+        <button
+          className="btn small ghost"
+          disabled={busy}
+          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'keep' }), 'Keeping it as is')}
+        >
+          Keep as is
+        </button>
       </div>
-      {s.cancellationDeadlineAt && (
+      {s.cancellationDeadlineAt && !passed && (
         <details>
           <summary className="small" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>
             Text this alert to yourself
@@ -203,7 +210,8 @@ export function SessionSheets({
     roster: `Players · ${title}`,
     payments: `Payments · ${title}`,
     reminders: `Reminders · ${title}`,
-    invite: `Invite subs · ${title}`,
+    invite: `Invite people · ${title}`,
+    reschedule: `Reschedule · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -212,6 +220,7 @@ export function SessionSheets({
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}
       {s && kind === 'invite' && <InviteSubs ctx={ctx} s={s} />}
+      {s && kind === 'reschedule' && <RescheduleForm ctx={ctx} s={s} onDone={onClose} />}
     </Sheet>
   );
 }
@@ -317,8 +326,8 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
         </Notice>
       )}
       <label className="field">
-        Venue cancellation deadline (Eastern time)
-        <span className="hint">Use the venue's real policy. It's not always 12 hours.</span>
+        Cancellation deadline (Eastern time)
+        <span className="hint">Starts at {defaultHours} hours before play. Change it if this booking's rule is different.</span>
         <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
       </label>
       <button
@@ -541,7 +550,6 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </button>
           {remindAll && (
             <div className="stack">
-              <NotSentNote />
               {unpaid.map((r) => (
                 <SmsDraft key={r.playerId} to={r.name} phone={r.phone} body={paymentMessage(r.name, r.shareCents!, s, tz, venmo)} />
               ))}
@@ -562,7 +570,7 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unconfirmed = s.roster.filter((r) => r.status === 'confirmed' && !r.attendanceConfirmedAt);
-  const dueAt = new Date(Date.parse(s.startsAt) - ctx.d.group.settings.confirmationLeadHours * 3600_000).toISOString();
+  const dueAt = new Date(Date.parse(s.startsAt) - ctx.d.group.settings.checkInHours * 3600_000).toISOString();
   const unpaid = s.roster.filter((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
 
   async function prepare() {
@@ -580,20 +588,19 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
   return (
     <div className="stack-lg">
-      <NotSentNote />
       <section className="stack">
-        <h3>Confirm attendance</h3>
+        <h3>Day-before check-in</h3>
         <p className="small muted">
-          {s.state.flags.confirmationsDue
-            ? `Due now. ${unconfirmed.length} player${unconfirmed.length === 1 ? '' : 's'} haven't confirmed.`
+          {s.state.flags.checkInsDue
+            ? `Due now. ${unconfirmed.length} player${unconfirmed.length === 1 ? '' : 's'} haven't checked in.`
             : Date.parse(dueAt) > now
               ? `Due ${formatDateTime(dueAt, tz)} (${formatRelative(dueAt, now)}). You can send early if you like.`
-              : 'Everyone confirmed.'}
+              : 'Everyone checked in.'}
         </p>
         {error && <Notice tone="danger">{error}</Notice>}
         {unconfirmed.length > 0 && !drafts && (
           <button className="btn" disabled={busy} onClick={prepare}>
-            {busy ? 'Preparing…' : `Prepare ${unconfirmed.length} confirmation text${unconfirmed.length === 1 ? '' : 's'}`}
+            {busy ? 'Preparing…' : `Prepare ${unconfirmed.length} check-in text${unconfirmed.length === 1 ? '' : 's'}`}
           </button>
         )}
         {drafts?.map((d) => (
@@ -667,7 +674,6 @@ function InviteSubs({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
           it gets the spot.
         </p>
       )}
-      <NotSentNote />
       {error && <Notice tone="danger">{error}</Notice>}
       {!drafts && !full && (
         <>
@@ -708,6 +714,55 @@ function InviteSubs({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         </div>
       )}
     </div>
+  );
+}
+
+// ---------- Reschedule ----------
+
+function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; onDone: () => void }) {
+  const tz = ctx.d.group.timezone;
+  const startLocal = toLocalInputValue(s.startsAt, tz);
+  const [date, setDate] = useState(startLocal.slice(0, 10));
+  const [start, setStart] = useState(startLocal.slice(11));
+  const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
+  const { busy, error, run } = useAction(ctx);
+  const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
+  const endsAt = date && end ? fromLocalInputValue(`${date}T${end}`, tz) : null;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const ok = await run(() => api('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt }), 'Session moved');
+    if (ok) onDone();
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <p className="small muted">Move it here after you change the booking with the venue. Players see the new time right away.</p>
+      <label className="field">
+        Date
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+      </label>
+      <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <label className="field" style={{ flex: 1 }}>
+          Start
+          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+        </label>
+        <label className="field" style={{ flex: 1 }}>
+          End
+          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
+        </label>
+      </div>
+      {startsAt && endsAt && (
+        <p className="small">
+          New time: <strong>{formatShortDate(startsAt, tz)}, {formatTimeRange(startsAt, endsAt, tz)}</strong>
+        </p>
+      )}
+      <p className="small muted">The cancellation deadline resets to {ctx.d.group.settings.defaultDeadlineHours} hours before the new time.</p>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <button className="btn" type="submit" disabled={busy || !startsAt || !endsAt}>
+        {busy ? 'Saving…' : 'Move session'}
+      </button>
+    </form>
   );
 }
 

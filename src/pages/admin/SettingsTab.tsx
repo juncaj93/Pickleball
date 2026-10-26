@@ -1,29 +1,34 @@
 import { type FormEvent, useState } from 'react';
 import { type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
-import { api, ApiError, copyText, navigate } from '../../lib';
-import { ConfirmDialog, Notice, useToast } from '../../ui';
+import { api, ApiError, copyText, getTheme, navigate, setTheme, type ThemeChoice } from '../../lib';
+import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 
-const SETTING_LABELS: Record<keyof GroupSettings, { label: string; unit: string }> = {
-  horizonWeeks: { label: 'Plan sessions ahead', unit: 'weeks' },
-  bookingLeadDays: { label: 'Booking reminder', unit: 'days before' },
-  warningWindowHours: { label: 'Warn before cancellation deadline', unit: 'hours' },
-  confirmationLeadHours: { label: 'Confirmation texts due', unit: 'hours before' },
-  defaultDeadlineHours: { label: 'Suggested cancellation deadline', unit: 'hours before' },
+const MAIN_SETTING = {
+  key: 'checkInHours' as const,
+  label: 'Day-before check-in (hours before play)',
+  hint: 'When check-in texts and the "short on players" warning start.',
 };
+
+const ADVANCED_SETTINGS: { key: keyof GroupSettings; label: string; hint?: string }[] = [
+  { key: 'horizonWeeks', label: 'Plan sessions ahead (weeks)' },
+  { key: 'bookingLeadDays', label: 'Booking reminder (days before play)' },
+  { key: 'defaultDeadlineHours', label: 'Cancellation deadline for new sessions (hours before play)', hint: "Northville's rule is 12. You can change it on any booking." },
+];
 
 const ACTION_TEXT: Record<string, string> = {
   booking_updated: 'Booking changed',
   session_canceled: 'Session canceled',
   session_reopened: 'Session reopened',
-  decision_keep: 'Chose to keep session',
+  decision_keep: 'Kept session as is',
   decision_try_fill: 'Chose to try to fill',
   marked_paid: 'Marked paid',
   marked_unpaid: 'Marked unpaid',
   player_added: 'Player added',
   player_updated: 'Player edited',
   settings_updated: 'Settings changed',
+  session_rescheduled: 'Session moved',
   pin_changed: 'PIN changed',
   player_link_rotated: 'Player link replaced',
   roster_confirm: 'Gave a spot',
@@ -38,7 +43,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const tz = g.timezone;
   const [name, setName] = useState(g.name);
   const [venmo, setVenmo] = useState(g.venmoUrl ?? '');
-  const [settings, setSettings] = useState<GroupSettings>(g.settings);
+  const [nums, setNums] = useState<Record<keyof GroupSettings, string>>(
+    () => Object.fromEntries(Object.entries(g.settings).map(([k, v]) => [k, String(v)])) as Record<keyof GroupSettings, string>,
+  );
+  const [numErrors, setNumErrors] = useState<Partial<Record<keyof GroupSettings, string>>>({});
+  const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [askRotate, setAskRotate] = useState(false);
@@ -48,8 +57,18 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    setBusy(true);
     setError(null);
+    // Number fields are only checked here, on Save, never while typing.
+    const errors: Partial<Record<keyof GroupSettings, string>> = {};
+    const settings = {} as GroupSettings;
+    for (const k of Object.keys(nums) as (keyof GroupSettings)[]) {
+      const r = parseWhole(nums[k], SETTING_LIMITS[k][0], SETTING_LIMITS[k][1]);
+      if ('error' in r) errors[k] = r.error;
+      else settings[k] = r.value;
+    }
+    setNumErrors(errors);
+    if (Object.keys(errors).length) return setError('Fix the highlighted numbers, then save.');
+    setBusy(true);
     try {
       await api('PUT', '/api/admin/group', { name, venmoUrl: venmo || null, settings });
       toast('Settings saved');
@@ -103,23 +122,58 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <p className="small muted">
           Time zone: {TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz}. Sessions are Tuesdays and Thursdays, 8:00–10:00 PM.
         </p>
-        {(Object.keys(SETTING_LABELS) as (keyof GroupSettings)[]).map((k) => (
-          <label key={k} className="field">
-            {SETTING_LABELS[k].label} ({SETTING_LABELS[k].unit})
-            <input
-              type="number"
-              min={SETTING_LIMITS[k][0]}
-              max={SETTING_LIMITS[k][1]}
-              value={settings[k]}
-              onChange={(e) => setSettings((s) => ({ ...s, [k]: Number(e.target.value) }))}
-            />
-          </label>
-        ))}
+        <NumberField
+          label={MAIN_SETTING.label}
+          hint={MAIN_SETTING.hint}
+          value={nums[MAIN_SETTING.key]}
+          onChange={(v) => setNums((n) => ({ ...n, [MAIN_SETTING.key]: v }))}
+          error={numErrors[MAIN_SETTING.key]}
+        />
+        <details className="advanced" open={ADVANCED_SETTINGS.some((a) => numErrors[a.key]) || undefined}>
+          <summary>Advanced</summary>
+          <div className="stack">
+            {ADVANCED_SETTINGS.map((a) => (
+              <NumberField
+                key={a.key}
+                label={a.label}
+                hint={a.hint}
+                value={nums[a.key]}
+                onChange={(v) => setNums((n) => ({ ...n, [a.key]: v }))}
+                error={numErrors[a.key]}
+              />
+            ))}
+          </div>
+        </details>
         {error && <Notice tone="danger">{error}</Notice>}
         <button className="btn" type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Save settings'}
         </button>
       </form>
+
+      <section className="card stack" aria-labelledby="look-title">
+        <h2 id="look-title">Appearance</h2>
+        <div className="segmented" role="group" aria-label="Light or dark">
+          {(
+            [
+              ['system', 'System'],
+              ['light', 'Light'],
+              ['dark', 'Dark'],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              aria-pressed={theme === v}
+              onClick={() => {
+                setTheme(v);
+                setThemeChoice(v);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="small muted">System follows your phone's setting. Saved on this phone only.</p>
+      </section>
 
       <form className="card stack" onSubmit={changePin}>
         <h2>Change PIN</h2>
@@ -146,10 +200,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       </section>
 
       <section className="card stack">
-        <h2>How this site works</h2>
+        <h2>How this works</h2>
         <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
-          <li>Texts are drafted here and sent by you from Messages. Nothing is sent automatically.</li>
-          <li>Alerts only appear when you open this dashboard. There are no push notifications.</li>
+          <li>Texts are never sent automatically. The site writes each message; you review it and press send in your phone's Messages app.</li>
+          <li>Alerts only appear when you open this page. Nothing pings your phone in the background.</li>
+          <li>Times are shown in Eastern time.</li>
           <li>Payments are marked by you after you check Venmo. Nothing connects to Venmo or a bank.</li>
           <li>The PIN and private link are light protection for a friend group, not bank-grade security.</li>
         </ul>

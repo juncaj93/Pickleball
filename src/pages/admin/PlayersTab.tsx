@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import type { AdminPlayer } from '../../../shared/api';
+import { formatPhone } from '../../../shared/messages';
 import { api, ApiError } from '../../lib';
 import { Chip, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
@@ -16,10 +17,10 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
           <li key={p.id} className="spread">
             <div>
               <strong>{p.name}</strong>
-              <div className="small muted">{p.phone ?? 'No phone'}</div>
+              <div className="small muted">{p.phone ? formatPhone(p.phone) : 'No phone'}</div>
               <div className="row" style={{ marginTop: 4 }}>
                 <Chip tone={p.isActive ? 'ok' : 'muted'}>{p.isActive ? 'Active' : 'Inactive'}</Chip>
-                <Chip tone="info">{p.isRegular ? 'Regular' : 'Sub'}</Chip>
+                <Chip tone="info">{p.isRegular ? 'Regular' : 'Occasional'}</Chip>
                 {!p.canReceiveSubstituteInvites && <Chip tone="muted">No sub invites</Chip>}
               </div>
             </div>
@@ -80,7 +81,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       </label>
       <label className="check">
         <input type="checkbox" checked={isRegular} onChange={(e) => setRegular(e.target.checked)} />
-        Regular player (unchecked = substitute)
+        Regular player (unchecked = occasional)
       </label>
       <label className="check">
         <input type="checkbox" checked={subs} onChange={(e) => setSubs(e.target.checked)} />

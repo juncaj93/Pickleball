@@ -44,6 +44,7 @@ export interface SessionRow {
   decision_at: string | null;
   canceled_at: string | null;
   canceled_by: string | null;
+  planned_starts_at: string | null;
 }
 
 export interface RosterRow {
@@ -90,17 +91,20 @@ export async function getSession(db: D1Database, groupId: string, sessionId: str
 
 /**
  * Create any missing Tue/Thu sessions inside the rolling horizon. Safe to
- * call on every page load: it only inserts dates that don't exist yet, and
- * the unique (group_id, starts_at) key blocks duplicates even if two loads race.
+ * call on every page load: it only inserts slots that don't exist yet, and
+ * the unique (group_id, planned_starts_at) key blocks duplicates even if two
+ * loads race. Slots are matched on planned_starts_at, so a session the
+ * organizer moved to another time is never re-created in its old slot.
  */
 export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
-  const planned = planSessions(nowMs, group.timezone, settingsOf(group).horizonWeeks);
+  const settings = settingsOf(group);
+  const planned = planSessions(nowMs, group.timezone, settings.horizonWeeks);
   if (planned.length === 0) return 0;
   const { results } = await db
-    .prepare('SELECT starts_at FROM sessions WHERE group_id = ? AND starts_at >= ?')
+    .prepare('SELECT planned_starts_at FROM sessions WHERE group_id = ? AND planned_starts_at >= ?')
     .bind(group.id, planned[0].startsAt)
-    .all<{ starts_at: string }>();
-  const existing = new Set(results.map((r) => r.starts_at));
+    .all<{ planned_starts_at: string }>();
+  const existing = new Set(results.map((r) => r.planned_starts_at));
   const missing = planned.filter((p) => !existing.has(p.startsAt));
   if (missing.length === 0) return 0;
   const now = new Date(nowMs).toISOString();
@@ -108,13 +112,18 @@ export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: num
     missing.map((p) =>
       db
         .prepare(
-          `INSERT OR IGNORE INTO sessions (id, group_id, starts_at, ends_at, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
+          `INSERT OR IGNORE INTO sessions (id, group_id, starts_at, ends_at, planned_starts_at, cancellation_deadline_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         )
-        .bind(newId(), group.id, p.startsAt, p.endsAt, now, now),
+        .bind(newId(), group.id, p.startsAt, p.endsAt, p.startsAt, defaultDeadline(p.startsAt, settings), now, now),
     ),
   );
   return missing.length;
+}
+
+/** The cancellation deadline a new or moved session starts with. */
+export function defaultDeadline(startsAtIso: string, settings: GroupSettings): string {
+  return new Date(Date.parse(startsAtIso) - settings.defaultDeadlineHours * 3600_000).toISOString();
 }
 
 export async function loadSessions(db: D1Database, groupId: string, endsAfterIso: string): Promise<SessionRow[]> {

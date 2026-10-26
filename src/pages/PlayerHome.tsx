@@ -5,7 +5,7 @@ import { SPOTS_PER_SESSION } from '../../shared/settings';
 import { formatMonthDay, formatShortDate, formatTimeRange, formatWeekday } from '../../shared/time';
 import { api, ApiError, safeHref, setGroupKey, storageSet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
-import { Chip, ConfirmDialog, Empty, ErrorState, Notice, Spinner, useToast } from '../ui';
+import { Chip, ConfirmDialog, Empty, ErrorState, FirstVisitNotice, Notice, Spinner, useToast } from '../ui';
 
 const SHOW_FIRST = 4;
 
@@ -67,6 +67,7 @@ export function PlayerHome({ groupKey }: { groupKey: string }) {
 
         {g && !pickName && (
           <>
+            <FirstVisitNotice>This site never texts you. Reminders come from your organizer.</FirstVisitNotice>
             {g.owed.length > 0 && <OwedCard g={g} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             {sessions.map((s) => (
@@ -77,9 +78,6 @@ export function PlayerHome({ groupKey }: { groupKey: string }) {
                 {showAll ? 'Show fewer sessions' : `Show all ${g.sessions.length} sessions`}
               </button>
             )}
-            <p className="small muted" style={{ textAlign: 'center' }}>
-              Reminders come from your organizer by text. This site never texts you on its own.
-            </p>
           </>
         )}
       </main>

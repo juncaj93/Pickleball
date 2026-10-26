@@ -1,32 +1,31 @@
 export interface GroupSettings {
   horizonWeeks: number; // how far ahead sessions are generated
   bookingLeadDays: number; // booking checklist becomes actionable this many days ahead
-  warningWindowHours: number; // flag underfilled sessions this long before the cancellation deadline
-  confirmationLeadHours: number; // attendance confirmations are due this long before play
-  defaultDeadlineHours: number; // suggested cancellation deadline (hours before start)
+  checkInHours: number; // day-before check-in: texts and "short on players" start this long before play
+  defaultDeadlineHours: number; // each session's cancellation deadline starts this many hours before play
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
   horizonWeeks: 6,
   bookingLeadDays: 14,
-  warningWindowHours: 18,
-  confirmationLeadHours: 24,
+  checkInHours: 24,
   defaultDeadlineHours: 12,
 };
 
 const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   horizonWeeks: [1, 12],
   bookingLeadDays: [1, 30],
-  warningWindowHours: [1, 168],
-  confirmationLeadHours: [1, 72],
-  defaultDeadlineHours: [0, 168],
+  checkInHours: [1, 72],
+  defaultDeadlineHours: [0, 72],
 };
 
 export const SETTING_LIMITS = LIMITS;
 
 /** Merge stored or submitted settings over defaults, clamping each value. */
 export function normalizeSettings(input: unknown): GroupSettings {
-  const src = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const src = { ...((input && typeof input === 'object' ? input : {}) as Record<string, unknown>) };
+  // Older saves called the check-in window "confirmationLeadHours".
+  if (src.checkInHours === undefined && typeof src.confirmationLeadHours === 'number') src.checkInHours = src.confirmationLeadHours;
   const out = { ...DEFAULT_SETTINGS };
   for (const key of Object.keys(LIMITS) as (keyof GroupSettings)[]) {
     const v = src[key];

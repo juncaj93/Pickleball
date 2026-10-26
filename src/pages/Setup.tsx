@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { api, ApiError, copyText, navigate, storageGet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
-import { ErrorState, Notice, Spinner, useToast } from '../ui';
+import { ErrorState, Notice, NumberField, parseWhole, Spinner, useToast } from '../ui';
 
 export function Landing() {
   const status = useLoad(() => api<{ setupComplete: boolean; setupEnabled: boolean }>('GET', '/api/status'));
@@ -56,7 +56,8 @@ export function SetupPage() {
   const [pin, setPin] = useState('');
   const [pin2, setPin2] = useState('');
   const [venmoUrl, setVenmoUrl] = useState('');
-  const [horizonWeeks, setHorizonWeeks] = useState(6);
+  const [horizonWeeks, setHorizonWeeks] = useState('6');
+  const [horizonError, setHorizonError] = useState<string | null>(null);
   const [players, setPlayers] = useState<PlayerDraft[]>(Array.from({ length: 6 }, () => ({ name: '', phone: '' })));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,9 @@ export function SetupPage() {
     if (pin !== pin2) return setError("The two PINs don't match.");
     const filled = players.filter((p) => p.name.trim());
     if (filled.length === 0) return setError('Add at least one player.');
+    const weeks = parseWhole(horizonWeeks, 1, 12);
+    setHorizonError('error' in weeks ? weeks.error : null);
+    if ('error' in weeks) return setError('Check the number of weeks.');
     setBusy(true);
     try {
       const res = await api<{ playerLink: string }>('POST', '/api/setup', {
@@ -79,7 +83,7 @@ export function SetupPage() {
         timezone: 'America/Detroit',
         pin,
         venmoUrl: venmoUrl || null,
-        horizonWeeks,
+        horizonWeeks: weeks.value,
         players: filled.map((p) => ({ name: p.name, phone: p.phone || null })),
       });
       setDone(res.playerLink);
@@ -103,10 +107,6 @@ export function SetupPage() {
               Copy player link
             </button>
           </div>
-          <Notice tone="info" title="How texts work">
-            This site drafts every reminder, but it never sends texts by itself. You open each draft in Messages and press send.
-            Alerts only show up when you open the organizer page.
-          </Notice>
           <button className="btn block" onClick={() => navigate('/admin')}>
             Go to the organizer dashboard
           </button>
@@ -131,10 +131,7 @@ export function SetupPage() {
               <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} maxLength={60} required placeholder="Tuesday/Thursday Pickleball" />
             </label>
             <p className="small muted">Sessions: every Tuesday and Thursday, 8:00–10:00 PM Eastern time.</p>
-            <label className="field">
-              Plan sessions this many weeks ahead
-              <input type="number" min={1} max={12} value={horizonWeeks} onChange={(e) => setHorizonWeeks(Number(e.target.value))} />
-            </label>
+            <NumberField label="Plan sessions this many weeks ahead" value={horizonWeeks} onChange={setHorizonWeeks} error={horizonError} />
           </div>
 
           <div className="card stack">
