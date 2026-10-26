@@ -1,0 +1,11 @@
+# Cloudflare Pages project config. `database_id` comes from
+# `npx wrangler d1 create pickleball` (see README).
+name = "pickleball-club"
+compatibility_date = "2025-10-01"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pickleball"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
