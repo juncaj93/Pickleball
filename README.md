@@ -55,21 +55,35 @@ difference.
 
 No SMS service, payment processor, AI service, maps, or analytics is used.
 
-### Free-tier limits (checked October 2026)
+### Free-tier limits
 
 - **Requests:** 100,000 server requests per day. Six friends will use a few hundred.
-- **CPU time:** 10 ms per request. PIN hashing is tuned to fit inside this.
+- **CPU time:** 10 milliseconds of computer time per request. PIN checking is
+  tuned to fit inside this.
 - **Database:** 5 million rows read and 100,000 rows written per day, 5 GB storage.
+- **Daily reset:** the counters reset at **8:00 PM Eastern** during daylight
+  saving time (right now, through Saturday, Oct 31, 2026) and at
+  **7:00 PM Eastern** the rest of the year (starting Sunday, Nov 1, 2026, until
+  the clocks spring forward in March). Cloudflare's reset happens at the same
+  moment worldwide, so the Eastern clock time shifts by an hour twice a year.
 - **What happens if a limit is hit:** requests fail with an error until the
-  daily reset at 8:00 PM Eastern (midnight UTC). Your data is not lost, and
-  nothing is charged. Since September 2026, Cloudflare blocks free accounts at
-  the limit instead of billing them.
+  daily reset. Your data is not lost, and nothing is charged. Since
+  Sept 1, 2026, Cloudflare blocks free accounts at the limit instead of
+  billing them.
 - **Sleeping:** Cloudflare D1 does not pause idle databases (unlike Supabase's
   free tier, which pauses after a week without use).
-- **Payment method:** the Workers Free plan doesn't ask for a card. If
-  Cloudflare ever asks for one, stop and check before entering it.
+- **Payment method:** the Workers Free plan is not supposed to ask for a card.
+  If Cloudflare ever asks for one, stop and check before entering it.
 - **To shut it down:** delete the Pages project and the D1 database in the
   Cloudflare dashboard. Nothing keeps running or billing after that.
+
+**What was verified, and how (Oct 26, 2026):** the workspace these numbers
+were checked from could not open Cloudflare's own documentation pages (its
+network rules blocked cloudflare.com). The numbers above come from web search
+results that quote those official pages: D1 pricing, the Sept 2026 D1
+enforcement notice, and Pages Functions pricing. Not verified first-hand:
+whether signup asks for a card, and the exact error a visitor sees when a
+daily limit is hit. Check the pages below once and update this note.
 
 Sources: [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/),
 [D1 free-tier enforcement](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/),
@@ -144,7 +158,7 @@ production.
 ## Tests
 
 ```bash
-npm test               # 64 server and logic tests
+npm test               # 67 server and logic tests
 npm run test:e2e       # 35 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
@@ -158,7 +172,10 @@ lockout, input validation, and layouts at 360, 375, 390, and 430 px wide.
 ## Security notes (plain version)
 
 - The organizer PIN is checked on the server and stored only as a scrambled
-  hash. Five wrong tries locks sign-in for 15 minutes.
+  hash. Five wrong tries from one device locks sign-in for 15 minutes (twenty
+  across all devices). The count is kept in the database, so restarting the
+  server doesn't reset it, and a burst of simultaneous guesses still can't get
+  more than five tries.
 - Personal links in texts are random, tied to one player and one session,
   expire when the session starts, and stop working once used. The database
   only stores a fingerprint of each link, not the link itself.
