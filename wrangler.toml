@@ -7,5 +7,5 @@ pages_build_output_dir = "dist"
 [[d1_databases]]
 binding = "DB"
 database_name = "pickleball"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "5c939453-ebef-4a1d-869e-9a952339d275"
 migrations_dir = "migrations"

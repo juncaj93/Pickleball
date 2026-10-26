@@ -77,13 +77,22 @@ No SMS service, payment processor, AI service, maps, or analytics is used.
 - **To shut it down:** delete the Pages project and the D1 database in the
   Cloudflare dashboard. Nothing keeps running or billing after that.
 
-**What was verified, and how (Oct 26, 2026):** the workspace these numbers
-were checked from could not open Cloudflare's own documentation pages (its
-network rules blocked cloudflare.com). The numbers above come from web search
-results that quote those official pages: D1 pricing, the Sept 2026 D1
-enforcement notice, and Pages Functions pricing. Not verified first-hand:
-whether signup asks for a card, and the exact error a visitor sees when a
-daily limit is hit. Check the pages below once and update this note.
+**What was verified, and how (Oct 26, 2026):** read first-hand on
+Cloudflare's own pages below.
+- D1 pricing: 5 million rows read and 100,000 rows written per day, 5 GB
+  total storage. Past a daily limit, "D1 API will return errors to your client
+  indicating that your daily limits have been exceeded."
+- D1 enforcement notice: starting Sept 1, 2026, free accounts get errors
+  "until the limit resets at midnight UTC," and stored data "is not affected."
+  It mentions no charges.
+- Pages Functions pricing: Functions requests share the Workers Free plan's
+  100,000 per day, reset at midnight UTC. Static files are "free and
+  unlimited."
+- Payment method: none of these pages say. Creating the D1 database and the
+  Pages project for this site through Cloudflare's API did not ask for a card.
+
+Still not confirmed: the exact message a visitor sees when the Functions
+request limit is hit (the Pages Functions page doesn't say).
 
 Sources: [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/),
 [D1 free-tier enforcement](https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/),
