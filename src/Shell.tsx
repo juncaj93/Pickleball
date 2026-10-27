@@ -8,7 +8,7 @@ export function TopBar({ eyebrow, title, sub }: { eyebrow: string; title: string
     <header className="topbar">
       <div className="topbar-inner">
         <div className="eyebrow">
-          <img className="brand-logo" src="/logo-header.png" alt="" width="28" height="28" />
+          <img className="brand-logo" src="/logo-header.png" alt="" width="32" height="32" />
           {eyebrow}
         </div>
         <h1>{title}</h1>

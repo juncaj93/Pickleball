@@ -1292,9 +1292,9 @@ label.field {
 /* Header logo: sits on a light rounded backing so its white edge looks
    intentional in dark mode too. */
 .brand-logo {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
   background: #fff;
   padding: 2px;
   flex: none;
