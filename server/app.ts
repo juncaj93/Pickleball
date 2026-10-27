@@ -1,6 +1,5 @@
 import * as admin from './admin';
 import { monthlyMoney } from './money';
-import { calendarFile, myCalendar, organizerCalendar, setPlayerCalendar } from './calendar';
 import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
 import { HttpError, json, readJson } from './http';
@@ -48,8 +47,8 @@ route('POST', '/api/sessions/:id/withdraw', (ctx) => player.playerWithdraw(ctx))
 route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));
 route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
 route('GET', '/api/sessions/:id/calendar.ics', (ctx) => player.sessionCalendarFile(ctx));
-route('GET', '/api/cal/:token', (ctx) => calendarFile(ctx));
-route('GET', '/api/me/calendar', (ctx) => myCalendar(ctx));
+// The old calendar subscription feed is gone: its links now get a plain "Not found".
+route('GET', '/api/cal/:token', async () => new Response('Not found', { status: 404, headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' } }));
 
 // Personal links from text messages. Tokens travel in the body, not the URL.
 route('POST', '/api/link', lookupToken);
@@ -73,8 +72,6 @@ route('POST', '/api/admin/sessions/:id/roster', admin.editRoster);
 route('POST', '/api/admin/sessions/:id/payment', admin.setPayment);
 route('POST', '/api/admin/sessions/:id/refund', admin.setRefund);
 route('GET', '/api/admin/money', (ctx) => monthlyMoney(ctx));
-route('GET', '/api/admin/calendar', (ctx) => organizerCalendar(ctx));
-route('PUT', '/api/admin/players/:id/calendar', setPlayerCalendar);
 route('POST', '/api/admin/sessions/:id/late-drop-done', admin.lateDropDone);
 route('POST', '/api/admin/sessions/:id/six-sorted', (ctx) => admin.sixSorted(ctx));
 route('POST', '/api/admin/sessions/:id/booked', admin.markBooked);

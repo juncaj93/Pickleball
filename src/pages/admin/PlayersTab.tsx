@@ -31,7 +31,6 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
               {p.isNew && <span className="new-tag">New</span>}
               <div className="small muted">{p.phone ? formatPhone(p.phone) : 'No phone'}</div>
               {p.lateDrops > 0 && <div className="small late-count">Late drops: {p.lateDrops}</div>}
-              {!p.calendarOn && <div className="small muted">Calendar link off</div>}
               <div className="row" style={{ marginTop: 4 }}>
                 <Chip tone={p.isRegular ? 'ok' : 'info'}>{p.isRegular ? 'Regular' : 'Occasional'}</Chip>
                 <Chip tone="muted">{daysText(p.usualDays)}</Chip>
@@ -156,7 +155,6 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       <button className="btn" type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save'}
       </button>
-      {player && <CalendarToggle ctx={ctx} player={player} />}
       {player && (
         <button type="button" className="btn danger" disabled={busy} onClick={() => setAskRemove(true)}>
           Remove from list
@@ -174,35 +172,5 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
         onCancel={() => setAskRemove(false)}
       />
     </>
-  );
-}
-
-/** Turn a person's calendar subscription link off (the old link stops working for good) or back on. */
-function CalendarToggle({ ctx, player: stale }: { ctx: AdminCtx; player: AdminPlayer }) {
-  const toast = useToast();
-  // The sheet holds the player as it was when opened; read the fresh one.
-  const player = ctx.d.players.find((p) => p.id === stale.id) ?? stale;
-  const [busy, setBusy] = useState(false);
-  async function set(on: boolean) {
-    setBusy(true);
-    try {
-      await api('PUT', `/api/admin/players/${player.id}/calendar`, { on });
-      await ctx.reload();
-      toast(on ? 'Calendar link on' : 'Calendar link off');
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : "Couldn't change it.", 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="spread calendar-toggle">
-      <span className="small">
-        Calendar link: <strong>{player.calendarOn ? (player.calendarMade ? 'on' : 'on, not used yet') : 'off'}</strong>
-      </span>
-      <button type="button" className="btn small secondary" disabled={busy} onClick={() => set(!player.calendarOn)}>
-        {player.calendarOn ? 'Turn off' : 'Turn on'}
-      </button>
-    </div>
   );
 }

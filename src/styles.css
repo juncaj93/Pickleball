@@ -284,6 +284,52 @@ a {
   flex: none;
 }
 
+/* Small round buttons left of the date square. More can sit in this row later. */
+.topbar-tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: -4px;
+}
+/* Light/dark: a 44px tap area around a 36px circle with a soft outline. */
+.mode-btn {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.mode-btn::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 1.5px solid rgb(255 255 255 / 55%);
+  background: rgb(255 255 255 / 8%);
+}
+.mode-btn:hover::after {
+  background: rgb(255 255 255 / 16%);
+}
+.mode-btn svg {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+}
+.mode-btn:focus-visible {
+  outline: 3px solid var(--ball);
+  outline-offset: -1px;
+  border-radius: 50%;
+}
+
 /* Small light button on the green band: "View as…" or "Not you?". */
 .topbar-btn {
   flex: none;
@@ -330,7 +376,7 @@ a {
 
 .page.has-tabs {
   /* Room for the floating pill (about 56px) plus breathing space. */
-  padding-bottom: calc(env(safe-area-inset-bottom) + 84px);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 104px);
 }
 
 .stack {
@@ -1119,15 +1165,21 @@ details.advanced[open] > summary {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: calc(env(safe-area-inset-top) + 8px) 16px 8px;
+  padding: calc(env(safe-area-inset-top) + 2px) 16px 2px;
   background: var(--ball);
   color: #13200f;
+  font-size: 0.85rem;
   font-weight: 600;
 }
-
-.viewas-banner .btn {
-  background: #13200f;
-  color: #fff;
+.viewas-banner .btn.small {
+  min-height: 44px;
+  padding: 0 14px;
+  background: transparent;
+  color: #13200f;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  box-shadow: none;
+  border: 0;
 }
 
 .viewas-banner + .topbar {
@@ -1568,7 +1620,7 @@ label.field {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: -4px 0 -2px;
+  margin: -2px 0 -4px;
 }
 .btn.more-btn {
   min-height: 44px;
@@ -1611,6 +1663,20 @@ label.field {
 .court-sub {
   font-size: 0.8rem;
   padding-left: 28px;
+}
+/* "Court booked" with a quiet "Add to calendar" on the right. */
+.court-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.cal-link.court-cal {
+  flex: none;
+  font-size: 0.8rem;
+  padding: 0 2px;
+  margin: -12px 0;
 }
 
 /* Not booked: amber dashed border and a banner across the top. */
@@ -1886,11 +1952,6 @@ label.field {
   color: var(--warn-fg);
   font-weight: 650;
 }
-.calendar-toggle {
-  align-items: center;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
-}
 
 /* Row footer: Pay / Sent? / Paid on the left, Add to Calendar on the right. */
 .row-foot {
@@ -1927,16 +1988,6 @@ label.field {
   min-height: 0;
   padding: 0;
 }
-.subscribe {
-  text-align: center;
-}
-.subscribe .link-btn {
-  font-size: 0.9rem;
-}
-.subscribe p {
-  margin: 0 auto;
-  max-width: 34ch;
-}
 
 /* Organizer Home: Upcoming | Past and Book on one slim row. */
 .sessions-bar {
@@ -1956,16 +2007,18 @@ label.field {
   padding: 4px 10px;
   font-size: 0.88rem;
 }
-/* Court banners keep the words and the buttons on one row. */
-.court-banner {
-  flex-wrap: nowrap;
-}
+/* Court banners: the words on the left (wrapping to two lines if needed),
+   the buttons on the right, or on their own line below when they don't fit. */
 .court-banner .court-status {
-  flex: 1 1 auto;
+  flex: 1 1 9rem;
   min-width: 0;
+}
+.court-banner .court-status > span {
+  overflow-wrap: break-word;
 }
 .court-banner .banner-btns {
   flex: none;
+  margin-left: auto;
 }
 .court-banner .banner-btns .btn {
   padding: 6px 10px;
@@ -2035,30 +2088,115 @@ label.field {
 .set-row-wrap {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
-.set-input {
-  flex: none;
-  width: 84px;
+/* The name takes all the room it can and wraps by word; the box stays small.
+   (Selectors here outrank the full-width rule for every text box.) */
+.set-row .set-label {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.set-row input.set-input,
+.set-row .set-input {
+  flex: 0 0 80px;
+  width: 80px;
+  max-width: 80px;
   min-height: 44px;
+  padding: 10px 12px;
   text-align: right;
 }
-.set-input.wide {
-  width: 150px;
+.set-row input.set-input.wide {
+  flex: 0 0 auto;
+  width: 10.5rem;
+  max-width: 56%;
   text-align: left;
+  font-size: 16px;
+  padding: 10px 8px;
 }
-.money-input.set-input {
-  width: 96px;
+.set-row .money-input.set-input {
+  flex: 0 0 88px;
+  width: 88px;
+  max-width: 88px;
+  padding: 0;
+}
+.set-row .money-input.set-input input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px 10px 26px;
+  text-align: right;
+}
+.set-row .money-input > span {
+  left: 11px;
+}
+.set-name {
+  display: inline;
+}
+/* Text settings: the name above a full-width box. */
+.auto-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.auto-field .field-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+/* Autosave: a tiny check that fades, and a retry line when saving fails. */
+.save-mark {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.save-mark.saved {
+  color: var(--ok-fg);
+  animation: save-fade 2s ease-in forwards;
+}
+@keyframes save-fade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .save-mark.saved {
+    animation: none;
+  }
+}
+.save-retry {
+  align-self: flex-start;
+  background: none;
+  border: 0;
+  padding: 6px 0;
+  min-height: 44px;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--danger-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
 }
 .set-top .segmented.compact {
   flex: 0 0 auto;
+}
+.set-line .set-label {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .set-list {
   padding: 0 14px;
   display: flex;
   flex-direction: column;
 }
-.set-sect + .set-sect,
-.set-list > .set-save {
+.set-sect + .set-sect {
   border-top: 1px solid var(--line);
 }
 .set-sect > summary {
@@ -2098,9 +2236,6 @@ label.field {
   flex-direction: column;
   gap: 8px;
   padding: 0 0 12px;
-}
-.set-save {
-  padding: 10px 0 12px;
 }
 
 /* "Welcome, Brandon  not you?": small gray underlined text on the title line. */
@@ -2166,7 +2301,7 @@ label.field {
   /* A full 44px button with a smaller drawn circle, so taps are easy. */
   width: 44px;
   height: 44px;
-  margin: -3px 0;
+  margin: 0;
   border: 0;
   border-radius: 50%;
   background: transparent;

@@ -1,7 +1,8 @@
-import { type ReactNode, useEffect } from 'react';
+import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
 import { SITE_NAME } from '../shared/settings';
 import { DEFAULT_TIMEZONE, localParts } from '../shared/time';
-import { useNow } from './lib';
+import { applyTheme, getTheme, setTheme, type ThemeChoice, useNow } from './lib';
+import { AutoModeIcon, MoonIcon, SunIcon, useToast } from './ui';
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -26,6 +27,7 @@ export function TopBar({
   sub,
   action,
   titleExtra,
+  tools,
 }: {
   eyebrow: string;
   title: string;
@@ -33,6 +35,8 @@ export function TopBar({
   action?: ReactNode;
   /** Small text right after the title, on the same line (like "not you?"). */
   titleExtra?: ReactNode;
+  /** Small round buttons just left of the date square (more can be added later). */
+  tools?: ReactNode;
 }) {
   useEffect(() => {
     document.title = title === SITE_NAME ? SITE_NAME : `${title} · ${SITE_NAME}`;
@@ -54,8 +58,47 @@ export function TopBar({
           {sub && <div className="sub">{sub}</div>}
         </div>
         {action}
+        {tools && <div className="topbar-tools">{tools}</div>}
         <TodaySquare />
       </div>
     </header>
+  );
+}
+
+const MODES: { v: ThemeChoice; label: string; toast: string; Icon: () => ReactElement }[] = [
+  { v: 'system', label: 'Auto', toast: 'Auto (matches your phone)', Icon: AutoModeIcon },
+  { v: 'light', label: 'Light', toast: 'Light', Icon: SunIcon },
+  { v: 'dark', label: 'Dark', toast: 'Dark', Icon: MoonIcon },
+];
+
+/**
+ * The player's light/dark button: each tap goes Auto, Light, Dark. Remembered
+ * on this phone. With `preview` (the organizer's "View as..."), it only
+ * changes what's on screen and puts the organizer's own choice back on exit.
+ */
+export function ModeButton({ preview }: { preview?: boolean }) {
+  const toast = useToast();
+  const [mode, setMode] = useState<ThemeChoice>(getTheme);
+  useEffect(() => {
+    if (!preview) return;
+    return () => applyTheme(getTheme());
+  }, [preview]);
+  const cur = MODES.find((m) => m.v === mode) ?? MODES[0];
+  return (
+    <button
+      type="button"
+      className="mode-btn"
+      data-mode={mode}
+      aria-label={`Light or dark: ${cur.label}. Tap to change.`}
+      onClick={() => {
+        const next = MODES[(MODES.indexOf(cur) + 1) % MODES.length];
+        if (preview) applyTheme(next.v);
+        else setTheme(next.v);
+        setMode(next.v);
+        toast(next.toast);
+      }}
+    >
+      <cur.Icon />
+    </button>
   );
 }

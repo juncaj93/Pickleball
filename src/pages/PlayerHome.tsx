@@ -4,7 +4,7 @@ import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad, copyText } from '../lib';
-import { TopBar } from '../Shell';
+import { ModeButton, TopBar } from '../Shell';
 import { ConfirmDialog, CourtIcon, Empty, SpotPills, ErrorState, Notice, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
@@ -33,6 +33,7 @@ export function PlayerHome({
   groupKey,
   viewAs,
   onExit,
+  onViewAs,
   plain,
   onLinkOnly,
   onWordNeeded,
@@ -40,6 +41,8 @@ export function PlayerHome({
   groupKey: string | null;
   viewAs?: { id: string; name: string };
   onExit?: () => void;
+  /** "View as...": "not you?" picked a different player to view as. Nothing is saved. */
+  onViewAs?: (p: { id: string; name: string }) => void;
   /** Opened at the plain site address (no private link). */
   plain?: boolean;
   /** The organizer switched to link-only while this page was open. */
@@ -49,7 +52,11 @@ export function PlayerHome({
 }) {
   setGroupKey(viewAs ? null : groupKey);
   setViewAs(viewAs?.id ?? null);
-  useEffect(() => () => setViewAs(null), []);
+  // Set again on mount (before the load below runs) and cleared on the way out.
+  useEffect(() => {
+    setViewAs(viewAs?.id ?? null);
+    return () => setViewAs(null);
+  }, [viewAs?.id]);
   const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id]);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -64,7 +71,7 @@ export function PlayerHome({
   const g = load.data;
   // Scroll to a shared session once the schedule shows (after picking a name).
   const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
-  const choosing = !!g && !viewAs && (!g.me || switching);
+  const choosing = !!g && (switching || (!viewAs && !g.me));
   useEffect(() => {
     if (!g || choosing || focusIndex < 0 || scrolled.current) return;
     scrolled.current = true;
@@ -89,14 +96,15 @@ export function PlayerHome({
     );
   }
 
-  const pickName = !!g && !viewAs && (!g.me || switching);
+  const pickName = !!g && (switching || (!viewAs && !g.me));
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
   const sessions = g ? (showAll || focusIndex >= SHOW_FIRST ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
 
   return (
     <>
+      {/* "View as...": a small bar of its own above the player's real screen. */}
       {viewAs && (
-        <div className="viewas-banner" role="status">
+        <div className="viewas-banner" role="region" aria-label="Viewing as a player">
           <span>
             Viewing as <strong>{viewAs.name}</strong>
           </span>
@@ -107,14 +115,15 @@ export function PlayerHome({
       )}
       <TopBar
         eyebrow={g?.group.name ?? SITE_NAME}
-        title={!g ? SITE_NAME : pickName ? 'Who are you?' : `Welcome, ${g.me?.name ?? viewAs?.name}`}
+        title={!g ? SITE_NAME : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
         titleExtra={
-          g?.me && !pickName && !viewAs ? (
+          g?.me && !pickName ? (
             <button className="not-you" aria-label="Not you?" onClick={() => setSwitching(true)}>
               not you?
             </button>
           ) : undefined
         }
+        tools={<ModeButton preview={!!viewAs} />}
       />
       <main className="page stack-lg">
         {load.loading && !g && <Spinner />}
@@ -123,6 +132,16 @@ export function PlayerHome({
         {g && pickName && (
           <NamePicker
             g={g}
+            demo={
+              viewAs
+                ? (p) => {
+                    // Only changes who the organizer is viewing as; nothing is saved anywhere.
+                    setSwitching(false);
+                    onViewAs?.(p);
+                    window.scrollTo(0, 0);
+                  }
+                : undefined
+            }
             onPicked={async () => {
               setSwitching(false);
               await load.reload();
@@ -157,7 +176,6 @@ export function PlayerHome({
                 {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
               </button>
             )}
-            {!viewAs && g.me && <CalendarSubscribe />}
             {!viewAs && <HomeScreenTip />}
           </>
         )}
@@ -167,11 +185,28 @@ export function PlayerHome({
   );
 }
 
-function NamePicker({ g, onPicked, onCancel }: { g: GroupView; onPicked: () => void; onCancel?: () => void }) {
+function NamePicker({
+  g,
+  onPicked,
+  onCancel,
+  demo,
+}: {
+  g: GroupView;
+  onPicked: () => void;
+  onCancel?: () => void;
+  /** "View as...": picking a name only switches the view. */
+  demo?: (p: { id: string; name: string }) => void;
+}) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   async function pick(playerId: string) {
+    if (demo) {
+      const p = g.players.find((x) => x.id === playerId);
+      if (p) demo({ id: p.id, name: p.name });
+      return;
+    }
     setBusy(true);
     try {
       await api('POST', '/api/me', { playerId });
@@ -194,7 +229,7 @@ function NamePicker({ g, onPicked, onCancel }: { g: GroupView; onPicked: () => v
           </button>
         ))}
       </div>
-      <button className="btn ghost block" onClick={() => setAdding(true)}>
+      <button className="btn ghost block" onClick={() => (demo ? toast('Demo: adding a name is off while viewing as a player.') : setAdding(true))}>
         Add my name
       </button>
       {onCancel && (
@@ -679,8 +714,8 @@ function ScheduleRow({
           <div className="row-foot">
             <RowPay g={g} s={s} onTop={g.payDue.some((o) => o.sessionId === s.id)} />
             {open && (
-              <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`}>
-                Add to Calendar
+              <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+                Add to calendar
               </a>
             )}
           </div>
@@ -698,43 +733,5 @@ function ScheduleRow({
         onCancel={() => setAskOut(false)}
       />
     </article>
-  );
-}
-
-/**
- * "Subscribe in Apple Calendar": a private link listing only this player's
- * sessions. Their phone keeps it up to date with new times and cancellations.
- */
-function CalendarSubscribe() {
-  const toast = useToast();
-  const [off, setOff] = useState(false);
-  const [busy, setBusy] = useState(false);
-  async function go() {
-    setBusy(true);
-    try {
-      const res = await api<{ off: boolean; webcal?: string }>('GET', '/api/me/calendar');
-      if (res.off || !res.webcal) setOff(true);
-      else window.location.href = res.webcal;
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : "Couldn't make the calendar link.", 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return <SubscribeBlock busy={busy} off={off} onTap={go} />;
-}
-
-export function SubscribeBlock({ busy, off, onTap, label = 'Subscribe in Apple Calendar' }: { busy: boolean; off?: boolean; onTap: () => void; label?: string }) {
-  return (
-    <div className="subscribe">
-      <button className="link-btn" disabled={busy} onClick={onTap}>
-        {busy ? 'Getting your link…' : label}
-      </button>
-      <p className="small muted">
-        {off
-          ? 'Your calendar link is turned off. Ask the organizer.'
-          : 'Apple Calendar refreshes subscribed calendars on its own schedule, so changes can take a while to show.'}
-      </p>
-    </div>
   );
 }

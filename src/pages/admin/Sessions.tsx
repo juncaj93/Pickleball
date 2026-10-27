@@ -75,7 +75,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
     s.courtCostCents !== null ? `${formatCents(s.courtCostCents)} (only you see this)` : null,
   ].filter(Boolean);
   return (
-    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} aria-labelledby={`as-${s.id}`}>
+    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       {needsCourt && (
         <div className="court-banner" role="group" aria-label="Court">
           <div className="court-status">
@@ -128,9 +128,16 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           )}
           {court.kind === 'booked' && (
             <div className="court-line">
-              <div className="court-status">
-                <CourtIcon kind="booked" />
-                <span>{court.text}</span>
+              <div className="court-top">
+                <div className="court-status">
+                  <CourtIcon kind="booked" />
+                  <span>{court.text}</span>
+                </div>
+                {live && (
+                  <a className="cal-link court-cal" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+                    Add to calendar
+                  </a>
+                )}
               </div>
               {!s.state.flags.past && <div className="court-sub">Cancel by {shortDeadline(s, tz, now)}</div>}
             </div>

@@ -103,74 +103,46 @@ describe('late drops', () => {
   });
 });
 
-describe('calendar subscription', () => {
-  async function feed(ctx: Ctx, url: string) {
-    const path = new URL(url).pathname;
-    return ctx.app.client().call('GET', path);
-  }
-
-  it("lists only that person's sessions, in Eastern time, with canceled ones marked, and nothing private", async () => {
+describe('calendar subscription is gone; "Add to calendar" saves one session', () => {
+  it('old feed links return a plain "Not found", even ones that used to work, and the data stays', async () => {
     const ctx = await setupGroup();
-    const tue = await on(ctx, '2026-10-27');
-    const thu = await on(ctx, '2026-10-29');
-    const nov3 = await on(ctx, '2026-11-03');
-    await join(ctx, tue.id, ['Alex', 'Blair', 'Casey', 'Devon']);
-    await join(ctx, thu.id, ['Alex', 'Blair']);
-    await join(ctx, nov3.id, ['Blair']);
-    await ctx.organizer.call('PUT', `/api/admin/sessions/${tue.id}/booking`, { bookingStatus: 'booked', courtCostCents: 4837, cancellationDeadlineAt: tue.cancellationDeadlineAt });
-    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', venueAddress: '40100 Six Mile Rd, Northville, MI' });
-    const alex = await phone(ctx, 'Alex');
-    const link = (await alex.call('GET', '/api/me/calendar')).data;
-    expect(link.webcal).toMatch(/^webcal:\/\/club\.example\/api\/cal\/[A-Za-z0-9_-]{43}\.ics$/);
-    await ctx.organizer.call('POST', `/api/admin/sessions/${thu.id}/decision`, { decision: 'cancel', confirm: true });
-    const res = await feed(ctx, link.url);
-    expect(res.status).toBe(200);
-    expect(res.headers.get('Content-Type')).toContain('text/calendar');
-    const ics = res.text;
-    expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(2);
-    expect(ics).toContain(`UID:${tue.id}@pickleball-club`);
-    expect(ics).toContain(`UID:${thu.id}@pickleball-club`);
-    expect(ics).not.toContain(nov3.id); // Blair's, not Alex's
-    expect(ics).toContain('DTSTART;TZID=America/Detroit:20261027T200000\r\n');
-    expect(ics).toContain('DTEND;TZID=America/Detroit:20261027T220000\r\n');
-    expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:America/Detroit');
-    expect(ics).toContain('SUMMARY:Canceled: Pickleball\r\nSTATUS:CANCELLED');
-    expect(ics).toContain('SUMMARY:Pickleball\r\nSTATUS:CONFIRMED');
-    expect(ics).toContain('LOCATION:Northville Pickleball Club\\, 40100 Six Mile Rd\\, Northville\\, MI');
-    expect(ics).not.toMatch(/Alex|Blair|Casey|Devon|\$|(?<![A-Za-z0-9_-])(4837|1400)(?![A-Za-z0-9_-])|48\.37|paid|owe/i);
-    // Dropping out takes it off their calendar.
-    await out(ctx, tue.id, 'Alex');
-    expect((await feed(ctx, link.url)).text).not.toContain(tue.id);
+    const token = 'a'.repeat(43);
+    await ctx.app.db.prepare('UPDATE players SET calendar_token = ? WHERE id = ?').bind(token, ctx.byName.Alex).run();
+    await ctx.app.db.prepare('UPDATE groups SET calendar_token = ?').bind('b'.repeat(43)).run();
+    for (const path of [`/api/cal/${token}.ics`, `/api/cal/${'b'.repeat(43)}.ics`, '/api/cal/nope.ics']) {
+      const res = await ctx.app.client().call('GET', path);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('Content-Type')).toContain('text/plain');
+      expect(res.text).toBe('Not found');
+    }
+    // The links that made feeds are gone too.
+    expect((await (await phone(ctx, 'Alex')).call('GET', '/api/me/calendar')).status).toBe(404);
+    expect((await ctx.organizer.call('GET', '/api/admin/calendar')).status).toBe(404);
+    expect((await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Alex}/calendar`, { on: false })).status).toBe(404);
+    // Nothing about it in what the screens load. The stored columns are left alone.
+    const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).text;
+    expect(d).not.toMatch(/calendarOn|calendarMade|webcal|calendar_token/);
+    const row = await ctx.app.db.prepare('SELECT calendar_token FROM players WHERE id = ?').bind(ctx.byName.Alex).first<{ calendar_token: string }>();
+    expect(row?.calendar_token).toBe(token);
   });
 
-  it('the organizer can turn a link off (old link dies) and back on (new link)', async () => {
+  it('one session as an event in Eastern time, 8:00 to 10:00 PM, at the club, with the site link', async () => {
     const ctx = await setupGroup();
     const tue = await on(ctx, '2026-10-27');
-    await join(ctx, tue.id, ['Alex']);
-    const alex = await phone(ctx, 'Alex');
-    const first = (await alex.call('GET', '/api/me/calendar')).data;
-    expect((await alex.call('GET', '/api/me/calendar')).data.url).toBe(first.url); // same link each time
-    expect((await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Alex}/calendar`, { on: false })).status).toBe(200);
-    expect((await feed(ctx, first.url)).status).toBe(404);
-    expect((await alex.call('GET', '/api/me/calendar')).data).toEqual({ off: true });
-    expect((await dash(ctx)).players.find((p: any) => p.name === 'Alex').calendarOn).toBe(false);
-    await ctx.organizer.call('PUT', `/api/admin/players/${ctx.byName.Alex}/calendar`, { on: true });
-    const second = (await alex.call('GET', '/api/me/calendar')).data;
-    expect(second.url).not.toBe(first.url);
-    expect((await feed(ctx, second.url)).status).toBe(200);
-    expect((await feed(ctx, first.url)).status).toBe(404);
-    // Players can't switch links.
-    expect((await alex.call('PUT', `/api/admin/players/${ctx.byName.Alex}/calendar`, { on: false })).status).toBe(401);
-  });
-
-  it("the organizer's calendar has every session; bad links are refused", async () => {
-    const ctx = await setupGroup();
-    const link = (await ctx.organizer.call('GET', '/api/admin/calendar')).data;
-    const ics = (await feed(ctx, link.url)).text;
-    const shown = (await dash(ctx)).sessions.length;
-    expect(ics.match(/BEGIN:VEVENT/g)?.length).toBe(shown);
-    expect((await ctx.app.client().call('GET', '/api/cal/nope.ics')).status).toBe(404);
-    expect((await ctx.app.client().call('GET', `/api/cal/${'a'.repeat(43)}.ics`)).status).toBe(404);
-    expect((await ctx.app.client().call('GET', '/api/admin/calendar')).status).toBe(401);
+    const nov10 = await on(ctx, '2026-11-10'); // after the clock change: still 8:00 PM local
+    for (const s of [tue, nov10]) {
+      const res = await ctx.app.client().call('GET', `/api/sessions/${s.id}/calendar.ics`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('Content-Type')).toContain('text/calendar');
+      const ics = res.text;
+      const day = new Date(s.startsAt).toLocaleDateString('en-CA', { timeZone: TZ }).replace(/-/g, '');
+      expect(ics.match(/BEGIN:VEVENT/g)).toHaveLength(1);
+      expect(ics).toContain(`DTSTART;TZID=America/Detroit:${day}T200000\r\n`);
+      expect(ics).toContain(`DTEND;TZID=America/Detroit:${day}T220000\r\n`);
+      expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:America/Detroit');
+      expect(ics).not.toMatch(/DTSTART:\d{8}T\d{6}Z|GMT|UTC/);
+      expect(ics).toContain('LOCATION:Northville Pickleball Club');
+      expect(ics).toContain(`URL:https://club.example/?s=${s.id}\r\n`);
+    }
   });
 });
