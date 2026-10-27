@@ -3285,7 +3285,7 @@ async function main() {
       assert(on.sheet[0] === 'sheet-up' && on.sheet[1] >= 200, `sheets should slide up: ${JSON.stringify(on)}`);
       assert(!/^0s(, 0s)*$/.test(on.press), `buttons should press down: ${on.press}`);
       const off = await read('reduce');
-      assert(off.spotMs < 1 && off.sheet[1] < 1, `Reduce Motion should stop the animations: ${JSON.stringify(off)}`);
+      assert(off.spot === 'none' && off.sheet[0] === 'none', `Reduce Motion should stop the animations: ${JSON.stringify(off)}`);
     });
 
     await check('bad links show a clear error state', async () => {

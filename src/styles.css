@@ -1373,6 +1373,9 @@ dialog.sheet {
   background: var(--bg);
   color: var(--ink);
   box-shadow: 0 -8px 40px rgb(0 0 0 / 22%);
+  /* Tall sheets scroll inside themselves; nothing spills over the tab bar. */
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 @media (min-width: 700px) {
@@ -3334,9 +3337,7 @@ dialog.sheet[open]::backdrop {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    animation-delay: 0s !important;
+    animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
   }
@@ -3350,8 +3351,7 @@ dialog.sheet[open]::backdrop {
     transform: none;
   }
   .spinner {
-    animation-duration: 2.4s !important;
-    animation-iteration-count: infinite !important;
+    animation: spin 2.4s linear infinite !important;
   }
 }
 
