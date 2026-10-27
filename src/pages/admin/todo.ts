@@ -3,7 +3,7 @@ import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { localParts } from '../../../shared/time';
 
 export type TodoItem =
-  | { kind: 'five' | 'tell' | 'sixdrop' | 'checkin' | 'daybefore' | 'lastcall' | 'refund'; session: AdminSessionView }
+  | { kind: 'five' | 'tell' | 'sixdrop' | 'checkin' | 'daybefore' | 'lastcall' | 'refund' | 'latedrop'; session: AdminSessionView }
   | { kind: 'owed'; rows: OwedRow[] }
   | { kind: 'tonight'; rows: OwedRow[] };
 
@@ -15,6 +15,13 @@ export interface OwedRow {
 }
 
 const upcoming = (s: AdminSessionView) => !s.state.flags.canceled && !s.state.flags.started;
+
+/** Late drops the organizer hasn't tapped Done on. */
+export const lateDrops = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt && !r.lateDropDoneAt);
+
+/** Who to pay back: everyone who paid for a canceled session, or anyone who paid and then dropped. */
+export const refundRows = (s: AdminSessionView) =>
+  s.roster.filter((r) => r.paymentStatus === 'paid' && (s.state.flags.canceled || r.status === 'withdrawn'));
 
 /**
  * The organizer's short list: things that aren't one session card's court or
@@ -33,8 +40,14 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   for (const x of s) if (x.cards.dayBefore) items.push({ kind: 'daybefore', session: x });
   for (const x of s) if (x.state.flags.checkInsDue) items.push({ kind: 'checkin', session: x });
   for (const x of s) if (x.sixDropped) items.push({ kind: 'sixdrop', session: x });
-  // Pay back anyone who paid for a session that was then canceled.
-  for (const x of s) if (x.state.flags.canceled && x.roster.some((r) => r.paymentStatus === 'paid' && !r.refundedAt)) items.push({ kind: 'refund', session: x });
+  // Late drops not yet looked at, while the session is still ahead.
+  for (const x of s) if (upcoming(x) && lateDrops(x).length) items.push({ kind: 'latedrop', session: x });
+  // Pay back anyone who paid and then the session was canceled or they dropped
+  // (a late drop's refund lives on its own card until that's done).
+  for (const x of s) {
+    const showing = upcoming(x) && lateDrops(x).length > 0;
+    if (!showing && refundRows(x).some((r) => !r.refundedAt)) items.push({ kind: 'refund', session: x });
+  }
   // Who owes you: from the day-before check-in on, and after play. On game
   // day, that day's unpaid players get their own "Mark paid tonight" card at
   // the top, since most people pay at the court.

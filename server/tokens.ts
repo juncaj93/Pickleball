@@ -4,8 +4,8 @@ import type { Ctx } from './context';
 import { newId, randomToken, sha256 } from './crypto';
 import type { D1Database } from './db';
 import { HttpError } from './http';
-import { confirmedOf, type GroupRow, loadRoster, type SessionRow, waitlistOf } from './repo';
-import { confirmAttendance, joinSession, withdraw } from './roster';
+import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, waitlistOf } from './repo';
+import { clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
 import * as v from './validate';
 
 export type TokenScope = 'attendance' | 'claim';
@@ -124,10 +124,12 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .bind(ctx.nowIso, r.token.id)
       .run();
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
-    await withdraw(ctx.db, r.session, r.token.player_id, ctx.nowMs);
+    const res = await withdraw(ctx.db, r.session, r.token.player_id, ctx.nowMs);
+    if (res.freedSpot) await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group).checkInHours);
     outcome = 'withdrawn';
   } else {
     const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only');
+    await clearLateDrop(ctx.db, r.session.id, r.token.player_id);
     if (res.result === 'spot_taken') {
       return { outcome: 'spot_taken', view: await view(ctx, r) };
     }

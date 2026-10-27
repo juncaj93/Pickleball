@@ -1,6 +1,6 @@
 import { Fragment, type FormEvent, type ReactElement, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
-import { dayBeforeMessage, lastCallMessage, promotionMessage } from '../../shared/messages';
+import { dayBeforeMessage, lastCallMessage, promotionMessage, spotOpenMessage } from '../../shared/messages';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
@@ -9,7 +9,7 @@ import { CourtReserveLink, Empty, ErrorState, GearIcon, HomeIcon, Notice, People
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
 import { RefundList, type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
-import { buildTodo, homeBadgeCount, type TodoItem } from './admin/todo';
+import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 
@@ -273,6 +273,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     daybefore: `${formatShortDate(s.startsAt, tz)}: ${countSummary(s.confirmedCount)}`,
     lastcall: `Last call, ${formatShortDate(s.startsAt, tz)}: ${s.confirmedCount} in`,
     refund: 'Pay back',
+    latedrop: 'Late drop',
   }[item.kind];
 
   return (
@@ -283,6 +284,35 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       </div>
       {item.kind === 'five' && <FivePanel ctx={ctx} s={s} />}
       {item.kind === 'refund' && <RefundList ctx={ctx} s={s} />}
+      {item.kind === 'latedrop' && (
+        <>
+          <ul className="rows">
+            {lateDrops(s).map((r) => (
+              <li key={r.playerId}>
+                <span className="who">
+                  <span>
+                    <span className="late-tag">Late drop</span> <strong>{r.name}</strong>
+                  </span>
+                  <span className="small muted">dropped {formatDateTime(r.lateDropAt!, tz)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <RefundList ctx={ctx} s={s} only={lateDrops(s).map((r) => r.playerId)} />
+          <SmsDraft to="Group chat" phone={null} openLabel="Text the group: spot open" body={spotOpenMessage(s, tz, ctx.d.group.playerLink)} />
+          <button
+            className="btn small ghost"
+            disabled={busy}
+            onClick={() =>
+              act(async () => {
+                for (const r of lateDrops(s)) await api('POST', `/api/admin/sessions/${s.id}/late-drop-done`, { playerId: r.playerId });
+              }, 'Done')
+            }
+          >
+            Done
+          </button>
+        </>
+      )}
       {item.kind === 'tell' &&
         s.roster
           .filter((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt)
@@ -527,21 +557,22 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
 
   return (
     <section className="stack" aria-labelledby="sessions-title">
-      <div className="spread" style={{ alignItems: 'center' }}>
-        <h2 id="sessions-title" className="section-title">
+      {/* One slim row: Upcoming | Past on the left, Book on the right. */}
+      <div className="sessions-bar">
+        <h2 id="sessions-title" className="sr-only">
           Sessions
         </h2>
+        <div className="segmented compact" role="group" aria-label="Which sessions">
+          <button aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>
+            Upcoming
+          </button>
+          <button aria-pressed={view === 'past'} onClick={() => setView('past')}>
+            Past
+          </button>
+        </div>
         <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-          Book a court
+          Book
         </CourtReserveLink>
-      </div>
-      <div className="segmented" role="group" aria-label="Which sessions">
-        <button aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>
-          Upcoming
-        </button>
-        <button aria-pressed={view === 'past'} onClick={() => setView('past')}>
-          Past
-        </button>
       </div>
       {list.length === 0 && <Empty>No sessions here.</Empty>}
       {shown.map((s, i) => (

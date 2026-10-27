@@ -442,10 +442,13 @@ async function main() {
       await players.Frankie.reload();
       await firstCard(players.Frankie).locator('.spots li').first().waitFor();
       assert((await firstCard(players.Frankie).getByText(/credit toward your next/).count()) === 0, 'last two should not hear about a credit');
+      // A small Pay button with the right amount, and no big money block.
+      await firstCard(players.Casey).getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
+      assert((await firstCard(players.Casey).locator('.pay-small').innerText()).trim() === 'Pay $14', 'Casey should see Pay $14');
+      await firstCard(players.Frankie).getByRole('link', { name: 'Pay $9 with Venmo' }).waitFor();
       for (const name of ['Casey', 'Frankie']) {
         const rows = players[name].locator('.schedule');
-        assert((await rows.getByText(/You owe|Pay with Venmo|\$9|\$14/).count()) === 0, `${name} sees money on a session row`);
-        assert((await rows.locator('a[href*="venmo"]').count()) === 0, `${name} has a Venmo button on a row`);
+        assert((await rows.getByText(/You owe|Pay with Venmo/).count()) === 0, `${name} sees a money block on a session row`);
       }
       await admin.reload();
       assert((await admin.getByText(/Refund \$5 each/).count()) === 0, 'old refund card still shown');
@@ -487,7 +490,7 @@ async function main() {
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
       const BOOK = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
       const CANCEL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
-      const link = section.locator('.spread').getByRole('link', { name: /^Book a court/ });
+      const link = section.locator('.sessions-bar').getByRole('link', { name: /^Book/ });
       assert((await link.getAttribute('href')) === BOOK, 'wrong CourtReserve link');
       assert((await link.getAttribute('target')) === '_blank', 'CourtReserve should open in a new tab');
       assert((await admin.getByText('Book on CourtReserve').count()) === 0, 'old button wording still shown');
@@ -549,7 +552,7 @@ async function main() {
       for (const scheme of ['light', 'dark']) {
         await admin.emulateMedia({ colorScheme: scheme });
         await card.screenshot({ path: path.join(SHOTS, `card-needs-${scheme}.png`) });
-        await admin.locator('section[aria-labelledby="sessions-title"] .spread').first().screenshot({ path: path.join(SHOTS, `book-a-court-${scheme}.png`) });
+        await admin.locator('.sessions-bar').screenshot({ path: path.join(SHOTS, `sessions-bar-${scheme}.png`) });
       }
       await admin.emulateMedia({ colorScheme: 'light' });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-not-booked.png') });
@@ -653,18 +656,18 @@ async function main() {
       assert(color !== ok, 'holiday pill should not use a status color');
       await admin.reload();
       const hcard = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
-      await hcard.locator('.holiday', { hasText: 'Election Day · check venue hours' }).waitFor();
+      await hcard.locator('.holiday', { hasText: 'Election Day · check hours' }).waitFor();
       await hcard.getByRole('button', { name: 'Venue is open normal hours' }).click();
       await hcard.locator('.holiday', { hasText: /^✓ Election Day$/ }).waitFor();
       await admin.reload();
       const after = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
       await after.locator('.holiday', { hasText: /^✓ Election Day$/ }).waitFor();
-      assert((await after.getByText('check venue hours').count()) === 0, 'check venue hours should be gone after confirming');
+      assert((await after.getByText('check hours').count()) === 0, 'check venue hours should be gone after confirming');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-holiday-confirmed.png'), fullPage: true });
       await after.getByRole('button', { name: 'Undo' }).click();
-      await after.locator('.holiday', { hasText: 'Election Day · check venue hours' }).waitFor();
+      await after.locator('.holiday', { hasText: 'Election Day · check hours' }).waitFor();
       await players.Alex.reload();
-      assert(!(await players.Alex.content()).includes('venue hours'), 'players must never see "check venue hours"');
+      assert(!(await players.Alex.content()).includes('check hours'), 'players must never see "check hours"');
     });
 
     await check('everyone confirmed owes a flat $14; mark paid updates only that player', async () => {
@@ -709,6 +712,41 @@ async function main() {
       assert(!/\bsent\b/i.test(await draft.innerText()), 'the draft must never say it was sent');
       assert((await draft.getByRole('button', { name: /sent/i }).count()) === 0, 'no "I sent it" button');
       await admin.keyboard.press('Escape');
+    });
+
+    await check('after signing up: a small Pay button; "Sent?" after tapping never marks paid; Paid once marked', async () => {
+      const p = players.Devon;
+      await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
+      await p.reload();
+      const row = firstCard(p);
+      const pay = row.getByRole('link', { name: 'Pay $14 with Venmo' });
+      await pay.waitFor();
+      assert((await pay.innerText()).trim() === 'Pay $14', 'button should say Pay $14');
+      const out = await row.getByRole('button', { name: "I'm out" }).boundingBox();
+      const pb = await pay.boundingBox();
+      assert(pb.height < out.height && pb.width < out.width + 40, 'Pay should be smaller than I\'m out');
+      const note = new URL(await pay.getAttribute('href')).searchParams.get('note');
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} - Devon$/.test(note), `Venmo note was ${note}`);
+      const [popup] = await Promise.all([p.waitForEvent('popup'), pay.click()]);
+      await popup.close();
+      await row.getByText(/^Sent\? \w+ confirms when it arrives\.$/).waitFor();
+      assert((await row.locator('.pay-small').count()) === 0, 'Pay button should turn into the quiet note');
+      await p.reload();
+      await firstCard(p).getByText(/^Sent\? \w+ confirms when it arrives\.$/).waitFor();
+      // Not marked paid: the organizer still sees Devon owing.
+      await admin.reload();
+      const card = sessionCards(admin).first();
+      await more(card);
+      await card.getByRole('button', { name: 'Money' }).click();
+      const sheet = admin.locator('dialog[open]');
+      const devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
+      await devonRow.getByText(/owes \$14/).waitFor();
+      await devonRow.getByRole('button', { name: 'Mark paid' }).click();
+      await admin.locator('.toast', { hasText: 'Devon marked paid' }).waitFor();
+      await admin.keyboard.press('Escape');
+      await p.reload();
+      await firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
+      assert((await firstCard(p).getByRole('link', { name: /Pay \$/ }).count()) === 0, 'Pay should be gone once paid');
     });
 
     await check('game day: the payment card shows at the top from 8:00 AM, with the right amount and a Venmo note', async () => {
@@ -1027,7 +1065,7 @@ async function main() {
       await row.locator('.in-pills li').first().waitFor();
       const names = await row.locator('.in-pills li').evaluateAll((lis) => lis.map((li) => li.getBoundingClientRect().top));
       assert(Math.max(...names) - Math.min(...names) < 30, 'names should sit on one line (wrapping only if needed)');
-      assert((await row.locator('a[href*="venmo"]').count()) === 0 && (await row.getByText(/You owe/).count()) === 0, 'no money on the row');
+      assert((await row.getByText(/You owe/).count()) === 0, 'no money block on the row');
     });
 
     await check('organizer and players see the same name pills: names fill in sign-up order, open spots stay blank', async () => {
@@ -1198,6 +1236,12 @@ async function main() {
       await banner.getByText('On the court waitlist', { exact: true }).waitFor();
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
       assert((await card.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist card should not offer I booked it');
+      // Words and both buttons on a single row inside the banner.
+      const words = await banner.locator('.court-status').boundingBox();
+      const opened = await banner.getByRole('button', { name: 'Court opened' }).boundingBox();
+      const didnt = await banner.getByRole('button', { name: "Didn't open" }).boundingBox();
+      assert(Math.abs(opened.y - didnt.y) < 4 && words.y < opened.y + opened.height && words.y + words.height > opened.y, 'banner should be one row');
+      await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       await more(card);
       await card.getByRole('button', { name: 'Text the group poll' }).click();
@@ -1233,7 +1277,8 @@ async function main() {
       const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
       await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
       await row.getByText("Good news, the court opened, so you're in.").waitFor();
-      assert((await row.locator('a[href*="venmo"]').count()) === 0, 'no Venmo button on the row');
+      await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
+      // The court-waitlist banner keeps its words and buttons on one row (checked before it opened).
     });
 
     await check('day-before card (when one is due right now): Text the group, Copy, Done; never "sent"', async () => {
@@ -1435,6 +1480,118 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
+    console.log('Late drops & calendar');
+    await check('late drop: tag on Home and the card, paid-and-dropped refund, spot-open text, count on Players', async () => {
+      const first = await admin.evaluate(async () => {
+        const d = await (await fetch('/api/admin/dashboard')).json();
+        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.now() && s.status !== 'canceled' && s.roster.some((r) => r.name === 'Frankie' && r.status === 'confirmed'));
+      });
+      assert(first, 'need a session Frankie is in');
+      const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
+      try {
+        // Frankie pays, then drops 2 hours before.
+        await admin.evaluate(
+          ({ sid, pid }) => fetch(`/api/admin/sessions/${sid}/payment`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ playerId: pid, paid: true }) }),
+          { sid: first.id, pid: first.roster.find((r) => r.name === 'Frankie').playerId },
+        );
+        await clock(Date.parse(first.startsAt) - 2 * 3600_000);
+        const f = players.Frankie;
+        await f.reload();
+        const row = f.locator('article', { has: f.locator(`#s-${first.id}`) });
+        await row.getByRole('button', { name: "I'm out" }).click();
+        await f.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+        await f.locator('.pop', { hasText: "You're out" }).waitFor();
+
+        await admin.reload();
+        const card = admin.getByRole('article', { name: /^Late drop/ });
+        await card.locator('.late-tag', { hasText: 'Late drop' }).first().waitFor();
+        await card.locator('.rows li', { hasText: 'Frankie' }).first().waitFor();
+        await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
+        await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
+        const bubble = (await card.locator('.bubble').innerText()).trim();
+        assert(/^A spot just opened for pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to claim it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
+        await card.getByRole('link', { name: 'Text the group: spot open' }).waitFor();
+        await card.getByRole('button', { name: 'Copy message' }).waitFor();
+        assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
+        const sc = admin.locator(`#session-${first.id}`);
+        await sc.locator('.late-tag').waitFor();
+        await sc.locator('.late-line').getByText(/Frankie \d{1,2}:\d{2} (AM|PM)/).waitFor();
+        await admin.screenshot({ path: path.join(SHOTS, 'admin-late-drop.png'), fullPage: true });
+        await card.getByRole('checkbox', { name: 'Refunded' }).check();
+        await admin.locator('.toast', { hasText: 'Refunded' }).waitFor();
+        await card.getByRole('button', { name: 'Done', exact: true }).click();
+        await card.waitFor({ state: 'detached' });
+        // Count on Players, organizer only.
+        await tab(admin, 'Players').click();
+        await admin.locator('li', { hasText: 'Frankie' }).getByText('Late drops: 1').waitFor();
+        await tab(admin, 'Home').click();
+        await players.Alex.reload();
+        await players.Alex.locator('.schedule article').first().waitFor();
+        assert((await players.Alex.getByText(/Late drop/i).count()) === 0, 'players never see late drops');
+      } finally {
+        await clock(undefined);
+      }
+    });
+
+    await check('calendar subscription: a small button at the bottom for players, in Settings for me, with an honest note', async () => {
+      const p = players.Alex;
+      await p.reload();
+      const sub = p.getByRole('button', { name: 'Subscribe in Apple Calendar' });
+      await sub.waitFor();
+      await p.getByText('Apple Calendar refreshes subscribed calendars on its own schedule, so changes can take a while to show.').waitFor();
+      // Out of the way: below every session.
+      const last = await p.locator('.schedule article').last().boundingBox();
+      assert((await sub.boundingBox()).y > last.y + last.height, 'subscribe should sit below the sessions');
+      const { webcal, url } = await p.evaluate(async () => (await fetch('/api/me/calendar')).json());
+      assert(/^webcal:\/\//.test(webcal), 'webcal link');
+      const ics = await (await p.request.get(BASE + new URL(url).pathname)).text();
+      assert(ics.includes('BEGIN:VEVENT') && ics.includes('TZID:America/Detroit') && !/Blair|Devon|\$/.test(ics), 'feed should hold only times and the club');
+      await tab(admin, 'Settings').click();
+      const cal = admin.getByRole('region', { name: 'Calendar' });
+      await cal.getByRole('button', { name: 'Subscribe in Apple Calendar' }).waitFor();
+      await cal.getByText(/refreshes subscribed calendars on its own schedule/).waitFor();
+      // Turning Alex's link off from Players.
+      await tab(admin, 'Players').click();
+      await admin.getByRole('button', { name: 'Edit Alex' }).click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByText(/Calendar link:/).waitFor();
+      await sheet.getByRole('button', { name: 'Turn off' }).click();
+      await admin.locator('.toast', { hasText: 'Calendar link off' }).waitFor();
+      await sheet.getByRole('button', { name: 'Turn on' }).waitFor();
+      assert((await p.request.get(BASE + new URL(url).pathname)).status() === 404, 'old link should stop working');
+      await sheet.getByRole('button', { name: 'Turn on' }).click();
+      await admin.locator('.toast', { hasText: 'Calendar link on' }).waitFor();
+      await admin.keyboard.press('Escape');
+      await tab(admin, 'Home').click();
+    });
+
+    await check('slim sessions row: Upcoming | Past and Book on one row; small week labels; spots on the count line', async () => {
+      await admin.reload();
+      const bar = admin.locator('.sessions-bar');
+      const box = await bar.boundingBox();
+      assert(box.height <= 48, `sessions row is ${box.height}px tall`);
+      assert((await admin.getByRole('heading', { name: 'Sessions', exact: true }).evaluate((h) => h.getBoundingClientRect().width <= 1)), '"Sessions" heading should be hidden');
+      const toggle = await bar.getByRole('group', { name: 'Which sessions' }).boundingBox();
+      const book = bar.getByRole('link', { name: /^Book/ });
+      assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await book.getAttribute('target')) === '_blank', 'Book opens CourtReserve in a new tab');
+      const bb = await book.boundingBox();
+      assert(toggle.x < bb.x && Math.abs(toggle.y + toggle.height / 2 - (bb.y + bb.height / 2)) < 6, 'toggle left, Book right, one row');
+      const wk = await admin.locator('.week-break').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+      assert(wk <= 11.5, `week label is ${wk}px`);
+      // A card with nobody in yet: "0 of 4 in" and four small circles on one line.
+      const all = admin.getByRole('button', { name: /^Show all/ });
+      if (await all.count()) await all.click();
+      const card = sessionCards(admin).filter({ hasText: '0 of 4 in' }).first();
+      const count = await card.locator('.players-count').boundingBox();
+      const spot = await card.locator('.spots li').first().boundingBox();
+      assert(Math.abs(count.y + count.height / 2 - (spot.y + spot.height / 2)) < 6, 'count and spots should share a line');
+      const open = card.locator('.spots li.open');
+      if (await open.count()) {
+        const o = await open.first().boundingBox();
+        assert(o.width <= 16 && o.height <= 16, `open spot should be a small circle (${o.width}x${o.height})`);
+      }
+    });
+
     console.log('Accessibility & layout');
     await check('every button and link has an accessible name', async () => {
       for (const p of [admin, players.Alex]) {
@@ -1481,7 +1638,7 @@ async function main() {
     });
 
     for (const [width, scheme] of [[360, 'light'], [390, 'dark'], [430, 'light'], [375, 'dark']]) {
-      await check(`at least 3 sessions fit on one iPhone screen at ${width}px (${scheme}), organizer and player`, async () => {
+      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer ${width >= 390 ? 4 : 3}+, player 3+`, async () => {
         const ctx = await browser.newContext({ ...phone(width), viewport: { width, height: 664 }, colorScheme: scheme });
         const p = await ctx.newPage();
         await p.goto(`${BASE}/admin`);
@@ -1497,7 +1654,7 @@ async function main() {
           }).length;
         });
         await p.screenshot({ path: path.join(SHOTS, `dense-admin-${width}-${scheme}.png`) });
-        assert(fitAdmin >= 3, `only ${fitAdmin} organizer session cards fit on screen`);
+        assert(fitAdmin >= (width >= 390 ? 4 : 3), `only ${fitAdmin} organizer session cards fit on screen`);
         const small = await p.evaluate(() =>
           [...document.querySelectorAll('main button:not(.link-btn), main a.btn, header button, nav.tabbar button')]
             .filter((b) => b.offsetParent !== null)

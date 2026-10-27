@@ -145,6 +145,7 @@ export function PlayerHome({
                 {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
               </button>
             )}
+            {!viewAs && g.me && <CalendarSubscribe />}
             {!viewAs && <HomeScreenTip />}
           </>
         )}
@@ -334,6 +335,28 @@ export function HomeScreenSteps() {
 }
 
 /**
+ * "I tapped Pay with Venmo" for these sessions, remembered on this phone only.
+ * It never marks anyone paid; only the organizer's Mark paid does.
+ */
+function useSent(playerId: string | undefined, sessionIds: string[]) {
+  const keys = sessionIds.map((id) => `pb_sent_${playerId}_${id}`);
+  const [sent, setSent] = useState(() => keys.length > 0 && keys.every((k) => storageGet(k) === '1'));
+  return {
+    sent,
+    markSent: () => {
+      for (const k of keys) storageSet(k, '1');
+      setSent(true);
+    },
+  };
+}
+
+/** Quiet note after tapping Pay: the organizer confirms. */
+function SentNote({ g }: { g: GroupView }) {
+  const who = g.group.organizerName ?? 'The organizer';
+  return <span className="sent-note">Sent? {who} confirms when it arrives.</span>;
+}
+
+/**
  * Game day's payment card, at the very top: from 8:00 AM on game day until
  * the organizer marks it paid. Several unpaid sessions combine into one total
  * with one Venmo button. The button fills in the amount and a note like
@@ -351,6 +374,7 @@ function PayCard({ g }: { g: GroupView }) {
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
+  const { sent, markSent } = useSent(g.me?.id, due.map((o) => o.sessionId));
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
   const title =
@@ -377,8 +401,22 @@ function PayCard({ g }: { g: GroupView }) {
           </p>
         )
       )}
-      {pay.url ? (
-        <a className="btn block big" href={pay.url} target="_blank" rel="noopener noreferrer" aria-label={`Pay ${formatPrice(total)} with Venmo`}>
+      {pay.url && sent ? (
+        <p className="small">
+          <SentNote g={g} />{' '}
+          <a className="link-btn inline" href={pay.url} target="_blank" rel="noopener noreferrer">
+            Open Venmo again
+          </a>
+        </p>
+      ) : pay.url ? (
+        <a
+          className="btn block big"
+          href={pay.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Pay ${formatPrice(total)} with Venmo`}
+          onClick={markSent}
+        >
           Pay with Venmo
         </a>
       ) : (
@@ -463,7 +501,7 @@ export function HolidayPill({ name, venueNote, confirmed }: { name: string; venu
     <span className="holiday">
       {confirmed && <span aria-label="venue hours confirmed">✓ </span>}
       {name}
-      {venueNote && !confirmed ? ' · check venue hours' : ''}
+      {venueNote && !confirmed ? ' · check hours' : ''}
     </span>
   );
 }
@@ -488,6 +526,33 @@ function countLine(s: PlayerSessionView): string {
   if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   if (n === 5) return '5 in · need 4 or 6';
   return n > 4 ? `${n} of 6 in` : `${n} of 4 in`;
+}
+
+/**
+ * The row's money, kept small: "Pay $14" after signing up (with the Venmo
+ * note filled in), then a quiet "Sent?" note once tapped, or "Paid" once the
+ * organizer marks it. On game day after 8:00 AM the card at the top takes over.
+ */
+function RowPay({ g, s, onTop }: { g: GroupView; s: PlayerSessionView; onTop: boolean }) {
+  const mine = s.mine!;
+  const { sent, markSent } = useSent(g.me?.id, [s.id]);
+  if (mine.paymentStatus === 'paid') return <span className="paid-tag">✓ Paid</span>;
+  if (onTop || mine.oweCents <= 0) return <span />;
+  if (sent) return <SentNote g={g} />;
+  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
+  if (!pay.url) return <span />;
+  return (
+    <a
+      className="btn small pay-small"
+      href={pay.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
+      onClick={markSent}
+    >
+      Pay {formatPrice(mine.oweCents)}
+    </a>
+  );
 }
 
 /**
@@ -595,10 +660,15 @@ function ScheduleRow({
 
         {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
 
-        {inSession && open && (
-          <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`}>
-            Add to Calendar
-          </a>
+        {inSession && !s.canceled && (
+          <div className="row-foot">
+            <RowPay g={g} s={s} onTop={g.payDue.some((o) => o.sessionId === s.id)} />
+            {open && (
+              <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`}>
+                Add to Calendar
+              </a>
+            )}
+          </div>
         )}
       </div>
 
@@ -613,5 +683,43 @@ function ScheduleRow({
         onCancel={() => setAskOut(false)}
       />
     </article>
+  );
+}
+
+/**
+ * "Subscribe in Apple Calendar": a private link listing only this player's
+ * sessions. Their phone keeps it up to date with new times and cancellations.
+ */
+function CalendarSubscribe() {
+  const toast = useToast();
+  const [off, setOff] = useState(false);
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    try {
+      const res = await api<{ off: boolean; webcal?: string }>('GET', '/api/me/calendar');
+      if (res.off || !res.webcal) setOff(true);
+      else window.location.href = res.webcal;
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Couldn't make the calendar link.", 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <SubscribeBlock busy={busy} off={off} onTap={go} />;
+}
+
+export function SubscribeBlock({ busy, off, onTap, label = 'Subscribe in Apple Calendar' }: { busy: boolean; off?: boolean; onTap: () => void; label?: string }) {
+  return (
+    <div className="subscribe">
+      <button className="link-btn" disabled={busy} onClick={onTap}>
+        {busy ? 'Getting your link…' : label}
+      </button>
+      <p className="small muted">
+        {off
+          ? 'Your calendar link is turned off. Ask the organizer.'
+          : 'Apple Calendar refreshes subscribed calendars on its own schedule, so changes can take a while to show.'}
+      </p>
+    </div>
   );
 }

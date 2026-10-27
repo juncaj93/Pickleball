@@ -97,6 +97,9 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     sortOrder: p.sort_order,
     usualDays: usualDaysOf(p),
     isNew: !!p.is_new,
+    lateDrops: 0,
+    calendarOn: !p.calendar_off,
+    calendarMade: !!p.calendar_token,
   };
 }
 
@@ -158,6 +161,8 @@ export function adminSessionView(
       waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
       promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
       refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
+      lateDropAt: r.status === 'withdrawn' ? r.late_drop_at : null,
+      lateDropDoneAt: r.status === 'withdrawn' ? r.late_drop_done_at : null,
       promotionReason: r.status === 'confirmed' ? r.promotion_reason : null,
       promotionNotifiedAt: r.promotion_notified_at,
     }));

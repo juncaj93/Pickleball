@@ -85,6 +85,12 @@ export function deadlineAlertMessage(s: SessionLike, tz: string, deadlineIso: st
 }
 
 /** Digits and a leading + only, for sms: links. */
+/** "A spot just opened for pickleball Tue, Nov 3, 8:00 to 10:00 PM. First to claim it gets it: pickleball.juncaj.net" */
+export function spotOpenMessage(s: SessionLike, tz: string, link: string): string {
+  const site = link.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return `A spot just opened for pickleball ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. First to claim it gets it: ${site}`;
+}
+
 /** One optional line from the organizer, ending with a period. */
 function withReason(text: string, reason?: string | null): string {
   const r = (reason ?? '').replace(/\s+/g, ' ').trim();

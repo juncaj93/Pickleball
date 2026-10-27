@@ -1398,11 +1398,12 @@ label.field {
   margin-top: 0;
 }
 
-/* Player rows: "2 of 4 in" over a pill per spot. */
+/* Player rows: "2 of 4 in" and the spots on one line. */
 .in-line {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   font-size: 0.88rem;
 }
 
@@ -1519,8 +1520,8 @@ label.field {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 5px;
+  padding: 8px 12px;
   scroll-margin-top: 16px;
   scroll-margin-bottom: calc(env(safe-area-inset-bottom) + 96px);
 }
@@ -1579,7 +1580,7 @@ label.field {
 }
 .btn.main-btn {
   min-height: 44px;
-  padding: 8px 14px;
+  padding: 6px 14px;
 }
 .scard .action-strip {
   margin-top: 2px;
@@ -1601,16 +1602,16 @@ label.field {
 .court-booked .court-line .court-status {
   color: var(--ok-fg);
   font-family: var(--display);
-  font-size: 1.15rem;
+  font-size: 1.05rem;
   line-height: 1.15;
 }
 .court-booked .court-line .court-icon {
-  width: 23px;
-  height: 23px;
+  width: 20px;
+  height: 20px;
 }
 .court-sub {
-  font-size: 0.84rem;
-  padding-left: 31px;
+  font-size: 0.8rem;
+  padding-left: 28px;
 }
 
 /* Not booked: amber dashed border and a banner across the top. */
@@ -1622,8 +1623,8 @@ label.field {
   border: 2px solid var(--info-edge);
 }
 .court-banner {
-  margin: -10px -12px 0;
-  padding: 6px 12px;
+  margin: -8px -12px 0;
+  padding: 4px 12px;
   border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
   display: flex;
   align-items: center;
@@ -1704,8 +1705,8 @@ label.field {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 6px 0 -4px;
-  font-size: 0.78rem;
+  margin: 0 0 -6px;
+  font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -1731,36 +1732,32 @@ label.field {
   flex: none;
 }
 
-/* One pill per spot. Names fill them in sign-up order; open spots are blank outlines. */
-.players {
+/* One mark per spot, on the same line as "2 of 4 in": names as small pills, open spots as small circles. */
+.players-line {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
 }
 .spots {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 3px;
-}
-.spots.spots-6 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
 }
 .spots li {
-  min-height: 24px;
-  padding: 2px 3px;
+  padding: 0 6px;
   border-radius: 999px;
-  border: 1.5px solid var(--ink);
   background: var(--ink);
   color: var(--bg);
-  font-size: 0.78rem;
-  letter-spacing: -0.01em;
+  font-size: 0.74rem;
   font-weight: 650;
-  line-height: 1.2;
-  text-align: center;
+  line-height: 1.35;
   white-space: nowrap;
+  max-width: 9em;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1769,9 +1766,12 @@ label.field {
   outline-offset: 1px;
 }
 .spots li.open {
+  width: 12px;
+  height: 12px;
+  padding: 0;
   background: transparent;
-  border: 1.5px dashed var(--ink-2);
-  opacity: 0.7;
+  border: 2px solid var(--ink-2);
+  opacity: 0.75;
 }
 
 /* Venmo can only open the profile: the note to paste, with Copy. */
@@ -1870,4 +1870,127 @@ label.field {
   margin: 0;
   padding-left: 18px;
   font-size: 0.92rem;
+}
+
+/* "Late drop" tag on Home and the session card. */
+.late-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1.5px solid var(--warn-edge);
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.late-count {
+  color: var(--warn-fg);
+  font-weight: 650;
+}
+.calendar-toggle {
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+/* Row footer: Pay / Sent? / Paid on the left, Add to Calendar on the right. */
+.row-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 34px;
+}
+/* Smaller than I'm out, with a full 44px tap area. */
+.btn.pay-small {
+  position: relative;
+  min-height: 34px;
+  padding: 4px 14px;
+  font-size: 0.88rem;
+  border-radius: 999px;
+}
+.btn.pay-small::before {
+  content: '';
+  position: absolute;
+  inset: -5px -2px;
+}
+.paid-tag {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ok-fg);
+}
+.sent-note {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.link-btn.inline {
+  min-height: 0;
+  padding: 0;
+}
+.subscribe {
+  text-align: center;
+}
+.subscribe .link-btn {
+  font-size: 0.9rem;
+}
+.subscribe p {
+  margin: 0 auto;
+  max-width: 34ch;
+}
+
+/* Organizer Home: Upcoming | Past and Book on one slim row. */
+.sessions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+}
+.segmented.compact {
+  flex: 0 1 210px;
+  padding: 0;
+  gap: 2px;
+}
+.segmented.compact button {
+  min-height: 44px;
+  padding: 4px 10px;
+  font-size: 0.88rem;
+}
+/* Court banners keep the words and the buttons on one row. */
+.court-banner {
+  flex-wrap: nowrap;
+}
+.court-banner .court-status {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.court-banner .banner-btns {
+  flex: none;
+}
+.court-banner .banner-btns .btn {
+  padding: 6px 10px;
+  font-size: 0.88rem;
+}
+
+.late-line {
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+/* Organizer cards: a slightly smaller date tile. */
+.scard .tile {
+  padding: 4px 0 5px;
+}
+.scard .tile .day {
+  font-size: 1.25rem;
+  margin: 1px 0;
+}
+.court-banner .court-status {
+  font-size: 0.95rem;
+  line-height: 1.15;
+}
+.court-banner .court-icon {
+  width: 19px;
+  height: 19px;
 }

@@ -431,13 +431,13 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
 }
 
 /**
- * One pill per spot: 4, or 6 once more than 4 are in. Names fill the pills
- * in sign-up order; open spots stay as blank outlines.
+ * One mark per spot: 4, or 6 once more than 4 are in. Names fill in sign-up
+ * order as small pills; open spots are small empty circles.
  */
 export function SpotPills({ names, me }: { names: string[]; me?: string | null }) {
   const slots = playerSlots(names.length);
   return (
-    <ul className={`in-pills spots spots-${slots}`} aria-label="Who's in">
+    <ul className="in-pills spots" aria-label="Who's in">
       {Array.from({ length: slots }, (_, i) =>
         i < names.length ? (
           <li key={i} className={names[i] === me ? 'me' : undefined} title={names[i]}>
@@ -468,19 +468,17 @@ export function PlayersLine({
   extra?: string | null;
 }) {
   return (
-    <div className="players">
-      <div className="players-line">
-        <span className="players-count">
-          {names.length} of {playerSlots(names.length)} in
-        </span>
-        {waiting > 0 && (
-          <span className="players-wait">
-            · {waiting} {waitingWord}
-          </span>
-        )}
-        {extra && <span className="players-wait">· {extra}</span>}
-      </div>
+    <div className="players players-line">
+      <span className="players-count">
+        {names.length} of {playerSlots(names.length)} in
+      </span>
       <SpotPills names={names} />
+      {waiting > 0 && (
+        <span className="players-wait">
+          · {waiting} {waitingWord}
+        </span>
+      )}
+      {extra && <span className="players-wait">· {extra}</span>}
     </div>
   );
 }

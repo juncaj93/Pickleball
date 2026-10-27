@@ -95,6 +95,9 @@ export interface AdminRosterEntry {
   waitlistPosition: number | null;
   promotedAt: string | null;
   refundedAt: string | null;
+  /** Dropped out after the day-before check-in opened. */
+  lateDropAt: string | null;
+  lateDropDoneAt: string | null;
   promotionReason: 'made_six' | 'spot_opened' | null;
   promotionNotifiedAt: string | null;
   /** Last two of six. */
@@ -158,6 +161,12 @@ export interface AdminPlayer {
   usualDays: number[];
   /** Added their own name and the organizer hasn't reviewed them yet. */
   isNew: boolean;
+  /** Organizer only: how many times they dropped out late. */
+  lateDrops: number;
+  /** Their calendar subscription link is allowed (the organizer can turn it off). */
+  calendarOn: boolean;
+  /** They've made a calendar link. */
+  calendarMade: boolean;
 }
 
 export interface AuditEntry {

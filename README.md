@@ -20,8 +20,11 @@ tap their name once ("Who are you?"), and the phone remembers it. After that eve
   It stays until the organizer marks them paid; opening Venmo never does
 - a schedule of date tiles (TUE / 3 / NOV) with the time, court status
   (Court booked / Court not booked yet / Waiting on the court), any holiday, who's in ("3 of 4 in"), **one big
-  button** (I'm in / I'm out / Join waitlist / Join standby), and a small
-  Add to Calendar link. No money on the rows
+  button** (I'm in / I'm out / Join waitlist / Join standby), a small
+  **Pay $14** button once they're in (it becomes "Sent? Robin confirms when it
+  arrives." after tapping, and "✓ Paid" once marked), and Add to Calendar
+- **Subscribe in Apple Calendar** at the bottom: a private link with only
+  their sessions, kept up to date (Apple refreshes on its own schedule)
 
 **The organizer** signs in at `/admin` with a PIN. A floating pill at the
 bottom has three tabs: **Home**, **Players**, **Settings**.
@@ -101,6 +104,22 @@ Canceling a session opens a ready text ("Pickleball Tue, Nov 3 is canceled.")
 and moving one opens "Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM.", each
 with an optional one-line reason, **Text the group** and **Copy message**.
 After a cancel, the same screen lists who already paid, with **Refunded**.
+
+## Late drops
+
+A confirmed player who drops out once the day-before check-in has opened (24
+hours before play by default) is a late drop: a "Late drop" card on Home with
+the name and time, a one-tap **Text the group: spot open** text, and, if they
+had paid, "Ryan paid $14 and dropped. Refund?" with **Refunded**. The session
+card shows a "Late drop" tag, and the Players screen counts them ("Late drops:
+2", organizer only). Removals by the organizer don't count.
+
+## Calendar subscriptions
+
+Each player's link lists only their sessions (title Pickleball, the club's
+address, Eastern time, canceled ones marked canceled). No money or names. The
+organizer's link in Settings lists every session. Turn a person's link off
+from Players; the old link stops working for good.
 
 ## Monthly money (organizer only)
 
