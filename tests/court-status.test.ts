@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courtStatus, playerSlots } from '../shared/court';
-import { buildTodo, courtCounts } from '../src/pages/admin/todo';
+import { buildTodo, homeBadgeCount } from '../src/pages/admin/todo';
+import { formatShortDate } from '../shared/time';
 import { firstSession, HOUR, playerPhone, setupGroup } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
@@ -22,6 +23,10 @@ describe('court status words', () => {
     expect(courtStatus({ ...base, canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
     expect(courtStatus({ ...base, canceled: true, courtState: 'not_opened' })).toMatchObject({ kind: 'off', text: "Court didn't open" });
     expect(courtStatus({ ...base, bookingStatus: 'unavailable' })).toMatchObject({ kind: 'off', text: 'No court available' });
+    expect(courtStatus({ ...base, bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' })).toMatchObject({ kind: 'later', text: 'Booking opens Tue, Nov 17' });
+    // A booked or waitlisted session keeps its own look even before the window opens.
+    expect(courtStatus({ ...base, bookingStatus: 'booked', bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('booked');
+    expect(courtStatus({ ...base, courtState: 'waitlist', bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('waitlist');
     expect(courtStatus({ ...base, bookingStatus: 'booked', canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
     expect(courtStatus({ ...base, bookingStatus: 'booked', started: true, past: true })).toMatchObject({ kind: 'off', text: 'Played' });
   });
@@ -41,17 +46,50 @@ async function upcoming(ctx: Ctx) {
 }
 
 describe('organizer Home', () => {
-  it('summary counts: booked, needs a court, on the waitlist', async () => {
+  it('amber only inside the 14-day booking window; further out is quiet gray "Booking opens [date]"', async () => {
     const ctx = await setupGroup();
-    const [a, b, c] = await upcoming(ctx);
-    await ctx.organizer.call('POST', `/api/admin/sessions/${a.id}/booked`, {});
-    await ctx.organizer.call('POST', `/api/admin/sessions/${b.id}/booked`, {});
-    await ctx.organizer.call('POST', `/api/admin/sessions/${c.id}/court`, { action: 'waitlist' });
     const d = await dash(ctx);
-    const n = courtCounts(d.sessions, Date.parse(d.now));
-    expect(n.booked).toBe(2);
-    expect(n.waitlist).toBe(1);
-    expect(n.needs).toBe(d.sessions.filter((s: any) => Date.parse(s.endsAt) > Date.parse(d.now)).length - 3);
+    const nowMs = Date.parse(d.now);
+    const live = d.sessions.filter((s: any) => Date.parse(s.startsAt) > nowMs);
+    const look = (s: any) =>
+      courtStatus({ ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen }, d.group.timezone);
+    const inside = live.filter((s: any) => Date.parse(s.startsAt) - nowMs <= 14 * 24 * HOUR);
+    const outside = live.filter((s: any) => Date.parse(s.startsAt) - nowMs > 14 * 24 * HOUR);
+    expect(inside.length).toBeGreaterThan(0);
+    expect(outside.length).toBeGreaterThan(0);
+    for (const s of inside) expect(look(s)).toMatchObject({ kind: 'needs', text: 'Court not booked' });
+    for (const s of outside) {
+      const c = look(s);
+      expect(c.kind).toBe('later');
+      expect(Date.parse(s.startsAt) - Date.parse(s.bookingOpensAt)).toBe(14 * 24 * HOUR);
+      expect(c.text).toBe(`Booking opens ${formatShortDate(s.bookingOpensAt, d.group.timezone)}`);
+      expect(c.text).toMatch(/^Booking opens (Sun|Mon|Tue|Wed|Thu|Fri|Sat), [A-Z][a-z]{2} \d{1,2}$/);
+    }
+    // Players see the same quiet look for far-off sessions.
+    const g = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data;
+    const far = g.sessions.find((x: any) => x.id === outside[0].id);
+    expect(far.bookingOpen).toBe(false);
+    expect(courtStatus(far, d.group.timezone)).toMatchObject({ kind: 'later', playerText: 'Court not booked yet' });
+    const near = g.sessions.find((x: any) => x.id === inside[0].id);
+    expect(courtStatus(near, d.group.timezone)).toMatchObject({ kind: 'needs', playerText: 'Court not booked yet' });
+  });
+
+  it('the Home badge counts only courts inside the booking window', async () => {
+    const ctx = await setupGroup();
+    const d = await dash(ctx);
+    const nowMs = Date.parse(d.now);
+    const inside = d.sessions.filter((s: any) => Date.parse(s.startsAt) > nowMs && Date.parse(s.startsAt) - nowMs <= 14 * 24 * HOUR);
+    expect(homeBadgeCount(d)).toBe(buildTodo(d).length + inside.length);
+    expect(homeBadgeCount(d)).toBeLessThan(d.sessions.length);
+    // Booking one drops the count by one.
+    await ctx.organizer.call('POST', `/api/admin/sessions/${inside[0].id}/booked`, {});
+    const after = await dash(ctx);
+    expect(homeBadgeCount(after)).toBe(buildTodo(after).length + inside.length - 1);
+  });
+
+  it('"Needs attention" is empty when there is nothing to do', async () => {
+    const ctx = await setupGroup();
+    expect(buildTodo(await dash(ctx))).toEqual([]);
   });
 
   it('"Needs attention" never repeats a session card: no court or short-on-players cards there', async () => {

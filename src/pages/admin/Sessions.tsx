@@ -55,7 +55,11 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const [more, setMore] = useState(false);
-  const court = courtStatus({ ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past });
+  const court = courtStatus(
+    { ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen },
+    tz,
+  );
+  const later = court.kind === 'later';
   const courtWait = court.kind === 'waitlist';
   const needsCourt = court.kind === 'needs';
   const details = [
@@ -99,10 +103,10 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           {details.length > 0 && <div className="court-sub muted">{details.join(' · ')}</div>}
         </div>
       )}
-      {court.kind === 'off' && (
+      {(court.kind === 'off' || later) && (
         <div className="court-line">
           <div className="court-status">
-            <CourtIcon kind="off" />
+            <CourtIcon kind={court.kind} />
             <span>{court.text}</span>
           </div>
           {s.state.flags.canceled && s.canceledAt && <div className="court-sub muted">{formatDateTime(s.canceledAt, tz)}</div>}
@@ -145,7 +149,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               Texts
             </button>
           )}
-          {live && (needsCourt || courtWait) && (
+          {live && (needsCourt || courtWait || later) && (
             <button className="btn small secondary" onClick={() => ctx.open('poll', s.id)}>
               Text the group poll
             </button>
@@ -160,7 +164,8 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               Invite substitutes
             </button>
           )}
-          {needsCourt && <CourtWaitlistStart ctx={ctx} s={s} />}
+          {later && <BookedButton ctx={ctx} s={s} small />}
+          {(needsCourt || later) && <CourtWaitlistStart ctx={ctx} s={s} />}
           {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
           {!s.state.flags.started && s.courtState !== 'not_opened' && (
             <button className="btn small danger" onClick={() => ctx.open('cancel', s.id)}>
@@ -174,11 +179,11 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
 }
 
 /** "I booked it": one tap, no questions. The deadline starts at 12 hours before play. */
-function BookedButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+function BookedButton({ ctx, s, small }: { ctx: AdminCtx; s: AdminSessionView; small?: boolean }) {
   const { busy, error, run } = useAction(ctx);
   return (
     <>
-      <button className="btn" disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court booked')}>
+      <button className={small ? 'btn small secondary' : 'btn'} disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court booked')}>
         {busy ? 'Saving…' : 'I booked it'}
       </button>
       {error && <Notice tone="danger">{error}</Notice>}

@@ -2,7 +2,7 @@ import { type ReactNode, useEffect } from 'react';
 import { DEFAULT_TIMEZONE, formatShortDate } from '../shared/time';
 import { useNow } from './lib';
 
-export function TopBar({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: ReactNode }) {
+export function TopBar({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub?: ReactNode; action?: ReactNode }) {
   const now = useNow();
   useEffect(() => {
     document.title = `${title} · Pickleball`;
@@ -18,7 +18,10 @@ export function TopBar({ eyebrow, title, sub }: { eyebrow: string; title: string
             {formatShortDate(new Date(now).toISOString(), DEFAULT_TIMEZONE)}
           </span>
         </div>
-        <h1>{title}</h1>
+        <div className="topbar-title">
+          <h1>{title}</h1>
+          {action}
+        </div>
         {sub && <div className="sub">{sub}</div>}
       </div>
     </header>

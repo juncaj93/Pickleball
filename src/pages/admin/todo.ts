@@ -1,6 +1,5 @@
 // What the organizer's Home counts and lists. No React here, so tests can use it.
 import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
-import { courtStatus, type CourtKind } from '../../../shared/court';
 
 export type TodoItem =
   | { kind: 'five' | 'tell' | 'sixdrop' | 'checkin' | 'daybefore' | 'lastcall'; session: AdminSessionView }
@@ -46,13 +45,7 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   return items;
 }
 
-export const courtOf = (s: AdminSessionView) =>
-  courtStatus({ ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past }).kind;
-
-/** Upcoming sessions by court status, for the summary line and the Home badge. */
-export function courtCounts(sessions: AdminSessionView[], nowMs: number): Record<CourtKind, number> {
-  const n: Record<CourtKind, number> = { booked: 0, needs: 0, waitlist: 0, off: 0 };
-  for (const s of sessions) if (Date.parse(s.endsAt) > nowMs) n[courtOf(s)]++;
-  return n;
+/** The red number on the Home tab: Needs attention items plus courts to book inside the booking window. */
+export function homeBadgeCount(d: AdminDashboard): number {
+  return buildTodo(d).length + d.sessions.filter((s) => s.state.flags.needsBooking).length;
 }
-

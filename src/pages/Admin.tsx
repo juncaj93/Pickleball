@@ -8,8 +8,7 @@ import { TopBar } from '../Shell';
 import { Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
-import type { CourtKind } from '../../shared/court';
-import { buildTodo, courtCounts, courtOf, type TodoItem } from './admin/todo';
+import { buildTodo, homeBadgeCount, type TodoItem } from './admin/todo';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 
@@ -103,8 +102,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
   const [viewing, setViewing] = useState<{ id: string; name: string } | null>(null);
   const [pickViewAs, setPickViewAs] = useState(false);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
-  // Courts count toward the badge once their booking window opens.
-  const todoCount = buildTodo(d).length + d.sessions.filter((s) => s.state.flags.needsBooking).length;
+  const todoCount = homeBadgeCount(d);
 
   if (viewing) {
     return (
@@ -122,9 +120,17 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
   return (
     <>
-      <TopBar eyebrow="Organizer" title={d.group.name} />
+      <TopBar
+        eyebrow="Organizer"
+        title={d.group.name}
+        action={
+          <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
+            View as…
+          </button>
+        }
+      />
       <main className="page has-tabs stack-lg">
-        {tab === 'home' && <HomeTab ctx={ctx} onViewAs={() => setPickViewAs(true)} />}
+        {tab === 'home' && <HomeTab ctx={ctx} />}
         {tab === 'players' && <PlayersTab ctx={ctx} />}
         {tab === 'settings' && <SettingsTab ctx={ctx} />}
       </main>
@@ -181,24 +187,20 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
 // ---------- Needs attention ----------
 
-function HomeTab({ ctx, onViewAs }: { ctx: AdminCtx; onViewAs: () => void }) {
+function HomeTab({ ctx }: { ctx: AdminCtx }) {
   const items = buildTodo(ctx.d);
   return (
     <>
-      <section className="stack" aria-labelledby="todo-title">
-        <div className="spread" style={{ alignItems: 'center' }}>
+      {items.length > 0 && (
+        <section className="stack" aria-labelledby="todo-title">
           <h2 id="todo-title" className="section-title">
             Needs attention
           </h2>
-          <button className="btn small ghost" onClick={onViewAs}>
-            View as…
-          </button>
-        </div>
-        {items.length === 0 && <Empty>Nothing needs you right now.</Empty>}
-        {items.map((item) => (
-          <TodoCard key={item.kind + ('session' in item ? item.session.id : '')} ctx={ctx} item={item} />
-        ))}
-      </section>
+          {items.map((item) => (
+            <TodoCard key={item.kind + ('session' in item ? item.session.id : '')} ctx={ctx} item={item} />
+          ))}
+        </section>
+      )}
 
       <CreditsCard ctx={ctx} />
       <SessionsSection ctx={ctx} />
@@ -518,28 +520,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const list = ctx.d.sessions.filter((s) => (view === 'upcoming' ? Date.parse(s.endsAt) > nowMs : Date.parse(s.endsAt) <= nowMs));
   if (view === 'past') list.reverse();
   const shown = all ? list : list.slice(0, 4);
-  const counts = courtCounts(ctx.d.sessions, nowMs);
   const tz = ctx.d.group.timezone;
-  const parts = (
-    [
-      ['booked', `${counts.booked} booked`],
-      ['needs', `${counts.needs} need${counts.needs === 1 ? 's' : ''} a court`],
-      ['waitlist', `${counts.waitlist} on the waitlist`],
-    ] as const
-  ).filter(([k]) => counts[k] > 0);
-
-  function jump(kind: CourtKind) {
-    const first = list.find((s) => courtOf(s) === kind) ?? ctx.d.sessions.find((s) => Date.parse(s.endsAt) > nowMs && courtOf(s) === kind);
-    if (!first) return;
-    setView('upcoming');
-    setAll(true);
-    // Wait for the card to draw if it was hidden behind "Show all".
-    requestAnimationFrame(() => {
-      const el = document.getElementById(`session-${first.id}`);
-      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el?.focus({ preventScroll: true });
-    });
-  }
 
   return (
     <section className="stack" aria-labelledby="sessions-title">
@@ -551,18 +532,6 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
           Book on CourtReserve
         </a>
       </div>
-      {parts.length > 0 && (
-        <p className="court-summary" aria-label="Courts">
-          {parts.map(([k, label], i) => (
-            <span key={k}>
-              {i > 0 && ', '}
-              <button className={`link-btn sum-${k}`} onClick={() => jump(k)}>
-                {label}
-              </button>
-            </span>
-          ))}
-        </p>
-      )}
       <div className="segmented" role="group" aria-label="Which sessions">
         <button aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>
           Upcoming

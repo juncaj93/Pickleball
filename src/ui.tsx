@@ -327,6 +327,12 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
           <path d="M12 7.2V12l3.2 2" />
         </>
       )}
+      {kind === 'later' && (
+        <>
+          <rect x="3.8" y="5.2" width="16.4" height="15" rx="2.5" />
+          <path d="M3.8 9.8h16.4M8.2 3.4v3.6M15.8 3.4v3.6" />
+        </>
+      )}
       {kind === 'off' && (
         <>
           <circle cx="12" cy="12" r="9" />

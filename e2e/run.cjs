@@ -167,6 +167,68 @@ async function main() {
       await admin.screenshot({ path: path.join(SHOTS, 'admin-home.png'), fullPage: true });
     });
 
+    await check('nothing to do: no "Needs attention" section at all; View as… sits in the green header', async () => {
+      // A day-before or last-call card may be due right now, depending on the clock. Clear it to empty the list.
+      const todo = admin.locator('section[aria-labelledby="todo-title"]');
+      if (await todo.count()) {
+        await todo.getByRole('heading', { name: 'Needs attention' }).waitFor();
+        while ((await todo.getByRole('button', { name: 'Done', exact: true }).count()) > 0) {
+          const n = await todo.locator('article').count();
+          await todo.getByRole('button', { name: 'Done', exact: true }).first().click();
+          await admin.waitForFunction((was) => document.querySelectorAll('section[aria-labelledby="todo-title"] article').length < was, n);
+        }
+      }
+      assert((await admin.getByRole('heading', { name: 'Needs attention' }).count()) === 0, 'empty Needs attention should be hidden');
+      assert((await admin.getByText('Nothing needs you right now').count()) === 0, 'empty-state box should be gone');
+      const viewAs = admin.locator('header').getByRole('button', { name: 'View as…' });
+      await viewAs.waitFor();
+      assert((await admin.getByRole('button', { name: 'View as…' }).count()) === 1, 'View as… should appear once, in the header');
+      const b = await viewAs.boundingBox();
+      const header = await admin.locator('header.topbar').boundingBox();
+      const vw = admin.viewportSize().width;
+      assert(b.x + b.width > vw - 40 && b.y + b.height <= header.y + header.height, 'View as… should be at the top right of the header');
+      assert(b.height >= 44, `View as… is too small to tap (${b.height}px)`);
+    });
+
+    await check('booking window: amber inside 14 days, quiet gray "Booking opens [date]" further out; badge counts only the amber ones', async () => {
+      const cards = sessionCards(admin);
+      const all = admin.getByRole('button', { name: /^Show all/ });
+      if (await all.count()) await all.click();
+      const today = Date.now();
+      let amber = 0;
+      let gray = 0;
+      for (let i = 0; i < (await cards.count()); i++) {
+        const c = cards.nth(i);
+        const kind = await c.getAttribute('data-court');
+        if (kind === 'needs') {
+          amber++;
+          await c.locator('.court-banner').getByText('Court not booked', { exact: true }).waitFor();
+        }
+        if (kind === 'later') {
+          gray++;
+          const text = (await c.locator('.court-status').innerText()).trim();
+          const m = text.match(/^Booking opens (Sun|Mon|Tue|Wed|Thu|Fri|Sat), ([A-Z][a-z]{2} \d{1,2})$/);
+          assert(m, `quiet card said: ${text}`);
+          // The opening date is 14 days before the session.
+          const day = (await c.locator('h2').innerText()).trim().replace(/^[A-Z][a-z]{2}, /, '');
+          let start = new Date(`${day}, ${new Date(today).getFullYear()} 12:00`);
+          if (start.getTime() < today - 60 * 24 * 3600_000) start = new Date(`${day}, ${new Date(today).getFullYear() + 1} 12:00`);
+          const opens = new Date(start.getTime() - 14 * 24 * 3600_000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+          assert(text === `Booking opens ${opens}`, `quiet card said "${text}", expected "Booking opens ${opens}" for ${day}`);
+          const look = await c.evaluate((el) => ({ border: getComputedStyle(el).borderTopStyle, banner: el.querySelectorAll('.court-banner').length }));
+          assert(look.border !== 'dashed' && look.banner === 0, 'far-off sessions should not get the amber look');
+          assert((await c.getByRole('button', { name: 'I booked it' }).count()) === 0, 'quiet card should keep I booked it under More');
+        }
+      }
+      assert(amber > 0 && gray > 0, `expected both looks, got ${amber} amber and ${gray} gray`);
+      const badge = (await tab(admin, 'Home').locator('.badge').innerText()).replace(/\D/g, '');
+      const todoCards = await admin.locator('section[aria-labelledby="todo-title"] article').count();
+      assert(Number(badge) === amber + todoCards, `badge was ${badge}, expected ${amber + todoCards} (only sessions inside the booking window)`);
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-window.png'), fullPage: true });
+      await admin.reload();
+      await sessionCards(admin).first().waitFor();
+    });
+
     await check('sessions are grouped by calendar week with a divider', async () => {
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
       const labels = await section.locator('.week-break').allInnerTexts();
@@ -366,6 +428,7 @@ async function main() {
       await card.getByRole('button', { name: /I'm in|Join waitlist/ }).waitFor();
       await admin.reload();
       const five = admin.getByRole('article', { name: /5 going, need 4 or 6/ });
+      await admin.getByRole('heading', { name: 'Needs attention' }).waitFor();
       await five.getByRole('button', { name: /Back to 4: move .* to the waitlist/ }).waitFor();
       await five.getByRole('button', { name: 'Invite someone to make 6' }).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-five.png'), fullPage: true });
@@ -465,21 +528,9 @@ async function main() {
       assert((await row.getByRole('button', { name: /I booked it|Court opened/ }).count()) === 0, 'players get no court buttons');
     });
 
-    await check('summary line counts courts, and each part jumps to its first card', async () => {
-      await admin.evaluate(() => window.scrollTo(0, 0));
-      const summary = admin.locator('.court-summary');
-      const text = (await summary.innerText()).trim();
-      assert(/^(\d+ booked)?(, )?(\d+ needs? a court)?(, )?(\d+ on the waitlist)?$/.test(text) && /\d/.test(text), `summary was: ${text}`);
-      assert(/^1 booked, \d+ needs? a court$/.test(text), `expected 1 booked and the rest needing a court: ${text}`);
-      await summary.getByRole('button', { name: /needs? a court/ }).click();
-      const target = sessionCards(admin).locator('[data-court="needs"]').first().or(admin.locator('article[data-court="needs"]').first());
-      await admin.waitForFunction(() => {
-        const el = document.querySelector('article[data-court="needs"]');
-        if (!el) return false;
-        const r = el.getBoundingClientRect();
-        return r.top >= -2 && r.top < window.innerHeight / 2;
-      });
-      assert((await target.count()) > 0, 'no needs-a-court card');
+    await check('no summary line above the sessions', async () => {
+      assert((await admin.locator('.court-summary').count()) === 0, 'summary line should be gone');
+      assert((await admin.getByText(/\d+ needs? a court/).count()) === 0, 'summary text should be gone');
     });
 
     await check('session card: one main button, Edit booking, Players, and the rest under More', async () => {
@@ -943,7 +994,6 @@ async function main() {
       const c2 = sessionCards(admin).nth(3);
       await c2.locator('.players-line').getByText(/2 on standby/).waitFor();
       assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
-      assert(/1 on the waitlist/.test(await admin.locator('.court-summary').innerText()), 'summary should count the court waitlist');
       await c2.getByRole('button', { name: 'Court opened' }).click();
       await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
       assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
