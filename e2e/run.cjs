@@ -891,7 +891,7 @@ async function main() {
       assert((await firstCard(players.Frankie).getByText(/credit toward your next/).count()) === 0, 'last two should not hear about a credit');
       // A small Pay button with the right amount, and no big money block.
       await firstCard(players.Casey).getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-      assert((await firstCard(players.Casey).locator('.pay-small').innerText()).trim() === 'Pay $14', 'Casey should see Pay $14');
+      assert((await firstCard(players.Casey).locator('a.pay-small').innerText()).trim() === 'Pay $14', 'Casey should see Pay $14');
       await firstCard(players.Frankie).getByRole('link', { name: 'Pay $9 with Venmo' }).waitFor();
       for (const name of ['Casey', 'Frankie']) {
         const rows = players[name].locator('.schedule');
