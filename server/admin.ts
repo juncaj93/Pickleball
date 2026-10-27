@@ -76,6 +76,15 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     details: safeParse(a.details_json),
     createdAt: a.created_at,
   }));
+  // Late drops per person, ever. Organizer only.
+  const lateRows = await ctx.db
+    .prepare(
+      `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE s.group_id = ? AND sp.late_drop_at IS NOT NULL GROUP BY sp.player_id`,
+    )
+    .bind(group.id)
+    .all<{ id: string; n: number }>();
+  const lateDrops = new Map(lateRows.results.map((r) => [r.id, Number(r.n)]));
   return {
     group: {
       name: group.name,
@@ -91,7 +100,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       openAccess: !!group.open_access,
       hasGroupWord: !!group.group_word_hash,
     },
-    players: players.map(adminPlayerView),
+    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0 })),
     sessions: sessions.map((s) => {
       const roster = rosters.get(s.id) ?? [];
       return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster));
@@ -366,6 +375,18 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   }
   await audit(ctx.db, group.id, session.id, `roster_${action}`, { player: player.display_name, result }, ctx.nowIso);
   return { result };
+}
+
+/** Done on a late-drop card: hides it. The late drop still counts on the Players screen. */
+export async function lateDropDone(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const playerId = v.id(body.playerId, 'playerId');
+  await ctx.db
+    .prepare('UPDATE session_players SET late_drop_done_at = ? WHERE session_id = ? AND player_id = ? AND late_drop_at IS NOT NULL')
+    .bind(ctx.nowIso, session.id, playerId)
+    .run();
+  await audit(ctx.db, group.id, session.id, 'late_drop_done', {}, ctx.nowIso);
+  return { ok: true };
 }
 
 /** "Refunded" for someone who paid for a session that was then canceled. Only a record; no money moves. */

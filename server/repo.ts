@@ -22,6 +22,7 @@ export interface GroupRow {
   first_session_date: string | null;
   open_access: number;
   group_word_hash: string | null;
+  calendar_token: string | null;
 }
 
 export interface PlayerRow {
@@ -36,6 +37,8 @@ export interface PlayerRow {
   usual_days: string;
   self_added_at: string | null;
   is_new: number;
+  calendar_token: string | null;
+  calendar_off: number;
 }
 
 export interface SessionRow {
@@ -64,6 +67,7 @@ export interface SessionRow {
   holiday_hours_ok_at: string | null;
   day_before_done_at: string | null;
   last_call_done_at: string | null;
+  updated_at: string;
 }
 
 export interface RosterRow {
@@ -83,6 +87,8 @@ export interface RosterRow {
   promotion_reason: 'made_six' | 'spot_opened' | null;
   promotion_notified_at: string | null;
   refunded_at: string | null;
+  late_drop_at: string | null;
+  late_drop_done_at: string | null;
   display_name: string;
   phone_number: string | null;
 }

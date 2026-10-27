@@ -29,6 +29,10 @@ import { api, ApiError, useNow } from '../../lib';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
+import { refundRows } from './todo';
+
+/** Every late drop on this session, done or not, for the tag on the card. */
+const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
 
 export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll' | 'canceled' | 'moved';
 
@@ -68,7 +72,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
     s.reservationReference ? `Reservation #${s.reservationReference}` : null,
     s.courtCostCents !== null ? `${formatCents(s.courtCostCents)} (only you see this)` : null,
   ].filter(Boolean);
-  const paid = s.payableCount > 0 ? `${s.paidCount}/${s.payableCount} paid` : null;
   return (
     <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} aria-labelledby={`as-${s.id}`}>
       {needsCourt && (
@@ -105,6 +108,11 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             </button>
           </div>
           {s.holiday && <HolidayControl ctx={ctx} s={s} />}
+          {lateDropsAll(s).length > 0 && (
+            <div className="late-line">
+              <span className="late-tag">Late drop</span> {lateDropsAll(s).map((r) => `${r.name} ${formatTime(r.lateDropAt!, tz)}`).join(', ')}
+            </div>
+          )}
           {court.kind === 'booked' && (
             <div className="court-line">
               <div className="court-status">
@@ -120,7 +128,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                 <CourtIcon kind={court.kind} />
                 <span>{court.text}</span>
               </div>
-              {s.state.flags.canceled && s.canceledAt && <div className="court-sub muted">{formatDateTime(s.canceledAt, tz)}</div>}
             </div>
           )}
           {!s.state.flags.canceled && (
@@ -131,7 +138,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                 .map((r) => r.name)}
               waiting={s.waitlistCount}
               waitingWord={courtWait ? 'on standby' : 'waiting'}
-              extra={paid}
             />
           )}
         </div>
@@ -270,7 +276,7 @@ function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 }
 
 /**
- * Holiday pill for the organizer: "Election Day · check venue hours" with
+ * Holiday pill for the organizer: "Election Day · check hours" with
  * "Hours OK" (read aloud as "Venue is open normal hours"). Once confirmed it shows "✓ Election Day"
  * with Undo. Saved on the session, so it holds on every device.
  */
@@ -428,23 +434,32 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
 }
 
 /** Everyone who paid for a canceled session, with a Refunded checkbox. A record only; no money moves. */
-export function RefundList({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionView; only?: string[] }) {
   const { busy, run } = useAction(ctx);
   // Ticks show right away while saving.
   const [pending, setPending] = useState<Record<string, boolean>>({});
-  const paid = s.roster.filter((r) => r.paymentStatus === 'paid');
+  const paid = refundRows(s).filter((r) => !only || only.includes(r.playerId));
   if (paid.length === 0) return null;
   const isRefunded = (r: AdminRosterEntry) => pending[r.playerId] ?? !!r.refundedAt;
   const left = paid.filter((r) => !isRefunded(r)).length;
+  const canceled = s.state.flags.canceled;
   return (
     <section className="stack refunds" aria-label="Pay back">
-      <h3>Pay back {left > 0 ? `(${left} left)` : '(all done)'}</h3>
+      {canceled && <h3>Pay back {left > 0 ? `(${left} left)` : '(all done)'}</h3>}
       <ul className="rows">
         {paid.map((r) => (
           <li key={r.playerId}>
             <span className="who">
-              <strong>{r.name}</strong>
-              <span className="small muted">paid {formatPrice(r.paymentAmountCents ?? 0)}</span>
+              {canceled ? (
+                <>
+                  <strong>{r.name}</strong>
+                  <span className="small muted">paid {formatPrice(r.paymentAmountCents ?? 0)}</span>
+                </>
+              ) : (
+                <span>
+                  <strong>{r.name}</strong> paid {formatPrice(r.paymentAmountCents ?? 0)} and dropped. Refund?
+                </span>
+              )}
             </span>
             <label className="check">
               <input

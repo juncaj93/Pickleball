@@ -4,7 +4,7 @@ import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../..
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
-import { HomeScreenSteps } from '../PlayerHome';
+import { HomeScreenSteps, SubscribeBlock } from '../PlayerHome';
 import { MonthlyMoneyPage } from './MonthlyMoney';
 import type { AdminCtx } from '../Admin';
 
@@ -355,6 +355,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <p className="small muted">The icon then opens the site full screen, like an app.</p>
       </section>
 
+      <section className="card stack" aria-labelledby="cal-title">
+        <h2 id="cal-title">Calendar</h2>
+        <p className="small muted">Every session, with cancellations and time changes. Players get their own link, with only their sessions, at the bottom of their screen. You can turn a person's link off under Players.</p>
+        <OrganizerSubscribe />
+      </section>
+
       <form className="card stack" onSubmit={changePin}>
         <h2>Change PIN</h2>
         <label className="field">
@@ -440,4 +446,21 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       />
     </>
   );
+}
+
+function OrganizerSubscribe() {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function go() {
+    setBusy(true);
+    try {
+      const res = await api<{ webcal: string }>('GET', '/api/admin/calendar');
+      window.location.href = res.webcal;
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : "Couldn't make the calendar link.", 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <SubscribeBlock busy={busy} onTap={go} />;
 }

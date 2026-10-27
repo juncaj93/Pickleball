@@ -29,7 +29,7 @@ import {
 import { holidayFor } from '../shared/holidays';
 import { newId } from './crypto';
 import { recentCount, recordEvent } from './rate';
-import { confirmAttendance, decline, joinSession, withdraw } from './roster';
+import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { playerSessionView } from './views';
 import * as v from './validate';
 
@@ -51,7 +51,7 @@ interface Viewer {
  * picked. With an X-View-As header, the signed-in organizer acts as that
  * player instead; without the organizer's sign-in the header is refused.
  */
-async function viewer(ctx: Ctx): Promise<Viewer> {
+export async function viewer(ctx: Ctx): Promise<Viewer> {
   const viewAs = ctx.req.headers.get('X-View-As');
   if (viewAs) {
     const group = await requireAdmin(ctx);
@@ -281,6 +281,7 @@ async function logIfViewingAs(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>
 export async function playerJoin(ctx: Ctx) {
   const who = await actingOn(ctx);
   const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto');
+  await clearLateDrop(ctx.db, who.session.id, who.playerId);
   await logIfViewingAs(ctx, who, 'join', res.result);
   return res;
 }
@@ -288,6 +289,7 @@ export async function playerJoin(ctx: Ctx) {
 export async function playerWithdraw(ctx: Ctx) {
   const who = await actingOn(ctx);
   const res = await withdraw(ctx.db, who.session, who.playerId, ctx.nowMs);
+  if (res.freedSpot) await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group).checkInHours);
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   await logIfViewingAs(ctx, who, 'withdraw', result);
   return { result };
