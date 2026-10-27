@@ -58,6 +58,7 @@ route('POST', '/api/link/act', actOnToken);
 route('POST', '/api/admin/login', admin.login);
 route('POST', '/api/admin/logout', (ctx) => admin.logout(ctx));
 route('GET', '/api/admin/dashboard', (ctx) => admin.dashboard(ctx));
+route('GET', '/api/admin/activity', (ctx) => admin.activity(ctx));
 route('PUT', '/api/admin/group', admin.updateGroup);
 route('POST', '/api/admin/pin', admin.changePin);
 route('POST', '/api/admin/rotate-link', (ctx) => admin.rotateLink(ctx));

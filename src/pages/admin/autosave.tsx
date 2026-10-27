@@ -1,5 +1,6 @@
-// Settings save themselves: text and number boxes when you leave the box or
-// stop typing for a second, toggles and the date right away. A bad value
+// Settings save themselves: number and dollar boxes when you leave the box
+// or press Enter, text boxes also after a one-second pause, toggles and the
+// date right away. A bad value
 // shows its error under the row and is never sent; a failed save keeps what
 // was typed and offers a retry.
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
@@ -77,6 +78,7 @@ export function AutoInput({
   body,
   layout,
   input,
+  saveOnPause = true,
 }: {
   auto: Autosave;
   id: string;
@@ -87,6 +89,8 @@ export function AutoInput({
   body: (value: unknown) => Record<string, unknown>;
   /** 'row': name on the left, small box on the right. 'field': name above a full-width box. */
   layout: 'row' | 'field';
+  /** Text boxes also save after a one-second pause. Number and dollar boxes don't, so "1" on the way to "14" is never saved. */
+  saveOnPause?: boolean;
   input: (p: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => ReactNode;
 }) {
   const inputId = useId();
@@ -117,7 +121,7 @@ export function AutoInput({
     onChange: (v) => {
       setText(v);
       window.clearTimeout(timer.current);
-      timer.current = window.setTimeout(() => void commit(), PAUSE_MS);
+      if (saveOnPause) timer.current = window.setTimeout(() => void commit(), PAUSE_MS);
     },
     onBlur: () => void commit(),
   });

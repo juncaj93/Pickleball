@@ -19,6 +19,9 @@ const upcoming = (s: AdminSessionView) => !s.state.flags.canceled && !s.state.fl
 /** Late drops the organizer hasn't tapped Done on. */
 export const lateDrops = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt && !r.lateDropDoneAt);
 
+/** Every late drop on a session, handled or not (the card tag and History). */
+export const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
+
 /** Who to pay back: everyone who paid for a canceled session, or anyone who paid and then dropped. */
 export const refundRows = (s: AdminSessionView) =>
   s.roster.filter((r) => r.paymentStatus === 'paid' && (s.state.flags.canceled || r.status === 'withdrawn'));

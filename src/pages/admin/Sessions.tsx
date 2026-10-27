@@ -29,11 +29,10 @@ import { api, ApiError, copyText, isIOS, useNow } from '../../lib';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
-import { refundRows } from './todo';
+import { lateDropsAll, refundRows } from './todo';
 import { shareGameText, TextsMenu } from './Texts';
 
 /** Every late drop on this session, done or not, for the tag on the card. */
-const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
 
 export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'poll' | 'canceled' | 'moved';
 

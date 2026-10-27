@@ -1,7 +1,7 @@
-import { type FormEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
-import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
+import { TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
 import { AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
@@ -14,6 +14,13 @@ type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
 /** Number and dollar boxes: the name on the left, a small box on the right. */
+/** Enter (or Done on the phone keypad) saves a number box by leaving it. */
+const enterLeaves = (e: KeyboardEvent<HTMLInputElement>) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    e.currentTarget.blur();
+  }
+};
 const numberBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => (
   <input
     id={id}
@@ -21,9 +28,11 @@ const numberBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value
     type="text"
     inputMode="numeric"
     pattern="[0-9]*"
+    enterKeyHint="done"
     autoComplete="off"
     value={value}
     onChange={(e) => onChange(e.target.value)}
+    onKeyDown={enterLeaves}
     onBlur={onBlur}
     aria-invalid={invalid || undefined}
   />
@@ -31,7 +40,18 @@ const numberBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value
 const moneyBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => (
   <span className="money-input set-input">
     <span aria-hidden="true">$</span>
-    <input id={id} type="text" inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} aria-invalid={invalid || undefined} />
+    <input
+      id={id}
+      type="text"
+      inputMode="decimal"
+      enterKeyHint="done"
+      autoComplete="off"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={enterLeaves}
+      onBlur={onBlur}
+      aria-invalid={invalid || undefined}
+    />
   </span>
 );
 const textBox =
@@ -94,35 +114,6 @@ const ADVANCED_SETTINGS: { key: WholeKey; label: string; hint?: string }[] = [
   { key: 'defaultDeadlineHours', label: 'Cancellation deadline for new sessions (hours before play)', hint: "Northville's rule is 12. You can change it on any booking." },
 ];
 
-const ACTION_TEXT: Record<string, string> = {
-  booking_updated: 'Booking changed',
-  session_canceled: 'Session canceled',
-  session_reopened: 'Session reopened',
-  decision_keep: 'Kept session as is',
-  decision_try_fill: 'Chose to try to fill',
-  marked_paid: 'Marked paid',
-  marked_unpaid: 'Marked unpaid',
-  player_added: 'Player added',
-  player_updated: 'Player edited',
-  settings_updated: 'Settings changed',
-  session_rescheduled: 'Session moved',
-  credit_cleared: 'Credit cleared',
-  six_drop_sorted: 'Sorted out the drop below 6',
-  player_self_added: 'Added their own name',
-  player_hidden: 'Name hidden',
-  player_deleted: 'Name deleted',
-  as_player_join: 'As player: joined',
-  as_player_withdraw: 'As player: dropped out',
-  as_player_check_in: 'As player: checked in',
-  as_player_decline: 'As player: said no',
-  pin_changed: 'PIN changed',
-  player_link_rotated: 'Player link replaced',
-  roster_confirm: 'Gave a spot',
-  roster_waitlist: 'Moved to waitlist',
-  roster_withdraw: 'Removed from session',
-  roster_confirm_attendance: 'Marked as coming',
-};
-
 export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const g = ctx.d.group;
@@ -162,6 +153,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       initial={String(g.settings[key])}
       parse={(t) => parseWhole(t, SETTING_LIMITS[key][0], SETTING_LIMITS[key][1])}
       body={(value) => ({ settings: { [key]: value } })}
+      saveOnPause={false}
       input={numberBox}
     />
   );
@@ -180,6 +172,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         return cents === null || cents > SETTING_LIMITS[key][1] ? { error: 'Enter an amount like 14 or 14.50.' } : { value: cents };
       }}
       body={(value) => ({ settings: { [key]: value } })}
+      saveOnPause={false}
       input={moneyBox}
     />
   );
@@ -380,22 +373,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <a className="btn secondary" href="/api/admin/export" download="pickleball-export.csv">
             Download CSV
           </a>
-        </Section>
-        <Section id="audit" title="Recent changes" sections={sections}>
-          {ctx.d.audit.length === 0 ? (
-            <p className="muted">No changes yet.</p>
-          ) : (
-            <ul className="list small">
-              {ctx.d.audit.slice(0, 30).map((a) => (
-                <li key={a.id}>
-                  <strong>{ACTION_TEXT[a.action] ?? a.action}</strong>
-                  {typeof a.details.player === 'string' ? ` · ${a.details.player}` : ''}
-                  {typeof a.details.name === 'string' ? ` · ${a.details.name}` : ''}
-                  <div className="muted">{formatDateTime(a.createdAt, tz)}</div>
-                </li>
-              ))}
-            </ul>
-          )}
         </Section>
       </div>
 

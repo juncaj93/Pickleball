@@ -447,6 +447,15 @@ export const GearIcon = () => (
   </svg>
 );
 
+/** History: a clock with an arrow curling back around it. */
+export const HistoryIcon = () => (
+  <svg {...ICON} data-icon="history">
+    <path d="M3.8 12a8.2 8.2 0 1 0 2.4-5.8" />
+    <path d="M3.5 4.2v3.6h3.6" />
+    <path d="M12 7.6V12l3 1.9" />
+  </svg>
+);
+
 /** Auto: a circle, half filled. */
 export const AutoModeIcon = () => (
   <svg {...ICON} data-icon="auto">
@@ -565,9 +574,9 @@ export function PlayersLine({
  * A link to CourtReserve. Its own blue-teal color and a small arrow show it
  * leaves this site; it always opens in a new tab.
  */
-export function CourtReserveLink({ href, children, small }: { href: string; children: ReactNode; small?: boolean }) {
+export function CourtReserveLink({ href, children, small, pill }: { href: string; children: ReactNode; small?: boolean; pill?: boolean }) {
   return (
-    <a className={`btn external${small ? ' small' : ''}`} href={href} target="_blank" rel="noopener noreferrer">
+    <a className={`btn external${small ? ' small' : ''}${pill ? ' pill' : ''}`} href={href} target="_blank" rel="noopener noreferrer">
       {children}
       <svg {...ICON} className="ext-icon" strokeWidth={2.2}>
         <path d="M8 16 16.5 7.5M9.5 7.5h7v7" />

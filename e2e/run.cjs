@@ -1588,7 +1588,7 @@ async function main() {
       const banner = card.locator('.court-banner');
       await banner.getByRole('button', { name: 'Court opened' }).waitFor();
       await banner.getByRole('button', { name: "Didn't open" }).waitFor();
-      await banner.getByText('On the court waitlist', { exact: true }).waitFor();
+      await banner.getByText('Court waitlist', { exact: true }).waitFor();
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
       assert((await card.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist card should not offer I booked it');
       // Words and both buttons on a single row inside the banner.

@@ -167,6 +167,24 @@ export interface AdminPlayer {
   lateDrops: number;
 }
 
+/** One line in History > Activity. */
+export interface ActivityEntry {
+  id: string;
+  /** Who did it: a player's name, "organizer", or "organizer as Name". */
+  actorLabel: string;
+  action: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+  /** The session it was about, if any. */
+  sessionStartsAt: string | null;
+}
+
+export interface ActivityPage {
+  entries: ActivityEntry[];
+  /** More, older entries exist (ask with ?before=<oldest createdAt>). */
+  more: boolean;
+}
+
 export interface AuditEntry {
   id: string;
   sessionId: string | null;

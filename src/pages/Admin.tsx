@@ -6,7 +6,7 @@ import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
-import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
+import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
 import { RefundList, type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
@@ -14,8 +14,9 @@ import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/tod
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
+import { HistoryTab } from './admin/HistoryTab';
 
-type Tab = 'home' | 'money' | 'players' | 'settings';
+type Tab = 'home' | 'players' | 'money' | 'history' | 'settings';
 
 export interface AdminCtx {
   d: AdminDashboard;
@@ -97,6 +98,7 @@ const TABS: { id: Tab; label: string; Icon: () => ReactElement }[] = [
   { id: 'home', label: 'Home', Icon: HomeIcon },
   { id: 'players', label: 'Players', Icon: PeopleIcon },
   { id: 'money', label: 'Money', Icon: DollarIcon },
+  { id: 'history', label: 'History', Icon: HistoryIcon },
   { id: 'settings', label: 'Settings', Icon: GearIcon },
 ];
 
@@ -161,6 +163,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
+        {tab === 'history' && <HistoryTab key={fresh} ctx={ctx} />}
         {tab === 'settings' && <SettingsTab ctx={ctx} />}
       </main>
       <nav className="tabbar" aria-label="Organizer sections">
@@ -569,37 +572,38 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
 
 function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
-  const [view, setView] = useState<'upcoming' | 'past'>('upcoming');
   const [all, setAll] = useState(false);
-  const list = ctx.d.sessions.filter((s) => (view === 'upcoming' ? Date.parse(s.endsAt) > nowMs : Date.parse(s.endsAt) <= nowMs));
-  if (view === 'past') list.reverse();
+  // Home is upcoming only; played sessions live under History.
+  const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs);
   const shown = all ? list : list.slice(0, 4);
   const tz = ctx.d.group.timezone;
 
   return (
     <section className="stack" aria-labelledby="sessions-title">
-      {/* One slim row: Upcoming | Past on the left, Book on the right. */}
-      <div className="sessions-bar">
-        <h2 id="sessions-title" className="sr-only">
-          Sessions
-        </h2>
-        <div className="segmented compact" role="group" aria-label="Which sessions">
-          <button aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>
-            Upcoming
-          </button>
-          <button aria-pressed={view === 'past'} onClick={() => setView('past')}>
-            Past
-          </button>
+      <h2 id="sessions-title" className="sr-only">
+        Sessions
+      </h2>
+      {list.length === 0 && (
+        <div className="week-break">
+          <h3>Upcoming</h3>
+          <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
+            Book a court
+          </CourtReserveLink>
         </div>
-        <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-          Book
-        </CourtReserveLink>
-      </div>
-      {list.length === 0 && <Empty>No sessions here.</Empty>}
+      )}
+      {list.length === 0 && <Empty>No upcoming sessions.</Empty>}
       {shown.map((s, i) => (
         <Fragment key={s.id}>
           {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(shown[i - 1].startsAt, tz)) && (
-            <h3 className="week-break">{weekLabel(s.startsAt, nowMs, tz)}</h3>
+            <div className="week-break">
+              <h3>{weekLabel(s.startsAt, nowMs, tz)}</h3>
+              {/* "Book a court" rides on the first divider line, adding no height. */}
+              {i === 0 && (
+                <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
+                  Book a court
+                </CourtReserveLink>
+              )}
+            </div>
           )}
           <SessionCard ctx={ctx} s={s} />
         </Fragment>

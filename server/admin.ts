@@ -1,4 +1,4 @@
-import type { ActionLinkDraft, AdminDashboard, AuditEntry } from '../shared/api';
+import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
@@ -745,4 +745,31 @@ export async function exportData(ctx: Ctx): Promise<Response> {
       'Cache-Control': 'no-store',
     },
   });
+}
+
+const ACTIVITY_PAGE = 80;
+
+/** GET /api/admin/activity?before=<iso>: History > Activity, newest first. */
+export async function activity(ctx: Ctx): Promise<ActivityPage> {
+  const group = await requireAdmin(ctx);
+  const before = ctx.url.searchParams.get('before');
+  const until = before && !Number.isNaN(Date.parse(before)) ? before : '9999';
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT a.*, s.starts_at AS session_starts_at FROM admin_audit_log a LEFT JOIN sessions s ON s.id = a.session_id
+       WHERE a.group_id = ? AND a.created_at < ? ORDER BY a.created_at DESC LIMIT ?`,
+    )
+    .bind(group.id, until, ACTIVITY_PAGE + 1)
+    .all<{ id: string; actor_label: string; action: string; details_json: string; created_at: string; session_starts_at: string | null }>();
+  return {
+    entries: results.slice(0, ACTIVITY_PAGE).map((a) => ({
+      id: a.id,
+      actorLabel: a.actor_label,
+      action: a.action,
+      details: safeParse(a.details_json),
+      createdAt: a.created_at,
+      sessionStartsAt: a.session_starts_at,
+    })),
+    more: results.length > ACTIVITY_PAGE,
+  };
 }

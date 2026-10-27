@@ -757,7 +757,7 @@ textarea:focus {
   transform: translateX(-50%);
   /* Low, close to the bottom edge; Safari keeps its own toolbar below the page. */
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
-  width: min(380px, calc(100% - 24px));
+  width: min(430px, calc(100% - 20px));
   /* Nearly solid, so card text never shows through; a light blur softens the edge. */
   background: color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: blur(8px);
@@ -774,7 +774,7 @@ textarea:focus {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 2px;
 }
 
@@ -785,8 +785,9 @@ textarea:focus {
   border-radius: 999px;
   background: none;
   font: inherit;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   font-weight: 650;
+  white-space: nowrap;
   color: var(--ink-2);
   display: flex;
   flex-direction: column;
@@ -1705,23 +1706,19 @@ label.field {
   border: 2px solid var(--info-edge);
 }
 .court-banner {
-  margin: -8px -12px 0;
-  padding: 4px 12px;
+  /* Tight, even padding; the same gap again before the card body. */
+  margin: -8px -12px 5px;
+  padding: 10px 12px;
   border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-wrap: wrap;
-  gap: 6px 10px;
+  gap: 8px 10px;
 }
 .court-banner .court-status {
   font-family: var(--display);
   font-size: 1.08rem;
   line-height: 1.15;
-}
-.court-banner .btn {
-  min-height: 44px;
-  padding: 6px 14px;
 }
 .banner-btns {
   display: flex;
@@ -1799,6 +1796,39 @@ label.field {
   flex: 1;
   height: 1px;
   background: var(--line);
+}
+.week-break h3 {
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+}
+.week-break::after {
+  order: 1;
+}
+/* "Book a court" on the first divider line: small, and pulled in so the
+   line is no taller than before; the tap area reaches 44px. */
+.btn.external.pill {
+  order: 2;
+  position: relative;
+  flex: none;
+  min-height: 0;
+  height: 24px;
+  margin: -6px 0;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.btn.external.pill .ext-icon {
+  width: 12px;
+  height: 12px;
+}
+.btn.external.pill::before {
+  content: '';
+  position: absolute;
+  inset: -10px -2px;
 }
 
 /* Links that leave for CourtReserve: their own blue-teal, with a small arrow. */
@@ -2006,14 +2036,6 @@ label.field {
   padding: 0;
 }
 
-/* Organizer Home: Upcoming | Past and Book on one slim row. */
-.sessions-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 44px;
-}
 .segmented.compact {
   flex: 0 1 210px;
   padding: 0;
@@ -2024,22 +2046,34 @@ label.field {
   padding: 4px 10px;
   font-size: 0.88rem;
 }
-/* Court banners: the words on the left (wrapping to two lines if needed),
-   the buttons on the right, or on their own line below when they don't fit. */
+/* Court strips (blue waitlist, amber not booked): one row when the label and
+   both buttons fit. Otherwise the label takes the first row and the two
+   buttons share the second as exact halves. The label soaks up spare room on
+   a shared row (grow 999), so the buttons only stretch once they're alone. */
 .court-banner .court-status {
-  flex: 1 1 9rem;
+  flex: 999 1 auto;
   min-width: 0;
 }
 .court-banner .court-status > span {
   overflow-wrap: break-word;
 }
 .court-banner .banner-btns {
-  flex: none;
-  margin-left: auto;
+  flex: 1 1 auto;
 }
-.court-banner .banner-btns .btn {
-  padding: 6px 10px;
-  font-size: 0.88rem;
+.court-banner .banner-btns > .btn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: max-content;
+  min-height: 36px;
+  padding: 4px 10px;
+  font-size: 15px;
+  line-height: 1.1;
+}
+/* 36px to look at, 44px to tap. */
+.court-banner .banner-btns > .btn::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
 }
 
 .late-line {
@@ -2497,4 +2531,108 @@ label.field {
 .btn.copy-text {
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+/* ---------- History ---------- */
+.chips {
+  display: flex;
+  gap: 8px;
+}
+.chip-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.chip-btn[aria-pressed='true'] {
+  background: var(--court);
+  border-color: var(--court);
+  color: #fff;
+}
+.chip-btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.history-list,
+.activity-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 14px;
+}
+.history-list > li + li,
+.activity-list > li + li {
+  border-top: 1px solid var(--line);
+}
+.history-row {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.h-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.h-date {
+  font-weight: 700;
+}
+.h-time {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.h-money {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+.h-money.ok {
+  color: var(--ok-fg);
+}
+.h-money.warn {
+  color: var(--warn-fg);
+}
+.h-who {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  font-size: 0.85rem;
+}
+.h-names {
+  color: var(--ink-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.h-canceled {
+  color: var(--muted-fg);
+  font-weight: 600;
+}
+.activity-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 9px 0;
+}
+.a-text {
+  font-size: 0.92rem;
+}
+.a-time {
+  font-size: 0.78rem;
+  color: var(--ink-2);
 }
