@@ -276,7 +276,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 </span>
               </span>
               <button
-                className="btn small"
+                className="btn small secondary"
                 disabled={busy}
                 aria-label={`Mark ${r.name} paid for ${formatShortDate(r.session.startsAt, tz)}`}
                 onClick={() =>
@@ -344,9 +344,10 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       {item.kind === 'tell' &&
         s.roster
           .filter((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt)
-          .map((r) => (
+          .map((r, i) => (
             <div key={r.playerId} className="stack" style={{ gap: 8 }}>
               <SmsDraft
+                quiet={i > 0}
                 to={r.name}
                 phone={r.phone}
                 body={promotionMessage(

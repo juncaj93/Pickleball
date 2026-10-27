@@ -596,8 +596,22 @@ function countLine(s: PlayerSessionView): string {
  * note filled in), then a quiet "Sent?" note once tapped, or "Paid" once the
  * organizer marks it. On game day after 8:00 AM the card at the top takes over.
  */
-function RowPay({ g, s, onTop, onChanged }: { g: GroupView; s: PlayerSessionView; onTop: boolean; onChanged: () => Promise<void> }) {
+function RowPay({
+  g,
+  s,
+  onTop,
+  quiet,
+  onChanged,
+}: {
+  g: GroupView;
+  s: PlayerSessionView;
+  onTop: boolean;
+  /** Another green button is on this card: Pay and I paid use the gray style. */
+  quiet?: boolean;
+  onChanged: () => Promise<void>;
+}) {
   const mine = s.mine!;
+  const btn = `btn small pay-small${quiet ? ' secondary' : ''}`;
   const { sent, markSent } = useSent(g.me?.id, [s.id]);
   const paid = usePaid([s.id], onChanged);
   if (mine.paymentStatus === 'paid') {
@@ -616,7 +630,7 @@ function RowPay({ g, s, onTop, onChanged }: { g: GroupView; s: PlayerSessionView
   if (onTop || mine.oweCents <= 0) return <span />;
   if (sent || !g.group.venmoUrl) {
     return (
-      <button className="btn small pay-small" disabled={paid.busy} onClick={() => paid.set(true)}>
+      <button className={btn} disabled={paid.busy} onClick={() => paid.set(true)}>
         I paid
       </button>
     );
@@ -625,7 +639,7 @@ function RowPay({ g, s, onTop, onChanged }: { g: GroupView; s: PlayerSessionView
   if (!pay.url) return <span />;
   return (
     <a
-      className="btn small pay-small"
+      className={btn}
       href={pay.url}
       target="_blank"
       rel="noopener noreferrer"
@@ -666,6 +680,7 @@ function ScheduleRow({
   const waiting = mine?.status === 'waitlisted';
   const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
+  const askCheckIn = open && inSession && s.confirmationOpen && !mine.attendanceConfirmed;
 
   async function run(path: string, label: (data: any) => string) {
     setBusy(true);
@@ -698,9 +713,11 @@ function ScheduleRow({
             {inSession && !s.canceled && <span className="me-tag">You're in</span>}
             {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
           </div>
-          {/* Sign-up never depends on the court being booked. */}
-          {open &&
-            (inSession || waiting ? (
+        </div>
+        {/* The one button, in its own column beside the first lines. Sign-up never depends on the court being booked. */}
+        {open && (
+          <div className="sched-act">
+            {inSession || waiting ? (
               <button className="btn secondary sched-btn" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
                 I'm out
               </button>
@@ -708,8 +725,9 @@ function ScheduleRow({
               <button className="btn sched-btn" disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
                 {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
               </button>
-            ))}
-        </div>
+            )}
+          </div>
+        )}
         <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
           <span className="court-status">
             <CourtIcon kind={court.kind} />
@@ -717,13 +735,6 @@ function ScheduleRow({
           </span>
           {s.holiday && <HolidayPill name={s.holiday} />}
         </div>
-
-        {s.note && <p className="game-note">{s.note}</p>}
-        {goodNews && <Notice tone="ok">{goodNews}</Notice>}
-        {inSession && mine.creditComing && (
-          <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
-        )}
-
         {!s.canceled && (s.confirmed.length > 0 || !courtWait) && (
           <div className="in-line">
             <span className="in-count">{countLine(s)}</span>
@@ -736,8 +747,14 @@ function ScheduleRow({
           </p>
         )}
 
-        {open && inSession && s.confirmationOpen && !mine.attendanceConfirmed && (
-          <div className="spread" style={{ alignItems: 'center' }}>
+        {s.note && <p className="game-note">{s.note}</p>}
+        {goodNews && <Notice tone="ok">{goodNews}</Notice>}
+        {inSession && mine.creditComing && (
+          <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
+        )}
+
+        {askCheckIn && (
+          <div className="confirm-row">
             <span className="small">Still coming?</span>
             <button className="btn small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
               Yes, I'm coming
@@ -749,7 +766,8 @@ function ScheduleRow({
 
         {inSession && !s.canceled && (
           <div className="row-foot">
-            <RowPay g={g} s={s} onTop={g.payDue.some((o) => o.sessionId === s.id)} onChanged={onChanged} />
+            {/* "Yes, I'm coming" is the card's green button while it shows, so Pay goes quiet. */}
+            <RowPay g={g} s={s} quiet={askCheckIn} onTop={g.payDue.some((o) => o.sessionId === s.id)} onChanged={onChanged} />
             {open && (
               <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
                 Add to calendar

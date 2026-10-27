@@ -52,7 +52,12 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
       {m && (
         <>
           <div className={`card money-sum ${m.netCents >= 0 ? 'surplus' : 'short'}`}>
-            <p className="bottom-line">{m.bottomLine}</p>
+            {/* "Left" in big numbers, the one-line sentence under it, then the breakdown. */}
+            <div className="money-head">
+              <span className="money-left-label">Left</span>
+              <span className="big-amount">{m.netCents < 0 ? `−${formatPrice(-m.netCents)}` : formatPrice(m.netCents)}</span>
+              <p className="bottom-line">{m.bottomLine}</p>
+            </div>
             <dl className="kv">
               <dt>Collected</dt>
               <dd>{formatPrice(m.collectedCents)}</dd>
@@ -60,10 +65,6 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               <dd>−{formatPrice(m.courtCostCents)}</dd>
               <dt>Credits owed</dt>
               <dd>−{formatPrice(m.creditsOwedCents)}</dd>
-              <dt>Left</dt>
-              <dd>
-                <strong>{m.netCents < 0 ? `−${formatPrice(-m.netCents)}` : formatPrice(m.netCents)}</strong>
-              </dd>
               <dt>Membership</dt>
               <dd>{formatPrice(m.membershipCents)}</dd>
               <dt>Sessions played</dt>
@@ -76,9 +77,8 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
             <details className="money-sess card">
               <summary>
                 <span>Sessions in {m.label}</span>
-                <span className="set-note">{m.sessions.filter((x) => x.state === 'played').length} played</span>
               </summary>
-            <ul className="rows" aria-label={`Sessions in ${m.label}`}>
+              <ul className="rows" aria-label={`Sessions in ${m.label}`}>
               {m.sessions.map((s) => (
                 <li key={s.id}>
                   <span className="who">

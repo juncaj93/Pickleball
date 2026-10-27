@@ -1,127 +1,195 @@
+/* Pickleball Bros: one calm, iPhone-style look for every screen.
+ *
+ * Tokens first (colors, type, space, radii, shadows, motion), then base
+ * elements, shared parts (cards, buttons, sheets, bubbles, tab bar), then
+ * each screen. Green is the one accent: at most one filled green button per
+ * card. Status colors keep their meaning: green booked, amber not booked,
+ * gray not open yet, blue court waitlist, red only for cancel.
+ */
+
+/* ---------- Tokens ---------- */
+
 :root {
-  --bg: #f3f1ea;
+  /* Surfaces */
+  --bg: #f2f2ee;
   --surface: #ffffff;
-  --surface-2: #f7f6f1;
-  --ink: #16231c;
-  --ink-2: #4a5850;
-  --line: #e0dccf;
-  --court: #1d5a43;
-  --court-deep: #143f2f;
-  --ball: #d4ef3c;
-  --primary: #1d5a43;
+  --surface-2: #f6f6f3;
+  --fill: #ebebe6;
+  --fill-press: #dfdfd9;
+  --ink: #141815;
+  --ink-2: #596059;
+  --line: #e2e2dc;
+  --line-strong: #c9c9c2;
+  --tile-line: #262b27;
+  --scrim: rgb(12 18 14 / 40%);
+
+  /* The one accent: court green. White text on it is 6.4:1. */
+  --court: #1e6a48;
+  --court-deep: #154d34;
+  --primary: #1e6a48;
+  --primary-press: #185a3c;
   --primary-ink: #ffffff;
-  --focus: #1d5a43;
+  --accent-text: #1a5c3e;
+  --accent-soft: #e2efe7;
+  --focus: #1e6a48;
+
+  /* The logo's ball yellow, used sparingly. */
+  --ball: #d8f03b;
+  --ball-ink: #1a2410;
+
+  /* Status */
   --ok-fg: #17603a;
-  --ok-bg: #e1f2e6;
-  --warn-fg: #774700;
-  --warn-bg: #fcefcc;
-  --danger-fg: #9b1c1c;
-  --danger-bg: #fbe3df;
+  --ok-bg: #e1f1e6;
+  --ok-edge: #2a8a54;
+  --warn-fg: #7a4800;
+  --warn-bg: #fcf0d2;
+  --warn-edge: #c08422;
+  --danger-fg: #a11c1c;
+  --danger-bg: #fbe5e1;
   --info-fg: #1c4a85;
-  --info-bg: #e2ebf8;
-  --muted-fg: #525a55;
-  --muted-bg: #eceae3;
+  --info-bg: #e3ecf8;
+  --info-edge: #3b78c8;
+  --muted-fg: #565d58;
+  --muted-bg: #ebebe6;
   --holiday-fg: #5b2a86;
-  --holiday-bg: #efe6f8;
-  --ok-edge: #1f8a4c;
-  --ext-bg: #1f5f7a;
-  --ext-fg: #ffffff;
-  --pop-bg: #e6f3ea;
-  --pop-fg: #14472f;
-  --pop-line: #b9dcc5;
+  --holiday-bg: #f1e9f9;
+
+  /* CourtReserve links: their own quiet blue-teal. */
+  --ext-bg: #e1edf2;
+  --ext-fg: #17536b;
+
+  /* Confirmation bubbles */
+  --pop-bg: #16231c;
+  --pop-fg: #ffffff;
+  --pop-line: #16231c;
   --pop-err-bg: #fbe1dc;
   --pop-err-fg: #8a1b14;
   --pop-err-line: #efb2a8;
-  --warn-edge: #b7791f;
-  --info-edge: #2f6fc4;
-  --shadow: 0 1px 2px rgb(22 35 28 / 6%), 0 4px 14px rgb(22 35 28 / 5%);
-  --radius: 16px;
+
+  /* Type */
   --display: 'Bricolage Grotesque Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
-  --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --body: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Space, radii, shadows */
+  --gutter: 16px;
+  --radius: 16px;
+  --r-md: 12px;
+  --r-sm: 9px;
+  --shadow: 0 1px 2px rgb(20 28 22 / 5%), 0 2px 8px rgb(20 28 22 / 4%);
+  --shadow-lift: 0 8px 28px rgb(12 20 15 / 16%), 0 1px 3px rgb(12 20 15 / 8%);
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --fast: 120ms;
+  --mid: 220ms;
+  --slow: 320ms;
+
   color-scheme: light;
 }
 
 /* Dark mode: follows the phone unless Settings picks Light or Dark
-   (public/theme.js sets data-theme on <html> before the page draws). */
+   (public/theme.js sets data-theme on <html> before the page draws).
+   The same values twice: once for "follow the phone", once for "Dark". */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0e1411;
-    --surface: #17201b;
-    --surface-2: #1d2722;
-    --ink: #edf1ec;
-    --ink-2: #a8b4ac;
-    --line: #2b3730;
-    --court: #1d5a43;
-    --court-deep: #0f2e22;
-    --primary: #23784f;
+    --bg: #0b0d0c;
+    --surface: #171a18;
+    --surface-2: #1f2320;
+    --fill: #272b28;
+    --fill-press: #313632;
+    --ink: #f1f3f1;
+    --ink-2: #a4ada7;
+    --line: #2a2f2b;
+    --line-strong: #3b413c;
+    --tile-line: #c9d1cb;
+    --scrim: rgb(0 0 0 / 55%);
+    --court: #237a52;
+    --court-deep: #0f2e21;
+    --primary: #237a52;
+    --primary-press: #1d6845;
     --primary-ink: #ffffff;
+    --accent-text: #86d9aa;
+    --accent-soft: #17301f;
     --focus: #c9e83c;
     --ok-fg: #8fe0ad;
-    --ok-bg: #163222;
-    --warn-fg: #f4cd70;
-    --warn-bg: #382a0b;
-    --danger-fg: #ffaba1;
-    --danger-bg: #3c1916;
-    --info-fg: #a8c7f4;
-    --info-bg: #162943;
-    --muted-fg: #b3b9b5;
-    --muted-bg: #252c28;
-    --holiday-fg: #d9bdf5;
-    --holiday-bg: #2e2140;
+    --ok-bg: #15301f;
     --ok-edge: #4cc27a;
-    --ext-bg: #2a7192;
-    --ext-fg: #ffffff;
-    --pop-bg: #1e3a2b;
-    --pop-fg: #d6f2e0;
-    --pop-line: #2f5a43;
+    --warn-fg: #f4cd70;
+    --warn-bg: #33270b;
+    --warn-edge: #e0a83e;
+    --danger-fg: #ffaba1;
+    --danger-bg: #3a1714;
+    --info-fg: #a8c7f4;
+    --info-bg: #152740;
+    --info-edge: #6fa3ea;
+    --muted-fg: #b3b9b5;
+    --muted-bg: #252a27;
+    --holiday-fg: #dcc2f7;
+    --holiday-bg: #2b1f3c;
+    --ext-bg: #14313d;
+    --ext-fg: #9fd3e8;
+    --pop-bg: #f1f3f1;
+    --pop-fg: #121614;
+    --pop-line: #f1f3f1;
     --pop-err-bg: #4a1d18;
     --pop-err-fg: #ffd3cc;
     --pop-err-line: #7a3029;
-    --warn-edge: #e0a83e;
-    --info-edge: #6fa3ea;
-    --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+    --shadow: 0 0 0 1px rgb(255 255 255 / 3%);
+    --shadow-lift: 0 10px 32px rgb(0 0 0 / 55%), 0 0 0 1px rgb(255 255 255 / 6%);
     color-scheme: dark;
   }
 }
 
 :root[data-theme='dark'] {
-  --bg: #0e1411;
-  --surface: #17201b;
-  --surface-2: #1d2722;
-  --ink: #edf1ec;
-  --ink-2: #a8b4ac;
-  --line: #2b3730;
-  --court: #1d5a43;
-  --court-deep: #0f2e22;
-  --primary: #23784f;
+  --bg: #0b0d0c;
+  --surface: #171a18;
+  --surface-2: #1f2320;
+  --fill: #272b28;
+  --fill-press: #313632;
+  --ink: #f1f3f1;
+  --ink-2: #a4ada7;
+  --line: #2a2f2b;
+  --line-strong: #3b413c;
+  --tile-line: #c9d1cb;
+  --scrim: rgb(0 0 0 / 55%);
+  --court: #237a52;
+  --court-deep: #0f2e21;
+  --primary: #237a52;
+  --primary-press: #1d6845;
   --primary-ink: #ffffff;
+  --accent-text: #86d9aa;
+  --accent-soft: #17301f;
   --focus: #c9e83c;
   --ok-fg: #8fe0ad;
-  --ok-bg: #163222;
-  --warn-fg: #f4cd70;
-  --warn-bg: #382a0b;
-  --danger-fg: #ffaba1;
-  --danger-bg: #3c1916;
-  --info-fg: #a8c7f4;
-  --info-bg: #162943;
-  --muted-fg: #b3b9b5;
-  --muted-bg: #252c28;
-  --holiday-fg: #d9bdf5;
-  --holiday-bg: #2e2140;
+  --ok-bg: #15301f;
   --ok-edge: #4cc27a;
-  --ext-bg: #2a7192;
-  --ext-fg: #ffffff;
-  --pop-bg: #1e3a2b;
-  --pop-fg: #d6f2e0;
-  --pop-line: #2f5a43;
+  --warn-fg: #f4cd70;
+  --warn-bg: #33270b;
+  --warn-edge: #e0a83e;
+  --danger-fg: #ffaba1;
+  --danger-bg: #3a1714;
+  --info-fg: #a8c7f4;
+  --info-bg: #152740;
+  --info-edge: #6fa3ea;
+  --muted-fg: #b3b9b5;
+  --muted-bg: #252a27;
+  --holiday-fg: #dcc2f7;
+  --holiday-bg: #2b1f3c;
+  --ext-bg: #14313d;
+  --ext-fg: #9fd3e8;
+  --pop-bg: #f1f3f1;
+  --pop-fg: #121614;
+  --pop-line: #f1f3f1;
   --pop-err-bg: #4a1d18;
   --pop-err-fg: #ffd3cc;
   --pop-err-line: #7a3029;
-  --warn-edge: #e0a83e;
-  --info-edge: #6fa3ea;
-  --shadow: 0 1px 2px rgb(0 0 0 / 40%);
+  --shadow: 0 0 0 1px rgb(255 255 255 / 3%);
+  --shadow-lift: 0 10px 32px rgb(0 0 0 / 55%), 0 0 0 1px rgb(255 255 255 / 6%);
   color-scheme: dark;
 }
+
+/* ---------- Base ---------- */
 
 *,
 *::before,
@@ -142,8 +210,10 @@ body {
   color: var(--ink);
   font-family: var(--body);
   font-size: 17px;
-  line-height: 1.45;
+  line-height: 1.4;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
   overflow-x: hidden;
 }
 
@@ -151,9 +221,11 @@ h1,
 h2,
 h3 {
   font-family: var(--display);
+  font-optical-sizing: auto;
   line-height: 1.15;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
 }
 
 h1 {
@@ -162,12 +234,12 @@ h1 {
 }
 
 h2 {
-  font-size: 1.3rem;
-  font-weight: 650;
+  font-size: 1.25rem;
+  font-weight: 680;
 }
 
 h3 {
-  font-size: 1.08rem;
+  font-size: 1.05rem;
   font-weight: 650;
 }
 
@@ -197,12 +269,13 @@ a {
   border: 0;
 }
 
-/* ---------- Layout ---------- */
+/* ---------- Header ---------- */
 
+/* Calm, like an iPhone large title: the page's own background, dark text. */
 .topbar {
-  background: var(--court);
-  color: #fff;
-  padding: calc(env(safe-area-inset-top) + 8px) 16px 10px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: calc(env(safe-area-inset-top) + 10px) var(--gutter) 6px;
 }
 
 .topbar-inner,
@@ -226,18 +299,20 @@ a {
 .topbar .eyebrow {
   font-size: 0.7rem;
   font-weight: 650;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: #d9e7df;
+  color: var(--ink-2);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .topbar h1 {
-  color: #fff;
-  font-size: 1.3rem;
-  line-height: 1.15;
+  color: var(--ink);
+  font-size: 1.45rem;
+  font-weight: 750;
+  line-height: 1.12;
+  letter-spacing: -0.02em;
   margin: 1px 0 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -247,32 +322,34 @@ a {
   overflow-wrap: anywhere;
 }
 
-/* Today, like the iPhone Calendar icon. */
+/* Today, drawn like the session date tiles: white with a thin dark outline. */
 .topbar .today {
   flex: none;
   width: 42px;
   height: 44px;
   border-radius: 10px;
-  background: #fff;
-  color: #16231c;
+  background: var(--surface);
+  border: 1.5px solid var(--tile-line);
+  color: var(--ink);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   line-height: 1;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
   font-family: var(--display);
 }
 .topbar .today .dow {
-  font-size: 0.66rem;
-  font-weight: 800;
+  font-family: var(--body);
+  font-size: 0.7rem;
+  font-weight: 750;
   letter-spacing: 0.06em;
-  color: #c8321f;
+  color: var(--accent-text);
 }
 .topbar .today .day {
-  font-size: 1.35rem;
-  font-weight: 700;
-  margin-top: 2px;
+  font-size: 1.32rem;
+  font-weight: 720;
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
 }
 
 .ball-dot {
@@ -284,7 +361,7 @@ a {
   flex: none;
 }
 
-/* Small round buttons left of the date square. More can sit in this row later. */
+/* Small round buttons left of the date square. */
 .topbar-tools {
   flex: none;
   display: flex;
@@ -292,7 +369,7 @@ a {
   gap: 2px;
   margin-right: -4px;
 }
-/* Light/dark: a 44px tap area around a 36px circle with a soft outline. */
+/* Light/dark: a 44px tap area around a 36px circle. */
 .mode-btn {
   position: relative;
   flex: none;
@@ -301,7 +378,7 @@ a {
   padding: 0;
   border: 0;
   background: transparent;
-  color: #fff;
+  color: var(--ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -312,11 +389,13 @@ a {
   position: absolute;
   inset: 4px;
   border-radius: 50%;
-  border: 1.5px solid rgb(255 255 255 / 55%);
-  background: rgb(255 255 255 / 8%);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  transition: transform var(--fast) var(--ease);
 }
-.mode-btn:hover::after {
-  background: rgb(255 255 255 / 16%);
+.mode-btn:active::after {
+  transform: scale(0.92);
 }
 .mode-btn svg {
   position: relative;
@@ -325,42 +404,40 @@ a {
   height: 18px;
 }
 .mode-btn:focus-visible {
-  outline: 3px solid var(--ball);
+  outline: 3px solid var(--focus);
   outline-offset: -1px;
   border-radius: 50%;
 }
 
-/* Small light button on the green band: "View as…" or "Not you?". */
+/* "View as…": a soft gray pill, like an iPhone toolbar button. */
 .topbar-btn {
   flex: none;
   min-height: 44px;
-  padding: 0 12px;
+  padding: 0 14px;
   border-radius: 999px;
-  border: 1px solid rgb(255 255 255 / 45%);
-  background: transparent;
-  color: #fff;
+  border: 0;
+  background: var(--fill);
+  color: var(--ink);
   font: inherit;
-  font-size: 0.84rem;
+  font-size: 0.86rem;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
+  transition: transform var(--fast) var(--ease), background-color var(--fast);
 }
-.topbar-btn:hover {
-  background: rgb(255 255 255 / 12%);
-}
-.topbar-btn:focus-visible {
-  outline: 3px solid var(--ball);
-  outline-offset: 2px;
+.topbar-btn:active {
+  transform: scale(0.96);
+  background: var(--fill-press);
 }
 
 .topbar .sub {
   margin-top: 2px;
-  color: #d9e7df;
+  color: var(--ink-2);
   font-size: 0.85rem;
 }
 
 .topbar .sub button {
-  color: #fff;
+  color: inherit;
   background: none;
   border: 0;
   padding: 4px 2px;
@@ -370,8 +447,98 @@ a {
   cursor: pointer;
 }
 
+/* Header logo on a white rounded backing, so its white edge looks intentional in dark mode. */
+.brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #fff;
+  padding: 2px;
+  flex: none;
+  object-fit: contain;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+/* "Ryan  not you?": the name, then small gray underlined text on the same line. */
+.title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.title-line h1 {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.not-you {
+  position: relative;
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* An invisible tap area at least 44px tall around the small text. */
+.not-you::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+.not-you:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* "View as...": a ball-yellow bar pinned above everything. */
+.viewas-banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 2px) var(--gutter) 2px;
+  background: var(--ball);
+  color: var(--ball-ink);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.viewas-banner .btn.small {
+  min-height: 44px;
+  padding: 0 4px 0 14px;
+  background: transparent;
+  color: var(--ball-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  box-shadow: none;
+  border: 0;
+}
+.viewas-banner + .topbar {
+  padding-top: 10px;
+}
+
+/* ---------- Layout ---------- */
+
 .page {
-  padding: 16px 16px calc(env(safe-area-inset-bottom) + 32px);
+  padding: 8px var(--gutter) calc(env(safe-area-inset-bottom) + 32px);
 }
 
 .page.has-tabs {
@@ -405,14 +572,16 @@ a {
   gap: 12px;
 }
 
+/* iPhone-style group header: small gray caps over a card. */
 .section-title {
-  font-family: var(--display);
-  font-size: 0.85rem;
+  font-family: var(--body);
+  font-size: 0.78rem;
   font-weight: 650;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--ink-2);
-  margin: 8px 4px 0;
+  margin: 4px 4px -4px;
+  text-wrap: nowrap;
 }
 
 .muted {
@@ -425,6 +594,10 @@ a {
 
 .num {
   font-variant-numeric: tabular-nums;
+}
+
+.nowrap {
+  white-space: nowrap;
 }
 
 /* ---------- Cards ---------- */
@@ -462,6 +635,7 @@ a {
 }
 
 .kv {
+  margin: 0;
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 6px 14px;
@@ -478,15 +652,15 @@ a {
   overflow-wrap: anywhere;
 }
 
-/* ---------- Status chips ---------- */
+/* ---------- Status chips and notices ---------- */
 
 .chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border-radius: 999px;
-  padding: 4px 10px;
-  font-size: 0.8rem;
+  padding: 3px 10px;
+  font-size: 0.78rem;
   font-weight: 650;
   white-space: nowrap;
   line-height: 1.3;
@@ -494,8 +668,8 @@ a {
 
 .chip::before {
   content: '';
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: currentColor;
 }
@@ -526,9 +700,9 @@ a {
 }
 
 .notice {
-  border-radius: 12px;
-  padding: 12px 14px;
-  font-size: 0.95rem;
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  font-size: 0.92rem;
 }
 
 .notice strong {
@@ -536,42 +710,52 @@ a {
   margin-bottom: 2px;
 }
 
-/* ---------- Buttons & inputs ---------- */
+/* ---------- Buttons ---------- */
 
+/* Primary: the one filled green action. */
 .btn {
   appearance: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 48px;
+  min-height: 46px;
   padding: 10px 18px;
-  border-radius: 12px;
+  border-radius: var(--r-md);
   border: 1px solid transparent;
   font: inherit;
   font-weight: 650;
   font-size: 1rem;
+  line-height: 1.2;
+  letter-spacing: -0.005em;
   text-decoration: none;
   cursor: pointer;
   background: var(--primary);
   color: var(--primary-ink);
-  transition: filter 0.12s;
+  transition:
+    transform var(--fast) var(--ease),
+    background-color var(--fast),
+    filter var(--fast);
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
-.btn:active {
-  filter: brightness(0.92);
+/* Every button presses down a touch. */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  filter: brightness(0.94);
 }
 
 .btn:disabled {
-  opacity: 0.55;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
+/* Secondary: soft gray, never green. */
 .btn.secondary {
-  background: var(--surface-2);
+  background: var(--fill);
   color: var(--ink);
-  border-color: var(--line);
+  border-color: transparent;
 }
 
 .btn.danger {
@@ -583,17 +767,29 @@ a {
 .btn.ghost {
   background: transparent;
   color: var(--ink);
-  border-color: var(--line);
+  border-color: var(--line-strong);
 }
 
 .btn.small {
   min-height: 44px;
   padding: 8px 14px;
-  font-size: 0.92rem;
+  font-size: 0.93rem;
 }
 
 .btn.block {
   width: 100%;
+}
+
+.btn.big {
+  min-height: 54px;
+  font-size: 1.08rem;
+  border-radius: 14px;
+}
+
+/* While a tap is saving the button says "Saving…" rather than looking switched off. */
+.btn[aria-busy='true']:disabled {
+  opacity: 1;
+  cursor: progress;
 }
 
 .btn-row {
@@ -612,12 +808,77 @@ a {
   gap: 8px;
 }
 
+/* Links that leave for CourtReserve: their own quiet blue-teal, with a small arrow. */
+.btn.external {
+  background: var(--ext-bg);
+  color: var(--ext-fg);
+  border-color: transparent;
+  gap: 4px;
+}
+.btn.external .ext-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+/* "Copy text" next to a message button: always one line. */
+.btn.copy-text {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--fill);
+  color: var(--ink-2);
+  font-size: 1rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform var(--fast) var(--ease);
+}
+.icon-btn:active {
+  transform: scale(0.92);
+}
+
+/* Plain underlined text that acts like a button. */
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 10px 2px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.link-btn.inline {
+  min-height: 0;
+  padding: 0;
+}
+
+/* ---------- Inputs ---------- */
+
 label.field {
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.93rem;
+  min-width: 0;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
 
 .field .hint {
@@ -634,6 +895,7 @@ input[type='number'],
 input[type='datetime-local'],
 input[type='date'],
 input[type='time'],
+input[type='month'],
 input[type='search'],
 select,
 textarea {
@@ -641,10 +903,10 @@ textarea {
   font-size: 17px; /* 16px+ stops iOS zooming on focus */
   color: var(--ink);
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 12px 14px;
-  min-height: 48px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  padding: 11px 14px;
+  min-height: 46px;
   width: 100%;
   min-width: 0;
 }
@@ -657,9 +919,35 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  outline: 3px solid var(--focus);
+  outline: 3px solid color-mix(in srgb, var(--focus) 55%, transparent);
   outline-offset: 0;
-  border-color: transparent;
+  border-color: var(--focus);
+}
+
+input::placeholder {
+  color: color-mix(in srgb, var(--ink-2) 75%, transparent);
+}
+
+/* iPhone Safari gives date, time and month boxes a built-in width that can
+   run past the screen edge. Let them shrink to the box like any text field. */
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'],
+input[type='month'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value,
+input[type='month']::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
 }
 
 .check {
@@ -673,24 +961,49 @@ textarea:focus {
 .check input {
   width: 22px;
   height: 22px;
-  accent-color: var(--court);
+  accent-color: var(--primary);
   flex: none;
 }
 
+.money-input {
+  position: relative;
+  display: block;
+}
+
+.money-input > span {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-2);
+  font-weight: 500;
+}
+
+.money-input input {
+  padding-left: 30px;
+}
+
+.field-error {
+  color: var(--danger-fg);
+  font-weight: 500;
+  font-size: 0.85rem;
+}
+
+/* iPhone segmented control: a gray track with a white thumb. */
 .segmented {
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  background: var(--muted-bg);
-  border-radius: 12px;
+  background: var(--fill);
+  border-radius: 11px;
   padding: 3px;
-  gap: 3px;
+  gap: 2px;
 }
 
 .segmented button {
   min-height: 44px;
   border: 0;
-  border-radius: 10px;
+  border-radius: 9px;
   background: transparent;
   font: inherit;
   font-size: 0.9rem;
@@ -698,55 +1011,264 @@ textarea:focus {
   color: var(--ink);
   cursor: pointer;
   padding: 6px 4px;
+  transition: background-color var(--fast), box-shadow var(--fast);
 }
 
 .segmented button[aria-pressed='true'] {
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 12%), 0 0 0 0.5px rgb(0 0 0 / 4%);
+}
+:root[data-theme='dark'] .segmented button[aria-pressed='true'] {
+  background: var(--line-strong);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .segmented button[aria-pressed='true'] {
+    background: var(--line-strong);
+  }
 }
 
-/* ---------- Spots ---------- */
+.segmented.compact {
+  flex: 0 1 210px;
+  padding: 2px;
+  gap: 2px;
+}
+.segmented.compact button {
+  min-height: 44px;
+  padding: 4px 10px;
+  font-size: 0.88rem;
+}
 
-.spots {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+/* Filter chips (History, Add game dates). */
+.chips {
+  display: flex;
   gap: 8px;
 }
+.chip-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 620;
+  cursor: pointer;
+  transition: transform var(--fast) var(--ease), background-color var(--fast);
+}
+.chip-btn:active {
+  transform: scale(0.96);
+}
+.chip-btn[aria-pressed='true'] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg);
+}
+.chip-btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
 
-.spot {
-  border-radius: 12px;
-  padding: 10px 12px;
-  min-height: 52px;
+/* ---------- Lists inside cards ---------- */
+
+.list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.list > li {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.list > li:last-child {
+  border-bottom: 0;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rows > li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  font-weight: 600;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  min-height: 52px;
+}
+
+.rows > li:last-child {
+  border-bottom: 0;
+}
+
+.rows .who {
   min-width: 0;
 }
 
-.spot .name {
-  overflow: hidden;
-  text-overflow: ellipsis;
+.rows .who .small {
+  display: block;
+}
+
+/* Row buttons keep their size next to long text or a holiday pill. */
+.rows > li > .btn {
+  flex: none;
   white-space: nowrap;
 }
 
-.spot.open {
-  border-style: dashed;
+.rows.card {
+  padding: 2px 14px;
+}
+
+.amount {
+  font-family: var(--display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.big-amount {
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 720;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Empty states: a few friendly words on a court line ---------- */
+
+.empty {
+  isolation: isolate;
+  position: relative;
+  text-align: center;
+  padding: 26px 16px 22px;
   color: var(--ink-2);
-  font-weight: 500;
+  font-size: 0.95rem;
+  overflow: hidden;
+}
+/* A pickleball (yellow, with holes) sitting on a court line. */
+.empty::before {
+  content: '';
+  display: block;
+  width: 30px;
+  height: 30px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 34%, rgb(0 0 0 / 20%) 0 2.2px, transparent 2.8px),
+    radial-gradient(circle at 66% 30%, rgb(0 0 0 / 20%) 0 2.2px, transparent 2.8px),
+    radial-gradient(circle at 50% 62%, rgb(0 0 0 / 20%) 0 2.2px, transparent 2.8px),
+    radial-gradient(circle at 24% 70%, rgb(0 0 0 / 14%) 0 1.8px, transparent 2.4px),
+    radial-gradient(circle at 76% 66%, rgb(0 0 0 / 14%) 0 1.8px, transparent 2.4px),
+    var(--ball);
+  box-shadow: inset -3px -3px 0 rgb(0 0 0 / 10%);
+}
+.empty::after {
+  content: '';
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 56px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--line);
+  z-index: -1;
+}
+
+.hero {
+  text-align: center;
+  padding: 32px 8px 8px;
+}
+
+.hero .big-ball {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--ball);
+  margin: 0 auto 16px;
+  background-image:
+    radial-gradient(circle at 30% 30%, rgb(0 0 0 / 18%) 0 3px, transparent 4px),
+    radial-gradient(circle at 65% 40%, rgb(0 0 0 / 18%) 0 3px, transparent 4px),
+    radial-gradient(circle at 45% 70%, rgb(0 0 0 / 18%) 0 3px, transparent 4px);
+}
+
+.spinner {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--primary);
+  animation: spin 0.8s linear infinite;
+  margin: 40px auto;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+code.link {
+  display: block;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  font-size: 0.85rem;
+}
+
+.steps {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+.name-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.name-grid .btn {
+  min-height: 60px;
+  font-size: 1.1rem;
+  font-family: var(--display);
+  font-weight: 650;
+  border-radius: 14px;
+}
+/* On the name picker the names sit on white, like a list of contacts. */
+.name-grid .btn.secondary {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+
+.hint-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 6px 10px 14px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-size: 0.88rem;
+  color: var(--ink-2);
+}
+
+.hint-banner p {
+  flex: 1;
+  padding-top: 2px;
+}
+
+.hint-banner .icon-btn {
+  border: 0;
   background: transparent;
-}
-
-.spot.me {
-  border-color: var(--court);
-  box-shadow: inset 0 0 0 1px var(--court);
-}
-
-.spot .tick {
-  color: var(--ok-fg);
-  flex: none;
+  color: var(--ink-2);
+  font-size: 1rem;
 }
 
 /* ---------- Floating tab pill ---------- */
@@ -758,13 +1280,13 @@ textarea:focus {
   /* Low, close to the bottom edge; Safari keeps its own toolbar below the page. */
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
   width: min(430px, calc(100% - 20px));
-  /* Nearly solid, so card text never shows through; a light blur softens the edge. */
-  background: color-mix(in srgb, var(--surface) 97%, transparent);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  /* Nearly solid, so card text never shows through; the blur frosts the edge. */
+  background: color-mix(in srgb, var(--surface) 95%, transparent);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
   border: 1px solid var(--line);
   border-radius: 999px;
-  box-shadow: 0 10px 30px rgb(10 20 15 / 18%), 0 1px 3px rgb(10 20 15 / 10%);
+  box-shadow: var(--shadow-lift);
   padding: 4px;
   z-index: 10;
 }
@@ -783,10 +1305,11 @@ textarea:focus {
   min-height: 46px;
   border: 0;
   border-radius: 999px;
-  background: none;
+  background: transparent;
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   font-weight: 650;
+  letter-spacing: 0;
   white-space: nowrap;
   color: var(--ink-2);
   display: flex;
@@ -797,17 +1320,28 @@ textarea:focus {
   cursor: pointer;
   position: relative;
   -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color var(--mid) var(--ease),
+    color var(--mid) var(--ease),
+    transform var(--fast) var(--ease);
+}
+.tabbar button:active {
+  transform: scale(0.94);
 }
 
+/* The tab you're on: a soft green pill with green icon and label. */
 .tabbar button[aria-current='page'] {
-  background: var(--court);
-  color: #fff;
+  background: var(--accent-soft);
+  color: var(--accent-text);
 }
 
 .tabbar svg {
-  width: 21px;
-  height: 21px;
+  width: 22px;
+  height: 22px;
   flex: none;
+}
+.tabbar button[aria-current='page'] svg {
+  stroke-width: 2.2;
 }
 
 .badge {
@@ -821,10 +1355,12 @@ textarea:focus {
   background: var(--danger-fg);
   color: var(--surface);
   font-size: 0.7rem;
+  font-weight: 700;
   line-height: 18px;
+  box-shadow: 0 0 0 2px var(--surface);
 }
 
-/* ---------- Dialogs ---------- */
+/* ---------- Sheets (slide up from the bottom) ---------- */
 
 dialog.sheet {
   border: 0;
@@ -833,21 +1369,21 @@ dialog.sheet {
   max-width: 640px;
   max-height: 92dvh;
   margin: auto auto 0;
-  border-radius: 20px 20px 0 0;
+  border-radius: 22px 22px 0 0;
   background: var(--bg);
   color: var(--ink);
-  box-shadow: 0 -8px 40px rgb(0 0 0 / 25%);
+  box-shadow: 0 -8px 40px rgb(0 0 0 / 22%);
 }
 
 @media (min-width: 700px) {
   dialog.sheet {
     margin: auto;
-    border-radius: 20px;
+    border-radius: 22px;
   }
 }
 
 dialog.sheet::backdrop {
-  background: rgb(10 20 15 / 45%);
+  background: var(--scrim);
 }
 
 /* With the floating tab bar on screen, sheets stop just above it, so its
@@ -856,7 +1392,7 @@ dialog.sheet::backdrop {
   body:has(.tabbar) dialog.sheet {
     margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
     max-height: calc(92dvh - 68px);
-    border-radius: 20px;
+    border-radius: 22px;
     width: calc(100% - 12px);
   }
 }
@@ -864,8 +1400,10 @@ dialog.sheet::backdrop {
 .sheet-head {
   position: sticky;
   top: 0;
-  background: var(--bg);
-  padding: 16px 16px 12px;
+  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 14px 12px 10px var(--gutter);
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
@@ -873,22 +1411,27 @@ dialog.sheet::backdrop {
   gap: 12px;
   z-index: 1;
 }
-
-.sheet-body {
-  padding: 16px 16px calc(env(safe-area-inset-bottom) + 24px);
+/* The grabber at the top of every sheet. */
+.sheet-head::before {
+  content: '';
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 36px;
+  height: 5px;
+  margin-left: -18px;
+  border-radius: 3px;
+  background: var(--line-strong);
+}
+.sheet-head h2 {
+  font-size: 1.15rem;
+}
+.sheet-head .icon-btn {
+  font-size: 0.95rem;
 }
 
-.icon-btn {
-  min-width: 44px;
-  min-height: 44px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  font-size: 1.2rem;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
+.sheet-body {
+  padding: 16px var(--gutter) calc(env(safe-area-inset-bottom) + 24px);
 }
 
 /* ---------- Message drafts ---------- */
@@ -911,10 +1454,11 @@ dialog.sheet::backdrop {
   overflow-wrap: anywhere;
 }
 
+/* The words as they'll look in Messages. */
 .bubble {
-  background: var(--info-bg);
+  background: var(--fill);
   color: var(--ink);
-  border-radius: 16px 16px 16px 4px;
+  border-radius: 18px 18px 18px 5px;
   padding: 8px 12px;
   font-size: 0.95rem;
   white-space: pre-wrap;
@@ -922,49 +1466,16 @@ dialog.sheet::backdrop {
   margin: 6px 0 8px;
 }
 
-/* ---------- Misc ---------- */
-
-.name-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+.message-ready {
+  font-weight: 700;
 }
 
-.name-grid .btn {
-  min-height: 64px;
-  font-size: 1.1rem;
-  font-family: var(--display);
+.missing-numbers {
+  color: var(--warn-fg);
 }
 
-.empty {
-  text-align: center;
-  padding: 28px 16px;
-  color: var(--ink-2);
-}
+/* ---------- Confirmation bubble next to the tapped button (see ToastProvider) ---------- */
 
-.spinner {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 3px solid var(--line);
-  border-top-color: var(--court);
-  animation: spin 0.8s linear infinite;
-  margin: 40px auto;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .spinner {
-    animation-duration: 2.4s;
-  }
-}
-
-/* Confirmation bubble next to the tapped button (see ToastProvider). */
 .pop {
   position: fixed;
   inset: auto;
@@ -972,19 +1483,23 @@ dialog.sheet::backdrop {
   z-index: 60;
   max-width: min(260px, calc(100vw - 16px));
   width: max-content;
-  padding: 6px 11px;
+  padding: 7px 12px;
   border: 1px solid var(--pop-line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--pop-bg);
   color: var(--pop-fg);
   font-size: 0.82rem;
   font-weight: 650;
   line-height: 1.3;
   text-align: center;
-  box-shadow: 0 4px 14px rgb(10 20 15 / 14%);
+  box-shadow: 0 6px 20px rgb(10 20 15 / 22%);
   pointer-events: none;
   overflow: visible;
-  animation: pop-in 0.14s ease-out;
+  transform-origin: var(--arrow-x, 50%) 100%;
+  animation: pop-in 0.32s var(--spring);
+}
+.pop[data-side='below'] {
+  transform-origin: var(--arrow-x, 50%) 0;
 }
 .pop::after {
   content: '';
@@ -1017,364 +1532,13 @@ dialog.sheet::backdrop {
 @keyframes pop-in {
   from {
     opacity: 0;
-    transform: translateY(3px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .pop {
-    animation: none;
+    transform: scale(0.85);
   }
 }
 
-.list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
+/* ---------- Session date tile (players and organizer) ---------- */
 
-.list > li {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--line);
-}
-
-.list > li:last-child {
-  border-bottom: 0;
-}
-
-.amount {
-  font-family: var(--display);
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.big-amount {
-  font-family: var(--display);
-  font-size: 2rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.hero {
-  text-align: center;
-  padding: 32px 8px 8px;
-}
-
-.hero .big-ball {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: var(--ball);
-  margin: 0 auto 16px;
-  background-image: radial-gradient(circle at 30% 30%, rgb(0 0 0 / 18%) 0 3px, transparent 4px),
-    radial-gradient(circle at 65% 40%, rgb(0 0 0 / 18%) 0 3px, transparent 4px),
-    radial-gradient(circle at 45% 70%, rgb(0 0 0 / 18%) 0 3px, transparent 4px);
-}
-
-code.link {
-  display: block;
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  overflow-wrap: anywhere;
-  font-size: 0.85rem;
-}
-
-/* ---------- First-visit notice ---------- */
-
-.hint-banner {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 10px 6px 10px 14px;
-  border-radius: 12px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  font-size: 0.88rem;
-  color: var(--ink-2);
-}
-
-.hint-banner p {
-  flex: 1;
-  padding-top: 2px;
-}
-
-.hint-banner .icon-btn {
-  min-width: 44px;
-  min-height: 44px;
-  border: 0;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 1rem;
-}
-
-/* ---------- Settings disclosure ---------- */
-
-details.advanced > summary {
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  cursor: pointer;
-  font-weight: 650;
-  list-style: none;
-}
-
-details.advanced > summary::-webkit-details-marker {
-  display: none;
-}
-
-details.advanced > summary::after {
-  content: '+';
-  font-size: 1.3rem;
-  color: var(--ink-2);
-}
-
-details.advanced[open] > summary::after {
-  content: '\2212';
-}
-
-details.advanced[open] > summary {
-  margin-bottom: 12px;
-}
-
-.field-error {
-  color: var(--danger-fg);
-  font-weight: 500;
-  font-size: 0.85rem;
-}
-
-/* ---------- Player Home ---------- */
-
-.btn.big {
-  min-height: 58px;
-  font-size: 1.12rem;
-  border-radius: 14px;
-}
-
-.going {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.going li {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  font-weight: 600;
-  font-size: 0.92rem;
-}
-
-.going li.me {
-  border-color: var(--court);
-  box-shadow: inset 0 0 0 1px var(--court);
-}
-
-.card.suggest {
-  border: 2px solid var(--court);
-}
-
-/* "View as..." banner, pinned above everything while the organizer looks through a player's eyes. */
-.viewas-banner {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: calc(env(safe-area-inset-top) + 2px) 16px 2px;
-  background: var(--ball);
-  color: #13200f;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-.viewas-banner .btn.small {
-  min-height: 44px;
-  padding: 0 14px;
-  background: transparent;
-  color: #13200f;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  box-shadow: none;
-  border: 0;
-}
-
-.viewas-banner + .topbar {
-  padding-top: 8px;
-}
-
-/* ---------- Organizer Home lists ---------- */
-
-.rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.rows > li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-  min-height: 52px;
-}
-
-.rows > li:last-child {
-  border-bottom: 0;
-}
-
-.rows .who {
-  min-width: 0;
-}
-
-.rows .who .small {
-  display: block;
-}
-
-.money-input {
-  position: relative;
-  display: block;
-}
-
-.money-input > span {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--ink-2);
-  font-weight: 500;
-}
-
-.money-input input {
-  padding-left: 30px;
-}
-
-/* ---------- Part 3 ---------- */
-
-/* Holiday pill: its own color so it never reads as a status. */
-.holiday {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  color: var(--holiday-fg);
-  background: var(--holiday-bg);
-  font-size: 0.8rem;
-  font-weight: 650;
-}
-
-/* Who's going: signed up = solid neutral pill with a check, waiting =
-   outlined, everyone else = faded plain text. No green, amber, or red. */
-.roster {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 8px;
-  align-items: center;
-}
-
-.roster li {
-  font-size: 0.92rem;
-}
-
-.roster li.in {
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--bg);
-  font-weight: 650;
-}
-
-.roster li.waiting {
-  padding: 5px 11px;
-  border-radius: 999px;
-  border: 1.5px solid var(--ink);
-  font-weight: 600;
-}
-
-.roster li.out {
-  color: var(--ink-2);
-  padding: 6px 4px;
-}
-
-.roster li.me {
-  outline: 2px solid var(--ink-2);
-  outline-offset: 2px;
-}
-
-.new-tag {
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--ink);
-  font-size: 0.72rem;
-  font-weight: 700;
-  vertical-align: 2px;
-}
-
-.steps {
-  margin: 4px 0 0;
-  padding-left: 20px;
-}
-
-/* iPhone Safari gives date and time inputs a built-in width that can run
-   past the screen edge. Let them shrink to the box like any text field. */
-input[type='date'],
-input[type='time'],
-input[type='datetime-local'] {
-  -webkit-appearance: none;
-  appearance: none;
-  display: block;
-  max-width: 100%;
-  min-width: 0;
-  text-align: left;
-}
-
-input[type='date']::-webkit-date-and-time-value,
-input[type='time']::-webkit-date-and-time-value,
-input[type='datetime-local']::-webkit-date-and-time-value {
-  text-align: left;
-  margin: 0;
-}
-
-label.field {
-  min-width: 0;
-}
-
-/* ---------- Part 4: player schedule ---------- */
-
-.schedule {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.sched {
-  display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 10px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 10px 12px;
-}
-
-.sched.off {
-  opacity: 0.75;
-}
-
+/* White with a thin dark outline; dark mode: dark surface, light outline. */
 .tile {
   display: flex;
   flex-direction: column;
@@ -1382,40 +1546,171 @@ label.field {
   justify-content: center;
   align-self: start;
   border-radius: 12px;
-  background: var(--court);
-  color: #fff;
+  background: var(--surface);
+  border: 1.5px solid var(--tile-line);
+  color: var(--ink);
   padding: 5px 0 6px;
   line-height: 1;
   font-family: var(--display);
 }
+:root[data-theme='dark'] .tile {
+  background: var(--surface-2);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tile {
+    background: var(--surface-2);
+  }
+}
 
 .tile .dow,
 .tile .mon {
+  font-family: var(--body);
   font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  opacity: 0.9;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+}
+.tile .dow {
+  color: var(--accent-text);
+}
+.tile .mon {
+  color: var(--ink-2);
 }
 
 .tile .day {
-  font-size: 1.4rem;
-  font-weight: 700;
-  margin: 2px 0;
+  font-size: 1.42rem;
+  font-weight: 720;
+  letter-spacing: -0.02em;
+  margin: 2px 0 1px;
+  font-variant-numeric: tabular-nums;
 }
 
-.sched-body {
+/* ---------- Week dividers ("This week", "Next week", "Week of Nov 9") ---------- */
+
+.week-break {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 4px -4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.week-break::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+  order: 1;
+}
+.week-break h3 {
+  margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  white-space: nowrap;
+}
+
+/* Small pills on the first divider line ("+ Add game", "Book a court"):
+   24px to look at, 44px to tap, so the line is no taller. */
+.btn.pill {
+  order: 2;
+  position: relative;
+  flex: none;
+  min-height: 0;
+  height: 26px;
+  margin: -6px 0;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 650;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.btn.pill::before {
+  content: '';
+  position: absolute;
+  inset: -10px -2px;
+}
+.btn.external.pill .ext-icon {
+  width: 12px;
+  height: 12px;
+}
+.btn.pill.add-pill {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+}
+.week-break .btn.pill + .btn.pill {
+  margin-left: -4px;
+}
+
+/* ---------- Player screen ---------- */
+
+.schedule {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-width: 0;
+  gap: 8px;
 }
 
-/* Time on the left, the sign-up button on the right of the same row. */
+/* One session: date tile, then time / court / who's in, and the action on the right. */
+.sched {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px 12px;
+  scroll-margin: 16px;
+}
+
+.sched.off {
+  opacity: 0.72;
+}
+
+/* Opened from a shared link: that session stands out. */
+.sched.highlight {
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 18%, transparent);
+}
+
+/* The body is a small grid: time and court on the left, the button in its
+   own column on the right, centered on those two lines. Who's in, notes and
+   pay run full width below, so nothing leaves a gap. */
+.sched-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 3px;
+  align-items: center;
+  min-width: 0;
+  min-height: 100%;
+}
+.sched-body > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.sched-body > .sched-head,
+.sched-body > .sched-status {
+  grid-column: 1;
+}
+.sched-act {
+  grid-column: 2 !important;
+  grid-row: 1 / span 2;
+  align-self: center;
+  justify-self: end;
+}
+
+/* Time and its tags. */
 .sched-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  min-width: 0;
 }
 
 .sched-when {
@@ -1429,29 +1724,29 @@ label.field {
 .sched-time {
   font-family: var(--display);
   font-weight: 700;
-  font-size: 1.02rem;
+  font-size: 1.04rem;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 
 .btn.sched-btn {
   flex: none;
   min-height: 44px;
-  padding: 8px 14px;
+  padding: 8px 16px;
   font-size: 0.95rem;
-  border-radius: 11px;
-}
-/* While a tap is saving the button says "Saving…" rather than looking switched off. */
-.btn[aria-busy='true']:disabled {
-  opacity: 1;
-  cursor: progress;
+  border-radius: 12px;
 }
 
+/* "You're in", "Waitlist #2": small tags by the time. */
 .me-tag {
+  font-family: var(--body);
   font-size: 0.74rem;
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
   background: var(--ink);
   color: var(--bg);
+  white-space: nowrap;
 }
 
 .me-tag.outline {
@@ -1479,7 +1774,7 @@ label.field {
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 6px;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
 }
 
 .in-count {
@@ -1492,526 +1787,23 @@ label.field {
   margin: 0;
 }
 
-.cal-link {
-  align-self: flex-start;
-  font-size: 0.88rem;
-  color: var(--ink-2);
-  text-underline-offset: 3px;
-  padding: 12px 2px;
-  margin: -10px 0 -12px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-}
-
-/* Header logo: sits on a light rounded backing so its white edge looks
-   intentional in dark mode too. */
-.brand-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: #fff;
-  padding: 2px;
-  flex: none;
-  object-fit: contain;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
-}
-
-.holiday-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 6px;
-}
-
-.link-btn {
-  background: none;
-  border: 0;
-  padding: 10px 2px;
-  min-height: 44px;
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
-}
-
-.message-ready {
-  font-weight: 700;
-}
-
-/* Row buttons keep their size next to long text or a holiday pill. */
-.rows > li > .btn {
-  flex: none;
-  white-space: nowrap;
-}
-
-/* ---------- Open address ---------- */
-
-.organizer-link {
-  text-align: center;
-  font-size: 0.88rem;
-  margin-top: 8px;
-}
-
-.organizer-link a {
-  color: var(--ink-2);
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 8px;
-  text-underline-offset: 3px;
-}
-
-/* One small, dismissible tip at the very end of the player page. */
-.footer-tip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 4px 4px 12px;
-  border-top: 1px solid var(--line);
+.game-note {
+  margin: 0;
   font-size: 0.82rem;
   color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
 
-.footer-tip p {
-  flex: 1;
-}
-
-.footer-tip .icon-btn {
-  border: 0;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 0.95rem;
-}
-
-/* ---------- Court status on session cards ----------
-   Court and players are two separate lines. The court is the loudest thing on
-   the card, and every look pairs an icon with words, never color alone. */
-
-.scard {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 6px 12px;
-  scroll-margin-top: 16px;
-  scroll-margin-bottom: calc(env(safe-area-inset-bottom) + 96px);
-}
-.scard:focus {
-  outline: none;
-}
-.scard:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
-
-.court-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
-}
-.court-icon {
-  width: 22px;
-  height: 22px;
-  flex: none;
-}
-
-/* Booked: solid green left edge, large "Court booked" with a check. */
-.scard.court-booked {
-  border-left: 7px solid var(--ok-edge);
-  padding-left: 8px;
-}
-
-/* Date tile on the left; time, court and players on the right. */
-.scard-main {
-  display: grid;
-  grid-template-columns: 50px minmax(0, 1fr);
-  gap: 10px;
-}
-.scard-body {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-}
-.scard-top {
+/* "Still coming?  Yes, I'm coming" */
+.confirm-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: -2px 0 -4px;
-}
-.btn.more-btn {
-  min-height: 44px;
-  padding: 0 10px;
-  margin-right: -6px;
-  font-size: 0.88rem;
-  color: var(--ink-2);
-}
-.btn.main-btn {
-  min-height: 44px;
-  padding: 6px 14px;
-}
-.scard .action-strip {
   margin-top: 2px;
 }
-.scard .holiday-actions {
-  margin-top: 0;
-  gap: 2px 8px;
-}
-.scard .holiday-actions .link-btn {
-  flex: none;
-  padding: 10px 2px;
-  margin: -10px 0;
-}
-.court-line {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.court-booked .court-line .court-status {
-  color: var(--ok-fg);
-  font-family: var(--display);
-  font-size: 1.05rem;
-  line-height: 1.15;
-}
-.court-booked .court-line .court-icon {
-  width: 20px;
-  height: 20px;
-}
-.court-sub {
-  font-size: 0.8rem;
-  padding-left: 28px;
-}
-/* "Court booked" with a quiet "Add to calendar" on the right. */
-.court-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0 8px;
-  min-width: 0;
-}
-/* "Court booked" stays on one line; "Add to calendar" drops below if there's no room. */
-.court-top .court-status {
-  white-space: nowrap;
-}
-.cal-link.court-cal {
-  flex: none;
-  margin-left: auto !important;
-  font-size: 0.8rem;
-  padding: 0 2px;
-  margin: -12px 0;
-}
 
-/* Not booked: amber dashed border and a banner across the top. */
-.scard.court-needs {
-  border: 2px dashed var(--warn-edge);
-}
-/* On the court waitlist: blue banner. */
-.scard.court-waitlist {
-  border: 2px solid var(--info-edge);
-}
-.court-banner {
-  /* Tight, even padding; the same gap again before the card body. */
-  margin: -6px -12px 7px;
-  padding: 10px;
-  border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.court-banner .court-status {
-  font-family: var(--display);
-  font-size: 1.08rem;
-  line-height: 1.15;
-}
-.banner-btns {
-  display: flex;
-  gap: 8px;
-}
-.court-needs .court-banner {
-  background: var(--warn-bg);
-  color: var(--warn-fg);
-  border-bottom: 2px dashed var(--warn-edge);
-}
-.court-waitlist .court-banner {
-  background: var(--info-bg);
-  color: var(--info-fg);
-  border-bottom: 1px solid var(--info-edge);
-}
-
-
-/* Canceled, no court, or played: gray with the reason. */
-.scard.court-off {
-  background: var(--surface-2);
-}
-.court-off .court-line .court-status,
-.court-later .court-line .court-status {
-  color: var(--muted-fg);
-}
-
-/* Players: "2 of 4 in" with a dot per spot. */
-.players-line {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 8px;
-  font-size: 0.9rem;
-}
-.players-count {
-  font-weight: 700;
-}
-.players-wait {
-  color: var(--ink-2);
-}
-
-/* Player rows use the same words and icons. */
-.sched-status.court-booked .court-status {
-  color: var(--ok-fg);
-}
-.sched-status.court-needs .court-status {
-  color: var(--warn-fg);
-}
-.sched-status.court-waitlist .court-status {
-  color: var(--info-fg);
-}
-.sched-status.court-off .court-status,
-.sched-status.court-later .court-status {
-  color: var(--muted-fg);
-}
-.sched-status .court-icon {
-  width: 18px;
-  height: 18px;
-}
-
-/* A thin divider between calendar weeks: "This week", "Next week", "Week of Nov 9". */
-.week-break {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 -6px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--ink-2);
-}
-.week-break::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--line);
-}
-.week-break h3 {
-  margin: 0;
-  font: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-}
-.week-break::after {
-  order: 1;
-}
-/* "Book a court" on the first divider line: small, and pulled in so the
-   line is no taller than before; the tap area reaches 44px. */
-.btn.pill {
-  order: 2;
-  position: relative;
-  flex: none;
-  min-height: 0;
-  height: 24px;
-  margin: -6px 0;
-  padding: 0 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  letter-spacing: 0;
-  text-transform: none;
-}
-.btn.external.pill .ext-icon {
-  width: 12px;
-  height: 12px;
-}
-.btn.pill::before {
-  content: '';
-  position: absolute;
-  inset: -11px -2px;
-}
-
-/* Links that leave for CourtReserve: their own blue-teal, with a small arrow. */
-.btn.external {
-  background: var(--ext-bg);
-  color: var(--ext-fg);
-  border-color: transparent;
-  gap: 4px;
-}
-.btn.external .ext-icon {
-  width: 15px;
-  height: 15px;
-  flex: none;
-}
-
-/* One mark per spot, on the same line as "2 of 4 in": names as small pills, open spots as small circles. */
-.players-line {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-}
-.spots {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 4px;
-}
-.spots li {
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--ink);
-  color: var(--bg);
-  font-size: 0.74rem;
-  font-weight: 650;
-  line-height: 1.35;
-  white-space: nowrap;
-  max-width: 9em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.spots li.me {
-  outline: 2px solid var(--ink-2);
-  outline-offset: 1px;
-}
-.spots li.open {
-  width: 12px;
-  height: 12px;
-  padding: 0;
-  background: transparent;
-  border: 2px solid var(--ink-2);
-  opacity: 0.75;
-}
-
-/* Venmo can only open the profile: the note to paste, with Copy. */
-.venmo-note {
-  flex-basis: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  color: var(--ink-2);
-}
-.venmo-note strong {
-  color: var(--ink);
-}
-
-/* "Mark paid tonight" stands out on game day. */
-.card.tonight {
-  border: 2px solid var(--ok-edge);
-}
-
-/* Pay back after a cancel. */
-.refunds .rows li {
-  align-items: center;
-}
-.refunds .check {
-  min-height: 44px;
-  margin: 0;
-}
-
-/* Settings: the organizer-only money fields. */
-.private-money {
-  border: 1px dashed var(--line);
-  border-radius: 12px;
-  padding: 10px 12px 12px;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.private-money legend {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--ink-2);
-  padding: 0 4px;
-}
-
-/* Monthly money page. */
-.month-picker {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) 44px;
-  gap: 8px;
-  align-items: center;
-}
-.month-picker input {
-  min-height: 44px;
-  width: 100%;
-  font: inherit;
-  text-align: center;
-}
-.money-sum {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.money-sum .bottom-line {
-  margin: 0;
-  font-family: var(--display);
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-.money-sum.surplus .bottom-line {
-  color: var(--ok-fg);
-}
-.money-sum.short .bottom-line {
-  color: var(--danger-fg);
-}
-.rows.card {
-  padding: 2px 14px;
-}
-
-/* Game day's payment card, at the very top of the player's screen. */
-.pay-card {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 2px solid var(--ok-edge);
-  background: var(--ok-bg);
-}
-.pay-card h2 {
-  margin: 0;
-  font-size: 1.25rem;
-  color: var(--ink);
-}
-.pay-list {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 0.92rem;
-}
-
-/* "Late drop" tag on Home and the session card. */
-.late-tag {
-  display: inline-block;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1.5px solid var(--warn-edge);
-  color: var(--warn-fg);
-  background: var(--warn-bg);
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-.late-count {
-  color: var(--warn-fg);
-  font-weight: 650;
-}
-
-/* Row footer: Pay / Sent? / Paid on the left, Add to Calendar on the right. */
+/* Row footer: Pay / I paid / Paid on the left, Add to calendar on the right. */
 .row-foot {
   display: flex;
   align-items: center;
@@ -2019,8 +1811,9 @@ label.field {
   gap: 8px;
   flex-wrap: wrap;
   min-height: 34px;
+  margin-top: 2px;
 }
-/* Smaller than I'm out, with a full 44px tap area. */
+/* Smaller than the main button, with a full 44px tap area. */
 .btn.pay-small {
   position: relative;
   min-height: 34px;
@@ -2042,318 +1835,377 @@ label.field {
   font-size: 0.85rem;
   color: var(--ink-2);
 }
-.link-btn.inline {
+
+/* "✓ Paid" with a tiny "Didn't pay?" right under it (only after "I paid"). */
+.paid-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.link-btn.didnt-pay {
+  position: relative;
   min-height: 0;
   padding: 0;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
-
-.segmented.compact {
-  flex: 0 1 210px;
-  padding: 0;
-  gap: 2px;
-}
-.segmented.compact button {
-  min-height: 44px;
-  padding: 4px 10px;
-  font-size: 0.88rem;
-}
-/* Court strips (blue waitlist, amber not booked): one row when the label and
-   both buttons fit. Otherwise the label takes the first row and the two
-   buttons share the second as exact halves. The label soaks up spare room on
-   a shared row (grow 999), so the buttons only stretch once they're alone. */
-.court-banner .court-status {
-  flex: 999 1 auto;
-  min-width: 0;
-}
-.court-banner .court-status > span {
-  overflow-wrap: break-word;
-}
-.court-banner .banner-btns {
-  flex: 1 1 auto;
-}
-.court-banner .banner-btns > .btn {
-  position: relative;
-  flex: 1 1 0;
-  min-width: max-content;
-  min-height: 36px;
-  padding: 4px 8px;
-  font-size: 15px;
-  line-height: 1.1;
-}
-/* 36px to look at, 44px to tap. */
-.court-banner .banner-btns > .btn::before {
+.link-btn.didnt-pay::before {
   content: '';
   position: absolute;
-  inset: -5px 0;
+  inset: -14px -8px;
 }
 
-.late-line {
-  font-size: 0.8rem;
-  line-height: 1.25;
+.cal-link {
+  align-self: flex-start;
+  font-size: 0.86rem;
+  color: var(--ink-2);
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  padding: 12px 2px;
+  margin: -10px 0 -12px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.row-foot .cal-link {
+  align-self: center;
+  margin-left: auto;
 }
 
-/* Organizer cards: a slightly smaller date tile. */
-.scard .tile {
-  padding: 4px 0 5px;
-}
-.scard .tile .day {
-  font-size: 1.25rem;
-  margin: 1px 0;
-}
-.court-banner .court-status {
-  font-size: 0.92rem;
-  line-height: 1.15;
-  gap: 6px;
-}
-.court-banner .court-icon {
-  width: 18px;
-  height: 18px;
+/* "Want in on Tuesday?" */
+.card.suggest {
+  border: 2px solid var(--primary);
 }
 
-/* ---------- Settings: compact rows and collapsed sections ---------- */
-.set-top {
-  padding: 4px 14px;
+/* Game day's payment card, at the very top of the player's screen. */
+.pay-card {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  border: 1.5px solid var(--ok-edge);
+  background: linear-gradient(180deg, var(--ok-bg), var(--surface) 70%);
 }
-.set-line,
-.set-row {
+.pay-card h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+.pay-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.92rem;
+}
+
+/* Venmo can only open the profile: the note to paste, with Copy. */
+.venmo-note {
+  flex-basis: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 52px;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink-2);
 }
-.set-top .set-line + .set-line {
-  border-top: 1px solid var(--line);
+.venmo-note strong {
+  color: var(--ink);
 }
-.set-label {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  font-size: 0.95rem;
-  line-height: 1.25;
-}
-.set-hint {
+
+/* Holiday pill: its own color so it never reads as a status. */
+.holiday {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--holiday-fg) 40%, transparent);
+  color: var(--holiday-fg);
+  background: var(--holiday-bg);
   font-size: 0.78rem;
-  color: var(--ink-2);
-  font-weight: 400;
-}
-.set-link {
-  font-size: 0.8rem;
-  color: var(--ink-2);
+  font-weight: 650;
   white-space: nowrap;
+}
+
+.holiday-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* A one-off game: a small tag by the time. */
+.extra-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--holiday-fg) 40%, transparent);
+  color: var(--holiday-fg);
+  background: var(--holiday-bg);
+  font-family: var(--body);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+.sched-when .extra-tag {
+  margin-left: 0;
+  vertical-align: baseline;
+}
+
+/* ---------- Who's in: a name pill per spot, open spots as small circles ---------- */
+
+.players-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  font-size: 0.88rem;
+}
+.players-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.players-wait {
+  color: var(--ink-2);
+}
+
+.spots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+.spots li {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.74rem;
+  font-weight: 650;
+  line-height: 1.4;
+  white-space: nowrap;
+  max-width: 9em;
   overflow: hidden;
   text-overflow: ellipsis;
-  background: none;
+  /* A filled spot springs in: the "I'm in" celebration. */
+  animation: spot-pop 0.42s var(--spring);
+}
+.spots li.me {
+  background: var(--primary);
+  color: var(--primary-ink);
+  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: 1px;
+}
+.spots li.open {
+  width: 12px;
+  height: 12px;
   padding: 0;
+  background: transparent;
+  border: 1.75px solid var(--ink-2);
+  opacity: 0.7;
+  animation: none;
 }
-.set-row-wrap {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-/* The name takes all the room it can and wraps by word; the box stays small.
-   (Selectors here outrank the full-width rule for every text box.) */
-.set-row .set-label {
-  flex: 1 1 0;
-  min-width: 0;
-  overflow-wrap: break-word;
-}
-.set-row input.set-input,
-.set-row .set-input {
-  flex: 0 0 80px;
-  width: 80px;
-  max-width: 80px;
-  min-height: 44px;
-  padding: 10px 12px;
-  text-align: right;
-}
-.set-row input.set-input.wide {
-  flex: 0 0 auto;
-  width: 10.5rem;
-  max-width: 56%;
-  text-align: left;
-  font-size: 16px;
-  padding: 10px 8px;
-}
-.set-row .money-input.set-input {
-  flex: 0 0 88px;
-  width: 88px;
-  max-width: 88px;
-  padding: 0;
-}
-.set-row .money-input.set-input input {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px 10px 26px;
-  text-align: right;
-}
-.set-row .money-input > span {
-  left: 11px;
-}
-.set-name {
-  display: inline;
-}
-/* Text settings: the name above a full-width box. */
-.auto-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-.auto-field .field-label {
-  font-weight: 600;
-  font-size: 0.95rem;
-}
-/* Autosave: a tiny check that fades, and a retry line when saving fails. */
-.save-mark {
-  display: inline-block;
-  margin-left: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.save-mark.saved {
-  color: var(--ok-fg);
-  animation: save-fade 2s ease-in forwards;
-}
-@keyframes save-fade {
-  0%,
+@keyframes spot-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
   60% {
     opacity: 1;
   }
-  100% {
-    opacity: 0;
-  }
 }
-@media (prefers-reduced-motion: reduce) {
-  .save-mark.saved {
-    animation: none;
-  }
+
+/* Older roster pills (kept for any screen still using them). */
+.roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
 }
-.save-retry {
-  align-self: flex-start;
-  background: none;
-  border: 0;
-  padding: 6px 0;
-  min-height: 44px;
-  font: inherit;
-  font-size: 0.85rem;
+.roster li {
+  font-size: 0.92rem;
+}
+.roster li.in {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 650;
+}
+.roster li.waiting {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
   font-weight: 600;
-  color: var(--danger-fg);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-  cursor: pointer;
 }
-.set-top .segmented.compact {
-  flex: 0 0 auto;
+.roster li.out {
+  color: var(--ink-2);
+  padding: 6px 4px;
 }
-.set-line .set-label {
+.roster li.me {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.going {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.going li {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.going li.me {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.new-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--ball);
+  color: var(--ball-ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+
+/* ---------- Court status on session cards ----------
+   Court and players are two separate lines. Every look pairs an icon with
+   words, never color alone. */
+
+.court-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+.court-icon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+/* Player rows use the same words and icons. */
+.sched-status.court-booked .court-status {
+  color: var(--ok-fg);
+}
+.sched-status.court-needs .court-status {
+  color: var(--warn-fg);
+}
+.sched-status.court-waitlist .court-status {
+  color: var(--info-fg);
+}
+.sched-status.court-off .court-status,
+.sched-status.court-later .court-status {
+  color: var(--muted-fg);
+}
+.sched-status .court-icon {
+  width: 17px;
+  height: 17px;
+}
+
+/* ---------- Organizer session cards ---------- */
+
+.scard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  scroll-margin-top: 16px;
+  scroll-margin-bottom: calc(env(safe-area-inset-bottom) + 96px);
+  /* Cards answer to their own width (for narrow-screen tweaks). */
+  container: scard / inline-size;
+}
+.scard:focus {
+  outline: none;
+}
+.scard:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* Booked: a solid green left edge, and "Court booked" with a check. */
+.scard.court-booked {
+  border-left: 6px solid var(--ok-edge);
+  padding-left: 10px;
+}
+/* Not booked: amber dashed border and a strip across the top. */
+.scard.court-needs {
+  border: 2px dashed var(--warn-edge);
+}
+/* On the court waitlist: blue border and strip. */
+.scard.court-waitlist {
+  border: 2px solid var(--info-edge);
+}
+/* Canceled, no court, or played: gray with the reason. */
+.scard.court-off {
+  background: var(--surface-2);
+}
+
+/* Date tile on the left; time, court and players on the right. */
+.scard-main {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr);
+  gap: 12px;
+}
+.scard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+/* The time row: the time and the organizer's own I'm in on the left (the
+   button drops to its own line when there's no room), icons top right. */
+.scard-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px;
+  margin: -2px 0 -2px;
+}
+.top-left {
   flex: 1 1 auto;
   min-width: 0;
-}
-.set-list {
-  padding: 0 14px;
   display: flex;
-  flex-direction: column;
-}
-.set-sect + .set-sect {
-  border-top: 1px solid var(--line);
-}
-.set-sect > summary {
-  list-style: none;
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 48px;
-  font-weight: 650;
-  cursor: pointer;
+  gap: 2px 8px;
+  min-height: 34px;
 }
-.set-sect > summary::-webkit-details-marker {
-  display: none;
-}
-.set-sect > summary::after {
-  content: '›';
-  font-size: 1.3rem;
-  color: var(--ink-2);
-  transition: transform 0.15s;
-}
-.set-sect[open] > summary::after {
-  transform: rotate(90deg);
-}
-.set-note {
-  margin-left: auto;
-  font-weight: 400;
-  font-size: 0.85rem;
-  color: var(--ink-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 55%;
-}
-.set-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 0 0 12px;
-}
-
-/* "Welcome, Brandon  not you?": small gray underlined text on the title line. */
-.title-line {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
+.scard-top .sched-time {
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
 }
-.title-line h1 {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex: 0 1 auto;
-}
-.not-you {
-  position: relative;
-  flex: none;
-  background: none;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 500;
-  color: #c9dcd1;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-/* An invisible tap area at least 44px tall around the small text. */
-.not-you::before {
-  content: '';
-  position: absolute;
-  left: -8px;
-  right: -8px;
-  top: 50%;
-  height: 44px;
-  transform: translateY(-50%);
-}
-.not-you:focus-visible {
-  outline: 2px solid var(--ball);
-  outline-offset: 3px;
-  border-radius: 4px;
+.scard-top .sched-time .extra-tag {
+  margin-left: 0;
 }
 
-/* Opened from a shared link: that session stands out. */
-.sched.highlight {
-  border: 2px solid var(--primary);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent);
-}
-
-/* Session card: two matching round icons at the top right (Texts, options). */
+/* Round icon buttons at the top right: Add to calendar, then the gear. */
 .card-icons {
   display: flex;
   gap: 0;
@@ -2361,9 +2213,9 @@ label.field {
   margin-right: -6px;
 }
 .icon-round {
-  /* A 36px circle to look at; the invisible ::before makes the tap 44px tall. */
+  /* A 34px circle to look at; the invisible ::before makes the tap 44px tall. */
   width: 44px;
-  height: 36px;
+  height: 34px;
   margin: 0;
   border: 0;
   border-radius: 50%;
@@ -2375,44 +2227,274 @@ label.field {
   cursor: pointer;
   position: relative;
   padding: 0;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
 }
 .icon-round::before {
   content: '';
   position: absolute;
-  inset: -4px 0;
+  inset: -5px 0;
 }
 .icon-round::after {
   content: '';
   position: absolute;
-  inset: 0 4px;
+  inset: 0 5px;
   border-radius: 50%;
-  border: 1px solid var(--line);
-  background: var(--surface-2);
+  background: var(--fill);
+  transition:
+    transform var(--fast) var(--ease),
+    background-color var(--mid);
+}
+.icon-round:active::after {
+  transform: scale(0.9);
 }
 .icon-round svg {
   position: relative;
   z-index: 1;
   width: 19px;
   height: 19px;
+  transition: transform var(--mid) var(--ease);
 }
 .icon-round[aria-expanded='true'] {
-  color: var(--primary-ink);
+  color: var(--bg);
 }
 .icon-round[aria-expanded='true']::after {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--ink);
+}
+.icon-round[aria-expanded='true'] svg {
+  transform: rotate(60deg);
 }
 .icon-round:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
-/* Options panel: Share the game full width, then an even 2 by 2 grid. */
+.icon-round.cal-btn {
+  color: var(--ink-2);
+}
+/* On the Court booked line, lined up under the gear; it adds no height. */
+.court-top .icon-round.cal-btn {
+  margin: -8px -6px -8px auto;
+  flex: none;
+}
+.icon-round.cal-btn::after {
+  background: transparent;
+}
+.icon-round.cal-btn:active::after {
+  background: var(--fill);
+}
+.icon-round.cal-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* The organizer's own I'm in: a small outlined pill (never a second green button). */
+.btn.small.me-in {
+  position: relative;
+  flex: none;
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--accent-text);
+  border: 1.5px solid color-mix(in srgb, var(--accent-text) 55%, transparent);
+}
+.btn.small.me-in::before {
+  content: '';
+  position: absolute;
+  inset: -10px 0;
+}
+.me-state {
+  display: inline-flex;
+  flex: none;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.me-state .me-tag {
+  font-size: 0.75rem;
+}
+.link-btn.me-out {
+  position: relative;
+  min-height: 0;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+}
+.link-btn.me-out::before {
+  content: '';
+  position: absolute;
+  inset: -12px -6px;
+}
+
+.scard .holiday-actions {
+  margin-top: 0;
+  gap: 2px 6px;
+  flex-wrap: nowrap;
+  min-width: 0;
+}
+.scard .holiday-actions .holiday {
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scard .holiday-actions .link-btn {
+  flex: none;
+  padding: 10px 2px;
+  margin: -10px 0;
+  font-size: 0.8rem;
+}
+/* Organizer cards: a slightly smaller date tile, so more cards fit. */
+.scard .tile {
+  padding: 4px 0 5px;
+}
+.scard .tile .day {
+  font-size: 1.3rem;
+  margin: 1px 0;
+}
+
+.court-line {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.court-top {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 0 8px;
+  min-width: 0;
+}
+.court-top .court-status {
+  white-space: nowrap;
+}
+.court-booked .court-line .court-status {
+  color: var(--ok-fg);
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+.court-off .court-line .court-status,
+.court-later .court-line .court-status {
+  color: var(--muted-fg);
+  font-size: 0.92rem;
+}
+.court-booked .court-line .court-icon {
+  width: 19px;
+  height: 19px;
+}
+.court-sub {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  padding-left: 25px;
+}
+
+/* Court strips across the top (blue waitlist, amber not booked): one row
+   when the label and both buttons fit, otherwise the label takes the first
+   row and the two buttons share the second as exact halves. */
+.court-banner {
+  /* Even: 10px inside, top and bottom, and 10px again before the card body. */
+  margin: -8px -12px 6px;
+  padding: 10px 10px 10px 12px;
+  border-radius: calc(var(--radius) - 3px) calc(var(--radius) - 3px) 0 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.court-banner .court-status {
+  flex: 999 1 auto;
+  min-width: 0;
+  font-size: 0.92rem;
+  line-height: 1.15;
+  gap: 6px;
+}
+.court-banner .court-status > span {
+  overflow-wrap: break-word;
+}
+.court-banner .court-icon {
+  width: 18px;
+  height: 18px;
+}
+.banner-btns {
+  display: flex;
+  gap: 8px;
+}
+.court-banner .banner-btns {
+  flex: 1 1 auto;
+}
+.court-banner .banner-btns > .btn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: max-content;
+  min-height: 36px;
+  padding: 4px 12px;
+  font-size: 15px;
+  line-height: 1.1;
+  border-radius: 10px;
+}
+/* 36px to look at, 44px to tap. */
+.court-banner .banner-btns > .btn::before {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+/* On a tinted strip the gray button needs a white face to read as a button. */
+.court-banner .banner-btns > .btn.secondary {
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.court-needs .court-banner {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-bottom: 1.5px dashed var(--warn-edge);
+}
+.court-waitlist .court-banner {
+  background: var(--info-bg);
+  color: var(--info-fg);
+  border-bottom: 1px solid color-mix(in srgb, var(--info-edge) 50%, transparent);
+}
+
+/* Players: "2 of 4 in" with a dot per spot; the organizer's own I'm in at the end. */
+.players-after {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* "Late drop" tag on Home and the session card. */
+.late-tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--warn-edge);
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+.late-count {
+  color: var(--warn-fg);
+  font-weight: 650;
+}
+.late-line {
+  font-size: 0.8rem;
+  line-height: 1.25;
+}
+
+/* Options panel from the gear: Text full width, then an even 2 by 2 grid. */
 .options {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
+  margin-top: 4px;
   border-top: 1px solid var(--line);
+  animation: fade-in var(--mid) var(--ease);
+}
+.court-details {
+  margin: 0;
 }
 .share-row {
   display: flex;
@@ -2445,7 +2527,27 @@ label.field {
   flex-wrap: wrap;
   gap: 8px;
 }
-/* Texts menu from the phone icon. */
+.move-session {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
+}
+
+/* The gear panel's single "Text" button and its short list of choices. */
+.btn.text-btn {
+  width: 100%;
+  gap: 8px;
+}
+.btn.text-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.text-pick .text-menu {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: 0 12px;
+  background: var(--surface);
+}
 .text-menu {
   list-style: none;
   margin: 0;
@@ -2482,7 +2584,33 @@ label.field {
   padding: 4px 12px;
   white-space: nowrap;
 }
-/* "Other texts" in the gear panel: one quiet row that opens a short list. */
+.text-choice {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+  padding: 6px 22px 6px 0;
+  color: var(--ink);
+  text-decoration: none;
+}
+/* A chevron, like an iPhone list row. */
+.text-choice::after {
+  content: '›';
+  position: absolute;
+  right: 2px;
+  top: 50%;
+  transform: translateY(-52%);
+  font-size: 1.3rem;
+  color: var(--ink-2);
+}
+.text-choice .text-name {
+  font-weight: 650;
+}
+.text-who {
+  font-size: 0.75rem;
+  color: var(--ink-2);
+}
 .other-texts > summary {
   list-style: none;
   display: flex;
@@ -2500,7 +2628,7 @@ label.field {
 .other-texts > summary::after {
   content: '›';
   font-size: 1.2rem;
-  transition: transform 0.15s;
+  transition: transform var(--fast);
 }
 .other-texts[open] > summary::after {
   transform: rotate(90deg);
@@ -2508,10 +2636,137 @@ label.field {
 .other-texts .text-menu {
   margin: 0;
 }
-.missing-numbers {
-  color: var(--warn-fg);
+
+/* Organizer Home: sessions a little closer together, so more fit on a screen. */
+section[aria-labelledby='sessions-title'] {
+  gap: 8px;
 }
-/* Money tab sessions. */
+section[aria-labelledby='sessions-title'] > .week-break {
+  margin: 6px 4px 0;
+}
+section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
+  margin-top: 0;
+}
+
+/* "Mark paid tonight" stands out on game day. */
+.card.tonight {
+  border: 1.5px solid var(--ok-edge);
+}
+
+/* Pay back after a cancel. */
+.refunds .rows li {
+  align-items: center;
+}
+.refunds .check {
+  min-height: 44px;
+  margin: 0;
+}
+
+/* ---------- Add game ---------- */
+
+.time-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.add-game .chips {
+  flex-wrap: wrap;
+  margin: 2px 0 6px;
+}
+
+/* ---------- Money tab ---------- */
+
+/* Month picker: arrows and the month share one rounded control. */
+.month-picker {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  background: var(--fill);
+  border-radius: var(--r-md);
+}
+.month-picker .btn {
+  min-height: 44px;
+  min-width: 0;
+  padding: 0;
+  font-size: 1.3rem;
+  font-weight: 500;
+  background: transparent;
+  border: 0;
+}
+.month-picker input {
+  min-height: 44px;
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-weight: 650;
+  text-align: center;
+  background: var(--surface);
+  border: 0;
+  border-radius: 9px;
+  padding: 0 8px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+.month-picker input::-webkit-date-and-time-value {
+  text-align: center;
+}
+
+/* The month in one line: "Left" in big numbers, the sentence under it. */
+.money-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.money-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.money-left-label {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.money-sum .big-amount {
+  font-size: 2.2rem;
+}
+.money-sum.surplus .big-amount {
+  color: var(--ok-fg);
+}
+.money-sum.short .big-amount {
+  color: var(--danger-fg);
+}
+.money-sum .bottom-line {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+/* The breakdown: label left, amount right, hairlines between, like Wallet. */
+.money-sum .kv {
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  font-size: 0.95rem;
+  border-top: 1px solid var(--line);
+}
+.money-sum .kv dt,
+.money-sum .kv dd {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+.money-sum .kv dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.money-sum .kv dt:nth-last-of-type(1),
+.money-sum .kv dd:nth-last-of-type(1) {
+  border-bottom: 0;
+}
+
 .money-sess {
   padding: 4px 14px;
 }
@@ -2528,54 +2783,176 @@ label.field {
 .money-sess > summary::-webkit-details-marker {
   display: none;
 }
+.money-sess > summary::after {
+  content: '›';
+  flex: none;
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: var(--ink-2);
+  transition: transform var(--fast);
+}
+.money-sess[open] > summary::after {
+  transform: rotate(90deg);
+}
 .money-sess[open] > summary {
   margin-bottom: 8px;
 }
+.money-sess > summary > span:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .owes-tag {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 700;
   color: var(--warn-fg);
   background: var(--warn-bg);
   border-radius: 999px;
   padding: 2px 8px;
-}
-.move-session {
-  border-top: 1px solid var(--line);
-  padding-top: 6px;
+  white-space: nowrap;
 }
 
-/* "Copy text" next to a message button: always one line. */
-.btn.copy-text {
+/* A payment the player marked themselves, until the organizer confirms it. */
+.self-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ink-2);
   white-space: nowrap;
-  flex-shrink: 0;
+}
+
+/* Settings: the organizer-only money fields. */
+.private-money {
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  padding: 10px 12px 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.private-money legend {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  padding: 0 4px;
+}
+
+/* ---------- Players: one compact row each ---------- */
+
+.player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px 0 14px;
+}
+.player-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 54px;
+  padding: 5px 0;
+}
+.player-row + .player-row {
+  border-top: 1px solid var(--line);
+}
+.player-open {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 2px 0;
+  min-height: 44px;
+  justify-content: center;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.player-open:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.p-line1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.p-name {
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.p-pill {
+  font-size: 0.7rem;
+  font-weight: 650;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
+  white-space: nowrap;
+  line-height: 1.5;
+}
+.p-pill.reg {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  border-color: transparent;
+}
+.p-line2 {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.p-money {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.p-bal {
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.p-bal.owes {
+  color: var(--ink);
+}
+.p-bal.credit {
+  color: var(--ok-fg);
+}
+.p-bal.zero {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.p-played {
+  font-size: 0.72rem;
+  color: var(--ink-2);
+}
+.btn.small.p-edit {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 0.88rem;
+  border-radius: 999px;
+  position: relative;
+}
+.btn.small.p-edit::before {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+.p-summary {
+  margin: 0;
 }
 
 /* ---------- History ---------- */
-.chips {
-  display: flex;
-  gap: 8px;
-}
-.chip-btn {
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  background: var(--surface);
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 650;
-  cursor: pointer;
-}
-.chip-btn[aria-pressed='true'] {
-  background: var(--court);
-  border-color: var(--court);
-  color: #fff;
-}
-.chip-btn:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-}
+
 .history-list,
 .activity-list {
   list-style: none;
@@ -2654,332 +3031,358 @@ label.field {
   color: var(--ink-2);
 }
 
-/* Organizer Home: sessions a little closer together, so more fit on a screen. */
-section[aria-labelledby='sessions-title'] {
-  gap: 8px;
-}
-section[aria-labelledby='sessions-title'] > .week-break {
-  margin: 4px 0 -2px;
-}
+/* ---------- Settings: compact rows and collapsed sections ---------- */
 
-/* Session cards answer to their own width (for "Add to calendar" below). */
-.scard {
-  container: scard / inline-size;
-}
-.cal-link.court-cal .cal-icon {
-  display: none;
-  width: 20px;
-  height: 20px;
-}
-/* Narrow cards: just the calendar icon next to "Court booked", so it never takes a line of its own. */
-@container scard (max-width: 330px) {
-  .cal-link.court-cal .cal-text {
-    display: none;
-  }
-  .cal-link.court-cal .cal-icon {
-    display: block;
-  }
-  .cal-link.court-cal {
-    min-width: 44px;
-    justify-content: center;
-  }
-}
-
-/* "+ Add game" next to "Book a court" on the first divider line. */
-.btn.pill.add-pill {
-  background: var(--surface);
-  color: var(--primary);
-  border: 1px solid var(--primary);
-}
-.week-break .btn.pill + .btn.pill {
-  margin-left: -4px;
-}
-/* A one-off game: a small tag by the time, and its note. */
-.extra-tag {
-  display: inline-block;
-  margin-left: 8px;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--holiday-fg);
-  color: var(--holiday-fg);
-  background: var(--holiday-bg);
-  font-family: var(--body, inherit);
-  font-size: 0.72rem;
-  font-weight: 700;
-  vertical-align: 2px;
-  white-space: nowrap;
-}
-.sched-when .extra-tag {
-  margin-left: 0;
-  vertical-align: baseline;
-}
-.game-note {
-  margin: 0;
-  font-size: 0.82rem;
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
-}
-.time-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-.add-game .chips {
-  flex-wrap: wrap;
-  margin: 2px 0 6px;
-}
-/* The organizer's own I'm in: at the right end of the players line, after the pills. */
-.players-after {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-}
-.btn.small.me-in {
-  position: relative;
-  flex: none;
-  min-height: 28px;
-  padding: 0 9px;
-  font-size: 0.78rem;
-  border-radius: 999px;
-  margin-left: auto;
-}
-.btn.small.me-in::before {
-  content: '';
-  position: absolute;
-  inset: -10px 0;
-}
-.me-state {
-  display: inline-flex;
-  flex: none;
-  margin-left: auto;
-  min-height: 28px;
-  align-items: center;
-  gap: 6px;
-  white-space: nowrap;
-}
-.me-state .me-tag {
-  font-size: 0.75rem;
-}
-.link-btn.me-out {
-  position: relative;
-  min-height: 0;
-  padding: 2px 4px;
-  font-size: 0.85rem;
-}
-.link-btn.me-out::before {
-  content: '';
-  position: absolute;
-  inset: -12px -6px;
-}
-/* The gear panel's single "Text" button and its short list of choices. */
-.btn.text-btn {
-  width: 100%;
-  gap: 8px;
-}
-.btn.text-btn svg {
-  width: 20px;
-  height: 20px;
-}
-.text-pick .text-menu {
-  margin-top: 6px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0 12px;
-}
-.text-choice {
+.set-top {
+  padding: 4px 14px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  min-height: 48px;
-  padding: 6px 0;
-  color: var(--ink);
-  text-decoration: none;
 }
-.text-choice .text-name {
-  font-weight: 650;
+.set-line,
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
 }
-.text-who {
-  font-size: 0.75rem;
-  color: var(--ink-2);
+.set-top .set-line + .set-line {
+  border-top: 1px solid var(--line);
 }
-
-/* The time row: the time and the organizer's own I'm in on the left (the
-   button drops to its own line when there's no room), the gear always top right. */
-.scard-top {
-  gap: 4px;
-  align-items: flex-start;
+.set-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
 }
-.top-left {
+.set-line .set-label {
   flex: 1 1 auto;
   min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 6px;
-  min-height: 36px;
 }
-.scard-top .sched-time {
-  min-width: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  column-gap: 6px;
+.set-hint {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  font-weight: 400;
 }
-.scard-top .sched-time .extra-tag {
-  margin-left: 0;
-}
-.nowrap {
+.set-link {
+  font-size: 0.8rem;
+  color: var(--ink-2);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: none;
+  padding: 0;
 }
-/* "You're in · Out" takes its own small line once in. */
-.top-left .me-state {
-  flex-basis: 100%;
-  justify-content: flex-end;
-  margin-top: -4px;
+.set-row-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-
-/* Setting hints: a few gray words on the same line as the name. */
+/* The name takes all the room it can and wraps by word; the box stays small. */
 .set-row .set-label {
   display: block;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-wrap: break-word;
 }
+/* Setting hints: a few gray words on the same line as the name. */
 .set-row .set-hint {
   display: inline;
   margin-left: 6px;
 }
-
-/* "✓ Paid" with a tiny "Didn't pay?" right under it (only after "I paid"). */
-.paid-wrap {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  line-height: 1.2;
+.set-row input.set-input,
+.set-row .set-input {
+  flex: 0 0 80px;
+  width: 80px;
+  max-width: 80px;
+  min-height: 44px;
+  padding: 10px 12px;
+  text-align: right;
 }
-.link-btn.didnt-pay {
-  position: relative;
-  min-height: 0;
+.set-row input.set-input.wide {
+  flex: 0 0 auto;
+  width: 10.5rem;
+  max-width: 56%;
+  text-align: left;
+  font-size: 16px;
+  padding: 10px 8px;
+}
+.set-row .money-input.set-input {
+  flex: 0 0 88px;
+  width: 88px;
+  max-width: 88px;
   padding: 0;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-underline-offset: 2px;
 }
-.link-btn.didnt-pay::before {
-  content: '';
-  position: absolute;
-  inset: -14px -8px;
+.set-row .money-input.set-input input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px 10px 26px;
+  text-align: right;
 }
-/* A payment the player marked themselves, until the organizer confirms it. */
-.self-tag {
+.set-row .money-input > span {
+  left: 11px;
+}
+.set-name {
+  display: inline;
+}
+/* Text settings: the name above a full-width box. */
+.auto-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.auto-field .field-label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+/* Autosave: a tiny check that fades, and a retry line when saving fails. */
+.save-mark {
   display: inline-block;
-  margin-left: 6px;
-  font-size: 0.68rem;
+  margin-left: 4px;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--ink-2);
   white-space: nowrap;
 }
-
-/* ---------- Players: one compact row each ---------- */
-.player-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 12px;
+.save-mark.saved {
+  color: var(--ok-fg);
+  animation: save-fade 2s ease-in forwards;
 }
-.player-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 8px;
-  min-height: 56px;
-  padding: 6px 0;
+@keyframes save-fade {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
-.player-row + .player-row {
-  border-top: 1px solid var(--line);
-}
-.player-open {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  padding: 2px 0;
-  min-height: 44px;
-  justify-content: center;
+.save-retry {
+  align-self: flex-start;
   background: none;
   border: 0;
+  padding: 6px 0;
+  min-height: 44px;
   font: inherit;
-  color: inherit;
-  text-align: left;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--danger-fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
-.player-open:focus-visible {
-  outline: 3px solid var(--focus);
-  outline-offset: 2px;
-  border-radius: 6px;
+.set-top .segmented.compact {
+  flex: 0 0 auto;
 }
-.p-line1 {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 6px;
-  min-width: 0;
-}
-.p-name {
-  overflow-wrap: anywhere;
-}
-.p-pill {
-  font-size: 0.68rem;
-  font-weight: 650;
-  padding: 1px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--line);
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.p-pill.reg {
-  color: var(--ok-fg);
-  border-color: color-mix(in srgb, var(--ok-fg) 45%, transparent);
-}
-.p-line2 {
-  font-size: 0.78rem;
-  color: var(--ink-2);
-  overflow-wrap: anywhere;
-}
-.p-money {
+.set-list {
+  padding: 0 14px;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  line-height: 1.2;
-  white-space: nowrap;
 }
-.p-bal {
+.set-sect + .set-sect {
+  border-top: 1px solid var(--line);
+}
+.set-sect > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 50px;
+  font-weight: 620;
+  cursor: pointer;
+}
+.set-sect > summary::-webkit-details-marker {
+  display: none;
+}
+.set-sect > summary::after {
+  content: '›';
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: var(--ink-2);
+  transition: transform var(--fast) var(--ease);
+}
+.set-sect[open] > summary::after {
+  transform: rotate(90deg);
+}
+.set-note {
+  margin-left: auto;
+  font-weight: 400;
   font-size: 0.85rem;
-  font-weight: 700;
-}
-.p-bal.owes {
-  color: var(--ink);
-}
-.p-bal.credit {
-  color: var(--ok-fg);
-}
-.p-bal.zero {
   color: var(--ink-2);
-  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
 }
-.p-played {
-  font-size: 0.72rem;
+.set-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+.set-sect[open] > .set-body {
+  animation: fade-in var(--mid) var(--ease);
+}
+
+details.advanced > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  font-weight: 620;
+  list-style: none;
+}
+details.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+details.advanced > summary::after {
+  content: '›';
+  font-size: 1.3rem;
+  font-weight: 400;
+  color: var(--ink-2);
+  transition: transform var(--fast) var(--ease);
+}
+details.advanced[open] > summary::after {
+  transform: rotate(90deg);
+}
+details.advanced[open] > summary {
+  margin-bottom: 12px;
+}
+
+/* ---------- Site home, organizer link, tips ---------- */
+
+.organizer-link {
+  text-align: center;
+  font-size: 0.88rem;
+  margin-top: 8px;
+}
+
+.organizer-link a {
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 8px;
+  text-underline-offset: 3px;
+}
+
+/* One small, dismissible tip at the very end of the player page. */
+.footer-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
   color: var(--ink-2);
 }
-.btn.small.p-edit {
-  min-height: 36px;
-  padding: 0 10px;
-  position: relative;
+
+.footer-tip p {
+  flex: 1;
 }
-.btn.small.p-edit::before {
-  content: '';
-  position: absolute;
-  inset: -4px 0;
+
+.footer-tip .icon-btn {
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font-size: 0.95rem;
 }
-.p-summary {
-  margin: 0;
+
+/* ---------- Motion: light and purposeful ---------- */
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Cards and each tab's content fade in (opacity only, so nothing jumps). */
+.page > *,
+.schedule > .sched,
+section[aria-labelledby='sessions-title'] > .scard {
+  animation: fade-in var(--mid) var(--ease) both;
+}
+
+/* Sheets slide up; the dimmed backdrop fades. */
+dialog.sheet[open] {
+  animation: sheet-up var(--slow) var(--ease);
+}
+dialog.sheet[open]::backdrop {
+  animation: fade-in var(--mid) ease-out;
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(40px);
+    opacity: 0;
+  }
+}
+@media (min-width: 700px) {
+  @keyframes sheet-up {
+    from {
+      transform: translateY(16px) scale(0.98);
+      opacity: 0;
+    }
+  }
+}
+
+/* No motion when the phone asks for less (the spinner just turns slowly). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0s !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+  .btn:active:not(:disabled),
+  .chip-btn:active,
+  .tabbar button:active,
+  .topbar-btn:active,
+  .icon-btn:active,
+  .icon-round:active::after,
+  .mode-btn:active::after {
+    transform: none;
+  }
+  .spinner {
+    animation-duration: 2.4s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ---------- Narrow phones (360 to 380px): a few pixels back everywhere ---------- */
+
+@media (max-width: 380px) {
+  :root {
+    --gutter: 14px;
+  }
+  .topbar-row {
+    gap: 8px;
+  }
+  .topbar h1 {
+    font-size: 1.22rem;
+  }
+  .topbar-btn {
+    padding: 0 11px;
+    font-size: 0.8rem;
+  }
+  .sched,
+  .scard-main {
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .tile .day {
+    font-size: 1.3rem;
+  }
+  .btn.sched-btn {
+    padding: 8px 13px;
+  }
+  .sched-status {
+    font-size: 0.85rem;
+  }
 }

@@ -116,7 +116,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
                   {r.paymentStatus === 'paid' ? (
                     <>
                       {r.selfPaid && (
-                        <button className="btn small" disabled={busy} onClick={() => setPaid(s, true)}>
+                        <button className="btn small secondary" disabled={busy} onClick={() => setPaid(s, true)}>
                           Mark paid
                         </button>
                       )}
@@ -127,7 +127,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
                   ) : (
                     r.status === 'confirmed' &&
                     amount !== null && (
-                      <button className="btn small" disabled={busy} onClick={() => setPaid(s, true)}>
+                      <button className="btn small secondary" disabled={busy} onClick={() => setPaid(s, true)}>
                         Mark paid
                       </button>
                     )

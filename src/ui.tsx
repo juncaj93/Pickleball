@@ -265,6 +265,7 @@ export function SmsDraft({
   missing,
   body,
   openLabel = 'Open in Messages',
+  quiet,
 }: {
   to: string;
   phone: string | null;
@@ -274,6 +275,8 @@ export function SmsDraft({
   missing?: string[];
   body: string;
   openLabel?: string;
+  /** Another draft on the same card already has the green button: use the gray one. */
+  quiet?: boolean;
 }) {
   const [opened, setOpened] = useState(false);
   // No numbers saved: Messages opens with just the words, to pick a group chat.
@@ -294,7 +297,7 @@ export function SmsDraft({
       {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
       <p className="bubble">{body}</p>
       <div className="btn-row">
-        <a className="btn small" href={href} onClick={() => setOpened(true)}>
+        <a className={`btn small${quiet ? ' secondary' : ''}`} href={href} onClick={() => setOpened(true)}>
           {openLabel}
         </a>
       </div>

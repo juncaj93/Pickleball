@@ -174,6 +174,29 @@ function layoutReport({ roots, items }) {
   return { problems, checked };
 }
 
+/**
+ * In the page: every card (and sheet) with more than one filled green button.
+ * Green is the color a plain "btn" gets; only buttons whose own card is this
+ * one count, so a card inside a card is judged on its own.
+ */
+function greenReport() {
+  const probe = document.createElement('button');
+  probe.className = 'btn';
+  document.body.appendChild(probe);
+  const green = getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  const box = '.card, article, .sched, .draft, dialog[open] .sheet-body';
+  const problems = [];
+  let cards = 0;
+  for (const card of document.querySelectorAll(`main :is(${box}), dialog[open] .sheet-body`)) {
+    if (!card.getClientRects().length || !card.checkVisibility()) continue;
+    cards++;
+    const filled = [...card.querySelectorAll('button, a')].filter((b) => b.closest(box) === card && b.checkVisibility() && getComputedStyle(b).backgroundColor === green);
+    if (filled.length > 1) problems.push(`"${(card.getAttribute('aria-label') || card.id || card.className).slice(0, 40)}" has ${filled.length} green buttons: ${filled.map((b) => b.textContent.trim()).join(', ')}`);
+  }
+  return { problems, cards, green };
+}
+
 /** In the page: scrolled to the very bottom, is the last button or link hidden by the floating tab bar? */
 function lastNotCovered() {
   window.scrollTo(0, document.documentElement.scrollHeight);
@@ -277,6 +300,8 @@ async function main() {
     deviceScaleFactor: 2,
     isMobile: true,
     hasTouch: true,
+    // Animations off for steady measurements; the motion check turns them back on.
+    reducedMotion: 'reduce',
     userAgent:
       'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
   });
@@ -1418,11 +1443,14 @@ async function main() {
       await btn.waitFor();
       const look = await btn.evaluate((el) => ({ disabled: el.disabled, opacity: getComputedStyle(el).opacity }));
       assert(!look.disabled && look.opacity === '1', `I'm in looks turned off: ${JSON.stringify(look)}`);
-      // Same row as the date and time, on the right.
+      // On the right of the time, beside the time and court lines (no gap under the time).
       const head = await row.locator('.sched-head').boundingBox();
       const b = await btn.boundingBox();
       const time = await row.locator('.sched-time').boundingBox();
-      assert(b.y >= head.y - 1 && b.y + b.height <= head.y + head.height + 1 && b.x > time.x + time.width, 'button should sit on the time row, on the right');
+      const court = await row.locator('.sched-status').boundingBox();
+      assert(b.y <= head.y + head.height && b.y + b.height >= head.y && b.x > time.x + time.width, 'button should sit beside the time, on the right');
+      assert(b.y + b.height <= court.y + court.height + 6, 'button should not reach below the court line');
+      assert(court.y - (head.y + head.height) <= 6, `gap under the time is ${Math.round(court.y - (head.y + head.height))}px`);
       assert(b.height >= 44, `button is ${b.height}px tall`);
 
       // The confirmation is a small bubble next to the button, and nothing on the page moves.
@@ -2060,6 +2088,7 @@ async function main() {
       assert((await amber.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar link before booking');
       await amber.getByRole('button', { name: 'I booked it' }).click();
       const booked = admin.locator(`#${id}`);
+      // A round calendar icon on the Court booked line, under the gear.
       const orgCal = booked.locator('.court-top').getByRole('link', { name: /to calendar$/ });
       await orgCal.waitFor();
       await icsOk(admin, await orgCal.getAttribute('href'));
@@ -3139,6 +3168,124 @@ async function main() {
       }
       await tab(p, 'Home').click();
       await p.screenshot({ path: path.join(SHOTS, 'admin-home-360.png'), fullPage: true });
+    });
+
+    // ---------- Design: every screen, four widths, light and dark ----------
+    for (const width of [360, 375, 390, 430]) {
+      for (const scheme of ['light', 'dark']) {
+        await check(`design at ${width}px (${scheme}): every screen has no overlaps or cut-off text, no sideways scrolling, and at most one green button per card`, async () => {
+          const p = await admin.context().newPage();
+          p.setDefaultTimeout(10000);
+          await p.setViewportSize({ width, height: 844 });
+          await p.emulateMedia({ colorScheme: scheme });
+          const issues = [];
+          const look = async (where) => {
+            const roots = 'main article, main .card, main .sched, dialog[open] .sheet-body, header.topbar, nav.tabbar';
+            const lay = await p.evaluate(layoutReport, { roots, items: CARD_ITEMS + ', .me-tag, .chip, .p-pill, .owes-tag, h2, h3, .set-label, summary > span' });
+            issues.push(...lay.problems.map((x) => `${where}: ${x}`));
+            const gr = await p.evaluate(greenReport);
+            issues.push(...gr.problems.map((x) => `${where}: ${x}`));
+            const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+            if (overflow > 0) issues.push(`${where}: scrolls sideways by ${overflow}px`);
+          };
+          await p.goto(`${BASE}/admin`);
+          await sessionCards(p).first().waitFor();
+          await showAll(p);
+          await look('Home');
+          // Date tiles: white (or the dark surface) with a thin outline, never solid green.
+          const tile = await sessionCards(p).first().locator('.tile').evaluate((el) => {
+            const cs = getComputedStyle(el);
+            const probe = document.createElement('button');
+            probe.className = 'btn';
+            document.body.appendChild(probe);
+            const green = getComputedStyle(probe).backgroundColor;
+            probe.remove();
+            return { bg: cs.backgroundColor, green, border: parseFloat(cs.borderTopWidth) };
+          });
+          if (tile.bg === tile.green || tile.border < 1) issues.push(`date tile should be outlined, not green: ${JSON.stringify(tile)}`);
+          const first = sessionCards(p).first();
+          await more(first);
+          await first.getByRole('button', { name: 'Text', exact: true }).click();
+          await look('Home, gear panel and Text open');
+          await closeOptions(first);
+          await p.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+          await p.locator('dialog[open]').waitFor();
+          await look('Add game sheet');
+          await p.keyboard.press('Escape');
+          await p.locator('dialog[open]').waitFor({ state: 'detached' });
+          await more(first);
+          await first.locator('.options').getByRole('button', { name: 'Edit booking' }).click();
+          await p.locator('dialog[open]').waitFor();
+          await look('Edit booking sheet');
+          await p.keyboard.press('Escape');
+          await p.locator('dialog[open]').waitFor({ state: 'detached' });
+          await tab(p, 'Players').click();
+          await p.getByRole('button', { name: 'Edit Alex' }).waitFor();
+          await look('Players');
+          await tab(p, 'Money').click();
+          await p.locator('.money-sum').waitFor();
+          await p.evaluate(() => document.querySelectorAll('details.money-sess').forEach((d) => (d.open = true)));
+          await look('Money');
+          // The month picker's middle box sits between the arrows, never under them.
+          const mp = await p.locator('.month-picker').evaluate((el) => [...el.children].filter((c) => !c.matches('.sr-only')).map((c) => c.getBoundingClientRect()).map((r) => [r.left, r.right]));
+          if (!(mp[0][1] <= mp[1][0] + 0.5 && mp[1][1] <= mp[2][0] + 0.5)) issues.push(`month picker overlaps: ${JSON.stringify(mp)}`);
+          const line = await p.locator('.bottom-line').evaluate((el) => el.getClientRects().length && Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+          if (width >= 375 && line > 1) issues.push(`the Money sentence wraps to ${line} lines`);
+          if ((await p.locator('main').getByText('Sessions played').count()) !== 1) issues.push('"Sessions played" should show once on Money');
+          await tab(p, 'History').click();
+          await p.getByRole('group', { name: 'Show' }).waitFor();
+          await look('History');
+          await p.getByRole('button', { name: 'Activity' }).click();
+          await p.getByRole('list', { name: 'Activity' }).waitFor();
+          await look('History, Activity');
+          await tab(p, 'Settings').click();
+          await openSections(p);
+          await look('Settings');
+          await tab(p, 'Home').click();
+          await p.getByRole('button', { name: 'View as…' }).click();
+          await p.locator('dialog[open]').waitFor();
+          await look('View as sheet');
+          await p.locator('dialog[open]').getByRole('button', { name: 'Alex', exact: true }).click();
+          await p.locator('.schedule article').first().waitFor();
+          await look('Player screen (View as)');
+          const ptile = await p.locator('.schedule .tile').first().evaluate((el) => parseFloat(getComputedStyle(el).borderTopWidth));
+          if (ptile < 1) issues.push('player date tiles need an outline');
+          await p.getByRole('button', { name: 'Not you?' }).click();
+          await p.locator('.name-grid').waitFor();
+          await look('Who are you?');
+          assert(issues.length === 0, issues.slice(0, 6).join(' | '));
+          await p.close();
+        });
+      }
+    }
+
+    await check('motion: buttons press, dots spring, sheets slide, bubbles pop; all of it off with Reduce Motion', async () => {
+      const read = async (reducedMotion) => {
+        const ctx = await browser.newContext({ ...phone(390), reducedMotion });
+        const p = await ctx.newPage();
+        await p.goto(playerLink);
+        await p.getByRole('button', { name: 'Alex', exact: true }).click();
+        await p.locator('.schedule .spots li:not(.open)').first().waitFor();
+        const out = await p.evaluate(() => {
+          const ms = (el, pseudo) => parseFloat(getComputedStyle(el, pseudo).animationDuration) * 1000;
+          const spot = document.querySelector('.schedule .spots li:not(.open)');
+          const btn = document.querySelector('.schedule .sched-btn');
+          return { spot: getComputedStyle(spot).animationName, spotMs: ms(spot), press: getComputedStyle(btn).transitionDuration };
+        });
+        await p.getByRole('button', { name: /^Out for|I'm out/ }).first().click();
+        const dlg = p.locator('dialog[open]');
+        await dlg.waitFor();
+        out.sheet = await dlg.evaluate((d) => [getComputedStyle(d).animationName, parseFloat(getComputedStyle(d).animationDuration) * 1000]);
+        await p.keyboard.press('Escape');
+        await ctx.close();
+        return out;
+      };
+      const on = await read('no-preference');
+      assert(on.spot === 'spot-pop' && on.spotMs >= 200, `filled spots should spring in: ${JSON.stringify(on)}`);
+      assert(on.sheet[0] === 'sheet-up' && on.sheet[1] >= 200, `sheets should slide up: ${JSON.stringify(on)}`);
+      assert(!/^0s(, 0s)*$/.test(on.press), `buttons should press down: ${on.press}`);
+      const off = await read('reduce');
+      assert(off.spotMs < 1 && off.sheet[1] < 1, `Reduce Motion should stop the animations: ${JSON.stringify(off)}`);
     });
 
     await check('bad links show a clear error state', async () => {

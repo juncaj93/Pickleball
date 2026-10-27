@@ -130,10 +130,10 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                   <CourtIcon kind="booked" />
                   <span>{court.text}</span>
                 </div>
+                {/* Add to calendar: a round icon right under the gear. */}
                 {live && (
-                  <a className="cal-link court-cal" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+                  <a className="icon-round cal-btn" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
                     <CalendarPlusIcon />
-                    <span className="cal-text">Add to calendar</span>
                   </a>
                 )}
               </div>
@@ -737,7 +737,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               {r.paymentStatus === 'paid' ? (
                 <>
                   {r.selfPaid && (
-                    <button className="btn small" disabled={busy} onClick={() => setPaid(r, true)}>
+                    <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
                       Mark paid
                     </button>
                   )}
@@ -748,7 +748,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               ) : (
                 r.status === 'confirmed' &&
                 !s.state.flags.canceled && (
-                  <button className="btn small" disabled={busy} onClick={() => setPaid(r, true)}>
+                  <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
                     Mark paid
                   </button>
                 )
