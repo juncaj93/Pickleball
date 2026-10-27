@@ -519,8 +519,13 @@ async function main() {
         if ((await c.getAttribute('data-court')) !== 'off') {
           const line = (await c.locator('.players-line .players-count').innerText()).trim();
           assert(/^\d of [46] in$/.test(line), `players line was ${line}`);
-          const dots = await c.locator('.players-line .dot').count();
-          assert(dots === Number(line.split(' of ')[1].split(' ')[0]), `expected a dot per spot, got ${dots}`);
+          const slots = Number(line.split(' of ')[1].split(' ')[0]);
+          const filled = Number(line.split(' ')[0]);
+          const pills = c.locator('.spots li');
+          assert((await pills.count()) === slots, `expected a pill per spot, got ${await pills.count()}`);
+          assert((await c.locator('.spots li.open').count()) === slots - filled, 'open spots should be blank pills');
+          const named = (await c.locator('.spots li:not(.open)').allInnerTexts()).map((x) => x.trim());
+          assert(named.length === filled && named.every((n) => /^[A-Z][a-z]+$/.test(n)), `filled pills should show names: ${named}`);
         }
       }
     });
@@ -602,7 +607,7 @@ async function main() {
       const before = await visible();
       assert(JSON.stringify(before) === JSON.stringify(['More', 'Text the group poll']), `card buttons were ${before}`);
       await card.locator('.tile').waitFor();
-      await card.locator('.players-line .dot').first().waitFor();
+      await card.locator('.spots li').first().waitFor();
       await more(card);
       const after = await visible();
       for (const b of ['Edit booking', 'Players', 'Money', 'Texts', 'Reschedule', 'Cancel session']) assert(after.includes(b), `More is missing ${b}: ${after}`);
@@ -983,6 +988,31 @@ async function main() {
         assert(Math.abs(owe.y + owe.height / 2 - (pay.y + pay.height / 2)) < 14, '"You owe" and Pay with Venmo should share a line');
         assert(pay.height >= 44, 'Pay with Venmo should be easy to tap');
       }
+    });
+
+    await check('organizer and players see the same name pills: names fill in sign-up order, open spots stay blank', async () => {
+      await admin.reload();
+      const card = sessionCards(admin).first();
+      await card.locator('.spots li').first().waitFor();
+      const adminNames = (await card.locator('.spots li:not(.open)').allInnerTexts()).map((x) => x.trim());
+      const p = players.Alex;
+      await p.reload();
+      const row = firstCard(p);
+      await row.locator('.spots li').first().waitFor();
+      const playerNames = (await row.locator('.spots li:not(.open)').allInnerTexts()).map((x) => x.trim());
+      assert(adminNames.length > 0 && JSON.stringify(adminNames) === JSON.stringify(playerNames), `organizer ${adminNames} vs player ${playerNames}`);
+      assert((await card.locator('.spots li').count()) === (await row.locator('.spots li').count()), 'same number of pills on both screens');
+      const look = async (page, sel) => page.locator(sel).first().evaluate((el) => [getComputedStyle(el).borderRadius, getComputedStyle(el).fontSize].join(' '));
+      assert((await look(admin, 'section[aria-labelledby="sessions-title"] .spots li')) === (await look(p, '.schedule .spots li')), 'pills should look the same');
+      assert((await row.locator('.spots li.me', { hasText: 'Alex' }).count()) === 1, 'your own pill is marked');
+      for (const scheme of ['light', 'dark']) {
+        await admin.emulateMedia({ colorScheme: scheme });
+        await p.emulateMedia({ colorScheme: scheme });
+        await card.screenshot({ path: path.join(SHOTS, `pills-admin-${scheme}.png`) });
+        await row.screenshot({ path: path.join(SHOTS, `pills-player-${scheme}.png`) });
+      }
+      await admin.emulateMedia({ colorScheme: 'light' });
+      await p.emulateMedia({ colorScheme: 'light' });
     });
 
     await check('the Home Screen tip is one small line at the very bottom, shown once; Settings has the steps', async () => {

@@ -1398,42 +1398,16 @@ label.field {
   margin-top: 0;
 }
 
-/* "4 of 4 in: Alex, Blair, Devon, Frankie" on one line that can wrap. */
+/* Player rows: "2 of 4 in" over a pill per spot. */
 .in-line {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 0.88rem;
-  line-height: 1.35;
 }
 
 .in-count {
   color: var(--ink-2);
-  margin-right: 4px;
-}
-
-.in-pills {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: inline;
-}
-
-.in-pills li {
-  display: inline;
-  font-weight: 650;
-  color: var(--ink);
-}
-
-.in-pills li:not(:last-child)::after {
-  content: ', ';
-  font-weight: 400;
-  /* inline-block keeps the "me" underline off the comma */
-  display: inline-block;
-  white-space: pre;
-}
-
-.in-pills li.me {
-  text-decoration: underline;
-  text-decoration-thickness: 2px;
-  text-underline-offset: 3px;
 }
 
 .waitlist-line {
@@ -1724,21 +1698,6 @@ label.field {
 .players-count {
   font-weight: 700;
 }
-.dots {
-  display: inline-flex;
-  gap: 5px;
-}
-.dot {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  border: 2px solid var(--ink-2);
-  background: transparent;
-}
-.dot.on {
-  background: var(--ink);
-  border-color: var(--ink);
-}
 .players-wait {
   color: var(--ink-2);
 }
@@ -1792,4 +1751,47 @@ label.field {
   width: 15px;
   height: 15px;
   flex: none;
+}
+
+/* One pill per spot. Names fill them in sign-up order; open spots are blank outlines. */
+.players {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.spots {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+}
+.spots.spots-6 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.spots li {
+  min-height: 26px;
+  padding: 3px 3px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.78rem;
+  letter-spacing: -0.01em;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.spots li.me {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 1px;
+}
+.spots li.open {
+  background: transparent;
+  border: 1.5px dashed var(--ink-2);
+  opacity: 0.7;
 }

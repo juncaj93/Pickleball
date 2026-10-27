@@ -5,7 +5,7 @@ import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
-import { ConfirmDialog, CourtIcon, Empty, ErrorState, Notice, Spinner, useToast } from '../ui';
+import { ConfirmDialog, CourtIcon, Empty, SpotPills, ErrorState, Notice, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 
@@ -532,19 +532,8 @@ function ScheduleRow({
 
         {!s.canceled && (s.confirmed.length > 0 || !courtWait) && (
           <div className="in-line">
-            <span className="in-count">
-              {countLine(s)}
-              {s.confirmed.length > 0 ? ':' : ''}
-            </span>
-            {s.confirmed.length > 0 && (
-              <ul className="in-pills" aria-label="Who's in">
-                {s.confirmed.map((p) => (
-                  <li key={p.name} className={p.name === g.me?.name ? 'me' : undefined}>
-                    {p.name}
-                  </li>
-                ))}
-              </ul>
-            )}
+            <span className="in-count">{countLine(s)}</span>
+            <SpotPills names={s.confirmed.map((p) => p.name)} me={g.me?.name} />
           </div>
         )}
         {!s.canceled && s.waitlist.length > 0 && (

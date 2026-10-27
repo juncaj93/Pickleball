@@ -36,8 +36,9 @@ lines, and each session appears once:
   under More if you book early)
 - **On the court waitlist**: blue banner with **Court opened** / **Didn't open**
 - canceled or no court: gray, with the reason
-- players: "2 of 4 in" with a dot per spot (6 dots once 5 or more are in),
-  plus the waitlist count
+- players: "2 of 4 in" plus the waitlist count, over a pill per spot (6 once 5
+  or more are in): names fill them in sign-up order, open spots stay blank.
+  Players see the same pills, with their own name ringed
 - short on players (from the day-before check-in): Invite people / Reschedule /
   Cancel / Keep as is, right on that card
 

@@ -430,36 +430,57 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
   );
 }
 
-/** "3 of 4 in" with a dot per spot, filled as people sign up, plus any waitlist. */
+/**
+ * One pill per spot: 4, or 6 once more than 4 are in. Names fill the pills
+ * in sign-up order; open spots stay as blank outlines.
+ */
+export function SpotPills({ names, me }: { names: string[]; me?: string | null }) {
+  const slots = playerSlots(names.length);
+  return (
+    <ul className={`in-pills spots spots-${slots}`} aria-label="Who's in">
+      {Array.from({ length: slots }, (_, i) =>
+        i < names.length ? (
+          <li key={i} className={names[i] === me ? 'me' : undefined} title={names[i]}>
+            {names[i]}
+          </li>
+        ) : (
+          <li key={i} className="open">
+            <span className="sr-only">Open spot</span>
+          </li>
+        ),
+      )}
+    </ul>
+  );
+}
+
+/** "3 of 4 in" plus any waitlist and a short note, then a pill per spot with names. */
 export function PlayersLine({
-  confirmed,
+  names,
   waiting,
   waitingWord = 'on the waitlist',
   extra,
 }: {
-  confirmed: number;
+  /** Confirmed players, in sign-up order. */
+  names: string[];
   waiting: number;
   waitingWord?: string;
   /** A short note at the end, like "2/4 paid". */
   extra?: string | null;
 }) {
-  const slots = playerSlots(confirmed);
   return (
-    <div className="players-line">
-      <span className="players-count">
-        {confirmed} of {slots} in
-      </span>
-      <span className="dots" aria-hidden="true">
-        {Array.from({ length: slots }, (_, i) => (
-          <span key={i} className={i < confirmed ? 'dot on' : 'dot'} />
-        ))}
-      </span>
-      {waiting > 0 && (
-        <span className="players-wait">
-          · {waiting} {waitingWord}
+    <div className="players">
+      <div className="players-line">
+        <span className="players-count">
+          {names.length} of {playerSlots(names.length)} in
         </span>
-      )}
-      {extra && <span className="players-wait">· {extra}</span>}
+        {waiting > 0 && (
+          <span className="players-wait">
+            · {waiting} {waitingWord}
+          </span>
+        )}
+        {extra && <span className="players-wait">· {extra}</span>}
+      </div>
+      <SpotPills names={names} />
     </div>
   );
 }
