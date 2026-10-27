@@ -181,6 +181,23 @@ async function main() {
       const pad = await admin.evaluate(() => parseFloat(getComputedStyle(document.querySelector('main.page')).paddingBottom));
       assert(pad >= box.height + 24, `not enough room under the last card for the pill (${pad}px)`);
       await admin.locator('header img.brand-logo').waitFor();
+      for (const scheme of ['light', 'dark']) {
+        await admin.emulateMedia({ colorScheme: scheme });
+        const logo = await admin.locator('header img.brand-logo').evaluate((img) => ({
+          loaded: img.complete && img.naturalWidth === 128,
+          backing: getComputedStyle(img).backgroundColor,
+          width: img.getBoundingClientRect().width,
+        }));
+        assert(logo.loaded, `header logo did not load in ${scheme} mode`);
+        assert(logo.backing === 'rgb(255, 255, 255)', `logo should sit on a light backing in ${scheme} mode`);
+        assert(logo.width === 32, `header logo should be 32px, was ${logo.width}`);
+      }
+      await admin.emulateMedia({ colorScheme: 'light' });
+      assert((await admin.locator('link[rel="icon"]').getAttribute('href')) === '/favicon-32.png', 'tab icon should be the logo');
+      for (const f of ['/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/favicon-32.png', '/logo-header.png']) {
+        const r = await admin.request.get(BASE + f);
+        assert(r.ok() && r.headers()['content-type'].includes('image/png'), `${f} missing`);
+      }
       const bg = await admin.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor]);
       assert(bg[0] === bg[1] && bg[0] !== 'rgba(0, 0, 0, 0)', `page background not set on html: ${bg}`);
     });

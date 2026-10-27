@@ -114,8 +114,10 @@ paid; otherwise it's hidden so old records stay correct.
 
 Settings shows the 3 iPhone steps (Share > Add to Home Screen > Add), and
 players see them once. The icon opens the site full screen. To use the club
-logo, run `node scripts/make-icons.cjs path/to/logo.png` (it writes every icon
-size plus the small header logo into `public/`) and redeploy.
+logo (kept at `branding/logo.jpg`), run `node scripts/make-icons.cjs branding/logo.jpg`:
+it trims the empty margin, centers the art on white with padding for the
+iPhone's rounded corners, and writes every icon size plus the small header
+logo into `public/`. Then redeploy.
 
 ## Day-before check-in and deadlines
 
