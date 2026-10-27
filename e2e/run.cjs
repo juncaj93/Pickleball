@@ -3271,51 +3271,58 @@ async function main() {
         const beforeH = (await joined.boundingBox()).height;
         await joined.getByRole('button', { name: "I'm in" }).click();
         await joined.locator('.tile-check').waitFor();
-        await pl.locator('.pop, .toast').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
-        const d = await pl.evaluate(designReport);
-        assert(d.problems.length === 0, `player: ${d.problems.slice(0, 4).join(' | ')}`);
-        assert(d.levels.includes(0) && d.levels.length >= 2, `expected full-strength and lighter weeks, saw fade levels ${d.levels}`);
-        const cardLook = await pl.evaluate(() => {
-          const bodyRows = (a) => {
-            const kids = [...a.querySelector('.sched-body').children].filter((k) => k.checkVisibility() && !k.matches('.sched-act, h2'));
-            return new Set(kids.map((k) => Math.round(k.getBoundingClientRect().top))).size;
-          };
-          const plain = (a) => !a.querySelector('.game-note, .notice, .waitlist-line, p.small, .confirm-row') && !a.dataset.holiday && !a.classList.contains('off');
-          const all = [...document.querySelectorAll('.schedule article')];
-          const mine = all.filter((a) => a.dataset.mine === 'in' && plain(a));
-          const others = all.filter((a) => !a.dataset.mine && !a.querySelector('.waitlist-line') && plain(a));
-          const h = (a) => a.getBoundingClientRect().height;
-          const foot = (a) => {
+        // Whatever happens below, sign Alex back out of that session for the checks after this one.
+        const joinedSession = joinId.replace('row-', '');
+        const undo = () => pl.request.post(`${BASE}/api/sessions/${joinedSession}/withdraw`, { data: {}, headers: { Origin: BASE } }).catch(() => {});
+        try {
+          await pl.locator('.pop, .toast').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
+          const d = await pl.evaluate(designReport);
+          assert(d.problems.length === 0, `player: ${d.problems.slice(0, 4).join(' | ')}`);
+          assert(d.levels.includes(0) && d.levels.length >= 2, `expected full-strength and lighter weeks, saw fade levels ${d.levels}`);
+          const cardLook = await pl.evaluate(() => {
+            const bodyRows = (a) => {
+              const kids = [...a.querySelector('.sched-body').children].filter((k) => k.checkVisibility() && !k.matches('.sched-act, h2'));
+              return new Set(kids.map((k) => Math.round(k.getBoundingClientRect().top))).size;
+            };
+            const plain = (a) => !a.querySelector('.game-note, .notice, .waitlist-line, p.small, .confirm-row') && !a.dataset.holiday && !a.classList.contains('off');
+            const all = [...document.querySelectorAll('.schedule article')];
+            const mine = all.filter((a) => a.dataset.mine === 'in' && plain(a));
+            const others = all.filter((a) => !a.dataset.mine && !a.querySelector('.waitlist-line') && plain(a));
+            const h = (a) => a.getBoundingClientRect().height;
+            const foot = (a) => {
+              const f = a.querySelector('.row-foot');
+              return f ? f.getBoundingClientRect().height + 3 : 0;
+            };
+            return {
+              mine: mine.map((a) => ({ rows: bodyRows(a), h: h(a), foot: foot(a), pills: a.querySelectorAll('.me-tag, .spots, .in-pills, .holiday').length })),
+              other: others.length ? Math.min(...others.map(h)) : null,
+              mineCount: all.filter((a) => a.dataset.mine === 'in').length,
+            };
+          });
+          assert(cardLook.mineCount > 0 && cardLook.mine.length > 0 && cardLook.other, `need signed-in and not-signed-in cards: ${JSON.stringify(cardLook)}`);
+          for (const m of cardLook.mine) {
+            assert(m.rows <= 4, `signed-in card has ${m.rows} rows`);
+            assert(m.pills === 0, 'signed-in card has a pill or name chips');
+          }
+          // The same card before and after I'm in: rows 1 to 3 keep their height; only the optional Pay row adds any.
+          const after = await joined.evaluate((a) => {
             const f = a.querySelector('.row-foot');
-            return f ? f.getBoundingClientRect().height + 3 : 0;
-          };
-          return {
-            mine: mine.map((a) => ({ rows: bodyRows(a), h: h(a), foot: foot(a), pills: a.querySelectorAll('.me-tag, .spots, .in-pills, .holiday').length })),
-            other: others.length ? Math.min(...others.map(h)) : null,
-            mineCount: all.filter((a) => a.dataset.mine === 'in').length,
-          };
-        });
-        assert(cardLook.mineCount > 0 && cardLook.mine.length > 0 && cardLook.other, `need signed-in and not-signed-in cards: ${JSON.stringify(cardLook)}`);
-        for (const m of cardLook.mine) {
-          assert(m.rows <= 4, `signed-in card has ${m.rows} rows`);
-          assert(m.pills === 0, 'signed-in card has a pill or name chips');
+            return { h: a.getBoundingClientRect().height, foot: f ? f.getBoundingClientRect().height + 3 : 0 };
+          });
+          assert(after.h - after.foot <= beforeH + 3, `signed-in card is ${after.h}px (${after.foot}px Pay row) vs ${beforeH}px before`);
+          const gp = await pl.evaluate(greenReport);
+          assert(gp.problems.length === 0, `player: ${gp.problems.join(' | ')}`);
+          const lp = await pl.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
+          assert(lp.problems.length === 0, `player cards: ${lp.problems.slice(0, 3).join(' | ')}`);
+          assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player page scrolls sideways');
+          await pl.screenshot({ path: path.join(SHOTS, `design-player-${width}-${scheme}.png`), fullPage: true });
+          await joined.getByRole('button', { name: "I'm out" }).click();
+          await pl.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+          await joined.getByRole('button', { name: "I'm in" }).waitFor();
+        } finally {
+          await undo();
+          await pl.close();
         }
-        // The same card before and after I'm in: rows 1 to 3 keep their height; only the optional Pay row adds any.
-        const after = await joined.evaluate((a) => {
-          const f = a.querySelector('.row-foot');
-          return { h: a.getBoundingClientRect().height, foot: f ? f.getBoundingClientRect().height + 3 : 0 };
-        });
-        assert(after.h - after.foot <= beforeH + 3, `signed-in card is ${after.h}px (${after.foot}px Pay row) vs ${beforeH}px before`);
-        const gp = await pl.evaluate(greenReport);
-        assert(gp.problems.length === 0, `player: ${gp.problems.join(' | ')}`);
-        const lp = await pl.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
-        assert(lp.problems.length === 0, `player cards: ${lp.problems.slice(0, 3).join(' | ')}`);
-        assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player page scrolls sideways');
-        await pl.screenshot({ path: path.join(SHOTS, `design-player-${width}-${scheme}.png`), fullPage: true });
-        await joined.getByRole('button', { name: "I'm out" }).click();
-        await pl.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
-        await joined.getByRole('button', { name: "I'm in" }).waitFor();
-        await pl.close();
 
         // The organizer: tiles, fade, one green button, no calendar icon under the gear.
         const p = await admin.context().newPage();
