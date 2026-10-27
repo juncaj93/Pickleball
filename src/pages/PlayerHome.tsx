@@ -4,7 +4,8 @@ import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
-import { ConfirmDialog, Empty, ErrorState, Notice, Spinner, useToast } from '../ui';
+import { ConfirmDialog, CourtIcon, Empty, ErrorState, Notice, Spinner, useToast } from '../ui';
+import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 
 const SHOW_FIRST = 6;
@@ -426,15 +427,6 @@ function DateTile({ iso, tz }: { iso: string; tz: string }) {
   );
 }
 
-function courtLine(s: PlayerSessionView): string {
-  if (s.courtState === 'not_opened') return "Court didn't open";
-  if (s.canceled) return 'Canceled';
-  if (s.courtState === 'waitlist') return 'Waiting on the court';
-  if (s.bookingStatus === 'booked') return s.courtNumber ? `Court booked, Court #${s.courtNumber}` : 'Court booked';
-  if (s.bookingStatus === 'unavailable') return 'No court available';
-  return 'Court not booked yet';
-}
-
 function countLine(s: PlayerSessionView): string {
   const n = s.confirmed.length;
   if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
@@ -487,6 +479,7 @@ function ScheduleRow({
     }
   }
 
+  const court = courtStatus(s);
   const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
 
   return (
@@ -501,12 +494,15 @@ function ScheduleRow({
           {inSession && !s.canceled && <span className="me-tag">You're in</span>}
           {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
         </div>
-        <div className="sched-status">
-          <span>{s.past ? 'Played' : courtLine(s)}</span>
+        <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
+          <span className="court-status">
+            <CourtIcon kind={court.kind} />
+            <span>{court.playerText}</span>
+          </span>
           {s.holiday && <HolidayPill name={s.holiday} />}
         </div>
 
-        {courtWait && open && !waiting && <p className="small">Waiting on the court. Join the list so we're ready if it opens.</p>}
+        {courtWait && open && !waiting && <p className="small">Join the standby list so we're ready if it opens.</p>}
         {s.courtState === 'not_opened' && waiting && <p className="small muted">The court didn't open, so this one is off.</p>}
         {goodNews && <Notice tone="ok">{goodNews}</Notice>}
         {inSession && mine.creditComing && (

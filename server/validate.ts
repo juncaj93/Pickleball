@@ -101,12 +101,3 @@ export function optionalDate(v: unknown, field: string): string | null {
   }
   return v;
 }
-
-/** Court number like "7" or "12A"; empty means none. */
-export function courtNumber(v: unknown): string | null {
-  const s = optionalText(v, 'courtNumber', 12);
-  if (s === null) return null;
-  const clean = s.replace(/^#/, '').trim();
-  if (!/^[A-Za-z0-9 -]{1,10}$/.test(clean)) bad('courtNumber', 'Court number should be short, like 7.');
-  return clean;
-}

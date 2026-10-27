@@ -23,6 +23,9 @@
   --muted-bg: #eceae3;
   --holiday-fg: #5b2a86;
   --holiday-bg: #efe6f8;
+  --ok-edge: #1f8a4c;
+  --warn-edge: #b7791f;
+  --info-edge: #2f6fc4;
   --shadow: 0 1px 2px rgb(22 35 28 / 6%), 0 4px 14px rgb(22 35 28 / 5%);
   --radius: 16px;
   --display: 'Bricolage Grotesque Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
@@ -57,6 +60,9 @@
     --muted-bg: #252c28;
     --holiday-fg: #d9bdf5;
     --holiday-bg: #2e2140;
+    --ok-edge: #4cc27a;
+    --warn-edge: #e0a83e;
+    --info-edge: #6fa3ea;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%);
     color-scheme: dark;
   }
@@ -86,6 +92,9 @@
   --muted-bg: #252c28;
   --holiday-fg: #d9bdf5;
   --holiday-bg: #2e2140;
+  --ok-edge: #4cc27a;
+  --warn-edge: #e0a83e;
+  --info-edge: #6fa3ea;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%);
   color-scheme: dark;
 }
@@ -1370,4 +1379,164 @@ label.field {
   background: transparent;
   color: var(--ink-2);
   font-size: 0.95rem;
+}
+
+/* ---------- Court status on session cards ----------
+   Court and players are two separate lines. The court is the loudest thing on
+   the card, and every look pairs an icon with words, never color alone. */
+
+.scard {
+  position: relative;
+  scroll-margin-top: 16px;
+  scroll-margin-bottom: calc(env(safe-area-inset-bottom) + 96px);
+}
+.scard:focus {
+  outline: none;
+}
+.scard:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.court-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+.court-icon {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}
+
+/* Booked: solid green left edge, large "Court booked" with a check. */
+.scard.court-booked {
+  border-left: 7px solid var(--ok-edge);
+  padding-left: 14px;
+}
+.court-line {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.court-booked .court-line .court-status {
+  color: var(--ok-fg);
+  font-family: var(--display);
+  font-size: 1.3rem;
+  line-height: 1.15;
+}
+.court-booked .court-line .court-icon {
+  width: 26px;
+  height: 26px;
+}
+.court-sub {
+  font-size: 0.92rem;
+  padding-left: 34px;
+}
+
+/* Not booked: amber dashed border and a banner across the top. */
+.scard.court-needs {
+  border: 2px dashed var(--warn-edge);
+}
+/* On the court waitlist: blue banner. */
+.scard.court-waitlist {
+  border: 2px solid var(--info-edge);
+}
+.court-banner {
+  margin: -16px -16px 0;
+  padding: 12px 16px 14px;
+  border-radius: calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.court-banner .court-status {
+  font-family: var(--display);
+  font-size: 1.2rem;
+  line-height: 1.15;
+}
+.court-needs .court-banner {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-bottom: 2px dashed var(--warn-edge);
+}
+.court-waitlist .court-banner {
+  background: var(--info-bg);
+  color: var(--info-fg);
+  border-bottom: 1px solid var(--info-edge);
+}
+.court-banner .btn {
+  width: 100%;
+}
+.court-banner .btn-row .btn {
+  width: auto;
+}
+
+/* Canceled, no court, or played: gray with the reason. */
+.scard.court-off {
+  background: var(--surface-2);
+}
+.court-off .court-line .court-status {
+  color: var(--muted-fg);
+}
+
+/* Players: "2 of 4 in" with a dot per spot. */
+.players-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.98rem;
+}
+.players-count {
+  font-weight: 700;
+}
+.dots {
+  display: inline-flex;
+  gap: 5px;
+}
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--ink-2);
+  background: transparent;
+}
+.dot.on {
+  background: var(--ink);
+  border-color: var(--ink);
+}
+.players-wait {
+  color: var(--ink-2);
+}
+
+/* "2 booked, 1 needs a court, 1 on the waitlist" */
+.court-summary {
+  margin: 0;
+  font-size: 0.98rem;
+}
+.court-summary .link-btn {
+  font-size: inherit;
+  font-weight: 650;
+  color: var(--ink);
+  padding: 10px 0;
+}
+
+/* Player rows use the same words and icons. */
+.sched-status.court-booked .court-status {
+  color: var(--ok-fg);
+}
+.sched-status.court-needs .court-status {
+  color: var(--warn-fg);
+}
+.sched-status.court-waitlist .court-status {
+  color: var(--info-fg);
+}
+.sched-status.court-off .court-status {
+  color: var(--muted-fg);
+}
+.sched-status .court-icon {
+  width: 18px;
+  height: 18px;
 }

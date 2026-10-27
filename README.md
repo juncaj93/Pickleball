@@ -17,23 +17,38 @@ tap their name once ("Who are you?"), and the phone remembers it. After that eve
 - "You owe $14 for Tue, Oct 27" with a **Pay $14 with Venmo** button once
   they're confirmed (opening Venmo never marks anything paid)
 - a schedule of date tiles (TUE / 3 / NOV) with the time, court status
-  ("Court booked, Court #7"), any holiday, who's in ("3 of 4 in"), **one big
+  (Court booked / Court not booked yet / Waiting on the court), any holiday, who's in ("3 of 4 in"), **one big
   button** (I'm in / I'm out / Join waitlist / Put me on standby), their money
   for that session (You owe $14 + Pay with Venmo, Paid, or Credit), and a small
   Add to Calendar link
 
 **The organizer** signs in at `/admin` with a PIN. A floating pill at the
-bottom has three tabs: **Home**, **Players**, **Settings**. Home starts with a
-short "Needs attention" list:
+bottom has three tabs: **Home**, **Players**, **Settings**.
 
-- courts to book, with a **Book on CourtReserve** button and **I booked it**
-  (court number only; reservation number and court cost under More details)
+Every session card on Home shows the court and the players as two separate
+lines, and each session appears once:
+
+- **Court booked**: solid green left edge, a check, and the cancel-by deadline
+- **Court not booked**: amber dashed border and a banner with **I booked it**
+  (one tap; the deadline starts at 12 hours before play)
+- **On the court waitlist**: blue banner with **Court opened** / **Didn't open**
+- canceled or no court: gray, with the reason
+- players: "2 of 4 in" with a dot per spot (6 dots once 5 or more are in),
+  plus the waitlist count
+- short on players (from the day-before check-in): Invite people / Reschedule /
+  Cancel / Keep as is, right on that card
+
+Above the cards, a summary line ("2 booked, 1 needs a court, 1 on the
+waitlist") jumps to the first matching card, and **Book on CourtReserve** sits
+next to the Sessions title. Reservation number and court cost are optional,
+under More details in Edit booking.
+
+Home starts with a short "Needs attention" list for things that aren't one
+session's court:
+
 - the **day-before** card (from 24 hours before play) and the **last-call** card
   (from 13 hours before), each with Text the group, Copy message, and Done, until
   the cancellation deadline
-- **Waiting on the court**, with Court opened / Didn't open
-- short on players (from the day-before check-in), with Invite people /
-  Reschedule / Cancel / Keep as is
 - "5 going, need 4 or 6" with the choices
 - "Tell them they're in": a text draft for each person moved off the waitlist
 - "Was 6, now 5: discount and credits are off" when a session drops below 6
@@ -65,9 +80,9 @@ The status says "Draft ready" or "Composer opened", never "Sent".
 ## Court waitlist
 
 When the organizer is on the venue's own waitlist for a court ("On court
-waitlist" under More), players see "Waiting on the court. Join the list so
-we're ready if it opens." and tap **Put me on standby**. Standby players owe
-nothing. **Court opened** (with the court number) confirms them in order by
+waitlist" under More), players see "Waiting on the court. Join the
+standby list so we're ready if it opens." and tap **Put me on standby**. Standby players owe
+nothing. **Court opened** (one tap) confirms them in order by
 the 4-or-6 rules and prepares a text for each; **Didn't open** marks the
 session off as "Court didn't open". A session before the first session date
 can be shown with **Show this session**.

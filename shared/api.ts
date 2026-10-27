@@ -23,7 +23,6 @@ export interface PlayerSessionView {
   sixPlaying: boolean;
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
-  courtNumber: string | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   /** Already played; only listed because this player still owes for it. */
   past: boolean;
@@ -124,7 +123,6 @@ export interface AdminSessionView {
   payableCount: number;
   /** Organizer's private record of the court cost. Never sent to players. */
   courtCostCents: number | null;
-  courtNumber: string | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   shownEarly: boolean;
   holiday: string | null;
