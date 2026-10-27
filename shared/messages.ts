@@ -1,5 +1,5 @@
 import { formatPrice } from './money';
-import { formatDateTime, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday } from './time';
+import { formatDateTime, formatMonthDay, formatShortDate, formatTime, formatTimeRange, formatWeekday } from './time';
 
 // Short, prewritten texts. The site only drafts them; the organizer sends
 // each one from their own phone.
@@ -56,6 +56,27 @@ export function courtWaitlistPollMessage(s: SessionLike, tz: string, link: strin
 }
 
 /** The day-before group text, worded for how many are in. */
+/** A link straight to one session on the player screen: the player link plus ?s=<session id>. */
+export function sessionLink(playerLink: string, sessionId: string): string {
+  const base = playerLink.replace(/\/$/, '');
+  return `${base}${base.includes('?') ? '&' : base.match(/\/g\/[^/]+$/) ? '?' : '/?'}s=${sessionId}`;
+}
+
+/** "Share the game", worded for where the court stands. */
+export function shareGameMessage(s: SessionLike, tz: string, court: 'booked' | 'waitlist' | 'open', link: string): string {
+  const day = formatShortDate(s.startsAt, tz);
+  const at = formatTime(s.startsAt, tz);
+  if (court === 'booked') return `We booked a court for ${day} at ${at}. Tap here to reserve your spot: ${link}`;
+  if (court === 'waitlist') return `I'm on the court waitlist for ${day} at ${at}. Tap here to join the standby list: ${link}`;
+  return `Thinking of playing ${day} at ${at}. Tap here to say if you're in: ${link}`;
+}
+
+/** The day-before text to the players who are in: a heads-up and a way to back out. */
+export function dayBeforePlayersMessage(s: SessionLike, tz: string, venue: string, link: string): string {
+  return `Pickleball tomorrow, ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)} at ${venue}. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: ${link}`;
+}
+
+/** The day-before group text when we're short of 4 or 6 ("need more players"). */
 export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, link: string): string {
   const head = `Pickleball tomorrow, ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`;
   if (confirmed === 4 || confirmed === 6) return `${head} We're set with ${confirmed} in. See you there.`;
@@ -65,8 +86,9 @@ export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, 
 }
 
 /** The last-call group text, the day of. */
-export function lastCallMessage(s: SessionLike, tz: string, confirmed: number): string {
-  return `Last call for pickleball tonight, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, tell me now.`;
+export function lastCallMessage(s: SessionLike, tz: string, confirmed: number, link?: string): string {
+  const text = `Last call for pickleball tonight, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, tell me now`;
+  return link ? `${text} or tap here: ${link}` : `${text}.`;
 }
 
 export function replacementMessage(s: SessionLike, tz: string, link: string): string {
@@ -122,8 +144,13 @@ export function normalizePhone(phone: string): string {
  * Build an sms: link. iPhones expect `&body=`, most Android phones expect
  * `?body=`. Opening the link only fills in the composer; nothing is sent.
  */
-export function smsHref(phone: string | null, body: string, isIOS: boolean): string {
-  const to = phone ? normalizePhone(phone) : '';
+export function smsHref(phone: string | string[] | null, body: string, isIOS: boolean): string {
+  const list = (Array.isArray(phone) ? phone : phone ? [phone] : []).map(normalizePhone).filter(Boolean);
+  // Several people at once: iPhone opens a group message with "open?addresses=".
+  if (list.length > 1) {
+    return isIOS ? `sms://open?addresses=${list.join(',')}&body=${encodeURIComponent(body)}` : `sms:${list.join(',')}?body=${encodeURIComponent(body)}`;
+  }
+  const to = list[0] ?? '';
   const sep = isIOS ? '&' : '?';
   return `sms:${to}${sep}body=${encodeURIComponent(body)}`;
 }

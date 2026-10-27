@@ -76,3 +76,15 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
 export function homeBadgeCount(d: AdminDashboard): number {
   return buildTodo(d).length + d.sessions.filter((s) => s.state.flags.needsBooking).length;
 }
+
+/** The players who are in: their numbers, and the names with none saved. */
+export function playersIn(s: AdminSessionView) {
+  const inNow = s.roster.filter((r) => r.status === 'confirmed');
+  return {
+    phones: inNow.filter((r) => r.phone).map((r) => r.phone!),
+    missing: inNow.filter((r) => !r.phone).map((r) => r.name),
+  };
+}
+
+/** Short of 4 or 6: the day-before card leads with "need more players". */
+export const shortOfPlayers = (s: AdminSessionView) => s.confirmedCount !== 4 && s.confirmedCount !== 6;

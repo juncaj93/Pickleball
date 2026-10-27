@@ -192,6 +192,7 @@ export function adminSessionView(
     payableCount: payable,
     courtCostCents: session.court_cost_cents,
     courtState: session.court_state,
+    moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,
     bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings)).toISOString(),
     shownEarly: !!session.shown_early,
     holiday: holidayFor(session.starts_at, tz),

@@ -15,7 +15,7 @@ function shift(month: string, by: number): string {
 }
 
 /** Organizer-only month view, opened from Settings. Players never get any of this. */
-export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack: () => void }) {
+export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () => void }) {
   const tz = ctx.d.group.timezone;
   const [month, setMonth] = useState(() => {
     const p = localParts(Date.parse(ctx.d.now), tz);
@@ -29,9 +29,11 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack: () =>
         <h2 id="mm-title" className="section-title">
           Monthly money
         </h2>
-        <button className="btn small ghost" onClick={onBack}>
-          Back to Settings
-        </button>
+        {onBack && (
+          <button className="btn small ghost" onClick={onBack}>
+            Back to Settings
+          </button>
+        )}
       </div>
       <div className="month-picker">
         <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shift(x, -1))}>
@@ -69,7 +71,12 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack: () =>
           {m.sessions.length === 0 ? (
             <p className="muted small">No sessions in {m.label}.</p>
           ) : (
-            <ul className="rows card" aria-label={`Sessions in ${m.label}`}>
+            <details className="money-sess card">
+              <summary>
+                <span>Sessions in {m.label}</span>
+                <span className="set-note">{m.sessions.filter((x) => x.state === 'played').length} played</span>
+              </summary>
+            <ul className="rows" aria-label={`Sessions in ${m.label}`}>
               {m.sessions.map((s) => (
                 <li key={s.id}>
                   <span className="who">
@@ -83,6 +90,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack: () =>
                 </li>
               ))}
             </ul>
+            </details>
           )}
           <p className="small muted">Counts sessions that were played. Uses the court cost you entered on a session, or your typical cost.</p>
         </>

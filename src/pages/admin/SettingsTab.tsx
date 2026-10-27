@@ -5,7 +5,6 @@ import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
 import { HomeScreenSteps, SubscribeBlock } from '../PlayerHome';
-import { MonthlyMoneyPage } from './MonthlyMoney';
 import type { AdminCtx } from '../Admin';
 
 type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
@@ -147,7 +146,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     typicalCourtCostCents: dollars(g.settings.typicalCourtCostCents),
     monthlyMembershipCents: dollars(g.settings.monthlyMembershipCents),
   }));
-  const [moneyPage, setMoneyPage] = useState(false);
   const [numErrors, setNumErrors] = useState<Partial<Record<keyof GroupSettings, string>>>({});
   const [organizerName, setOrganizerName] = useState(g.organizerName ?? '');
   const [venueName, setVenueName] = useState(g.venueName ?? '');
@@ -222,28 +220,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     }
   }
 
-  if (moneyPage) return <MonthlyMoneyPage ctx={ctx} onBack={() => setMoneyPage(false)} />;
 
   const tzLabel = TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
   return (
     <>
       {/* The things used most, in one compact card. */}
       <section className="card set-top" aria-label="Quick settings">
-        <div className="set-line">
-          <span className="set-label">
-            <strong>Monthly money</strong>
-            <span className="set-hint">Only you see it</span>
-          </span>
-          <button
-            className="btn small"
-            onClick={() => {
-              setMoneyPage(true);
-              window.scrollTo(0, 0);
-            }}
-          >
-            Open
-          </button>
-        </div>
         <div className="set-line">
           <span className="set-label">
             <strong>Player link</strong>

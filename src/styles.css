@@ -711,7 +711,7 @@ textarea:focus {
   transform: translateX(-50%);
   /* Low, close to the bottom edge; Safari keeps its own toolbar below the page. */
   bottom: calc(env(safe-area-inset-bottom, 0px) + 6px);
-  width: min(340px, calc(100% - 32px));
+  width: min(380px, calc(100% - 24px));
   /* Nearly solid, so card text never shows through; a light blur softens the edge. */
   background: color-mix(in srgb, var(--surface) 97%, transparent);
   backdrop-filter: blur(8px);
@@ -728,8 +728,8 @@ textarea:focus {
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 2px;
 }
 
 .tabbar button {
@@ -1568,8 +1568,7 @@ label.field {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* The More button keeps a 44px tap area without making the row taller. */
-  margin: -10px 0 -8px;
+  margin: -4px 0 -2px;
 }
 .btn.more-btn {
   min-height: 44px;
@@ -2148,4 +2147,168 @@ label.field {
   outline: 2px solid var(--ball);
   outline-offset: 3px;
   border-radius: 4px;
+}
+
+/* Opened from a shared link: that session stands out. */
+.sched.highlight {
+  border: 2px solid var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 22%, transparent);
+}
+
+/* Session card: two matching round icons at the top right (Texts, options). */
+.card-icons {
+  display: flex;
+  gap: 0;
+  flex: none;
+  margin-right: -6px;
+}
+.icon-round {
+  /* A full 44px button with a smaller drawn circle, so taps are easy. */
+  width: 44px;
+  height: 44px;
+  margin: -3px 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  padding: 0;
+}
+.icon-round::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+}
+.icon-round svg {
+  position: relative;
+  z-index: 1;
+  width: 19px;
+  height: 19px;
+}
+.icon-round[aria-expanded='true'] {
+  color: var(--primary-ink);
+}
+.icon-round[aria-expanded='true']::after {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.icon-round:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+/* Options panel: Share the game full width, then an even 2 by 2 grid. */
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.share-row {
+  display: flex;
+  gap: 8px;
+}
+.btn.share-btn {
+  flex: 1;
+  min-height: 44px;
+}
+.btn.share-copy {
+  flex: none;
+  min-height: 44px;
+  padding: 6px 14px;
+}
+.opt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.opt-grid > .btn {
+  min-height: 44px;
+  padding: 6px 8px;
+  font-size: 0.92rem;
+  white-space: nowrap;
+  width: 100%;
+}
+.opt-extra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* Texts menu from the phone icon. */
+.text-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.text-row {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.text-row:last-child {
+  border-bottom: 0;
+}
+.text-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.text-name {
+  font-weight: 650;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.98rem;
+}
+.text-row-btns {
+  display: flex;
+  gap: 6px;
+}
+.text-row-btns .btn {
+  min-height: 44px;
+  padding: 4px 14px;
+}
+.missing-numbers {
+  color: var(--warn-fg);
+}
+/* Money tab sessions. */
+.money-sess {
+  padding: 4px 14px;
+}
+.money-sess > summary {
+  list-style: none;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.money-sess > summary::-webkit-details-marker {
+  display: none;
+}
+.money-sess[open] > summary {
+  margin-bottom: 8px;
+}
+.owes-tag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.move-session {
+  border-top: 1px solid var(--line);
+  padding-top: 6px;
 }
