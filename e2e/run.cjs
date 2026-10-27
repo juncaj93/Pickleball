@@ -67,6 +67,12 @@ async function moneyFor(page, card) {
   return d;
 }
 
+/** Home lists 4 sessions at first; show them all. */
+async function showAll(page) {
+  const btn = page.getByRole('button', { name: /^Show all \d+$/ });
+  if (await btn.count()) await btn.click();
+}
+
 /** Close a session card's options panel. */
 async function closeOptions(card) {
   const gear = card.getByRole('button', { name: /^Session options/ });
@@ -82,6 +88,125 @@ async function openSections(page) {
   await page.locator('details.set-sect').first().waitFor();
   await page.evaluate(() => document.querySelectorAll('details.set-sect:not([open])').forEach((d) => (d.open = true)));
   await page.waitForFunction(() => document.querySelectorAll('details.set-sect:not([open])').length === 0);
+}
+
+/** A Settings row (name, box, and its error or retry line). */
+const rowOf = (field) => field.locator('xpath=ancestor::*[@data-row][1]');
+/** Wait for that row's tiny "Saved" check. */
+async function savedIn(field) {
+  await rowOf(field).locator('.save-mark.saved').waitFor();
+}
+/** Type a setting and let it save itself: leave the box, or just pause. */
+async function autoSet(field, value, { pause = false } = {}) {
+  await field.fill(value);
+  if (!pause) await field.blur();
+  await savedIn(field);
+  // Let the check fade so the next save shows a fresh one.
+  await rowOf(field).locator('.save-mark.saved').waitFor({ state: 'detached', timeout: 5000 });
+}
+
+
+/** What counts as a "thing" on a card or a Settings row for the overlap checks. */
+const CARD_ITEMS = 'button, a[href], input, .court-status, .tile, .sched-time, .late-tag, .holiday, .court-sub, .players-line, .in-count';
+const SETTINGS_ITEMS = 'summary > span, .set-label, .set-input, .set-row input, .field-label, .auto-field input, .check, .set-body > button, .set-line button, .save-retry, .field-error';
+
+/**
+ * In the page: every visible thing inside each root is checked against its
+ * neighbors (no overlaps) and against its card (nothing cut off or poking
+ * out). Plain text links are measured by their text, not their invisible
+ * 44px tap area.
+ */
+function layoutReport({ roots, items }) {
+  const visual = (el) => {
+    const cs = getComputedStyle(el);
+    const solid = (cs.backgroundColor !== 'rgba(0, 0, 0, 0)' && cs.backgroundColor !== 'transparent') || parseFloat(cs.borderTopWidth) > 0 || el.matches('input, select');
+    if (solid) return el.getBoundingClientRect();
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    const b = r.getBoundingClientRect();
+    if (b.width && b.height) return b;
+    const svg = el.querySelector('svg');
+    return svg ? svg.getBoundingClientRect() : el.getBoundingClientRect();
+  };
+  const problems = [];
+  let checked = 0;
+  for (const root of document.querySelectorAll(roots)) {
+    if (!root.offsetParent) continue;
+    const card = root.getBoundingClientRect();
+    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && !e.closest('[hidden], dialog:not([open])'));
+    const boxes = els.map((e) => ({ e, b: visual(e), label: (e.getAttribute('aria-label') || e.innerText || e.className || e.tagName).trim().slice(0, 30) }));
+    for (const x of boxes) {
+      checked++;
+      if (x.b.left < card.left - 1 || x.b.right > card.right + 1) problems.push(`"${x.label}" pokes past its card`);
+      if (x.b.right > window.innerWidth + 1) problems.push(`"${x.label}" runs off the screen`);
+      const tx = x.e.matches('input, select, textarea') ? null : x.e;
+      if (tx && tx.scrollWidth > tx.clientWidth + 2 && getComputedStyle(tx).textOverflow !== 'ellipsis' && getComputedStyle(tx).overflow !== 'visible') problems.push(`"${x.label}" is cut off`);
+    }
+    for (let i = 0; i < boxes.length; i++)
+      for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i];
+        const b = boxes[j];
+        if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+        const w = Math.min(a.b.right, b.b.right) - Math.max(a.b.left, b.b.left);
+        const h = Math.min(a.b.bottom, b.b.bottom) - Math.max(a.b.top, b.b.top);
+        if (w > 1 && h > 1) problems.push(`"${a.label}" overlaps "${b.label}"`);
+      }
+  }
+  return { problems, checked };
+}
+
+/** In the page: scrolled to the very bottom, is the last button or link hidden by the floating tab bar? */
+function lastNotCovered() {
+  window.scrollTo(0, document.documentElement.scrollHeight);
+  const bar = document.querySelector('.tabbar');
+  if (!bar) return null;
+  const top = bar.getBoundingClientRect().top;
+  const all = [...document.querySelectorAll('main button, main a[href], main input, main summary')].filter((e) => e.offsetParent !== null);
+  const last = all.sort((a, b) => a.getBoundingClientRect().bottom - b.getBoundingClientRect().bottom).pop();
+  const r = last.getBoundingClientRect();
+  return r.bottom > top + 1 ? `"${(last.innerText || last.getAttribute('aria-label') || '').trim()}" sits under the tab bar (${Math.round(r.bottom - top)}px)` : null;
+}
+
+/** In the page: the player header's pieces, for the one-line checks. */
+function headerReport() {
+  const head = document.querySelector('header.topbar');
+  const h1 = head.querySelector('h1');
+  const nu = head.querySelector('.not-you');
+  const mode = head.querySelector('.mode-btn');
+  const sq = head.querySelector('.today');
+  const line = head.querySelector('.title-line') || h1;
+  const box = (e) => e && e.getBoundingClientRect();
+  const parts = { name: box(h1), notYou: box(nu), mode: box(mode), square: box(sq) };
+  const vis = (b) => b && b.width > 0 && b.left >= -1 && b.right <= window.innerWidth + 1;
+  let overlap = null;
+  const keys = Object.keys(parts);
+  for (let i = 0; i < keys.length; i++)
+    for (let j = i + 1; j < keys.length; j++) {
+      const a = parts[keys[i]];
+      const b = parts[keys[j]];
+      if (!a || !b) continue;
+      // The mode button's 44px tap area may touch the date square; its drawn circle may not.
+      const ai = keys[i] === 'mode' ? { left: a.left + 4, right: a.right - 4, top: a.top + 4, bottom: a.bottom - 4 } : a;
+      const bi = keys[j] === 'mode' ? { left: b.left + 4, right: b.right - 4, top: b.top + 4, bottom: b.bottom - 4 } : b;
+      if (Math.min(ai.right, bi.right) - Math.max(ai.left, bi.left) > 1 && Math.min(ai.bottom, bi.bottom) - Math.max(ai.top, bi.top) > 1) overlap = `${keys[i]} / ${keys[j]}`;
+    }
+  const after = getComputedStyle(mode, '::after');
+  return {
+    welcome: /Welcome,/.test(head.innerText),
+    oneLine: line.getBoundingClientRect().height < 40 && nu.getClientRects().length === 1,
+    height: line.getBoundingClientRect().height,
+    allVisible: vis(parts.notYou) && vis(parts.mode) && vis(parts.square) && (() => {
+      const r = document.createRange();
+      r.selectNodeContents(nu);
+      return r.getBoundingClientRect().width <= parts.notYou.width + 1;
+    })(),
+    overlap,
+    boxes: parts,
+    nameFits: h1.scrollWidth <= h1.clientWidth + 1,
+    ellipsis: getComputedStyle(h1).textOverflow === 'ellipsis' && h1.scrollWidth > h1.clientWidth,
+    modeTap: Math.min(parts.mode.width, parts.mode.height),
+    modeCircle: parts.mode.width - parseFloat(after.left) - parseFloat(after.right),
+  };
 }
 
 async function waitForServer() {
@@ -274,9 +399,19 @@ async function main() {
         }
       }
       assert(amber > 0 && gray > 0, `expected both looks, got ${amber} amber and ${gray} gray`);
+      // Counted by calendar date: the session exactly 14 days out is open from 12:00 AM today.
+      const in14 = new Date(today + 14 * 24 * 3600_000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' });
+      const card14 = sessionCards(admin).filter({ has: admin.locator('h2', { hasText: in14 }) });
+      if (await card14.count()) {
+        assert((await card14.getAttribute('data-court')) === 'needs', `${in14} is 14 days out and should be open to book`);
+        await card14.locator('.court-banner').getByRole('button', { name: 'I booked it' }).waitFor();
+      }
+      // The badge reminds from 7:00 AM on the day booking opens (the test clock is 12:30 AM).
+      const reminded = await sessionCards(admin).locator('xpath=self::*[@data-remind="true"]').count();
       const badge = (await tab(admin, 'Home').locator('.badge').innerText()).replace(/\D/g, '');
       const todoCards = await admin.locator('section[aria-labelledby="todo-title"] article').count();
-      assert(Number(badge) === amber + todoCards, `badge was ${badge}, expected ${amber + todoCards} (only sessions inside the booking window)`);
+      assert(Number(badge) === reminded + todoCards, `badge was ${badge}, expected ${reminded + todoCards}`);
+      assert(reminded <= amber, 'only open courts are reminded about');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-window.png'), fullPage: true });
       await admin.reload();
       await sessionCards(admin).first().waitFor();
@@ -365,9 +500,10 @@ async function main() {
       await tab(admin, 'Settings').click();
       await admin.locator('details.set-sect').first().waitFor();
       const titles = (await admin.locator('details.set-sect > summary > span:first-child').allInnerTexts()).map((s) => s.trim());
-      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Calendar', 'Add to Home Screen', 'Change PIN', 'Backup', 'Recent changes']) {
+      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Add to Home Screen', 'Change PIN', 'Backup', 'Recent changes']) {
         assert(titles.includes(want), `missing section ${want}: ${titles}`);
       }
+      assert(!titles.includes('Calendar'), 'the Calendar section is gone');
       assert((await admin.locator('details.set-sect[open]').count()) === 0, 'every section should start closed');
       assert((await admin.getByText('How this works').count()) === 0, '"How this works" should be gone');
       assert((await admin.getByText(/Texts are never sent automatically/).count()) === 0, 'How this works notes should be gone');
@@ -402,41 +538,76 @@ async function main() {
       assert((await admin.locator('details[data-section="advanced"][open]').count()) === 0, 'closed sections stay closed');
     });
 
-    await check('Settings: check-in hours field clears, retypes, and is checked on Save', async () => {
+    await check('Settings autosave: change a number, leave the box, "Saved", reload, it stuck; no Save settings button', async () => {
       await tab(admin, 'Settings').click();
       await openSections(admin);
+      assert((await admin.getByRole('button', { name: 'Save settings' }).count()) === 0, 'Save settings button should be gone');
       const field = admin.getByLabel(/Day-before check-in/);
       assert((await field.getAttribute('inputmode')) === 'numeric', 'should show the number keypad');
       await field.fill('');
       assert((await field.inputValue()) === '', 'field should stay empty, not jump to 0');
-      await field.pressSequentially('24');
-      assert((await field.inputValue()) === '24', `typing gave ${await field.inputValue()}`);
-      await field.fill('');
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.getByText('Enter a whole number from 1 to 72.').waitFor();
-      await field.fill('24');
-      await admin.getByLabel('Your name').fill('Robin');
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await field.blur();
+      // Empty is never saved: the short error shows, and the old value stays saved.
+      await rowOf(field).getByText('Enter a whole number from 1 to 72.').waitFor();
+      await field.pressSequentially('30');
+      await field.blur();
+      await savedIn(field);
+      await admin.reload();
+      await tab(admin, 'Settings').click();
+      await openSections(admin);
+      assert((await admin.getByLabel(/Day-before check-in/).inputValue()) === '30', 'check-in hours did not stick');
+      // Pausing for a second saves too, without leaving the box.
+      const name = admin.getByLabel('Your name');
+      await name.fill('Robin');
+      await name.blur();
+      await autoSet(admin.getByLabel(/Day-before check-in/), '24', { pause: true });
       assert((await admin.getByText('Warn before cancellation deadline').count()) === 0, 'old setting still shown');
       await admin.getByLabel(/Plan sessions ahead/).waitFor();
     });
 
+    await check('Settings autosave: an invalid value shows its error and is not saved; a failed save offers a retry', async () => {
+      await openSections(admin);
+      const reminder = admin.getByLabel(/Booking reminder/);
+      const before = await reminder.inputValue();
+      await reminder.fill('99');
+      await reminder.blur();
+      await rowOf(reminder).getByText('Enter a number from 1 to 30.').waitFor();
+      assert((await rowOf(reminder).locator('.save-mark.saved').count()) === 0, 'an invalid value must not say Saved');
+      await admin.reload();
+      await tab(admin, 'Settings').click();
+      await openSections(admin);
+      assert((await admin.getByLabel(/Booking reminder/).inputValue()) === before, 'the bad value should not have been saved');
+      // The network drops: keep what was typed, offer a retry, and the retry saves it.
+      const last = admin.getByLabel(/Last call/);
+      const lastBefore = await last.inputValue();
+      await admin.route('**/api/admin/group', (route) => route.abort());
+      await last.fill('11');
+      await last.blur();
+      const retry = rowOf(last).getByRole('button', { name: "Couldn't save. Tap to retry." });
+      await retry.waitFor();
+      assert((await last.inputValue()) === '11', 'what was typed should stay');
+      await admin.unroute('**/api/admin/group');
+      await retry.click();
+      await savedIn(last);
+      await admin.reload();
+      await tab(admin, 'Settings').click();
+      await openSections(admin);
+      assert((await admin.getByLabel(/Last call/).inputValue()) === '11', 'the retry did not save');
+      await autoSet(admin.getByLabel(/Last call/), lastBefore);
+    });
+
     await check('Settings: every setting still saves (a few changed and put back)', async () => {
       await openSections(admin);
-      const set = async (label, value) => admin.getByLabel(label).fill(value);
       const before = {
         membership: await admin.getByLabel('Monthly membership').inputValue(),
         last: await admin.getByLabel(/Last call/).inputValue(),
         venue: await admin.getByLabel('Venue street address').inputValue(),
         reminder: await admin.getByLabel(/Booking reminder/).inputValue(),
       };
-      await set('Monthly membership', '31');
-      await set(/Last call/, '12');
-      await set('Venue street address', '40100 Six Mile Rd, Northville, MI');
-      await set(/Booking reminder/, '13');
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await autoSet(admin.getByLabel('Monthly membership'), '31');
+      await autoSet(admin.getByLabel(/Last call/), '12');
+      await autoSet(admin.getByLabel('Venue street address'), '40100 Six Mile Rd, Northville, MI');
+      await autoSet(admin.getByLabel(/Booking reminder/), '13');
       await admin.reload();
       await tab(admin, 'Settings').click();
       await openSections(admin);
@@ -444,20 +615,19 @@ async function main() {
       assert((await admin.getByLabel(/Last call/).inputValue()) === '12', 'last call did not save');
       assert((await admin.getByLabel('Venue street address').inputValue()) === '40100 Six Mile Rd, Northville, MI', 'address did not save');
       assert((await admin.getByLabel(/Booking reminder/).inputValue()) === '13', 'booking reminder did not save');
-      // A bad number in a closed section reopens it and says what's wrong.
-      await set(/Booking reminder/, '99');
-      await admin.locator('details[data-section="advanced"] > summary').click();
-      assert((await admin.locator('details[data-section="advanced"][open]').count()) === 0, 'Advanced should be closed now');
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('details[data-section="advanced"][open]').waitFor();
-      await admin.getByText('Enter a number from 1 to 30.').waitFor();
+      // Toggles save right away.
+      const access = admin.getByLabel('Anyone with the site address can use it');
+      const wasOpen = await access.isChecked();
+      await access.click();
+      await rowOf(access).locator('.save-mark.saved').waitFor();
+      await access.click();
+      await rowOf(access).locator('.save-mark.saved').waitFor();
+      assert((await access.isChecked()) === wasOpen, 'access toggled back');
       // Put everything back.
-      await set('Monthly membership', before.membership);
-      await set(/Last call/, before.last);
-      await set('Venue street address', before.venue);
-      await set(/Booking reminder/, before.reminder);
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).last().waitFor();
+      await autoSet(admin.getByLabel('Monthly membership'), before.membership);
+      await autoSet(admin.getByLabel(/Last call/), before.last);
+      await autoSet(admin.getByLabel('Venue street address'), before.venue);
+      await autoSet(admin.getByLabel(/Booking reminder/), before.reminder);
       await admin.reload();
       await tab(admin, 'Settings').click();
       await openSections(admin);
@@ -476,8 +646,8 @@ async function main() {
       await admin.screenshot({ path: path.join(SHOTS, 'admin-dark.png'), fullPage: true });
       await tab(admin, 'Settings').click();
       await openSections(admin);
-      await admin.getByRole('button', { name: 'System', exact: true }).click();
-      assert((await bgOf()) === light, 'System should follow the (light) phone setting');
+      await admin.getByRole('button', { name: 'Auto', exact: true }).click();
+      assert((await bgOf()) === light, 'Auto should follow the (light) phone setting');
       await tab(admin, 'Home').click();
     });
 
@@ -496,7 +666,7 @@ async function main() {
       await p.goto(playerLink);
       await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
       await p.getByRole('button', { name, exact: true }).click();
-      await p.getByRole('heading', { name: `Welcome, ${name}` }).waitFor();
+      await p.getByRole('heading', { name, exact: true, level: 1 }).waitFor();
       return p;
     }
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) {
@@ -518,11 +688,11 @@ async function main() {
       await p.screenshot({ path: path.join(SHOTS, 'player-waitlist.png'), fullPage: true });
     });
 
-    await check('the phone remembers the name: next visit says "Welcome, Alex" with "Not you?"', async () => {
+    await check('the phone remembers the name: next visit says "Alex" with "not you?"', async () => {
       const p = players.Alex;
       await p.goto(BASE);
       await p.goto(playerLink);
-      await p.getByRole('heading', { name: 'Welcome, Alex' }).waitFor();
+      await p.getByRole('heading', { name: 'Alex', exact: true, level: 1 }).waitFor();
       await p.getByRole('button', { name: 'Not you?' }).waitFor();
       assert((await p.getByRole('heading', { name: 'Who are you?' }).count()) === 0, 'asked for the name again');
     });
@@ -1020,12 +1190,12 @@ async function main() {
       assert(/^(TUE|THU) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
       await row.locator('.sched-time', { hasText: /^8:00 to 10:00 PM$|^7:30 to 10:00 PM$/ }).waitFor();
       assert(!/\b(EDT|EST)\b/.test(await players.Blair.locator('main').innerText()), 'EDT/EST still on screen');
-      const cal = row.getByRole('link', { name: 'Add to Calendar' });
+      const cal = row.getByRole('link', { name: /to calendar$/ });
       assert(!(await cal.getAttribute('class')).includes('btn'), 'calendar should be a small link, not a big button');
     });
 
     await check('Add to Calendar downloads a Pickleball event at 8:00 to 10:00 PM', async () => {
-      const link = firstCard(players.Blair).getByRole('link', { name: 'Add to Calendar' });
+      const link = firstCard(players.Blair).getByRole('link', { name: /to calendar$/ });
       const href = await link.getAttribute('href');
       assert(/^\/api\/sessions\/[0-9a-f-]{36}\/calendar\.ics$/.test(href), `bad calendar link ${href}`);
       const res = await players.Blair.request.get(BASE + href);
@@ -1102,9 +1272,9 @@ async function main() {
       const lastBtn = await p.getByRole('button', { name: 'Add my name' }).boundingBox();
       assert(box.y > lastBtn.y, 'Organizer sign-in should be at the bottom');
       await p.getByRole('button', { name: 'Blair', exact: true }).click();
-      await p.getByRole('heading', { name: 'Welcome, Blair' }).waitFor();
+      await p.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
       await p.reload();
-      await p.getByRole('heading', { name: 'Welcome, Blair' }).waitFor();
+      await p.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
       await p.screenshot({ path: path.join(SHOTS, 'player-plain-address.png'), fullPage: true });
     });
 
@@ -1115,8 +1285,7 @@ async function main() {
       privateLink = (await admin.locator('details code.link').textContent()).trim();
       assert(/\/g\/[A-Za-z0-9_-]{20,}$/.test(privateLink), `private link was ${privateLink}`);
       await admin.getByLabel('Anyone with the site address can use it').uncheck();
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await savedIn(admin.getByLabel('Anyone with the site address can use it'));
       assert((await admin.getByRole('region', { name: 'Quick settings' }).locator('.set-link').textContent()).includes('/g/'), 'link-only should show the long link');
       const p = await newPage();
       await p.goto(BASE);
@@ -1125,16 +1294,13 @@ async function main() {
       await p.goto(privateLink);
       await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
       await admin.getByLabel('Anyone with the site address can use it').check();
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await savedIn(admin.getByLabel('Anyone with the site address can use it'));
       await p.goto(BASE);
       await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
     });
 
     await check('Settings: a group word is asked once on a new phone, then remembered', async () => {
-      await admin.getByLabel(/Group word/).fill('Dink');
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await autoSet(admin.getByLabel(/Group word/), 'Dink');
       const p = await newPage();
       await p.goto(BASE);
       await p.getByLabel("What's the group word?").fill('nope');
@@ -1150,8 +1316,7 @@ async function main() {
       await firstCard(players.Alex).waitFor();
       assert((await players.Alex.getByLabel("What's the group word?").count()) === 0, 'known phones should not be asked');
       await admin.getByRole('button', { name: 'Remove the group word' }).click();
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await admin.getByRole('button', { name: 'Remove the group word' }).waitFor({ state: 'detached' });
       const q = await newPage();
       await q.goto(BASE);
       await q.getByRole('heading', { name: 'Who are you?' }).waitFor();
@@ -1340,7 +1505,7 @@ async function main() {
       await p.getByRole('heading', { name: 'Any preferred days?' }).waitFor();
       for (const b of ['Tuesday', 'Thursday', 'Both', 'Skip']) await p.getByRole('button', { name: b, exact: true }).waitFor();
       await p.getByRole('button', { name: 'Both', exact: true }).click();
-      await p.getByRole('heading', { name: 'Welcome, Morgan' }).waitFor();
+      await p.getByRole('heading', { name: 'Morgan', exact: true, level: 1 }).waitFor();
       await p.getByRole('button', { name: 'Not you?' }).waitFor();
       await p.screenshot({ path: path.join(SHOTS, 'player-added-name.png'), fullPage: true });
       await tab(admin, 'Players').click();
@@ -1365,13 +1530,13 @@ async function main() {
     });
 
     console.log('View as');
-    await check('"View as..." shows the player\'s screen with a banner, and taps really happen', async () => {
+    await check('"View as..." shows the player\'s screen with a small bar above it, and taps really happen', async () => {
       await admin.reload();
       await admin.getByRole('button', { name: 'View as…' }).click();
       await admin.locator('dialog[open]').getByRole('button', { name: 'Blair', exact: true }).click();
-      await admin.getByRole('status').getByText('Viewing as').waitFor();
-      await admin.getByRole('heading', { name: 'Welcome, Blair' }).waitFor();
-      assert((await admin.getByRole('button', { name: 'Not you?' }).count()) === 0, 'Not you? should be hidden');
+      await admin.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
+      await admin.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
+      await admin.getByRole('button', { name: 'Not you?' }).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
       const second = admin.locator('article').nth(1);
       await second.getByRole('button', { name: "I'm in" }).click();
@@ -1420,7 +1585,10 @@ async function main() {
       const words = await banner.locator('.court-status').boundingBox();
       const opened = await banner.getByRole('button', { name: 'Court opened' }).boundingBox();
       const didnt = await banner.getByRole('button', { name: "Didn't open" }).boundingBox();
-      assert(Math.abs(opened.y - didnt.y) < 4 && words.y < opened.y + opened.height && words.y + words.height > opened.y, 'banner should be one row');
+      // The two buttons stay together; the words never run under them.
+      const hit = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+      assert(Math.abs(opened.y - didnt.y) < 4, 'the two buttons should sit side by side');
+      assert(!hit(words, opened) && !hit(words, didnt), 'banner words should not overlap the buttons');
       await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       await card.getByRole('button', { name: /^Texts for / }).click();
@@ -1679,8 +1847,7 @@ async function main() {
         return d.toISOString().slice(0, 10);
       });
       await field.fill(iso);
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await savedIn(field);
       await tab(admin, 'Home').click();
       await admin
         .waitForFunction((was) => {
@@ -1714,8 +1881,7 @@ async function main() {
       await tab(admin, 'Settings').click();
       await openSections(admin);
       await admin.getByLabel('First session').fill('');
-      await admin.getByRole('button', { name: 'Save settings' }).click();
-      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await savedIn(admin.getByLabel('First session'));
       await tab(admin, 'Home').click();
     });
 
@@ -1772,37 +1938,82 @@ async function main() {
       }
     });
 
-    await check('calendar subscription: a small button at the bottom for players, in Settings for me, with an honest note', async () => {
+    await check('calendar: no subscription text or links anywhere; the old feed address returns "Not found"', async () => {
+      const banned = /Subscribe in Apple Calendar|subscribed calendar|Calendar link|webcal:|\/api\/cal\//i;
       const p = players.Alex;
       await p.reload();
-      const sub = p.getByRole('button', { name: 'Subscribe in Apple Calendar' });
-      await sub.waitFor();
-      await p.getByText('Apple Calendar refreshes subscribed calendars on its own schedule, so changes can take a while to show.').waitFor();
-      // Out of the way: below every session.
-      const last = await p.locator('.schedule article').last().boundingBox();
-      assert((await sub.boundingBox()).y > last.y + last.height, 'subscribe should sit below the sessions');
-      const { webcal, url } = await p.evaluate(async () => (await fetch('/api/me/calendar')).json());
-      assert(/^webcal:\/\//.test(webcal), 'webcal link');
-      const ics = await (await p.request.get(BASE + new URL(url).pathname)).text();
-      assert(ics.includes('BEGIN:VEVENT') && ics.includes('TZID:America/Detroit') && !/Blair|Devon|\$/.test(ics), 'feed should hold only times and the club');
-      await tab(admin, 'Settings').click();
-      await openSections(admin);
-      const cal = admin.locator('details[data-section="calendar"]');
-      await cal.getByRole('button', { name: 'Subscribe in Apple Calendar' }).waitFor();
-      await cal.getByText(/refreshes subscribed calendars on its own schedule/).waitFor();
-      // Turning Alex's link off from Players.
+      await p.locator('.schedule article').first().waitFor();
+      assert(!banned.test(await p.content()), 'player screen still mentions the subscription');
+      for (const t of ['Home', 'Money', 'Players', 'Settings']) {
+        await tab(admin, t).click();
+        if (t === 'Settings') await openSections(admin);
+        await admin.waitForTimeout(150);
+        assert(!banned.test(await admin.content()), `${t} still mentions the subscription`);
+      }
+      assert((await admin.locator('details[data-section="calendar"]').count()) === 0, 'Calendar section should be gone');
       await tab(admin, 'Players').click();
       await admin.getByRole('button', { name: 'Edit Alex' }).click();
-      const sheet = admin.locator('dialog[open]');
-      await sheet.getByText(/Calendar link:/).waitFor();
-      await sheet.getByRole('button', { name: 'Turn off' }).click();
-      await admin.locator('.toast', { hasText: 'Calendar link off' }).waitFor();
-      await sheet.getByRole('button', { name: 'Turn on' }).waitFor();
-      assert((await p.request.get(BASE + new URL(url).pathname)).status() === 404, 'old link should stop working');
-      await sheet.getByRole('button', { name: 'Turn on' }).click();
-      await admin.locator('.toast', { hasText: 'Calendar link on' }).waitFor();
+      assert((await admin.locator('dialog[open]').getByText(/Calendar link/).count()) === 0, 'per-player calendar switch should be gone');
       await admin.keyboard.press('Escape');
+      for (const old of [`/api/cal/${'a'.repeat(43)}.ics`, '/api/cal/whatever.ics']) {
+        const res = await p.request.get(BASE + old);
+        assert(res.status() === 404, `${old} gave ${res.status()}`);
+        assert((await res.text()).trim() === 'Not found', 'should be a plain "Not found"');
+      }
+      for (const gone of ['/api/me/calendar', '/api/admin/calendar']) {
+        assert((await admin.request.get(BASE + gone)).status() === 404, `${gone} should be gone`);
+      }
       await tab(admin, 'Home').click();
+    });
+
+    await check('"Add to calendar" shows after "I\'m in" and after "I booked it"; the file is Eastern time, not GMT', async () => {
+      const icsOk = async (page, href) => {
+        const res = await page.request.get(BASE + href);
+        assert(res.headers()['content-type'].includes('text/calendar'), 'not a calendar file');
+        const ics = await res.text();
+        assert(/DTSTART;TZID=America\/Detroit:\d{8}T200000\r\n/.test(ics) && /DTEND;TZID=America\/Detroit:\d{8}T220000\r\n/.test(ics), 'should be 8:00 to 10:00 PM Eastern');
+        assert(!/DTSTART:[^\r]*Z|GMT/.test(ics), 'should not be in GMT');
+        assert(ics.includes('LOCATION:Northville Pickleball Club') && /URL:http[^\r]*\?s=/.test(ics), 'club and site link');
+      };
+      // A player: nothing until "I'm in", then a small quiet link on that session.
+      const p = players.Frankie;
+      await p.reload();
+      const rows = p.locator('.schedule article');
+      await rows.first().waitFor();
+      let row = null;
+      for (let i = 2; i < (await rows.count()); i++) {
+        if (await rows.nth(i).getByRole('button', { name: "I'm in" }).count()) {
+          row = rows.nth(i);
+          break;
+        }
+      }
+      assert(row, 'need a session Frankie can join');
+      assert((await row.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar link before signing up');
+      await row.getByRole('button', { name: "I'm in" }).click();
+      const cal = row.getByRole('link', { name: /to calendar$/ });
+      await cal.waitFor();
+      assert((await cal.innerText()).trim() === 'Add to calendar', 'link text');
+      assert(!(await cal.getAttribute('class')).includes('btn'), 'small and quiet, not a big button');
+      await icsOk(p, await cal.getAttribute('href'));
+      await row.getByRole('button', { name: "I'm out" }).click();
+      await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await row.getByRole('link', { name: /to calendar$/ }).waitFor({ state: 'detached' });
+      // The organizer: on a booked card, next to "Court booked".
+      await tab(admin, 'Home').click();
+      await showAll(admin);
+      const amber = sessionCards(admin).filter({ has: admin.locator('.court-banner') }).filter({ hasText: 'Court not booked' }).first();
+      const id = await amber.getAttribute('id');
+      assert((await amber.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar link before booking');
+      await amber.getByRole('button', { name: 'I booked it' }).click();
+      const booked = admin.locator(`#${id}`);
+      const orgCal = booked.locator('.court-top').getByRole('link', { name: /to calendar$/ });
+      await orgCal.waitFor();
+      await icsOk(admin, await orgCal.getAttribute('href'));
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-add-to-calendar.png') });
+      // Put the court back to "not booked" for the checks after this one.
+      const sid = id.replace('session-', '');
+      const sess = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.find((x) => x.id === sid);
+      await admin.request.put(`${BASE}/api/admin/sessions/${sid}/booking`, { data: { bookingStatus: 'needs_booking', cancellationDeadlineAt: sess.cancellationDeadlineAt }, headers: { Origin: BASE } });
     });
 
     await check('slim sessions row: Upcoming | Past and Book on one row; small week labels; spots on the count line', async () => {
@@ -2033,6 +2244,202 @@ async function main() {
         await openSections(p);
         await p.getByLabel('First session').waitFor();
         await fits('Settings');
+        await p.close();
+      });
+    }
+
+    // ---------- Overlap checks: organizer Home cards and every Settings row ----------
+    // Put the cards in every state the Home page can show.
+    {
+      const api = (method, url, data) => admin.request.fetch(`${BASE}${url}`, { method, data, headers: { Origin: BASE } });
+      const d = await (await api('GET', '/api/admin/dashboard')).json();
+      const live = d.sessions.filter((x) => !x.state.flags.canceled && !x.state.flags.started);
+      const later = live.filter((x) => !x.state.flags.bookingWindowOpen && x.bookingStatus === 'needs_booking');
+      if (!live.some((x) => x.courtState === 'waitlist') && later.length > 1) await api('POST', `/api/admin/sessions/${later[later.length - 1].id}/court`, { action: 'waitlist' });
+      const hol = live.find((x) => x.holiday);
+      if (hol && !hol.holidayHoursOk) await api('POST', `/api/admin/sessions/${hol.id}/holiday-hours`, { ok: true });
+    }
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`no overlaps or cut-off text on Home cards and Settings rows at ${width}px (${scheme}); the tab bar never covers the last button`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        await showAll(p);
+        const kinds = await sessionCards(p).evaluateAll((cs) => [...new Set(cs.map((c) => c.dataset.court))]);
+        for (const k of ['needs', 'later', 'waitlist', 'booked']) assert(kinds.includes(k), `no ${k} card to check (${kinds})`);
+        assert(await p.locator('.holiday-actions .link-btn', { hasText: 'Undo' }).count(), 'no holiday card with Undo to check');
+        // Open the gear on two cards too, so the options grid is checked.
+        await more(sessionCards(p).first());
+        await more(sessionCards(p).nth(2));
+        const home = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
+        assert(home.problems.length === 0, `Home: ${home.problems.slice(0, 4).join(' | ')}`);
+        assert(home.checked > 40, `only ${home.checked} things checked`);
+        const covered = await p.evaluate(lastNotCovered);
+        assert(!covered, `Home: ${covered}`);
+        await tab(p, 'Settings').click();
+        await openSections(p);
+        const set = await p.evaluate(layoutReport, { roots: 'main .card', items: SETTINGS_ITEMS });
+        assert(set.problems.length === 0, `Settings: ${set.problems.slice(0, 4).join(' | ')}`);
+        // Each row: the name gets real width, the box is small and inside the card.
+        const rows = await p.evaluate(() =>
+          [...document.querySelectorAll('.set-row')].map((r) => {
+            const label = r.querySelector('.set-label').getBoundingClientRect();
+            const box = r.querySelector('.set-input').getBoundingClientRect();
+            const card = r.closest('.card').getBoundingClientRect();
+            return { name: r.querySelector('.set-label').innerText.split('\n')[0], label: label.width, box: box.width, inside: box.right <= card.right - 1 && box.left > label.right - 1 };
+          }),
+        );
+        assert(rows.length >= 9, `only ${rows.length} setting rows`);
+        for (const r of rows) {
+          // The date box is wider on purpose; its name ("First session") is short.
+          assert(r.label >= (/First session/.test(r.name) ? 100 : 130), `"${r.name}" is squeezed to ${Math.round(r.label)}px`);
+          assert(r.inside, `"${r.name}" box pokes past the card or over the name`);
+          assert(r.box <= 90 || /First session/.test(r.name), `"${r.name}" box is ${Math.round(r.box)}px wide`);
+        }
+        // Names wrap by word, never letter by letter: never more lines than words.
+        const broken = await p.evaluate(() =>
+          [...document.querySelectorAll('.set-row .set-name')]
+            .map((n) => {
+              const r = document.createRange();
+              r.selectNodeContents(n.firstChild);
+              const lines = new Set([...r.getClientRects()].map((x) => Math.round(x.top))).size;
+              return { text: n.firstChild.textContent.trim(), lines, words: n.firstChild.textContent.trim().split(/\s+/).length };
+            })
+            .filter((x) => x.lines > x.words || x.lines > 3),
+        );
+        assert(broken.length === 0, `setting names break badly: ${JSON.stringify(broken)}`);
+        const coveredSet = await p.evaluate(lastNotCovered);
+        assert(!coveredSet, `Settings: ${coveredSet}`);
+        await p.screenshot({ path: path.join(SHOTS, `settings-open-${width}-${scheme}.png`), fullPage: true });
+        await p.close();
+      });
+    }
+
+    // ---------- "View as a player" is a true simulation ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`"View as" at ${width}px (${scheme}): same header with "not you?", switching names never touches my sign-in, Exit goes back`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await tab(p, 'Home').waitFor();
+        const cookiesBefore = JSON.stringify((await p.context().cookies()).map((c) => [c.name, c.value]).sort());
+        const storeBefore = await p.evaluate(() => JSON.stringify(Object.entries(localStorage).filter(([k]) => k !== 'pb_settings_open').sort()));
+        const writes = [];
+        p.on('request', (r) => r.method() !== 'GET' && writes.push(`${r.method()} ${new URL(r.url()).pathname}`));
+        await p.getByRole('button', { name: 'View as…' }).click();
+        await p.locator('dialog[open]').getByRole('button', { name: 'Alex', exact: true }).click();
+        const bar = p.getByRole('region', { name: 'Viewing as a player' });
+        await bar.getByText('Viewing as').waitFor();
+        // The player's real header: the name, "not you?", the mode button, the date square.
+        await p.getByRole('heading', { name: 'Alex', exact: true, level: 1 }).waitFor();
+        const notYou = p.getByRole('button', { name: 'Not you?' });
+        assert(await notYou.isVisible(), '"not you?" should show in the simulation');
+        assert(await p.locator('.topbar .mode-btn').isVisible(), 'mode button should show in the simulation');
+        assert((await p.getByText(/Welcome,/).count()) === 0, 'no "Welcome,"');
+        // The exit bar is its own row above the header, covering nothing.
+        const barBox = await bar.boundingBox();
+        const headBox = await p.locator('header.topbar').boundingBox();
+        assert(barBox.y + barBox.height <= headBox.y + 1, 'the demo bar should sit above the header, not over it');
+        await notYou.click();
+        await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+        await p.getByRole('button', { name: 'Blair', exact: true }).click();
+        await p.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
+        await bar.getByText('Blair').waitFor();
+        await p.locator('.schedule article').first().waitFor();
+        assert(writes.length === 0, `switching wrote to the server: ${writes}`);
+        assert(JSON.stringify((await p.context().cookies()).map((c) => [c.name, c.value]).sort()) === cookiesBefore, 'sign-in cookies changed');
+        assert((await p.evaluate(() => JSON.stringify(Object.entries(localStorage).filter(([k]) => k !== 'pb_settings_open').sort()))) === storeBefore, 'something was saved to this phone');
+        await p.screenshot({ path: path.join(SHOTS, `view-as-${width}-${scheme}.png`) });
+        await bar.getByRole('button', { name: 'Exit' }).click();
+        await tab(p, 'Home').waitFor();
+        await p.getByRole('heading', { name: 'Dink Dynasty', level: 1 }).waitFor();
+        assert((await p.request.get(`${BASE}/api/admin/dashboard`)).status() === 200, 'still signed in as organizer');
+        assert(writes.length === 0, `wrote to the server: ${writes}`);
+        await p.close();
+      });
+    }
+
+    // ---------- Player header: name, "not you?", light/dark button, date square ----------
+    {
+      for (const name of ['Maximilian Johnson', 'Bartholomew Alexander Montgomery-Smythe']) {
+        await admin.request.post(`${BASE}/api/admin/players`, { data: { name, isRegular: false }, headers: { Origin: BASE } });
+      }
+    }
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`player header at ${width}px (${scheme}): short, long and very long names on one line; mode button cycles; no footer`, async () => {
+        const p = await newPage(width, scheme);
+        for (const name of ['Alex', 'Maximilian Johnson', 'Bartholomew Alexander Montgomery-Smythe']) {
+          await p.goto(BASE);
+          const nu = p.getByRole('button', { name: 'Not you?' });
+          await p.locator('.not-you, .name-grid').first().waitFor();
+          if (await p.locator('.name-grid').count()) {
+            await p.getByRole('button', { name, exact: true }).click();
+          } else {
+            await nu.click();
+            await p.getByRole('button', { name, exact: true }).click();
+          }
+          await p.getByRole('heading', { name, exact: true, level: 1 }).waitFor();
+          const h = await p.evaluate(headerReport);
+          assert(!h.welcome, 'no "Welcome," text');
+          assert(h.oneLine, `${name}: header wraps (${h.height}px)`);
+          assert(h.allVisible, `${name}: something is cut off: ${JSON.stringify(h.boxes)}`);
+          assert(!h.overlap, `${name}: header pieces overlap: ${h.overlap}`);
+          assert(h.nameFits || h.ellipsis, `${name}: name neither fits nor shortens with …`);
+          if (name.length > 30) assert(h.ellipsis, `${name}: a very long name should shorten with …`);
+          assert(h.modeTap >= 44 && h.modeCircle >= 32 && h.modeCircle <= 38, `mode button tap ${h.modeTap}, circle ${h.modeCircle}`);
+          await p.screenshot({ path: path.join(SHOTS, `header-${width}-${scheme}-${name.split(' ')[0]}.png`), clip: { x: 0, y: 0, width, height: 90 } });
+        }
+        // Auto → Light → Dark, with the speech-bubble toast, and the page changes.
+        const bg = () => p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+        const mode = p.locator('.topbar .mode-btn');
+        await p.evaluate(() => localStorage.removeItem('pb_theme'));
+        await p.reload();
+        await mode.waitFor();
+        assert((await mode.getAttribute('data-mode')) === 'system', 'Auto is the default');
+        const auto = await bg();
+        await mode.click();
+        await p.locator('.toast', { hasText: 'Light' }).waitFor();
+        assert((await mode.getAttribute('data-mode')) === 'light', 'second is Light');
+        const light = await bg();
+        await mode.click();
+        await p.locator('.toast', { hasText: 'Dark' }).waitFor();
+        const dark = await bg();
+        assert(light !== dark, 'Light and Dark should look different');
+        assert(auto === (scheme === 'dark' ? dark : light), 'Auto should match the phone');
+        await p.reload();
+        await mode.waitFor();
+        assert((await mode.getAttribute('data-mode')) === 'dark' && (await bg()) === dark, 'Dark should survive a reload');
+        await mode.click();
+        await p.locator('.toast', { hasText: 'Auto (matches your phone)' }).waitFor();
+        assert((await bg()) === auto, 'back to Auto');
+        // No footer row and no Help sheet; nothing scrolls sideways.
+        assert((await p.locator('footer, .player-footer').count()) === 0, 'no footer row');
+        assert((await p.getByRole('link', { name: 'Help' }).count()) + (await p.getByRole('button', { name: 'Help' }).count()) === 0, 'no Help link');
+        assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scrolling');
+        // In "View as", the same header and button; it never changes the organizer's saved setting.
+        const o = await admin.context().newPage();
+        await o.setViewportSize({ width, height: 844 });
+        await o.emulateMedia({ colorScheme: scheme });
+        await o.goto(`${BASE}/admin`);
+        await tab(o, 'Home').waitFor();
+        const saved = await o.evaluate(() => localStorage.getItem('pb_theme'));
+        const orgBg = await o.evaluate(() => getComputedStyle(document.body).backgroundColor);
+        await o.getByRole('button', { name: 'View as…' }).click();
+        await o.locator('dialog[open]').getByRole('button', { name: 'Maximilian Johnson', exact: true }).click();
+        await o.getByRole('heading', { name: 'Maximilian Johnson', exact: true, level: 1 }).waitFor();
+        const sim = await o.evaluate(headerReport);
+        assert(sim.oneLine && sim.allVisible && !sim.overlap && !sim.welcome, `simulation header differs: ${JSON.stringify(sim)}`);
+        const simMode = o.locator('.topbar .mode-btn');
+        await simMode.click();
+        await simMode.click();
+        assert((await o.evaluate(() => localStorage.getItem('pb_theme'))) === saved, 'View as changed the organizer setting');
+        await o.getByRole('region', { name: 'Viewing as a player' }).getByRole('button', { name: 'Exit' }).click();
+        await tab(o, 'Home').waitFor();
+        assert((await o.evaluate(() => getComputedStyle(document.body).backgroundColor)) === orgBg, 'organizer colors should come back after Exit');
+        await o.close();
         await p.close();
       });
     }

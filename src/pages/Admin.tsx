@@ -113,6 +113,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
       <PlayerHome
         groupKey={null}
         viewAs={viewing}
+        onViewAs={setViewing}
         onExit={() => {
           setViewing(null);
           window.scrollTo(0, 0);

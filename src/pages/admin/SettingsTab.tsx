@@ -3,7 +3,8 @@ import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
-import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
+import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
+import { AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import { HomeScreenSteps } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
 
@@ -12,24 +13,32 @@ type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
-/** A dollar amount: label on the left, "$ 14" on the right, decimal keypad, checked on Save. */
-function MoneyField({ label, value, onChange, error, hint }: { label: string; value: string; onChange: (v: string) => void; error?: string; hint?: string }) {
-  return (
-    <div className="set-row-wrap">
-      <label className="set-row">
-        <span className="set-label">
-          {label}
-          {hint && <span className="set-hint">{hint}</span>}
-        </span>
-        <span className="money-input set-input">
-          <span aria-hidden="true">$</span>
-          <input type="text" inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={error ? true : undefined} />
-        </span>
-      </label>
-      {error && <span className="field-error">{error}</span>}
-    </div>
+/** Number and dollar boxes: the name on the left, a small box on the right. */
+const numberBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => (
+  <input
+    id={id}
+    className="set-input"
+    type="text"
+    inputMode="numeric"
+    pattern="[0-9]*"
+    autoComplete="off"
+    value={value}
+    onChange={(e) => onChange(e.target.value)}
+    onBlur={onBlur}
+    aria-invalid={invalid || undefined}
+  />
+);
+const moneyBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => (
+  <span className="money-input set-input">
+    <span aria-hidden="true">$</span>
+    <input id={id} type="text" inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} aria-invalid={invalid || undefined} />
+  </span>
+);
+const textBox =
+  (extra: { type?: string; maxLength?: number; placeholder?: string; inputMode?: 'url'; autoComplete?: string; autoCapitalize?: string }) =>
+  ({ id, value, onChange, onBlur, invalid }: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => (
+    <input id={id} type={extra.type ?? 'text'} {...extra} value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} aria-invalid={invalid || undefined} />
   );
-}
 
 /** Which collapsed Settings sections are open, remembered on this phone. */
 const OPEN_KEY = 'pb_settings_open';
@@ -79,19 +88,6 @@ function Section({
   );
 }
 
-/** Which section each number lives in, so a bad value opens its section on Save. */
-const SECTION_OF: Record<keyof GroupSettings, string> = {
-  pricePerPlayerCents: 'money',
-  creditCentsWhenSix: 'money',
-  typicalCourtCostCents: 'money',
-  monthlyMembershipCents: 'money',
-  checkInHours: 'schedule',
-  lastCallHours: 'schedule',
-  horizonWeeks: 'advanced',
-  bookingLeadDays: 'advanced',
-  defaultDeadlineHours: 'advanced',
-};
-
 const ADVANCED_SETTINGS: { key: WholeKey; label: string; hint?: string }[] = [
   { key: 'horizonWeeks', label: 'Plan sessions ahead (weeks)' },
   { key: 'bookingLeadDays', label: 'Booking reminder (days before play)' },
@@ -131,81 +127,15 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const g = ctx.d.group;
   const tz = g.timezone;
-  const [name, setName] = useState(g.name);
-  const [venmo, setVenmo] = useState(g.venmoUrl ?? '');
-  const [nums, setNums] = useState<Record<WholeKey, string>>(() => ({
-    horizonWeeks: String(g.settings.horizonWeeks),
-    bookingLeadDays: String(g.settings.bookingLeadDays),
-    checkInHours: String(g.settings.checkInHours),
-    defaultDeadlineHours: String(g.settings.defaultDeadlineHours),
-    lastCallHours: String(g.settings.lastCallHours),
-  }));
-  const [money, setMoney] = useState<Record<MoneyKey, string>>(() => ({
-    pricePerPlayerCents: dollars(g.settings.pricePerPlayerCents),
-    creditCentsWhenSix: dollars(g.settings.creditCentsWhenSix),
-    typicalCourtCostCents: dollars(g.settings.typicalCourtCostCents),
-    monthlyMembershipCents: dollars(g.settings.monthlyMembershipCents),
-  }));
-  const [numErrors, setNumErrors] = useState<Partial<Record<keyof GroupSettings, string>>>({});
-  const [organizerName, setOrganizerName] = useState(g.organizerName ?? '');
-  const [venueName, setVenueName] = useState(g.venueName ?? '');
-  const [venueAddress, setVenueAddress] = useState(g.venueAddress ?? '');
+  const auto = useAutosave(ctx);
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
   const [openAccess, setOpenAccess] = useState(g.openAccess);
-  const [groupWord, setGroupWord] = useState('');
-  const [removeWord, setRemoveWord] = useState(false);
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [askRotate, setAskRotate] = useState(false);
   const [curPin, setCurPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const sections = useOpenSections();
-
-  async function save(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    // Number fields are only checked here, on Save, never while typing.
-    const errors: Partial<Record<keyof GroupSettings, string>> = {};
-    const settings = {} as GroupSettings;
-    for (const k of Object.keys(nums) as WholeKey[]) {
-      const r = parseWhole(nums[k], SETTING_LIMITS[k][0], SETTING_LIMITS[k][1]);
-      if ('error' in r) errors[k] = r.error;
-      else settings[k] = r.value;
-    }
-    for (const k of Object.keys(money) as MoneyKey[]) {
-      const cents = parseDollars(money[k]);
-      if (cents === null || cents > SETTING_LIMITS[k][1]) errors[k] = 'Enter an amount like 14 or 14.50.';
-      else settings[k] = cents;
-    }
-    setNumErrors(errors);
-    for (const k of Object.keys(errors) as (keyof GroupSettings)[]) sections.set(SECTION_OF[k], true);
-    if (Object.keys(errors).length) return setError('Fix the highlighted numbers, then save.');
-    setBusy(true);
-    try {
-      await api('PUT', '/api/admin/group', {
-        name,
-        venmoUrl: venmo || null,
-        settings,
-        organizerName: organizerName || null,
-        venueName: venueName || null,
-        venueAddress: venueAddress || null,
-        firstSessionDate: firstDate || null,
-        openAccess,
-        // Leave the word alone unless a new one was typed or Remove was tapped.
-        ...(groupWord.trim() ? { groupWord: groupWord.trim() } : removeWord ? { groupWord: null } : {}),
-      });
-      setGroupWord('');
-      setRemoveWord(false);
-      await ctx.reload();
-      toast('Saved');
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not save.');
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function changePin(e: FormEvent) {
     e.preventDefault();
@@ -220,6 +150,65 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     }
   }
 
+  /** A whole-number setting, checked against its limits. */
+  const whole = (key: WholeKey, label: string, hint?: string) => (
+    <AutoInput
+      key={key}
+      auto={auto}
+      id={key}
+      layout="row"
+      label={label}
+      hint={hint}
+      initial={String(g.settings[key])}
+      parse={(t) => parseWhole(t, SETTING_LIMITS[key][0], SETTING_LIMITS[key][1])}
+      body={(value) => ({ settings: { [key]: value } })}
+      input={numberBox}
+    />
+  );
+  /** A dollar setting: "14" or "14.50". */
+  const money = (key: MoneyKey, label: string, hint?: string) => (
+    <AutoInput
+      key={key}
+      auto={auto}
+      id={key}
+      layout="row"
+      label={label}
+      hint={hint}
+      initial={dollars(g.settings[key])}
+      parse={(t) => {
+        const cents = parseDollars(t);
+        return cents === null || cents > SETTING_LIMITS[key][1] ? { error: 'Enter an amount like 14 or 14.50.' } : { value: cents };
+      }}
+      body={(value) => ({ settings: { [key]: value } })}
+      input={moneyBox}
+    />
+  );
+  /** A text setting. Empty saves as "not set", unless it's required. */
+  const text = (
+    key: 'name' | 'organizerName' | 'venmoUrl' | 'venueName' | 'venueAddress',
+    label: string,
+    initial: string,
+    box: Parameters<typeof textBox>[0],
+    opts: { hint?: string; required?: string; check?: (t: string) => string | null } = {},
+  ) => (
+    <AutoInput
+      key={key}
+      auto={auto}
+      id={key}
+      layout="field"
+      label={label}
+      hint={opts.hint}
+      initial={initial}
+      parse={(t) => {
+        const v = t.trim();
+        if (!v && opts.required) return { error: opts.required };
+        const bad = v && opts.check ? opts.check(v) : null;
+        return bad ? { error: bad } : { value: v || null };
+      }}
+      body={(value) => ({ [key]: value })}
+      input={textBox(box)}
+    />
+  );
 
   const tzLabel = TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
   return (
@@ -242,7 +231,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <div className="segmented compact" role="group" aria-label="Light or dark">
             {(
               [
-                ['system', 'System'],
+                ['system', 'Auto'],
                 ['light', 'Light'],
                 ['dark', 'Dark'],
               ] as const
@@ -262,98 +251,88 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         </div>
       </section>
 
-      <form className="card set-list" onSubmit={save} aria-label="Group settings">
+      {/* Every row saves itself; there is no Save button. */}
+      <div className="card set-list" role="group" aria-label="Group settings">
         <Section id="group" title="Group" note={g.name} sections={sections}>
-          <label className="field">
-            Group name
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
-          </label>
-          <label className="field">
-            Your name
-            <span className="hint">Players see it, like "Robin confirms when it arrives."</span>
-            <input type="text" value={organizerName} onChange={(e) => setOrganizerName(e.target.value)} maxLength={40} />
-          </label>
-          <label className="field">
-            Venmo link
-            <input type="url" inputMode="url" value={venmo} onChange={(e) => setVenmo(e.target.value)} placeholder="https://venmo.com/u/" />
-          </label>
-          <label className="field">
-            Venue name
-            <input type="text" value={venueName} onChange={(e) => setVenueName(e.target.value)} maxLength={80} placeholder={DEFAULT_VENUE_NAME} />
-          </label>
-          <label className="field">
-            Venue street address
-            <input type="text" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} maxLength={160} autoComplete="street-address" />
-          </label>
+          {text('name', 'Group name', g.name, { maxLength: 60 }, { required: 'Enter a group name.' })}
+          {text('organizerName', 'Your name', g.organizerName ?? '', { maxLength: 40 }, { hint: 'Players see it, like "Robin confirms when it arrives."' })}
+          {text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
+            check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
+          })}
+          {text('venueName', 'Venue name', g.venueName ?? '', { maxLength: 80, placeholder: DEFAULT_VENUE_NAME })}
+          {text('venueAddress', 'Venue street address', g.venueAddress ?? '', { maxLength: 160, autoComplete: 'street-address' })}
           <p className="set-hint">Time zone: {tzLabel}. Tuesdays and Thursdays, 8:00 to 10:00 PM.</p>
         </Section>
 
-        <Section id="money" title="Money" note={`$${money.pricePerPlayerCents} each`} sections={sections}>
-          <MoneyField label="Price per player" value={money.pricePerPlayerCents} onChange={(v) => setMoney((m) => ({ ...m, pricePerPlayerCents: v }))} error={numErrors.pricePerPlayerCents} />
-          <MoneyField
-            label="Credit per person when 6 play"
-            value={money.creditCentsWhenSix}
-            onChange={(v) => setMoney((m) => ({ ...m, creditCentsWhenSix: v }))}
-            error={numErrors.creditCentsWhenSix}
-          />
-          <MoneyField
-            label="Typical court cost"
-            hint="Only you see this"
-            value={money.typicalCourtCostCents}
-            onChange={(v) => setMoney((m) => ({ ...m, typicalCourtCostCents: v }))}
-            error={numErrors.typicalCourtCostCents}
-          />
-          <MoneyField
-            label="Monthly membership"
-            hint="Only you see this"
-            value={money.monthlyMembershipCents}
-            onChange={(v) => setMoney((m) => ({ ...m, monthlyMembershipCents: v }))}
-            error={numErrors.monthlyMembershipCents}
-          />
+        <Section id="money" title="Money" note={`$${dollars(g.settings.pricePerPlayerCents)} each`} sections={sections}>
+          {money('pricePerPlayerCents', 'Price per player')}
+          {money('creditCentsWhenSix', 'Credit per person when 6 play')}
+          {money('typicalCourtCostCents', 'Typical court cost', 'Only you see this')}
+          {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
         </Section>
 
         <Section id="schedule" title="Schedule" sections={sections}>
-          <label className="set-row">
-            <span className="set-label">
-              First session
-              <span className="set-hint">Nothing before it shows</span>
-            </span>
-            <input className="set-input wide" type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} />
-          </label>
-          <NumberField
-            compact
-            label="Day-before check-in (hours before play)"
-            value={nums.checkInHours}
-            onChange={(v) => setNums((n) => ({ ...n, checkInHours: v }))}
-            error={numErrors.checkInHours}
-          />
-          <NumberField
-            compact
-            label="Last call (hours before play)"
-            value={nums.lastCallHours}
-            onChange={(v) => setNums((n) => ({ ...n, lastCallHours: v }))}
-            error={numErrors.lastCallHours}
-          />
+          <div className="set-row-wrap" data-row="firstSessionDate">
+            <div className="set-row">
+              <label className="set-label" htmlFor="set-first-date">
+                <span className="set-name">
+                  First session <SaveMark state={auto.rows.firstSessionDate} />
+                </span>
+                <span className="set-hint">Nothing before it shows</span>
+              </label>
+              <input
+                id="set-first-date"
+                className="set-input wide"
+                type="date"
+                value={firstDate}
+                onChange={(e) => {
+                  setFirstDate(e.target.value);
+                  // A date saves right away; a cleared box means "no first date".
+                  if (!e.target.value || /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) void auto.save('firstSessionDate', { firstSessionDate: e.target.value || null });
+                }}
+              />
+            </div>
+            <SaveProblem state={auto.rows.firstSessionDate} />
+          </div>
+          {whole('checkInHours', 'Day-before check-in (hours before play)')}
+          {whole('lastCallHours', 'Last call (hours before play)')}
         </Section>
 
-        <Section id="access" title="Access" note={openAccess ? 'Open' : 'Link only'} sections={sections}>
-          <label className="check">
-            <input type="checkbox" checked={openAccess} onChange={(e) => setOpenAccess(e.target.checked)} />
-            Anyone with the site address can use it
-          </label>
-          {openAccess && (
-            <label className="field">
-              Group word (optional)
-              <span className="hint">{g.hasGroupWord && !removeWord ? 'One is set. Type a new one to change it.' : 'A new phone is asked for it once.'}</span>
-              <input type="text" value={groupWord} onChange={(e) => setGroupWord(e.target.value)} autoCapitalize="none" autoComplete="off" maxLength={40} />
+        <Section id="access" title="Access" note={g.openAccess ? 'Open' : 'Link only'} sections={sections}>
+          <div className="set-row-wrap" data-row="openAccess">
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={openAccess}
+                onChange={(e) => {
+                  setOpenAccess(e.target.checked);
+                  void auto.save('openAccess', { openAccess: e.target.checked });
+                }}
+              />
+              <span>
+                Anyone with the site address can use it <SaveMark state={auto.rows.openAccess} />
+              </span>
             </label>
+            <SaveProblem state={auto.rows.openAccess} />
+          </div>
+          {openAccess && (
+            <AutoInput
+              auto={auto}
+              id="groupWord"
+              layout="field"
+              label="Group word (optional)"
+              hint={g.hasGroupWord ? 'One is set. Type a new one to change it.' : 'A new phone is asked for it once.'}
+              initial=""
+              parse={(t) => (t.trim().length >= 2 ? { value: t.trim() } : { error: 'The group word needs at least 2 letters.' })}
+              body={(value) => ({ groupWord: value })}
+              input={textBox({ autoCapitalize: 'none', autoComplete: 'off', maxLength: 40 })}
+            />
           )}
-          {openAccess && g.hasGroupWord && !removeWord && (
-            <button type="button" className="btn small ghost" onClick={() => setRemoveWord(true)}>
+          {openAccess && g.hasGroupWord && (
+            <button type="button" className="btn small ghost" onClick={() => void auto.save('groupWord', { groupWord: null })}>
               Remove the group word
             </button>
           )}
-          {removeWord && <p className="small">The group word will be removed when you save.</p>}
           {g.openAccess ? (
             <details className="advanced">
               <summary>Old private link</summary>
@@ -371,18 +350,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         </Section>
 
         <Section id="advanced" title="Advanced" sections={sections}>
-          {ADVANCED_SETTINGS.map((a) => (
-            <NumberField compact key={a.key} label={a.label} value={nums[a.key]} onChange={(v) => setNums((n) => ({ ...n, [a.key]: v }))} error={numErrors[a.key]} />
-          ))}
+          {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
         </Section>
-
-        {error && <Notice tone="danger">{error}</Notice>}
-        <div className="set-save">
-          <button className="btn block" type="submit" disabled={busy}>
-            {busy ? 'Saving…' : 'Save settings'}
-          </button>
-        </div>
-      </form>
+      </div>
 
       <div className="card set-list">
         <Section id="a2hs" title="Add to Home Screen" sections={sections}>

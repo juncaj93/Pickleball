@@ -75,7 +75,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
     s.courtCostCents !== null ? `${formatCents(s.courtCostCents)} (only you see this)` : null,
   ].filter(Boolean);
   return (
-    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} aria-labelledby={`as-${s.id}`}>
+    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       {needsCourt && (
         <div className="court-banner" role="group" aria-label="Court">
           <div className="court-status">

@@ -166,6 +166,12 @@ export function getTheme(): ThemeChoice {
   return t === 'light' || t === 'dark' ? t : 'system';
 }
 
+/** Show a mode without remembering it (the organizer's "View as..." preview). */
+export function applyTheme(choice: ThemeChoice) {
+  if (choice === 'system') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', choice);
+}
+
 export function setTheme(choice: ThemeChoice) {
   if (choice === 'system') {
     try {

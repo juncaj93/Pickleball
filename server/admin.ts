@@ -632,9 +632,9 @@ export async function updatePlayer(ctx: Ctx, body: Record<string, unknown>) {
 
 export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
-  const name = v.text(body.name, 'name', { max: 60 });
-  const venmoUrl = v.optionalUrl(body.venmoUrl, 'venmoUrl');
-  // Fields left out of the request keep their saved values.
+  // Fields left out of the request keep their saved values (Settings saves one row at a time).
+  const name = body.name === undefined ? group.name : v.text(body.name, 'name', { max: 60 });
+  const venmoUrl = body.venmoUrl === undefined ? group.venmo_url : v.optionalUrl(body.venmoUrl, 'venmoUrl');
   const organizerName = body.organizerName === undefined ? group.organizer_name : v.optionalText(body.organizerName, 'organizerName', 40);
   const venueName = body.venueName === undefined ? group.venue_name : v.optionalText(body.venueName, 'venueName', 80);
   const venueAddress = body.venueAddress === undefined ? group.venue_address : v.optionalText(body.venueAddress, 'venueAddress', 160);
