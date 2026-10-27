@@ -1,19 +1,3 @@
-import { SPOTS_PER_SESSION } from './settings';
-
-/**
- * Split a court cost into four shares that add up exactly to the total.
- *
- * Rounding rule: everyone pays floor(total / 4) cents, and the leftover
- * 1–3 cents go one each to the players who confirmed earliest. Example:
- * $45.01 -> 11.26, 11.25, 11.25, 11.25.
- */
-export function splitCost(totalCents: number, ways = SPOTS_PER_SESSION): number[] {
-  if (!Number.isInteger(totalCents) || totalCents < 0) throw new Error('invalid_amount');
-  const base = Math.floor(totalCents / ways);
-  const remainder = totalCents - base * ways;
-  return Array.from({ length: ways }, (_, i) => base + (i < remainder ? 1 : 0));
-}
-
 export function formatCents(cents: number): string {
   const sign = cents < 0 ? '-' : '';
   const abs = Math.abs(cents);
@@ -25,4 +9,34 @@ export function parseDollars(input: string): number | null {
   const m = /^\s*\$?\s*(\d{1,5})(?:\.(\d{1,2}))?\s*$/.exec(input);
   if (!m) return null;
   return Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'));
+}
+
+/** "$14" for whole dollars, "$14.50" otherwise. */
+export function formatPrice(cents: number): string {
+  return cents % 100 === 0 ? `$${cents / 100}` : formatCents(cents);
+}
+
+/**
+ * A Venmo link with the amount and a note filled in, built from the
+ * organizer's profile link (venmo.com/u/name, venmo.com/name, or
+ * account.venmo.com/u/name). If the name can't be read, the profile link is
+ * returned unchanged and the page shows the amount next to the button.
+ */
+export function venmoPayUrl(profileUrl: string | null, cents: number, note: string): { url: string | null; prefilled: boolean } {
+  if (!profileUrl) return { url: null, prefilled: false };
+  let u: URL;
+  try {
+    u = new URL(profileUrl);
+  } catch {
+    return { url: null, prefilled: false };
+  }
+  if (!/(^|\.)venmo\.com$/i.test(u.hostname)) return { url: profileUrl, prefilled: false };
+  const parts = u.pathname.split('/').filter(Boolean);
+  const name = parts[0] === 'u' ? parts[1] : parts.length === 1 ? parts[0] : undefined;
+  if (!name || !/^[A-Za-z0-9_-]{2,40}$/.test(name)) return { url: profileUrl, prefilled: false };
+  const amount = (cents / 100).toFixed(2);
+  return {
+    url: `https://venmo.com/${name}?txn=pay&amount=${amount}&note=${encodeURIComponent(note)}`,
+    prefilled: true,
+  };
 }

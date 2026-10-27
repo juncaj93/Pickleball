@@ -1,6 +1,7 @@
 import type { ActionLinkDraft, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents } from '../shared/money';
 import { normalizeSettings } from '../shared/settings';
+import { openSpots } from '../shared/spots';
 import { formatDateTime, formatShortDate, formatTimeRange } from '../shared/time';
 import { adminLogin, adminLogout, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
@@ -20,6 +21,7 @@ import {
   type SessionRow,
   settingsOf,
   sharesFor,
+  waitlistOf,
 } from './repo';
 import { confirmAttendance, joinSession, moveToWaitlist, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
@@ -65,6 +67,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       name: group.name,
       timezone: group.timezone,
       venmoUrl: group.venmo_url,
+      organizerName: group.organizer_name,
+      venueName: group.venue_name,
+      venueAddress: group.venue_address,
       settings,
       playerLink: `${ctx.url.origin}/g/${group.group_key}`,
     },
@@ -211,8 +216,8 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'Player not found.');
   let result: string;
   if (action === 'confirm') {
-    const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'claim_only');
-    if (r.result === 'spot_taken') throw new HttpError(409, 'session_full', 'All four spots are taken.');
+    const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer');
+    if (r.result === 'spot_taken') throw new HttpError(409, 'session_full', 'All six spots are taken.');
     result = r.result;
   } else if (action === 'waitlist') {
     await moveToWaitlist(ctx.db, session, playerId, ctx.nowMs);
@@ -239,8 +244,8 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   if (paid) {
     if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
     if (row.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
-    const share = sharesFor(session, roster).get(playerId);
-    if (share === undefined) throw new HttpError(409, 'no_cost', 'Enter the court cost first.');
+    const share = sharesFor(session, roster, settingsOf(group)).get(playerId);
+    if (share === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
     if (row.payment_status === 'paid') return { ok: true, changed: false };
     await ctx.db
       .prepare(
@@ -273,6 +278,36 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true, changed: true };
 }
 
+/** The organizer's "Refunded" checkbox for one player in one session. */
+export async function setRefund(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const playerId = v.id(body.playerId, 'playerId');
+  const refunded = v.bool(body.refunded, 'refunded');
+  const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
+  if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
+  if (!!row.refunded_at === refunded) return { ok: true, changed: false };
+  await ctx.db
+    .prepare('UPDATE session_players SET refunded_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
+    .bind(refunded ? ctx.nowIso : null, ctx.nowIso, session.id, playerId)
+    .run();
+  await audit(ctx.db, group.id, session.id, refunded ? 'marked_refunded' : 'unmarked_refunded', { player: row.display_name }, ctx.nowIso);
+  return { ok: true, changed: true };
+}
+
+/** The organizer sent the "Good news, you're in" text to someone moved off the waitlist. */
+export async function markTold(ctx: Ctx, body: Record<string, unknown>) {
+  const { session } = await adminSession(ctx);
+  const playerId = v.id(body.playerId, 'playerId');
+  await ctx.db
+    .prepare(
+      `UPDATE session_players SET promotion_notified_at = ?, updated_at = ?
+       WHERE session_id = ? AND player_id = ? AND promoted_at IS NOT NULL AND promotion_notified_at IS NULL`,
+    )
+    .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
+    .run();
+  return { ok: true };
+}
+
 /**
  * Create personal links for text messages. The server picks who is
  * eligible; the browser only gets to narrow that list down.
@@ -291,7 +326,9 @@ export async function prepareLinks(ctx: Ctx, body: Record<string, unknown>): Pro
       .filter((r) => !r.attendance_confirmed_at)
       .map((r) => ({ playerId: r.player_id, name: r.display_name, phone: r.phone_number }));
   } else {
-    if (confirmedOf(roster).length >= 4) throw new HttpError(409, 'session_full', 'This session is already full.');
+    if (openSpots(confirmedOf(roster).length, waitlistOf(roster).length) === 0) {
+      throw new HttpError(409, 'session_full', 'No spots are open right now.');
+    }
     recipients = eligibleSubstitutes(roster, await getPlayers(ctx.db, group.id));
   }
   if (wanted) recipients = recipients.filter((r) => wanted.has(r.playerId));
@@ -317,6 +354,7 @@ function playerFields(body: Record<string, unknown>) {
     isRegular: v.optionalBool(body.isRegular, 'isRegular', true),
     isActive: v.optionalBool(body.isActive, 'isActive', true),
     canReceiveSubstituteInvites: v.optionalBool(body.canReceiveSubstituteInvites, 'canReceiveSubstituteInvites', true),
+    usualDays: v.usualDays(body.usualDays),
   };
 }
 
@@ -334,10 +372,10 @@ export async function createPlayer(ctx: Ctx, body: Record<string, unknown>) {
   try {
     await ctx.db
       .prepare(
-        `INSERT INTO players (id, group_id, display_name, phone_number, is_regular, is_active, can_receive_substitute_invites, sort_order, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO players (id, group_id, display_name, phone_number, is_regular, is_active, can_receive_substitute_invites, sort_order, created_at, usual_days)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, group.id, f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, count?.n ?? 0, ctx.nowIso)
+      .bind(id, group.id, f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, count?.n ?? 0, ctx.nowIso, f.usualDays ?? '')
       .run();
   } catch (err) {
     uniqueNameError(err);
@@ -354,10 +392,11 @@ export async function updatePlayer(ctx: Ctx, body: Record<string, unknown>) {
   try {
     res = await ctx.db
       .prepare(
-        `UPDATE players SET display_name = ?, phone_number = ?, is_regular = ?, is_active = ?, can_receive_substitute_invites = ?
+        `UPDATE players SET display_name = ?, phone_number = ?, is_regular = ?, is_active = ?, can_receive_substitute_invites = ?,
+           usual_days = COALESCE(?, usual_days)
          WHERE id = ? AND group_id = ?`,
       )
-      .bind(f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, id, group.id)
+      .bind(f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, f.usualDays, id, group.id)
       .run();
   } catch (err) {
     uniqueNameError(err);
@@ -371,12 +410,16 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const name = v.text(body.name, 'name', { max: 60 });
   const venmoUrl = v.optionalUrl(body.venmoUrl, 'venmoUrl');
+  // Fields left out of the request keep their saved values.
+  const organizerName = body.organizerName === undefined ? group.organizer_name : v.optionalText(body.organizerName, 'organizerName', 40);
+  const venueName = body.venueName === undefined ? group.venue_name : v.optionalText(body.venueName, 'venueName', 80);
+  const venueAddress = body.venueAddress === undefined ? group.venue_address : v.optionalText(body.venueAddress, 'venueAddress', 160);
   const settings = normalizeSettings({ ...settingsOf(group), ...(body.settings as object) });
   await ctx.db
-    .prepare('UPDATE groups SET name = ?, venmo_url = ?, settings_json = ? WHERE id = ?')
-    .bind(name, venmoUrl, JSON.stringify(settings), group.id)
+    .prepare('UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ? WHERE id = ?')
+    .bind(name, venmoUrl, JSON.stringify(settings), organizerName, venueName, venueAddress, group.id)
     .run();
-  await audit(ctx.db, group.id, null, 'settings_updated', { name, venmoUrl, settings }, ctx.nowIso);
+  await audit(ctx.db, group.id, null, 'settings_updated', { name, venmoUrl, organizerName, venueName, venueAddress, settings }, ctx.nowIso);
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(settings) }, ctx.nowMs);
   return { ok: true };
 }
@@ -415,13 +458,14 @@ export async function exportData(ctx: Ctx): Promise<Response> {
   const sessions = await loadSessions(ctx.db, group.id, '0000');
   const rosters = await loadRosters(ctx.db, group.id, '0000');
   const header = [
-    'Date', 'Time', 'Session status', 'Court booking', 'Venue', 'Reservation', 'Court cost',
-    'Cancellation deadline', 'Player', 'Player status', 'Share', 'Payment', 'Paid at', 'Amount paid',
+    'Date', 'Time', 'Session status', 'Court booking', 'Venue', 'Reservation',
+    'Cancellation deadline', 'Player', 'Player status', 'Price', 'Payment', 'Paid at', 'Amount paid', 'Refunded at',
   ];
+  const settings = settingsOf(group);
   const lines = [header.map(csvCell).join(',')];
   for (const s of sessions) {
     const roster = rosters.get(s.id) ?? [];
-    const shares = sharesFor(s, roster);
+    const shares = sharesFor(s, roster, settings);
     const base = [
       formatShortDate(s.starts_at, tz),
       formatTimeRange(s.starts_at, s.ends_at, tz),
@@ -429,10 +473,9 @@ export async function exportData(ctx: Ctx): Promise<Response> {
       s.booking_status,
       s.venue_name,
       s.reservation_reference,
-      s.court_cost_cents === null ? '' : formatCents(s.court_cost_cents),
       s.cancellation_deadline_at ? formatDateTime(s.cancellation_deadline_at, tz) : '',
     ];
-    if (roster.length === 0) lines.push([...base, '', '', '', '', '', ''].map(csvCell).join(','));
+    if (roster.length === 0) lines.push([...base, '', '', '', '', '', '', ''].map(csvCell).join(','));
     for (const r of roster) {
       const share = shares.get(r.player_id);
       lines.push(
@@ -444,6 +487,7 @@ export async function exportData(ctx: Ctx): Promise<Response> {
           r.payment_status,
           r.paid_at ? formatDateTime(r.paid_at, tz) : '',
           r.payment_amount_cents === null ? '' : formatCents(r.payment_amount_cents),
+          r.refunded_at ? formatDateTime(r.refunded_at, tz) : '',
         ]
           .map(csvCell)
           .join(','),

@@ -1,10 +1,10 @@
 import type { ActionTokenView } from '../shared/api';
-import { SPOTS_PER_SESSION } from '../shared/settings';
+import { openSpots } from '../shared/spots';
 import type { Ctx } from './context';
 import { newId, randomToken, sha256 } from './crypto';
 import type { D1Database } from './db';
 import { HttpError } from './http';
-import { confirmedOf, type GroupRow, loadRoster, type SessionRow } from './repo';
+import { confirmedOf, type GroupRow, loadRoster, type SessionRow, waitlistOf } from './repo';
 import { confirmAttendance, joinSession, withdraw } from './roster';
 import * as v from './validate';
 
@@ -82,7 +82,7 @@ async function view(ctx: Ctx, r: Resolved): Promise<ActionTokenView> {
       endsAt: r.session.ends_at,
       canceled: r.session.status === 'canceled',
       venueName: r.session.venue_name,
-      openSpots: Math.max(0, SPOTS_PER_SESSION - confirmedOf(roster).length),
+      openSpots: openSpots(confirmedOf(roster).length, waitlistOf(roster).filter((w) => w.player_id !== r.token.player_id).length),
     },
     myStatus: mine?.status ?? null,
     attendanceConfirmed: !!mine?.attendance_confirmed_at,

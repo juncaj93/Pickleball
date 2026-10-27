@@ -4,8 +4,10 @@ import type {
   AdminSessionView,
   EligibleSubstitute,
   PlayerSessionView,
+  RefundDue,
 } from '../shared/api';
-import { SPOTS_PER_SESSION, type GroupSettings } from '../shared/settings';
+import type { GroupSettings } from '../shared/settings';
+import { goingText, joinOutcome, openSpots } from '../shared/spots';
 import { computeSessionState } from '../shared/status';
 import {
   confirmedOf,
@@ -14,6 +16,7 @@ import {
   type SessionRow,
   sharesFor,
   statusInput,
+  usualDaysOf,
   waitlistOf,
 } from './repo';
 
@@ -27,10 +30,12 @@ export function playerSessionView(
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
-  const shares = sharesFor(session, roster);
+  const shares = sharesFor(session, roster, settings);
   const mine = meId ? roster.find((r) => r.player_id === meId) : undefined;
   const started = nowMs >= Date.parse(session.starts_at);
   const canceled = session.status === 'canceled';
+  const six = !canceled && confirmed.length === 6;
+  const othersWaiting = waitlist.filter((r) => r.player_id !== meId).length;
   return {
     id: session.id,
     startsAt: session.starts_at,
@@ -39,10 +44,12 @@ export function playerSessionView(
     started,
     bookingStatus: session.booking_status,
     venueName: session.venue_name,
-    courtCostCents: canceled ? null : session.court_cost_cents,
     confirmed: confirmed.map((r) => ({ name: r.display_name, attendanceConfirmed: !!r.attendance_confirmed_at })),
     waitlist: waitlist.map((r) => ({ name: r.display_name })),
-    openSpots: canceled || started ? 0 : Math.max(0, SPOTS_PER_SESSION - confirmed.length),
+    openSpots: canceled || started ? 0 : openSpots(confirmed.length, waitlist.length),
+    goingText: goingText(confirmed.length, waitlist.length),
+    joinAs: joinOutcome(confirmed.length, othersWaiting),
+    sixPlaying: six,
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
     mine: mine
@@ -50,8 +57,10 @@ export function playerSessionView(
           status: mine.status,
           waitlistPosition: mine.status === 'waitlisted' ? waitlist.findIndex((r) => r.id === mine.id) + 1 : null,
           attendanceConfirmed: !!mine.attendance_confirmed_at,
+          promotion: mine.status === 'confirmed' ? mine.promotion_reason : null,
           shareCents: shares.get(mine.player_id) ?? null,
           paymentStatus: mine.payment_status,
+          refundCents: six && mine.status === 'confirmed' && settings.refundCentsWhenSix > 0 ? settings.refundCentsWhenSix : null,
         }
       : null,
   };
@@ -66,10 +75,11 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     isActive: !!p.is_active,
     canReceiveSubstituteInvites: !!p.can_receive_substitute_invites,
     sortOrder: p.sort_order,
+    usualDays: usualDaysOf(p),
   };
 }
 
-/** Waitlisted players first (in order), then regulars, then other subs. */
+/** Waitlisted players first (in order), then regulars, then everyone else. */
 export function eligibleSubstitutes(roster: RosterRow[], players: PlayerRow[]): EligibleSubstitute[] {
   const byId = new Map(players.map((p) => [p.id, p]));
   const out: EligibleSubstitute[] = [];
@@ -90,6 +100,27 @@ export function eligibleSubstitutes(roster: RosterRow[], players: PlayerRow[]): 
   return out;
 }
 
+/**
+ * Money going back out: the flat refund for everyone when 6 are playing,
+ * and a full refund for anyone who paid and then left.
+ */
+export function refundsFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): RefundDue[] {
+  const out: RefundDue[] = [];
+  const confirmed = confirmedOf(roster);
+  if (session.status !== 'canceled' && confirmed.length === 6 && settings.refundCentsWhenSix > 0) {
+    for (const r of confirmed) {
+      out.push({ playerId: r.player_id, name: r.display_name, amountCents: settings.refundCentsWhenSix, refunded: !!r.refunded_at, reason: 'six' });
+    }
+  }
+  for (const r of roster) {
+    const left = r.status !== 'confirmed' || session.status === 'canceled';
+    if (left && r.payment_status === 'paid' && r.payment_amount_cents) {
+      out.push({ playerId: r.player_id, name: r.display_name, amountCents: r.payment_amount_cents, refunded: !!r.refunded_at, reason: 'dropped' });
+    }
+  }
+  return out;
+}
+
 export function adminSessionView(
   session: SessionRow,
   roster: RosterRow[],
@@ -99,7 +130,7 @@ export function adminSessionView(
 ): AdminSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
-  const shares = sharesFor(session, roster);
+  const shares = sharesFor(session, roster, settings);
   const state = computeSessionState(statusInput(session, roster), nowMs, settings);
   const order = new Map<string, number>();
   confirmed.forEach((r, i) => order.set(r.id, i));
@@ -107,36 +138,27 @@ export function adminSessionView(
 
   const entries: AdminRosterEntry[] = [...roster]
     .sort((a, b) => (order.get(a.id) ?? 1000) - (order.get(b.id) ?? 1000) || a.claim_seq - b.claim_seq)
-    .map((r) => {
-      const share = shares.get(r.player_id) ?? null;
-      const paid = r.payment_status === 'paid' && r.payment_amount_cents !== null;
-      const expected = r.status === 'confirmed' ? (share ?? 0) : 0;
-      const diff = paid ? (r.payment_amount_cents as number) - expected : null;
-      return {
-        playerId: r.player_id,
-        name: r.display_name,
-        phone: r.phone_number,
-        status: r.status,
-        claimedAt: r.claimed_at,
-        confirmedAt: r.confirmed_at,
-        attendanceConfirmedAt: r.attendance_confirmed_at,
-        paymentStatus: r.payment_status,
-        paidAt: r.paid_at,
-        paymentAmountCents: r.payment_amount_cents,
-        shareCents: share,
-        paymentDifferenceCents: diff !== null && diff !== 0 ? diff : null,
-        waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
-      };
-    });
+    .map((r) => ({
+      playerId: r.player_id,
+      name: r.display_name,
+      phone: r.phone_number,
+      status: r.status,
+      claimedAt: r.claimed_at,
+      confirmedAt: r.confirmed_at,
+      attendanceConfirmedAt: r.attendance_confirmed_at,
+      paymentStatus: r.payment_status,
+      paidAt: r.paid_at,
+      paymentAmountCents: r.payment_amount_cents,
+      shareCents: shares.get(r.player_id) ?? null,
+      waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
+      promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
+      promotionReason: r.status === 'confirmed' ? r.promotion_reason : null,
+      promotionNotifiedAt: r.promotion_notified_at,
+      refundedAt: r.refunded_at,
+    }));
 
-  const payable = session.status !== 'canceled' && session.court_cost_cents !== null ? confirmed.length : 0;
+  const payable = session.status !== 'canceled' ? confirmed.length : 0;
   const paidCount = payable ? confirmed.filter((r) => r.payment_status === 'paid').length : 0;
-  let uncovered = 0;
-  if (session.court_cost_cents !== null && session.status !== 'canceled') {
-    let covered = 0;
-    for (const v of shares.values()) covered += v;
-    uncovered = session.court_cost_cents - covered;
-  }
 
   return {
     id: session.id,
@@ -147,7 +169,6 @@ export function adminSessionView(
     venueName: session.venue_name,
     venueBookingUrl: session.venue_booking_url,
     reservationReference: session.reservation_reference,
-    courtCostCents: session.court_cost_cents,
     cancellationDeadlineAt: session.cancellation_deadline_at,
     adminDecision: session.admin_decision,
     decisionAt: session.decision_at,
@@ -159,7 +180,7 @@ export function adminSessionView(
     waitlistCount: waitlist.length,
     paidCount,
     payableCount: payable,
-    uncoveredCents: uncovered,
+    refunds: refundsFor(session, roster, settings),
     eligibleSubstitutes: state.flags.openSpots > 0 ? eligibleSubstitutes(roster, players) : [],
   };
 }

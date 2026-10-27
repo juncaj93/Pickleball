@@ -7,7 +7,7 @@ import {
   paymentMessage,
   replacementMessage,
 } from '../../../shared/messages';
-import { formatCents, parseDollars } from '../../../shared/money';
+import { formatPrice } from '../../../shared/money';
 import type { BookingStatus } from '../../../shared/status';
 import {
   formatDateTime,
@@ -17,7 +17,7 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from '../../../shared/time';
-import { api, ApiError, safeHref, useNow } from '../../lib';
+import { api, ApiError, useNow } from '../../lib';
 import { Chip, ConfirmDialog, Notice, Sheet, SmsDraft, useToast } from '../../ui';
 import { type AdminCtx, deadlineLine } from '../Admin';
 
@@ -32,8 +32,8 @@ function useAction(ctx: AdminCtx) {
     setError(null);
     try {
       await fn();
-      if (success) toast(success);
       await ctx.reload();
+      if (success) toast(success);
       return true;
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
@@ -65,13 +65,13 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
       <dl className="kv">
         <dt>Players</dt>
         <dd>
-          <strong>{s.confirmedCount}/4</strong> confirmed{s.waitlistCount > 0 ? ` · ${s.waitlistCount} waitlisted` : ''}
+          <strong>{s.confirmedCount} going</strong>
+          {s.waitlistCount > 0 ? ` · ${s.waitlistCount} waiting` : ''}
         </dd>
         <dt>Court</dt>
         <dd>
           {s.bookingStatus === 'booked' ? 'Booked' : s.bookingStatus === 'unavailable' ? 'Not available' : 'Needs booking'}
-          {s.venueName ? ` · ${s.venueName}` : ''}
-          {s.courtCostCents !== null ? ` · ${formatCents(s.courtCostCents)}` : ''}
+          {s.reservationReference ? ` · #${s.reservationReference}` : ''}
         </dd>
         {s.bookingStatus === 'booked' && (
           <>
@@ -110,7 +110,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           Manage players
         </button>
         <button className="btn small secondary" onClick={() => ctx.open('payments', s.id)}>
-          Payments
+          Money
         </button>
         {live && (
           <button className="btn small secondary" onClick={() => ctx.open('reminders', s.id)}>
@@ -152,7 +152,7 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   return (
     <div className="stack">
       <p className="small">
-        <strong>{s.confirmedCount}/4 going.</strong> {open} spot{open === 1 ? '' : 's'} open.{' '}
+        <strong>{s.confirmedCount} going.</strong> {open} more needed.{' '}
         {s.cancellationDeadlineAt &&
           (passed
             ? booked
@@ -208,7 +208,7 @@ export function SessionSheets({
   const titles: Record<Exclude<SheetKind, 'cancel'>, string> = {
     booking: `Booking · ${title}`,
     roster: `Players · ${title}`,
-    payments: `Payments · ${title}`,
+    payments: `Money · ${title}`,
     reminders: `Reminders · ${title}`,
     invite: `Invite people · ${title}`,
     reschedule: `Reschedule · ${title}`,
@@ -229,31 +229,23 @@ export function SessionSheets({
 
 function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; onDone: () => void }) {
   const tz = ctx.d.group.timezone;
-  const [status, setStatus] = useState<BookingStatus>(s.bookingStatus);
-  const [venue, setVenue] = useState(s.venueName ?? '');
-  const [url, setUrl] = useState(s.venueBookingUrl ?? '');
+  const [status, setStatus] = useState<BookingStatus>(s.bookingStatus === 'needs_booking' ? 'booked' : s.bookingStatus);
   const [ref, setRef] = useState(s.reservationReference ?? '');
-  const [cost, setCost] = useState(s.courtCostCents !== null ? (s.courtCostCents / 100).toFixed(2) : '');
   const [deadline, setDeadline] = useState(s.cancellationDeadlineAt ? toLocalInputValue(s.cancellationDeadlineAt, tz) : '');
-  const [formError, setFormError] = useState<string | null>(null);
   const { busy, error, run } = useAction(ctx);
   const deadlineIso = deadline ? fromLocalInputValue(deadline, tz) : null;
   const defaultHours = ctx.d.group.settings.defaultDeadlineHours;
-  const hasCostChangeAfterPayments = s.paidCount > 0 && cost !== '' && parseDollars(cost) !== s.courtCostCents;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    setFormError(null);
-    const cents = cost.trim() === '' ? null : parseDollars(cost);
-    if (cost.trim() !== '' && cents === null) return setFormError('Cost should look like 48 or 48.50.');
     const ok = await run(
       () =>
         api('PUT', `/api/admin/sessions/${s.id}/booking`, {
           bookingStatus: status,
-          venueName: venue || null,
-          venueBookingUrl: url || null,
+          venueName: s.venueName,
+          venueBookingUrl: s.venueBookingUrl,
           reservationReference: ref || null,
-          courtCostCents: cents,
+          courtCostCents: null,
           cancellationDeadlineAt: deadlineIso,
         }),
       'Booking saved',
@@ -261,34 +253,12 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
     if (ok) onDone();
   }
 
-  const checklist = [
-    { done: status === 'booked', label: 'Court booked with the venue' },
-    { done: !!venue, label: 'Venue' },
-    { done: !!ref || !!url, label: 'Reservation number or link' },
-    { done: cost !== '', label: 'Actual cost' },
-    { done: !!deadline, label: 'Cancellation deadline' },
-  ];
-
   return (
     <form className="stack" onSubmit={submit}>
-      <p className="muted small">
-        The site can't book courts. Book with the venue first, then record what happened here.
-      </p>
-      <ul className="list small" aria-label="Booking checklist">
-        {checklist.map((c) => (
-          <li key={c.label} className="row" style={{ padding: '6px 0' }}>
-            <span aria-hidden="true" style={{ width: 20, color: c.done ? 'var(--ok-fg)' : 'var(--ink-2)' }}>
-              {c.done ? '✓' : '○'}
-            </span>
-            <span>{c.label}</span>
-            <span className="sr-only">{c.done ? 'done' : 'not done'}</span>
-          </li>
-        ))}
-      </ul>
       <div className="segmented" role="group" aria-label="Court status">
         {(
           [
-            ['needs_booking', 'Needs booking'],
+            ['needs_booking', 'Not booked'],
             ['booked', 'Booked'],
             ['unavailable', 'Not available'],
           ] as const
@@ -299,32 +269,9 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
         ))}
       </div>
       <label className="field">
-        Venue
-        <input type="text" value={venue} onChange={(e) => setVenue(e.target.value)} maxLength={80} />
-      </label>
-      <label className="field">
-        Reservation number
+        Reservation number (optional)
         <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
       </label>
-      <label className="field">
-        Booking link (optional)
-        <input type="url" inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" />
-      </label>
-      {safeHref(s.venueBookingUrl) && (
-        <a className="small" href={safeHref(s.venueBookingUrl)} target="_blank" rel="noopener noreferrer">
-          Open saved booking link
-        </a>
-      )}
-      <label className="field">
-        Actual court cost
-        <span className="hint">Split four ways. Leftover cents go to the earliest players.</span>
-        <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="48.00" />
-      </label>
-      {hasCostChangeAfterPayments && (
-        <Notice tone="warn" title="Some players already paid">
-          Changing the cost won't change what they paid. The Payments screen will show each difference so you can sort it out.
-        </Notice>
-      )}
       <label className="field">
         Cancellation deadline (Eastern time)
         <span className="hint">Starts at {defaultHours} hours before play. Change it if this booking's rule is different.</span>
@@ -337,8 +284,12 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
       >
         Fill in {defaultHours} hours before start
       </button>
-      {deadlineIso && <p className="small">Deadline: <strong>{formatDateTime(deadlineIso, tz)}</strong></p>}
-      {(formError || error) && <Notice tone="danger">{formError || error}</Notice>}
+      {deadlineIso && (
+        <p className="small">
+          Deadline: <strong>{formatDateTime(deadlineIso, tz)}</strong>
+        </p>
+      )}
+      {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn" type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save booking'}
       </button>
@@ -363,7 +314,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);
   const inRoster = new Set(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => r.playerId));
   const others = ctx.d.players.filter((p) => p.isActive && !inRoster.has(p.id));
-  const full = s.confirmedCount >= 4;
+  const full = s.confirmedCount >= 6;
 
   return (
     <div className="stack">
@@ -456,29 +407,17 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const venmo = ctx.d.group.venmoUrl;
   const { busy, error, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
-  const [remindAll, setRemindAll] = useState(false);
   const rows = s.roster.filter((r) => r.status === 'confirmed' || r.paymentStatus === 'paid');
-  const unpaid = rows.filter((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
-
-  if (s.courtCostCents === null) {
-    return (
-      <div className="stack">
-        <p className="muted">Enter the actual court cost in the booking first. Shares are worked out from it.</p>
-        <button className="btn" onClick={() => ctx.open('booking', s.id)}>
-          Edit booking
-        </button>
-      </div>
-    );
-  }
+  const price = ctx.d.group.settings.pricePerPlayerCents;
 
   return (
     <div className="stack">
       <div className="spread">
         <div>
-          <div className="muted small">Court cost</div>
-          <div className="big-amount">{formatCents(s.courtCostCents)}</div>
+          <div className="muted small">Each player pays</div>
+          <div className="big-amount">{formatPrice(price)}</div>
         </div>
         <Chip tone={s.paidCount === s.payableCount && s.payableCount > 0 ? 'ok' : 'warn'}>
           {s.paidCount}/{s.payableCount} paid
@@ -486,15 +425,10 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
       </div>
       {s.state.flags.canceled && (
         <Notice tone="muted" title="Session canceled">
-          Payment reminders are off. Anyone who already paid still shows here so you can refund them if needed.
+          Nobody owes for it. Anyone who already paid shows under Refunds on Home.
         </Notice>
       )}
-      {s.uncoveredCents > 0 && !s.state.flags.canceled && (
-        <Notice tone="info">
-          Only {s.confirmedCount} players, so {formatCents(s.uncoveredCents)} of the cost isn't assigned to anyone.
-        </Notice>
-      )}
-      <p className="small muted">Mark someone paid only after you see the money in Venmo (or however they paid). Nothing here checks Venmo.</p>
+      <p className="small muted">Mark someone paid after you see the money in Venmo. Nothing here checks Venmo.</p>
       {error && <Notice tone="danger">{error}</Notice>}
       <ul className="list">
         {rows.map((r) => (
@@ -504,20 +438,11 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                 <strong>{r.name}</strong>
                 <div className="small muted">
                   {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
-                  Share {r.shareCents !== null ? formatCents(r.shareCents) : '—'}
-                  {r.paidAt ? ` · paid ${formatCents(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}` : ''}
+                  {r.paidAt ? `paid ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}` : `owes ${formatPrice(r.shareCents ?? price)}`}
                 </div>
               </div>
               <Chip tone={r.paymentStatus === 'paid' ? 'ok' : 'warn'}>{r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}</Chip>
             </div>
-            {r.paymentDifferenceCents !== null && (
-              <Notice tone="warn">
-                {r.paymentDifferenceCents > 0
-                  ? `Paid ${formatCents(r.paymentDifferenceCents)} more than their current share.`
-                  : `Paid ${formatCents(-r.paymentDifferenceCents)} less than their current share.`}{' '}
-                The cost or lineup changed after they paid. Your call how to settle it.
-              </Notice>
-            )}
             <div className="btn-row">
               {r.paymentStatus === 'paid' ? (
                 <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
@@ -543,20 +468,6 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </li>
         ))}
       </ul>
-      {unpaid.length > 1 && !s.state.flags.canceled && (
-        <>
-          <button className="btn secondary" onClick={() => setRemindAll((v) => !v)}>
-            {remindAll ? 'Hide reminders' : `Remind all unpaid (${unpaid.length})`}
-          </button>
-          {remindAll && (
-            <div className="stack">
-              {unpaid.map((r) => (
-                <SmsDraft key={r.playerId} to={r.name} phone={r.phone} body={paymentMessage(r.name, r.shareCents!, s, tz, venmo)} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
     </div>
   );
 }

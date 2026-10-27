@@ -1,6 +1,5 @@
-import { splitCost } from '../shared/money';
 import { planSessions } from '../shared/schedule';
-import { type GroupSettings, normalizeSettings, SPOTS_PER_SESSION } from '../shared/settings';
+import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
@@ -15,6 +14,9 @@ export interface GroupRow {
   venmo_url: string | null;
   settings_json: string;
   created_at: string;
+  organizer_name: string | null;
+  venue_name: string | null;
+  venue_address: string | null;
 }
 
 export interface PlayerRow {
@@ -26,6 +28,7 @@ export interface PlayerRow {
   is_active: number;
   can_receive_substitute_invites: number;
   sort_order: number;
+  usual_days: string;
 }
 
 export interface SessionRow {
@@ -60,6 +63,10 @@ export interface RosterRow {
   payment_status: PaymentStatus;
   paid_at: string | null;
   payment_amount_cents: number | null;
+  promoted_at: string | null;
+  promotion_reason: 'made_six' | 'spot_opened' | null;
+  promotion_notified_at: string | null;
+  refunded_at: string | null;
   display_name: string;
   phone_number: string | null;
 }
@@ -180,17 +187,22 @@ export function waitlistOf(roster: RosterRow[]): RosterRow[] {
 }
 
 /**
- * Each confirmed player's share of the court cost. The cost is always split
- * four ways; earlier confirmers absorb any leftover cents (see splitCost).
+ * What each confirmed player owes: the same flat price whether 4 or 6 play.
+ * Canceled sessions owe nothing.
  */
-export function sharesFor(session: SessionRow, roster: RosterRow[]): Map<string, number> {
+export function sharesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, number> {
   const shares = new Map<string, number>();
-  if (session.court_cost_cents === null || session.status === 'canceled') return shares;
-  const parts = splitCost(session.court_cost_cents, SPOTS_PER_SESSION);
-  confirmedOf(roster)
-    .slice(0, SPOTS_PER_SESSION)
-    .forEach((r, i) => shares.set(r.player_id, parts[i]));
+  if (session.status === 'canceled') return shares;
+  for (const r of confirmedOf(roster)) shares.set(r.player_id, settings.pricePerPlayerCents);
   return shares;
+}
+
+/** Weekday numbers stored as '2,4'. */
+export function usualDaysOf(p: Pick<PlayerRow, 'usual_days'>): number[] {
+  return (p.usual_days ?? '')
+    .split(',')
+    .map(Number)
+    .filter((d) => d === 2 || d === 4);
 }
 
 export function statusInput(session: SessionRow, roster: RosterRow[]): StatusInput {
@@ -203,6 +215,7 @@ export function statusInput(session: SessionRow, roster: RosterRow[]): StatusInp
     cancellationDeadlineAt: session.cancellation_deadline_at,
     adminDecision: session.admin_decision,
     confirmedCount: confirmed.length,
+    waitlistCount: waitlistOf(roster).length,
     unconfirmedAttendanceCount: confirmed.filter((r) => !r.attendance_confirmed_at).length,
   };
 }

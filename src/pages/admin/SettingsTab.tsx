@@ -1,9 +1,29 @@
 import { type FormEvent, useState } from 'react';
-import { type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
+import { parseDollars } from '../../../shared/money';
+import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
+
+type MoneyKey = 'pricePerPlayerCents' | 'refundCentsWhenSix';
+type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
+
+const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
+
+/** A dollar amount: decimal keypad, checked on Save. */
+function MoneyField({ label, value, onChange, error }: { label: string; value: string; onChange: (v: string) => void; error?: string }) {
+  return (
+    <label className="field">
+      {label}
+      <span className="money-input">
+        <span aria-hidden="true">$</span>
+        <input type="text" inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={error ? true : undefined} />
+      </span>
+      {error && <span className="field-error">{error}</span>}
+    </label>
+  );
+}
 
 const MAIN_SETTING = {
   key: 'checkInHours' as const,
@@ -11,7 +31,7 @@ const MAIN_SETTING = {
   hint: 'When check-in texts and the "short on players" warning start.',
 };
 
-const ADVANCED_SETTINGS: { key: keyof GroupSettings; label: string; hint?: string }[] = [
+const ADVANCED_SETTINGS: { key: WholeKey; label: string; hint?: string }[] = [
   { key: 'horizonWeeks', label: 'Plan sessions ahead (weeks)' },
   { key: 'bookingLeadDays', label: 'Booking reminder (days before play)' },
   { key: 'defaultDeadlineHours', label: 'Cancellation deadline for new sessions (hours before play)', hint: "Northville's rule is 12. You can change it on any booking." },
@@ -29,6 +49,12 @@ const ACTION_TEXT: Record<string, string> = {
   player_updated: 'Player edited',
   settings_updated: 'Settings changed',
   session_rescheduled: 'Session moved',
+  marked_refunded: 'Marked refunded',
+  unmarked_refunded: 'Unmarked refunded',
+  as_player_join: 'As player: joined',
+  as_player_withdraw: 'As player: dropped out',
+  as_player_check_in: 'As player: checked in',
+  as_player_decline: 'As player: said no',
   pin_changed: 'PIN changed',
   player_link_rotated: 'Player link replaced',
   roster_confirm: 'Gave a spot',
@@ -43,10 +69,20 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const tz = g.timezone;
   const [name, setName] = useState(g.name);
   const [venmo, setVenmo] = useState(g.venmoUrl ?? '');
-  const [nums, setNums] = useState<Record<keyof GroupSettings, string>>(
-    () => Object.fromEntries(Object.entries(g.settings).map(([k, v]) => [k, String(v)])) as Record<keyof GroupSettings, string>,
-  );
+  const [nums, setNums] = useState<Record<WholeKey, string>>(() => ({
+    horizonWeeks: String(g.settings.horizonWeeks),
+    bookingLeadDays: String(g.settings.bookingLeadDays),
+    checkInHours: String(g.settings.checkInHours),
+    defaultDeadlineHours: String(g.settings.defaultDeadlineHours),
+  }));
+  const [money, setMoney] = useState<Record<MoneyKey, string>>(() => ({
+    pricePerPlayerCents: dollars(g.settings.pricePerPlayerCents),
+    refundCentsWhenSix: dollars(g.settings.refundCentsWhenSix),
+  }));
   const [numErrors, setNumErrors] = useState<Partial<Record<keyof GroupSettings, string>>>({});
+  const [organizerName, setOrganizerName] = useState(g.organizerName ?? '');
+  const [venueName, setVenueName] = useState(g.venueName ?? '');
+  const [venueAddress, setVenueAddress] = useState(g.venueAddress ?? '');
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,16 +97,28 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     // Number fields are only checked here, on Save, never while typing.
     const errors: Partial<Record<keyof GroupSettings, string>> = {};
     const settings = {} as GroupSettings;
-    for (const k of Object.keys(nums) as (keyof GroupSettings)[]) {
+    for (const k of Object.keys(nums) as WholeKey[]) {
       const r = parseWhole(nums[k], SETTING_LIMITS[k][0], SETTING_LIMITS[k][1]);
       if ('error' in r) errors[k] = r.error;
       else settings[k] = r.value;
+    }
+    for (const k of Object.keys(money) as MoneyKey[]) {
+      const cents = parseDollars(money[k]);
+      if (cents === null || cents > SETTING_LIMITS[k][1]) errors[k] = 'Enter an amount like 14 or 14.50.';
+      else settings[k] = cents;
     }
     setNumErrors(errors);
     if (Object.keys(errors).length) return setError('Fix the highlighted numbers, then save.');
     setBusy(true);
     try {
-      await api('PUT', '/api/admin/group', { name, venmoUrl: venmo || null, settings });
+      await api('PUT', '/api/admin/group', {
+        name,
+        venmoUrl: venmo || null,
+        settings,
+        organizerName: organizerName || null,
+        venueName: venueName || null,
+        venueAddress: venueAddress || null,
+      });
       toast('Settings saved');
       await ctx.reload();
     } catch (err) {
@@ -116,8 +164,29 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
         </label>
         <label className="field">
+          Your name
+          <span className="hint">Players see it, for example "Alex may not have marked this paid yet."</span>
+          <input type="text" value={organizerName} onChange={(e) => setOrganizerName(e.target.value)} maxLength={40} />
+        </label>
+        <label className="field">
           Venmo link
           <input type="url" inputMode="url" value={venmo} onChange={(e) => setVenmo(e.target.value)} placeholder="https://venmo.com/u/" />
+        </label>
+        <MoneyField label="Price per player" value={money.pricePerPlayerCents} onChange={(v) => setMoney((m) => ({ ...m, pricePerPlayerCents: v }))} error={numErrors.pricePerPlayerCents} />
+        <MoneyField
+          label="Refund per person when 6 play"
+          value={money.refundCentsWhenSix}
+          onChange={(v) => setMoney((m) => ({ ...m, refundCentsWhenSix: v }))}
+          error={numErrors.refundCentsWhenSix}
+        />
+        <label className="field">
+          Venue name
+          <span className="hint">Goes on calendar invites.</span>
+          <input type="text" value={venueName} onChange={(e) => setVenueName(e.target.value)} maxLength={80} placeholder={DEFAULT_VENUE_NAME} />
+        </label>
+        <label className="field">
+          Venue street address
+          <input type="text" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} maxLength={160} autoComplete="street-address" />
         </label>
         <p className="small muted">
           Time zone: {TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz}. Sessions are Tuesdays and Thursdays, 8:00–10:00 PM.
@@ -206,6 +275,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <li>Alerts only appear when you open this page. Nothing pings your phone in the background.</li>
           <li>Times are shown in Eastern time.</li>
           <li>Payments are marked by you after you check Venmo. Nothing connects to Venmo or a bank.</li>
+          <li>One court: exactly 4 or 6 players. The 5th waits; a 6th brings both in. If 6 drops to 5, nothing moves until you choose.</li>
           <li>The PIN and private link are light protection for a friend group, not bank-grade security.</li>
         </ul>
       </section>

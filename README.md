@@ -1,49 +1,72 @@
 # Pickleball Club
 
-A private, phone-friendly website for six friends who play every **Tuesday and
-Thursday, 8:00–10:00 PM Eastern**. It handles sign-ups (four spots plus a
-waitlist), court booking notes, cancellation deadlines, substitutes, and who
-has paid. It drafts text messages for the organizer, but **it never sends a
-text by itself**.
+A private, phone-friendly website for a group that plays every **Tuesday and
+Thursday, 8:00–10:00 PM Eastern** on one court. It handles sign-ups (exactly
+4 or 6 players), the waitlist, court booking notes, cancellation deadlines,
+substitutes, payments, and refunds. It drafts text messages for the organizer,
+but **it never sends a text by itself**.
 
 ## What each person sees
 
-**Players** open the private group link, tap their name once, and can then:
+**Players** open the private group link, tap their name once ("Who are
+you?"), and the phone remembers it. After that every visit opens on
+"Welcome, Ryan" with a small "Not you?" button. One screen shows:
 
-- claim one of the four spots, or join the waitlist ("You're #2 on the waitlist")
-- confirm they're still coming, or withdraw
-- see their own share of the court cost and whether the organizer has marked it paid
-- tap "Pay with Venmo" (this only opens Venmo; it never marks anything paid)
+- a "Want in on Tuesday? Yes / No" card for a usual day they haven't
+  answered yet (regulars only)
+- "You owe $14 for Tue, Oct 27" with a **Pay $14 with Venmo** button once
+  they're confirmed (opening Venmo never marks anything paid)
+- the next sessions, each with **one big button**: I'm in / Join waitlist /
+  I'm out, plus who's going and an **Add to Calendar** button
 
-**The organizer** signs in at `/admin` with a PIN and gets:
+**The organizer** signs in at `/admin` with a PIN. A floating pill at the
+bottom has three tabs: **Home**, **Players**, **Settings**. Home starts with a
+short "Needs attention" list:
 
-- a **To do** list: courts to book (about 14 days ahead), sessions short on
-  players, cancellation deadlines coming up, unpaid players, and confirmation
-  texts that are due
-- per session: Edit booking, Manage players, Payments, Prepare reminders,
-  Invite substitutes, Cancel session
-- prewritten texts with **Open in Messages**, **Copy message**, and **Copy number**
-  buttons. The status says "Draft ready" or "Composer opened", never "Sent".
-- a CSV backup download, a log of recent changes, and settings
+- courts to book, with a **Book on CourtReserve** button and Enter details
+- short on players (from the day-before check-in), with Invite people /
+  Reschedule / Cancel / Keep as is
+- "5 going, need 4 or 6" with the choices
+- "Tell them they're in": a text draft for each person moved off the waitlist
+- "6 going. Everyone paid $14. Refund $5 each" with a Refunded checkbox per person
+- who owes you, with one-tap **Mark paid**
+- check-in texts that are due
 
-**Substitute invitations:** when a spot opens, the organizer prepares one
-personal link per eligible person (waitlist first). Everyone can get the text,
-but only the first person to tap "Claim this spot" gets it. The others see
-"Sorry, this spot has already been claimed." The database itself refuses a
-fifth confirmed player, so two people tapping at the same second can't both
-get in.
+**View as...** on Home shows exactly what any player sees, with a "Viewing as
+Ryan" banner and Exit. Taps there really happen for that player, and the log
+records that the organizer did it.
 
-## How the cost split works
+Every text is a draft with **Open in Messages** and **Copy message** buttons.
+The status says "Draft ready" or "Composer opened", never "Sent".
 
-Each session's actual court cost is split four ways. If it doesn't divide
-evenly to the cent, the leftover 1–3 cents go one each to the players who got
-their spot earliest. Example: $45.01 becomes $11.26, $11.25, $11.25, $11.25.
-The four shares always add up to the exact court cost.
+## How spots work (one court: 4 or 6, never 5)
 
-If fewer than four people play, the unfilled share shows as "not assigned to
-anyone" and the organizer decides what to do. If the cost changes after
-someone paid, their payment stays as it was and the Payments screen flags the
-difference.
+- The first 4 to sign up are in. The 5th joins the waitlist as #1.
+- When a 6th person joins, both waiting people are confirmed at once and see
+  "Good news, we now have 6, an even number, so you're in."
+- If someone drops out of 4 and someone is waiting, the first waiting person
+  moves in.
+- If someone drops out of 6, nothing moves by itself. The organizer sees
+  "5 going, need 4 or 6" and picks: move the next waiting person in, invite
+  someone, move one person back to the waitlist, or cancel.
+- The database refuses a 7th confirmed player, and every spot change is a
+  single guarded step, so people tapping at the same second can't land on 5.
+
+## How money works
+
+Everyone confirmed pays a flat **$14** per session, whether 4 or 6 play.
+Waitlisted people owe nothing until they're confirmed. When 6 play, the
+organizer refunds **$5** to each person (both amounts are in Settings). A
+player only sees a soft "may not have marked this paid yet" note once the
+session ended more than 24 hours ago.
+
+## Day-before check-in and deadlines
+
+At **24 hours before play** (Settings: "Day-before check-in") a session that
+needs players gets flagged and check-in texts become due. Each session has its
+own **cancellation deadline**, 12 hours before play by default (Northville's
+rule), editable on any booking. Until then the organizer can reschedule or
+cancel; after that it shows "Deadline passed".
 
 ## What runs where
 
@@ -167,16 +190,19 @@ production.
 ## Tests
 
 ```bash
-npm test               # 67 server and logic tests
-npm run test:e2e       # 35 browser checks (needs Playwright + Chromium)
+npm test               # 89 server and logic tests
+npm run test:e2e       # 51 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
 The tests cover Tue/Thu generation across both daylight-saving changes,
-duplicate prevention, the four-spot cap, waitlist order, simultaneous claims,
-links that are expired, used, or for someone else, cost splits and rounding,
-paid/unpaid isolation, cost changes after payment, deadline warnings, admin
-lockout, input validation, and layouts at 360, 375, 390, and 430 px wide.
+duplicate prevention, the 4-then-waitlist-then-6 flow (including promotion
+when someone drops from 4, the "5 going" warning, and everyone tapping at
+once), the 7-player database cap, the flat $14 and the $5 refund when 6 play,
+the unpaid reminder only after 24 hours, the 24-hour check-in and 12-hour
+deadline, rescheduling, the remembered name, usual-day suggestions, View as,
+the calendar file, expired and reused links, admin lockout, input validation,
+and phone layouts at 360 to 430 px wide in light and dark mode.
 
 ## Security notes (plain version)
 
@@ -203,4 +229,5 @@ lockout, input validation, and layouts at 360, 375, 390, and 430 px wide.
   did.
 - Payments are marked by hand after checking Venmo.
 - One group per deployment. The time zone is set at setup (Eastern by default).
+- Light / dark mode is saved per phone; players follow their phone's setting.
 - The session schedule (Tue/Thu, 8–10 PM) is fixed in code.

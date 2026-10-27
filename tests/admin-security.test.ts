@@ -281,14 +281,13 @@ describe('booking, deadlines, and decisions', () => {
     expect(after.status).toBe('planned');
   });
 
-  it('lets the organizer fix the roster without breaking the four-spot cap', async () => {
+  it('lets the organizer move people to the waitlist in order', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const path = `/api/admin/sessions/${s.id}/roster`;
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) {
       expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName[name], action: 'confirm' })).status).toBe(200);
     }
-    expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName.Emery, action: 'confirm' })).status).toBe(409);
     await ctx.organizer.call('POST', path, { playerId: ctx.byName.Emery, action: 'waitlist' });
     await ctx.organizer.call('POST', path, { playerId: ctx.byName.Devon, action: 'waitlist' });
     const after = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((x: any) => x.id === s.id);

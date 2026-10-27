@@ -3,6 +3,8 @@ export interface GroupSettings {
   bookingLeadDays: number; // booking checklist becomes actionable this many days ahead
   checkInHours: number; // day-before check-in: texts and "short on players" start this long before play
   defaultDeadlineHours: number; // each session's cancellation deadline starts this many hours before play
+  pricePerPlayerCents: number; // flat price each confirmed player pays, whether 4 or 6 play
+  refundCentsWhenSix: number; // refunded to each player when 6 play
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
@@ -10,6 +12,8 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   bookingLeadDays: 14,
   checkInHours: 24,
   defaultDeadlineHours: 12,
+  pricePerPlayerCents: 1400,
+  refundCentsWhenSix: 500,
 };
 
 const LIMITS: Record<keyof GroupSettings, [number, number]> = {
@@ -17,6 +21,8 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   bookingLeadDays: [1, 30],
   checkInHours: [1, 72],
   defaultDeadlineHours: [0, 72],
+  pricePerPlayerCents: [0, 100_00],
+  refundCentsWhenSix: [0, 100_00],
 };
 
 export const SETTING_LIMITS = LIMITS;
@@ -37,7 +43,7 @@ export function normalizeSettings(input: unknown): GroupSettings {
   return out;
 }
 
-export const SPOTS_PER_SESSION = 4;
+export const DEFAULT_VENUE_NAME = 'Northville Pickleball Club';
 export const SESSION_DAYS = [2, 4]; // Tuesday, Thursday
 export const SESSION_START = { hour: 20, minute: 0 }; // 8:00 PM local
 export const SESSION_END = { hour: 22, minute: 0 }; // 10:00 PM local

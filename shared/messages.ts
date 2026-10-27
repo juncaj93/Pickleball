@@ -1,4 +1,4 @@
-import { formatCents } from './money';
+import { formatPrice } from './money';
 import { formatDateTime, formatMonthDay, formatTimeRange, formatWeekday } from './time';
 
 // Short, prewritten texts. The site only drafts them; the organizer sends
@@ -25,7 +25,13 @@ export function confirmationMessage(name: string, s: SessionLike, tz: string, li
 export function paymentMessage(name: string, amountCents: number, s: SessionLike, tz: string, venmoUrl: string | null): string {
   const w = when(s, tz);
   const pay = venmoUrl ? `Please send it here: ${venmoUrl}` : 'Please send it when you can.';
-  return `Hey ${name}! You owe ${formatCents(amountCents)} for pickleball on ${w.day}, ${w.date}. ${pay}`;
+  return `Hey ${name}! You owe ${formatPrice(amountCents)} for pickleball on ${w.day}, ${w.date}. ${pay}`;
+}
+
+export function promotionMessage(name: string, s: SessionLike, tz: string, reason: 'made_six' | 'spot_opened'): string {
+  const w = when(s, tz);
+  const why = reason === 'made_six' ? 'We now have 6, an even number' : 'A spot opened up';
+  return `Good news, ${name}! ${why}, so you're in for pickleball ${w.day}, ${w.date}, ${w.time}.`;
 }
 
 export function replacementMessage(s: SessionLike, tz: string, link: string): string {
