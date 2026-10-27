@@ -90,9 +90,17 @@ async function venmoLinkOk(link, dollars, name) {
 
 /** Tap Pay (on the test iPhone the app link goes nowhere, so the web page opens), then come back. */
 async function payAndComeBack(page, link) {
-  await Promise.all([page.waitForURL(/^https:\/\/venmo\.com\//, { timeout: 8000 }), link.click()]);
+  await toVenmo(page, link);
   await page.goBack();
   await page.locator('.schedule article').first().waitFor();
+}
+
+/** Tap Pay and wait for the Venmo web page (the app link before it is ignored by the test browser). */
+async function toVenmo(page, link) {
+  await link.click();
+  for (let i = 0; i < 80 && !page.url().startsWith('https://venmo.com/'); i++) await new Promise((r) => setTimeout(r, 100));
+  assert(page.url().startsWith('https://venmo.com/'), `Pay should end up on Venmo, was ${page.url()}`);
+  await page.getByText('Venmo').waitFor();
 }
 
 /** "I paid" is a quiet gray button right next to Pay, never a second green one. */
@@ -1354,7 +1362,7 @@ async function main() {
         // Pay stays after coming back from Venmo; a quiet "I paid" joins it only then.
         assert((await card.getByRole('button', { name: 'I paid' }).count()) === 0, 'no I paid before tapping Pay');
         await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
-        await Promise.all([p.waitForURL(/^https:\/\/venmo\.com\//, { timeout: 8000 }), pay.click()]);
+        await toVenmo(p, pay);
         await p.goBack();
         await card.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
         const paidBtn = card.getByRole('button', { name: 'I paid' });

@@ -713,11 +713,11 @@ function ScheduleRow({
 
   const names = s.confirmed.map((p) => p.name);
   const onTop = g.payDue.some((o) => o.sessionId === s.id);
-  // Row 4 holds Pay (or Paid) and the calendar icon, or "Yes, I'm coming"
-  // while the check-in is open. With nothing else to show, the calendar icon
-  // sits at the end of the who's in row instead, so the card stays short.
-  const payShows = inSession && !s.canceled && !askCheckIn && (mine.paymentStatus === 'paid' || (!onTop && mine.oweCents > 0));
-  const rowFour = inSession && !s.canceled && (payShows || askCheckIn);
+  // Row 4 holds Pay (or Paid) and the calendar icon. With nothing to pay
+  // there, the calendar icon sits at the end of the who's in row instead, so
+  // the card stays short.
+  const payShows = inSession && !s.canceled && (mine.paymentStatus === 'paid' || (!onTop && mine.oweCents > 0));
+  const rowFour = payShows;
   const calLink = inSession && open && (
     <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
       <CalendarPlusIcon />
@@ -792,16 +792,20 @@ function ScheduleRow({
 
         {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
 
-        {/* Row 4, only when needed: the card's one green button and the calendar icon. */}
+        {/* The day-before check-in, only while it's asked: a quiet button, so Pay stays the one green one. */}
+        {askCheckIn && (
+          <div className="confirm-row">
+            <span className="small">Still coming?</span>
+            <button className="btn small secondary pay-small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
+              Yes, I'm coming
+            </button>
+          </div>
+        )}
+
+        {/* Row 4, only when needed: Pay (the card's one green button) and the calendar icon. */}
         {rowFour && (
           <div className="row-foot">
-            {askCheckIn ? (
-              <button className="btn small pay-small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
-                Yes, I'm coming
-              </button>
-            ) : (
-              <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} />
-            )}
+            <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} />
             {calLink}
           </div>
         )}
