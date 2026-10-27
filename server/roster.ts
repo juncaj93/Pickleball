@@ -3,7 +3,7 @@ import { MIN_PLAYERS } from '../shared/spots';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
-import { type SessionRow, waitlistOf, loadRoster, confirmedOf } from './repo';
+import { type SessionRow, waitlistOf, loadRoster, confirmedOf, syncSix } from './repo';
 
 // One court, exactly 4 or 6 players (see shared/spots.ts for the rules).
 //
@@ -205,6 +205,18 @@ export async function joinSession(
   nowMs: number,
   mode: 'auto' | 'claim_only' | 'organizer',
 ): Promise<JoinResult> {
+  const res = await joinInner(db, session, playerId, nowMs, mode);
+  await syncSix(db, session.id, new Date(nowMs).toISOString());
+  return res;
+}
+
+async function joinInner(
+  db: D1Database,
+  session: SessionRow,
+  playerId: string,
+  nowMs: number,
+  mode: 'auto' | 'claim_only' | 'organizer',
+): Promise<JoinResult> {
   assertOpen(session, nowMs);
   const nowIso = new Date(nowMs).toISOString();
   const existing = await existingRow(db, session.id, playerId);
@@ -256,6 +268,7 @@ export async function withdraw(
       .run();
   }
   const promoted = changed ? await settle(db, session, nowIso) : [];
+  await syncSix(db, session.id, nowIso);
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted };
 }
 
@@ -301,4 +314,5 @@ export async function confirmAttendance(db: D1Database, session: SessionRow, pla
 export async function moveToWaitlist(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
   await addToWaitlist(db, session, playerId, new Date(nowMs).toISOString());
+  await syncSix(db, session.id, new Date(nowMs).toISOString());
 }

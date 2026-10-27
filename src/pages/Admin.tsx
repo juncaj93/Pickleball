@@ -1,12 +1,12 @@
 import { type FormEvent, type ReactElement, useState } from 'react';
-import type { AdminDashboard, AdminSessionView, RefundDue } from '../../shared/api';
+import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { promotionMessage } from '../../shared/messages';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
 import { Chip, Empty, ErrorState, FirstVisitNotice, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
-import { PlayerHome } from './PlayerHome';
+import { HolidayPill, PlayerHome } from './PlayerHome';
 import { type SheetKind, SessionCard, SessionSheets, ShortPanel } from './admin/Sessions';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
@@ -180,7 +180,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
 type TodoItem =
   | { kind: 'courts'; sessions: AdminSessionView[] }
-  | { kind: 'five' | 'short' | 'tell' | 'refunds' | 'checkin'; session: AdminSessionView }
+  | { kind: 'five' | 'short' | 'tell' | 'sixdrop' | 'checkin'; session: AdminSessionView }
   | { kind: 'owed'; rows: OwedRow[] };
 
 interface OwedRow {
@@ -207,14 +207,14 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
       items.push({ kind: 'tell', session: x });
   for (const x of s) if (x.state.flags.checkInsDue) items.push({ kind: 'checkin', session: x });
   if (courts.length) items.push({ kind: 'courts', sessions: courts });
-  for (const x of s) if (x.refunds.some((r) => !r.refunded)) items.push({ kind: 'refunds', session: x });
+  for (const x of s) if (x.sixDropped) items.push({ kind: 'sixdrop', session: x });
   // Who owes you: from the day-before check-in on, and after play.
   const owed: OwedRow[] = [];
   for (const x of s) {
     if (x.state.flags.canceled || nowMs < Date.parse(x.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
     for (const r of x.roster) {
       if (r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) {
-        owed.push({ session: x, playerId: r.playerId, name: r.name, cents: r.shareCents });
+        owed.push({ session: x, playerId: r.playerId, name: r.name, cents: r.shareCents - r.creditCents });
       }
     }
   }
@@ -246,6 +246,7 @@ function HomeTab({ ctx, onViewAs }: { ctx: AdminCtx; onViewAs: () => void }) {
         ))}
       </section>
 
+      <CreditsCard ctx={ctx} />
       <SessionsSection ctx={ctx} />
     </>
   );
@@ -291,6 +292,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 <span className="small muted">
                   {s.state.flags.courtUnavailable ? 'Marked not available' : formatTimeRange(s.startsAt, s.endsAt, tz)}
                 </span>
+                {s.holiday && <HolidayPill name={s.holiday} venueNote />}
               </span>
               <button className="btn small secondary" onClick={() => ctx.open('booking', s.id)}>
                 Enter details
@@ -337,10 +339,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     five: '5 going, need 4 or 6',
     short: 'Short on players',
     tell: "Tell them they're in",
-    refunds:
-      s.confirmedCount === 6 && s.refunds.some((r) => r.reason === 'six')
-        ? `6 going. Everyone paid ${formatPrice(settings.pricePerPlayerCents)}. Refund ${formatPrice(settings.refundCentsWhenSix)} each`
-        : 'Refunds to send',
+    sixdrop: `Was 6, now ${s.confirmedCount}: discount and credits are off`,
     checkin: 'Check-in texts due',
   }[item.kind];
 
@@ -350,8 +349,9 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         <div>
           <h3>{title}</h3>
           <div className="small muted">{when(s, tz)}</div>
+          {s.holiday && <HolidayPill name={s.holiday} venueNote />}
         </div>
-        {item.kind !== 'refunds' && <Chip tone={s.state.tone}>{s.state.text}</Chip>}
+        {item.kind !== 'sixdrop' && <Chip tone={s.state.tone}>{s.state.text}</Chip>}
       </div>
       {item.kind === 'five' && <FivePanel ctx={ctx} s={s} />}
       {item.kind === 'short' && <ShortPanel ctx={ctx} s={s} />}
@@ -360,7 +360,11 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           .filter((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt)
           .map((r) => (
             <div key={r.playerId} className="stack" style={{ gap: 8 }}>
-              <SmsDraft to={r.name} phone={r.phone} body={promotionMessage(r.name, s, tz, r.promotionReason ?? 'spot_opened')} />
+              <SmsDraft
+                to={r.name}
+                phone={r.phone}
+                body={promotionMessage(r.name, s, tz, r.promotionReason ?? 'spot_opened', r.shareCents !== null ? r.shareCents - r.creditCents : undefined)}
+              />
               <button
                 className="btn small secondary"
                 disabled={busy}
@@ -370,14 +374,39 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
               </button>
             </div>
           ))}
-      {item.kind === 'refunds' && (
-        <ul className="rows">
-          {s.refunds.map((r) => (
-            <RefundRow key={r.playerId} ctx={ctx} sessionId={s.id} r={r} />
-          ))}
-        </ul>
+      {item.kind === 'sixdrop' && (
+        <>
+          <p className="small">
+            Everyone is back to {formatPrice(settings.pricePerPlayerCents)}, and nobody earns a credit for this session unless it gets back to 6.
+            Sort out anything already paid or promised by hand:
+          </p>
+          <ul className="rows">
+            {s.roster
+              .filter((r) => r.paymentStatus === 'paid' || r.promotedAt)
+              .map((r) => (
+                <li key={r.playerId}>
+                  <span className="who">
+                    <strong>{r.name}</strong>
+                    <span className="small muted">
+                      {r.status !== 'confirmed'
+                        ? `dropped out${r.paymentStatus === 'paid' ? `, paid ${formatPrice(r.paymentAmountCents ?? 0)}` : ''}`
+                        : r.paymentStatus === 'paid'
+                          ? `paid ${formatPrice(r.paymentAmountCents ?? 0)}, now owes ${formatPrice(r.shareCents ?? 0)}`
+                          : `now owes ${formatPrice((r.shareCents ?? 0) - r.creditCents)}`}
+                    </span>
+                  </span>
+                </li>
+              ))}
+          </ul>
+          <button
+            className="btn small secondary"
+            disabled={busy}
+            onClick={() => act(() => api('POST', `/api/admin/sessions/${s.id}/six-sorted`, {}), 'Marked as sorted')}
+          >
+            Done, I sorted it out
+          </button>
+        </>
       )}
-      {item.kind === 'refunds' && <p className="small muted">Tick each person after you send their refund.</p>}
       {item.kind === 'checkin' && (
         <>
           <p className="small muted">
@@ -396,36 +425,45 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   );
 }
 
-/** One "Refunded" tick. It flips right away and saves in the background. */
-function RefundRow({ ctx, sessionId, r }: { ctx: AdminCtx; sessionId: string; r: RefundDue }) {
+/** Each person's open credit, with "Clear credit" for when the organizer paid them back by hand. */
+function CreditsCard({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
-  const [checked, setChecked] = useState(r.refunded);
+  const [busy, setBusy] = useState(false);
+  if (ctx.d.credits.length === 0) return null;
   return (
-    <li>
-      <label className="check" style={{ flex: 1 }}>
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={async (e) => {
-            const next = e.target.checked;
-            setChecked(next);
-            try {
-              await api('POST', `/api/admin/sessions/${sessionId}/refund`, { playerId: r.playerId, refunded: next });
-              toast(next ? `${r.name} refunded` : `${r.name} not refunded`);
-              await ctx.reload();
-            } catch (err) {
-              setChecked(!next);
-              toast(err instanceof ApiError ? err.message : "Couldn't save. Try again.");
-            }
-          }}
-        />
-        <span>
-          {r.name}
-          {r.reason === 'dropped' && <span className="small muted"> · paid, then dropped out</span>}
-        </span>
-      </label>
-      <span className="amount">{formatPrice(r.amountCents)}</span>
-    </li>
+    <section className="card stack" aria-labelledby="credits-title">
+      <h2 id="credits-title">Credits</h2>
+      <p className="small muted">Earned when 6 played. Each comes off that person's next session automatically.</p>
+      <ul className="rows">
+        {ctx.d.credits.map((c) => (
+          <li key={c.playerId}>
+            <span className="who">
+              <strong>{c.name}</strong>
+              <span className="small muted">{formatPrice(c.balanceCents)} credit</span>
+            </span>
+            <button
+              className="btn small secondary"
+              disabled={busy}
+              aria-label={`Clear ${c.name}'s credit`}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await api('POST', `/api/admin/credits/${c.playerId}/clear`, {});
+                  await ctx.reload();
+                  toast(`${c.name}'s credit cleared`);
+                } catch (err) {
+                  toast(err instanceof ApiError ? err.message : "Couldn't clear it.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Clear credit
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

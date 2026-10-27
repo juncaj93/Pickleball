@@ -235,8 +235,8 @@ async function main() {
       await firstCard(p).getByRole('button', { name: 'Join waitlist' }).click();
       await firstCard(p).getByText('#1 on waitlist').waitFor();
       await firstCard(p).getByText('4 going · 1 more makes 6').waitFor();
-      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await firstCard(p).locator('.going li', { hasText: n }).waitFor();
-      await firstCard(p).getByText('1. Emery').waitFor();
+      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await firstCard(p).locator('.roster li.in', { hasText: n }).waitFor();
+      await firstCard(p).locator('.roster li.waiting', { hasText: 'Emery · waitlist #1' }).waitFor();
       await p.screenshot({ path: path.join(SHOTS, 'player-waitlist.png'), fullPage: true });
     });
 
@@ -285,17 +285,19 @@ async function main() {
       await card.getByText(/Good news, Frankie!/).waitFor();
     });
 
-    await check('6 going: refund card says $14 each, refund $5, with a Refunded checkbox per person', async () => {
-      const card = admin.getByRole('article', { name: /6 going\. Everyone paid \$14\. Refund \$5 each/ });
-      await card.waitFor();
-      assert((await card.getByRole('checkbox').count()) === 6, 'expected six checkboxes');
-      await card.getByRole('checkbox', { name: /Casey/ }).check();
-      await admin.locator('.toast', { hasText: 'Casey refunded' }).waitFor();
-      await admin.reload();
-      assert(await admin.getByRole('article', { name: /Refund \$5 each/ }).getByRole('checkbox', { name: /Casey/ }).isChecked(), 'refund tick not saved');
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-refunds.png'), fullPage: true });
+    await check('6 going: the first four hear about a $5 credit, the last two owe $9 (6-person discount)', async () => {
       await players.Casey.reload();
-      await firstCard(players.Casey).getByText('6 playing, so Robin refunds you $5.').waitFor();
+      await firstCard(players.Casey).getByText("6 are playing. You'll get a $5 credit toward your next session.").waitFor();
+      assert((await firstCard(players.Casey).getByText('6-person discount').count()) === 0, 'first four should not get the discount');
+      await players.Frankie.reload();
+      await firstCard(players.Frankie).getByText('you owe $9').waitFor();
+      await players.Frankie.getByRole('region', { name: 'Payments' }).getByText('6-person discount').waitFor();
+      await players.Frankie.getByRole('region', { name: 'Payments' }).getByRole('link', { name: 'Pay $9 with Venmo' }).waitFor();
+      assert((await firstCard(players.Frankie).getByText(/credit toward your next/).count()) === 0, 'last two should not hear about a credit');
+      await admin.reload();
+      assert((await admin.getByText(/Refund \$5 each/).count()) === 0, 'old refund card still shown');
+      assert((await admin.getByRole('checkbox', { name: /refunded/i }).count()) === 0, 'Refunded checkbox still shown');
+      await players.Frankie.screenshot({ path: path.join(SHOTS, 'player-discount.png'), fullPage: true });
     });
 
     await check('someone drops out of 6: "5 going, need 4 or 6", nothing moves until the organizer picks', async () => {
@@ -308,9 +310,20 @@ async function main() {
       await five.getByRole('button', { name: /Back to 4: move .* to the waitlist/ }).waitFor();
       await five.getByRole('button', { name: 'Invite someone to make 6' }).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-five.png'), fullPage: true });
+      // The discount is gone: everyone is back to $14, and the organizer gets a card to sort it out.
+      const dropped = admin.getByRole('article', { name: /Was 6, now 5: discount and credits are off/ });
+      await dropped.getByText(/now owes \$14/).first().waitFor();
+      await players.Frankie.reload();
+      assert((await firstCard(players.Frankie).getByText('6-person discount').count()) === 0, 'discount text should be gone');
+      assert((await players.Frankie.getByRole('link', { name: 'Pay $14 with Venmo' }).count()) > 0, 'Frankie should be back to $14');
+      await players.Alex.reload();
+      assert((await firstCard(players.Alex).getByText(/credit toward your next session/).count()) === 0, 'credit text should be gone');
       await five.getByRole('button', { name: /Back to 4/ }).click();
       await admin.locator('.toast', { hasText: '4 going' }).waitFor();
       await admin.getByRole('article', { name: /5 going/ }).waitFor({ state: 'detached' });
+      const nowFour = admin.getByRole('article', { name: /Was 6, now 4: discount and credits are off/ });
+      await nowFour.getByRole('button', { name: 'Done, I sorted it out' }).click();
+      await nowFour.waitFor({ state: 'detached' });
     });
 
     console.log('Booking & payments');
@@ -323,12 +336,55 @@ async function main() {
       const sheet = admin.locator('dialog[open]');
       await sheet.getByRole('button', { name: 'Booked', exact: true }).click();
       await sheet.getByLabel(/Reservation number/).fill('R-1042');
+      await sheet.getByText("Your own record. Players never see it, and it's never in a text.").waitFor();
+      assert((await sheet.getByText(/Split four ways/i).count()) === 0, 'old split helper text still shown');
+      await sheet.getByLabel(/Court cost/).fill('48.37');
       await sheet.getByText(/Deadline: .*8:00 AM E[DS]T/).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
       await sheet.getByRole('button', { name: 'Save booking' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       await card.getByText('#R-1042').waitFor();
+      await card.getByText('$48.37 (only you see this)').waitFor();
       await card.getByText(/Cancel by/).waitFor();
+    });
+
+    await check('court cost never shows to players', async () => {
+      for (const name of ['Alex', 'Blair']) {
+        await players[name].reload();
+        await firstCard(players[name]).waitFor();
+        const html = await players[name].content();
+        assert(!html.includes('48.37') && !html.includes('4837'), `court cost leaked to ${name}`);
+      }
+    });
+
+    await check('"Text the group poll" opens Messages with the date, venue and $14, and has Copy', async () => {
+      const card = sessionCards(admin).first();
+      await card.getByRole('button', { name: 'Text the group poll' }).click();
+      const sheet = admin.locator('dialog[open]');
+      const bubble = (await sheet.locator('.bubble').innerText()).trim();
+      assert(
+        /^Pickleball: (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 8:00 to 10:00 PM at Northville Pickleball Club\. \$14 each\. In or out\?$/.test(bubble),
+        `poll text was: ${bubble}`,
+      );
+      assert(!bubble.includes('48'), 'court cost in the poll');
+      const href = await sheet.getByRole('link', { name: 'Open in Messages' }).getAttribute('href');
+      assert(href.startsWith('sms:&body=Pickleball'), `bad sms link ${href}`);
+      await sheet.getByRole('button', { name: 'Copy message' }).click();
+      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
+      assert((await admin.evaluate(() => navigator.clipboard.readText())) === bubble, 'clipboard should hold the poll');
+      await admin.keyboard.press('Escape');
+    });
+
+    await check('holiday pill shows on sessions that fall on one (Election Day, Nov 3)', async () => {
+      if (Date.now() > Date.parse('2026-11-04T03:00:00Z')) return; // only while Nov 3, 2026 is still upcoming
+      await players.Alex.reload();
+      const card = players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' });
+      await card.locator('.holiday', { hasText: 'Election Day' }).waitFor();
+      const color = await card.locator('.holiday').evaluate((el) => getComputedStyle(el).color);
+      const ok = await players.Alex.evaluate(() => getComputedStyle(document.querySelector('.tone-ok') || document.body).color);
+      assert(color !== ok, 'holiday pill should not use a status color');
+      await admin.reload();
+      await admin.locator('.holiday', { hasText: 'Election Day · check venue hours' }).first().waitFor();
     });
 
     await check('everyone confirmed owes a flat $14; mark paid updates only that player', async () => {
@@ -458,6 +514,93 @@ async function main() {
       assert((await p.getByRole('region', { name: /Want in on/ }).count()) === 0, 'occasional player got a suggestion');
     });
 
+    console.log('Roster, names, home screen');
+    await check('who\'s going: signed up = solid pill with a check, everyone else faded', async () => {
+      await players.Alex.reload();
+      const card = firstCard(players.Alex);
+      const pill = card.locator('.roster li.in', { hasText: 'Alex' });
+      await pill.waitFor();
+      assert((await pill.innerText()).startsWith('✓'), 'signed-up name should have a check mark');
+      const out = card.locator('.roster li.out').first();
+      await out.waitFor();
+      const styles = await players.Alex.evaluate(() => {
+        const css = (sel) => getComputedStyle(document.querySelector(sel));
+        const probe = document.createElement('span');
+        probe.className = 'chip tone-ok';
+        document.body.appendChild(probe);
+        const green = getComputedStyle(probe).backgroundColor;
+        probe.className = 'chip tone-warn';
+        const amber = getComputedStyle(probe).backgroundColor;
+        probe.className = 'chip tone-danger';
+        const red = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return { inBg: css('.roster li.in').backgroundColor, outBg: css('.roster li.out').backgroundColor, outColor: css('.roster li.out').color, inColor: css('.roster li.in').color, green, amber, red };
+      });
+      assert(![styles.green, styles.amber, styles.red].includes(styles.inBg), `pill uses a status color: ${styles.inBg}`);
+      assert(styles.outBg === 'rgba(0, 0, 0, 0)', 'not-signed-up names should be plain text, not pills');
+      assert(styles.outColor !== styles.inBg, 'faded names should look different');
+    });
+
+    await check('first visit shows the Add to Home Screen tip once; Settings has the steps', async () => {
+      const p = await newPage();
+      await p.goto(playerLink);
+      await p.getByRole('button', { name: 'Alex', exact: true }).click();
+      const tip = p.getByRole('note', { name: 'Add to Home Screen' });
+      await tip.getByText('Tap the Share button.').waitFor();
+      await tip.getByText('Tap Add to Home Screen.').waitFor();
+      await tip.getByText('Tap Add.').waitFor();
+      await tip.getByRole('button', { name: 'Dismiss' }).click();
+      await p.reload();
+      await p.locator('article').first().waitFor();
+      assert((await p.getByRole('note', { name: 'Add to Home Screen' }).count()) === 0, 'tip came back');
+      const manifest = await (await p.request.get(BASE + '/manifest.webmanifest')).json();
+      assert(manifest.display === 'standalone', 'should open full screen from the icon');
+      assert(!manifest.start_url, 'no start_url, so each player keeps their own link');
+      assert((await p.locator('link[rel="apple-touch-icon"]').getAttribute('href')) === '/apple-touch-icon.png', 'icon spot missing');
+      await tab(admin, 'Settings').click();
+      await admin.getByRole('heading', { name: 'Add to Home Screen' }).waitFor();
+      await tab(admin, 'Home').click();
+    });
+
+    await check('"Add my name": duplicate check, then preferred days, then Welcome', async () => {
+      const p = await newPage();
+      await p.goto(playerLink);
+      await p.getByRole('button', { name: 'Add my name' }).click();
+      await p.getByLabel('Your name').fill('ryan');
+      await p.getByRole('button', { name: 'Continue' }).click();
+      await p.getByRole('heading', { name: 'Is this you?' }).waitFor();
+      await p.getByRole('button', { name: 'Ryan', exact: true }).waitFor();
+      await p.getByRole('button', { name: "No, I'm new" }).click();
+      await p.getByText(/Someone already uses "ryan"/).waitFor();
+      await p.getByLabel('Your name').fill('Morgan');
+      await p.getByRole('button', { name: 'Continue' }).click();
+      await p.getByRole('heading', { name: 'Any preferred days?' }).waitFor();
+      for (const b of ['Tuesday', 'Thursday', 'Both', 'Skip']) await p.getByRole('button', { name: b, exact: true }).waitFor();
+      await p.getByRole('button', { name: 'Both', exact: true }).click();
+      await p.getByRole('heading', { name: 'Welcome, Morgan' }).waitFor();
+      await p.getByRole('button', { name: 'Not you?' }).waitFor();
+      await p.screenshot({ path: path.join(SHOTS, 'player-added-name.png'), fullPage: true });
+      await tab(admin, 'Players').click();
+      await admin.reload();
+      await tab(admin, 'Players').click();
+      const row = admin.locator('li', { hasText: 'Morgan' });
+      await row.locator('.new-tag', { hasText: 'New' }).waitFor();
+      await row.getByText('Tue & Thu').waitFor();
+    });
+
+    await check('removing a name: deleted if no history, hidden if they have some', async () => {
+      await admin.getByRole('button', { name: 'Edit Morgan' }).click();
+      await admin.locator('dialog[open]').getByRole('button', { name: 'Remove from list' }).click();
+      await admin.locator('dialog[open]', { hasText: 'Remove Morgan?' }).getByRole('button', { name: 'Remove', exact: true }).click();
+      await admin.locator('.toast', { hasText: 'Morgan removed' }).waitFor();
+      await admin.locator('li', { hasText: 'Morgan' }).waitFor({ state: 'detached' });
+      await admin.getByRole('button', { name: 'Edit Ryan' }).click();
+      await admin.locator('dialog[open]').getByRole('button', { name: 'Remove from list' }).click();
+      await admin.locator('dialog[open]', { hasText: 'Remove Ryan?' }).getByRole('button', { name: 'Remove', exact: true }).click();
+      await admin.locator('.toast', { hasText: /Ryan (removed|hidden)/ }).waitFor();
+      await tab(admin, 'Home').click();
+    });
+
     console.log('View as');
     await check('"View as..." shows the player\'s screen with a banner, and taps really happen', async () => {
       await admin.reload();
@@ -551,6 +694,36 @@ async function main() {
       await card.getByText('Canceled', { exact: true }).first().waitFor();
     });
 
+    console.log('First session date');
+    await check('Settings "First session" hides earlier sessions from Home and players', async () => {
+      await tab(admin, 'Settings').click();
+      const field = admin.getByLabel('First session');
+      // A date one week after the first upcoming session.
+      await tab(admin, 'Home').click();
+      const firstShown = await sessionCards(admin).first().locator('h2').innerText();
+      await tab(admin, 'Settings').click();
+      const iso = await admin.evaluate(() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 9);
+        return d.toISOString().slice(0, 10);
+      });
+      await field.fill(iso);
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      await tab(admin, 'Home').click();
+      const nowFirst = await sessionCards(admin).first().locator('h2').innerText();
+      assert(nowFirst !== firstShown, `Home still starts at ${firstShown}`);
+      await players.Alex.reload();
+      const playerFirst = await firstCard(players.Alex).locator('h2').innerText();
+      assert(!playerFirst.includes(firstShown.split(', ')[1]), `players still see ${firstShown}`);
+      // Put it back for the rest of the checks.
+      await tab(admin, 'Settings').click();
+      await admin.getByLabel('First session').fill('');
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      await tab(admin, 'Home').click();
+    });
+
     console.log('Accessibility & layout');
     await check('every button and link has an accessible name', async () => {
       for (const p of [admin, players.Alex]) {
@@ -611,6 +784,40 @@ async function main() {
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(overflow <= 0, `player home overflows by ${overflow}px`);
         await p.screenshot({ path: path.join(SHOTS, `player-${width}-${scheme}.png`), fullPage: false });
+      });
+    }
+
+    for (const [width, scheme] of [[360, 'light'], [375, 'dark'], [390, 'dark'], [430, 'light']]) {
+      await check(`booking form, reschedule and Settings date fields fit at ${width}px (${scheme})`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        const fits = async (what) => {
+          const r = await p.evaluate(() => {
+            const vw = window.innerWidth;
+            const fields = [...document.querySelectorAll('dialog[open] input, main input')].filter((el) => el.offsetParent !== null);
+            const worst = Math.max(0, ...fields.map((el) => el.getBoundingClientRect().right - vw));
+            const d = document.querySelector('dialog[open]');
+            const dialogOverflow = d ? d.scrollWidth - d.clientWidth : 0;
+            return { worst, dialogOverflow, page: document.documentElement.scrollWidth - vw };
+          });
+          assert(r.worst <= 0 && r.dialogOverflow <= 0 && r.page <= 0, `${what} runs past the edge: ${JSON.stringify(r)}`);
+        };
+        await p.goto(`${BASE}/admin`);
+        const card = sessionCards(p).first();
+        await card.getByRole('button', { name: 'Edit booking' }).click();
+        await p.locator('dialog[open]').getByLabel(/Cancellation deadline/).waitFor();
+        await fits('booking form');
+        await p.screenshot({ path: path.join(SHOTS, `booking-${width}-${scheme}.png`) });
+        await p.keyboard.press('Escape');
+        await card.getByRole('button', { name: 'Reschedule' }).first().click();
+        await p.locator('dialog[open]').getByLabel('Date').waitFor();
+        await fits('reschedule form');
+        await p.keyboard.press('Escape');
+        await tab(p, 'Settings').click();
+        await p.getByLabel('First session').waitFor();
+        await fits('Settings');
+        await p.close();
       });
     }
 

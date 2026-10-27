@@ -4,7 +4,7 @@ export interface GroupSettings {
   checkInHours: number; // day-before check-in: texts and "short on players" start this long before play
   defaultDeadlineHours: number; // each session's cancellation deadline starts this many hours before play
   pricePerPlayerCents: number; // flat price each confirmed player pays, whether 4 or 6 play
-  refundCentsWhenSix: number; // refunded to each player when 6 play
+  creditCentsWhenSix: number; // credit each of the first four earns when 6 play; the last two pay price minus this
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
@@ -13,7 +13,7 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   checkInHours: 24,
   defaultDeadlineHours: 12,
   pricePerPlayerCents: 1400,
-  refundCentsWhenSix: 500,
+  creditCentsWhenSix: 500,
 };
 
 const LIMITS: Record<keyof GroupSettings, [number, number]> = {
@@ -22,7 +22,7 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   checkInHours: [1, 72],
   defaultDeadlineHours: [0, 72],
   pricePerPlayerCents: [0, 100_00],
-  refundCentsWhenSix: [0, 100_00],
+  creditCentsWhenSix: [0, 100_00],
 };
 
 export const SETTING_LIMITS = LIMITS;
@@ -32,6 +32,8 @@ export function normalizeSettings(input: unknown): GroupSettings {
   const src = { ...((input && typeof input === 'object' ? input : {}) as Record<string, unknown>) };
   // Older saves called the check-in window "confirmationLeadHours".
   if (src.checkInHours === undefined && typeof src.confirmationLeadHours === 'number') src.checkInHours = src.confirmationLeadHours;
+  // Part 2 called the credit a refund.
+  if (src.creditCentsWhenSix === undefined && typeof src.refundCentsWhenSix === 'number') src.creditCentsWhenSix = src.refundCentsWhenSix;
   const out = { ...DEFAULT_SETTINGS };
   for (const key of Object.keys(LIMITS) as (keyof GroupSettings)[]) {
     const v = src[key];

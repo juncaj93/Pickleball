@@ -4,9 +4,10 @@ import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../..
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
+import { HomeScreenSteps } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
 
-type MoneyKey = 'pricePerPlayerCents' | 'refundCentsWhenSix';
+type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix';
 type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
@@ -49,8 +50,11 @@ const ACTION_TEXT: Record<string, string> = {
   player_updated: 'Player edited',
   settings_updated: 'Settings changed',
   session_rescheduled: 'Session moved',
-  marked_refunded: 'Marked refunded',
-  unmarked_refunded: 'Unmarked refunded',
+  credit_cleared: 'Credit cleared',
+  six_drop_sorted: 'Sorted out the drop below 6',
+  player_self_added: 'Added their own name',
+  player_hidden: 'Name hidden',
+  player_deleted: 'Name deleted',
   as_player_join: 'As player: joined',
   as_player_withdraw: 'As player: dropped out',
   as_player_check_in: 'As player: checked in',
@@ -77,12 +81,13 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   }));
   const [money, setMoney] = useState<Record<MoneyKey, string>>(() => ({
     pricePerPlayerCents: dollars(g.settings.pricePerPlayerCents),
-    refundCentsWhenSix: dollars(g.settings.refundCentsWhenSix),
+    creditCentsWhenSix: dollars(g.settings.creditCentsWhenSix),
   }));
   const [numErrors, setNumErrors] = useState<Partial<Record<keyof GroupSettings, string>>>({});
   const [organizerName, setOrganizerName] = useState(g.organizerName ?? '');
   const [venueName, setVenueName] = useState(g.venueName ?? '');
   const [venueAddress, setVenueAddress] = useState(g.venueAddress ?? '');
+  const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -118,6 +123,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         organizerName: organizerName || null,
         venueName: venueName || null,
         venueAddress: venueAddress || null,
+        firstSessionDate: firstDate || null,
       });
       toast('Settings saved');
       await ctx.reload();
@@ -174,10 +180,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         </label>
         <MoneyField label="Price per player" value={money.pricePerPlayerCents} onChange={(v) => setMoney((m) => ({ ...m, pricePerPlayerCents: v }))} error={numErrors.pricePerPlayerCents} />
         <MoneyField
-          label="Refund per person when 6 play"
-          value={money.refundCentsWhenSix}
-          onChange={(v) => setMoney((m) => ({ ...m, refundCentsWhenSix: v }))}
-          error={numErrors.refundCentsWhenSix}
+          label="Credit per person when 6 play"
+          value={money.creditCentsWhenSix}
+          onChange={(v) => setMoney((m) => ({ ...m, creditCentsWhenSix: v }))}
+          error={numErrors.creditCentsWhenSix}
         />
         <label className="field">
           Venue name
@@ -191,6 +197,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <p className="small muted">
           Time zone: {TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz}. Sessions are Tuesdays and Thursdays, 8:00–10:00 PM.
         </p>
+        <label className="field">
+          First session
+          <span className="hint">Nothing before this date shows to players or on your Home.</span>
+          <input type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} />
+        </label>
         <NumberField
           label={MAIN_SETTING.label}
           hint={MAIN_SETTING.hint}
@@ -244,6 +255,13 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <p className="small muted">System follows your phone's setting. Saved on this phone only.</p>
       </section>
 
+      <section className="card stack" aria-labelledby="a2hs-title">
+        <h2 id="a2hs-title">Add to Home Screen</h2>
+        <p className="small muted">On iPhone, in Safari:</p>
+        <HomeScreenSteps />
+        <p className="small muted">The icon then opens the site full screen, like an app.</p>
+      </section>
+
       <form className="card stack" onSubmit={changePin}>
         <h2>Change PIN</h2>
         <label className="field">
@@ -275,6 +293,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <li>Alerts only appear when you open this page. Nothing pings your phone in the background.</li>
           <li>Times are shown in Eastern time.</li>
           <li>Payments are marked by you after you check Venmo. Nothing connects to Venmo or a bank.</li>
+          <li>When 6 play, the last two pay the 6-person discount and the first four each earn a credit toward their next session.</li>
           <li>One court: exactly 4 or 6 players. The 5th waits; a 6th brings both in. If 6 drops to 5, nothing moves until you choose.</li>
           <li>The PIN and private link are light protection for a friend group, not bank-grade security.</li>
         </ul>

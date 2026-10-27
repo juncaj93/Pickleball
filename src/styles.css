@@ -21,6 +21,8 @@
   --info-bg: #e2ebf8;
   --muted-fg: #525a55;
   --muted-bg: #eceae3;
+  --holiday-fg: #5b2a86;
+  --holiday-bg: #efe6f8;
   --shadow: 0 1px 2px rgb(22 35 28 / 6%), 0 4px 14px rgb(22 35 28 / 5%);
   --radius: 16px;
   --display: 'Bricolage Grotesque Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
@@ -53,6 +55,8 @@
     --info-bg: #162943;
     --muted-fg: #b3b9b5;
     --muted-bg: #252c28;
+    --holiday-fg: #d9bdf5;
+    --holiday-bg: #2e2140;
     --shadow: 0 1px 2px rgb(0 0 0 / 40%);
     color-scheme: dark;
   }
@@ -80,6 +84,8 @@
   --info-bg: #162943;
   --muted-fg: #b3b9b5;
   --muted-bg: #252c28;
+  --holiday-fg: #d9bdf5;
+  --holiday-bg: #2e2140;
   --shadow: 0 1px 2px rgb(0 0 0 / 40%);
   color-scheme: dark;
 }
@@ -1021,4 +1027,99 @@ details.advanced[open] > summary {
 
 .money-input input {
   padding-left: 30px;
+}
+
+/* ---------- Part 3 ---------- */
+
+/* Holiday pill: its own color so it never reads as a status. */
+.holiday {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: var(--holiday-fg);
+  background: var(--holiday-bg);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+/* Who's going: signed up = solid neutral pill with a check, waiting =
+   outlined, everyone else = faded plain text. No green, amber, or red. */
+.roster {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+}
+
+.roster li {
+  font-size: 0.92rem;
+}
+
+.roster li.in {
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-weight: 650;
+}
+
+.roster li.waiting {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1.5px solid var(--ink);
+  font-weight: 600;
+}
+
+.roster li.out {
+  color: var(--ink-2);
+  padding: 6px 4px;
+}
+
+.roster li.me {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.new-tag {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--ink);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: 2px;
+}
+
+.steps {
+  margin: 4px 0 0;
+  padding-left: 20px;
+}
+
+/* iPhone Safari gives date and time inputs a built-in width that can run
+   past the screen edge. Let them shrink to the box like any text field. */
+input[type='date'],
+input[type='time'],
+input[type='datetime-local'] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  text-align: left;
+}
+
+input[type='date']::-webkit-date-and-time-value,
+input[type='time']::-webkit-date-and-time-value,
+input[type='datetime-local']::-webkit-date-and-time-value {
+  text-align: left;
+  margin: 0;
+}
+
+label.field {
+  min-width: 0;
 }

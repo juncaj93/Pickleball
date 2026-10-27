@@ -1,4 +1,6 @@
+import { allocateCredits, type Due, type OpenCredit, type SeatPrice, seatPrices } from '../shared/pricing';
 import { planSessions } from '../shared/schedule';
+import { zonedTimeToUtc } from '../shared/time';
 import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
@@ -17,6 +19,7 @@ export interface GroupRow {
   organizer_name: string | null;
   venue_name: string | null;
   venue_address: string | null;
+  first_session_date: string | null;
 }
 
 export interface PlayerRow {
@@ -29,6 +32,8 @@ export interface PlayerRow {
   can_receive_substitute_invites: number;
   sort_order: number;
   usual_days: string;
+  self_added_at: string | null;
+  is_new: number;
 }
 
 export interface SessionRow {
@@ -48,6 +53,9 @@ export interface SessionRow {
   canceled_at: string | null;
   canceled_by: string | null;
   planned_starts_at: string | null;
+  six_reached_at: string | null;
+  six_drop_resolved_at: string | null;
+  credits_issued_at: string | null;
 }
 
 export interface RosterRow {
@@ -105,7 +113,8 @@ export async function getSession(db: D1Database, groupId: string, sessionId: str
  */
 export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
   const settings = settingsOf(group);
-  const planned = planSessions(nowMs, group.timezone, settings.horizonWeeks);
+  const firstStart = visibleFrom(group);
+  const planned = planSessions(nowMs, group.timezone, settings.horizonWeeks).filter((p) => p.startsAt >= firstStart);
   if (planned.length === 0) return 0;
   const { results } = await db
     .prepare('SELECT planned_starts_at FROM sessions WHERE group_id = ? AND planned_starts_at >= ?')
@@ -133,24 +142,39 @@ export function defaultDeadline(startsAtIso: string, settings: GroupSettings): s
   return new Date(Date.parse(startsAtIso) - settings.defaultDeadlineHours * 3600_000).toISOString();
 }
 
-export async function loadSessions(db: D1Database, groupId: string, endsAfterIso: string): Promise<SessionRow[]> {
+/**
+ * Midnight (group time zone) of the first session date, as UTC. Sessions
+ * starting earlier are never generated or shown. '0000' when no date is set.
+ */
+export function visibleFrom(group: Pick<GroupRow, 'first_session_date' | 'timezone'>): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(group.first_session_date ?? '');
+  if (!m) return '0000';
+  return new Date(zonedTimeToUtc(Number(m[1]), Number(m[2]), Number(m[3]), 0, 0, group.timezone)).toISOString();
+}
+
+export async function loadSessions(db: D1Database, groupId: string, endsAfterIso: string, startsFromIso = '0000'): Promise<SessionRow[]> {
   const { results } = await db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? ORDER BY starts_at')
-    .bind(groupId, endsAfterIso)
+    .prepare('SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? AND starts_at >= ? ORDER BY starts_at')
+    .bind(groupId, endsAfterIso, startsFromIso)
     .all<SessionRow>();
   return results;
 }
 
-export async function loadRosters(db: D1Database, groupId: string, endsAfterIso: string): Promise<Map<string, RosterRow[]>> {
+export async function loadRosters(
+  db: D1Database,
+  groupId: string,
+  endsAfterIso: string,
+  startsFromIso = '0000',
+): Promise<Map<string, RosterRow[]>> {
   const { results } = await db
     .prepare(
       `SELECT sp.*, p.display_name, p.phone_number
        FROM session_players sp
        JOIN sessions s ON s.id = sp.session_id
        JOIN players p ON p.id = sp.player_id
-       WHERE s.group_id = ? AND s.ends_at > ?`,
+       WHERE s.group_id = ? AND s.ends_at > ? AND s.starts_at >= ?`,
     )
-    .bind(groupId, endsAfterIso)
+    .bind(groupId, endsAfterIso, startsFromIso)
     .all<RosterRow>();
   const map = new Map<string, RosterRow[]>();
   for (const r of results) {
@@ -187,14 +211,128 @@ export function waitlistOf(roster: RosterRow[]): RosterRow[] {
 }
 
 /**
- * What each confirmed player owes: the same flat price whether 4 or 6 play.
- * Canceled sessions owe nothing.
+ * Each confirmed player's price for a session, before any credit: the flat
+ * price, or price minus credit for the last two when exactly 6 are in.
  */
+export function pricesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, SeatPrice> {
+  return seatPrices(
+    confirmedOf(roster).map((r) => ({ playerId: r.player_id, seq: r.confirm_seq ?? 0 })),
+    settings,
+    session.status === 'canceled',
+  );
+}
+
 export function sharesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, number> {
-  const shares = new Map<string, number>();
-  if (session.status === 'canceled') return shares;
-  for (const r of confirmedOf(roster)) shares.set(r.player_id, settings.pricePerPlayerCents);
-  return shares;
+  return new Map([...pricesFor(session, roster, settings)].map(([id, p]) => [id, p.cents]));
+}
+
+// ---------- Credits ----------
+
+export interface CreditRow {
+  id: string;
+  player_id: string;
+  earned_session_id: string;
+  amount_cents: number;
+  created_at: string;
+  used_session_id: string | null;
+  cleared_at: string | null;
+  earned_ends_at: string;
+}
+
+export async function loadCredits(db: D1Database, groupId: string): Promise<CreditRow[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT c.*, s.ends_at AS earned_ends_at FROM credits c JOIN sessions s ON s.id = c.earned_session_id
+       WHERE c.group_id = ? ORDER BY c.created_at`,
+    )
+    .bind(groupId)
+    .all<CreditRow>();
+  return results;
+}
+
+/** Credits not yet used on a session and not cleared by the organizer. */
+export function openCredits(credits: CreditRow[]): OpenCredit[] {
+  return credits
+    .filter((c) => !c.used_session_id && !c.cleared_at)
+    .map((c) => ({ id: c.id, playerId: c.player_id, amountCents: c.amount_cents, earnedAfter: c.earned_ends_at }));
+}
+
+/**
+ * After a session ends with exactly 6 playing, each of the first four earns
+ * the credit. Runs on page loads like ensureSessions; each session is only
+ * looked at once, and the unique (session, player) key blocks doubles.
+ */
+export async function issueCredits(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
+  const settings = settingsOf(group);
+  const nowIso = new Date(nowMs).toISOString();
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM sessions WHERE group_id = ? AND credits_issued_at IS NULL AND ends_at <= ? AND starts_at >= ?`,
+    )
+    .bind(group.id, nowIso, visibleFrom(group))
+    .all<SessionRow>();
+  let issued = 0;
+  for (const s of results) {
+    const stmts = [];
+    if (s.status !== 'canceled' && settings.creditCentsWhenSix > 0) {
+      for (const [playerId, price] of pricesFor(s, await loadRoster(db, s.id), settings)) {
+        if (!price.creditComing) continue;
+        stmts.push(
+          db
+            .prepare(
+              `INSERT OR IGNORE INTO credits (id, group_id, player_id, earned_session_id, amount_cents, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+            )
+            .bind(newId(), group.id, playerId, s.id, settings.creditCentsWhenSix, nowIso),
+        );
+        issued++;
+      }
+    }
+    stmts.push(db.prepare('UPDATE sessions SET credits_issued_at = ? WHERE id = ? AND credits_issued_at IS NULL').bind(nowIso, s.id));
+    await db.batch(stmts);
+  }
+  return issued;
+}
+
+/**
+ * Remember when a session reaches 6 (the discount was shown), so a later
+ * drop below 6 can show the organizer a "sort it out" card.
+ */
+export async function syncSix(db: D1Database, sessionId: string, nowIso: string): Promise<void> {
+  const six = `(SELECT COUNT(*) FROM session_players WHERE session_id = ?2 AND status = 'confirmed') = 6`;
+  await db
+    .prepare(
+      `UPDATE sessions SET
+         six_reached_at = CASE WHEN ${six} THEN COALESCE(six_reached_at, ?1) ELSE six_reached_at END,
+         six_drop_resolved_at = CASE WHEN ${six} THEN NULL ELSE six_drop_resolved_at END
+       WHERE id = ?2`,
+    )
+    .bind(nowIso, sessionId)
+    .run();
+}
+
+/**
+ * Which credits come off which unpaid seats, keyed `${sessionId}:${playerId}`.
+ * Paid seats keep whatever was used when they were marked paid.
+ */
+export function creditPlan(
+  sessions: SessionRow[],
+  rosters: Map<string, RosterRow[]>,
+  credits: CreditRow[],
+  settings: GroupSettings,
+): Map<string, { cents: number; ids: string[] }> {
+  const dues: Due[] = [];
+  for (const s of sessions) {
+    const roster = rosters.get(s.id) ?? [];
+    const prices = pricesFor(s, roster, settings);
+    for (const r of roster) {
+      const price = prices.get(r.player_id);
+      if (price && r.status === 'confirmed' && r.payment_status === 'unpaid') {
+        dues.push({ sessionId: s.id, playerId: r.player_id, startsAt: s.starts_at, cents: price.cents });
+      }
+    }
+  }
+  return allocateCredits(openCredits(credits), dues);
 }
 
 /** Weekday numbers stored as '2,4'. */
