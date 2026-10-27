@@ -3600,10 +3600,10 @@ async function main() {
         const p = await ctx.newPage();
         await p.goto(playerLink);
         await p.getByRole('button', { name: 'Alex', exact: true }).click();
-        await p.locator('.schedule .spots li:not(.open)').first().waitFor();
+        await p.locator('.schedule .dot.in, .schedule .dot.me').first().waitFor();
         const out = await p.evaluate(() => {
           const ms = (el, pseudo) => parseFloat(getComputedStyle(el, pseudo).animationDuration) * 1000;
-          const spot = document.querySelector('.schedule .spots li:not(.open)');
+          const spot = document.querySelector('.schedule .dot.in, .schedule .dot.me');
           const btn = document.querySelector('.schedule .sched-btn');
           return { spot: getComputedStyle(spot).animationName, spotMs: ms(spot), press: getComputedStyle(btn).transitionDuration };
         });
