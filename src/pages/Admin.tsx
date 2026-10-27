@@ -1,4 +1,4 @@
-import { Fragment, type FormEvent, type ReactElement, useState } from 'react';
+import { Fragment, type FormEvent, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { lastCallMessage, promotionMessage, sessionLink, spotOpenMessage } from '../../shared/messages';
 import { DayBeforeTexts } from './admin/Texts';
@@ -95,8 +95,8 @@ function Login({ onDone }: { onDone: () => Promise<void> }) {
 
 const TABS: { id: Tab; label: string; Icon: () => ReactElement }[] = [
   { id: 'home', label: 'Home', Icon: HomeIcon },
-  { id: 'money', label: 'Money', Icon: DollarIcon },
   { id: 'players', label: 'Players', Icon: PeopleIcon },
+  { id: 'money', label: 'Money', Icon: DollarIcon },
   { id: 'settings', label: 'Settings', Icon: GearIcon },
 ];
 
@@ -107,6 +107,29 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
   const [pickViewAs, setPickViewAs] = useState(false);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
   const todoCount = homeBadgeCount(d);
+  // Each tab keeps its own scroll spot. Tapping the tab you're on starts it
+  // fresh instead: closed panels and sheets, back at the top. The data and
+  // Settings (with anything typed there) are kept.
+  const scrollOf = useRef<Partial<Record<Tab, number>>>({});
+  const [fresh, setFresh] = useState(0);
+  const restoreTo = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (restoreTo.current === null) return;
+    window.scrollTo(0, restoreTo.current);
+    restoreTo.current = null;
+  }, [tab]);
+  function pickTab(id: Tab) {
+    if (id === tab) {
+      setSheet(null);
+      if (id !== 'settings') setFresh((n) => n + 1);
+      const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: smooth ? 'smooth' : 'auto' });
+      return;
+    }
+    scrollOf.current[tab] = window.scrollY;
+    restoreTo.current = scrollOf.current[id] ?? 0;
+    setTab(id);
+  }
 
   if (viewing) {
     return (
@@ -135,9 +158,9 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
         }
       />
       <main className="page has-tabs stack-lg">
-        {tab === 'home' && <HomeTab ctx={ctx} />}
-        {tab === 'money' && <MoneyTab ctx={ctx} />}
-        {tab === 'players' && <PlayersTab ctx={ctx} />}
+        {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
+        {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
+        {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
         {tab === 'settings' && <SettingsTab ctx={ctx} />}
       </main>
       <nav className="tabbar" aria-label="Organizer sections">
@@ -146,10 +169,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
             <li key={id}>
               <button
                 aria-current={tab === id ? 'page' : undefined}
-                onClick={() => {
-                  setTab(id);
-                  window.scrollTo(0, 0);
-                }}
+                onClick={() => pickTab(id)}
               >
                 <Icon />
                 {label}
