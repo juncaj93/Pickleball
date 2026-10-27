@@ -51,7 +51,11 @@ const sessionCards = (page) => page.locator('section[aria-labelledby="sessions-t
 /** Open a session card's "More" buttons (Money, Texts, Reschedule, Invite, Cancel). */
 async function more(card) {
   const btn = card.getByRole('button', { name: 'More', exact: true });
-  if (await btn.count()) await btn.click();
+  const less = card.getByRole('button', { name: 'Less', exact: true });
+  // Wait until the card has drawn, then open it unless it's already open.
+  await btn.or(less).first().waitFor();
+  if (await btn.isVisible()) await btn.click();
+  await less.waitFor();
 }
 
 async function waitForServer() {
