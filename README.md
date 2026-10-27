@@ -30,7 +30,10 @@ lines, and each session appears once:
 
 - **Court booked**: solid green left edge, a check, and the cancel-by deadline
 - **Court not booked**: amber dashed border and a banner with **I booked it**
-  (one tap; the deadline starts at 12 hours before play)
+  (one tap; the deadline starts at 12 hours before play), only once the
+  booking window is open (14 days before play)
+- further out: a quiet gray "Booking opens Tue, Nov 17" (I booked it is
+  under More if you book early)
 - **On the court waitlist**: blue banner with **Court opened** / **Didn't open**
 - canceled or no court: gray, with the reason
 - players: "2 of 4 in" with a dot per spot (6 dots once 5 or more are in),
@@ -38,13 +41,14 @@ lines, and each session appears once:
 - short on players (from the day-before check-in): Invite people / Reschedule /
   Cancel / Keep as is, right on that card
 
-Above the cards, a summary line ("2 booked, 1 needs a court, 1 on the
-waitlist") jumps to the first matching card, and **Book on CourtReserve** sits
-next to the Sessions title. Reservation number and court cost are optional,
+**Book on CourtReserve** sits next to the Sessions title. Sessions are grouped
+by calendar week. The red number on the Home tab counts Needs attention items
+plus courts to book inside the booking window. Today's date and **View as…**
+sit at the top right of the green header. Reservation number and court cost are optional,
 under More details in Edit booking.
 
 Home starts with a short "Needs attention" list for things that aren't one
-session's court:
+session's court (hidden when there's nothing in it):
 
 - the **day-before** card (from 24 hours before play) and the **last-call** card
   (from 13 hours before), each with Text the group, Copy message, and Done, until
@@ -57,7 +61,7 @@ session's court:
 - who owes you, with one-tap **Mark paid**
 - check-in texts that are due
 
-**View as...** on Home shows exactly what any player sees, with a "Viewing as
+**View as…** in the header shows exactly what any player sees, with a "Viewing as
 Ryan" banner and Exit. Taps there really happen for that player, and the log
 records that the organizer did it.
 

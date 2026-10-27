@@ -56,6 +56,8 @@ export function playerSessionView(
     sixPlaying: six,
     holiday: holidayFor(session.starts_at, tz),
     courtState: session.court_state,
+    bookingOpen: nowMs >= bookingOpensMs(session.starts_at, settings),
+    bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings)).toISOString(),
     past: nowMs >= Date.parse(session.ends_at),
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
@@ -77,6 +79,11 @@ export function playerSessionView(
         }
       : null,
   };
+}
+
+/** The booking window opens this many days before play (14 by default). */
+function bookingOpensMs(startsAt: string, settings: GroupSettings): number {
+  return Date.parse(startsAt) - settings.bookingLeadDays * 24 * 3600_000;
 }
 
 export function adminPlayerView(p: PlayerRow): AdminPlayer {
@@ -179,6 +186,7 @@ export function adminSessionView(
     payableCount: payable,
     courtCostCents: session.court_cost_cents,
     courtState: session.court_state,
+    bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings)).toISOString(),
     shownEarly: !!session.shown_early,
     holiday: holidayFor(session.starts_at, tz),
     holidayHoursOk: !!session.holiday_hours_ok_at,

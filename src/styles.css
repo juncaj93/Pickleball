@@ -221,8 +221,39 @@ a {
 }
 
 .topbar h1 {
-  margin-top: 6px;
   color: #fff;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.topbar-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+/* Small light button on the green band, e.g. "View as…". */
+.topbar-btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid rgb(255 255 255 / 45%);
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.topbar-btn:hover {
+  background: rgb(255 255 255 / 12%);
+}
+.topbar-btn:focus-visible {
+  outline: 3px solid var(--ball);
+  outline-offset: 2px;
 }
 
 .topbar .sub {
@@ -1490,7 +1521,8 @@ label.field {
 .scard.court-off {
   background: var(--surface-2);
 }
-.court-off .court-line .court-status {
+.court-off .court-line .court-status,
+.court-later .court-line .court-status {
   color: var(--muted-fg);
 }
 
@@ -1524,18 +1556,6 @@ label.field {
   color: var(--ink-2);
 }
 
-/* "2 booked, 1 needs a court, 1 on the waitlist" */
-.court-summary {
-  margin: 0;
-  font-size: 0.98rem;
-}
-.court-summary .link-btn {
-  font-size: inherit;
-  font-weight: 650;
-  color: var(--ink);
-  padding: 10px 0;
-}
-
 /* Player rows use the same words and icons. */
 .sched-status.court-booked .court-status {
   color: var(--ok-fg);
@@ -1546,7 +1566,8 @@ label.field {
 .sched-status.court-waitlist .court-status {
   color: var(--info-fg);
 }
-.sched-status.court-off .court-status {
+.sched-status.court-off .court-status,
+.sched-status.court-later .court-status {
   color: var(--muted-fg);
 }
 .sched-status .court-icon {

@@ -24,6 +24,9 @@ export interface PlayerSessionView {
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** Inside the booking window (14 days by default), and when it opens. */
+  bookingOpen: boolean;
+  bookingOpensAt: string;
   /** Already played; only listed because this player still owes for it. */
   past: boolean;
   confirmationOpen: boolean;
@@ -124,6 +127,8 @@ export interface AdminSessionView {
   /** Organizer's private record of the court cost. Never sent to players. */
   courtCostCents: number | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** When the booking window opens (14 days before play by default). */
+  bookingOpensAt: string;
   shownEarly: boolean;
   holiday: string | null;
   /** Organizer confirmed the venue keeps normal hours that day. */

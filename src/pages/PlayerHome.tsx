@@ -484,7 +484,7 @@ function ScheduleRow({
     }
   }
 
-  const court = courtStatus(s);
+  const court = courtStatus(s, tz);
   const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
 
   return (
