@@ -603,7 +603,7 @@ async function main() {
       const less = card.getByRole('button', { name: 'Less', exact: true });
       if (await less.count()) await less.click();
       const visible = async () =>
-        (await card.locator('button:visible').allInnerTexts()).map((t) => t.trim()).filter((t) => !/^(Undo|Venue is open normal hours)$/.test(t));
+        (await card.locator('button:visible').allInnerTexts()).map((t) => t.trim()).filter((t) => !/^(Undo|Hours OK)$/.test(t));
       const before = await visible();
       assert(JSON.stringify(before) === JSON.stringify(['More', 'Text the group poll']), `card buttons were ${before}`);
       await card.locator('.tile').waitFor();
@@ -981,6 +981,17 @@ async function main() {
       await row.locator('.in-pills li').first().waitFor();
       const names = await row.locator('.in-pills li').evaluateAll((lis) => lis.map((li) => li.getBoundingClientRect().top));
       assert(Math.max(...names) - Math.min(...names) < 30, 'names should sit on one line (wrapping only if needed)');
+      // Pay with Venmo carries the amount and a note with the date and the player's name.
+      const d = players.Devon;
+      await d.reload();
+      await d.locator('.schedule article').first().waitFor();
+      const pay = d.locator('a.pay-btn').first();
+      if (await pay.count()) {
+        const href = await pay.getAttribute('href');
+        const note = new URL(href).searchParams.get('note');
+        assert(/^Pickleball (Sun|Mon|Tue|Wed|Thu|Fri|Sat) [A-Z][a-z]{2} \d{1,2} - Devon$/.test(note), `Venmo note was ${note}`);
+        assert(/amount=\d+\.\d{2}/.test(href), 'Venmo link needs the amount');
+      }
       const money = row.getByLabel('Money for this session');
       if (await money.getByText(/You owe/).count()) {
         const owe = await money.getByText(/You owe/).boundingBox();
@@ -1226,6 +1237,17 @@ async function main() {
       await sheet.getByLabel('Start').fill('19:30');
       await sheet.getByText(/New time: .*7:30 to 10:00 PM$/).waitFor();
       await sheet.getByRole('button', { name: 'Move session' }).click();
+      // Straight to a ready text for the group, with an optional reason.
+      const moved = admin.locator('dialog[open]');
+      await moved.getByText(/^Moved · /).waitFor();
+      const bubble = moved.locator('.bubble');
+      assert(/^Pickleball moved to (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 7:30 to 10:00 PM\.$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
+      await moved.getByLabel(/Reason/).fill('Court swap');
+      await bubble.getByText(/7:30 to 10:00 PM\. Court swap\.$/).waitFor();
+      await moved.getByRole('link', { name: 'Text the group' }).waitFor();
+      await moved.getByRole('button', { name: 'Copy message' }).waitFor();
+      assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
+      await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       await card.getByText('7:30 to 10:00 PM', { exact: true }).waitFor();
     });
@@ -1255,10 +1277,81 @@ async function main() {
       await dlg.getByRole('button', { name: 'Go back' }).click();
       await card.getByRole('button', { name: 'Cancel session' }).waitFor();
       assert((await card.getByText('Canceled', { exact: true }).count()) === 0, 'canceled without confirming');
+      // Someone pays first, so there's someone to pay back.
+      await card.getByRole('button', { name: 'Money' }).click();
+      const moneySheet = admin.locator('dialog[open]');
+      const payer = (await moneySheet.locator('li', { has: admin.getByRole('button', { name: 'Mark paid' }) }).first().locator('strong').innerText()).trim();
+      await moneySheet.getByRole('button', { name: 'Mark paid' }).first().click();
+      await admin.locator('.toast', { hasText: 'marked paid' }).waitFor();
+      await admin.keyboard.press('Escape');
+      await moneySheet.waitFor({ state: 'detached' }).catch(() => {});
       await card.getByRole('button', { name: 'Cancel session' }).click();
       await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      const after = admin.locator('dialog[open]');
+      await after.getByText(/^Canceled · /).waitFor();
+      const bubble = after.locator('.bubble');
+      assert(/^Pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2} is canceled\.$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
+      await after.getByLabel(/Reason/).fill('Rain');
+      await bubble.getByText(/is canceled\. Rain\.$/).waitFor();
+      await after.getByRole('link', { name: 'Text the group' }).waitFor();
+      assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
+      // Who to pay back, with Refunded.
+      const back = after.getByRole('region', { name: 'Pay back' });
+      const row = back.locator('li', { hasText: payer });
+      await row.getByText(/paid \$\d+/).waitFor();
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-canceled-text.png') });
+      await row.getByRole('checkbox', { name: 'Refunded' }).check();
+      await admin.locator('.toast', { hasText: 'Refunded' }).waitFor();
+      await back.getByText('(all done)', { exact: false }).waitFor();
+      await admin.keyboard.press('Escape');
+      await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       await card.getByText('Canceled', { exact: true }).first().waitFor();
+      assert((await admin.getByRole('article', { name: /^Pay back/ }).count()) === 0, 'Pay back card should be gone once refunded');
     });
+
+    await check('Monthly money: from Settings, month picker, bottom line; organizer only', async () => {
+      await tab(admin, 'Settings').click();
+      await admin.getByRole('region', { name: 'Monthly money' }).getByRole('button', { name: 'Open' }).click();
+      await admin.getByRole('heading', { name: 'Monthly money' }).waitFor();
+      const month = admin.getByLabel('Month', { exact: true });
+      const now = await month.inputValue();
+      assert(/^\d{4}-\d{2}$/.test(now), `month picker value ${now}`);
+      for (const label of ['Collected', 'Court costs', 'Credits owed', 'Membership']) await admin.locator('.money-sum dt', { hasText: label }).waitFor();
+      const line = (await admin.locator('.bottom-line').innerText()).trim();
+      assert(/^(Surplus: \$[\d.]+ toward the \$30 membership|Short: \$[\d.]+)$/.test(line), `bottom line was ${line}`);
+      await admin.getByRole('button', { name: 'Next month' }).click();
+      await admin.waitForFunction((was) => document.querySelector('#mm-month').value !== was, now);
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-monthly-money.png'), fullPage: true });
+      await admin.getByRole('button', { name: 'Back to Settings' }).click();
+      await admin.getByLabel('Typical court cost').waitFor();
+      assert((await admin.getByLabel('Typical court cost').inputValue()) === '48', 'typical court cost defaults to $48');
+      assert((await admin.getByLabel('Monthly membership').inputValue()) === '30', 'membership defaults to $30');
+      await tab(admin, 'Home').click();
+      // Players never see any of it.
+      for (const name of ['Alex', 'Casey']) {
+        await players[name].reload();
+        await players[name].locator('.schedule article').first().waitFor();
+        const text = await players[name].locator('body').innerText();
+        assert(!/Monthly money|membership|Surplus|Short:|court cost/i.test(text), `${name} sees private money`);
+      }
+    });
+
+    for (const [width, scheme] of [[360, 'dark'], [430, 'light']]) {
+      await check(`Monthly money and the cancel text fit at ${width}px (${scheme})`, async () => {
+        const ctx = await browser.newContext({ ...phone(width), colorScheme: scheme });
+        const p = await ctx.newPage();
+        await p.goto(`${BASE}/admin`);
+        await p.getByLabel('Organizer PIN').fill(PIN);
+        await p.getByRole('button', { name: 'Sign in' }).click();
+        await tab(p, 'Settings').click();
+        await p.getByRole('region', { name: 'Monthly money' }).getByRole('button', { name: 'Open' }).click();
+        await p.locator('.bottom-line').waitFor();
+        const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        assert(overflow <= 0, `monthly money overflows by ${overflow}px`);
+        await p.screenshot({ path: path.join(SHOTS, `monthly-${width}-${scheme}.png`), fullPage: true });
+        await ctx.close();
+      });
+    }
 
     console.log('First session date');
     await check('Settings "First session" hides earlier sessions from Home and players', async () => {
@@ -1417,6 +1510,7 @@ async function main() {
         // The floating pill never covers the last card on the organizer Home.
         await p.goto(`${BASE}/admin`);
         const signIn = p.getByLabel('Organizer PIN');
+        await signIn.or(sessionCards(p).first()).first().waitFor();
         if (await signIn.isVisible().catch(() => false)) {
           await signIn.fill(PIN);
           await p.getByRole('button', { name: 'Sign in' }).click();

@@ -59,7 +59,9 @@ session's court (hidden when there's nothing in it):
 - "Was 6, now 5: discount and credits are off" when a session drops below 6
   after the discount was shown, listing anything to sort out by hand
 - each person's credit balance, with **Clear credit**
-- who owes you, with one-tap **Mark paid**
+- who owes you, with one-tap **Mark paid**; on game day that day's unpaid
+  players move to a **Mark paid tonight** card at the top
+- **Pay back** after a cancel: who already paid, with a **Refunded** checkbox
 - check-in texts that are due
 
 **View as…** in the header shows exactly what any player sees, with a "Viewing as
@@ -91,6 +93,22 @@ nothing. **Court opened** (one tap) confirms them in order by
 the 4-or-6 rules and prepares a text for each; **Didn't open** marks the
 session off as "Court didn't open". A session before the first session date
 can be shown with **Show this session**.
+
+## Texts when a session changes
+
+Canceling a session opens a ready text ("Pickleball Tue, Nov 3 is canceled.")
+and moving one opens "Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM.", each
+with an optional one-line reason, **Text the group** and **Copy message**.
+After a cancel, the same screen lists who already paid, with **Refunded**.
+
+## Monthly money (organizer only)
+
+Settings → **Monthly money** shows, for any month: collected (people marked
+paid), court costs (the cost entered on a session, or the **Typical court
+cost** setting, default $48), credits still owed, and a bottom line like
+"Surplus: $14 toward the $30 membership" or "Short: $8" (membership from the
+**Monthly membership** setting). Only sessions that were played count;
+canceled ones never do. None of it is ever sent to players.
 
 ## How money works
 

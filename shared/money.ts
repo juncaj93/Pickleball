@@ -40,3 +40,9 @@ export function venmoPayUrl(profileUrl: string | null, cents: number, note: stri
     prefilled: true,
   };
 }
+
+/** The Venmo note: "Pickleball Tue Nov 3 - Ryan". Date in the group's time zone, no commas. */
+export function venmoNote(startsAt: string, tz: string, name?: string | null): string {
+  const date = new Date(startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).replace(/,/g, '');
+  return name ? `Pickleball ${date} - ${name}` : `Pickleball ${date}`;
+}

@@ -1,4 +1,5 @@
 import * as admin from './admin';
+import { monthlyMoney } from './money';
 import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
 import { HttpError, json, readJson } from './http';
@@ -67,6 +68,8 @@ route('PUT', '/api/admin/sessions/:id/time', admin.reschedule);
 route('POST', '/api/admin/sessions/:id/decision', admin.decide);
 route('POST', '/api/admin/sessions/:id/roster', admin.editRoster);
 route('POST', '/api/admin/sessions/:id/payment', admin.setPayment);
+route('POST', '/api/admin/sessions/:id/refund', admin.setRefund);
+route('GET', '/api/admin/money', (ctx) => monthlyMoney(ctx));
 route('POST', '/api/admin/sessions/:id/six-sorted', (ctx) => admin.sixSorted(ctx));
 route('POST', '/api/admin/sessions/:id/booked', admin.markBooked);
 route('POST', '/api/admin/sessions/:id/court', admin.courtWaitlist);

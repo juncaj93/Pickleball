@@ -85,6 +85,23 @@ export function deadlineAlertMessage(s: SessionLike, tz: string, deadlineIso: st
 }
 
 /** Digits and a leading + only, for sms: links. */
+/** One optional line from the organizer, ending with a period. */
+function withReason(text: string, reason?: string | null): string {
+  const r = (reason ?? '').replace(/\s+/g, ' ').trim();
+  if (!r) return text;
+  return `${text} ${/[.!?]$/.test(r) ? r : `${r}.`}`;
+}
+
+/** "Pickleball Tue, Nov 3 is canceled." plus an optional reason. */
+export function canceledMessage(s: SessionLike, tz: string, reason?: string | null): string {
+  return withReason(`Pickleball ${formatShortDate(s.startsAt, tz)} is canceled.`, reason);
+}
+
+/** "Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM." plus an optional reason. */
+export function movedMessage(s: SessionLike, tz: string, reason?: string | null): string {
+  return withReason(`Pickleball moved to ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`, reason);
+}
+
 export function normalizePhone(phone: string): string {
   const trimmed = phone.trim();
   const digits = trimmed.replace(/\D/g, '');

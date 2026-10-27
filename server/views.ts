@@ -157,6 +157,7 @@ export function adminSessionView(
       creditCents: r.status === 'confirmed' ? creditFor(r.player_id) : 0,
       waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
       promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
+      refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
       promotionReason: r.status === 'confirmed' ? r.promotion_reason : null,
       promotionNotifiedAt: r.promotion_notified_at,
     }));

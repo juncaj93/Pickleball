@@ -368,6 +368,22 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   return { result };
 }
 
+/** "Refunded" for someone who paid for a session that was then canceled. Only a record; no money moves. */
+export async function setRefund(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const playerId = v.id(body.playerId, 'playerId');
+  const refunded = v.bool(body.refunded, 'refunded');
+  const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
+  if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'not_paid', 'Only someone who paid can be refunded.');
+  if (!!row.refunded_at === refunded) return { ok: true, changed: false };
+  await ctx.db
+    .prepare('UPDATE session_players SET refunded_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
+    .bind(refunded ? ctx.nowIso : null, ctx.nowIso, session.id, playerId)
+    .run();
+  await audit(ctx.db, group.id, session.id, refunded ? 'refund_marked' : 'refund_cleared', { player: row.display_name }, ctx.nowIso);
+  return { ok: true, changed: true };
+}
+
 export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
