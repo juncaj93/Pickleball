@@ -16,27 +16,46 @@ export function formatPrice(cents: number): string {
   return cents % 100 === 0 ? `$${cents / 100}` : formatCents(cents);
 }
 
+/** The amount as Venmo wants it: "14" for whole dollars, "14.50" otherwise. Nothing else. */
+export function venmoAmount(cents: number): string {
+  return cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2);
+}
+
+/** Spaces as %20 (never "+"), and the few marks encodeURIComponent leaves alone, like the apostrophe. */
+export function venmoEncode(text: string): string {
+  return encodeURIComponent(text).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
 /**
- * A Venmo link with the amount and a note filled in, built from the
+ * Venmo links with the amount and a note filled in, built from the
  * organizer's profile link (venmo.com/u/name, venmo.com/name, or
- * account.venmo.com/u/name). If the name can't be read, the profile link is
- * returned unchanged and the page shows the amount next to the button.
+ * account.venmo.com/u/name):
+ *   url     https://venmo.com/?txn=pay&recipients=name&amount=14&note=...
+ *   appUrl  venmo://paycharge?txn=pay&recipients=name&amount=14&note=...
+ * The page opens the app link on a phone and falls back to the web link.
+ * If the name can't be read, the profile link is returned unchanged and the
+ * page shows the amount next to the button.
  */
-export function venmoPayUrl(profileUrl: string | null, cents: number, note: string): { url: string | null; prefilled: boolean } {
-  if (!profileUrl) return { url: null, prefilled: false };
+export function venmoPayUrl(
+  profileUrl: string | null,
+  cents: number,
+  note: string,
+): { url: string | null; appUrl: string | null; prefilled: boolean } {
+  if (!profileUrl) return { url: null, appUrl: null, prefilled: false };
   let u: URL;
   try {
     u = new URL(profileUrl);
   } catch {
-    return { url: null, prefilled: false };
+    return { url: null, appUrl: null, prefilled: false };
   }
-  if (!/(^|\.)venmo\.com$/i.test(u.hostname)) return { url: profileUrl, prefilled: false };
+  if (!/(^|\.)venmo\.com$/i.test(u.hostname)) return { url: profileUrl, appUrl: null, prefilled: false };
   const parts = u.pathname.split('/').filter(Boolean);
   const name = parts[0] === 'u' ? parts[1] : parts.length === 1 ? parts[0] : undefined;
-  if (!name || !/^[A-Za-z0-9_-]{2,40}$/.test(name)) return { url: profileUrl, prefilled: false };
-  const amount = (cents / 100).toFixed(2);
+  if (!name || !/^[A-Za-z0-9_-]{2,40}$/.test(name)) return { url: profileUrl, appUrl: null, prefilled: false };
+  const query = `txn=pay&recipients=${name}&amount=${venmoAmount(cents)}&note=${venmoEncode(note)}`;
   return {
-    url: `https://venmo.com/${name}?txn=pay&amount=${amount}&note=${encodeURIComponent(note)}`,
+    url: `https://venmo.com/?${query}`,
+    appUrl: `venmo://paycharge?${query}`,
     prefilled: true,
   };
 }

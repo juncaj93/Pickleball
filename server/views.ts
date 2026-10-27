@@ -73,6 +73,7 @@ export function playerSessionView(
           shareCents: prices.get(mine.player_id)?.cents ?? null,
           paymentStatus: mine.payment_status,
           selfPaid: !!mine.self_paid_at,
+          signupAt: mine.confirmed_at ?? mine.claimed_at,
           discount: prices.get(mine.player_id)?.discount ?? false,
           creditComing: prices.get(mine.player_id)?.creditComing ?? false,
           oweCents:

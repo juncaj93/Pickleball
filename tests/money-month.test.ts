@@ -38,9 +38,9 @@ describe('Venmo note', () => {
     expect(venmoNote('2026-11-04T01:00:00.000Z', TZ, 'Ryan')).toBe('Pickleball Tue Nov 3 - Ryan');
     const pay = venmoPayUrl('https://venmo.com/u/Alex-Smith', 1400, venmoNote('2026-11-04T01:00:00.000Z', TZ, 'Ryan'));
     expect(pay.prefilled).toBe(true);
-    expect(pay.url).toBe('https://venmo.com/Alex-Smith?txn=pay&amount=14.00&note=Pickleball%20Tue%20Nov%203%20-%20Ryan');
+    expect(pay.url).toBe('https://venmo.com/?txn=pay&recipients=Alex-Smith&amount=14&note=Pickleball%20Tue%20Nov%203%20-%20Ryan');
     // A link Venmo can't prefill opens as is; the page then shows the note with Copy.
-    expect(venmoPayUrl('https://example.com/pay', 1400, 'x')).toEqual({ url: 'https://example.com/pay', prefilled: false });
+    expect(venmoPayUrl('https://example.com/pay', 1400, 'x')).toEqual({ url: 'https://example.com/pay', appUrl: null, prefilled: false });
   });
 });
 

@@ -14,6 +14,14 @@ function shift(month: string, by: number): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** "2026-10" as "October 2026". */
+function monthName(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return `${MONTH_NAMES[m - 1]} ${y}`;
+}
+
 /** Organizer-only month view, opened from Settings. Players never get any of this. */
 export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () => void }) {
   const tz = ctx.d.group.timezone;
@@ -42,7 +50,25 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
         <label className="sr-only" htmlFor="mm-month">
           Month
         </label>
-        <input id="mm-month" type="month" value={month} onChange={(e) => e.target.value && setMonth(e.target.value)} />
+        {/* The month name is drawn by us, centered; the real month picker sits on top, see-through, so a tap still opens it. */}
+        <div className="month-field">
+          <span className="month-label" aria-hidden="true">
+            {monthName(month)}
+          </span>
+          <input
+            id="mm-month"
+            type="month"
+            value={month}
+            onChange={(e) => e.target.value && setMonth(e.target.value)}
+            onClick={(e) => {
+              try {
+                e.currentTarget.showPicker?.();
+              } catch {
+                /* some browsers only open it on their own */
+              }
+            }}
+          />
+        </div>
         <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shift(x, 1))}>
           ›
         </button>

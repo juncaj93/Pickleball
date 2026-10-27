@@ -104,6 +104,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
         creditCents: credit,
         discount: price.discount,
         reminder: ctx.nowMs >= Date.parse(s.ends_at) + DAY_MS,
+        signupAt: mine!.confirmed_at ?? mine!.claimed_at,
       });
     }
     // Credit not yet matched to a session they've signed up for.

@@ -21,6 +21,11 @@
   --line: #e2e2dc;
   --line-strong: #c9c9c2;
   --tile-line: #262b27;
+  /* Weekday on date tiles: calendar red. 5.6:1 on white. */
+  --cal-red: #c62a1f;
+  /* The gear panel's Text button: charcoal, its own family (not green, not blue). */
+  --text-btn-bg: #2a2f36;
+  --text-btn-fg: #ffffff;
   --scrim: rgb(12 18 14 / 40%);
 
   /* The one accent: court green. White text on it is 6.4:1. */
@@ -103,6 +108,9 @@
     --line: #2a2f2b;
     --line-strong: #3b413c;
     --tile-line: #c9d1cb;
+    --cal-red: #ff8a80;
+    --text-btn-bg: #e6e9ee;
+    --text-btn-fg: #15181d;
     --scrim: rgb(0 0 0 / 55%);
     --court: #237a52;
     --court-deep: #0f2e21;
@@ -152,6 +160,9 @@
   --line: #2a2f2b;
   --line-strong: #3b413c;
   --tile-line: #c9d1cb;
+  --cal-red: #ff8a80;
+  --text-btn-bg: #e6e9ee;
+  --text-btn-fg: #15181d;
   --scrim: rgb(0 0 0 / 55%);
   --court: #237a52;
   --court-deep: #0f2e21;
@@ -322,7 +333,7 @@ a {
   overflow-wrap: anywhere;
 }
 
-/* Today, drawn like the session date tiles: white with a thin dark outline. */
+/* Today, drawn like the session date tiles: a paper calendar, red weekday. */
 .topbar .today {
   flex: none;
   width: 42px;
@@ -343,7 +354,7 @@ a {
   font-size: 0.7rem;
   font-weight: 750;
   letter-spacing: 0.06em;
-  color: var(--accent-text);
+  color: var(--cal-red);
 }
 .topbar .today .day {
   font-size: 1.32rem;
@@ -1541,8 +1552,10 @@ dialog.sheet::backdrop {
 
 /* ---------- Session date tile (players and organizer) ---------- */
 
-/* White with a thin dark outline; dark mode: dark surface, light outline. */
+/* A paper calendar: white with a thin outline, red weekday, dark day, small
+   gray month. Dark mode: dark tile, light outline, softer red. */
 .tile {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1573,7 +1586,95 @@ dialog.sheet::backdrop {
   letter-spacing: 0.07em;
 }
 .tile .dow {
-  color: var(--accent-text);
+  color: var(--cal-red);
+}
+/* You're in: a small green check on the tile's corner. */
+.tile-check {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-ink);
+  box-shadow: 0 0 0 2px var(--surface);
+  display: grid;
+  place-items: center;
+  animation: spot-pop 0.42s var(--spring);
+}
+.tile-check svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Later weeks, gently muted: lighter outlines and softer grays, never lower
+   opacity. Every level keeps text at 4.5:1 or better. Buttons and the court
+   status keep their colors. 0 (this week, next week) has no attribute. */
+[data-fade='1'] {
+  --ink: #232825;
+  --ink-2: #5f665f;
+  --tile-line: #7f8580;
+  --cal-red: #c8352b;
+  --line: #e6e6e1;
+}
+[data-fade='2'] {
+  --ink: #303632;
+  --ink-2: #656b66;
+  --tile-line: #a3a8a3;
+  --cal-red: #ca3f35;
+  --line: #e9e9e4;
+}
+[data-fade='3'] {
+  --ink: #3c423e;
+  --ink-2: #6a706b;
+  --tile-line: #bdc1bc;
+  --cal-red: #cb463c;
+  --line: #ebebe7;
+}
+:root[data-theme='dark'] [data-fade='1'] {
+  --ink: #e0e4e1;
+  --ink-2: #9aa39d;
+  --tile-line: #8b938d;
+  --cal-red: #f48c83;
+  --line: #272b28;
+}
+:root[data-theme='dark'] [data-fade='2'] {
+  --ink: #d1d6d2;
+  --ink-2: #929a95;
+  --tile-line: #6c736e;
+  --cal-red: #e98e86;
+  --line: #242826;
+}
+:root[data-theme='dark'] [data-fade='3'] {
+  --ink: #c3c9c5;
+  --ink-2: #8b938e;
+  --tile-line: #545b56;
+  --cal-red: #df9089;
+  --line: #222624;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) [data-fade='1'] {
+    --ink: #e0e4e1;
+    --ink-2: #9aa39d;
+    --tile-line: #8b938d;
+    --cal-red: #f48c83;
+    --line: #272b28;
+  }
+  :root:not([data-theme='light']) [data-fade='2'] {
+    --ink: #d1d6d2;
+    --ink-2: #929a95;
+    --tile-line: #6c736e;
+    --cal-red: #e98e86;
+    --line: #242826;
+  }
+  :root:not([data-theme='light']) [data-fade='3'] {
+    --ink: #c3c9c5;
+    --ink-2: #8b938e;
+    --tile-line: #545b56;
+    --cal-red: #df9089;
+    --line: #222624;
+  }
 }
 .tile .mon {
   color: var(--ink-2);
@@ -1708,6 +1809,20 @@ dialog.sheet::backdrop {
   justify-self: end;
 }
 
+/* A holiday or extra game needs the court line's full width to stay on one
+   line, so on those cards the button lines up with the time instead. */
+.sched[data-holiday] .sched-act {
+  grid-row: 1;
+}
+.sched[data-holiday] .sched-status {
+  grid-column: 1 / -1;
+  flex-wrap: nowrap;
+}
+.sched[data-holiday] .sched-status .court-status {
+  min-width: 0;
+  white-space: nowrap;
+}
+
 /* Time and its tags. */
 .sched-head {
   display: flex;
@@ -1771,17 +1886,100 @@ dialog.sheet::backdrop {
   margin-top: 0;
 }
 
-/* Player rows: "2 of 4 in" and the spots on one line. */
+/* Holiday or "Extra game" on the court line: small colored words, no pill. */
+.holiday-text {
+  color: var(--holiday-fg);
+  font-size: 0.78rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+/* Player rows: "2 of 4 in", a dot per spot, the names in plain text, all on one line. */
 .in-line {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
+  flex-wrap: nowrap;
+  gap: 6px;
+  min-height: 20px;
   font-size: 0.86rem;
 }
 
 .in-count {
+  flex: none;
   color: var(--ink-2);
+}
+
+.dots {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.75px solid var(--ink-2);
+}
+.dot.in,
+.dot.me {
+  border-color: var(--ink);
+  background: var(--ink);
+  /* A filled spot springs in: the "I'm in" celebration. */
+  animation: spot-pop 0.42s var(--spring);
+}
+.dot.me {
+  border-color: var(--primary);
+  background: var(--primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.names-line {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--ink-2);
+}
+.names-line strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+
+/* Add to calendar on the player card: a small quiet icon, 44px to tap. */
+.cal-icon-link {
+  position: relative;
+  flex: none;
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  margin-top: -6px;
+  margin-bottom: -6px;
+  margin-right: -4px;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  color: var(--ink-2);
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--fast);
+}
+.cal-icon-link::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+.cal-icon-link:active {
+  background: var(--fill);
+}
+.cal-icon-link svg {
+  width: 19px;
+  height: 19px;
+}
+.row-foot .cal-icon-link {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .waitlist-line {
@@ -1969,12 +2167,42 @@ dialog.sheet::backdrop {
   gap: 4px 6px;
   font-size: 0.88rem;
 }
+.players-mid {
+  display: contents;
+}
+/* With the organizer's own I'm in: count, pills (wrapping in their own
+   column), then the button, always on the first line at the right. */
+.players-line.has-after {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: 6px;
+}
+.players-line.has-after > .players-count {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+}
+.players-line.has-after > .players-mid {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  align-content: center;
+  gap: 4px 6px;
+  min-height: 34px;
+  min-width: 0;
+}
 .players-count {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .players-wait {
+  flex: none;
   color: var(--ink-2);
+  white-space: nowrap;
+}
+.players-line .names-line {
+  font-size: 0.82rem;
 }
 
 .spots {
@@ -2271,52 +2499,37 @@ dialog.sheet::backdrop {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
-.icon-round.cal-btn {
-  color: var(--ink-2);
-}
-/* On the Court booked line, lined up under the gear; it adds no height. */
-.court-top .icon-round.cal-btn {
-  margin: -8px -6px -8px auto;
-  flex: none;
-}
-.icon-round.cal-btn::after {
-  background: transparent;
-}
-.icon-round.cal-btn:active::after {
-  background: var(--fill);
-}
-.icon-round.cal-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-/* The organizer's own I'm in: a small outlined pill (never a second green button). */
+/* The organizer's own I'm in: a small gray button at the end of the players
+   row, as tall as the other small buttons (never a second green button). */
 .btn.small.me-in {
   position: relative;
   flex: none;
-  min-height: 26px;
-  padding: 0 10px;
-  font-size: 0.78rem;
+  min-height: 34px;
+  padding: 4px 14px;
+  font-size: 0.88rem;
   border-radius: 999px;
-  background: var(--surface);
   color: var(--accent-text);
-  border: 1.5px solid color-mix(in srgb, var(--accent-text) 55%, transparent);
 }
 .btn.small.me-in::before {
   content: '';
   position: absolute;
-  inset: -10px 0;
+  inset: -5px -2px;
 }
 .me-state {
   display: inline-flex;
   flex: none;
-  min-height: 28px;
+  min-height: 34px;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
 }
-.me-state .me-tag {
-  font-size: 0.75rem;
+.me-in-text {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--ok-fg);
+}
+.me-in-text::before {
+  content: '✓ ';
 }
 .link-btn.me-out {
   position: relative;
@@ -2464,6 +2677,8 @@ dialog.sheet::backdrop {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
+  justify-content: flex-end;
+  min-height: 34px;
 }
 
 /* "Late drop" tag on Home and the session card. */
@@ -2484,6 +2699,13 @@ dialog.sheet::backdrop {
 .late-line {
   font-size: 0.8rem;
   line-height: 1.25;
+}
+/* On session cards it's colored words, not a pill, so nothing piles up. */
+.scard .late-tag {
+  padding: 0;
+  border: 0;
+  background: none;
+  font-size: 0.8rem;
 }
 
 /* Options panel from the gear: Text full width, then an even 2 by 2 grid. */
@@ -2525,6 +2747,18 @@ dialog.sheet::backdrop {
   white-space: nowrap;
   width: 100%;
 }
+/* An odd one out (Cancel session after Add to calendar) takes the full width. */
+.opt-grid > .btn:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+.btn.cal-opt {
+  gap: 6px;
+}
+.btn.cal-opt svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
 .opt-extra {
   display: flex;
   flex-wrap: wrap;
@@ -2539,6 +2773,9 @@ dialog.sheet::backdrop {
 .btn.text-btn {
   width: 100%;
   gap: 8px;
+  background: var(--text-btn-bg);
+  color: var(--text-btn-fg);
+  border-color: transparent;
 }
 .btn.text-btn svg {
   width: 20px;
@@ -2713,6 +2950,38 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
 }
 .month-picker input::-webkit-date-and-time-value {
   text-align: center;
+}
+/* Our own centered month name, with the real picker see-through on top. */
+.month-field {
+  position: relative;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 10%);
+}
+.month-label {
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.month-field input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  box-shadow: none;
+}
+.month-field:focus-within {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 /* The month in one line: "Left" in big numbers, the sentence under it. */
@@ -3273,26 +3542,11 @@ details.advanced[open] > summary {
   text-underline-offset: 3px;
 }
 
-/* One small, dismissible tip at the very end of the player page. */
-.footer-tip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 4px 4px 12px;
+/* The end of the player page: a thin line and a little space. */
+.page-end {
+  height: 20px;
+  margin-top: 4px;
   border-top: 1px solid var(--line);
-  font-size: 0.82rem;
-  color: var(--ink-2);
-}
-
-.footer-tip p {
-  flex: 1;
-}
-
-.footer-tip .icon-btn {
-  border: 0;
-  background: transparent;
-  color: var(--ink-2);
-  font-size: 0.95rem;
 }
 
 /* ---------- Motion: light and purposeful ---------- */
@@ -3385,4 +3639,11 @@ dialog.sheet[open]::backdrop {
   .sched-status {
     font-size: 0.85rem;
   }
+}
+
+/* Pay $14 with the quiet "I paid" beside it. */
+.pay-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }

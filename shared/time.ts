@@ -176,6 +176,16 @@ export function weekStart(iso: string | number, tz: string): number {
   return Date.UTC(p.year, p.month - 1, p.day) / DAY_MS - ((p.weekday + 6) % 7);
 }
 
+/**
+ * How muted a session's card looks: 0 for this week and next week (and the
+ * past), then 1, 2, 3 for each later week. Done with lighter colors, never
+ * by fading text.
+ */
+export function weekFade(iso: string, nowMs: number, tz: string): 0 | 1 | 2 | 3 {
+  const weeks = (weekStart(iso, tz) - weekStart(nowMs, tz)) / 7;
+  return weeks <= 1 ? 0 : (Math.min(weeks - 1, 3) as 1 | 2 | 3);
+}
+
 /** "This week", "Next week", "Last week", or "Week of Nov 9". */
 export function weekLabel(iso: string, nowMs: number, tz: string): string {
   const diff = weekStart(iso, tz) - weekStart(nowMs, tz);
