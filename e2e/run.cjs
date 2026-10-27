@@ -2826,7 +2826,7 @@ async function main() {
         }
         // Edit still opens the form; a row opens the money breakdown with Mark paid.
         await rows.first().getByRole('button', { name: /^Edit / }).click();
-        await p.locator('dialog[open]').getByLabel('Name').waitFor();
+        await p.locator('dialog[open]').getByLabel('Name', { exact: true }).waitFor();
         await p.keyboard.press('Escape');
         await p.locator('dialog[open]').waitFor({ state: 'detached' });
         const devon = rows.filter({ has: p.locator('.p-name', { hasText: /^Devon$/ }) });
