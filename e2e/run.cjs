@@ -553,6 +553,8 @@ async function main() {
       await admin.getByLabel(/Plan sessions ahead/).waitFor();
       await admin.locator('details[data-section="advanced"] > summary').click();
       assert(!(await admin.getByLabel(/Plan sessions ahead/).isVisible()), 'Advanced should close again');
+      // The phone remembers it as soon as the section finishes closing.
+      await admin.waitForFunction(() => !JSON.parse(localStorage.getItem('pb_settings_open') || '[]').includes('advanced'));
       await admin.reload();
       await tab(admin, 'Settings').click();
       await admin.locator('details[data-section="schedule"][open]').waitFor();
