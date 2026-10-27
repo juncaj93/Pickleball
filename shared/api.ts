@@ -170,7 +170,12 @@ export interface AdminDashboard {
     venueAddress: string | null;
     firstSessionDate: string | null;
     settings: GroupSettings;
+    /** What to send players: the plain site address when open, else the private link. */
     playerLink: string;
+    /** The long private link; always works. */
+    privateLink: string;
+    openAccess: boolean;
+    hasGroupWord: boolean;
   };
   players: AdminPlayer[];
   sessions: AdminSessionView[];

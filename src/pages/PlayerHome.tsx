@@ -4,7 +4,8 @@ import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
-import { ConfirmDialog, Empty, ErrorState, FirstVisitNotice, Notice, Spinner, useToast } from '../ui';
+import { ConfirmDialog, Empty, ErrorState, Notice, Spinner, useToast } from '../ui';
+import { OrganizerLink } from './SiteHome';
 
 const SHOW_FIRST = 6;
 
@@ -26,7 +27,24 @@ function joinedText(d: JoinResponse): string {
  * The player's one screen. Also used by the organizer's "View as...", where
  * every request carries the chosen player and taps really happen for them.
  */
-export function PlayerHome({ groupKey, viewAs, onExit }: { groupKey: string | null; viewAs?: { id: string; name: string }; onExit?: () => void }) {
+export function PlayerHome({
+  groupKey,
+  viewAs,
+  onExit,
+  plain,
+  onLinkOnly,
+  onWordNeeded,
+}: {
+  groupKey: string | null;
+  viewAs?: { id: string; name: string };
+  onExit?: () => void;
+  /** Opened at the plain site address (no private link). */
+  plain?: boolean;
+  /** The organizer switched to link-only while this page was open. */
+  onLinkOnly?: () => void;
+  /** A group word is now needed on this phone. */
+  onWordNeeded?: () => void;
+}) {
   setGroupKey(viewAs ? null : groupKey);
   setViewAs(viewAs?.id ?? null);
   useEffect(() => () => setViewAs(null), []);
@@ -39,6 +57,12 @@ export function PlayerHome({ groupKey, viewAs, onExit }: { groupKey: string | nu
   }, [load.data, groupKey, viewAs]);
 
   const g = load.data;
+  useEffect(() => {
+    if (!plain || !load.error) return;
+    if (load.error.status === 404) onLinkOnly?.();
+    if (load.error.status === 403) onWordNeeded?.();
+  }, [plain, load.error, onLinkOnly, onWordNeeded]);
+  if (plain && (load.error?.status === 404 || load.error?.status === 403)) return <Spinner />;
   if (load.error?.status === 404 && !viewAs) {
     return (
       <>
@@ -95,9 +119,7 @@ export function PlayerHome({ groupKey, viewAs, onExit }: { groupKey: string | nu
 
         {g && !pickName && (
           <>
-            {!viewAs && <FirstVisitNotice>This site never texts you. Reminders come from {g.group.organizerName ?? 'your organizer'}.</FirstVisitNotice>}
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
-            {!viewAs && <HomeScreenTip />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
               {sessions.map((s) => (
@@ -115,8 +137,10 @@ export function PlayerHome({ groupKey, viewAs, onExit }: { groupKey: string | nu
                 {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
               </button>
             )}
+            {!viewAs && <HomeScreenTip />}
           </>
         )}
+        {plain && !viewAs && <OrganizerLink />}
       </main>
     </>
   );
@@ -263,7 +287,10 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
   );
 }
 
-/** Shown once per phone, and never inside the home screen app itself. */
+/**
+ * A small tip at the very end of the page, shown once per phone and never
+ * inside the Home Screen app itself.
+ */
 function HomeScreenTip() {
   const [show, setShow] = useState(() => {
     const standalone =
@@ -272,13 +299,8 @@ function HomeScreenTip() {
   });
   if (!show) return null;
   return (
-    <div className="hint-banner" role="note" aria-label="Add to Home Screen">
-      <div style={{ flex: 1 }}>
-        <p>
-          <strong>Put Pickleball on your Home Screen</strong>
-        </p>
-        <HomeScreenSteps />
-      </div>
+    <div className="footer-tip" role="note" aria-label="Add to Home Screen">
+      <p>Tip: add Pickleball to your Home Screen. Tap Share, then Add to Home Screen, then Add.</p>
       <button
         className="icon-btn"
         aria-label="Dismiss"

@@ -9,3 +9,7 @@ binding = "DB"
 database_name = "pickleball"
 database_id = "5c939453-ebef-4a1d-869e-9a952339d275"
 migrations_dir = "migrations"
+
+# The address players use. Shown as the player link in Settings and used in texts.
+[vars]
+SITE_URL = "https://pickleball.juncaj.net"

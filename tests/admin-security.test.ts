@@ -109,8 +109,9 @@ describe('admin access', () => {
 });
 
 describe('player privacy', () => {
-  it('needs the private link key', async () => {
+  it('needs the private link key once the open address is turned off', async () => {
     const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', openAccess: false });
     const c = ctx.app.client();
     expect((await c.call('GET', '/api/group')).status).toBe(404);
     c.groupKey = 'not-the-right-key-at-all-123';

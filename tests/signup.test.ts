@@ -6,7 +6,8 @@ describe('setup', () => {
     const ctx = await setupGroup();
     expect(ctx.players.map((p) => p.name)).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
     expect(ctx.dashboard.sessions).toHaveLength(12);
-    expect(ctx.dashboard.group.playerLink).toMatch(/^https:\/\/club\.example\/g\/[A-Za-z0-9_-]{24}$/);
+    expect(ctx.dashboard.group.playerLink).toBe('https://club.example'); // the plain site address
+    expect(ctx.dashboard.group.privateLink).toMatch(/^https:\/\/club\.example\/g\/[A-Za-z0-9_-]{24}$/);
   });
 
   it('only works once and needs the setup code', async () => {

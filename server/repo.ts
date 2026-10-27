@@ -20,6 +20,8 @@ export interface GroupRow {
   venue_name: string | null;
   venue_address: string | null;
   first_session_date: string | null;
+  open_access: number;
+  group_word_hash: string | null;
 }
 
 export interface PlayerRow {

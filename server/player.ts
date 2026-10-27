@@ -27,11 +27,13 @@ import {
 } from './repo';
 import { holidayFor } from '../shared/holidays';
 import { newId } from './crypto';
+import { recentCount, recordEvent } from './rate';
 import { confirmAttendance, decline, joinSession, withdraw } from './roster';
 import { playerSessionView } from './views';
 import * as v from './validate';
 
 const OWED_LOOKBACK_MS = 90 * 86_400_000;
+const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
 /** Suggestions only look at sessions this far ahead. */
 const SUGGEST_AHEAD_MS = 8 * DAY_MS;
@@ -211,6 +213,10 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
     throw new HttpError(409, 'name_taken', `Someone already uses "${name}". Add your last initial, like "${name} S."`);
   }
   if (all.length >= 30) throw new HttpError(409, 'too_many_players', 'The list is full. Ask the organizer to add you.');
+  // Spam guard: a few new names per phone per hour.
+  if ((await recentCount(ctx, 'self_add', 3600_000)) >= SELF_ADDS_PER_HOUR) {
+    throw new HttpError(429, 'too_many_names', "You've added a few names already. Try again in an hour, or ask the organizer to add you.");
+  }
   const id = newId();
   try {
     await ctx.db
@@ -226,6 +232,7 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
     }
     throw err;
   }
+  await recordEvent(ctx, 'self_add');
   await rememberPlayer(ctx, group, id);
   await audit(ctx.db, group.id, null, 'player_self_added', { name }, ctx.nowIso, 'player');
   return { result: 'added', me: { id, name } };

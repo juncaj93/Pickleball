@@ -1,48 +1,7 @@
 import { type FormEvent, useState } from 'react';
-import { api, ApiError, copyText, navigate, storageGet, useLoad } from '../lib';
+import { api, ApiError, copyText, navigate } from '../lib';
 import { TopBar } from '../Shell';
-import { ErrorState, Notice, NumberField, parseWhole, Spinner, useToast } from '../ui';
-
-export function Landing() {
-  const status = useLoad(() => api<{ setupComplete: boolean; setupEnabled: boolean }>('GET', '/api/status'));
-  const lastGroup = storageGet('pb_group_key');
-  return (
-    <>
-      <TopBar eyebrow="Pickleball" title="Pickleball Club" />
-      <main className="page stack-lg">
-        {status.loading && !status.data && <Spinner />}
-        {status.error && <ErrorState error={status.error} onRetry={status.reload} />}
-        {status.data && (
-          <div className="hero stack">
-            <div className="big-ball" aria-hidden="true" />
-            {status.data.setupComplete ? (
-              <>
-                <h2>This is a private group site</h2>
-                <p className="muted">Open the link your organizer texted you to see sessions and claim a spot.</p>
-                {lastGroup && (
-                  <button className="btn block" onClick={() => navigate(`/g/${lastGroup}`)}>
-                    Open my group
-                  </button>
-                )}
-                <button className="btn secondary block" onClick={() => navigate('/admin')}>
-                  Organizer sign-in
-                </button>
-              </>
-            ) : (
-              <>
-                <h2>Welcome</h2>
-                <p className="muted">Nobody has set up this site yet. The organizer starts here.</p>
-                <button className="btn block" onClick={() => navigate('/setup')}>
-                  Set up the group
-                </button>
-              </>
-            )}
-          </div>
-        )}
-      </main>
-    </>
-  );
-}
+import { Notice, NumberField, parseWhole, useToast } from '../ui';
 
 interface PlayerDraft {
   name: string;
