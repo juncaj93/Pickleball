@@ -324,7 +324,14 @@ export async function sessionCalendarFile(ctx: Ctx): Promise<Response> {
   }>();
   const name = group?.venue_name || DEFAULT_VENUE_NAME;
   const location = group?.venue_address ? `${name}, ${group.venue_address}` : name;
-  const body = sessionCalendar({ id: session.id, startsAt: session.starts_at, endsAt: session.ends_at, location, nowIso: ctx.nowIso });
+  const body = sessionCalendar({
+    id: session.id,
+    startsAt: session.starts_at,
+    endsAt: session.ends_at,
+    location,
+    nowIso: ctx.nowIso,
+    timezone: group?.timezone,
+  });
   const p = localParts(Date.parse(session.starts_at), group?.timezone ?? 'America/Detroit');
   const date = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
   return new Response(body, {

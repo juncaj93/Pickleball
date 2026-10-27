@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { SITE_NAME } from '../../shared/settings';
 import type { ActionTokenView } from '../../shared/api';
 import { formatTimeRange, formatWeekday, formatMonthDay } from '../../shared/time';
 import { api, ApiError, useLoad } from '../lib';
@@ -41,7 +42,7 @@ export function LinkPage({ token }: { token: string }) {
   const v = load.data;
   return (
     <>
-      <TopBar eyebrow="Pickleball" title={v ? `Hi ${v.playerName}` : 'Your pickleball link'} />
+      <TopBar eyebrow={SITE_NAME} title={v ? `Hi ${v.playerName}` : 'Your pickleball link'} />
       <main className="page stack-lg">
         {load.loading && !v && <Spinner />}
         {load.error && (load.error.status === 404 ? (

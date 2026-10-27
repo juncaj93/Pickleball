@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
 import { copyText, isIOS } from './lib';
@@ -45,30 +45,116 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty card">{children}</div>;
 }
 
-// ---------- Toasts ----------
+// ---------- Confirmation bubbles ----------
+//
+// A small speech bubble next to the button that was tapped, with a tiny
+// pointer toward it. Shown in the top layer (above any open sheet), it never
+// moves the page and stays on screen near the edges. Screen readers hear it
+// through a live region. Confirmations last about 2 seconds, errors 4.
 
-const ToastContext = createContext<(msg: string) => void>(() => {});
+type ToastKind = 'ok' | 'error';
+type ToastFn = (msg: string, kind?: ToastKind) => void;
+
+const ToastContext = createContext<ToastFn>(() => {});
+
+/** The element the person last tapped or pressed Enter on, so the bubble can point at it. */
+let lastTarget: { el: Element; rect: DOMRect; at: number } | null = null;
+if (typeof document !== 'undefined') {
+  const remember = (el: EventTarget | null) => {
+    const hit = el instanceof Element ? el.closest('button, a, [role="button"], label, summary') : null;
+    if (hit) lastTarget = { el: hit, rect: hit.getBoundingClientRect(), at: Date.now() };
+  };
+  document.addEventListener('pointerdown', (e) => remember(e.target), true);
+  document.addEventListener('click', (e) => remember(e.target), true);
+  document.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && remember(document.activeElement), true);
+}
+
+interface Shown {
+  id: number;
+  msg: string;
+  kind: ToastKind;
+  /** Viewport box of the tapped button, or null to sit above the bottom bar. */
+  anchor: { top: number; bottom: number; left: number; right: number } | null;
+}
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [msg, setMsg] = useState<string | null>(null);
+  const [shown, setShown] = useState<Shown | null>(null);
+  const [spoken, setSpoken] = useState<{ msg: string; kind: ToastKind } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const show = useCallback((m: string) => {
-    setMsg(m);
+  const show = useCallback<ToastFn>((msg, kind = 'ok') => {
+    let anchor: Shown['anchor'] = null;
+    if (lastTarget && Date.now() - lastTarget.at < 15_000) {
+      const live = lastTarget.el.isConnected ? lastTarget.el.getBoundingClientRect() : null;
+      // A button that's gone (a sheet closed) or scrolled away gets the fallback spot.
+      const r = live && live.width > 0 ? live : null;
+      if (r && r.bottom > 0 && r.top < window.innerHeight) anchor = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
+    }
+    setShown({ id: Date.now(), msg, kind, anchor });
+    setSpoken({ msg, kind });
     clearTimeout(timer.current);
-    timer.current = setTimeout(() => setMsg(null), 2600);
+    timer.current = setTimeout(() => setShown(null), kind === 'error' ? 4000 : 2000);
   }, []);
   return (
     <ToastContext.Provider value={show}>
       {children}
       <div aria-live="polite" className="sr-only">
-        {msg}
+        {spoken?.kind === 'ok' ? spoken.msg : ''}
       </div>
-      {msg && (
-        <div className="toast" aria-hidden="true">
-          {msg}
-        </div>
-      )}
+      <div aria-live="assertive" className="sr-only">
+        {spoken?.kind === 'error' ? spoken.msg : ''}
+      </div>
+      {shown && <Bubble key={shown.id} shown={shown} />}
     </ToastContext.Provider>
+  );
+}
+
+function Bubble({ shown }: { shown: Shown }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // The top layer keeps it above an open sheet; older browsers fall back to a high z-index.
+    try {
+      if ('showPopover' in el) (el as HTMLElement & { showPopover: () => void }).showPopover();
+    } catch {
+      /* already showing */
+    }
+    const vw = document.documentElement.clientWidth;
+    const vh = window.innerHeight;
+    const w = el.offsetWidth;
+    const h = el.offsetHeight;
+    const gap = 10;
+    const margin = 8;
+    const a = shown.anchor;
+    let top: number;
+    let center: number;
+    let below = false;
+    if (a) {
+      center = (a.left + a.right) / 2;
+      below = a.top - h - gap < margin + 4;
+      top = below ? a.bottom + gap : a.top - h - gap;
+      top = Math.min(Math.max(top, margin), vh - h - margin);
+    } else {
+      center = vw / 2;
+      top = vh - h - 96; // above the bottom bar
+    }
+    const left = Math.min(Math.max(center - w / 2, margin), vw - w - margin);
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+    el.style.setProperty('--arrow-x', `${Math.min(Math.max(center - left, 14), w - 14)}px`);
+    el.dataset.side = a ? (below ? 'below' : 'above') : 'none';
+    el.style.visibility = 'visible';
+  }, [shown]);
+  return (
+    <div
+      ref={ref}
+      popover="manual"
+      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}`}
+      aria-hidden="true"
+      style={{ visibility: 'hidden' }}
+    >
+      {shown.msg}
+    </div>
   );
 }
 
@@ -206,14 +292,14 @@ export function SmsDraft({
         </a>
         <button
           className="btn small secondary"
-          onClick={async () => toast((await copyText(body)) ? 'Message copied' : "Couldn't copy. Select the text instead.")}
+          onClick={async () => (await copyText(body)) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error')}
         >
           Copy message
         </button>
         {phone && (
           <button
             className="btn small secondary"
-            onClick={async () => toast((await copyText(phone)) ? 'Number copied' : "Couldn't copy the number.")}
+            onClick={async () => (await copyText(phone)) ? toast('Number copied') : toast("Couldn't copy the number.", 'error')}
           >
             Copy number
           </button>
@@ -280,7 +366,7 @@ export function parseWhole(text: string, min: number, max: number): { value: num
 const ICON = { viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true };
 
 export const HomeIcon = () => (
-  <svg {...ICON}>
+  <svg {...ICON} data-icon="home">
     <path d="M3.5 10.5 12 3.8l8.5 6.7" />
     <path d="M5.8 9v10.2h12.4V9" />
     <path d="M10 19.2v-5.4h4v5.4" />
@@ -288,7 +374,7 @@ export const HomeIcon = () => (
 );
 
 export const PeopleIcon = () => (
-  <svg {...ICON}>
+  <svg {...ICON} data-icon="people">
     <circle cx="9" cy="8.5" r="3.2" />
     <path d="M3.2 19.2c.6-3.2 3-5 5.8-5s5.2 1.8 5.8 5" />
     <circle cx="16.8" cy="9.3" r="2.6" />
@@ -296,10 +382,11 @@ export const PeopleIcon = () => (
   </svg>
 );
 
+/** A cog: eight square teeth around a hole, so it never reads as a sun. */
 export const GearIcon = () => (
-  <svg {...ICON}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" />
+  <svg {...ICON} data-icon="gear">
+    <path d="M9.23 5.14 L10.17 2.58 L13.83 2.58 L14.77 5.14 L14.89 5.19 L17.37 4.04 L19.96 6.63 L18.81 9.11 L18.86 9.23 L21.42 10.17 L21.42 13.83 L18.86 14.77 L18.81 14.89 L19.96 17.37 L17.37 19.96 L14.89 18.81 L14.77 18.86 L13.83 21.42 L10.17 21.42 L9.23 18.86 L9.11 18.81 L6.63 19.96 L4.04 17.37 L5.19 14.89 L5.14 14.77 L2.58 13.83 L2.58 10.17 L5.14 9.23 L5.19 9.11 L4.04 6.63 L6.63 4.04 L9.11 5.19 Z" />
+    <circle cx="12" cy="12" r="3.1" />
   </svg>
 );
 
@@ -344,7 +431,18 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
 }
 
 /** "3 of 4 in" with a dot per spot, filled as people sign up, plus any waitlist. */
-export function PlayersLine({ confirmed, waiting, waitingWord = 'on the waitlist' }: { confirmed: number; waiting: number; waitingWord?: string }) {
+export function PlayersLine({
+  confirmed,
+  waiting,
+  waitingWord = 'on the waitlist',
+  extra,
+}: {
+  confirmed: number;
+  waiting: number;
+  waitingWord?: string;
+  /** A short note at the end, like "2/4 paid". */
+  extra?: string | null;
+}) {
   const slots = playerSlots(confirmed);
   return (
     <div className="players-line">
@@ -361,6 +459,7 @@ export function PlayersLine({ confirmed, waiting, waitingWord = 'on the waitlist
           · {waiting} {waitingWord}
         </span>
       )}
+      {extra && <span className="players-wait">· {extra}</span>}
     </div>
   );
 }

@@ -146,11 +146,43 @@ describe('calendar file', () => {
     });
     expect(ics).toContain('BEGIN:VCALENDAR\r\n');
     expect(ics).toContain('SUMMARY:Pickleball\r\n');
-    expect(ics).toContain('DTSTART:20261028T000000Z');
-    expect(ics).toContain('DTEND:20261028T020000Z');
+    // Written in Eastern wall-clock time with the zone's rules, never in UTC.
+    expect(ics).toContain('DTSTART;TZID=America/Detroit:20261027T200000\r\n');
+    expect(ics).toContain('DTEND;TZID=America/Detroit:20261027T220000\r\n');
+    expect(ics).not.toMatch(/DT(START|END)[^\r]*Z\r\n/);
+    expect(ics).toContain('BEGIN:VTIMEZONE\r\nTZID:America/Detroit\r\n');
+    expect(ics).toContain('RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=2SU\r\nTZOFFSETFROM:-0500\r\nTZOFFSETTO:-0400\r\nTZNAME:EDT');
+    expect(ics).toContain('RRULE:FREQ=YEARLY;BYMONTH=11;BYDAY=1SU\r\nTZOFFSETFROM:-0400\r\nTZOFFSETTO:-0500\r\nTZNAME:EST');
+    // The time zone block comes before the event, as Calendar expects.
+    expect(ics.indexOf('END:VTIMEZONE')).toBeLessThan(ics.indexOf('BEGIN:VEVENT'));
     expect(ics).toContain('LOCATION:Northville Pickleball Club\\, 123 Main St\\, Northville\\, MI');
     expect(ics).toContain('UID:abc@pickleball-club');
     expect(ics.trimEnd().endsWith('END:VCALENDAR')).toBe(true);
+  });
+
+  it('stays 8:00 to 10:00 PM after the November time change (standard time)', () => {
+    const ics = sessionCalendar({
+      id: 'def',
+      startsAt: '2026-11-04T01:00:00.000Z', // Tue Nov 3, 8:00 PM EST
+      endsAt: '2026-11-04T03:00:00.000Z',
+      location: 'Northville Pickleball Club',
+      nowIso: '2026-10-26T16:00:00.000Z',
+      timezone: 'America/Detroit',
+    });
+    expect(ics).toContain('DTSTART;TZID=America/Detroit:20261103T200000\r\n');
+    expect(ics).toContain('DTEND;TZID=America/Detroit:20261103T220000\r\n');
+    expect(ics).toContain('SUMMARY:Pickleball\r\n');
+  });
+
+  it('the zone rules put both dates on the right side of the change', () => {
+    // 2026: daylight time ends Sun Nov 1 at 2:00 AM. Oct 27 is EDT (-4), Nov 3 is EST (-5).
+    const rule = (y: number, month: number, nth: number) => {
+      const first = new Date(Date.UTC(y, month - 1, 1)).getUTCDay();
+      return 1 + ((7 - first) % 7) + (nth - 1) * 7;
+    };
+    expect(rule(2026, 11, 1)).toBe(1);
+    expect(rule(2026, 3, 2)).toBe(8);
+    expect(rule(2027, 11, 1)).toBe(7);
   });
 });
 

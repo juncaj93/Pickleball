@@ -1,4 +1,5 @@
 import { type FormEvent, useState } from 'react';
+import { SITE_NAME } from '../../shared/settings';
 import { api, ApiError, navigate, storageGet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
 import { ErrorState, Notice, Spinner } from '../ui';
@@ -22,7 +23,7 @@ export function SiteHome() {
   if (status.loading && !s) {
     return (
       <>
-        <TopBar eyebrow="Pickleball" title="Pickleball" />
+        <TopBar eyebrow={SITE_NAME} title={SITE_NAME} />
         <Spinner />
       </>
     );
@@ -30,7 +31,7 @@ export function SiteHome() {
   if (status.error || !s) {
     return (
       <>
-        <TopBar eyebrow="Pickleball" title="Pickleball" />
+        <TopBar eyebrow={SITE_NAME} title={SITE_NAME} />
         <main className="page">{status.error && <ErrorState error={status.error} onRetry={status.reload} />}</main>
       </>
     );
@@ -60,7 +61,7 @@ export function OrganizerLink() {
 function NotSetUp() {
   return (
     <>
-      <TopBar eyebrow="Pickleball" title="Welcome" />
+      <TopBar eyebrow={SITE_NAME} title="Welcome" />
       <main className="page stack-lg">
         <div className="hero stack">
           <div className="big-ball" aria-hidden="true" />
@@ -78,7 +79,7 @@ function LinkOnly() {
   const lastGroup = storageGet('pb_group_key');
   return (
     <>
-      <TopBar eyebrow="Pickleball" title="Pickleball" />
+      <TopBar eyebrow={SITE_NAME} title={SITE_NAME} />
       <main className="page stack-lg">
         <p className="muted">Open the link your organizer sent you to see the schedule.</p>
         {lastGroup && (
@@ -112,7 +113,7 @@ function GroupWord({ onDone }: { onDone: () => void }) {
   }
   return (
     <>
-      <TopBar eyebrow="Pickleball" title="Group word" />
+      <TopBar eyebrow={SITE_NAME} title="Group word" />
       <main className="page stack-lg">
         <form className="stack" onSubmit={submit}>
           <label className="field">

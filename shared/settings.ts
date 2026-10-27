@@ -49,6 +49,10 @@ export function normalizeSettings(input: unknown): GroupSettings {
 }
 
 export const DEFAULT_VENUE_NAME = 'Northville Pickleball Club';
+/** The site's name: header fallback, browser tab, Home Screen icon. The group's own name lives in Settings. */
+export const SITE_NAME = 'Pickleball Bros';
+/** Where the organizer books the court on CourtReserve. */
+export const COURTRESERVE_BOOKING_URL = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
 export const SESSION_DAYS = [2, 4]; // Tuesday, Thursday
 export const SESSION_START = { hour: 20, minute: 0 }; // 8:00 PM local
 export const SESSION_END = { hour: 22, minute: 0 }; // 10:00 PM local
