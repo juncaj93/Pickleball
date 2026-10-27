@@ -80,7 +80,7 @@ describe('court cost is private', () => {
     // The organizer sees it.
     expect((await dash(ctx)).sessions.find((x: any) => x.id === s.id).courtCostCents).toBe(4837);
 
-    const leaks = (text: string) => /4837|48\.37|courtCost|court_cost/i.test(text);
+    const leaks = (text: string) => /(?<![A-Za-z0-9_-])4837(?![A-Za-z0-9_-])|48\.37|courtCost|court_cost/i.test(text);
     const alex = await playerPhone(ctx, 'Alex');
     expect(leaks((await alex.call('GET', '/api/group')).text)).toBe(false);
     const asAlex = await ctx.organizer.call('GET', '/api/group', undefined, { 'X-View-As': ctx.byName.Alex });

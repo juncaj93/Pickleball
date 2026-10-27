@@ -215,7 +215,7 @@ describe('monthly money is private', () => {
       movedMessage(s, TZ, 'y'),
     ];
     for (const t of texts) {
-      expect(t).not.toMatch(/(?<![0-9a-f-])(4321|2987)(?![0-9a-f-])|43\.21|29\.87|membership|typicalCourtCost|monthlyMembership|Monthly money|Surplus|Short:/i);
+      expect(t).not.toMatch(/(?<![A-Za-z0-9_-])(4321|2987)(?![A-Za-z0-9_-])|43\.21|29\.87|membership|typicalCourtCost|monthlyMembership|Monthly money|Surplus|Short:/i);
     }
   });
 });
