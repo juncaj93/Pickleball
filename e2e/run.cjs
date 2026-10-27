@@ -483,10 +483,24 @@ async function main() {
     await check('Home: court and players are separate lines; no chip; no duplicate court cards', async () => {
       await admin.reload();
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
-      const link = section.getByRole('link', { name: 'Book on CourtReserve' });
-      assert((await link.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442', 'wrong CourtReserve link');
+      const BOOK = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
+      const CANCEL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
+      const link = section.locator('.spread').getByRole('link', { name: /^Book a court/ });
+      assert((await link.getAttribute('href')) === BOOK, 'wrong CourtReserve link');
       assert((await link.getAttribute('target')) === '_blank', 'CourtReserve should open in a new tab');
-      assert((await admin.locator('a[href*="courtreserve.com"]').evaluateAll((as) => as.every((a) => a.href === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && a.target === '_blank'))), 'every CourtReserve link should be the booking page in a new tab');
+      assert((await admin.getByText('Book on CourtReserve').count()) === 0, 'old button wording still shown');
+      assert((await admin.locator('a[href*="courtreserve.com"]').evaluateAll((as, ok) => as.every((a) => ok.includes(a.href) && a.target === '_blank'), [BOOK, CANCEL])), 'every CourtReserve link should be the booking or cancel page, in a new tab');
+      // Its own color, so it reads as leaving the site, plus an arrow.
+      const colors = await admin.evaluate(() => {
+        const ext = document.querySelector('a.btn.external');
+        const probe = document.createElement('button');
+        probe.className = 'btn';
+        document.body.appendChild(probe);
+        const r = { ext: getComputedStyle(ext).backgroundColor, main: getComputedStyle(probe).backgroundColor, arrow: !!ext.querySelector('svg.ext-icon') };
+        probe.remove();
+        return r;
+      });
+      assert(colors.ext !== colors.main && colors.arrow, `Book a court should look different from the green buttons: ${JSON.stringify(colors)}`);
       await sessionCards(admin).first().waitFor();
       for (const name of [/^Courts to book/, /^Waiting on the court/, /^Short on players/]) {
         assert((await admin.getByRole('article', { name }).count()) === 0, `old ${name} card still on Home`);
@@ -519,6 +533,18 @@ async function main() {
       assert((await banner.locator('svg.court-icon').count()) === 1, 'banner needs an icon with the words');
       const look = await card.evaluate((el) => ({ style: getComputedStyle(el).borderTopStyle, banner: getComputedStyle(el.querySelector('.court-banner')).backgroundColor }));
       assert(look.style === 'dashed', `not-booked border should be dashed, was ${look.style}`);
+      // A Book link right next to I booked it, to the booking page.
+      const book = banner.getByRole('link', { name: /^Book/ });
+      assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442', 'banner Book link should go to the booking page');
+      const bb = await book.boundingBox();
+      const ib = await banner.getByRole('button', { name: 'I booked it' }).boundingBox();
+      assert(Math.abs(bb.y - ib.y) < 4 && bb.x < ib.x, 'Book should sit right before I booked it');
+      for (const scheme of ['light', 'dark']) {
+        await admin.emulateMedia({ colorScheme: scheme });
+        await card.screenshot({ path: path.join(SHOTS, `card-needs-${scheme}.png`) });
+        await admin.locator('section[aria-labelledby="sessions-title"] .spread').first().screenshot({ path: path.join(SHOTS, `book-a-court-${scheme}.png`) });
+      }
+      await admin.emulateMedia({ colorScheme: 'light' });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-not-booked.png') });
       await banner.getByRole('button', { name: 'I booked it' }).click();
       await admin.locator('.toast', { hasText: 'Court booked' }).waitFor();
@@ -1165,11 +1191,29 @@ async function main() {
       await more(card);
       await card.getByRole('button', { name: 'Reschedule' }).first().click();
       const sheet = admin.locator('dialog[open]');
+      const change = sheet.getByRole('link', { name: /^Change court on CourtReserve/ });
+      assert((await change.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1', 'reschedule should link to the modify/cancel page');
       await sheet.getByLabel('Start').fill('19:30');
       await sheet.getByText(/New time: .*7:30 to 10:00 PM$/).waitFor();
       await sheet.getByRole('button', { name: 'Move session' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       await card.getByText('7:30 to 10:00 PM', { exact: true }).waitFor();
+    });
+
+    await check('a booked session links to the CourtReserve modify/cancel page from More and from Cancel session', async () => {
+      const CANCEL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
+      const card = sessionCards(admin).first();
+      assert((await card.getAttribute('data-court')) === 'booked', 'first card should be booked here');
+      await more(card);
+      const link = card.getByRole('link', { name: /^Change or cancel court/ });
+      assert((await link.getAttribute('href')) === CANCEL && (await link.getAttribute('target')) === '_blank', 'More should link to the modify/cancel page');
+      await card.getByRole('button', { name: 'Cancel session' }).click();
+      const dlg = admin.locator('dialog[open]');
+      const inDialog = dlg.getByRole('link', { name: /^Cancel court on CourtReserve/ });
+      assert((await inDialog.getAttribute('href')) === CANCEL, 'cancel dialog should link to the modify/cancel page');
+      await admin.keyboard.press('Escape');
+      await dlg.waitFor({ state: 'detached' }).catch(() => {});
+      assert((await card.getAttribute('data-court')) === 'booked', 'closing the dialog must not cancel');
     });
 
     await check('canceling needs confirmation and warns it does not cancel the court', async () => {

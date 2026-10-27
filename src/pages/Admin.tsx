@@ -5,7 +5,7 @@ import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
-import { Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
+import { CourtReserveLink, Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
@@ -528,9 +528,9 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
         <h2 id="sessions-title" className="section-title">
           Sessions
         </h2>
-        <a className="btn small secondary" href={COURTRESERVE_BOOKING_URL} target="_blank" rel="noopener noreferrer">
-          Book on CourtReserve
-        </a>
+        <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+          Book a court
+        </CourtReserveLink>
       </div>
       <div className="segmented" role="group" aria-label="Which sessions">
         <button aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>

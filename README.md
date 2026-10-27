@@ -41,7 +41,7 @@ lines, and each session appears once:
 - short on players (from the day-before check-in): Invite people / Reschedule /
   Cancel / Keep as is, right on that card
 
-**Book on CourtReserve** sits next to the Sessions title. Sessions are grouped
+**Book a court** (blue-teal, opens CourtReserve in a new tab) sits next to the Sessions title, and a **Book** link sits next to I booked it on each card that needs a court. Booked sessions link to CourtReserve's change/cancel page from More, Reschedule and Cancel session. Sessions are grouped
 by calendar week. The red number on the Home tab counts Needs attention items
 plus courts to book inside the booking window. Today's date and **View as…**
 sit at the top right of the green header. Reservation number and court cost are optional,

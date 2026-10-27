@@ -10,7 +10,7 @@ import {
   replacementMessage,
 } from '../../../shared/messages';
 import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
-import { DEFAULT_VENUE_NAME } from '../../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, DEFAULT_VENUE_NAME } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
 import type { BookingStatus } from '../../../shared/status';
 import {
@@ -24,7 +24,7 @@ import {
   toLocalInputValue,
 } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
-import { Chip, ConfirmDialog, CourtIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 
@@ -75,7 +75,10 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             <CourtIcon kind="needs" />
             <span>{court.text}</span>
           </div>
-          <BookedButton ctx={ctx} s={s} />
+          <div className="banner-btns">
+            <CourtReserveLink href={COURTRESERVE_BOOKING_URL}>Book</CourtReserveLink>
+            <BookedButton ctx={ctx} s={s} />
+          </div>
         </div>
       )}
       {courtWait && (
@@ -164,6 +167,11 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             </button>
           )}
           {later && <BookedButton ctx={ctx} s={s} small />}
+          {live && s.bookingStatus === 'booked' && (
+            <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
+              Change or cancel court
+            </CourtReserveLink>
+          )}
           {(needsCourt || later) && <CourtWaitlistStart ctx={ctx} s={s} />}
           {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
           {!s.state.flags.started && s.courtState !== 'not_opened' && (
@@ -310,6 +318,11 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         <button className="btn small danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
           Cancel session
         </button>
+        {booked && (
+          <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
+            Cancel court
+          </CourtReserveLink>
+        )}
         <button
           className="btn small ghost"
           disabled={busy}
@@ -815,6 +828,11 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
 
   return (
     <form className="stack" onSubmit={submit}>
+      {s.bookingStatus === 'booked' && (
+        <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
+          Change court on CourtReserve
+        </CourtReserveLink>
+      )}
       <label className="field">
         Date
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
@@ -864,6 +882,11 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 Cancel the reservation with the venue yourself.
                 {s.cancellationDeadlineAt ? ` Venue deadline: ${deadlineLine(s, tz, now)}.` : ''}
               </Notice>
+              {s.bookingStatus === 'booked' && (
+                <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
+                  Cancel court on CourtReserve
+                </CourtReserveLink>
+              )}
             </>
           )}
         </div>
