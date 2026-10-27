@@ -150,17 +150,39 @@ async function main() {
       await admin.screenshot({ path: path.join(SHOTS, 'setup-done.png'), fullPage: true });
     });
 
-    await check('first visit shows one small dismissible notice, and no blue boxes', async () => {
+    await check('organizer Home is lean: no first-visit notice, no guiding filler, today\'s date top right', async () => {
       await admin.getByRole('button', { name: 'Go to the organizer dashboard' }).click();
-      const note = admin.getByRole('note');
-      await note.getByText('never sends texts or alerts by itself').waitFor();
-      assert((await admin.getByText('Texts are never sent automatically').count()) === 0, 'old blue box still shown');
-      assert((await admin.getByText('Times shown in Eastern time').count()) === 0, 'old header line still shown');
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-home.png'), fullPage: true });
-      await note.getByRole('button', { name: 'Dismiss' }).click();
-      await admin.reload();
       await tab(admin, 'Home').waitFor();
-      assert((await admin.getByRole('note').count()) === 0, 'notice came back after dismissing');
+      await sessionCards(admin).first().waitFor();
+      assert((await admin.getByRole('note').count()) === 0, 'first-visit notice should be gone');
+      for (const filler of [/never sends texts/, /Texts are never sent automatically/, /Times shown in Eastern time/, /When the venue gives you a court/, /After you book, come back/, /Earned when 6 played/, /Hidden from everyone/]) {
+        assert((await admin.getByText(filler).count()) === 0, `filler still shown: ${filler}`);
+      }
+      const today = (await admin.locator('header .today').innerText()).replace(/^Today is\s*/, '').trim();
+      const expected = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' });
+      assert(today === expected, `header date was ${today}, expected ${expected}`);
+      const box = await admin.locator('header .today').boundingBox();
+      const vw = admin.viewportSize().width;
+      assert(box.x + box.width > vw - 40, 'date should sit at the top right');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-home.png'), fullPage: true });
+    });
+
+    await check('sessions are grouped by calendar week with a divider', async () => {
+      const section = admin.locator('section[aria-labelledby="sessions-title"]');
+      const labels = await section.locator('.week-break').allInnerTexts();
+      assert(labels.length >= 2, `expected week dividers, got ${labels}`);
+      assert(/^(This week|Next week|Week of [A-Z][a-z]{2} \d{1,2})$/i.test(labels[0].trim()), `first divider was ${labels[0]}`);
+      // No two dividers in a row, and never more than 2 sessions (Tue + Thu) between them.
+      const kids = await section.evaluate((el) => [...el.querySelectorAll(':scope > .week-break, :scope > article')].map((n) => n.tagName));
+      let run = 0;
+      for (const k of kids) {
+        if (k === 'H3') {
+          run = 0;
+          continue;
+        }
+        run++;
+        assert(run <= 2, 'a week has more than 2 sessions without a divider');
+      }
     });
 
     await check('floating tab pill has exactly Home, Players, Settings', async () => {
@@ -741,6 +763,20 @@ async function main() {
       assert(!styles.colors.includes(styles.pill), `pill uses a status color: ${styles.pill}`);
     });
 
+    await check('players see today\'s date top right and week dividers, without filler', async () => {
+      const p = players.Casey;
+      await p.reload();
+      await p.locator('.schedule article').first().waitFor();
+      const today = (await p.locator('header .today').innerText()).replace(/^Today is\s*/, '').trim();
+      assert(/^(Sun|Mon|Tue|Wed|Thu|Fri|Sat), [A-Z][a-z]{2} \d{1,2}$/.test(today), `player header date was ${today}`);
+      const labels = await p.locator('.schedule .week-break').allInnerTexts();
+      assert(labels.length >= 2, `expected week dividers on the player screen, got ${labels}`);
+      for (const filler of [/standby list so we're ready/, /Nobody on standby yet/, /so this one is off/]) {
+        assert((await p.getByText(filler).count()) === 0, `filler still shown: ${filler}`);
+      }
+      await p.screenshot({ path: path.join(SHOTS, 'player-weeks.png'), fullPage: true });
+    });
+
     await check('the Home Screen tip is one small line at the very bottom, shown once; Settings has the steps', async () => {
       const p = await newPage();
       await p.goto(playerLink);
@@ -897,7 +933,6 @@ async function main() {
         await p.reload();
         const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
         await row.locator('.sched-status').getByText('Waiting on the court', { exact: true }).waitFor();
-        await row.getByText("Join the standby list so we're ready if it opens.").waitFor();
         await row.getByRole('button', { name: 'Put me on standby' }).click();
         await row.locator('.me-tag', { hasText: /Standby #\d/ }).waitFor();
         assert((await row.getByLabel('Money for this session').count()) === 0, 'standby players owe nothing');

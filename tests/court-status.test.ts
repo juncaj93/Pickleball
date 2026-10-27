@@ -99,3 +99,18 @@ describe('player wording', () => {
     expect(courtStatus(other).playerText).toBe('Court not booked yet');
   });
 });
+
+describe('week dividers', () => {
+  it('labels weeks This week, Next week, then Week of Mon date; Tue and Thu share a week', async () => {
+    const { weekLabel, weekStart } = await import('../shared/time');
+    const tz = 'America/Detroit';
+    const now = Date.parse('2026-10-27T15:00:00Z'); // Tue, Oct 27
+    expect(weekStart('2026-10-27T23:00:00Z', tz)).toBe(weekStart('2026-10-30T00:00:00Z', tz)); // Tue and Thu evening
+    expect(weekLabel('2026-10-29T23:00:00Z', now, tz)).toBe('This week');
+    expect(weekLabel('2026-11-03T23:00:00Z', now, tz)).toBe('Next week');
+    expect(weekLabel('2026-11-10T23:00:00Z', now, tz)).toBe('Week of Nov 9');
+    expect(weekLabel('2026-10-20T23:00:00Z', now, tz)).toBe('Last week');
+    // Late evening Eastern is already the next day in UTC; it still counts by the local date.
+    expect(weekLabel('2026-11-02T03:30:00Z', now, tz)).toBe('This week'); // Sun, Nov 1, 10:30 PM
+  });
+});

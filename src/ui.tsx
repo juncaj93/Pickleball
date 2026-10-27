@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
-import { copyText, isIOS, storageGet, storageSet } from './lib';
+import { copyText, isIOS } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -224,27 +224,6 @@ export function SmsDraft({
           Messages didn't open? Tap Copy message and paste it into any texting app.
         </p>
       )}
-    </div>
-  );
-}
-
-/** A small heads-up shown once per phone, the first time someone opens the site. */
-export function FirstVisitNotice({ children }: { children: ReactNode }) {
-  const [show, setShow] = useState(() => !storageGet('pb_seen_intro'));
-  if (!show) return null;
-  return (
-    <div className="hint-banner" role="note">
-      <p>{children}</p>
-      <button
-        className="icon-btn"
-        aria-label="Dismiss"
-        onClick={() => {
-          storageSet('pb_seen_intro', '1');
-          setShow(false);
-        }}
-      >
-        ✕
-      </button>
     </div>
   );
 }

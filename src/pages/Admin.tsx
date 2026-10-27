@@ -1,11 +1,11 @@
-import { type FormEvent, type ReactElement, useState } from 'react';
+import { Fragment, type FormEvent, type ReactElement, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { dayBeforeMessage, lastCallMessage, promotionMessage } from '../../shared/messages';
 import { formatPrice } from '../../shared/money';
-import { formatDateTime, formatRelative, formatShortDate, formatTimeRange } from '../../shared/time';
+import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
-import { Empty, ErrorState, FirstVisitNotice, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
+import { Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import type { CourtKind } from '../../shared/court';
@@ -155,7 +155,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
       <SessionSheets ctx={ctx} sheet={sheet} onClose={() => setSheet(null)} />
       <Sheet open={pickViewAs} title="View as…" onClose={() => setPickViewAs(false)}>
         <div className="stack">
-          <p className="small muted">See exactly what they see. Anything you tap really happens for them, and the site logs that you did it.</p>
+          <p className="small muted">Taps here really happen for them.</p>
           <div className="name-grid">
             {d.players
               .filter((p) => p.isActive)
@@ -185,11 +185,6 @@ function HomeTab({ ctx, onViewAs }: { ctx: AdminCtx; onViewAs: () => void }) {
   const items = buildTodo(ctx.d);
   return (
     <>
-      <FirstVisitNotice>
-        This site never sends texts or alerts by itself. It writes the texts and you send them from Messages. Alerts show up here
-        when you open this page.
-      </FirstVisitNotice>
-
       <section className="stack" aria-labelledby="todo-title">
         <div className="spread" style={{ alignItems: 'center' }}>
           <h2 id="todo-title" className="section-title">
@@ -311,8 +306,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       {item.kind === 'sixdrop' && (
         <>
           <p className="small">
-            Everyone is back to {formatPrice(settings.pricePerPlayerCents)}, and nobody earns a credit for this session unless it gets back to 6.
-            Sort out anything already paid or promised by hand:
+            Everyone is back to {formatPrice(settings.pricePerPlayerCents)}. Sort these out by hand:
           </p>
           <ul className="rows">
             {s.roster
@@ -390,7 +384,6 @@ function CreditsCard({ ctx }: { ctx: AdminCtx }) {
   return (
     <section className="card stack" aria-labelledby="credits-title">
       <h2 id="credits-title">Credits</h2>
-      <p className="small muted">Earned when 6 played. Each comes off that person's next session automatically.</p>
       <ul className="rows">
         {ctx.d.credits.map((c) => (
           <li key={c.playerId}>
@@ -445,7 +438,6 @@ function FivePanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   }
   return (
     <div className="stack">
-      <p className="small">Someone dropped out of 6. Nothing changes until you choose:</p>
       <div className="stack" style={{ gap: 8 }}>
         {firstWaiting && (
           <button className="btn small" disabled={busy} onClick={() => roster(firstWaiting.playerId, 'confirm', `${firstWaiting.name} is in. 6 going.`)}>
@@ -487,7 +479,6 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
       <h2 id="hidden-title" className="section-title" style={{ margin: 0 }}>
         Before your first session date
       </h2>
-      <p className="small muted">Hidden from everyone. Show one if you want to play it anyway.</p>
       <ul className="rows">
         {ctx.d.hiddenSessions.map((h) => (
           <li key={h.id}>
@@ -528,6 +519,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   if (view === 'past') list.reverse();
   const shown = all ? list : list.slice(0, 4);
   const counts = courtCounts(ctx.d.sessions, nowMs);
+  const tz = ctx.d.group.timezone;
   const parts = (
     [
       ['booked', `${counts.booked} booked`],
@@ -580,8 +572,13 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
         </button>
       </div>
       {list.length === 0 && <Empty>No sessions here.</Empty>}
-      {shown.map((s) => (
-        <SessionCard key={s.id} ctx={ctx} s={s} />
+      {shown.map((s, i) => (
+        <Fragment key={s.id}>
+          {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(shown[i - 1].startsAt, tz)) && (
+            <h3 className="week-break">{weekLabel(s.startsAt, nowMs, tz)}</h3>
+          )}
+          <SessionCard ctx={ctx} s={s} />
+        </Fragment>
       ))}
       {list.length > shown.length && (
         <button className="btn ghost block" onClick={() => setAll(true)}>

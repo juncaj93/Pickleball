@@ -167,3 +167,21 @@ export function formatRelative(targetIso: string, nowMs: number): string {
   const diff = Date.parse(targetIso) - nowMs;
   return diff >= 0 ? `in ${formatDuration(diff)}` : `${formatDuration(-diff)} ago`;
 }
+
+const DAY_MS = 24 * 3600_000;
+
+/** Days since 1970 of the Monday that starts this date's week, in the group's time zone. */
+export function weekStart(iso: string | number, tz: string): number {
+  const p = localParts(typeof iso === 'number' ? iso : Date.parse(iso), tz);
+  return Date.UTC(p.year, p.month - 1, p.day) / DAY_MS - ((p.weekday + 6) % 7);
+}
+
+/** "This week", "Next week", "Last week", or "Week of Nov 9". */
+export function weekLabel(iso: string, nowMs: number, tz: string): string {
+  const diff = weekStart(iso, tz) - weekStart(nowMs, tz);
+  if (diff === 0) return 'This week';
+  if (diff === 7) return 'Next week';
+  if (diff === -7) return 'Last week';
+  const monday = new Date(weekStart(iso, tz) * DAY_MS);
+  return `Week of ${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+}

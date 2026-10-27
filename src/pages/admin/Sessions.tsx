@@ -357,7 +357,6 @@ export function SessionSheets({
       {s && kind === 'reschedule' && <RescheduleForm ctx={ctx} s={s} onDone={onClose} />}
       {s && kind === 'poll' && (
         <div className="stack">
-          <p className="small muted">Opens Messages with no recipient. Pick your group chat there.</p>
           <SmsDraft
             to="Group chat"
             phone={null}
@@ -592,7 +591,6 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           Nobody owes for it. Anyone who already paid shows under Refunds on Home.
         </Notice>
       )}
-      <p className="small muted">Mark someone paid after you see the money in Venmo. Nothing here checks Venmo.</p>
       {error && <Notice tone="danger">{error}</Notice>}
       <ul className="list">
         {rows.map((r) => (
@@ -673,7 +671,7 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
           {s.state.flags.checkInsDue
             ? `Due now. ${unconfirmed.length} player${unconfirmed.length === 1 ? '' : 's'} haven't checked in.`
             : Date.parse(dueAt) > now
-              ? `Due ${formatDateTime(dueAt, tz)} (${formatRelative(dueAt, now)}). You can send early if you like.`
+              ? `Due ${formatDateTime(dueAt, tz)} (${formatRelative(dueAt, now)}).`
               : 'Everyone checked in.'}
         </p>
         {error && <Notice tone="danger">{error}</Notice>}
@@ -699,7 +697,6 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
       <section className="stack">
         <h3>Group text about booking</h3>
-        <p className="small muted">Opens Messages with no recipient. Pick your group chat there.</p>
         <SmsDraft to="Group chat" phone={null} body={bookingMessage(s, tz)} />
       </section>
     </div>
@@ -786,7 +783,6 @@ function InviteSubs({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       )}
       {drafts && (
         <div className="stack" style={{ opacity: full ? 0.55 : 1 }}>
-          {!full && <p className="small muted">Open each one and send it. This page checks every few seconds for a claim.</p>}
           {drafts.map((d) => (
             <SmsDraft key={d.playerId} to={d.name} phone={d.phone} body={replacementMessage(s, tz, d.url)} />
           ))}
@@ -816,7 +812,6 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
 
   return (
     <form className="stack" onSubmit={submit}>
-      <p className="small muted">Move it here after you change the booking with the venue. Players see the new time right away.</p>
       <label className="field">
         Date
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
