@@ -205,17 +205,15 @@ describe('player schedule data', () => {
     expect(alex.sessions.find((v: any) => v.id === next.id).mine).toMatchObject({ oweCents: 900, creditCents: 500 });
   });
 
-  it('keeps a played session in the list while the player still owes for it', async () => {
+  it('a played session leaves the list; what is still owed moves to the payment card', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     await join(ctx, 'Devon', s.id);
     ctx.app.now = Date.parse(s.endsAt) + 30 * HOUR;
     const devon = await asPlayer(ctx, 'Devon');
-    const row = devon.sessions.find((v: any) => v.id === s.id);
-    expect(row).toMatchObject({ past: true, mine: { oweCents: 1400 } });
-    expect(devon.owed[0]).toMatchObject({ sessionId: s.id, reminder: true });
-    // Someone who doesn't owe for it doesn't see it any more.
-    expect((await asPlayer(ctx, 'Alex')).sessions.some((v: any) => v.id === s.id)).toBe(false);
+    expect(devon.sessions.some((v: any) => v.id === s.id)).toBe(false);
+    expect(devon.payDue[0]).toMatchObject({ sessionId: s.id, amountCents: 1400, reminder: true });
+    expect((await asPlayer(ctx, 'Alex')).payDue).toEqual([]);
   });
 });
 

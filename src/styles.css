@@ -1416,35 +1416,6 @@ label.field {
   margin: 0;
 }
 
-.money {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 6px;
-  margin-top: 2px;
-  border-top: 1px solid var(--line);
-}
-
-/* "You owe $14" and Pay with Venmo on one line. */
-.owe-line {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 0.92rem;
-}
-
-.btn.pay-btn {
-  flex: none;
-  min-height: 44px;
-  padding: 6px 12px;
-}
-
-.money .paid {
-  font-weight: 700;
-}
-
 .cal-link {
   align-self: flex-start;
   font-size: 0.88rem;
@@ -1880,4 +1851,23 @@ label.field {
 }
 .rows.card {
   padding: 2px 14px;
+}
+
+/* Game day's payment card, at the very top of the player's screen. */
+.pay-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 2px solid var(--ok-edge);
+  background: var(--ok-bg);
+}
+.pay-card h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--ink);
+}
+.pay-list {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.92rem;
 }

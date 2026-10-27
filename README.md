@@ -14,13 +14,14 @@ tap their name once ("Who are you?"), and the phone remembers it. After that eve
 
 - a "Want in on Tuesday? Yes / No" card for a usual day they haven't
   answered yet (regulars only)
-- "You owe $14 for Tue, Oct 27" with a **Pay $14 with Venmo** button once
-  they're confirmed (opening Venmo never marks anything paid)
+- on game day, from 8:00 AM, a card at the very top: "Tonight: you owe $14"
+  with a big **Pay with Venmo** button (amount and a note like "Pickleball Tue
+  Nov 3 - Ryan" filled in). Several unpaid sessions combine into one total.
+  It stays until the organizer marks them paid; opening Venmo never does
 - a schedule of date tiles (TUE / 3 / NOV) with the time, court status
   (Court booked / Court not booked yet / Waiting on the court), any holiday, who's in ("3 of 4 in"), **one big
-  button** (I'm in / I'm out / Join waitlist / Join standby), their money
-  for that session (You owe $14 + Pay with Venmo, Paid, or Credit), and a small
-  Add to Calendar link
+  button** (I'm in / I'm out / Join waitlist / Join standby), and a small
+  Add to Calendar link. No money on the rows
 
 **The organizer** signs in at `/admin` with a PIN. A floating pill at the
 bottom has three tabs: **Home**, **Players**, **Settings**.

@@ -81,7 +81,7 @@ async function main() {
     ? null
     : spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
         cwd: ROOT,
-        env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN },
+        env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN, DEV_CLOCK: '1' },
         stdio: ['ignore', 'pipe', 'pipe'],
         // Own process group, so stopping it also stops the Vite process npx starts.
         detached: true,
@@ -435,16 +435,18 @@ async function main() {
       await card.getByText(/Good news, Frankie!/).waitFor();
     });
 
-    await check('6 going: the first four hear about a $5 credit, the last two owe $9 (6-person discount)', async () => {
+    await check('6 going: the first four hear about a $5 credit; nobody is asked to pay on the row', async () => {
       await players.Casey.reload();
       await firstCard(players.Casey).getByText("6 are playing. You'll get a $5 credit toward your next session.").waitFor();
       assert((await firstCard(players.Casey).getByText('6-person discount').count()) === 0, 'first four should not get the discount');
       await players.Frankie.reload();
-      const money = firstCard(players.Frankie).getByLabel('Money for this session');
-      await money.getByText('You owe $9').waitFor();
-      await money.getByText('6-person discount').waitFor();
-      await money.getByRole('link', { name: 'Pay $9 with Venmo' }).waitFor();
+      await firstCard(players.Frankie).locator('.spots li').first().waitFor();
       assert((await firstCard(players.Frankie).getByText(/credit toward your next/).count()) === 0, 'last two should not hear about a credit');
+      for (const name of ['Casey', 'Frankie']) {
+        const rows = players[name].locator('.schedule');
+        assert((await rows.getByText(/You owe|Pay with Venmo|\$9|\$14/).count()) === 0, `${name} sees money on a session row`);
+        assert((await rows.locator('a[href*="venmo"]').count()) === 0, `${name} has a Venmo button on a row`);
+      }
       await admin.reload();
       assert((await admin.getByText(/Refund \$5 each/).count()) === 0, 'old refund card still shown');
       assert((await admin.getByRole('checkbox', { name: /refunded/i }).count()) === 0, 'Refunded checkbox still shown');
@@ -466,7 +468,7 @@ async function main() {
       const dropped = admin.getByRole('article', { name: /Was 6, now 5: discount and credits are off/ });
       await dropped.getByText(/now owes \$14/).first().waitFor();
       await players.Frankie.reload();
-      await players.Frankie.getByRole('link', { name: 'Pay $14 with Venmo' }).first().waitFor();
+      await players.Frankie.locator('.schedule article').first().waitFor();
       assert((await firstCard(players.Frankie).getByText('6-person discount').count()) === 0, 'discount text should be gone');
       await players.Alex.reload();
       await firstCard(players.Alex).locator('.in-pills li').first().waitFor();
@@ -709,19 +711,64 @@ async function main() {
       await admin.keyboard.press('Escape');
     });
 
-    await check('money lives inside each session row: owe + Venmo, or Paid; no money card', async () => {
-      const p = players.Blair;
-      await p.reload();
-      const money = firstCard(p).getByLabel('Money for this session');
-      await money.getByText('You owe $14').waitFor();
-      const href = await money.getByRole('link', { name: 'Pay $14 with Venmo' }).getAttribute('href');
-      assert(href.startsWith('https://venmo.com/organizer?txn=pay&amount=14.00&note=Pickleball'), `bad Venmo link ${href}`);
-      assert((await money.getByText(/may not have marked this paid/).count()) === 0, 'unpaid reminder shown too early');
-      assert((await p.getByRole('region', { name: 'Payments' }).count()) === 0, 'separate money card should be gone');
-      await p.screenshot({ path: path.join(SHOTS, 'player-owe.png'), fullPage: true });
-      // Alex is marked paid for the first session.
-      await players.Alex.reload();
-      await firstCard(players.Alex).getByLabel('Money for this session').getByText('✓ Paid').waitFor();
+    await check('game day: the payment card shows at the top from 8:00 AM, with the right amount and a Venmo note', async () => {
+      // The first session's date, and 7:59 / 8:00 AM Eastern that day.
+      const first = await admin.evaluate(async () => {
+        const d = await (await fetch('/api/admin/dashboard')).json();
+        return d.sessions.find((s) => Date.parse(s.endsAt) > Date.now() && s.status !== 'canceled');
+      });
+      const date = new Date(first.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
+      const eight = [`${date}T08:00:00-04:00`, `${date}T08:00:00-05:00`]
+        .map((s) => Date.parse(s))
+        .find((ms) => new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Detroit' }) === '08');
+      const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
+      try {
+        await clock(eight - 60_000);
+        const p = players.Blair;
+        await p.reload();
+        await p.locator('.schedule article').first().waitFor();
+        assert((await p.getByRole('region', { name: 'Payment' }).count()) === 0, 'no payment card before 8:00 AM');
+
+        await clock(eight);
+        await p.reload();
+        const card = p.getByRole('region', { name: 'Payment' });
+        await card.getByRole('heading', { name: 'Tonight: you owe $14' }).waitFor();
+        // At the very top, above the sessions.
+        const cardBox = await card.boundingBox();
+        const rowBox = await p.locator('.schedule article').first().boundingBox();
+        assert(cardBox.y < rowBox.y, 'payment card should sit above the sessions');
+        assert((await p.locator('main > *').first().getAttribute('aria-label')) === 'Payment', 'payment card should be first on the page');
+        const pay = card.getByRole('link', { name: 'Pay $14 with Venmo' });
+        const href = await pay.getAttribute('href');
+        assert(href.startsWith('https://venmo.com/organizer?txn=pay&amount=14.00&note='), `bad Venmo link ${href}`);
+        const note = new URL(href).searchParams.get('note');
+        assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} - Blair$/.test(note), `Venmo note was ${note}`);
+        assert((await pay.boundingBox()).height >= 48, 'big Pay with Venmo button');
+        assert((await card.getByText(/may not have marked this paid/).count()) === 0, 'reminder shown too early');
+        assert((await p.locator('.schedule').getByText(/You owe|Pay with Venmo/).count()) === 0, 'rows stay free of money');
+        for (const scheme of ['light', 'dark']) {
+          await p.emulateMedia({ colorScheme: scheme });
+          await p.screenshot({ path: path.join(SHOTS, `player-pay-card-${scheme}.png`) });
+        }
+        await p.emulateMedia({ colorScheme: 'light' });
+
+        // Paid, and not playing: no card.
+        for (const name of ['Alex', 'Casey']) {
+          await players[name].reload();
+          await players[name].locator('.schedule article').first().waitFor();
+          assert((await players[name].getByRole('region', { name: 'Payment' }).count()) === 0, `${name} should have no payment card`);
+        }
+        // Marking Blair paid makes the card go away on Blair's phone.
+        await admin.reload();
+        const tonight = admin.getByRole('article', { name: 'Mark paid tonight' });
+        await tonight.getByRole('button', { name: /Mark Blair paid/ }).click();
+        await admin.locator('.toast', { hasText: 'Blair marked paid' }).waitFor();
+        await p.reload();
+        await p.locator('.schedule article').first().waitFor();
+        assert((await p.getByRole('region', { name: 'Payment' }).count()) === 0, 'card should go once marked paid');
+      } finally {
+        await clock(undefined);
+      }
     });
 
     await check('schedule rows: date tile, time without EDT/EST, and a small calendar link', async () => {
@@ -766,7 +813,7 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
-    await check('a regular gets "Want in on ...? Yes / No"; Yes shows "You\'re in" and Venmo', async () => {
+    await check('a regular gets "Want in on ...? Yes / No"; Yes shows "You\'re in" with no payment', async () => {
       const p = players.Devon;
       await p.reload();
       const card = p.getByRole('region', { name: /Want in on (Tuesday|Thursday)\?/ });
@@ -775,9 +822,8 @@ async function main() {
       await card.getByRole('button', { name: 'Yes' }).click();
       const answer = p.getByRole('region', { name: 'Your answer' });
       await answer.getByRole('heading', { name: /You're in|on the waitlist/ }).waitFor();
-      if ((await answer.getByRole('heading', { name: "You're in" }).count()) > 0) {
-        await answer.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-      }
+      // Signing up never asks for money; that waits for game day.
+      assert((await answer.locator('a[href*="venmo"]').count()) === 0 && (await answer.getByText(/\$\d/).count()) === 0, 'no payment at sign-up');
       await answer.getByRole('button', { name: 'Done' }).click();
       await answer.waitFor({ state: 'detached' });
     });
@@ -974,31 +1020,14 @@ async function main() {
       await p.locator('.pop', { hasText: "You're out" }).waitFor();
     });
 
-    await check('player rows are compact: names on one wrapping line, "You owe $14" and Pay with Venmo on one line', async () => {
+    await check('player rows are light: names on one wrapping line, no money', async () => {
       const p = players.Alex;
       await p.reload();
       const row = firstCard(p);
       await row.locator('.in-pills li').first().waitFor();
       const names = await row.locator('.in-pills li').evaluateAll((lis) => lis.map((li) => li.getBoundingClientRect().top));
       assert(Math.max(...names) - Math.min(...names) < 30, 'names should sit on one line (wrapping only if needed)');
-      // Pay with Venmo carries the amount and a note with the date and the player's name.
-      const d = players.Devon;
-      await d.reload();
-      await d.locator('.schedule article').first().waitFor();
-      const pay = d.locator('a.pay-btn').first();
-      if (await pay.count()) {
-        const href = await pay.getAttribute('href');
-        const note = new URL(href).searchParams.get('note');
-        assert(/^Pickleball (Sun|Mon|Tue|Wed|Thu|Fri|Sat) [A-Z][a-z]{2} \d{1,2} - Devon$/.test(note), `Venmo note was ${note}`);
-        assert(/amount=\d+\.\d{2}/.test(href), 'Venmo link needs the amount');
-      }
-      const money = row.getByLabel('Money for this session');
-      if (await money.getByText(/You owe/).count()) {
-        const owe = await money.getByText(/You owe/).boundingBox();
-        const pay = await money.getByRole('link', { name: /Pay \$\d+ with Venmo/ }).boundingBox();
-        assert(Math.abs(owe.y + owe.height / 2 - (pay.y + pay.height / 2)) < 14, '"You owe" and Pay with Venmo should share a line');
-        assert(pay.height >= 44, 'Pay with Venmo should be easy to tap');
-      }
+      assert((await row.locator('a[href*="venmo"]').count()) === 0 && (await row.getByText(/You owe/).count()) === 0, 'no money on the row');
     });
 
     await check('organizer and players see the same name pills: names fill in sign-up order, open spots stay blank', async () => {
@@ -1204,7 +1233,7 @@ async function main() {
       const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
       await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
       await row.getByText("Good news, the court opened, so you're in.").waitFor();
-      await row.getByLabel('Money for this session').getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
+      assert((await row.locator('a[href*="venmo"]').count()) === 0, 'no Venmo button on the row');
     });
 
     await check('day-before card (when one is due right now): Text the group, Copy, Done; never "sent"', async () => {
