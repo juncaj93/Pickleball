@@ -184,7 +184,12 @@ function layoutReport({ roots, items }) {
     if (solid) return el.getBoundingClientRect();
     const r = document.createRange();
     r.selectNodeContents(el);
-    const b = r.getBoundingClientRect();
+    let b = r.getBoundingClientRect();
+    // Text cut short with "…" only shows inside its own box.
+    if (b.width && cs.overflow !== 'visible') {
+      const own = el.getBoundingClientRect();
+      b = DOMRect.fromRect({ x: Math.max(b.left, own.left), y: b.top, width: Math.min(b.right, own.right) - Math.max(b.left, own.left), height: b.height });
+    }
     if (b.width && b.height) return b;
     const svg = el.querySelector('svg');
     return svg ? svg.getBoundingClientRect() : el.getBoundingClientRect();
@@ -1767,6 +1772,9 @@ async function main() {
       await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
       const second = admin.locator('article').nth(1);
       await second.getByRole('button', { name: "I'm in" }).click();
+      await admin.locator('.pop, .toast').first().waitFor();
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
+      await second.getByRole('button', { name: "I'm out" }).waitFor();
       await second.locator('.tile-check').waitFor();
       await admin.getByRole('button', { name: 'Exit' }).click();
       await tab(admin, 'Home').waitFor();
