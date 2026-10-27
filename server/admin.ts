@@ -1,6 +1,6 @@
 import type { ActionLinkDraft, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents } from '../shared/money';
-import { normalizeSettings } from '../shared/settings';
+import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
 import { formatDateTime, formatShortDate, formatTimeRange } from '../shared/time';
 import { adminLogin, adminLogout, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -25,10 +25,12 @@ import {
   creditPlan,
   issueCredits,
   loadCredits,
+  loadHiddenSessions,
   openCredits,
+  syncSix,
   visibleFrom,
 } from './repo';
-import { confirmAttendance, joinSession, moveToWaitlist, withdraw } from './roster';
+import { confirmAttendance, joinSession, moveToWaitlist, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -92,6 +94,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster));
     }),
     audit: auditEntries,
+    hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
     credits: [...balances]
       .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
       .sort((a, b) => a.name.localeCompare(b.name)),
@@ -135,6 +138,7 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
     reservation_reference: v.optionalText(body.reservationReference, 'reservationReference', 80),
     court_cost_cents: v.cents(body.courtCostCents, 'courtCostCents'),
     cancellation_deadline_at: v.isoTime(body.cancellationDeadlineAt, 'cancellationDeadlineAt'),
+    court_number: body.courtNumber === undefined ? session.court_number : v.courtNumber(body.courtNumber),
   };
   if (next.cancellation_deadline_at && next.cancellation_deadline_at > session.starts_at) {
     throw new HttpError(400, 'invalid_cancellationDeadlineAt', 'The cancellation deadline must be before the session starts.');
@@ -149,7 +153,7 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
   await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = ?, venue_name = ?, venue_booking_url = ?, reservation_reference = ?,
-         court_cost_cents = ?, cancellation_deadline_at = ?, status = ?, updated_at = ?
+         court_cost_cents = ?, cancellation_deadline_at = ?, court_number = ?, status = ?, updated_at = ?
        WHERE id = ?`,
     )
     .bind(
@@ -159,6 +163,7 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
       next.reservation_reference,
       next.court_cost_cents,
       next.cancellation_deadline_at,
+      next.court_number,
       status,
       ctx.nowIso,
       session.id,
@@ -203,6 +208,94 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     .run();
   await audit(ctx.db, group.id, session.id, `decision_${decision}`, {}, ctx.nowIso);
   return { ok: true, changed: true };
+}
+
+/**
+ * "I booked it" (or "Court opened" when on the venue's waitlist): one step
+ * that marks the session booked. Venue defaults to the club, the deadline to
+ * the default hours before play; court number, reservation number and court
+ * cost are optional. Standby players then move in by the 4-or-6 rules.
+ */
+export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
+  const courtNumber = v.courtNumber(body.courtNumber);
+  const reference = body.reservationReference === undefined ? session.reservation_reference : v.optionalText(body.reservationReference, 'reservationReference', 80);
+  const cost = body.courtCostCents === undefined ? session.court_cost_cents : v.cents(body.courtCostCents, 'courtCostCents');
+  const wasWaiting = session.court_state === 'waitlist';
+  await ctx.db
+    .prepare(
+      `UPDATE sessions SET booking_status = 'booked', status = 'booked',
+         venue_name = COALESCE(venue_name, ?), court_number = ?, reservation_reference = ?, court_cost_cents = ?,
+         cancellation_deadline_at = COALESCE(cancellation_deadline_at, ?),
+         court_state = CASE WHEN court_state = 'waitlist' THEN 'opened' ELSE court_state END,
+         updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(group.venue_name || DEFAULT_VENUE_NAME, courtNumber, reference, cost, defaultDeadline(session.starts_at, settingsOf(group)), ctx.nowIso, session.id)
+    .run();
+  let promoted: { playerId: string }[] = [];
+  if (wasWaiting && ctx.nowMs < Date.parse(session.starts_at)) {
+    promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso);
+    await syncSix(ctx.db, session.id, ctx.nowIso);
+  }
+  await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { courtNumber, promoted: promoted.length }, ctx.nowIso);
+  return { ok: true, promoted: promoted.length };
+}
+
+/** The venue's court waitlist: start waiting, give up ("Didn't open"), or go back to not booked. */
+export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const action = v.oneOf(body.action, 'action', ['waitlist', 'not_opened', 'clear'] as const);
+  if (action === 'waitlist') {
+    if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    await ctx.db
+      .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
+      .bind(ctx.nowIso, session.id)
+      .run();
+  } else if (action === 'clear') {
+    await ctx.db.prepare('UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = \'waitlist\'').bind(ctx.nowIso, session.id).run();
+  } else {
+    if (session.court_state !== 'waitlist') throw new HttpError(409, 'not_waiting', 'This session is not on the court waitlist.');
+    await ctx.db
+      .prepare(
+        `UPDATE sessions SET court_state = 'not_opened', status = 'canceled', canceled_at = ?, canceled_by = 'court_not_opened', updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(ctx.nowIso, ctx.nowIso, session.id)
+      .run();
+    await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
+  }
+  await audit(ctx.db, group.id, session.id, `court_${action}`, {}, ctx.nowIso);
+  return { ok: true };
+}
+
+/** "Show this session" for one that falls before the first session date (or hide it again). */
+export async function showSession(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const shown = v.bool(body.shown, 'shown');
+  await ctx.db.prepare('UPDATE sessions SET shown_early = ?, updated_at = ? WHERE id = ?').bind(shown ? 1 : 0, ctx.nowIso, session.id).run();
+  await audit(ctx.db, group.id, session.id, shown ? 'session_shown_early' : 'session_hidden_again', {}, ctx.nowIso);
+  return { ok: true };
+}
+
+/** "Venue is open normal hours" on a holiday, or undo it. */
+export async function holidayHours(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const ok = v.bool(body.ok, 'ok');
+  await ctx.db.prepare('UPDATE sessions SET holiday_hours_ok_at = ?, updated_at = ? WHERE id = ?').bind(ok ? ctx.nowIso : null, ctx.nowIso, session.id).run();
+  await audit(ctx.db, group.id, session.id, ok ? 'holiday_hours_confirmed' : 'holiday_hours_unconfirmed', {}, ctx.nowIso);
+  return { ok: true };
+}
+
+/** "Done" on the day-before or last-call card. */
+export async function cardDone(ctx: Ctx, body: Record<string, unknown>) {
+  const { session } = await adminSession(ctx);
+  const card = v.oneOf(body.card, 'card', ['day_before', 'last_call'] as const);
+  const column = card === 'day_before' ? 'day_before_done_at' : 'last_call_done_at';
+  await ctx.db.prepare(`UPDATE sessions SET ${column} = ?, updated_at = ? WHERE id = ?`).bind(ctx.nowIso, ctx.nowIso, session.id).run();
+  return { ok: true };
 }
 
 /** Move a session to a new date or time. Its deadline resets to the default for the new time. */

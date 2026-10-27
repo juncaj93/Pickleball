@@ -1,22 +1,24 @@
 import { useEffect, useState } from 'react';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
-import { formatMonthDay, formatShortDate, formatTimeRange, formatWeekday } from '../../shared/time';
+import { formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
-import { Chip, ConfirmDialog, Empty, ErrorState, FirstVisitNotice, Notice, Spinner, useToast } from '../ui';
+import { ConfirmDialog, Empty, ErrorState, FirstVisitNotice, Notice, Spinner, useToast } from '../ui';
 
-const SHOW_FIRST = 4;
+const SHOW_FIRST = 6;
 
-type JoinResponse = { result: 'confirmed' | 'already_confirmed' | 'waitlisted'; position?: number; madeSix?: boolean };
+type JoinResponse = { result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby'; position?: number; madeSix?: boolean };
 
 const GOOD_NEWS = {
   made_six: "Good news, we now have 6, an even number, so you're in.",
   spot_opened: "Good news, a spot opened up, so you're in.",
+  court_opened: "Good news, the court opened, so you're in.",
 };
 
 function joinedText(d: JoinResponse): string {
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
+  if (d.result === 'standby') return `You're on standby, #${d.position}`;
   return d.madeSix ? GOOD_NEWS.made_six : "You're in";
 }
 
@@ -96,11 +98,18 @@ export function PlayerHome({ groupKey, viewAs, onExit }: { groupKey: string | nu
             {!viewAs && <FirstVisitNotice>This site never texts you. Reminders come from {g.group.organizerName ?? 'your organizer'}.</FirstVisitNotice>}
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
             {!viewAs && <HomeScreenTip />}
-            {(g.owed.length > 0 || g.creditBalanceCents > 0) && <OwedCard g={g} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
-            {sessions.map((s) => (
-              <SessionCard key={s.id} s={s} g={g} onChanged={load.reload} />
-            ))}
+            <div className="schedule">
+              {sessions.map((s) => (
+                <ScheduleRow
+                  key={s.id}
+                  s={s}
+                  g={g}
+                  creditNote={s.id === g.sessions.find((x) => !x.past)?.id ? g.creditBalanceCents : 0}
+                  onChanged={load.reload}
+                />
+              ))}
+            </div>
             {g.sessions.length > SHOW_FIRST && (
               <button className="btn ghost block" onClick={() => setShowAll((v) => !v)}>
                 {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
@@ -334,14 +343,14 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   }
 
   if (joined) {
-    const inNow = joined.result !== 'waitlisted';
+    const inNow = joined.result === 'confirmed' || joined.result === 'already_confirmed';
     return (
       <section className="card stack suggest" aria-label="Your answer">
         <h2>{joinedText(joined)}</h2>
         <p className="muted small">
           {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
         </p>
-        {inNow && <PayButton g={g} cents={g.group.priceCents} startsAt={s.startsAt} />}
+        {inNow && joined.result !== 'standby' && <PayButton g={g} cents={g.group.priceCents} startsAt={s.startsAt} />}
         <button className="btn secondary block" onClick={() => void onChanged()}>
           Done
         </button>
@@ -370,77 +379,64 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   );
 }
 
-/**
- * Everyone on the list, in one place: people who signed up are solid pills
- * with a check mark, waiting people are outlined, everyone else is faded
- * plain text. Neutral colors only; green, amber and red mean status.
- */
-function Roster({ s, g }: { s: PlayerSessionView; g: GroupView }) {
-  const going = new Set(s.confirmed.map((p) => p.name));
-  const waiting = new Map(s.waitlist.map((p, i) => [p.name, i + 1]));
-  const rest = g.players.map((p) => p.name).filter((n) => !going.has(n) && !waiting.has(n));
-  const me = g.me?.name;
-  return (
-    <ul className="roster" aria-label="Who's going">
-      {s.confirmed.map((p) => (
-        <li key={p.name} className={`in${p.name === me ? ' me' : ''}`}>
-          <span aria-hidden="true">✓ </span>
-          {p.name}
-          <span className="sr-only">, going</span>
-        </li>
-      ))}
-      {s.waitlist.map((p) => (
-        <li key={p.name} className={`waiting${p.name === me ? ' me' : ''}`}>
-          {p.name} · waitlist #{waiting.get(p.name)}
-        </li>
-      ))}
-      {!s.canceled &&
-        rest.map((n) => (
-          <li key={n} className="out">
-            {n}
-            <span className="sr-only">, not signed up</span>
-          </li>
-        ))}
-    </ul>
-  );
-}
-
-export function HolidayPill({ name, venueNote }: { name: string; venueNote?: boolean }) {
+export function HolidayPill({ name, venueNote, confirmed }: { name: string; venueNote?: boolean; confirmed?: boolean }) {
   return (
     <span className="holiday">
+      {confirmed && <span aria-label="venue hours confirmed">✓ </span>}
       {name}
-      {venueNote ? ' · check venue hours' : ''}
+      {venueNote && !confirmed ? ' · check venue hours' : ''}
     </span>
   );
 }
 
-function OwedCard({ g }: { g: GroupView }) {
-  const tz = g.group.timezone;
-  const who = g.group.organizerName ?? 'The organizer';
+const TILE_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+/** "TUE / 3 / NOV" tile for the left of a schedule row. */
+function DateTile({ iso, tz }: { iso: string; tz: string }) {
+  const p = localParts(Date.parse(iso), tz);
+  const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   return (
-    <section className="card stack" aria-label="Payments">
-      {g.owed.map((o) => (
-        <div key={o.sessionId} className="stack" style={{ gap: 8 }}>
-          <p>
-            <strong>
-              You owe {formatPrice(o.amountCents)} for {formatShortDate(o.startsAt, tz)}
-            </strong>
-            {o.creditCents > 0 && <> (includes your {formatPrice(o.creditCents)} credit)</>}
-            {o.discount && <span className="small muted"> · 6-person discount</span>}
-          </p>
-          {o.reminder && (
-            <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>
-          )}
-          <PayButton g={g} cents={o.amountCents} startsAt={o.startsAt} />
-        </div>
-      ))}
-      {g.owed.length > 0 && <p className="small muted">Opening Venmo doesn't mark you paid. {who} does that after the money arrives.</p>}
-      {g.creditBalanceCents > 0 && <p>You have a {formatPrice(g.creditBalanceCents)} credit toward your next session.</p>}
-    </section>
+    <div className="tile" aria-hidden="true">
+      <span className="dow">{TILE_DOW[p.weekday]}</span>
+      <span className="day">{p.day}</span>
+      <span className="mon">{month}</span>
+    </div>
   );
 }
 
-function SessionCard({ s, g, onChanged }: { s: PlayerSessionView; g: GroupView; onChanged: () => Promise<void> }) {
+function courtLine(s: PlayerSessionView): string {
+  if (s.courtState === 'not_opened') return "Court didn't open";
+  if (s.canceled) return 'Canceled';
+  if (s.courtState === 'waitlist') return 'Waiting on the court';
+  if (s.bookingStatus === 'booked') return s.courtNumber ? `Court booked, Court #${s.courtNumber}` : 'Court booked';
+  if (s.bookingStatus === 'unavailable') return 'No court available';
+  return 'Court not booked yet';
+}
+
+function countLine(s: PlayerSessionView): string {
+  const n = s.confirmed.length;
+  if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
+  if (n === 5) return '5 in · need 4 or 6';
+  return n > 4 ? `${n} of 6 in` : `${n} of 4 in`;
+}
+
+/**
+ * One session in the schedule: date tile, time, court status and holiday,
+ * who's in (only people who signed up), one big button, and this player's
+ * money for it.
+ */
+function ScheduleRow({
+  s,
+  g,
+  creditNote,
+  onChanged,
+}: {
+  s: PlayerSessionView;
+  g: GroupView;
+  /** Credit waiting for a session they haven't joined yet; shown on the first upcoming row. */
+  creditNote: number;
+  onChanged: () => Promise<void>;
+}) {
   const tz = g.group.timezone;
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -448,8 +444,11 @@ function SessionCard({ s, g, onChanged }: { s: PlayerSessionView; g: GroupView; 
   const [error, setError] = useState<string | null>(null);
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
-  const waitlisted = mine?.status === 'waitlisted';
+  const waiting = mine?.status === 'waitlisted';
+  const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
+  const owed = g.owed.find((o) => o.sessionId === s.id);
+  const who = g.group.organizerName ?? 'The organizer';
 
   async function run(path: string, label: (data: any) => string) {
     setBusy(true);
@@ -466,75 +465,103 @@ function SessionCard({ s, g, onChanged }: { s: PlayerSessionView; g: GroupView; 
     }
   }
 
-  const chip = s.canceled ? (
-    <Chip tone="muted">Canceled</Chip>
-  ) : inSession ? (
-    <Chip tone="ok">You're in</Chip>
-  ) : waitlisted ? (
-    <Chip tone="info">#{mine.waitlistPosition} on waitlist</Chip>
-  ) : null;
+  const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
 
   return (
-    <article className="card stack" aria-labelledby={`s-${s.id}`}>
-      <div className="spread">
-        <div>
-          <h2 id={`s-${s.id}`} className="card-date">
-            {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}
-          </h2>
-          <div className="card-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</div>
+    <article className={`sched${s.canceled ? ' off' : ''}`} aria-labelledby={`s-${s.id}`}>
+      <DateTile iso={s.startsAt} tz={tz} />
+      <div className="sched-body">
+        <h2 id={`s-${s.id}`} className="sr-only">
+          {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}
+        </h2>
+        <div className="sched-head">
+          <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+          {inSession && !s.canceled && <span className="me-tag">You're in</span>}
+          {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
+        </div>
+        <div className="sched-status">
+          <span>{s.past ? 'Played' : courtLine(s)}</span>
           {s.holiday && <HolidayPill name={s.holiday} />}
         </div>
-        {chip}
-      </div>
 
-      {s.canceled ? (
-        <p className="muted">Canceled.</p>
-      ) : (
-        <>
-          {inSession && mine.promotion && <Notice tone="ok">{GOOD_NEWS[mine.promotion]}</Notice>}
-          {inSession && mine.creditComing && (
-            <Notice tone="info">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</Notice>
-          )}
-          {inSession && mine.discount && mine.shareCents !== null && (
-            <p className="small">
-              <strong>6-person discount:</strong> you owe {formatPrice(mine.shareCents)}.
-            </p>
-          )}
-          {error && <Notice tone="danger">{error}</Notice>}
-          {open &&
-            (inSession || waitlisted ? (
-              <button className="btn secondary block big" disabled={busy} onClick={() => setAskOut(true)}>
-                I'm out
-              </button>
-            ) : (
-              <button className="btn block big" disabled={busy} onClick={() => run('join', joinedText)}>
-                {s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
-              </button>
-            ))}
-          {open && inSession && s.confirmationOpen && !mine.attendanceConfirmed && (
-            <div className="spread" style={{ alignItems: 'center' }}>
-              <span className="small">Still coming?</span>
-              <button className="btn small" disabled={busy} onClick={() => run('confirm', () => 'Thanks, see you there')}>
-                Yes, I'm coming
-              </button>
-            </div>
-          )}
-          <div className="stack" style={{ gap: 6 }}>
-            <p className="small muted">{s.goingText}</p>
-            <Roster s={s} g={g} />
+        {courtWait && open && !waiting && <p className="small">Waiting on the court. Join the list so we're ready if it opens.</p>}
+        {s.courtState === 'not_opened' && waiting && <p className="small muted">The court didn't open, so this one is off.</p>}
+        {goodNews && <Notice tone="ok">{goodNews}</Notice>}
+        {inSession && mine.creditComing && (
+          <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
+        )}
+
+        {!s.canceled && (s.confirmed.length > 0 || !courtWait) && (
+          <div className="in-line">
+            <span className="small muted">{countLine(s)}</span>
+            {s.confirmed.length > 0 && (
+              <ul className="in-pills" aria-label="Who's in">
+                {s.confirmed.map((p) => (
+                  <li key={p.name} className={p.name === g.me?.name ? 'me' : undefined}>
+                    {p.name}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-          {inSession && open && (
-            <a className="btn small ghost" href={`/api/sessions/${s.id}/calendar.ics`}>
-              Add to Calendar
-            </a>
-          )}
-        </>
-      )}
+        )}
+        {!s.canceled && s.waitlist.length > 0 && (
+          <p className="waitlist-line">
+            {courtWait ? 'Standby' : 'Waitlist'}: {s.waitlist.map((w) => w.name).join(', ')}
+          </p>
+        )}
+        {courtWait && s.waitlist.length === 0 && open && <p className="small muted">Nobody on standby yet.</p>}
+
+        {error && <Notice tone="danger">{error}</Notice>}
+        {open &&
+          (inSession || waiting ? (
+            <button className="btn secondary block big" disabled={busy} onClick={() => setAskOut(true)}>
+              I'm out
+            </button>
+          ) : (
+            <button className="btn block big" disabled={busy} onClick={() => run('join', joinedText)}>
+              {courtWait ? 'Put me on standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
+            </button>
+          ))}
+        {open && inSession && s.confirmationOpen && !mine.attendanceConfirmed && (
+          <div className="spread" style={{ alignItems: 'center' }}>
+            <span className="small">Still coming?</span>
+            <button className="btn small" disabled={busy} onClick={() => run('confirm', () => 'Thanks, see you there')}>
+              Yes, I'm coming
+            </button>
+          </div>
+        )}
+
+        {inSession && !s.canceled && (
+          <div className="money" aria-label="Money for this session">
+            {mine.paymentStatus === 'paid' ? (
+              <span className="paid">✓ Paid</span>
+            ) : mine.oweCents > 0 ? (
+              <>
+                <p>
+                  <strong>You owe {formatPrice(mine.oweCents)}</strong>
+                  {mine.creditCents > 0 && <> (includes your {formatPrice(mine.creditCents)} credit)</>}
+                  {mine.discount && <span className="small muted"> · 6-person discount</span>}
+                </p>
+                {owed?.reminder && <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>}
+                <PayButton g={g} cents={mine.oweCents} startsAt={s.startsAt} />
+              </>
+            ) : null}
+          </div>
+        )}
+        {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
+
+        {inSession && open && (
+          <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`}>
+            Add to Calendar
+          </a>
+        )}
+      </div>
 
       <ConfirmDialog
         open={askOut}
-        title={waitlisted ? 'Leave the waitlist?' : `Out for ${formatShortDate(s.startsAt, tz)}?`}
-        body={waitlisted ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
+        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${formatShortDate(s.startsAt, tz)}?`}
+        body={waiting ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
         confirmLabel="I'm out"
         danger
         busy={busy}

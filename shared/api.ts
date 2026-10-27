@@ -23,6 +23,10 @@ export interface PlayerSessionView {
   sixPlaying: boolean;
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
+  courtNumber: string | null;
+  courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** Already played; only listed because this player still owes for it. */
+  past: boolean;
   confirmationOpen: boolean;
   mine: null | {
     status: RosterStatus;
@@ -37,6 +41,10 @@ export interface PlayerSessionView {
     discount: boolean;
     /** One of the first four of six: earns a credit if 6 play. */
     creditComing: boolean;
+    /** What they still owe for this session, after any credit (0 when paid). */
+    oweCents: number;
+    /** Credit coming off this session. */
+    creditCents: number;
   };
 }
 
@@ -116,7 +124,14 @@ export interface AdminSessionView {
   payableCount: number;
   /** Organizer's private record of the court cost. Never sent to players. */
   courtCostCents: number | null;
+  courtNumber: string | null;
+  courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  shownEarly: boolean;
   holiday: string | null;
+  /** Organizer confirmed the venue keeps normal hours that day. */
+  holidayHoursOk: boolean;
+  /** Day-before and last-call cards are inside their windows (and not marked Done). */
+  cards: { dayBefore: boolean; lastCall: boolean };
   /** Had 6 (discount shown), now fewer: the organizer should sort out payments by hand. */
   sixDropped: boolean;
   eligibleSubstitutes: EligibleSubstitute[];
@@ -160,6 +175,8 @@ export interface AdminDashboard {
   players: AdminPlayer[];
   sessions: AdminSessionView[];
   audit: AuditEntry[];
+  /** Upcoming sessions hidden by the first session date, which the organizer can show. */
+  hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
   /** Open credit per player (earned, not yet used or cleared). */
   credits: { playerId: string; name: string; balanceCents: number }[];
   now: string;

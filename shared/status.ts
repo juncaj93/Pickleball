@@ -12,12 +12,16 @@ export interface StatusInput {
   bookingStatus: BookingStatus;
   cancellationDeadlineAt: string | null;
   adminDecision: AdminDecision;
+  /** The venue's court waitlist: 'waitlist', 'opened', 'not_opened', or null. */
+  courtState?: 'waitlist' | 'opened' | 'not_opened' | null;
   confirmedCount: number;
   waitlistCount: number;
   unconfirmedAttendanceCount: number; // confirmed players who haven't checked in yet
 }
 
 export type StatusLabel =
+  | 'court_not_opened'
+  | 'court_waitlist'
   | 'canceled'
   | 'completed'
   | 'in_progress'
@@ -30,6 +34,8 @@ export type StatusLabel =
   | 'on_track';
 
 export const STATUS_TEXT: Record<StatusLabel, string> = {
+  court_not_opened: "Court didn't open",
+  court_waitlist: 'Waiting on the court',
   canceled: 'Canceled',
   completed: 'Played',
   in_progress: 'Playing now',
@@ -45,6 +51,8 @@ export const STATUS_TEXT: Record<StatusLabel, string> = {
 export type Tone = 'ok' | 'warn' | 'danger' | 'info' | 'muted';
 
 export const STATUS_TONE: Record<StatusLabel, Tone> = {
+  court_not_opened: 'muted',
+  court_waitlist: 'info',
   canceled: 'muted',
   completed: 'muted',
   in_progress: 'ok',
@@ -109,13 +117,13 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
   const inCheckIn = live && nowMs >= start - settings.checkInHours * HOUR;
   const deadlinePassed = live && deadline !== null && nowMs >= deadline;
-  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep';
+  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep' && s.courtState !== 'waitlist';
 
   const flags: SessionFlags = {
     canceled,
     past,
     started,
-    needsBooking: live && s.bookingStatus === 'needs_booking' && bookingWindowOpen,
+    needsBooking: live && s.bookingStatus === 'needs_booking' && s.courtState !== 'waitlist' && bookingWindowOpen,
     bookingWindowOpen,
     courtUnavailable: live && s.bookingStatus === 'unavailable',
     underfilled,
@@ -128,9 +136,11 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   };
 
   let label: StatusLabel;
-  if (canceled) label = 'canceled';
+  if (canceled && s.courtState === 'not_opened') label = 'court_not_opened';
+  else if (canceled) label = 'canceled';
   else if (past) label = 'completed';
   else if (started) label = 'in_progress';
+  else if (s.courtState === 'waitlist') label = 'court_waitlist';
   else if (shortOnPlayers && deadlinePassed) label = 'deadline_passed';
   else if (flags.fiveGoing) label = 'five_going';
   else if (shortOnPlayers) label = 'short_on_players';

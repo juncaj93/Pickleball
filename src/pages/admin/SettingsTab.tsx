@@ -78,6 +78,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     bookingLeadDays: String(g.settings.bookingLeadDays),
     checkInHours: String(g.settings.checkInHours),
     defaultDeadlineHours: String(g.settings.defaultDeadlineHours),
+    lastCallHours: String(g.settings.lastCallHours),
   }));
   const [money, setMoney] = useState<Record<MoneyKey, string>>(() => ({
     pricePerPlayerCents: dollars(g.settings.pricePerPlayerCents),
@@ -208,6 +209,13 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           value={nums[MAIN_SETTING.key]}
           onChange={(v) => setNums((n) => ({ ...n, [MAIN_SETTING.key]: v }))}
           error={numErrors[MAIN_SETTING.key]}
+        />
+        <NumberField
+          label="Last call (hours before play)"
+          hint="When the last-call card shows on Home. It stays until the cancellation deadline."
+          value={nums.lastCallHours}
+          onChange={(v) => setNums((n) => ({ ...n, lastCallHours: v }))}
+          error={numErrors.lastCallHours}
         />
         <details className="advanced" open={ADVANCED_SETTINGS.some((a) => numErrors[a.key]) || undefined}>
           <summary>Advanced</summary>

@@ -56,6 +56,12 @@ export interface SessionRow {
   six_reached_at: string | null;
   six_drop_resolved_at: string | null;
   credits_issued_at: string | null;
+  court_number: string | null;
+  court_state: 'waitlist' | 'opened' | 'not_opened' | null;
+  shown_early: number;
+  holiday_hours_ok_at: string | null;
+  day_before_done_at: string | null;
+  last_call_done_at: string | null;
 }
 
 export interface RosterRow {
@@ -154,7 +160,7 @@ export function visibleFrom(group: Pick<GroupRow, 'first_session_date' | 'timezo
 
 export async function loadSessions(db: D1Database, groupId: string, endsAfterIso: string, startsFromIso = '0000'): Promise<SessionRow[]> {
   const { results } = await db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? AND starts_at >= ? ORDER BY starts_at')
+    .prepare('SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? AND (starts_at >= ? OR shown_early = 1) ORDER BY starts_at')
     .bind(groupId, endsAfterIso, startsFromIso)
     .all<SessionRow>();
   return results;
@@ -172,7 +178,7 @@ export async function loadRosters(
        FROM session_players sp
        JOIN sessions s ON s.id = sp.session_id
        JOIN players p ON p.id = sp.player_id
-       WHERE s.group_id = ? AND s.ends_at > ? AND s.starts_at >= ?`,
+       WHERE s.group_id = ? AND s.ends_at > ? AND (s.starts_at >= ? OR s.shown_early = 1)`,
     )
     .bind(groupId, endsAfterIso, startsFromIso)
     .all<RosterRow>();
@@ -267,7 +273,7 @@ export async function issueCredits(db: D1Database, group: GroupRow, nowMs: numbe
   const nowIso = new Date(nowMs).toISOString();
   const { results } = await db
     .prepare(
-      `SELECT * FROM sessions WHERE group_id = ? AND credits_issued_at IS NULL AND ends_at <= ? AND starts_at >= ?`,
+      `SELECT * FROM sessions WHERE group_id = ? AND credits_issued_at IS NULL AND ends_at <= ? AND (starts_at >= ? OR shown_early = 1)`,
     )
     .bind(group.id, nowIso, visibleFrom(group))
     .all<SessionRow>();
@@ -350,6 +356,7 @@ export function statusInput(session: SessionRow, roster: RosterRow[]): StatusInp
     endsAt: session.ends_at,
     status: session.status,
     bookingStatus: session.booking_status,
+    courtState: session.court_state,
     cancellationDeadlineAt: session.cancellation_deadline_at,
     adminDecision: session.admin_decision,
     confirmedCount: confirmed.length,
@@ -374,4 +381,14 @@ export async function audit(
     )
     .bind(newId(), groupId, sessionId, actor, action, JSON.stringify(details), nowIso)
     .run();
+}
+
+/** Sessions before the first session date that the organizer could still show. */
+export async function loadHiddenSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<SessionRow[]> {
+  const from = visibleFrom(group);
+  const { results } = await db
+    .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at < ? AND starts_at > ? AND shown_early = 0 ORDER BY starts_at')
+    .bind(group.id, from, new Date(nowMs).toISOString())
+    .all<SessionRow>();
+  return results;
 }

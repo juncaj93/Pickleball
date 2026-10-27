@@ -45,9 +45,9 @@ describe('session generation', () => {
     // Tue Oct 27 is EDT (UTC-4), Tue Nov 3 is EST (UTC-5).
     expect(sessions[0].startsAt).toBe('2026-10-28T00:00:00.000Z');
     expect(sessions.find((s) => s.startsAt.startsWith('2026-11-04'))?.startsAt).toBe('2026-11-04T01:00:00.000Z');
-    expect(formatTimeRange(sessions[0].startsAt, sessions[0].endsAt, TZ)).toBe('8:00–10:00 PM EDT');
+    expect(formatTimeRange(sessions[0].startsAt, sessions[0].endsAt, TZ)).toBe('8:00 to 10:00 PM');
     const nov = sessions.find((s) => s.startsAt.startsWith('2026-11-04'))!;
-    expect(formatTimeRange(nov.startsAt, nov.endsAt, TZ)).toBe('8:00–10:00 PM EST');
+    expect(formatTimeRange(nov.startsAt, nov.endsAt, TZ)).toBe('8:00 to 10:00 PM');
   });
 
   it('handles the March daylight saving change', () => {
@@ -78,7 +78,7 @@ describe('session generation', () => {
 describe('time display', () => {
   it('uses a 12-hour clock in Eastern time, never UTC', () => {
     const s = formatDateTime('2026-10-28T00:00:00.000Z', TZ);
-    expect(s).toBe('Tue, Oct 27, 8:00 PM EDT');
+    expect(s).toBe('Tue, Oct 27, 8:00 PM');
     expect(s).not.toMatch(/UTC|GMT|Z$/);
   });
 
@@ -253,7 +253,7 @@ describe('message templates', () => {
     const m = confirmationMessage('Alex', s, TZ, 'https://club.example/t/abc');
     expect(m).toContain('Alex');
     expect(m).toContain('Tuesday, Oct 27');
-    expect(m).toContain('8:00–10:00 PM EDT');
+    expect(m).toContain('8:00 to 10:00 PM');
     expect(m).toContain('https://club.example/t/abc');
     expect(replacementMessage(s, TZ, 'https://x/t/1')).toContain('First to claim it gets the spot: https://x/t/1');
     expect(bookingMessage(s, TZ)).toContain("I'm checking court bookings now.");
@@ -265,7 +265,7 @@ describe('message templates', () => {
   });
 
   it('states the exact deadline in the organizer alert', () => {
-    expect(deadlineAlertMessage(s, TZ, '2026-10-27T12:00:00.000Z')).toContain('Tue, Oct 27, 8:00 AM EDT');
+    expect(deadlineAlertMessage(s, TZ, '2026-10-27T12:00:00.000Z')).toContain('Tue, Oct 27, 8:00 AM');
   });
 
   it('builds sms links for iPhone and Android', () => {

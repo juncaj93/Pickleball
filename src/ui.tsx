@@ -158,23 +158,26 @@ export function ConfirmDialog({
 
 // ---------- Text message drafts ----------
 
-type DraftState = 'ready' | 'opened' | 'sent';
-
 /**
- * A prewritten text. Opening Messages only fills in the composer; the
- * organizer still has to press send. "Mark as sent" is the organizer's own
- * note and is kept on this screen only.
+ * A prewritten text. The button only opens Messages with the text filled
+ * in; the organizer still presses send there, so the site never says a
+ * message was sent. After the tap it says "Message ready".
  */
-export function SmsDraft({ to, phone, body }: { to: string; phone: string | null; body: string }) {
-  const [state, setState] = useState<DraftState>('ready');
+export function SmsDraft({
+  to,
+  phone,
+  body,
+  openLabel = 'Open in Messages',
+}: {
+  to: string;
+  phone: string | null;
+  body: string;
+  openLabel?: string;
+}) {
+  const [opened, setOpened] = useState(false);
   const toast = useToast();
   const [showFallback, setShowFallback] = useState(false);
   const href = smsHref(phone, body, isIOS);
-  const statusText: Record<DraftState, string> = {
-    ready: 'Draft ready',
-    opened: 'Messages opened. Not sent until you press send there.',
-    sent: 'You marked this as sent',
-  };
   return (
     <div className="draft">
       <div className="spread">
@@ -182,23 +185,23 @@ export function SmsDraft({ to, phone, body }: { to: string; phone: string | null
           <strong>{to}</strong>
           <div className="muted small">{phone ? formatPhone(phone) : 'No phone number saved'}</div>
         </div>
-        <Chip tone={state === 'sent' ? 'ok' : 'info'}>{state === 'sent' ? 'Marked sent' : state === 'opened' ? 'Composer opened' : 'Draft ready'}</Chip>
+        <Chip tone="info">{opened ? 'Message ready' : 'Draft'}</Chip>
       </div>
       <p className="bubble">{body}</p>
       <p className="muted small" aria-live="polite">
-        {statusText[state]}
+        {opened ? <span className="message-ready">Message ready.</span> : null} {opened ? 'Press send in Messages when it looks right.' : ''}
       </p>
       <div className="btn-row" style={{ marginTop: 10 }}>
         <a
           className="btn small"
           href={href}
           onClick={() => {
-            setState((s) => (s === 'sent' ? s : 'opened'));
+            setOpened(true);
             // If nothing happens (desktop, no SMS app), offer the copy fallback.
             setTimeout(() => setShowFallback(true), 1500);
           }}
         >
-          Open in Messages
+          {openLabel}
         </a>
         <button
           className="btn small secondary"
@@ -214,13 +217,8 @@ export function SmsDraft({ to, phone, body }: { to: string; phone: string | null
             Copy number
           </button>
         )}
-        {state === 'opened' && (
-          <button className="btn small ghost" onClick={() => setState('sent')}>
-            I sent it
-          </button>
-        )}
       </div>
-      {showFallback && state !== 'sent' && (
+      {showFallback && (
         <p className="muted small" style={{ marginTop: 8 }}>
           Messages didn't open? Tap Copy message and paste it into any texting app.
         </p>

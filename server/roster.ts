@@ -31,6 +31,7 @@ const GUARD = {
 
 export type JoinResult =
   | { result: 'confirmed'; madeSix?: boolean }
+  | { result: 'standby'; position: number }
   | { result: 'already_confirmed' }
   | { result: 'waitlisted'; position: number }
   | { result: 'spot_taken' };
@@ -222,6 +223,14 @@ async function joinInner(
   const existing = await existingRow(db, session.id, playerId);
   if (existing?.status === 'confirmed') return { result: 'already_confirmed' };
 
+  // Waiting on the venue for a court: players can only go on standby, in
+  // order, owing nothing. "Court opened" confirms them by the 4-or-6 rules.
+  if (session.court_state === 'waitlist' && mode !== 'organizer') {
+    if (mode === 'claim_only') return { result: 'spot_taken' };
+    await addToWaitlist(db, session, playerId, nowIso);
+    return { result: 'standby', position: await waitlistPosition(db, session.id, playerId) };
+  }
+
   if (await tryConfirm(db, session, playerId, nowIso, mode === 'organizer' ? 'organizer' : 'normal')) {
     return { result: 'confirmed' };
   }
@@ -267,7 +276,8 @@ export async function withdraw(
       .bind(nowIso, session.id)
       .run();
   }
-  const promoted = changed ? await settle(db, session, nowIso) : [];
+  // While waiting on a court nobody moves in; that happens on "Court opened".
+  const promoted = changed && session.court_state !== 'waitlist' ? await settle(db, session, nowIso) : [];
   await syncSix(db, session.id, nowIso);
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted };
 }

@@ -1,13 +1,13 @@
 import { type FormEvent, type ReactElement, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
-import { promotionMessage } from '../../shared/messages';
+import { dayBeforeMessage, lastCallMessage, promotionMessage } from '../../shared/messages';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
 import { Chip, Empty, ErrorState, FirstVisitNotice, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
-import { HolidayPill, PlayerHome } from './PlayerHome';
-import { type SheetKind, SessionCard, SessionSheets, ShortPanel } from './admin/Sessions';
+import { PlayerHome } from './PlayerHome';
+import { CourtWaitButtons, HolidayControl, type SheetKind, SessionCard, SessionSheets, ShortPanel } from './admin/Sessions';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 
@@ -180,7 +180,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
 type TodoItem =
   | { kind: 'courts'; sessions: AdminSessionView[] }
-  | { kind: 'five' | 'short' | 'tell' | 'sixdrop' | 'checkin'; session: AdminSessionView }
+  | { kind: 'five' | 'short' | 'tell' | 'sixdrop' | 'checkin' | 'daybefore' | 'lastcall' | 'courtwait'; session: AdminSessionView }
   | { kind: 'owed'; rows: OwedRow[] };
 
 interface OwedRow {
@@ -205,6 +205,9 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   for (const x of s)
     if (upcoming(x) && x.roster.some((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt))
       items.push({ kind: 'tell', session: x });
+  for (const x of s) if (x.cards.lastCall) items.push({ kind: 'lastcall', session: x });
+  for (const x of s) if (x.cards.dayBefore) items.push({ kind: 'daybefore', session: x });
+  for (const x of s) if (x.courtState === 'waitlist' && upcoming(x)) items.push({ kind: 'courtwait', session: x });
   for (const x of s) if (x.state.flags.checkInsDue) items.push({ kind: 'checkin', session: x });
   if (courts.length) items.push({ kind: 'courts', sessions: courts });
   for (const x of s) if (x.sixDropped) items.push({ kind: 'sixdrop', session: x });
@@ -248,6 +251,7 @@ function HomeTab({ ctx, onViewAs }: { ctx: AdminCtx; onViewAs: () => void }) {
 
       <CreditsCard ctx={ctx} />
       <SessionsSection ctx={ctx} />
+      <HiddenSessions ctx={ctx} />
     </>
   );
 }
@@ -283,7 +287,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         <a className="btn block" href={COURTRESERVE_URL} target="_blank" rel="noopener noreferrer">
           Book on CourtReserve
         </a>
-        <p className="small muted">After you book, come back and tap Enter details.</p>
+        <p className="small muted">After you book, come back and tap I booked it.</p>
         <ul className="rows">
           {item.sessions.map((s) => (
             <li key={s.id}>
@@ -292,10 +296,10 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 <span className="small muted">
                   {s.state.flags.courtUnavailable ? 'Marked not available' : formatTimeRange(s.startsAt, s.endsAt, tz)}
                 </span>
-                {s.holiday && <HolidayPill name={s.holiday} venueNote />}
+                {s.holiday && <HolidayControl ctx={ctx} s={s} />}
               </span>
-              <button className="btn small secondary" onClick={() => ctx.open('booking', s.id)}>
-                Enter details
+              <button className="btn" onClick={() => ctx.open('booked', s.id)}>
+                I booked it
               </button>
             </li>
           ))}
@@ -341,6 +345,9 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     tell: "Tell them they're in",
     sixdrop: `Was 6, now ${s.confirmedCount}: discount and credits are off`,
     checkin: 'Check-in texts due',
+    daybefore: `${formatShortDate(s.startsAt, tz)}: ${countSummary(s.confirmedCount)}`,
+    lastcall: `Last call, ${formatShortDate(s.startsAt, tz)}: ${s.confirmedCount} in`,
+    courtwait: 'Waiting on the court',
   }[item.kind];
 
   return (
@@ -349,7 +356,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         <div>
           <h3>{title}</h3>
           <div className="small muted">{when(s, tz)}</div>
-          {s.holiday && <HolidayPill name={s.holiday} venueNote />}
+          {s.holiday && <HolidayControl ctx={ctx} s={s} />}
         </div>
         {item.kind !== 'sixdrop' && <Chip tone={s.state.tone}>{s.state.text}</Chip>}
       </div>
@@ -363,7 +370,13 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
               <SmsDraft
                 to={r.name}
                 phone={r.phone}
-                body={promotionMessage(r.name, s, tz, r.promotionReason ?? 'spot_opened', r.shareCents !== null ? r.shareCents - r.creditCents : undefined)}
+                body={promotionMessage(
+                  r.name,
+                  s,
+                  tz,
+                  s.courtState === 'opened' && r.promotionReason === 'spot_opened' ? 'court_opened' : (r.promotionReason ?? 'spot_opened'),
+                  r.shareCents !== null ? r.shareCents - r.creditCents : undefined,
+                )}
               />
               <button
                 className="btn small secondary"
@@ -405,6 +418,37 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           >
             Done, I sorted it out
           </button>
+        </>
+      )}
+      {(item.kind === 'daybefore' || item.kind === 'lastcall') && (
+        <>
+          <SmsDraft
+            to="Group chat"
+            phone={null}
+            openLabel="Text the group"
+            body={
+              item.kind === 'daybefore'
+                ? dayBeforeMessage(s, tz, s.confirmedCount, ctx.d.group.playerLink)
+                : lastCallMessage(s, tz, s.confirmedCount)
+            }
+          />
+          <button
+            className="btn small ghost"
+            disabled={busy}
+            onClick={() =>
+              act(() => api('POST', `/api/admin/sessions/${s.id}/card-done`, { card: item.kind === 'daybefore' ? 'day_before' : 'last_call' }), 'Hidden')
+            }
+          >
+            Done
+          </button>
+        </>
+      )}
+      {item.kind === 'courtwait' && (
+        <>
+          <p className="small muted">
+            {s.waitlistCount} on standby. When the venue gives you a court, tap Court opened and they move in by the 4-or-6 rules.
+          </p>
+          <CourtWaitButtons ctx={ctx} s={s} />
         </>
       )}
       {item.kind === 'checkin' && (
@@ -508,6 +552,58 @@ function FivePanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/** "4 in, need 2 more for 6", "3 in, need 1 more for 4", "6 in, all set" */
+export function countSummary(n: number): string {
+  if (n < 4) return `${n} in, need ${4 - n} more for 4`;
+  if (n === 4) return '4 in, need 2 more for 6';
+  if (n === 5) return '5 in, need one more or one fewer';
+  return `${n} in, all set`;
+}
+
+/** Sessions before the first session date, with "Show this session". */
+function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const tz = ctx.d.group.timezone;
+  if (ctx.d.hiddenSessions.length === 0) return null;
+  return (
+    <section className="card stack" aria-labelledby="hidden-title">
+      <h2 id="hidden-title" className="section-title" style={{ margin: 0 }}>
+        Before your first session date
+      </h2>
+      <p className="small muted">Hidden from everyone. Show one if you want to play it anyway.</p>
+      <ul className="rows">
+        {ctx.d.hiddenSessions.map((h) => (
+          <li key={h.id}>
+            <span className="who">
+              <strong>{formatShortDate(h.startsAt, tz)}</strong>
+              <span className="small muted">{formatTimeRange(h.startsAt, h.endsAt, tz)}</span>
+            </span>
+            <button
+              className="btn small secondary"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  await api('POST', `/api/admin/sessions/${h.id}/show`, { shown: true });
+                  await ctx.reload();
+                  toast(`${formatShortDate(h.startsAt, tz)} is showing`);
+                } catch (err) {
+                  toast(err instanceof ApiError ? err.message : "Couldn't show it.");
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              Show this session
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

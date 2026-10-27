@@ -141,9 +141,13 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     me: me ? { id: me.id, name: me.display_name } : null,
     viewingAs: !!viewAsName,
     now: ctx.nowIso,
+    // Upcoming sessions, plus played ones this player still owes for, so
+    // money lives in the same row as the session.
     sessions: sessions
-      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
-      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz)),
+      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs || owed.some((o) => o.sessionId === s.id))
+      .map((s) =>
+        playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, me ? (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) : 0),
+      ),
     owed,
     creditBalanceCents,
     suggestion,

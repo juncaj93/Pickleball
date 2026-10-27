@@ -16,14 +16,22 @@ you?"), and the phone remembers it. After that every visit opens on
   answered yet (regulars only)
 - "You owe $14 for Tue, Oct 27" with a **Pay $14 with Venmo** button once
   they're confirmed (opening Venmo never marks anything paid)
-- the next sessions, each with **one big button**: I'm in / Join waitlist /
-  I'm out, plus who's going and an **Add to Calendar** button
+- a schedule of date tiles (TUE / 3 / NOV) with the time, court status
+  ("Court booked, Court #7"), any holiday, who's in ("3 of 4 in"), **one big
+  button** (I'm in / I'm out / Join waitlist / Put me on standby), their money
+  for that session (You owe $14 + Pay with Venmo, Paid, or Credit), and a small
+  Add to Calendar link
 
 **The organizer** signs in at `/admin` with a PIN. A floating pill at the
 bottom has three tabs: **Home**, **Players**, **Settings**. Home starts with a
 short "Needs attention" list:
 
-- courts to book, with a **Book on CourtReserve** button and Enter details
+- courts to book, with a **Book on CourtReserve** button and **I booked it**
+  (court number only; reservation number and court cost under More details)
+- the **day-before** card (from 24 hours before play) and the **last-call** card
+  (from 13 hours before), each with Text the group, Copy message, and Done, until
+  the cancellation deadline
+- **Waiting on the court**, with Court opened / Didn't open
 - short on players (from the day-before check-in), with Invite people /
   Reschedule / Cancel / Keep as is
 - "5 going, need 4 or 6" with the choices
@@ -54,6 +62,16 @@ The status says "Draft ready" or "Composer opened", never "Sent".
 - The database refuses a 7th confirmed player, and every spot change is a
   single guarded step, so people tapping at the same second can't land on 5.
 
+## Court waitlist
+
+When the organizer is on the venue's own waitlist for a court ("On court
+waitlist" under More), players see "Waiting on the court. Join the list so
+we're ready if it opens." and tap **Put me on standby**. Standby players owe
+nothing. **Court opened** (with the court number) confirms them in order by
+the 4-or-6 rules and prepares a text for each; **Didn't open** marks the
+session off as "Court didn't open". A session before the first session date
+can be shown with **Show this session**.
+
 ## How money works
 
 Everyone confirmed pays a flat **$14** per session. Waitlisted people owe
@@ -80,7 +98,9 @@ than 24 hours ago.
 Sessions on New Year's Day, Memorial Day, July 4, Labor Day, Election Day,
 the day before Thanksgiving, Thanksgiving, Christmas Eve, Christmas Day, and
 New Year's Eve get a holiday pill (plus "check venue hours" for the
-organizer). The list is built in; no outside service. Settings > "First
+organizer, until they tap "Venue is open normal hours", which leaves just
+"✓ Election Day"; Undo brings it back). The list is built in; no outside
+service. Settings > "First
 session" hides and stops creating any session before that date.
 
 ## Players adding themselves
@@ -94,8 +114,8 @@ paid; otherwise it's hidden so old records stay correct.
 
 Settings shows the 3 iPhone steps (Share > Add to Home Screen > Add), and
 players see them once. The icon opens the site full screen. To use the club
-logo, replace `public/apple-touch-icon.png` (180x180) and
-`public/icon-512.png` (512x512) and redeploy.
+logo, run `node scripts/make-icons.cjs path/to/logo.png` (it writes every icon
+size plus the small header logo into `public/`) and redeploy.
 
 ## Day-before check-in and deadlines
 
@@ -227,8 +247,8 @@ production.
 ## Tests
 
 ```bash
-npm test               # 111 server and logic tests
-npm run test:e2e       # 63 browser checks (needs Playwright + Chromium)
+npm test               # 129 server and logic tests
+npm run test:e2e       # 67 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
@@ -239,7 +259,10 @@ once), the 7-player database cap, the flat $14, the $9 discount and $5
 credits when 6 play (including drops below 6), the first session date,
 holidays (Thanksgiving and Election Day 2026), the group poll text, the court
 cost never reaching players, add-your-name with the duplicate check, delete
-vs hide, the roster,
+vs hide, I booked it, the court waitlist (standby, court opened, didn't
+open, showing a hidden session), the player schedule, the day-before and
+last-call card windows and wording, holiday hours, no text ever saying
+"sent",
 the unpaid reminder only after 24 hours, the 24-hour check-in and 12-hour
 deadline, rescheduling, the remembered name, usual-day suggestions, View as,
 the calendar file, expired and reused links, admin lockout, input validation,
