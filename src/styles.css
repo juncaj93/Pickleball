@@ -1808,7 +1808,7 @@ label.field {
 }
 /* "Book a court" on the first divider line: small, and pulled in so the
    line is no taller than before; the tap area reaches 44px. */
-.btn.external.pill {
+.btn.pill {
   order: 2;
   position: relative;
   flex: none;
@@ -1825,7 +1825,7 @@ label.field {
   width: 12px;
   height: 12px;
 }
-.btn.external.pill::before {
+.btn.pill::before {
   content: '';
   position: absolute;
   inset: -11px -2px;
@@ -2672,4 +2672,122 @@ section[aria-labelledby='sessions-title'] > .week-break {
     min-width: 44px;
     justify-content: center;
   }
+}
+
+/* "+ Add game" next to "Book a court" on the first divider line. */
+.btn.pill.add-pill {
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+.week-break .btn.pill + .btn.pill {
+  margin-left: -4px;
+}
+/* A one-off game: a small tag by the time, and its note. */
+.extra-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--holiday-fg);
+  color: var(--holiday-fg);
+  background: var(--holiday-bg);
+  font-family: var(--body, inherit);
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: 2px;
+  white-space: nowrap;
+}
+.sched-when .extra-tag {
+  margin-left: 0;
+  vertical-align: baseline;
+}
+.game-note {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.time-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.add-game .chips {
+  flex-wrap: wrap;
+  margin: 2px 0 6px;
+}
+/* The players row: "0 of 4 in" on the left, the organizer's own I'm in on the right. */
+.players-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+.players-row > .players-line {
+  min-width: 0;
+}
+.btn.small.me-in {
+  position: relative;
+  min-height: 28px;
+  padding: 0 12px;
+  font-size: 0.82rem;
+  border-radius: 999px;
+}
+.btn.small.me-in::before {
+  content: '';
+  position: absolute;
+  inset: -8px 0;
+}
+.me-state {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.me-state .me-tag {
+  font-size: 0.75rem;
+}
+.link-btn.me-out {
+  position: relative;
+  min-height: 0;
+  padding: 2px 4px;
+  font-size: 0.85rem;
+}
+.link-btn.me-out::before {
+  content: '';
+  position: absolute;
+  inset: -12px -6px;
+}
+/* The gear panel's single "Text" button and its short list of choices. */
+.btn.text-btn {
+  width: 100%;
+  gap: 8px;
+}
+.btn.text-btn svg {
+  width: 20px;
+  height: 20px;
+}
+.text-pick .text-menu {
+  margin-top: 6px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+}
+.text-choice {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 48px;
+  padding: 6px 0;
+  color: var(--ink);
+  text-decoration: none;
+}
+.text-choice .text-name {
+  font-weight: 650;
+}
+.text-who {
+  font-size: 0.75rem;
+  color: var(--ink-2);
 }

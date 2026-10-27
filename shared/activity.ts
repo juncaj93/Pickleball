@@ -59,6 +59,8 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'booking_updated':
       if (changes.booking_status?.to === 'booked') return `${who} booked${day ? ` ${day}` : ' a court'}`;
       return `${who} edited a booking${forDay}`;
+    case 'session_added':
+      return `${who} added a game${forDay}`;
     case 'session_canceled':
       return `${who} canceled${day ? ` ${day}` : ' a session'}`;
     case 'session_reopened':

@@ -30,7 +30,7 @@ import {
   syncSix,
   visibleFrom,
 } from './repo';
-import { confirmAttendance, joinSession, moveToWaitlist, settle, withdraw } from './roster';
+import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -110,6 +110,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     credits: [...balances]
       .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
       .sort((a, b) => a.name.localeCompare(b.name)),
+    me: await organizerPlayer(ctx, group, false),
     now: ctx.nowIso,
   };
 }
@@ -772,4 +773,104 @@ export async function activity(ctx: Ctx): Promise<ActivityPage> {
     })),
     more: results.length > ACTIVITY_PAGE,
   };
+}
+
+/**
+ * POST /api/admin/sessions { startsAt, endsAt, note? }: a one-off game.
+ * It works like any other session from then on. The same date and time as
+ * an existing game is refused, so a double tap can't make two.
+ */
+export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const startsAt = v.isoTime(body.startsAt, 'startsAt');
+  const endsAt = v.isoTime(body.endsAt, 'endsAt');
+  if (!startsAt || !endsAt) throw new HttpError(400, 'invalid_time', 'Pick a date, start time, and end time.');
+  const length = Date.parse(endsAt) - Date.parse(startsAt);
+  if (length <= 0) throw new HttpError(400, 'invalid_time', 'The end time must be after the start time.');
+  if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
+  if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
+  const note = v.optionalText(body.note, 'note', 80);
+  const tz = group.timezone;
+  const clash = await ctx.db
+    .prepare('SELECT id, status FROM sessions WHERE group_id = ? AND starts_at = ?')
+    .bind(group.id, startsAt)
+    .first<{ id: string; status: string }>();
+  if (clash) {
+    const when = formatDateTime(startsAt, tz);
+    throw new HttpError(
+      409,
+      'game_exists',
+      clash.status === 'canceled' ? `There's already a canceled game at ${when}. Reopen it instead.` : `There's already a game at ${when}.`,
+    );
+  }
+  const settings = settingsOf(group);
+  const id = newId();
+  // Before the first session date, a game still shows (like "Show this session").
+  const early = startsAt < visibleFrom(group) ? 1 : 0;
+  try {
+    await ctx.db
+      .prepare(
+        `INSERT INTO sessions (id, group_id, starts_at, ends_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+      )
+      .bind(id, group.id, startsAt, endsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso)
+      .run();
+  } catch (err) {
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There's already a game at ${formatDateTime(startsAt, tz)}.`);
+    throw err;
+  }
+  await audit(ctx.db, group.id, id, 'session_added', { startsAt, note }, ctx.nowIso);
+  return { id };
+}
+
+/** The organizer's own player record: the saved one, else a player with their name. */
+export async function organizerPlayer(ctx: Ctx, group: GroupRow, create: boolean): Promise<{ id: string; name: string } | null> {
+  if (group.organizer_player_id) {
+    const p = await ctx.db
+      .prepare('SELECT id, display_name FROM players WHERE id = ? AND group_id = ?')
+      .bind(group.organizer_player_id, group.id)
+      .first<{ id: string; display_name: string }>();
+    if (p) return { id: p.id, name: p.display_name };
+  }
+  const name = (group.organizer_name ?? '').trim();
+  if (!name) return null;
+  const all = await getPlayers(ctx.db, group.id);
+  let p = all.find((x) => x.display_name.trim().toLowerCase() === name.toLowerCase());
+  if (!p && !create) return null;
+  let id = p?.id;
+  if (!id) {
+    id = newId();
+    await ctx.db
+      .prepare(
+        `INSERT INTO players (id, group_id, display_name, is_regular, is_active, can_receive_substitute_invites, sort_order, created_at)
+         VALUES (?, ?, ?, 1, 1, 0, ?, ?)`,
+      )
+      .bind(id, group.id, name, all.length, ctx.nowIso)
+      .run();
+  } else if (!p!.is_active) {
+    await ctx.db.prepare('UPDATE players SET is_active = 1 WHERE id = ?').bind(id).run();
+  }
+  if (create) await ctx.db.prepare('UPDATE groups SET organizer_player_id = ? WHERE id = ?').bind(id, group.id).run();
+  return { id, name: p?.display_name ?? name };
+}
+
+/**
+ * POST /api/admin/sessions/:id/me { in }: the organizer signs up (or drops
+ * out) like any player, under their name from Settings. Real, and logged.
+ */
+export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const goingIn = v.bool(body.in, 'in');
+  const me = await organizerPlayer(ctx, group, true);
+  if (!me) throw new HttpError(400, 'name_needed', 'Add your name in Settings first (Group > Your name).');
+  if (goingIn) {
+    const res = await joinSession(ctx.db, session, me.id, ctx.nowMs, 'auto');
+    await clearLateDrop(ctx.db, session.id, me.id);
+    if (res.result !== 'already_confirmed') await audit(ctx.db, group.id, session.id, 'player_join', { player: me.name, result: res.result, organizer: true }, ctx.nowIso, me.name);
+    return res;
+  }
+  const res = await withdraw(ctx.db, session, me.id, ctx.nowMs);
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group).checkInHours) : false;
+  if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
+  return { result: res.changed ? 'withdrawn' : 'not_in_session' };
 }

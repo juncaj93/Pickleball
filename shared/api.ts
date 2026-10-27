@@ -24,6 +24,9 @@ export interface PlayerSessionView {
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** A one-off game the organizer added, with its optional note. */
+  extra: boolean;
+  note: string | null;
   /** Inside the booking window (14 days by default), and when it opens. */
   bookingOpen: boolean;
   bookingOpensAt: string;
@@ -138,6 +141,9 @@ export interface AdminSessionView {
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   /** Moved from its usual time (rescheduled). */
   moved: boolean;
+  /** A one-off game the organizer added, with its optional note. */
+  extra: boolean;
+  note: string | null;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;
@@ -218,6 +224,8 @@ export interface AdminDashboard {
   hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
   /** Open credit per player (earned, not yet used or cleared). */
   credits: { playerId: string; name: string; balanceCents: number }[];
+  /** The organizer's own player record, once they have one (their name from Settings). */
+  me: { id: string; name: string } | null;
   now: string;
 }
 

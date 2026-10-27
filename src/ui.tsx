@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
-import { copyText, isIOS } from './lib';
+import { isIOS } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -276,8 +276,7 @@ export function SmsDraft({
   openLabel?: string;
 }) {
   const [opened, setOpened] = useState(false);
-  const toast = useToast();
-  const [showFallback, setShowFallback] = useState(false);
+  // No numbers saved: Messages opens with just the words, to pick a group chat.
   const href = smsHref(phones && phones.length ? phones : phone, body, isIOS);
   return (
     <div className="draft">
@@ -285,7 +284,7 @@ export function SmsDraft({
         <div>
           <strong>{to}</strong>
           <div className="muted small">
-            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'No numbers saved') : phone ? formatPhone(phone) : 'No phone number saved'}
+            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'No numbers saved: pick a group chat') : phone ? formatPhone(phone) : 'Pick who to send it to in Messages'}
           </div>
           {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
         </div>
@@ -296,37 +295,10 @@ export function SmsDraft({
         {opened ? <span className="message-ready">Message ready.</span> : null} {opened ? 'Press send in Messages when it looks right.' : ''}
       </p>
       <div className="btn-row" style={{ marginTop: 10 }}>
-        <a
-          className="btn small"
-          href={href}
-          onClick={() => {
-            setOpened(true);
-            // If nothing happens (desktop, no SMS app), offer the copy fallback.
-            setTimeout(() => setShowFallback(true), 1500);
-          }}
-        >
+        <a className="btn small" href={href} onClick={() => setOpened(true)}>
           {openLabel}
         </a>
-        <button
-          className="btn small secondary copy-text"
-          onClick={async () => (await copyText(body)) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error')}
-        >
-          Copy text
-        </button>
-        {phone && (
-          <button
-            className="btn small secondary"
-            onClick={async () => (await copyText(phone)) ? toast('Number copied') : toast("Couldn't copy the number.", 'error')}
-          >
-            Copy number
-          </button>
-        )}
       </div>
-      {showFallback && (
-        <p className="muted small" style={{ marginTop: 8 }}>
-          Messages didn't open? Tap Copy text and paste it into any texting app.
-        </p>
-      )}
     </div>
   );
 }
@@ -444,6 +416,13 @@ export const GearIcon = () => (
   <svg {...ICON} data-icon="gear">
     <path d="M9.23 5.14 L10.17 2.58 L13.83 2.58 L14.77 5.14 L14.89 5.19 L17.37 4.04 L19.96 6.63 L18.81 9.11 L18.86 9.23 L21.42 10.17 L21.42 13.83 L18.86 14.77 L18.81 14.89 L19.96 17.37 L17.37 19.96 L14.89 18.81 L14.77 18.86 L13.83 21.42 L10.17 21.42 L9.23 18.86 L9.11 18.81 L6.63 19.96 L4.04 17.37 L5.19 14.89 L5.14 14.77 L2.58 13.83 L2.58 10.17 L5.14 9.23 L5.19 9.11 L4.04 6.63 L6.63 4.04 L9.11 5.19 Z" />
     <circle cx="12" cy="12" r="3.1" />
+  </svg>
+);
+
+/** A speech bubble: the card's "Text" button. */
+export const MessageIcon = () => (
+  <svg {...ICON} data-icon="message">
+    <path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17h-1A1.5 1.5 0 0 1 3 15.5V7a1.5 1.5 0 0 1 1.5-1.5z" />
   </svg>
 );
 

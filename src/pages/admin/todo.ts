@@ -81,12 +81,41 @@ export function homeBadgeCount(d: AdminDashboard): number {
 }
 
 /** The players who are in: their numbers, and the names with none saved. */
-export function playersIn(s: AdminSessionView) {
-  const inNow = s.roster.filter((r) => r.status === 'confirmed');
+export function playersIn(s: AdminSessionView, meId?: string | null) {
+  const inNow = s.roster.filter((r) => r.status === 'confirmed' && r.playerId !== meId);
   return {
     phones: inNow.filter((r) => r.phone).map((r) => r.phone!),
     missing: inNow.filter((r) => !r.phone).map((r) => r.name),
   };
+}
+
+export type Audience = 'everyone' | 'in' | 'notIn' | 'wereIn';
+
+/**
+ * Who a text goes to, never including the organizer: everyone on the list,
+ * the players who are in (or were, on a canceled game), or everyone not in.
+ */
+export function recipients(d: AdminDashboard, s: AdminSessionView, who: Audience) {
+  const me = d.me?.id ?? null;
+  if (who === 'in' || who === 'wereIn') {
+    const r = playersIn(s, me);
+    return { ...r, count: r.phones.length + r.missing.length };
+  }
+  const inIds = new Set(s.roster.filter((r) => r.status === 'confirmed').map((r) => r.playerId));
+  const people = d.players.filter((p) => p.isActive && p.id !== me && (who === 'everyone' || !inIds.has(p.id)));
+  return {
+    phones: people.filter((p) => p.phone).map((p) => p.phone!),
+    missing: people.filter((p) => !p.phone).map((p) => p.name),
+    count: people.length,
+  };
+}
+
+/** "5 who are in", "Everyone (8)", "6 not in yet", "4 who were in". */
+export function audienceLine(who: Audience, count: number): string {
+  if (who === 'everyone') return `Everyone (${count})`;
+  if (who === 'in') return `${count} who ${count === 1 ? 'is' : 'are'} in`;
+  if (who === 'wereIn') return `${count} who ${count === 1 ? 'was' : 'were'} in`;
+  return `${count} not in yet`;
 }
 
 /** Short of 4 or 6: the day-before card leads with "need more players". */

@@ -169,8 +169,8 @@ describe('court waitlist', () => {
 
   it('poll text for a court-waitlist session', () => {
     const s = { startsAt: '2026-10-30T00:00:00.000Z', endsAt: '2026-10-30T02:00:00.000Z' };
-    expect(courtWaitlistPollMessage(s, TZ, 'https://club.example/g/abc')).toBe(
-      "Pickleball Thu, Oct 29, 8:00 to 10:00 PM. I'm on the court waitlist. Want to be ready if it opens? Tap here: https://club.example/g/abc",
+    expect(courtWaitlistPollMessage(s, TZ, 'https://pickleball.juncaj.net')).toBe(
+      "Pickleball Thu Oct 29, 8:00 to 10:00 PM. I'm on the court waitlist. Want in if it opens? pickleball.juncaj.net",
     );
     expect(promotionMessage('Ryan', s, TZ, 'court_opened', 1400)).toBe(
       "Good news, Ryan! The court opened up, so you're in for pickleball Thursday, Oct 29, 8:00 to 10:00 PM. You owe $14.",
@@ -263,14 +263,14 @@ describe('day-before and last-call cards', () => {
 
   it('words the day-before text for how many are in', () => {
     const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
-    const link = 'https://club.example/g/abc';
-    const head = 'Pickleball tomorrow, Tue, Nov 3, 8:00 to 10:00 PM.';
-    expect(dayBeforeMessage(s, TZ, 3, link)).toBe(`${head} We have 3 in and need 1 more to fill. Sign up here: ${link}`);
-    expect(dayBeforeMessage(s, TZ, 1, link)).toBe(`${head} We have 1 in and need 3 more to fill. Sign up here: ${link}`);
-    expect(dayBeforeMessage(s, TZ, 4, link)).toBe(`${head} We're set with 4 in. See you there.`);
-    expect(dayBeforeMessage(s, TZ, 6, link)).toBe(`${head} We're set with 6 in. See you there.`);
-    expect(dayBeforeMessage(s, TZ, 5, link)).toBe(`${head} We have 5, and we need either one more or one fewer. Sign up or drop here: ${link}`);
-    expect(lastCallMessage(s, TZ, 4)).toBe("Last call for pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, tell me now.");
+    const link = 'https://pickleball.juncaj.net';
+    const head = 'Pickleball tomorrow, Tue Nov 3, 8:00 to 10:00 PM.';
+    expect(dayBeforeMessage(s, TZ, 3, link)).toBe(`${head} We have 3 in and need 1 more. Sign up: pickleball.juncaj.net`);
+    expect(dayBeforeMessage(s, TZ, 1, link)).toBe(`${head} We have 1 in and need 3 more. Sign up: pickleball.juncaj.net`);
+    expect(dayBeforeMessage(s, TZ, 4, link)).toBe(`${head} We're set with 4. See you there.`);
+    expect(dayBeforeMessage(s, TZ, 6, link)).toBe(`${head} We're set with 6. See you there.`);
+    expect(dayBeforeMessage(s, TZ, 5, link)).toBe(`${head} We have 5 and need 1 more or 1 fewer. pickleball.juncaj.net`);
+    expect(lastCallMessage(s, TZ, 4)).toBe("Last call: pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, text me ASAP.");
   });
 
   it('no text ever says it was sent, or carries the court cost', () => {
@@ -280,7 +280,7 @@ describe('day-before and last-call cards', () => {
       dayBeforeMessage(s, TZ, 5, 'L'),
       dayBeforeMessage(s, TZ, 6, 'L'),
       lastCallMessage(s, TZ, 4),
-      pollMessage(s, TZ, 'Northville Pickleball Club', 1400),
+      pollMessage(s, TZ, 1400, 'L'),
       courtWaitlistPollMessage(s, TZ, 'L'),
       promotionMessage('A', s, TZ, 'made_six', 900),
       confirmationMessage('A', s, TZ, 'L'),

@@ -1,9 +1,10 @@
 import { Fragment, type FormEvent, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
-import { lastCallMessage, promotionMessage, sessionLink, spotOpenMessage } from '../../shared/messages';
+import { lastCallMessage, promotionMessage, spotOpenMessage } from '../../shared/messages';
 import { DayBeforeTexts } from './admin/Texts';
+import { recipients } from './admin/todo';
 import { formatPrice } from '../../shared/money';
-import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, weekLabel, weekStart } from '../../shared/time';
+import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
@@ -326,7 +327,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
             ))}
           </ul>
           <RefundList ctx={ctx} s={s} only={lateDrops(s).map((r) => r.playerId)} />
-          <SmsDraft to="Group chat" phone={null} openLabel="Text the group: spot open" body={spotOpenMessage(s, tz, ctx.d.group.playerLink)} />
+          <SpotOpenDraft ctx={ctx} s={s} />
           <button
             className="btn small ghost"
             disabled={busy}
@@ -402,12 +403,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           {item.kind === 'daybefore' ? (
             <DayBeforeTexts ctx={ctx} s={s} />
           ) : (
-            <SmsDraft
-              to="Group chat"
-              phone={null}
-              openLabel="Text the group"
-              body={lastCallMessage(s, tz, s.confirmedCount, sessionLink(ctx.d.group.playerLink, s.id))}
-            />
+            <LastCallDraft ctx={ctx} s={s} />
           )}
           <button
             className="btn small ghost"
@@ -573,6 +569,17 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
 function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
   const [all, setAll] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const pills = (
+    <>
+      <button className="btn pill add-pill" onClick={() => setAdding(true)}>
+        + Add game
+      </button>
+      <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
+        Book a court
+      </CourtReserveLink>
+    </>
+  );
   // Home is upcoming only; played sessions live under History.
   const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs);
   const shown = all ? list : list.slice(0, 6);
@@ -586,9 +593,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
       {list.length === 0 && (
         <div className="week-break">
           <h3>Upcoming</h3>
-          <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
-            Book a court
-          </CourtReserveLink>
+          {pills}
         </div>
       )}
       {list.length === 0 && <Empty>No upcoming sessions.</Empty>}
@@ -597,12 +602,8 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
           {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(shown[i - 1].startsAt, tz)) && (
             <div className="week-break">
               <h3>{weekLabel(s.startsAt, nowMs, tz)}</h3>
-              {/* "Book a court" rides on the first divider line, adding no height. */}
-              {i === 0 && (
-                <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
-                  Book a court
-                </CourtReserveLink>
-              )}
+              {/* "+ Add game" and "Book a court" ride on the first divider line, adding no height. */}
+              {i === 0 && pills}
             </div>
           )}
           <SessionCard ctx={ctx} s={s} />
@@ -613,6 +614,9 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
           Show all {list.length}
         </button>
       )}
+      <Sheet open={adding} title="Add a game" onClose={() => setAdding(false)}>
+        {adding && <AddGameForm ctx={ctx} onDone={() => setAdding(false)} />}
+      </Sheet>
     </section>
   );
 }
@@ -622,4 +626,104 @@ export function deadlineLine(s: AdminSessionView, tz: string, nowMs: number): st
   const when = formatDateTime(s.cancellationDeadlineAt, tz);
   const passed = Date.parse(s.cancellationDeadlineAt) <= nowMs;
   return passed ? `${when} (passed)` : `${when} (${formatRelative(s.cancellationDeadlineAt, nowMs)})`;
+}
+
+/** Last call goes to the players who are in. */
+function LastCallDraft({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const r = recipients(ctx.d, s, 'in');
+  return (
+    <SmsDraft to="Players who are in" phone={null} phones={r.phones} missing={r.missing} openLabel="Text the players who are in" body={lastCallMessage(s, ctx.d.group.timezone, s.confirmedCount)} />
+  );
+}
+
+/** A spot opened: tell everyone who isn't in. */
+function SpotOpenDraft({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const r = recipients(ctx.d, s, 'notIn');
+  return (
+    <SmsDraft to="Everyone not in yet" phone={null} phones={r.phones} missing={r.missing} openLabel="Text the group: spot open" body={spotOpenMessage(s, ctx.d.group.timezone, ctx.d.group.playerLink)} />
+  );
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/** The next Sat, Sun and Wed (today counts), soonest first, as "YYYY-MM-DD" with a "Sat Nov 14" label. */
+function quickDates(nowMs: number, tz: string): { iso: string; label: string }[] {
+  const t = localParts(nowMs, tz);
+  return [6, 0, 3].map((dow) => {
+    const ahead = (dow - t.weekday + 7) % 7;
+    const d = new Date(Date.UTC(t.year, t.month - 1, t.day + ahead, 12));
+    const iso = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+    const label = `${WEEKDAY_SHORT[dow]} ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+    return { iso, label };
+  }).sort((a, b) => a.iso.localeCompare(b.iso));
+}
+
+/** "+ Add game": a one-off game on any date. Same rules as every session after that. */
+function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
+  const tz = ctx.d.group.timezone;
+  const toast = useToast();
+  const chips = quickDates(Date.parse(ctx.d.now), tz);
+  const [date, setDate] = useState(chips[0].iso);
+  const [start, setStart] = useState('20:00');
+  const [end, setEnd] = useState('22:00');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function add(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    const startsAt = fromLocalInputValue(`${date}T${start}`, tz);
+    const endsAt = fromLocalInputValue(`${date}T${end}`, tz);
+    if (!startsAt || !endsAt) return setError('Pick a date, start time, and end time.');
+    if (Date.parse(endsAt) <= Date.parse(startsAt)) return setError('The end time must be after the start time.');
+    setBusy(true);
+    try {
+      await api('POST', '/api/admin/sessions', { startsAt, endsAt, note: note.trim() || null });
+      await ctx.reload();
+      toast('Game added');
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not add the game.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form className="stack add-game" onSubmit={add}>
+      <div className="field">
+        <span id="add-date-label">Date</span>
+        <div className="chips" role="group" aria-labelledby="add-date-label">
+          {chips.map((c) => (
+            <button type="button" key={c.iso} className="chip-btn" aria-pressed={date === c.iso} onClick={() => setDate(c.iso)}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+        <input type="date" aria-label="Pick a date" value={date} onChange={(e) => setDate(e.target.value)} required />
+      </div>
+      <div className="time-pair">
+        <label className="field">
+          Start
+          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+        </label>
+        <label className="field">
+          End
+          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
+        </label>
+      </div>
+      <label className="field">
+        Note (optional)
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder="Court 3, bring water" />
+      </label>
+      {error && (
+        <Notice tone="danger" title="Not added">
+          {error}
+        </Notice>
+      )}
+      <button className="btn block big" type="submit" disabled={busy}>
+        {busy ? 'Adding…' : 'Add game'}
+      </button>
+    </form>
+  );
 }

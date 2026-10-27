@@ -87,7 +87,7 @@ describe('late drops', () => {
   it('the spot-open text', () => {
     const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
     const text = spotOpenMessage(s, TZ, 'https://pickleball.juncaj.net');
-    expect(text).toBe('A spot just opened for pickleball Tue, Nov 3, 8:00 to 10:00 PM. First to claim it gets it: pickleball.juncaj.net');
+    expect(text).toBe('A spot opened for pickleball Tue Nov 3, 8:00 to 10:00 PM. First to grab it gets it: pickleball.juncaj.net');
     expect(text).not.toMatch(/\bsent\b/i);
   });
 

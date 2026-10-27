@@ -41,18 +41,27 @@ export function promotionMessage(
   return `Good news, ${name}! ${why}, so you're in for pickleball ${w.day}, ${w.date}, ${w.time}.${owe}`;
 }
 
+/** "Tue Nov 3": the short date the texts use. */
+export function textDay(iso: string, tz: string): string {
+  return formatShortDate(iso, tz).replace(',', '');
+}
+
+/** "pickleball.juncaj.net": the plain site address, for texts. */
+export function siteAddress(link: string): string {
+  return link.replace(/^https?:\/\//, '').replace(/[/?].*$/, '');
+}
+
 /**
- * The group-chat poll: "Pickleball: Tue, Nov 3, 8:00 to 10:00 PM at
- * Northville Pickleball Club. $14 each. In or out?" Uses the per-player
- * price only, never the court cost.
+ * The poll: "Pickleball Tue Nov 3, 8:00 to 10:00 PM. $14 each. In or out?
+ * pickleball.juncaj.net" Uses the per-player price only, never the court cost.
  */
-export function pollMessage(s: SessionLike, tz: string, venue: string, priceCents: number): string {
-  return `Pickleball: ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)} at ${venue}. ${formatPrice(priceCents)} each. In or out?`;
+export function pollMessage(s: SessionLike, tz: string, priceCents: number, site: string): string {
+  return `Pickleball ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. ${formatPrice(priceCents)} each. In or out? ${siteAddress(site)}`;
 }
 
 /** Poll while the organizer is on the venue's court waitlist. */
-export function courtWaitlistPollMessage(s: SessionLike, tz: string, link: string): string {
-  return `Pickleball ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. I'm on the court waitlist. Want to be ready if it opens? Tap here: ${link}`;
+export function courtWaitlistPollMessage(s: SessionLike, tz: string, site: string): string {
+  return `Pickleball ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. I'm on the court waitlist. Want in if it opens? ${siteAddress(site)}`;
 }
 
 /** The day-before group text, worded for how many are in. */
@@ -71,24 +80,23 @@ export function shareGameMessage(s: SessionLike, tz: string, court: 'booked' | '
   return `Thinking of playing ${day} at ${at}. Tap here to say if you're in: ${link}`;
 }
 
-/** The day-before text to the players who are in: a heads-up and a way to back out. */
-export function dayBeforePlayersMessage(s: SessionLike, tz: string, venue: string, link: string): string {
-  return `Pickleball tomorrow, ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)} at ${venue}. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: ${link}`;
+/** The day-before text to the players who are in: a heads-up and how to back out. */
+export function dayBeforePlayersMessage(s: SessionLike, tz: string, site: string): string {
+  return `Pickleball tomorrow, ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. You're in! If you need to back out, text me ASAP. ${siteAddress(site)}`;
 }
 
 /** The day-before group text when we're short of 4 or 6 ("need more players"). */
-export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, link: string): string {
-  const head = `Pickleball tomorrow, ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`;
-  if (confirmed === 4 || confirmed === 6) return `${head} We're set with ${confirmed} in. See you there.`;
-  if (confirmed === 5) return `${head} We have 5, and we need either one more or one fewer. Sign up or drop here: ${link}`;
+export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, site: string): string {
+  const head = `Pickleball tomorrow, ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`;
+  if (confirmed === 4 || confirmed === 6) return `${head} We're set with ${confirmed}. See you there.`;
+  if (confirmed === 5) return `${head} We have 5 and need 1 more or 1 fewer. ${siteAddress(site)}`;
   const need = confirmed < 4 ? 4 - confirmed : 6 - confirmed;
-  return `${head} We have ${confirmed} in and need ${need} more to fill. Sign up here: ${link}`;
+  return `${head} We have ${confirmed} in and need ${need} more. Sign up: ${siteAddress(site)}`;
 }
 
-/** The last-call group text, the day of. */
-export function lastCallMessage(s: SessionLike, tz: string, confirmed: number, link?: string): string {
-  const text = `Last call for pickleball tonight, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, tell me now`;
-  return link ? `${text} or tap here: ${link}` : `${text}.`;
+/** The last-call text to the players who are in, the day of. */
+export function lastCallMessage(s: SessionLike, tz: string, confirmed: number): string {
+  return `Last call: pickleball tonight, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, text me ASAP.`;
 }
 
 export function replacementMessage(s: SessionLike, tz: string, link: string): string {
@@ -106,11 +114,9 @@ export function deadlineAlertMessage(s: SessionLike, tz: string, deadlineIso: st
   return `Reminder: ${w.day}, ${w.date} pickleball is not full. The court cancellation deadline is ${formatDateTime(deadlineIso, tz)}. Decide whether to keep trying to fill the spot or cancel the venue booking.`;
 }
 
-/** Digits and a leading + only, for sms: links. */
-/** "A spot just opened for pickleball Tue, Nov 3, 8:00 to 10:00 PM. First to claim it gets it: pickleball.juncaj.net" */
-export function spotOpenMessage(s: SessionLike, tz: string, link: string): string {
-  const site = link.replace(/^https?:\/\//, '').replace(/\/$/, '');
-  return `A spot just opened for pickleball ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. First to claim it gets it: ${site}`;
+/** "A spot opened for pickleball Tue Nov 3, 8:00 to 10:00 PM. First to grab it gets it: pickleball.juncaj.net" */
+export function spotOpenMessage(s: SessionLike, tz: string, site: string): string {
+  return `A spot opened for pickleball ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. First to grab it gets it: ${siteAddress(site)}`;
 }
 
 /** One optional line from the organizer, ending with a period. */

@@ -35,13 +35,16 @@ describe('Share the game', () => {
 });
 
 describe('day-before and last-call texts', () => {
-  it('the players who are in hear the date, time, place and a link to back out', () => {
-    expect(dayBeforePlayersMessage(s, TZ, 'Northville Pickleball Club', LINK)).toBe(
-      `Pickleball tomorrow, Tue, Nov 3, 8:00 to 10:00 PM at Northville Pickleball Club. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: ${LINK}`,
+  it('day before: exactly the short wording, with the plain site address and no venue', () => {
+    expect(dayBeforePlayersMessage(s, TZ, 'https://pickleball.juncaj.net')).toBe(
+      "Pickleball tomorrow, Tue Nov 3, 8:00 to 10:00 PM. You're in! If you need to back out, text me ASAP. pickleball.juncaj.net",
     );
+    // A long session link still comes out as the plain address.
+    expect(dayBeforePlayersMessage(s, TZ, LINK)).toMatch(/ASAP\. pickleball\.juncaj\.net$/);
   });
-  it('last call points to the session link', () => {
-    expect(lastCallMessage(s, TZ, 4, LINK)).toBe(`Last call for pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, tell me now or tap here: ${LINK}`);
+  it('last call: exactly the short wording, no link, never "tell me now" or "tap here"', () => {
+    expect(lastCallMessage(s, TZ, 4)).toBe("Last call: pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, text me ASAP.");
+    expect(lastCallMessage(s, TZ, 5)).not.toMatch(/tell me now|tap here|https?:/i);
   });
   it('the main button is "need more players" only when short of 4 or 6', () => {
     const at = (n: number) => ({ confirmedCount: n }) as any;
@@ -52,10 +55,10 @@ describe('day-before and last-call texts', () => {
       shareGameMessage(s, TZ, 'booked', LINK),
       shareGameMessage(s, TZ, 'open', LINK),
       shareGameMessage(s, TZ, 'waitlist', LINK),
-      dayBeforePlayersMessage(s, TZ, 'Northville Pickleball Club', LINK),
+      dayBeforePlayersMessage(s, TZ, LINK),
       dayBeforeMessage(s, TZ, 3, LINK),
-      lastCallMessage(s, TZ, 4, LINK),
-      pollMessage(s, TZ, 'Northville Pickleball Club', 1400),
+      lastCallMessage(s, TZ, 4),
+      pollMessage(s, TZ, 1400, LINK),
       spotOpenMessage(s, TZ, 'https://pickleball.juncaj.net'),
       canceledMessage(s, TZ),
       movedMessage(s, TZ),

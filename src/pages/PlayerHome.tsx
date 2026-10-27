@@ -659,6 +659,7 @@ function ScheduleRow({
         <div className="sched-head">
           <div className="sched-when">
             <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+            {s.extra && <span className="extra-tag">Extra game</span>}
             {inSession && !s.canceled && <span className="me-tag">You're in</span>}
             {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
           </div>
@@ -682,6 +683,7 @@ function ScheduleRow({
           {s.holiday && <HolidayPill name={s.holiday} />}
         </div>
 
+        {s.note && <p className="game-note">{s.note}</p>}
         {goodNews && <Notice tone="ok">{goodNews}</Notice>}
         {inSession && mine.creditComing && (
           <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>

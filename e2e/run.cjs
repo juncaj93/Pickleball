@@ -23,6 +23,8 @@ const BASE = REMOTE ?? `http://localhost:${PORT}`;
 const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? 'e2e-setup-token-0123456789';
 const PIN = '482913';
 const SHOTS = path.join(__dirname, 'screenshots');
+/** The plain site address the texts use ("pickleball.juncaj.net" live). */
+const SITE = BASE.replace(/^https?:\/\//, '');
 
 let passed = 0;
 let failed = 0;
@@ -73,13 +75,21 @@ async function showAll(page) {
   if (await btn.count()) await btn.click();
 }
 
-/** Open a card's gear panel and its "Other texts" list. */
-async function otherTexts(card) {
+/** Open a card's gear panel and its "Text" choices. */
+async function textMenu(card) {
   await more(card);
-  const d = card.locator('details.other-texts');
-  if (!(await d.evaluate((el) => el.open))) await d.locator('summary').click();
-  await d.locator('.text-row').first().waitFor();
-  return d;
+  const btn = card.getByRole('button', { name: 'Text', exact: true });
+  if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
+  const menu = card.locator('.text-menu');
+  await menu.locator('.text-row').first().waitFor();
+  return menu;
+}
+
+/** Who and what an sms: link opens Messages with (iPhone and Android forms). */
+function smsOf(href) {
+  const m = href.match(/^sms:(?:\/\/open\?addresses=)?([^?&]*)[?&]body=(.*)$/);
+  if (!m) throw new Error(`not an sms link: ${href}`);
+  return { to: m[1] ? m[1].split(',') : [], body: decodeURIComponent(m[2]) };
 }
 
 /** Close a session card's options panel. */
@@ -928,17 +938,19 @@ async function main() {
       const tapArea = { w: gb.width, h: Math.max(gb.height, await gear.evaluate((b) => parseFloat(getComputedStyle(b, '::before').height) || 0)) };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: no main button any more (the poll lives in Texts).
-      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK)$/.test(x));
+      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x));
       assert(JSON.stringify(await visible()) === '[]', `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
       const opts = card.locator('.options');
-      const share = opts.getByRole('link', { name: 'Share the game' });
-      const sb = await share.boundingBox();
+      const textBtn = opts.getByRole('button', { name: 'Text', exact: true });
+      const sb = await textBtn.boundingBox();
       const ob = await opts.boundingBox();
-      assert(sb.width > ob.width * 0.6, 'Share the game should be the full-width main button');
-      const copyShare = opts.getByRole('button', { name: 'Copy text: Share the game' });
-      assert((await copyShare.innerText()).trim() === 'Copy text', 'the copy button next to Share the game says Copy text');
+      assert(sb.width > ob.width * 0.9, 'Text should be the full-width main button');
+      assert((await textBtn.locator('svg[data-icon="message"]').count()) === 1, 'Text has a message icon');
+      const gb2 = await opts.locator('.opt-grid').boundingBox();
+      assert(sb.y < gb2.y, 'Text sits above the grid');
+      assert((await opts.getByRole('button', { name: /^Copy/ }).count()) === 0 && (await opts.locator('.other-texts').count()) === 0, 'no Copy or Other texts');
       const grid = await opts.locator('.opt-grid > *').evaluateAll((els) =>
         els.map((e) => {
           const r = e.getBoundingClientRect();
@@ -963,12 +975,13 @@ async function main() {
       await opts.waitFor({ state: 'detached' });
     });
 
-    await check('Share the game: the text matches the court, links straight to the session, and has Copy', async () => {
+    await check('Share the game: the text matches the court, links straight to the session, and goes to everyone', async () => {
       const card = sessionCards(admin).first();
       const id = (await card.getAttribute('id')).replace('session-', '');
-      await more(card);
-      const href = await card.getByRole('link', { name: 'Share the game' }).getAttribute('href');
-      const body = decodeURIComponent(href.split('body=')[1]);
+      const menu = await textMenu(card);
+      const href = await menu.locator('.text-row[data-text="share"] a').getAttribute('href');
+      const { body, to } = smsOf(href);
+      assert(to.length === 6, `share should go to all 6 numbers, went to ${to.length}`);
       const kind = await card.getAttribute('data-court');
       const re =
         kind === 'booked'
@@ -980,9 +993,6 @@ async function main() {
       assert(m, `share text (${kind}) was: ${body}`);
       const link = m[m.length - 1];
       assert(link.endsWith(`s=${id}`), `share link should point at the session: ${link}`);
-      await card.getByRole('button', { name: 'Copy text: Share the game' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      assert((await admin.evaluate(() => navigator.clipboard.readText())) === body, 'clipboard should hold the share text');
       // The link opens the player screen with that session highlighted, after picking a name.
       const p = await newPage();
       await p.goto(BASE + new URL(link).pathname + new URL(link).search);
@@ -1004,35 +1014,33 @@ async function main() {
       }
     });
 
-    await check('"Other texts" in the gear panel: a short list; the poll has the date, venue and $14, with Copy text', async () => {
+    await check('"Text" opens the choices; each opens Messages with the right people and words; the poll has the date and $14', async () => {
       const card = sessionCards(admin).first();
-      const sheet = await otherTexts(card);
-      const names = (await sheet.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
-      for (const want of ['Poll', 'Day before', 'Last call']) assert(names.includes(want), `texts menu is missing ${want}: ${names}`);
-      assert(!names.includes('Share the game'), 'Share the game stays the main button, not in Other texts');
+      const menu = await textMenu(card);
+      const names = (await menu.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
+      for (const want of ['Share the game', 'Poll', 'Day before', 'Last call']) assert(names.includes(want), `choices missing ${want}: ${names}`);
       assert(!names.includes('Canceled'), 'a live session has no Canceled text');
       const spots = await card.locator('.spots li.open').count();
       assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
-      for (const row of await sheet.locator('.text-row').all()) {
-        const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
-        assert((await open.getAttribute('href')).startsWith('sms:'), 'each text opens Messages');
-        assert((await row.getByRole('button', { name: /^Copy text: / }).innerText()).trim() === 'Copy text', 'Copy text label');
-        const h = (await open.boundingBox()).height;
-        assert(h >= 44, 'menu buttons 44px+');
+      const inCount = await card.locator('.spots li:not(.open)').count();
+      for (const row of await menu.locator('.text-row').all()) {
+        const id = await row.getAttribute('data-text');
+        const link = row.locator('a.text-choice');
+        const { to } = smsOf(await link.getAttribute('href'));
+        const who = (await row.locator('.text-who').innerText()).trim();
+        if (id === 'share' || id === 'poll') assert(who === 'Everyone (6)' && to.length === 6, `${id} goes to everyone: ${who}, ${to.length}`);
+        if (id === 'daybefore' || id === 'lastcall') assert(who === `${inCount} who ${inCount === 1 ? 'is' : 'are'} in` && to.length === inCount, `${id} goes to the ${inCount} in: ${who}, ${to.length}`);
+        if (id === 'spot') assert(/^\d+ not in yet$/.test(who), `spot open goes to everyone not in: ${who}`);
+        assert((await link.boundingBox()).height >= 44, 'choices 44px+');
       }
-      await sheet.locator('.text-row[data-text="poll"] .text-name').click();
-      const bubble = (await sheet.locator('.text-row[data-text="poll"] .bubble').innerText()).trim();
-      assert(
-        /^Pickleball: (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 8:00 to 10:00 PM at Northville Pickleball Club\. \$14 each\. In or out\?$/.test(bubble),
-        `poll text was: ${bubble}`,
-      );
-      assert(!bubble.includes('48'), 'court cost in the poll');
-      const href = await sheet.getByRole('link', { name: 'Open Poll in Messages' }).getAttribute('href');
-      assert(href.startsWith('sms:&body=Pickleball'), `bad sms link ${href}`);
-      await sheet.getByRole('button', { name: 'Copy text: Poll' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      assert((await admin.evaluate(() => navigator.clipboard.readText())) === bubble, 'clipboard should hold the poll');
-      assert(!/\bsent\b/i.test(await sheet.innerText()), 'never say sent');
+      const poll = smsOf(await menu.locator('.text-row[data-text="poll"] a').getAttribute('href')).body;
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. \$14 each\. In or out\? \S+$/.test(poll), `poll text was: ${poll}`);
+      assert(!poll.includes('48') && !/https?:/.test(poll), 'no court cost and only the plain address');
+      // Tapping a choice opens Messages and says it's ready, never "sent".
+      await menu.locator('.text-row[data-text="poll"] a').evaluate((a) => a.addEventListener('click', (e) => e.preventDefault(), { once: true }));
+      await menu.locator('.text-row[data-text="poll"] a').click();
+      await menu.getByText('Message ready. Press send in Messages when it looks right.').waitFor();
+      assert(!/\bsent\b/i.test(await menu.innerText()), 'never say sent');
       await admin.screenshot({ path: path.join(SHOTS, 'texts-menu.png') });
       await closeOptions(card);
     });
@@ -1082,12 +1090,10 @@ async function main() {
       assert(href.startsWith('sms:+13135550101&body='), `bad sms link ${href}`);
     });
 
-    await check('copy message fallback works', async () => {
+    await check('message drafts have no Copy buttons: the main button opens Messages', async () => {
       const draft = admin.locator('details.money-sess[data-session][open] .draft').first();
-      await draft.getByRole('button', { name: 'Copy text' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      const clip = await admin.evaluate(() => navigator.clipboard.readText());
-      assert(clip.includes('You owe $14'), `clipboard was ${clip}`);
+      assert((await draft.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy next to a message');
+      await draft.getByRole('link', { name: 'Open in Messages' }).waitFor();
     });
 
     await check('opening Messages shows "Message ready", never "sent"', async () => {
@@ -1604,15 +1610,12 @@ async function main() {
       assert(!hit(words, opened) && !hit(words, didnt), 'banner words should not overlap the buttons');
       await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
-      const texts = await otherTexts(card);
-      const shareHref = await card.locator('.options').getByRole('link', { name: 'Share the game' }).getAttribute('href');
-      const shareBody = decodeURIComponent(shareHref.split('body=')[1]);
+      const texts = await textMenu(card);
+      const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
       assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test(shareBody), `waitlist share text: ${shareBody}`);
-      const pollRow = texts.locator('.text-row[data-text="poll"]');
-      await pollRow.locator('.text-name').click();
-      const bubble = (await pollRow.locator('.bubble').innerText()).trim();
-      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://[^\\s/]+(/g/[A-Za-z0-9_-]+)?/?\\?s=[0-9a-f-]+$`);
-      assert(re.test(bubble), `court-waitlist poll was: ${bubble}`);
+      const bubble = smsOf(await texts.locator('.text-row[data-text="poll"] a').getAttribute('href')).body;
+      const expectPoll = `Pickleball ${day.replace(',', '')}, 8:00 to 10:00 PM. I'm on the court waitlist. Want in if it opens? ${SITE}`;
+      assert(bubble === expectPoll, `court-waitlist poll was: ${bubble}`);
       await closeOptions(card);
 
       for (const name of ['Casey', 'Devon']) {
@@ -1669,10 +1672,12 @@ async function main() {
         const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
         assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
         const body = (await main.locator('.bubble').innerText()).trim();
-        const re = new RegExp(`^Pickleball tomorrow, (Tue|Thu), [A-Z][a-z]{2} \\d{1,2}, \\d{1,2}:\\d{2} to 10:00 PM at .+\\. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: \\S+\\?s=${first.id}$`);
-        assert(re.test(body), `day-before text was: ${body}`);
+        const dayWord = new Date(first.startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' }).replace(',', '');
+        const want = `Pickleball tomorrow, ${dayWord}, 8:00 to 10:00 PM. You're in! If you need to back out, text me ASAP. ${SITE}`;
+        assert(body === want, `day-before text was: ${body}`);
+        assert(smsOf(href).body === want, 'Messages opens with the same words');
         assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
-        await main.getByRole('button', { name: 'Copy text' }).waitFor();
+        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the day-before card');
         // The "need more players" text is a smaller second button.
         const second = card.getByRole('button', { name: 'Text the group: need more players' });
         assert((await second.boundingBox()).height < (await open.boundingBox()).height + 1, 'second button should be smaller or equal');
@@ -1683,13 +1688,16 @@ async function main() {
         await main.getByText('Message ready.').waitFor();
         assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
         await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
-        // Last call at 13 hours: links to the session too.
+        // Last call at 13 hours: to the players who are in, no link.
         await clock(Date.parse(first.startsAt) - 12.5 * 3600_000); // between last call (13h) and the deadline (12h)
         await admin.reload();
         const last = admin.getByRole('article', { name: /^Last call, / });
         await last.waitFor();
         const lbody = (await last.locator('.bubble').innerText()).trim();
-        assert(new RegExp(`^Last call for pickleball tonight, \\d{1,2}:\\d{2} to 10:00 PM\\. We have 4 in\\. If you can't make it, tell me now or tap here: \\S+\\?s=${first.id}$`).test(lbody), `last call was: ${lbody}`);
+        assert(lbody === "Last call: pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, text me ASAP.", `last call was: ${lbody}`);
+        const lhref = await last.getByRole('link', { name: 'Text the players who are in' }).getAttribute('href');
+        assert(smsOf(lhref).to.length === 4 && smsOf(lhref).body === lbody, 'last call opens Messages to the 4 who are in');
+        assert((await last.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the last-call card');
         assert(!/\bsent\b/i.test(await last.innerText()), 'never say sent');
       } finally {
         await clock(Date.now() + BASE_OFFSET);
@@ -1719,8 +1727,8 @@ async function main() {
       assert(/^Pickleball moved to (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 7:30 to 10:00 PM\.$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
       await moved.getByLabel(/Reason/).fill('Court swap');
       await bubble.getByText(/7:30 to 10:00 PM\. Court swap\.$/).waitFor();
-      await moved.getByRole('link', { name: 'Text the group' }).waitFor();
-      await moved.getByRole('button', { name: 'Copy text' }).waitFor();
+      await moved.getByRole('link', { name: 'Text the players who are in' }).waitFor();
+      assert((await moved.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy');
       assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
@@ -1767,7 +1775,7 @@ async function main() {
       assert(/^Pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2} is canceled\.$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       await after.getByLabel(/Reason/).fill('Rain');
       await bubble.getByText(/is canceled\. Rain\.$/).waitFor();
-      await after.getByRole('link', { name: 'Text the group' }).waitFor();
+      await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
       assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
       // Who to pay back, with Refunded.
       const back = after.getByRole('region', { name: 'Pay back' });
@@ -1927,9 +1935,11 @@ async function main() {
         await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
         await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
         const bubble = (await card.locator('.bubble').innerText()).trim();
-        assert(/^A spot just opened for pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to claim it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
-        await card.getByRole('link', { name: 'Text the group: spot open' }).waitFor();
-        await card.getByRole('button', { name: 'Copy text' }).waitFor();
+        assert(/^A spot opened for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to grab it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
+        const spotLink = card.getByRole('link', { name: 'Text the group: spot open' });
+        const spot = smsOf(await spotLink.getAttribute('href'));
+        assert(spot.body === bubble && spot.to.length >= 1, 'spot open goes to the people not in');
+        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the spot-open card');
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
         await sc.locator('.late-tag').waitFor();
@@ -2695,10 +2705,145 @@ async function main() {
       });
     }
 
-    // ---------- Cards: gear only, Other texts, "Copy text" ----------
+    // ---------- One-off games ----------
+    await check('"+ Add game": pill on the line, sheet adds a game for everyone in date order with an Extra game tag; duplicates warn; 14-day rule; Activity', async () => {
+      await tab(admin, 'Home').click();
+      await sessionCards(admin).first().waitFor();
+      const line = admin.locator('.week-break').first();
+      const pill = line.getByRole('button', { name: '+ Add game' });
+      const lb = await line.boundingBox();
+      const plain = await admin.locator('.week-break').nth(1).boundingBox();
+      assert(Math.abs(lb.height - plain.height) <= 1, 'the pills add no height to the line');
+      assert((await line.getByRole('link', { name: /^Book a court/ }).count()) === 1, 'Book a court sits next to it');
+      await pill.click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByRole('heading', { name: 'Add a game' }).waitFor();
+      // Quick chips: the next Wed, Sat and Sun, soonest first.
+      const chips = (await sheet.getByRole('group', { name: 'Date' }).getByRole('button').allInnerTexts()).map((x) => x.trim());
+      assert(chips.length === 3 && ['Wed', 'Sat', 'Sun'].every((d) => chips.some((c) => c.startsWith(d))), `chips were ${chips}`);
+      assert((await sheet.getByLabel('Start').inputValue()) === '20:00' && (await sheet.getByLabel('End').inputValue()) === '22:00', 'default 8:00 to 10:00 PM');
+      // A Saturday about three weeks out, so booking isn't open yet.
+      const now = Date.now() + BASE_OFFSET;
+      let d = new Date(now + 17 * 24 * 3600_000);
+      while (d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' }) !== 'Sat') d = new Date(d.getTime() + 24 * 3600_000);
+      const iso = d.toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
+      const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' });
+      await sheet.getByLabel('Pick a date').fill(iso);
+      await sheet.getByLabel('Start').fill('10:00');
+      await sheet.getByLabel('End').fill('12:00');
+      await sheet.getByLabel('Note (optional)').fill('Court 3');
+      await sheet.getByRole('button', { name: 'Add game', exact: true }).click();
+      await admin.locator('.toast', { hasText: 'Game added' }).waitFor();
+      await sheet.waitFor({ state: 'detached' });
+      await showAll(admin);
+      const card = sessionCards(admin).filter({ has: admin.locator('h2', { hasText: label }) }).first();
+      await card.locator('.extra-tag', { hasText: 'Extra game' }).waitFor();
+      await card.getByText('10:00 AM to 12:00 PM').waitFor();
+      await card.getByText('Court 3').waitFor();
+      assert((await card.getAttribute('data-court')) === 'later', 'three weeks out: booking not open yet');
+      const opens = new Date(Date.parse(`${iso}T12:00:00Z`) - 14 * 24 * 3600_000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      await card.getByText(`Booking opens ${opens}`).waitFor();
+      // In date order on Home.
+      const starts = await sessionCards(admin).evaluateAll((cs) => cs.map((c) => c.id));
+      const all = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions;
+      const shownStarts = starts.map((id) => all.find((x) => `session-${x.id}` === id).startsAt);
+      assert(shownStarts.every((x, i) => i === 0 || x >= shownStarts[i - 1]), 'Home in date order');
+      // Duplicate: warned, not made.
+      await admin.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+      await sheet.getByLabel('Pick a date').fill(iso);
+      await sheet.getByLabel('Start').fill('10:00');
+      await sheet.getByLabel('End').fill('12:00');
+      await sheet.getByRole('button', { name: 'Add game', exact: true }).click();
+      await sheet.getByText(/^There's already a game at (Sat), [A-Z][a-z]{2} \d{1,2}, 10:00 AM\.$/).waitFor();
+      await admin.keyboard.press('Escape');
+      const count = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.filter((x) => x.extra).length;
+      assert(count === 1, `expected one extra game, found ${count}`);
+      // Players see it too, tagged, in order.
+      const pl = players.Alex;
+      await pl.reload();
+      await pl.locator('.schedule article').first().waitFor();
+      const more2 = pl.getByRole('button', { name: /^More sessions/ });
+      if (await more2.count()) await more2.click();
+      const prow = pl.locator('.schedule article').filter({ has: pl.locator('.extra-tag', { hasText: 'Extra game' }) });
+      await prow.waitFor();
+      await prow.getByText('Court 3').waitFor();
+      assert((await prow.getByRole('button', { name: "I'm in" }).count()) === 1, 'players can sign up for it');
+      // Logged in Activity.
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(`Robin added a game for ${label}`).first().waitFor();
+      await tab(admin, 'Home').click();
+    });
+
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`cards at ${width}px (${scheme}): no phone button, the gear works, Other texts open and copy, every message copy says "Copy text" on one line`, async () => {
+      await check(`Add game sheet and organizer "I'm in" at ${width}px (${scheme}): no overlaps; my name shows and counts; Out takes it back`, async () => {
         const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        await showAll(p);
+        // The sheet fits, nothing overlaps.
+        await p.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+        const sheet = p.locator('dialog[open]');
+        await sheet.getByRole('button', { name: 'Add game', exact: true }).waitFor();
+        const sr = await p.evaluate(layoutReport, { roots: 'dialog[open] .sheet-body', items: 'button, input, .chip-btn' });
+        assert(sr.problems.length === 0, `Add game sheet: ${sr.problems.slice(0, 3).join(' | ')}`);
+        assert((await sheet.evaluate((d) => d.scrollWidth - d.clientWidth)) <= 0, 'sheet scrolls sideways');
+        await p.keyboard.press('Escape');
+        await sheet.waitFor({ state: 'detached' });
+        // I'm in on a card well ahead (not a late drop when I go Out).
+        const cards = sessionCards(p).filter({ has: p.getByRole('button', { name: /^I'm in for / }) });
+        const card = cards.nth(Math.min(3, (await cards.count()) - 1));
+        const before = Number((await card.locator('.players-count').innerText()).match(/^(\d+)/)[1]);
+        await card.getByRole('button', { name: /^I'm in for / }).click();
+        await card.locator('.me-tag', { hasText: /^(You're in|Waitlist)$/ }).waitFor();
+        const inNow = (await card.locator('.me-tag').innerText()).trim() === "You're in";
+        if (inNow) {
+          await card.locator('.spots li', { hasText: 'Robin' }).waitFor();
+          const after = Number((await card.locator('.players-count').innerText()).match(/^(\d+)/)[1]);
+          assert(after === before + 1, `count went ${before} to ${after}`);
+        }
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .me-tag' });
+        assert(rep.problems.length === 0, `cards with I'm in: ${rep.problems.slice(0, 3).join(' | ')}`);
+        const btnBox = await card.locator('.me-state').boundingBox();
+        const cardBox = await card.boundingBox();
+        assert(btnBox.x + btnBox.width <= cardBox.x + cardBox.width, 'You\'re in stays inside the card');
+        await card.getByRole('button', { name: /^Out of / }).click();
+        await card.getByRole('button', { name: /^I'm in for / }).waitFor();
+        assert((await card.locator('.spots li', { hasText: 'Robin' }).count()) === 0, 'Out takes my name off');
+        // Every card state still has no overlaps with the I'm in button there.
+        const rep2 = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
+        assert(rep2.problems.length === 0, `cards: ${rep2.problems.slice(0, 3).join(' | ')}`);
+        await p.close();
+      });
+    }
+
+    await check('organizer "I\'m in" is logged in Activity under my name, and players see me in the roster', async () => {
+      await tab(admin, 'Home').click();
+      await showAll(admin);
+      const card = sessionCards(admin).filter({ has: admin.getByRole('button', { name: /^I'm in for / }) }).nth(2);
+      const day = (await card.locator('h2').innerText()).trim();
+      await card.getByRole('button', { name: /^I'm in for / }).click();
+      await card.locator('.me-tag', { hasText: "You're in" }).waitFor();
+      const id = (await card.getAttribute('id')).replace('session-', '');
+      await players.Alex.reload();
+      await players.Alex.locator(`#row-${id} .in-pills li`, { hasText: 'Robin' }).waitFor();
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(`Robin said I'm in for ${day}`).first().waitFor();
+      await tab(admin, 'Home').click();
+      await showAll(admin);
+      await admin.locator(`#session-${id}`).getByRole('button', { name: /^Out of / }).click();
+      await admin.locator(`#session-${id}`).getByRole('button', { name: /^I'm in for / }).waitFor();
+    });
+
+    // ---------- Cards: gear only, one "Text" button, no Copy anywhere ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`cards at ${width}px (${scheme}): gear only; "Text" opens the choices with who they go to; no Copy or Other texts anywhere but the Settings Player link`, async () => {
+        const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
         await p.goto(`${BASE}/admin`);
@@ -2707,61 +2852,39 @@ async function main() {
         assert((await sessionCards(p).locator('[data-icon="phone"]').count()) === 0, 'a card still has the phone button');
         const gearX = await sessionCards(p).locator('.card-icons button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().right)));
         assert(gearX.length === (await sessionCards(p).count()), 'one gear per card');
-        assert(new Set(gearX).size <= 2 && Math.max(...gearX) - Math.min(...gearX) <= 8, `gears not lined up: ${gearX}`);
-        // A live card: Share the game on top, then Other texts under the grid.
+        assert(Math.max(...gearX) - Math.min(...gearX) <= 8, `gears not lined up: ${gearX}`);
         let card = null;
         for (const c of await sessionCards(p).all()) {
-          await more(c);
-          if (await c.locator('details.other-texts').count()) {
+          if ((await c.getAttribute('data-court')) !== 'off') {
             card = c;
             break;
           }
-          await closeOptions(c);
         }
-        assert(card, 'no live card with Other texts');
-        const order = await card.locator('.options').evaluate((o) => {
-          const y = (sel) => o.querySelector(sel).getBoundingClientRect().top;
-          return { share: y('.share-row'), grid: y('.opt-grid'), other: y('.other-texts') };
-        });
-        assert(order.share < order.grid && order.grid < order.other, 'Share the game, then the grid, then Other texts');
-        const texts = await otherTexts(card);
-        const names = (await texts.locator('.text-name').allInnerTexts()).map((x) => x.trim());
-        for (const want of ['Poll', 'Day before', 'Last call']) assert(names.includes(want), `Other texts missing ${want}: ${names}`);
-        const spots = await card.locator('.spots li.open').count();
-        assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
-        assert(!names.includes('Canceled'), 'Canceled only on canceled sessions');
-        for (const row of await texts.locator('.text-row').all()) {
-          const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
-          assert((await open.getAttribute('href')).startsWith('sms:'), 'each item opens Messages');
+        const menu = await textMenu(card);
+        const order = await card.locator('.options').evaluate((o) => ({ text: o.querySelector('.text-btn').getBoundingClientRect().top, grid: o.querySelector('.opt-grid').getBoundingClientRect().top }));
+        assert(order.text < order.grid, 'Text comes before the grid');
+        for (const row of await menu.locator('.text-row').all()) {
+          const link = row.locator('a.text-choice');
+          assert((await link.getAttribute('href')).startsWith('sms:'), 'each choice opens Messages');
+          const who = (await row.locator('.text-who').innerText()).trim();
+          assert(/^(Everyone \(\d+\)|\d+ who (is|are|was|were) in|\d+ not in yet)$/.test(who), `who line was "${who}"`);
         }
-        const lastRow = texts.locator('.text-row[data-text="lastcall"]');
-        await lastRow.getByRole('button', { name: 'Copy text: Last call' }).click();
-        await p.locator('.toast', { hasText: 'Message copied' }).last().waitFor();
-        // Every message copy button: "Copy text", one line, not overlapping anything near it.
-        const copies = await p.evaluate(() =>
-          [...document.querySelectorAll('main .btn')]
-            .filter((b) => b.offsetParent !== null && /^Copy/.test(b.textContent.trim()) && b.textContent.trim() !== 'Copy number')
-            .map((b) => {
-              const r = b.getBoundingClientRect();
-              const lh = parseFloat(getComputedStyle(b).lineHeight) || 20;
-              const sibs = [...b.parentElement.children].filter((x) => x !== b && x.offsetParent !== null).map((x) => x.getBoundingClientRect());
-              const hit = sibs.some((q) => Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1);
-              const range = document.createRange();
-              range.selectNodeContents(b);
-              return { text: b.textContent.trim(), lines: new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size, inside: r.right <= window.innerWidth, hit, lh };
-            }),
-        );
-        assert(copies.length >= 4, `only ${copies.length} copy buttons checked`);
-        for (const c of copies) {
-          assert(c.text === 'Copy text', `a message copy button says "${c.text}"`);
-          assert(c.lines === 1 && c.inside && !c.hit, `"Copy text" wraps, overlaps or runs off: ${JSON.stringify(c)}`);
-        }
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
+        assert(rep.problems.length === 0, `cards: ${rep.problems.slice(0, 3).join(' | ')}`);
         assert(!/\bsent\b/i.test(await p.locator('main').innerText()), 'never say sent');
-        await p.screenshot({ path: path.join(SHOTS, `other-texts-${width}-${scheme}.png`) });
-        // Settings: the player link's button is still just "Copy".
+        await p.screenshot({ path: path.join(SHOTS, `text-menu-${width}-${scheme}.png`) });
+        // No Copy or Other texts on any tab, except the Settings Player link.
+        for (const t of ['Home', 'Players', 'Money', 'History']) {
+          await tab(p, t).click();
+          await p.waitForTimeout(150);
+          const copies = await p.locator('main').getByRole('button', { name: /^Copy/ }).count();
+          assert(copies === 0, `${t} still has a Copy button`);
+          assert((await p.getByText('Other texts').count()) === 0, `${t} still says Other texts`);
+        }
         await tab(p, 'Settings').click();
         const quick = p.getByRole('region', { name: 'Quick settings' });
         assert((await quick.getByRole('button', { name: 'Copy', exact: true }).innerText()).trim() === 'Copy', 'Player link button should say Copy');
+        assert((await p.locator('main').getByRole('button', { name: /^Copy/ }).count()) === 1, 'only the Player link Copy in Settings');
         await p.close();
       });
     }
