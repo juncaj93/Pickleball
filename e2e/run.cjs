@@ -179,6 +179,7 @@ async function main() {
       await admin.getByRole('button', { name: 'Save settings' }).click();
       await admin.getByText('Enter a whole number from 1 to 72.').waitFor();
       await field.fill('24');
+      await admin.getByLabel('Your name').fill('Robin');
       await admin.getByRole('button', { name: 'Save settings' }).click();
       await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
       assert((await admin.getByText('Warn before cancellation deadline').count()) === 0, 'old setting still shown');
@@ -211,74 +212,133 @@ async function main() {
 
     console.log('Players');
     const players = {};
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']) {
-      await check(`${name} picks a name and signs up`, async () => {
-        const p = await newPage();
-        players[name] = p;
-        await p.goto(playerLink);
-        await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
-        await p.getByRole('button', { name, exact: true }).click();
-        await p.getByText(`Playing as`).waitFor();
-        const first = p.locator('article').first();
-        if (name === 'Emery') {
-          await first.getByRole('button', { name: 'Join waitlist' }).click();
-          await first.getByText("You're #1 on the waitlist").waitFor();
-        } else {
-          await first.getByRole('button', { name: 'Claim spot' }).click();
-          await first.getByText("You're in").first().waitFor();
-        }
+    const firstCard = (p) => p.locator('article').first();
+    async function openAs(name) {
+      const p = await newPage();
+      players[name] = p;
+      await p.goto(playerLink);
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      await p.getByRole('button', { name, exact: true }).click();
+      await p.getByRole('heading', { name: `Welcome, ${name}` }).waitFor();
+      return p;
+    }
+    for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) {
+      await check(`${name} picks a name and taps "I'm in"`, async () => {
+        const p = await openAs(name);
+        await firstCard(p).getByRole('button', { name: "I'm in" }).click();
+        await firstCard(p).getByText("You're in", { exact: true }).waitFor();
       });
     }
 
-    await check('player page shows four named spots and the waitlist', async () => {
-      const first = players.Emery.locator('article').first();
-      await players.Emery.reload();
-      await first.getByText('Full').waitFor();
-      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await first.locator('.spot', { hasText: n }).waitFor();
-      await first.getByText('1. Emery').waitFor();
-      await players.Emery.screenshot({ path: path.join(SHOTS, 'player-home.png'), fullPage: true });
+    await check('the 5th person joins the waitlist as #1', async () => {
+      const p = await openAs('Emery');
+      await firstCard(p).getByRole('button', { name: 'Join waitlist' }).click();
+      await firstCard(p).getByText('#1 on waitlist').waitFor();
+      await firstCard(p).getByText('4 going · 1 more makes 6').waitFor();
+      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await firstCard(p).locator('.going li', { hasText: n }).waitFor();
+      await firstCard(p).getByText('1. Emery').waitFor();
+      await p.screenshot({ path: path.join(SHOTS, 'player-waitlist.png'), fullPage: true });
+    });
+
+    await check('the phone remembers the name: next visit says "Welcome, Alex" with "Not you?"', async () => {
+      const p = players.Alex;
+      await p.goto(BASE);
+      await p.goto(playerLink);
+      await p.getByRole('heading', { name: 'Welcome, Alex' }).waitFor();
+      await p.getByRole('button', { name: 'Not you?' }).waitFor();
+      assert((await p.getByRole('heading', { name: 'Who are you?' }).count()) === 0, 'asked for the name again');
+    });
+
+    await check('player Home is one button per session, no extra screens', async () => {
+      const card = firstCard(players.Alex);
+      const buttons = (await card.getByRole('button').allInnerTexts()).map((t) => t.trim());
+      const big = buttons.filter((t) => ["I'm in", "I'm out", 'Join waitlist'].includes(t));
+      assert(big.length === 1, `expected one big button, got ${buttons}`);
     });
 
     await check('players never see phone numbers or the PIN', async () => {
       const html = await players.Alex.content();
-      assert(!html.includes('3135550'), 'phone number leaked into player page');
+      assert(!html.includes('3135550') && !html.includes('555-01'), 'phone number leaked into player page');
       assert(!html.includes(PIN), 'PIN leaked');
     });
 
-    console.log('Booking & payments');
-    await check('organizer records a booking with cost and deadline', async () => {
+    console.log('4, then waitlist, then 6');
+    await check('a 6th person brings both in: "Good news, we now have 6"', async () => {
+      const p = await openAs('Frankie');
+      await firstCard(p).getByRole('button', { name: "I'm in" }).click();
+      await p.locator('.toast', { hasText: 'Good news, we now have 6' }).waitFor();
+      await firstCard(p).getByText("You're in", { exact: true }).waitFor();
+      await players.Emery.reload();
+      await firstCard(players.Emery).getByText("Good news, we now have 6, an even number, so you're in.").waitFor();
+      await players.Emery.screenshot({ path: path.join(SHOTS, 'player-good-news.png'), fullPage: true });
+    });
+
+    await check("organizer gets a text draft for each person moved in", async () => {
       await admin.reload();
+      const card = admin.getByRole('article', { name: /Tell them they're in/ });
+      await card.getByText(/Good news, Emery! We now have 6/).waitFor();
+      await card.getByText(/Good news, Frankie! We now have 6/).waitFor();
+      await card.getByRole('link', { name: 'Open in Messages' }).first().waitFor();
+      await card.getByRole('button', { name: 'I told Emery' }).click();
+      await admin.locator('.toast', { hasText: 'Done' }).waitFor();
+      await card.getByText(/Good news, Emery!/).waitFor({ state: 'detached' });
+      await card.getByText(/Good news, Frankie!/).waitFor();
+    });
+
+    await check('6 going: refund card says $14 each, refund $5, with a Refunded checkbox per person', async () => {
+      const card = admin.getByRole('article', { name: /6 going\. Everyone paid \$14\. Refund \$5 each/ });
+      await card.waitFor();
+      assert((await card.getByRole('checkbox').count()) === 6, 'expected six checkboxes');
+      await card.getByRole('checkbox', { name: /Casey/ }).check();
+      await admin.locator('.toast', { hasText: 'Casey refunded' }).waitFor();
+      await admin.reload();
+      assert(await admin.getByRole('article', { name: /Refund \$5 each/ }).getByRole('checkbox', { name: /Casey/ }).isChecked(), 'refund tick not saved');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-refunds.png'), fullPage: true });
+      await players.Casey.reload();
+      await firstCard(players.Casey).getByText('6 playing, so Robin refunds you $5.').waitFor();
+    });
+
+    await check('someone drops out of 6: "5 going, need 4 or 6", nothing moves until the organizer picks', async () => {
+      const card = firstCard(players.Casey);
+      await card.getByRole('button', { name: "I'm out" }).click();
+      await players.Casey.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await card.getByRole('button', { name: /I'm in|Join waitlist/ }).waitFor();
+      await admin.reload();
+      const five = admin.getByRole('article', { name: /5 going, need 4 or 6/ });
+      await five.getByRole('button', { name: /Back to 4: move .* to the waitlist/ }).waitFor();
+      await five.getByRole('button', { name: 'Invite someone to make 6' }).waitFor();
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-five.png'), fullPage: true });
+      await five.getByRole('button', { name: /Back to 4/ }).click();
+      await admin.locator('.toast', { hasText: '4 going' }).waitFor();
+      await admin.getByRole('article', { name: /5 going/ }).waitFor({ state: 'detached' });
+    });
+
+    console.log('Booking & payments');
+    await check('Book a court: CourtReserve button, then enter the details', async () => {
+      const courts = admin.getByRole('article', { name: 'Courts to book' });
+      const link = courts.getByRole('link', { name: 'Book on CourtReserve' });
+      assert((await link.getAttribute('href')) === 'https://app.courtreserve.com/Online/PublicBookings/13765/Landing', 'wrong CourtReserve link');
       const card = sessionCards(admin).first();
       await card.getByRole('button', { name: 'Edit booking' }).click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByRole('button', { name: 'Booked', exact: true }).click();
-      await sheet.getByLabel('Venue', { exact: true }).fill('Rec Center Court 2');
-      await sheet.getByLabel('Reservation number').fill('R-1042');
-      await sheet.getByLabel('Actual court cost').fill('45.01');
-      await sheet.getByText(/Deadline: .*8:00 AM E[DS]T/).waitFor();
-      await sheet.getByRole('button', { name: /Fill in 12 hours before start/ }).click();
+      await sheet.getByLabel(/Reservation number/).fill('R-1042');
       await sheet.getByText(/Deadline: .*8:00 AM E[DS]T/).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
       await sheet.getByRole('button', { name: 'Save booking' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText('Rec Center Court 2').waitFor();
+      await card.getByText('#R-1042').waitFor();
       await card.getByText(/Cancel by/).waitFor();
     });
 
-    await check('cost splits into shares that add up ($45.01 → 11.26 + 3×11.25)', async () => {
+    await check('everyone confirmed owes a flat $14; mark paid updates only that player', async () => {
       const card = sessionCards(admin).first();
-      await card.getByRole('button', { name: 'Payments' }).click();
+      await card.getByRole('button', { name: 'Money' }).click();
       const sheet = admin.locator('dialog[open]');
-      await sheet.getByText('Share $11.26').waitFor();
-      assert((await sheet.getByText('Share $11.25').count()) === 3, 'expected three $11.25 shares');
-    });
-
-    await check('mark paid updates only that player', async () => {
-      const sheet = admin.locator('dialog[open]');
+      assert((await sheet.getByText('owes $14').count()) === 4, 'expected four people owing $14');
       const alexRow = sheet.locator('li', { hasText: 'Alex' }).first();
       await alexRow.getByRole('button', { name: 'Mark paid' }).click();
       await sheet.getByText('1/4 paid').waitFor();
-      await alexRow.getByText('Paid', { exact: true }).waitFor();
       assert((await sheet.getByRole('button', { name: 'Mark paid' }).count()) === 3, 'other players changed');
     });
 
@@ -288,10 +348,9 @@ async function main() {
       await blairRow.getByRole('button', { name: 'Payment reminder' }).click();
       const draft = blairRow.locator('.draft');
       await draft.getByText('Draft ready').first().waitFor();
-      await draft.getByText(/Hey Blair! You owe \$11\.25 for pickleball/).waitFor();
+      await draft.getByText(/Hey Blair! You owe \$14 for pickleball/).waitFor();
       const href = await draft.getByRole('link', { name: 'Open in Messages' }).getAttribute('href');
       assert(href.startsWith('sms:+13135550101&body='), `bad sms link ${href}`);
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-payments.png') });
     });
 
     await check('copy message fallback works', async () => {
@@ -299,7 +358,7 @@ async function main() {
       await draft.getByRole('button', { name: 'Copy message' }).click();
       await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
       const clip = await admin.evaluate(() => navigator.clipboard.readText());
-      assert(clip.includes('You owe $11.25'), `clipboard was ${clip}`);
+      assert(clip.includes('You owe $14'), `clipboard was ${clip}`);
     });
 
     await check('opening the composer does not mark it sent', async () => {
@@ -316,31 +375,126 @@ async function main() {
       await admin.keyboard.press('Escape');
     });
 
-    await check('player sees only their own share and status', async () => {
-      await players.Blair.reload();
-      const first = players.Blair.locator('article').first();
-      await first.getByText('$11.25').waitFor();
-      await first.getByText('Unpaid', { exact: true }).waitFor();
-      assert((await first.getByText('Paid', { exact: true }).count()) === 0, "saw someone else's paid status");
+    await check('player sees "You owe $14" with a Pay with Venmo button, amount filled in', async () => {
+      const p = players.Blair;
+      await p.reload();
+      const owe = p.getByRole('region', { name: 'Payments' });
+      await owe.getByText(/You owe \$14 for /).first().waitFor();
+      const href = await owe.getByRole('link', { name: 'Pay $14 with Venmo' }).first().getAttribute('href');
+      assert(href.startsWith('https://venmo.com/organizer?txn=pay&amount=14.00&note=Pickleball'), `bad Venmo link ${href}`);
+      assert((await owe.getByText(/may not have marked this paid/).count()) === 0, 'unpaid reminder shown too early');
+      await p.screenshot({ path: path.join(SHOTS, 'player-owe.png'), fullPage: true });
+      // Alex is marked paid for the first session, so it isn't in Alex's list.
+      await players.Alex.reload();
+      const blairOwes = await owe.innerText();
+      const alexOwes = (await players.Alex.getByRole('region', { name: 'Payments' }).count())
+        ? await players.Alex.getByRole('region', { name: 'Payments' }).innerText()
+        : '';
+      const firstLine = blairOwes.split('\n').find((l) => l.startsWith('You owe'));
+      assert(!alexOwes.includes(firstLine), `Alex still owes for the session marked paid: ${firstLine}`);
     });
 
-    console.log('Withdraw & substitutes');
-    await check('withdrawing asks for confirmation, then frees the spot', async () => {
-      const first = players.Blair.locator('article').first();
-      await first.getByRole('button', { name: 'Withdraw' }).click();
-      const dlg = players.Blair.locator('dialog[open]');
-      await dlg.getByText('Withdraw from this session?').waitFor();
-      await dlg.getByRole('button', { name: 'Withdraw' }).click();
-      await first.getByText('1 open').waitFor();
+    await check('Add to Calendar downloads a Pickleball event at 8:00–10:00 PM', async () => {
+      const link = firstCard(players.Blair).getByRole('link', { name: 'Add to Calendar' });
+      const href = await link.getAttribute('href');
+      assert(/^\/api\/sessions\/[0-9a-f-]{36}\/calendar\.ics$/.test(href), `bad calendar link ${href}`);
+      const res = await players.Blair.request.get(BASE + href);
+      assert(res.headers()['content-type'].includes('text/calendar'), 'not a calendar file');
+      const ics = await res.text();
+      assert(ics.includes('SUMMARY:Pickleball') && ics.includes('LOCATION:Northville Pickleball Club'), 'wrong event');
+      assert(/DTSTART:\d{8}T(00|01)0000Z/.test(ics), 'event should start at 8:00 PM Eastern');
     });
 
-    let links = {};
-    await check('organizer prepares substitute invitations', async () => {
+    console.log('Usual days & suggestions');
+    await check('organizer sets usual days and Regular / Occasional on the Players screen', async () => {
+      await tab(admin, 'Players').click();
+      await admin.getByRole('button', { name: 'Edit Devon' }).click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByRole('group', { name: 'Usual days' }).getByRole('button', { name: 'Tue' }).click();
+      await sheet.getByRole('group', { name: 'Usual days' }).getByRole('button', { name: 'Thu' }).click();
+      await sheet.getByRole('button', { name: 'Save' }).click();
+      await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
+      await admin.locator('li', { hasText: 'Devon' }).getByText('Tue & Thu').waitFor();
+      await admin.getByRole('button', { name: 'Add a person' }).click();
+      const add = admin.locator('dialog[open]');
+      await add.getByLabel('Name', { exact: true }).fill('Ryan');
+      await add.getByRole('button', { name: 'Occasional' }).click();
+      await add.getByRole('button', { name: 'Save' }).click();
+      await admin.locator('li', { hasText: 'Ryan' }).getByText('Occasional').waitFor();
+      await tab(admin, 'Home').click();
+    });
+
+    await check('a regular gets "Want in on ...? Yes / No"; Yes shows "You\'re in" and Venmo', async () => {
+      const p = players.Devon;
+      await p.reload();
+      const card = p.getByRole('region', { name: /Want in on (Tuesday|Thursday)\?/ });
+      await card.waitFor();
+      await p.screenshot({ path: path.join(SHOTS, 'player-suggestion.png'), fullPage: true });
+      await card.getByRole('button', { name: 'Yes' }).click();
+      const answer = p.getByRole('region', { name: 'Your answer' });
+      await answer.getByRole('heading', { name: /You're in|on the waitlist/ }).waitFor();
+      if ((await answer.getByRole('heading', { name: "You're in" }).count()) > 0) {
+        await answer.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
+      }
+      await answer.getByRole('button', { name: 'Done' }).click();
+      await answer.waitFor({ state: 'detached' });
+    });
+
+    await check('tapping No hides the suggestion', async () => {
+      const p = players.Devon;
+      const card = p.getByRole('region', { name: /Want in on/ });
+      if ((await card.count()) === 0) return; // nothing else unanswered within 8 days
+      const before = await card.innerText();
+      await card.getByRole('button', { name: 'No' }).click();
+      await p.waitForFunction((b) => {
+        const el = [...document.querySelectorAll('section')].find((x) => x.textContent.startsWith('Want in on'));
+        return !el || el.innerText !== b;
+      }, before);
+    });
+
+    await check('occasional people get no suggestions', async () => {
+      const p = await openAs('Ryan');
+      await p.locator('article').first().waitFor();
+      assert((await p.getByRole('region', { name: /Want in on/ }).count()) === 0, 'occasional player got a suggestion');
+    });
+
+    console.log('View as');
+    await check('"View as..." shows the player\'s screen with a banner, and taps really happen', async () => {
       await admin.reload();
-      const card = sessionCards(admin).first();
+      await admin.getByRole('button', { name: 'View as…' }).click();
+      await admin.locator('dialog[open]').getByRole('button', { name: 'Blair', exact: true }).click();
+      await admin.getByRole('status').getByText('Viewing as').waitFor();
+      await admin.getByRole('heading', { name: 'Welcome, Blair' }).waitFor();
+      assert((await admin.getByRole('button', { name: 'Not you?' }).count()) === 0, 'Not you? should be hidden');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
+      const second = admin.locator('article').nth(1);
+      await second.getByRole('button', { name: "I'm in" }).click();
+      await second.getByText("You're in", { exact: true }).waitFor();
+      await admin.getByRole('button', { name: 'Exit' }).click();
+      await tab(admin, 'Home').waitFor();
+      await players.Blair.reload();
+      await players.Blair.locator('article').nth(1).getByText("You're in", { exact: true }).waitFor();
+      await tab(admin, 'Settings').click();
+      await admin.getByText('As player: joined').first().waitFor();
+      await tab(admin, 'Home').click();
+    });
+
+    console.log('Substitutes');
+    let links = {};
+    await check('organizer prepares invitations when a spot is open', async () => {
+      // Fill the second session up to 3 (Blair, plus Devon if the suggestion put him in).
+      for (const name of ['Alex', 'Casey']) {
+        const card = players[name].locator('article').nth(1);
+        await players[name].reload();
+        if ((await card.locator('p', { hasText: /^\d going/ }).innerText()).startsWith('3 going')) break;
+        await card.getByRole('button', { name: "I'm in" }).click();
+        await card.getByText("You're in", { exact: true }).waitFor();
+      }
+      await admin.reload();
+      const card = sessionCards(admin).nth(1);
       await card.getByRole('button', { name: 'Invite substitutes' }).click();
       const sheet = admin.locator('dialog[open]');
-      await sheet.getByText('Emery').first().waitFor();
+      await sheet.getByText('Frankie').first().waitFor();
       await sheet.getByRole('button', { name: /Prepare invitations/ }).click();
       await sheet.locator('.draft').first().waitFor();
       for (const d of await sheet.locator('.draft').all()) {
@@ -350,20 +504,18 @@ async function main() {
       }
       assert(links.Emery && links.Frankie, `missing links: ${Object.keys(links)}`);
       assert(links.Emery !== links.Frankie, 'links must be personal');
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-invite.png') });
     });
 
     await check('first claimer gets the spot', async () => {
       const p = await newPage();
-      await p.goto(links.Emery);
+      await p.goto(links.Frankie);
       await p.getByRole('button', { name: 'Claim this spot' }).click();
       await p.getByText("You're in!").waitFor();
-      await p.screenshot({ path: path.join(SHOTS, 'claim-success.png') });
     });
 
     await check('later claimer is told the spot is gone', async () => {
       const p = await newPage();
-      await p.goto(links.Frankie);
+      await p.goto(links.Emery);
       await p.getByText('No spots are open right now.').waitFor();
       assert((await p.getByRole('button', { name: 'Claim this spot' }).count()) === 0, 'claim button still shown');
     });
@@ -376,7 +528,7 @@ async function main() {
     console.log('Reschedule & cancel');
     await check('organizer can move a session to a new time', async () => {
       const card = sessionCards(admin).first();
-      await card.getByRole('button', { name: 'Reschedule' }).click();
+      await card.getByRole('button', { name: 'Reschedule' }).first().click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByLabel('Start').fill('19:30');
       await sheet.getByText(/New time: .*7:30–10:00 PM E[DS]T/).waitFor();
@@ -446,7 +598,7 @@ async function main() {
     for (const [width, scheme] of [[360, 'light'], [375, 'dark'], [390, 'light'], [430, 'dark'], [360, 'dark'], [430, 'light']]) {
       await check(`no sideways scrolling at ${width}px in ${scheme} mode (player, organizer, link page)`, async () => {
         const p = await newPage(width, scheme);
-        const urls = [playerLink, `${BASE}/admin`, links.Frankie];
+        const urls = [playerLink, `${BASE}/admin`, links.Emery];
         for (const url of urls) {
           await p.goto(url);
           await p.waitForLoadState('networkidle');

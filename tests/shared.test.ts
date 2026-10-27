@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { formatCents, parseDollars, splitCost } from '../shared/money';
+import { sessionCalendar } from '../shared/calendar';
+import { formatCents, formatPrice, parseDollars, venmoPayUrl } from '../shared/money';
+import { goingText, joinOutcome, openSpots } from '../shared/spots';
 import { planSessions } from '../shared/schedule';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../shared/settings';
 import { computeSessionState, type StatusInput } from '../shared/status';
@@ -88,28 +90,67 @@ describe('time display', () => {
   });
 });
 
-describe('cost split', () => {
-  it('splits evenly when possible', () => {
-    expect(splitCost(4800)).toEqual([1200, 1200, 1200, 1200]);
+describe('spots: exactly 4 or 6', () => {
+  it('lets the first 4 in, waitlists the 5th, and lets the 6th in (bringing the 5th with them)', () => {
+    expect([0, 1, 2, 3].map((c) => joinOutcome(c, 0))).toEqual(['in', 'in', 'in', 'in']);
+    expect(joinOutcome(4, 0)).toBe('waitlist'); // 5th person
+    expect(joinOutcome(4, 1)).toBe('in'); // 6th person: both get in
+    expect(joinOutcome(6, 0)).toBe('waitlist');
+    expect(joinOutcome(5, 0)).toBe('in'); // turns 5 into 6
+    expect(joinOutcome(5, 1)).toBe('waitlist'); // someone is already first in line
   });
 
-  it('always adds back up to the court cost', () => {
-    for (const total of [0, 1, 2, 3, 4501, 4502, 4503, 9999, 12345]) {
-      const shares = splitCost(total);
-      expect(shares.reduce((a, b) => a + b, 0)).toBe(total);
-      expect(Math.max(...shares) - Math.min(...shares)).toBeLessThanOrEqual(1);
-    }
-    expect(splitCost(4501)).toEqual([1126, 1125, 1125, 1125]);
-    expect(splitCost(4503)).toEqual([1126, 1126, 1126, 1125]);
+  it('describes the count in plain words', () => {
+    expect(goingText(3, 0)).toBe('3 going · 1 more needed');
+    expect(goingText(4, 1)).toBe('4 going · 1 more makes 6');
+    expect(goingText(5, 0)).toBe('5 going · need 4 or 6');
+    expect(goingText(6, 2)).toBe('6 going');
+    expect(openSpots(2, 0)).toBe(2);
+    expect(openSpots(4, 1)).toBe(0);
+    expect(openSpots(5, 0)).toBe(1);
+    expect(openSpots(6, 0)).toBe(0);
   });
+});
 
+describe('money', () => {
   it('formats and parses dollars', () => {
     expect(formatCents(1125)).toBe('$11.25');
     expect(formatCents(5)).toBe('$0.05');
+    expect(formatPrice(1400)).toBe('$14');
+    expect(formatPrice(1450)).toBe('$14.50');
     expect(parseDollars('$45.5')).toBe(4550);
     expect(parseDollars('45')).toBe(4500);
     expect(parseDollars('abc')).toBeNull();
     expect(parseDollars('45.555')).toBeNull();
+  });
+
+  it('fills the amount into Venmo when it can read the username', () => {
+    const pay = venmoPayUrl('https://venmo.com/u/Alex-Smith', 1400, 'Pickleball Tue Oct 27');
+    expect(pay).toEqual({ url: 'https://venmo.com/Alex-Smith?txn=pay&amount=14.00&note=Pickleball%20Tue%20Oct%2027', prefilled: true });
+    expect(venmoPayUrl('https://account.venmo.com/u/alex', 1400, 'x').prefilled).toBe(true);
+    expect(venmoPayUrl('https://venmo.com/alex', 1400, 'x').url).toContain('venmo.com/alex?txn=pay&amount=14.00');
+    // Anything else: open the saved link and let the page show the amount.
+    expect(venmoPayUrl('https://example.com/pay', 1400, 'x')).toEqual({ url: 'https://example.com/pay', prefilled: false });
+    expect(venmoPayUrl(null, 1400, 'x').url).toBeNull();
+  });
+});
+
+describe('calendar file', () => {
+  it('makes an 8:00–10:00 PM Eastern event called Pickleball at the club', () => {
+    const ics = sessionCalendar({
+      id: 'abc',
+      startsAt: '2026-10-28T00:00:00.000Z', // Tue Oct 27, 8:00 PM EDT
+      endsAt: '2026-10-28T02:00:00.000Z',
+      location: 'Northville Pickleball Club, 123 Main St, Northville, MI',
+      nowIso: '2026-10-26T16:00:00.000Z',
+    });
+    expect(ics).toContain('BEGIN:VCALENDAR\r\n');
+    expect(ics).toContain('SUMMARY:Pickleball\r\n');
+    expect(ics).toContain('DTSTART:20261028T000000Z');
+    expect(ics).toContain('DTEND:20261028T020000Z');
+    expect(ics).toContain('LOCATION:Northville Pickleball Club\\, 123 Main St\\, Northville\\, MI');
+    expect(ics).toContain('UID:abc@pickleball-club');
+    expect(ics.trimEnd().endsWith('END:VCALENDAR')).toBe(true);
   });
 });
 
@@ -123,6 +164,7 @@ describe('session status', () => {
     cancellationDeadlineAt: new Date(start - 12 * HOUR).toISOString(),
     adminDecision: null,
     confirmedCount: 4,
+    waitlistCount: 0,
     unconfirmedAttendanceCount: 4,
   };
   const at = (input: Partial<StatusInput>, now: number) => computeSessionState({ ...base, ...input }, now, DEFAULT_SETTINGS);
@@ -179,6 +221,15 @@ describe('session status', () => {
     expect(at({}, start - 25 * HOUR).flags.checkInsDue).toBe(false);
     expect(at({}, start - 24 * HOUR).flags.checkInsDue).toBe(true);
     expect(at({ unconfirmedAttendanceCount: 0 }, start - 2 * HOUR).flags.checkInsDue).toBe(false);
+  });
+
+  it('warns when 5 are going, at any time before play', () => {
+    const five = at({ confirmedCount: 5 }, start - 5 * DAY);
+    expect(five.label).toBe('five_going');
+    expect(five.text).toBe('5 going');
+    expect(five.flags.fiveGoing).toBe(true);
+    expect(five.flags.underfilled).toBe(false);
+    expect(at({ confirmedCount: 6 }, start - 5 * DAY).label).toBe('on_track');
   });
 
   it('marks canceled sessions and stops other flags', () => {

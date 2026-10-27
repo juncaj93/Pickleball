@@ -5,12 +5,23 @@ import { api, ApiError } from '../../lib';
 import { Chip, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 
+const DAYS = [
+  { day: 2, label: 'Tue' },
+  { day: 4, label: 'Thu' },
+];
+
+function daysText(days: number[]): string {
+  if (days.length === 2) return 'Tue & Thu';
+  if (days.length === 1) return days[0] === 2 ? 'Tuesdays' : 'Thursdays';
+  return 'No usual day';
+}
+
 export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);
   return (
     <>
       <p className="small muted">
-        Only save a phone number if that player agreed to get reminder texts. Numbers are only shown to you.
+        Regulars get a "Want in?" nudge for their usual days. Occasional people can still sign up, they just don't get nudged.
       </p>
       <ul className="list card" style={{ padding: '4px 16px' }}>
         {ctx.d.players.map((p) => (
@@ -19,9 +30,9 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
               <strong>{p.name}</strong>
               <div className="small muted">{p.phone ? formatPhone(p.phone) : 'No phone'}</div>
               <div className="row" style={{ marginTop: 4 }}>
-                <Chip tone={p.isActive ? 'ok' : 'muted'}>{p.isActive ? 'Active' : 'Inactive'}</Chip>
-                <Chip tone="info">{p.isRegular ? 'Regular' : 'Occasional'}</Chip>
-                {!p.canReceiveSubstituteInvites && <Chip tone="muted">No sub invites</Chip>}
+                <Chip tone={p.isRegular ? 'ok' : 'info'}>{p.isRegular ? 'Regular' : 'Occasional'}</Chip>
+                <Chip tone="muted">{daysText(p.usualDays)}</Chip>
+                {!p.isActive && <Chip tone="muted">Hidden</Chip>}
               </div>
             </div>
             <button className="btn small secondary" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
@@ -31,9 +42,9 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
         ))}
       </ul>
       <button className="btn block" onClick={() => setEditing('new')}>
-        Add a player
+        Add a person
       </button>
-      <Sheet open={!!editing} title={editing === 'new' ? 'Add a player' : `Edit ${editing?.name ?? ''}`} onClose={() => setEditing(null)}>
+      <Sheet open={!!editing} title={editing === 'new' ? 'Add a person' : `Edit ${editing?.name ?? ''}`} onClose={() => setEditing(null)}>
         {editing && <PlayerForm ctx={ctx} player={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />}
       </Sheet>
     </>
@@ -43,10 +54,10 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
 function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlayer | null; onDone: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(player?.name ?? '');
-  const [phone, setPhone] = useState(player?.phone ?? '');
+  const [phone, setPhone] = useState(player?.phone ? formatPhone(player.phone) : '');
   const [isRegular, setRegular] = useState(player?.isRegular ?? true);
+  const [days, setDays] = useState<number[]>(player?.usualDays ?? []);
   const [isActive, setActive] = useState(player?.isActive ?? true);
-  const [subs, setSubs] = useState(player?.canReceiveSubstituteInvites ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,11 +65,18 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const body = { name, phone: phone || null, isRegular, isActive, canReceiveSubstituteInvites: subs };
+    const body = {
+      name,
+      phone: phone || null,
+      isRegular,
+      isActive,
+      canReceiveSubstituteInvites: player?.canReceiveSubstituteInvites ?? true,
+      usualDays: days,
+    };
     try {
       if (player) await api('PUT', `/api/admin/players/${player.id}`, body);
       else await api('POST', '/api/admin/players', body);
-      toast(player ? 'Player saved' : 'Player added');
+      toast(player ? 'Saved' : 'Added');
       await ctx.reload();
       onDone();
     } catch (err) {
@@ -76,20 +94,42 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       </label>
       <label className="field">
         Phone (optional)
-        <span className="hint">Only with their OK. Used to prefill texts you send.</span>
-        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} />
+        <span className="hint">Only with their OK. Used to fill in texts you send.</span>
+        <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} placeholder="(248) 555-1234" />
       </label>
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="small" style={{ fontWeight: 600 }}>
+          Plays
+        </span>
+        <div className="segmented" role="group" aria-label="Regular or occasional">
+          <button type="button" aria-pressed={isRegular} onClick={() => setRegular(true)}>
+            Regular
+          </button>
+          <button type="button" aria-pressed={!isRegular} onClick={() => setRegular(false)}>
+            Occasional
+          </button>
+        </div>
+      </div>
+      <div className="stack" style={{ gap: 6 }}>
+        <span className="small" style={{ fontWeight: 600 }}>
+          Usual days
+        </span>
+        <div className="segmented" role="group" aria-label="Usual days">
+          {DAYS.map(({ day, label }) => (
+            <button
+              type="button"
+              key={day}
+              aria-pressed={days.includes(day)}
+              onClick={() => setDays((cur) => (cur.includes(day) ? cur.filter((d) => d !== day) : [...cur, day].sort()))}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       <label className="check">
-        <input type="checkbox" checked={isRegular} onChange={(e) => setRegular(e.target.checked)} />
-        Regular player (unchecked = occasional)
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={subs} onChange={(e) => setSubs(e.target.checked)} />
-        Can get substitute invitations
-      </label>
-      <label className="check">
-        <input type="checkbox" checked={isActive} onChange={(e) => setActive(e.target.checked)} />
-        Active (inactive players disappear from the name list)
+        <input type="checkbox" checked={!isActive} onChange={(e) => setActive(!e.target.checked)} />
+        Hide from the name list (they stopped playing)
       </label>
       {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn" type="submit" disabled={busy}>

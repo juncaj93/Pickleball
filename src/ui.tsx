@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
 import type { Tone } from '../shared/status';
 import { copyText, isIOS, storageGet, storageSet } from './lib';
-import { smsHref } from '../shared/messages';
+import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
 export function Chip({ tone, children }: { tone: Tone; children: ReactNode }) {
@@ -180,7 +180,7 @@ export function SmsDraft({ to, phone, body }: { to: string; phone: string | null
       <div className="spread">
         <div>
           <strong>{to}</strong>
-          <div className="muted small">{phone ?? 'No phone number saved'}</div>
+          <div className="muted small">{phone ? formatPhone(phone) : 'No phone number saved'}</div>
         </div>
         <Chip tone={state === 'sent' ? 'ok' : 'info'}>{state === 'sent' ? 'Marked sent' : state === 'opened' ? 'Composer opened' : 'Draft ready'}</Chip>
       </div>

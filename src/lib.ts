@@ -11,16 +11,23 @@ export class ApiError extends Error {
 }
 
 let groupKey: string | null = null;
+let viewAsId: string | null = null;
 
 /** The private link's key. Sent as a header on player requests. */
 export function setGroupKey(key: string | null) {
   groupKey = key;
 }
 
+/** "View as...": the signed-in organizer sees and acts as this player. */
+export function setViewAs(playerId: string | null) {
+  viewAsId = playerId;
+}
+
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
-  if (groupKey) headers['X-Group-Key'] = groupKey;
+  if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
+  else if (groupKey) headers['X-Group-Key'] = groupKey;
   let res: Response;
   try {
     res = await fetch(path, {

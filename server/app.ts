@@ -41,6 +41,8 @@ route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
 route('POST', '/api/sessions/:id/withdraw', (ctx) => player.playerWithdraw(ctx));
 route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));
+route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
+route('GET', '/api/sessions/:id/calendar.ics', (ctx) => player.sessionCalendarFile(ctx));
 
 // Personal links from text messages. Tokens travel in the body, not the URL.
 route('POST', '/api/link', lookupToken);
@@ -61,6 +63,8 @@ route('PUT', '/api/admin/sessions/:id/time', admin.reschedule);
 route('POST', '/api/admin/sessions/:id/decision', admin.decide);
 route('POST', '/api/admin/sessions/:id/roster', admin.editRoster);
 route('POST', '/api/admin/sessions/:id/payment', admin.setPayment);
+route('POST', '/api/admin/sessions/:id/refund', admin.setRefund);
+route('POST', '/api/admin/sessions/:id/told', admin.markTold);
 route('POST', '/api/admin/sessions/:id/links', admin.prepareLinks);
 route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 

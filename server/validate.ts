@@ -85,3 +85,10 @@ export function isoTime(v: unknown, field: string): string | null {
 export function playerName(v: unknown): string {
   return text(v, 'name', { max: 40 });
 }
+
+/** Usual days as stored: '2', '4', '2,4', or ''. Undefined means "leave as is". */
+export function usualDays(v: unknown): string | null {
+  if (v === undefined) return null;
+  if (!Array.isArray(v) || v.some((d) => d !== 2 && d !== 4)) bad('usualDays', 'Usual days must be Tuesday and/or Thursday.');
+  return [...new Set(v as number[])].sort().join(',');
+}
