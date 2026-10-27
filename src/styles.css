@@ -2084,7 +2084,7 @@ label.field {
 .court-banner .banner-btns > .btn::before {
   content: '';
   position: absolute;
-  inset: -4px 0;
+  inset: -5px 0;
 }
 
 .late-line {
@@ -2746,7 +2746,7 @@ section[aria-labelledby='sessions-title'] > .week-break {
 .btn.small.me-in::before {
   content: '';
   position: absolute;
-  inset: -8px 0;
+  inset: -10px 0;
 }
 .me-state {
   display: inline-flex;
@@ -2803,13 +2803,20 @@ section[aria-labelledby='sessions-title'] > .week-break {
   color: var(--ink-2);
 }
 
-/* The time row holds the time, the organizer's own I'm in, and the gear
-   (always top right). Once in, "You're in · Out" takes a small line below. */
+/* The time row: the time and the organizer's own I'm in on the left (the
+   button drops to its own line when there's no room), the gear always top right. */
 .scard-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 4px;
+  align-items: flex-start;
+}
+.top-left {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0 4px;
+  gap: 2px 6px;
+  min-height: 36px;
 }
 .scard-top .sched-time {
   min-width: 0;
@@ -2821,23 +2828,14 @@ section[aria-labelledby='sessions-title'] > .week-break {
 .scard-top .sched-time .extra-tag {
   margin-left: 0;
 }
-
 .nowrap {
   white-space: nowrap;
 }
-.scard-top .btn.me-in {
-  grid-column: 2;
-  grid-row: 1;
-}
-.scard-top .card-icons {
-  grid-column: 3;
-  grid-row: 1;
-}
-.scard-top .me-state {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  justify-self: end;
-  margin-top: -6px;
+/* "You're in · Out" takes its own small line once in. */
+.top-left .me-state {
+  flex-basis: 100%;
+  justify-content: flex-end;
+  margin-top: -4px;
 }
 
 /* Setting hints: a few gray words on the same line as the name. */

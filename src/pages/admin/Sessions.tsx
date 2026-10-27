@@ -99,11 +99,13 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             <h2 id={`as-${s.id}`} className="sr-only">
               {formatShortDate(s.startsAt, tz)}
             </h2>
-            <span className="sched-time">
-              <span className="nowrap">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
-              {s.extra && <span className="extra-tag">Extra game</span>}
-            </span>
-            {live && <OrganizerInOut ctx={ctx} s={s} />}
+            <div className="top-left">
+              <span className="sched-time">
+                <span className="nowrap">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+                {s.extra && <span className="extra-tag">Extra game</span>}
+              </span>
+              {live && <OrganizerInOut ctx={ctx} s={s} />}
+            </div>
             <div className="card-icons">
               <button
                 className="icon-round"

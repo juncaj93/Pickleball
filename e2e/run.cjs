@@ -152,7 +152,7 @@ function layoutReport({ roots, items }) {
   for (const root of document.querySelectorAll(roots)) {
     if (!root.offsetParent) continue;
     const card = root.getBoundingClientRect();
-    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && !e.closest('[hidden], dialog:not([open])'));
+    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && !e.closest('[hidden], dialog:not([open]), .sr-only'));
     const boxes = els.map((e) => ({ e, b: visual(e), label: (e.getAttribute('aria-label') || e.innerText || e.className || e.tagName).trim().slice(0, 30) }));
     for (const x of boxes) {
       checked++;
