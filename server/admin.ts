@@ -150,7 +150,6 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
     reservation_reference: v.optionalText(body.reservationReference, 'reservationReference', 80),
     court_cost_cents: v.cents(body.courtCostCents, 'courtCostCents'),
     cancellation_deadline_at: v.isoTime(body.cancellationDeadlineAt, 'cancellationDeadlineAt'),
-    court_number: body.courtNumber === undefined ? session.court_number : v.courtNumber(body.courtNumber),
   };
   if (next.cancellation_deadline_at && next.cancellation_deadline_at > session.starts_at) {
     throw new HttpError(400, 'invalid_cancellationDeadlineAt', 'The cancellation deadline must be before the session starts.');
@@ -165,7 +164,7 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
   await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = ?, venue_name = ?, venue_booking_url = ?, reservation_reference = ?,
-         court_cost_cents = ?, cancellation_deadline_at = ?, court_number = ?, status = ?, updated_at = ?
+         court_cost_cents = ?, cancellation_deadline_at = ?, status = ?, updated_at = ?
        WHERE id = ?`,
     )
     .bind(
@@ -175,7 +174,6 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
       next.reservation_reference,
       next.court_cost_cents,
       next.cancellation_deadline_at,
-      next.court_number,
       status,
       ctx.nowIso,
       session.id,
@@ -223,36 +221,37 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
 }
 
 /**
- * "I booked it" (or "Court opened" when on the venue's waitlist): one step
+ * "I booked it" (or "Court opened" when on the venue's waitlist): one tap
  * that marks the session booked. Venue defaults to the club, the deadline to
- * the default hours before play; court number, reservation number and court
- * cost are optional. Standby players then move in by the 4-or-6 rules.
+ * the default hours before play; reservation number and court cost are
+ * optional and kept when left out. Standby players then move in by the
+ * 4-or-6 rules. Court numbers are no longer used; any saved ones are left
+ * alone in the database and never shown.
  */
 export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
-  const courtNumber = v.courtNumber(body.courtNumber);
   const reference = body.reservationReference === undefined ? session.reservation_reference : v.optionalText(body.reservationReference, 'reservationReference', 80);
   const cost = body.courtCostCents === undefined ? session.court_cost_cents : v.cents(body.courtCostCents, 'courtCostCents');
   const wasWaiting = session.court_state === 'waitlist';
   await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = 'booked', status = 'booked',
-         venue_name = COALESCE(venue_name, ?), court_number = ?, reservation_reference = ?, court_cost_cents = ?,
+         venue_name = COALESCE(venue_name, ?), reservation_reference = ?, court_cost_cents = ?,
          cancellation_deadline_at = COALESCE(cancellation_deadline_at, ?),
          court_state = CASE WHEN court_state = 'waitlist' THEN 'opened' ELSE court_state END,
          updated_at = ?
        WHERE id = ?`,
     )
-    .bind(group.venue_name || DEFAULT_VENUE_NAME, courtNumber, reference, cost, defaultDeadline(session.starts_at, settingsOf(group)), ctx.nowIso, session.id)
+    .bind(group.venue_name || DEFAULT_VENUE_NAME, reference, cost, defaultDeadline(session.starts_at, settingsOf(group)), ctx.nowIso, session.id)
     .run();
   let promoted: { playerId: string }[] = [];
   if (wasWaiting && ctx.nowMs < Date.parse(session.starts_at)) {
     promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso);
     await syncSix(ctx.db, session.id, ctx.nowIso);
   }
-  await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { courtNumber, promoted: promoted.length }, ctx.nowIso);
+  await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: promoted.length }, ctx.nowIso);
   return { ok: true, promoted: promoted.length };
 }
 

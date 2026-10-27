@@ -13,5 +13,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "dev", "tests", "server", "shared"]
+  "include": ["vite.config.ts", "dev", "tests", "server", "shared", "src/pages/admin/todo.ts"]
 }

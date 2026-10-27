@@ -5,9 +5,11 @@ import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
-import { Chip, Empty, ErrorState, FirstVisitNotice, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
+import { Empty, ErrorState, FirstVisitNotice, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
-import { CourtWaitButtons, HolidayControl, type SheetKind, SessionCard, SessionSheets, ShortPanel } from './admin/Sessions';
+import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
+import type { CourtKind } from '../../shared/court';
+import { buildTodo, courtCounts, courtOf, type TodoItem } from './admin/todo';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 
@@ -101,7 +103,8 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
   const [viewing, setViewing] = useState<{ id: string; name: string } | null>(null);
   const [pickViewAs, setPickViewAs] = useState(false);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
-  const todoCount = buildTodo(d).length;
+  // Courts count toward the badge once their booking window opens.
+  const todoCount = buildTodo(d).length + d.sessions.filter((s) => s.state.flags.needsBooking).length;
 
   if (viewing) {
     return (
@@ -178,53 +181,6 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
 // ---------- Needs attention ----------
 
-type TodoItem =
-  | { kind: 'courts'; sessions: AdminSessionView[] }
-  | { kind: 'five' | 'short' | 'tell' | 'sixdrop' | 'checkin' | 'daybefore' | 'lastcall' | 'courtwait'; session: AdminSessionView }
-  | { kind: 'owed'; rows: OwedRow[] };
-
-interface OwedRow {
-  session: AdminSessionView;
-  playerId: string;
-  name: string;
-  cents: number;
-}
-
-const upcoming = (s: AdminSessionView) => !s.state.flags.canceled && !s.state.flags.started;
-
-/** The organizer's short list: what needs a tap right now, most urgent first. */
-export function buildTodo(d: AdminDashboard): TodoItem[] {
-  const items: TodoItem[] = [];
-  const nowMs = Date.parse(d.now);
-  const s = d.sessions;
-  const courts = s.filter(
-    (x) => x.state.flags.needsBooking || (upcoming(x) && x.state.flags.courtUnavailable && x.state.flags.bookingWindowOpen),
-  );
-  for (const x of s) if (x.state.flags.fiveGoing) items.push({ kind: 'five', session: x });
-  for (const x of s) if (x.state.flags.shortOnPlayers) items.push({ kind: 'short', session: x });
-  for (const x of s)
-    if (upcoming(x) && x.roster.some((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt))
-      items.push({ kind: 'tell', session: x });
-  for (const x of s) if (x.cards.lastCall) items.push({ kind: 'lastcall', session: x });
-  for (const x of s) if (x.cards.dayBefore) items.push({ kind: 'daybefore', session: x });
-  for (const x of s) if (x.courtState === 'waitlist' && upcoming(x)) items.push({ kind: 'courtwait', session: x });
-  for (const x of s) if (x.state.flags.checkInsDue) items.push({ kind: 'checkin', session: x });
-  if (courts.length) items.push({ kind: 'courts', sessions: courts });
-  for (const x of s) if (x.sixDropped) items.push({ kind: 'sixdrop', session: x });
-  // Who owes you: from the day-before check-in on, and after play.
-  const owed: OwedRow[] = [];
-  for (const x of s) {
-    if (x.state.flags.canceled || nowMs < Date.parse(x.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
-    for (const r of x.roster) {
-      if (r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) {
-        owed.push({ session: x, playerId: r.playerId, name: r.name, cents: r.shareCents - r.creditCents });
-      }
-    }
-  }
-  if (owed.length) items.push({ kind: 'owed', rows: owed });
-  return items;
-}
-
 function HomeTab({ ctx, onViewAs }: { ctx: AdminCtx; onViewAs: () => void }) {
   const items = buildTodo(ctx.d);
   return (
@@ -280,34 +236,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     }
   }
 
-  if (item.kind === 'courts') {
-    return (
-      <article className="card stack" aria-label="Courts to book">
-        <h3>Courts to book</h3>
-        <a className="btn block" href={COURTRESERVE_URL} target="_blank" rel="noopener noreferrer">
-          Book on CourtReserve
-        </a>
-        <p className="small muted">After you book, come back and tap I booked it.</p>
-        <ul className="rows">
-          {item.sessions.map((s) => (
-            <li key={s.id}>
-              <span className="who">
-                <strong>{formatShortDate(s.startsAt, tz)}</strong>
-                <span className="small muted">
-                  {s.state.flags.courtUnavailable ? 'Marked not available' : formatTimeRange(s.startsAt, s.endsAt, tz)}
-                </span>
-                {s.holiday && <HolidayControl ctx={ctx} s={s} />}
-              </span>
-              <button className="btn" onClick={() => ctx.open('booked', s.id)}>
-                I booked it
-              </button>
-            </li>
-          ))}
-        </ul>
-      </article>
-    );
-  }
-
   if (item.kind === 'owed') {
     return (
       <article className="card stack" aria-label="Who owes you">
@@ -341,27 +269,20 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   const s = item.session;
   const title = {
     five: '5 going, need 4 or 6',
-    short: 'Short on players',
     tell: "Tell them they're in",
     sixdrop: `Was 6, now ${s.confirmedCount}: discount and credits are off`,
     checkin: 'Check-in texts due',
     daybefore: `${formatShortDate(s.startsAt, tz)}: ${countSummary(s.confirmedCount)}`,
     lastcall: `Last call, ${formatShortDate(s.startsAt, tz)}: ${s.confirmedCount} in`,
-    courtwait: 'Waiting on the court',
   }[item.kind];
 
   return (
     <article className="card stack" aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`}>
-      <div className="spread">
-        <div>
-          <h3>{title}</h3>
-          <div className="small muted">{when(s, tz)}</div>
-          {s.holiday && <HolidayControl ctx={ctx} s={s} />}
-        </div>
-        {item.kind !== 'sixdrop' && <Chip tone={s.state.tone}>{s.state.text}</Chip>}
+      <div>
+        <h3>{title}</h3>
+        <div className="small muted">{when(s, tz)}</div>
       </div>
       {item.kind === 'five' && <FivePanel ctx={ctx} s={s} />}
-      {item.kind === 'short' && <ShortPanel ctx={ctx} s={s} />}
       {item.kind === 'tell' &&
         s.roster
           .filter((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt)
@@ -441,14 +362,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           >
             Done
           </button>
-        </>
-      )}
-      {item.kind === 'courtwait' && (
-        <>
-          <p className="small muted">
-            {s.waitlistCount} on standby. When the venue gives you a court, tap Court opened and they move in by the 4-or-6 rules.
-          </p>
-          <CourtWaitButtons ctx={ctx} s={s} />
         </>
       )}
       {item.kind === 'checkin' && (
@@ -614,11 +527,50 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const list = ctx.d.sessions.filter((s) => (view === 'upcoming' ? Date.parse(s.endsAt) > nowMs : Date.parse(s.endsAt) <= nowMs));
   if (view === 'past') list.reverse();
   const shown = all ? list : list.slice(0, 4);
+  const counts = courtCounts(ctx.d.sessions, nowMs);
+  const parts = (
+    [
+      ['booked', `${counts.booked} booked`],
+      ['needs', `${counts.needs} need${counts.needs === 1 ? 's' : ''} a court`],
+      ['waitlist', `${counts.waitlist} on the waitlist`],
+    ] as const
+  ).filter(([k]) => counts[k] > 0);
+
+  function jump(kind: CourtKind) {
+    const first = list.find((s) => courtOf(s) === kind) ?? ctx.d.sessions.find((s) => Date.parse(s.endsAt) > nowMs && courtOf(s) === kind);
+    if (!first) return;
+    setView('upcoming');
+    setAll(true);
+    // Wait for the card to draw if it was hidden behind "Show all".
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`session-${first.id}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el?.focus({ preventScroll: true });
+    });
+  }
+
   return (
     <section className="stack" aria-labelledby="sessions-title">
-      <h2 id="sessions-title" className="section-title">
-        Sessions
-      </h2>
+      <div className="spread" style={{ alignItems: 'center' }}>
+        <h2 id="sessions-title" className="section-title">
+          Sessions
+        </h2>
+        <a className="btn small secondary" href={COURTRESERVE_URL} target="_blank" rel="noopener noreferrer">
+          Book on CourtReserve
+        </a>
+      </div>
+      {parts.length > 0 && (
+        <p className="court-summary" aria-label="Courts">
+          {parts.map(([k, label], i) => (
+            <span key={k}>
+              {i > 0 && ', '}
+              <button className={`link-btn sum-${k}`} onClick={() => jump(k)}>
+                {label}
+              </button>
+            </span>
+          ))}
+        </p>
+      )}
       <div className="segmented" role="group" aria-label="Which sessions">
         <button aria-pressed={view === 'upcoming'} onClick={() => setView('upcoming')}>
           Upcoming

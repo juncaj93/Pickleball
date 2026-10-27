@@ -35,38 +35,45 @@ async function withGale(ctx: Ctx) {
 }
 
 describe('"I booked it"', () => {
-  it('marks the session booked in one step with the court number, venue and 12-hour deadline', async () => {
+  it('marks the session booked in one tap, with the venue and a 12-hour deadline', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     ctx.app.db.raw.prepare('UPDATE sessions SET cancellation_deadline_at = NULL, venue_name = NULL WHERE id = ?').run(s.id);
-    const res = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtNumber: '#7' });
+    const res = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
     expect(res.data).toMatchObject({ ok: true });
     const x = await adminSession(ctx, s.id);
-    expect(x).toMatchObject({ bookingStatus: 'booked', status: 'booked', courtNumber: '7', venueName: 'Northville Pickleball Club', courtCostCents: null });
+    expect(x).toMatchObject({ bookingStatus: 'booked', status: 'booked', venueName: 'Northville Pickleball Club', courtCostCents: null });
     expect(Date.parse(x.startsAt) - Date.parse(x.cancellationDeadlineAt)).toBe(12 * HOUR);
     const p = (await asPlayer(ctx, 'Alex')).sessions.find((v: any) => v.id === s.id);
-    expect(p).toMatchObject({ bookingStatus: 'booked', courtNumber: '7' });
+    expect(p).toMatchObject({ bookingStatus: 'booked' });
     expect((await dash(ctx)).audit[0]).toMatchObject({ action: 'court_booked' });
   });
 
-  it('court number is optional; reservation number and court cost are optional extras', async () => {
+  it('keeps a saved reservation number and court cost; both stay optional extras', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
+    await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/booking`, {
+      bookingStatus: 'needs_booking',
+      reservationReference: 'R-9',
+      courtCostCents: 4800,
+      cancellationDeadlineAt: s.cancellationDeadlineAt,
+    });
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
-    expect(await adminSession(ctx, s.id)).toMatchObject({ bookingStatus: 'booked', courtNumber: null });
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtNumber: '3', reservationReference: 'R-9', courtCostCents: 4800 });
-    expect(await adminSession(ctx, s.id)).toMatchObject({ courtNumber: '3', reservationReference: 'R-9', courtCostCents: 4800 });
-    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtNumber: 'way too long court name' })).status).toBe(400);
+    expect(await adminSession(ctx, s.id)).toMatchObject({ bookingStatus: 'booked', reservationReference: 'R-9', courtCostCents: 4800 });
   });
 
-  it('Edit booking keeps or changes the court number', async () => {
+  it('never shows or asks for a court number; saved ones stay in the database untouched', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtNumber: '7' });
-    await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/booking`, { bookingStatus: 'booked', cancellationDeadlineAt: s.cancellationDeadlineAt });
-    expect((await adminSession(ctx, s.id)).courtNumber).toBe('7');
+    ctx.app.db.raw.prepare("UPDATE sessions SET court_number = '7' WHERE id = ?").run(s.id);
+    // Old screens might still send one: it's ignored, not an error.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtNumber: '9' })).status).toBe(200);
     await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/booking`, { bookingStatus: 'booked', courtNumber: '9', cancellationDeadlineAt: s.cancellationDeadlineAt });
-    expect((await adminSession(ctx, s.id)).courtNumber).toBe('9');
+    const row = ctx.app.db.raw.prepare('SELECT court_number AS n FROM sessions WHERE id = ?').get(s.id) as { n: string };
+    expect(row.n).toBe('7');
+    const admin = (await ctx.organizer.call('GET', '/api/admin/dashboard')).text;
+    const player = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).text;
+    for (const text of [admin, player]) expect(text).not.toMatch(/courtNumber|court_number|Court #/);
   });
 });
 
@@ -100,10 +107,10 @@ describe('court waitlist', () => {
     const ctx = await withGale(await setupGroup());
     const s = await waiting(ctx);
     for (const n of [...NAMES, 'Gale']) await join(ctx, n, s.id);
-    const res = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtNumber: '7' });
+    const res = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
     expect(res.data).toEqual({ ok: true, promoted: 6 });
     const x = await adminSession(ctx, s.id);
-    expect(x).toMatchObject({ courtState: 'opened', bookingStatus: 'booked', courtNumber: '7', confirmedCount: 6, waitlistCount: 1 });
+    expect(x).toMatchObject({ courtState: 'opened', bookingStatus: 'booked', confirmedCount: 6, waitlistCount: 1 });
     expect(x.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.name)).toEqual(NAMES);
     expect(x.roster.find((r: any) => r.status === 'waitlisted').name).toBe('Gale');
     // Every one of them has a text waiting for the organizer.

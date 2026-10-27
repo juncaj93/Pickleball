@@ -365,39 +365,99 @@ async function main() {
     });
 
     console.log('Booking & payments');
-    await check('"I booked it": court number in one step, extras under More details', async () => {
-      const courts = admin.getByRole('article', { name: 'Courts to book' });
-      const link = courts.getByRole('link', { name: 'Book on CourtReserve' });
+    await check('Home: court and players are separate lines; no chip; no duplicate court cards', async () => {
+      await admin.reload();
+      const section = admin.locator('section[aria-labelledby="sessions-title"]');
+      const link = section.getByRole('link', { name: 'Book on CourtReserve' });
       assert((await link.getAttribute('href')) === 'https://app.courtreserve.com/Online/PublicBookings/13765/Landing', 'wrong CourtReserve link');
-      assert((await courts.getByRole('button', { name: 'I booked it' }).count()) > 0, 'court rows need an I booked it button');
-      assert((await courts.getByRole('button', { name: 'Enter details' }).count()) === 0, 'old Enter details button still shown');
+      await sessionCards(admin).first().waitFor();
+      for (const name of [/^Courts to book/, /^Waiting on the court/, /^Short on players/]) {
+        assert((await admin.getByRole('article', { name }).count()) === 0, `old ${name} card still on Home`);
+      }
+      assert((await sessionCards(admin).locator('.chip').count()) === 0, 'session cards should have no status chip');
+      // Court buttons live only inside session cards.
+      for (const label of ['I booked it', 'Court opened', "Didn't open"]) {
+        const all = await admin.getByRole('button', { name: label, exact: true }).count();
+        const inCards = await sessionCards(admin).getByRole('button', { name: label, exact: true }).count();
+        assert(all === inCards, `${label} shows outside a session card`);
+      }
+      const cards = sessionCards(admin);
+      for (let i = 0; i < (await cards.count()); i++) {
+        const c = cards.nth(i);
+        assert((await c.locator('.court-status').count()) >= 1, 'every card needs a court line');
+        if ((await c.getAttribute('data-court')) !== 'off') {
+          const line = (await c.locator('.players-line .players-count').innerText()).trim();
+          assert(/^\d of [46] in$/.test(line), `players line was ${line}`);
+          const dots = await c.locator('.players-line .dot').count();
+          assert(dots === Number(line.split(' of ')[1].split(' ')[0]), `expected a dot per spot, got ${dots}`);
+        }
+      }
+    });
+
+    await check('not booked: amber dashed border, banner with I booked it; one tap books it', async () => {
       const card = sessionCards(admin).first();
-      await card.getByRole('button', { name: 'I booked it' }).click();
-      const sheet = admin.locator('dialog[open]');
-      await sheet.getByLabel(/Court number/).fill('7');
-      assert(!(await sheet.getByLabel(/Reservation number/).isVisible()), 'extras should be tucked under More details');
-      await sheet.getByText('More details').click();
-      await sheet.getByLabel(/Reservation number/).fill('R-1042');
-      await sheet.getByLabel(/Court cost/).fill('48.37');
-      await sheet.getByText('Venue: Northville Pickleball Club', { exact: false }).waitFor();
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-i-booked-it.png') });
-      await sheet.getByRole('button', { name: 'Save: booked' }).click();
-      await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText(/Booked, Court #7/).waitFor();
-      await card.getByText('#R-1042', { exact: false }).waitFor();
-      await card.getByText('$48.37 (only you see this)', { exact: false }).waitFor();
-      await card.getByText(/Cancel by/).waitFor();
-      // Edit booking has the same fields, a 12-hour deadline, and no split text.
+      assert((await card.getAttribute('data-court')) === 'needs', 'first card should need a court');
+      const banner = card.locator('.court-banner');
+      await banner.getByText('Court not booked', { exact: true }).waitFor();
+      assert((await banner.locator('svg.court-icon').count()) === 1, 'banner needs an icon with the words');
+      const look = await card.evaluate((el) => ({ style: getComputedStyle(el).borderTopStyle, banner: getComputedStyle(el.querySelector('.court-banner')).backgroundColor }));
+      assert(look.style === 'dashed', `not-booked border should be dashed, was ${look.style}`);
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-not-booked.png') });
+      await banner.getByRole('button', { name: 'I booked it' }).click();
+      await admin.locator('.toast', { hasText: 'Court booked' }).waitFor();
+      assert((await admin.locator('dialog[open]').count()) === 0, 'I booked it should not ask anything');
+      const booked = sessionCards(admin).first();
+      assert((await booked.getAttribute('data-court')) === 'booked', 'card should now be booked');
+      await booked.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
+      await booked.getByText(/^Cancel by .*8:00 AM/).waitFor();
+      const edge = await booked.evaluate((el) => ({ style: getComputedStyle(el).borderLeftStyle, width: parseFloat(getComputedStyle(el).borderLeftWidth) }));
+      assert(edge.style === 'solid' && edge.width >= 6, `booked card needs a solid left edge: ${JSON.stringify(edge)}`);
+      assert((await booked.locator('.court-banner').count()) === 0, 'booked card should have no banner');
+    });
+
+    await check('Edit booking: no court number; reservation number and cost under More details', async () => {
+      const card = sessionCards(admin).first();
       await card.getByRole('button', { name: 'Edit booking' }).click();
       const edit = admin.locator('dialog[open]');
-      assert((await edit.getByLabel(/Court #/).inputValue()) === '7', 'Court # missing from Edit booking');
+      await edit.getByLabel(/Cancellation deadline/).waitFor();
+      assert((await edit.getByLabel(/Court #|Court number/).count()) === 0, 'court number field still in Edit booking');
+      assert(!(await edit.getByLabel(/Reservation number/).isVisible()), 'extras should be tucked under More details');
+      await edit.getByText('More details').click();
+      await edit.getByLabel(/Reservation number/).fill('R-1042');
+      await edit.getByLabel(/Court cost/).fill('48.37');
       await edit.getByText("Your own record. Players never see it, and it's never in a text.").waitFor();
       assert((await edit.getByText(/Split four ways/i).count()) === 0, 'old split helper text still shown');
       await edit.getByText(/Deadline: .*8:00 AM$/).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
-      await admin.keyboard.press('Escape');
+      await edit.getByRole('button', { name: 'Save booking' }).click();
+      await admin.locator('.toast', { hasText: 'Booking saved' }).waitFor();
+      await card.getByText('Reservation #R-1042', { exact: false }).waitFor();
+      await card.getByText('$48.37 (only you see this)', { exact: false }).waitFor();
+      assert((await admin.getByText(/Court #|Court number/).count()) === 0, 'court number shows on organizer Home');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-booked.png') });
       await players.Alex.reload();
-      await firstCard(players.Alex).getByText('Court booked, Court #7').waitFor();
+      const row = firstCard(players.Alex);
+      await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
+      assert((await players.Alex.getByText(/Court #/).count()) === 0, 'court number shows to players');
+      assert((await players.Alex.getByText('Court not booked yet', { exact: true }).count()) > 0, 'other sessions should say Court not booked yet');
+      assert((await row.getByRole('button', { name: /I booked it|Court opened/ }).count()) === 0, 'players get no court buttons');
+    });
+
+    await check('summary line counts courts, and each part jumps to its first card', async () => {
+      await admin.evaluate(() => window.scrollTo(0, 0));
+      const summary = admin.locator('.court-summary');
+      const text = (await summary.innerText()).trim();
+      assert(/^(\d+ booked)?(, )?(\d+ needs? a court)?(, )?(\d+ on the waitlist)?$/.test(text) && /\d/.test(text), `summary was: ${text}`);
+      assert(/^1 booked, \d+ needs? a court$/.test(text), `expected 1 booked and the rest needing a court: ${text}`);
+      await summary.getByRole('button', { name: /needs? a court/ }).click();
+      const target = sessionCards(admin).locator('[data-court="needs"]').first().or(admin.locator('article[data-court="needs"]').first());
+      await admin.waitForFunction(() => {
+        const el = document.querySelector('article[data-court="needs"]');
+        if (!el) return false;
+        const r = el.getBoundingClientRect();
+        return r.top >= -2 && r.top < window.innerHeight / 2;
+      });
+      assert((await target.count()) > 0, 'no needs-a-court card');
     });
 
     await check('session card: one main button, Edit booking, Players, and the rest under More', async () => {
@@ -818,8 +878,13 @@ async function main() {
       const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
       await more(card);
       await card.getByRole('button', { name: 'On court waitlist' }).click();
-      await card.getByRole('button', { name: 'Court opened' }).waitFor();
-      await card.getByText('Waiting on the court', { exact: true }).first().waitFor();
+      const banner = card.locator('.court-banner');
+      await banner.getByRole('button', { name: 'Court opened' }).waitFor();
+      await banner.getByRole('button', { name: "Didn't open" }).waitFor();
+      await banner.getByText('On the court waitlist', { exact: true }).waitFor();
+      assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
+      assert((await card.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist card should not offer I booked it');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       await more(card);
       await card.getByRole('button', { name: 'Text the group poll' }).click();
       const bubble = (await admin.locator('dialog[open] .bubble').innerText()).trim();
@@ -831,7 +896,8 @@ async function main() {
         const p = players[name];
         await p.reload();
         const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
-        await row.getByText("Waiting on the court. Join the list so we're ready if it opens.").waitFor();
+        await row.locator('.sched-status').getByText('Waiting on the court', { exact: true }).waitFor();
+        await row.getByText("Join the standby list so we're ready if it opens.").waitFor();
         await row.getByRole('button', { name: 'Put me on standby' }).click();
         await row.locator('.me-tag', { hasText: /Standby #\d/ }).waitFor();
         assert((await row.getByLabel('Money for this session').count()) === 0, 'standby players owe nothing');
@@ -839,20 +905,21 @@ async function main() {
       await players.Casey.screenshot({ path: path.join(SHOTS, 'player-standby.png'), fullPage: true });
 
       await admin.reload();
-      await admin.getByRole('article', { name: new RegExp(`^Waiting on the court: ${day}`) }).waitFor();
       const c2 = sessionCards(admin).nth(3);
+      await c2.locator('.players-line').getByText(/2 on standby/).waitFor();
+      assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
+      assert(/1 on the waitlist/.test(await admin.locator('.court-summary').innerText()), 'summary should count the court waitlist');
       await c2.getByRole('button', { name: 'Court opened' }).click();
-      const sheet = admin.locator('dialog[open]');
-      await sheet.getByLabel(/Court number/).fill('4');
-      await sheet.getByRole('button', { name: 'Save: court opened' }).click();
       await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
-      await c2.getByText(/Booked, Court #4/).waitFor();
+      assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
+      await c2.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
       const tell = admin.getByRole('article', { name: new RegExp(`Tell them they're in: ${day}`) });
       await tell.getByText(/Good news, Casey! The court opened up/).waitFor();
 
       const p = players.Casey;
       await p.reload();
-      const row = p.locator('article', { hasText: 'Court booked, Court #4' });
+      const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
+      await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
       await row.getByText("Good news, the court opened, so you're in.").waitFor();
       await row.getByLabel('Money for this session').getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
     });
@@ -1011,6 +1078,27 @@ async function main() {
           const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
           assert(overflow <= 0, `${url} overflows by ${overflow}px`);
         }
+        // The floating pill never covers the last card on the organizer Home.
+        await p.goto(`${BASE}/admin`);
+        const signIn = p.getByLabel('Organizer PIN');
+        if (await signIn.isVisible().catch(() => false)) {
+          await signIn.fill(PIN);
+          await p.getByRole('button', { name: 'Sign in' }).click();
+        }
+        await sessionCards(p).first().waitFor();
+        const showAll = p.getByRole('button', { name: /^Show all/ });
+        if (await showAll.count()) await showAll.click();
+        await p.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        const gap = await p.evaluate(() => {
+          const cards = [...document.querySelectorAll('main article, main section.card')];
+          const last = cards[cards.length - 1].getBoundingClientRect();
+          const pill = document.querySelector('.tabbar').getBoundingClientRect();
+          return pill.top - last.bottom;
+        });
+        assert(gap >= 0, `the pill covers the last card by ${-gap}px at ${width}px`);
+        await p.screenshot({ path: path.join(SHOTS, `admin-${width}-${scheme}.png`), fullPage: false });
+        await p.evaluate(() => window.scrollTo(0, 0));
+        await p.screenshot({ path: path.join(SHOTS, `admin-top-${width}-${scheme}.png`), fullPage: false });
         await p.goto(playerLink);
         await p.getByRole('button', { name: 'Alex', exact: true }).click();
         await p.locator('article').first().waitFor();

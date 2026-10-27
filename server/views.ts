@@ -55,7 +55,6 @@ export function playerSessionView(
     joinAs: joinOutcome(confirmed.length, othersWaiting),
     sixPlaying: six,
     holiday: holidayFor(session.starts_at, tz),
-    courtNumber: session.court_number,
     courtState: session.court_state,
     past: nowMs >= Date.parse(session.ends_at),
     confirmationOpen:
@@ -179,7 +178,6 @@ export function adminSessionView(
     paidCount,
     payableCount: payable,
     courtCostCents: session.court_cost_cents,
-    courtNumber: session.court_number,
     courtState: session.court_state,
     shownEarly: !!session.shown_early,
     holiday: holidayFor(session.starts_at, tz),

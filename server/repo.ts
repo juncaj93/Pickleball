@@ -58,7 +58,7 @@ export interface SessionRow {
   six_reached_at: string | null;
   six_drop_resolved_at: string | null;
   credits_issued_at: string | null;
-  court_number: string | null;
+  court_number: string | null; // no longer shown or changed
   court_state: 'waitlist' | 'opened' | 'not_opened' | null;
   shown_early: number;
   holiday_hours_ok_at: string | null;

@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useRef, useState } from 'react';
+import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
 import { copyText, isIOS, storageGet, storageSet } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
@@ -322,3 +323,59 @@ export const GearIcon = () => (
     <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7" />
   </svg>
 );
+
+// ---------- Court status (same words and icons for organizers and players) ----------
+
+/** Check for booked, warning for not booked, clock for the court waitlist, slashed circle for off. */
+export function CourtIcon({ kind }: { kind: CourtKind }) {
+  return (
+    <svg {...ICON} className="court-icon" strokeWidth={2.3}>
+      {kind === 'booked' && (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m7.8 12.3 2.8 2.8 5.6-6" />
+        </>
+      )}
+      {kind === 'needs' && (
+        <>
+          <path d="M12 3.6 21 19.6H3z" />
+          <path d="M12 9.6v4.4M12 16.9v.1" />
+        </>
+      )}
+      {kind === 'waitlist' && (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 7.2V12l3.2 2" />
+        </>
+      )}
+      {kind === 'off' && (
+        <>
+          <circle cx="12" cy="12" r="9" />
+          <path d="m5.8 5.8 12.4 12.4" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/** "3 of 4 in" with a dot per spot, filled as people sign up, plus any waitlist. */
+export function PlayersLine({ confirmed, waiting, waitingWord = 'on the waitlist' }: { confirmed: number; waiting: number; waitingWord?: string }) {
+  const slots = playerSlots(confirmed);
+  return (
+    <div className="players-line">
+      <span className="players-count">
+        {confirmed} of {slots} in
+      </span>
+      <span className="dots" aria-hidden="true">
+        {Array.from({ length: slots }, (_, i) => (
+          <span key={i} className={i < confirmed ? 'dot on' : 'dot'} />
+        ))}
+      </span>
+      {waiting > 0 && (
+        <span className="players-wait">
+          · {waiting} {waitingWord}
+        </span>
+      )}
+    </div>
+  );
+}
