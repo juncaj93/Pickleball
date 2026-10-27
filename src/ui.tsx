@@ -558,7 +558,9 @@ export function shortNames(names: string[], budget = 20): { shown: string[]; mor
 
 export function NamesLine({ names, me, budget }: { names: string[]; me?: string | null; budget?: number }) {
   if (names.length === 0) return null;
-  const { shown, more } = shortNames(names, budget);
+  // Your own name first, so it never hides behind "+1".
+  const order = me && names.includes(me) ? [me, ...names.filter((n) => n !== me)] : names;
+  const { shown, more } = shortNames(order, budget);
   return (
     <>
       <span className="names-line" title={names.join(', ')}>

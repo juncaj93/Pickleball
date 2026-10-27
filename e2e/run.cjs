@@ -3268,6 +3268,7 @@ async function main() {
         const joinable = pl.locator('.schedule article:not([data-holiday]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I'm in" }) });
         const joinId = await joinable.nth(Math.min(2, (await joinable.count()) - 1)).getAttribute('id');
         const joined = pl.locator(`#${joinId}`);
+        const beforeH = (await joined.boundingBox()).height;
         await joined.getByRole('button', { name: "I'm in" }).click();
         await joined.locator('.tile-check').waitFor();
         await pl.locator('.pop, .toast').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
@@ -3298,9 +3299,13 @@ async function main() {
         for (const m of cardLook.mine) {
           assert(m.rows <= 4, `signed-in card has ${m.rows} rows`);
           assert(m.pills === 0, 'signed-in card has a pill or name chips');
-          // Rows 1 to 3 match the not-signed-in card; only the optional Pay row adds height.
-          assert(m.h - m.foot <= cardLook.other + 3, `signed-in card is ${m.h}px (${m.foot}px Pay row) vs ${cardLook.other}px`);
         }
+        // The same card before and after I'm in: rows 1 to 3 keep their height; only the optional Pay row adds any.
+        const after = await joined.evaluate((a) => {
+          const f = a.querySelector('.row-foot');
+          return { h: a.getBoundingClientRect().height, foot: f ? f.getBoundingClientRect().height + 3 : 0 };
+        });
+        assert(after.h - after.foot <= beforeH + 3, `signed-in card is ${after.h}px (${after.foot}px Pay row) vs ${beforeH}px before`);
         const gp = await pl.evaluate(greenReport);
         assert(gp.problems.length === 0, `player: ${gp.problems.join(' | ')}`);
         const lp = await pl.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
