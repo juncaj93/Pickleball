@@ -2,6 +2,8 @@ import { type FormEvent, useEffect, useState } from 'react';
 import type { ActionLinkDraft, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   bookingMessage,
+  canceledMessage,
+  movedMessage,
   confirmationMessage,
   deadlineAlertMessage,
   paymentMessage,
@@ -28,7 +30,7 @@ import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, 
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll' | 'canceled' | 'moved';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -269,7 +271,7 @@ function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
 /**
  * Holiday pill for the organizer: "Election Day · check venue hours" with
- * "Venue is open normal hours". Once confirmed it shows "✓ Election Day"
+ * "Hours OK" (read aloud as "Venue is open normal hours"). Once confirmed it shows "✓ Election Day"
  * with Undo. Saved on the session, so it holds on every device.
  */
 export function HolidayControl({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
@@ -285,8 +287,8 @@ export function HolidayControl({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView 
           Undo
         </button>
       ) : (
-        <button className="link-btn" disabled={busy} onClick={() => set(true)}>
-          Venue is open normal hours
+        <button className="link-btn" disabled={busy} onClick={() => set(true)} aria-label="Venue is open normal hours">
+          Hours OK
         </button>
       )}
     </div>
@@ -373,6 +375,8 @@ export function SessionSheets({
     invite: `Invite people · ${title}`,
     reschedule: `Reschedule · ${title}`,
     poll: `Group poll · ${title}`,
+    canceled: `Canceled · ${title}`,
+    moved: `Moved · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -381,7 +385,8 @@ export function SessionSheets({
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}
       {s && kind === 'invite' && <InviteSubs ctx={ctx} s={s} />}
-      {s && kind === 'reschedule' && <RescheduleForm ctx={ctx} s={s} onDone={onClose} />}
+      {s && kind === 'reschedule' && <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />}
+      {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
       {s && kind === 'poll' && (
         <div className="stack">
           <SmsDraft
@@ -396,6 +401,69 @@ export function SessionSheets({
         </div>
       )}
     </Sheet>
+  );
+}
+
+// ---------- After a cancel or a move ----------
+
+/**
+ * The text to send the group after canceling or moving a session, with an
+ * optional one-line reason. After a cancel, also who to pay back.
+ * Opening Messages never counts as sending.
+ */
+function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; canceled: boolean }) {
+  const tz = ctx.d.group.timezone;
+  const [reason, setReason] = useState('');
+  const body = canceled ? canceledMessage(s, tz, reason) : movedMessage(s, tz, reason);
+  return (
+    <div className="stack">
+      <label className="field">
+        Reason (optional)
+        <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder={canceled ? 'Rain in the forecast' : 'Court swap'} />
+      </label>
+      <SmsDraft to="Group chat" phone={null} openLabel="Text the group" body={body} />
+      {canceled && <RefundList ctx={ctx} s={s} />}
+    </div>
+  );
+}
+
+/** Everyone who paid for a canceled session, with a Refunded checkbox. A record only; no money moves. */
+export function RefundList({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  // Ticks show right away while saving.
+  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const paid = s.roster.filter((r) => r.paymentStatus === 'paid');
+  if (paid.length === 0) return null;
+  const isRefunded = (r: AdminRosterEntry) => pending[r.playerId] ?? !!r.refundedAt;
+  const left = paid.filter((r) => !isRefunded(r)).length;
+  return (
+    <section className="stack refunds" aria-label="Pay back">
+      <h3>Pay back {left > 0 ? `(${left} left)` : '(all done)'}</h3>
+      <ul className="rows">
+        {paid.map((r) => (
+          <li key={r.playerId}>
+            <span className="who">
+              <strong>{r.name}</strong>
+              <span className="small muted">paid {formatPrice(r.paymentAmountCents ?? 0)}</span>
+            </span>
+            <label className="check">
+              <input
+                type="checkbox"
+                checked={isRefunded(r)}
+                disabled={busy}
+                onChange={async (e) => {
+                  const refunded = e.target.checked;
+                  setPending((p) => ({ ...p, [r.playerId]: refunded }));
+                  await run(() => api('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: r.playerId, refunded }), refunded ? 'Refunded' : 'Unmarked');
+                  setPending(({ [r.playerId]: _, ...rest }) => rest);
+                }}
+              />
+              <span>Refunded</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -612,9 +680,12 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
         </Chip>
       </div>
       {s.state.flags.canceled && (
-        <Notice tone="muted" title="Session canceled">
-          Nobody owes for it. Anyone who already paid shows under Refunds on Home.
-        </Notice>
+        <>
+          <Notice tone="muted" title="Session canceled">
+            Nobody owes for it.
+          </Notice>
+          <RefundList ctx={ctx} s={s} />
+        </>
       )}
       <ul className="list">
         {rows.map((r) => (
@@ -907,7 +978,8 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
           () => api('POST', `/api/admin/sessions/${s.id}/decision`, reopening ? { decision: 'reopen' } : { decision: 'cancel', confirm: true }),
           reopening ? 'Session reopened' : 'Session canceled',
         );
-        if (ok) onClose();
+        // After a cancel, go straight to the text for the group and who to pay back.
+        if (ok) (reopening ? onClose() : ctx.open('canceled', s.id));
       }}
       onCancel={onClose}
     />

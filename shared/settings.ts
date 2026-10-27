@@ -6,6 +6,8 @@ export interface GroupSettings {
   pricePerPlayerCents: number; // flat price each confirmed player pays, whether 4 or 6 play
   creditCentsWhenSix: number; // credit each of the first four earns when 6 play; the last two pay price minus this
   lastCallHours: number; // the last-call card starts this many hours before play
+  typicalCourtCostCents: number; // organizer only: court cost used when a session has none entered
+  monthlyMembershipCents: number; // organizer only: the club membership the surplus goes toward
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
@@ -16,6 +18,8 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   pricePerPlayerCents: 1400,
   creditCentsWhenSix: 500,
   lastCallHours: 13,
+  typicalCourtCostCents: 4800,
+  monthlyMembershipCents: 3000,
 };
 
 const LIMITS: Record<keyof GroupSettings, [number, number]> = {
@@ -26,6 +30,8 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   pricePerPlayerCents: [0, 100_00],
   creditCentsWhenSix: [0, 100_00],
   lastCallHours: [1, 48],
+  typicalCourtCostCents: [0, 500_00],
+  monthlyMembershipCents: [0, 1000_00],
 };
 
 export const SETTING_LIMITS = LIMITS;

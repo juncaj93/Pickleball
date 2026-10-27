@@ -119,7 +119,8 @@ describe('organizer Home', () => {
     ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
     const kinds = buildTodo(await dash(ctx)).map((i) => i.kind);
     expect(kinds).toContain('five');
-    expect(kinds).toContain('owed');
+    // On game day the unpaid players show as "Mark paid tonight".
+    expect(kinds.some((k) => k === 'owed' || k === 'tonight')).toBe(true);
   });
 });
 

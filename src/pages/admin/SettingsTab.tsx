@@ -5,9 +5,10 @@ import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
 import { HomeScreenSteps } from '../PlayerHome';
+import { MonthlyMoneyPage } from './MonthlyMoney';
 import type { AdminCtx } from '../Admin';
 
-type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix';
+type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
 type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
@@ -83,7 +84,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const [money, setMoney] = useState<Record<MoneyKey, string>>(() => ({
     pricePerPlayerCents: dollars(g.settings.pricePerPlayerCents),
     creditCentsWhenSix: dollars(g.settings.creditCentsWhenSix),
+    typicalCourtCostCents: dollars(g.settings.typicalCourtCostCents),
+    monthlyMembershipCents: dollars(g.settings.monthlyMembershipCents),
   }));
+  const [moneyPage, setMoneyPage] = useState(false);
   const [numErrors, setNumErrors] = useState<Partial<Record<keyof GroupSettings, string>>>({});
   const [organizerName, setOrganizerName] = useState(g.organizerName ?? '');
   const [venueName, setVenueName] = useState(g.venueName ?? '');
@@ -156,8 +160,26 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     }
   }
 
+  if (moneyPage) return <MonthlyMoneyPage ctx={ctx} onBack={() => setMoneyPage(false)} />;
+
   return (
     <>
+      <section className="card stack" aria-labelledby="money-title">
+        <div className="spread" style={{ alignItems: 'center' }}>
+          <h2 id="money-title">Monthly money</h2>
+          <button
+            className="btn small"
+            onClick={() => {
+              setMoneyPage(true);
+              window.scrollTo(0, 0);
+            }}
+          >
+            Open
+          </button>
+        </div>
+        <p className="small muted">Collected, court costs, credits and your membership. Only you see this.</p>
+      </section>
+
       <section className="card stack" aria-labelledby="link-title">
         <h2 id="link-title">Player link</h2>
         <p className="small muted">
@@ -210,6 +232,21 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           onChange={(v) => setMoney((m) => ({ ...m, creditCentsWhenSix: v }))}
           error={numErrors.creditCentsWhenSix}
         />
+        <fieldset className="private-money">
+          <legend>Only you see these</legend>
+          <MoneyField
+            label="Typical court cost"
+            value={money.typicalCourtCostCents}
+            onChange={(v) => setMoney((m) => ({ ...m, typicalCourtCostCents: v }))}
+            error={numErrors.typicalCourtCostCents}
+          />
+          <MoneyField
+            label="Monthly membership"
+            value={money.monthlyMembershipCents}
+            onChange={(v) => setMoney((m) => ({ ...m, monthlyMembershipCents: v }))}
+            error={numErrors.monthlyMembershipCents}
+          />
+        </fieldset>
         <label className="field">
           Venue name
           <span className="hint">Goes on calendar invites.</span>

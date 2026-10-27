@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
-import { formatPrice, venmoPayUrl } from '../../shared/money';
+import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad } from '../lib';
+import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad, copyText } from '../lib';
 import { TopBar } from '../Shell';
 import { ConfirmDialog, CourtIcon, Empty, SpotPills, ErrorState, Notice, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
@@ -332,24 +332,41 @@ export function HomeScreenSteps() {
   );
 }
 
-function payLink(g: GroupView, cents: number, startsAt: string) {
-  const note = `Pickleball ${formatShortDate(startsAt, g.group.timezone).replace(',', '')}`;
-  return venmoPayUrl(g.group.venmoUrl, cents, note);
-}
-
+/**
+ * Pay with Venmo, with the amount and a note like "Pickleball Tue Nov 3 - Ryan"
+ * filled in when Venmo allows it. When the link can only open the profile,
+ * the note shows under the button with Copy. Opening Venmo never marks anyone paid.
+ */
 function PayButton({ g, cents, startsAt, compact }: { g: GroupView; cents: number; startsAt: string; compact?: boolean }) {
-  const pay = payLink(g, cents, startsAt);
+  const toast = useToast();
+  const note = venmoNote(startsAt, g.group.timezone, g.me?.name);
+  const pay = venmoPayUrl(g.group.venmoUrl, cents, note);
   if (!pay.url) return null;
   return (
-    <a
-      className={compact ? 'btn small pay-btn' : 'btn block'}
-      href={pay.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Pay ${formatPrice(cents)} with Venmo`}
-    >
-      {compact ? 'Pay with Venmo' : `Pay ${formatPrice(cents)} with Venmo`}
-    </a>
+    <>
+      <a
+        className={compact ? 'btn small pay-btn' : 'btn block'}
+        href={pay.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Pay ${formatPrice(cents)} with Venmo`}
+      >
+        {compact ? 'Pay with Venmo' : `Pay ${formatPrice(cents)} with Venmo`}
+      </a>
+      {!pay.prefilled && (
+        <div className="venmo-note">
+          <span className="small">
+            Send {formatPrice(cents)} with the note <strong>{note}</strong>
+          </span>
+          <button
+            className="btn small secondary"
+            onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn't copy the note.", 'error'))}
+          >
+            Copy note
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

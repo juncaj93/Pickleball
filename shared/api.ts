@@ -89,6 +89,7 @@ export interface AdminRosterEntry {
   shareCents: number | null;
   waitlistPosition: number | null;
   promotedAt: string | null;
+  refundedAt: string | null;
   promotionReason: 'made_six' | 'spot_opened' | null;
   promotionNotifiedAt: string | null;
   /** Last two of six. */
@@ -206,4 +207,31 @@ export interface ActionTokenView {
   attendanceConfirmed: boolean;
   valid: boolean;
   invalidReason: string | null;
+}
+
+/** The organizer's private monthly money page. Never sent to players. */
+export interface MonthlyMoney {
+  /** "2026-11" */
+  month: string;
+  /** "November 2026" */
+  label: string;
+  collectedCents: number;
+  courtCostCents: number;
+  creditsOwedCents: number;
+  /** Collected minus court costs minus credits owed. */
+  netCents: number;
+  membershipCents: number;
+  /** "Surplus: $14 toward the $30 membership" or "Short: $8" */
+  bottomLine: string;
+  sessions: {
+    id: string;
+    startsAt: string;
+    endsAt: string;
+    /** played: counted. canceled / upcoming / not_played: shown but not counted. */
+    state: 'played' | 'canceled' | 'upcoming' | 'not_played';
+    collectedCents: number;
+    courtCostCents: number;
+    /** No cost entered on the session, so the typical cost was used. */
+    typicalCost: boolean;
+  }[];
 }

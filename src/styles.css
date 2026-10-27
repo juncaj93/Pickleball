@@ -1596,7 +1596,8 @@ label.field {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: -4px 0 -2px;
+  /* The More button keeps a 44px tap area without making the row taller. */
+  margin: -10px 0 -8px;
 }
 .btn.more-btn {
   min-height: 44px;
@@ -1614,6 +1615,12 @@ label.field {
 }
 .scard .holiday-actions {
   margin-top: 0;
+  gap: 2px 8px;
+}
+.scard .holiday-actions .link-btn {
+  flex: none;
+  padding: 10px 2px;
+  margin: -10px 0;
 }
 .court-line {
   display: flex;
@@ -1771,8 +1778,8 @@ label.field {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .spots li {
-  min-height: 26px;
-  padding: 3px 3px;
+  min-height: 24px;
+  padding: 2px 3px;
   border-radius: 999px;
   border: 1.5px solid var(--ink);
   background: var(--ink);
@@ -1794,4 +1801,83 @@ label.field {
   background: transparent;
   border: 1.5px dashed var(--ink-2);
   opacity: 0.7;
+}
+
+/* Venmo can only open the profile: the note to paste, with Copy. */
+.venmo-note {
+  flex-basis: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink-2);
+}
+.venmo-note strong {
+  color: var(--ink);
+}
+
+/* "Mark paid tonight" stands out on game day. */
+.card.tonight {
+  border: 2px solid var(--ok-edge);
+}
+
+/* Pay back after a cancel. */
+.refunds .rows li {
+  align-items: center;
+}
+.refunds .check {
+  min-height: 44px;
+  margin: 0;
+}
+
+/* Settings: the organizer-only money fields. */
+.private-money {
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.private-money legend {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-2);
+  padding: 0 4px;
+}
+
+/* Monthly money page. */
+.month-picker {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  gap: 8px;
+  align-items: center;
+}
+.month-picker input {
+  min-height: 44px;
+  width: 100%;
+  font: inherit;
+  text-align: center;
+}
+.money-sum {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.money-sum .bottom-line {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+.money-sum.surplus .bottom-line {
+  color: var(--ok-fg);
+}
+.money-sum.short .bottom-line {
+  color: var(--danger-fg);
+}
+.rows.card {
+  padding: 2px 14px;
 }

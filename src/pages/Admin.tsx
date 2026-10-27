@@ -8,7 +8,7 @@ import { TopBar } from '../Shell';
 import { CourtReserveLink, Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
-import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
+import { RefundList, type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, type TodoItem } from './admin/todo';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
@@ -233,10 +233,11 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     }
   }
 
-  if (item.kind === 'owed') {
+  if (item.kind === 'owed' || item.kind === 'tonight') {
+    const label = item.kind === 'tonight' ? 'Mark paid tonight' : 'Who owes you';
     return (
-      <article className="card stack" aria-label="Who owes you">
-        <h3>Who owes you</h3>
+      <article className={`card stack${item.kind === 'tonight' ? ' tonight' : ''}`} aria-label={label}>
+        <h3>{label}</h3>
         <ul className="rows">
           {item.rows.map((r) => (
             <li key={`${r.session.id}-${r.playerId}`}>
@@ -271,6 +272,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     checkin: 'Check-in texts due',
     daybefore: `${formatShortDate(s.startsAt, tz)}: ${countSummary(s.confirmedCount)}`,
     lastcall: `Last call, ${formatShortDate(s.startsAt, tz)}: ${s.confirmedCount} in`,
+    refund: 'Pay back',
   }[item.kind];
 
   return (
@@ -280,6 +282,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         <div className="small muted">{when(s, tz)}</div>
       </div>
       {item.kind === 'five' && <FivePanel ctx={ctx} s={s} />}
+      {item.kind === 'refund' && <RefundList ctx={ctx} s={s} />}
       {item.kind === 'tell' &&
         s.roster
           .filter((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt)
