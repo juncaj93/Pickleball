@@ -69,6 +69,11 @@ export interface GroupView {
     discount: boolean;
     reminder: boolean;
   }[];
+  /**
+   * What to pay now, for the card at the top of the screen: owed sessions
+   * whose game day has reached 8:00 AM. Nothing before that.
+   */
+  payDue: GroupView['owed'];
   /** Credit waiting for a future session they haven't signed up for yet. */
   creditBalanceCents: number;
   /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */

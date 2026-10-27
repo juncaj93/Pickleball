@@ -122,6 +122,7 @@ export function PlayerHome({
 
         {g && !pickName && (
           <>
+            {g.payDue.length > 0 && <PayCard g={g} />}
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
@@ -333,40 +334,68 @@ export function HomeScreenSteps() {
 }
 
 /**
- * Pay with Venmo, with the amount and a note like "Pickleball Tue Nov 3 - Ryan"
- * filled in when Venmo allows it. When the link can only open the profile,
- * the note shows under the button with Copy. Opening Venmo never marks anyone paid.
+ * Game day's payment card, at the very top: from 8:00 AM on game day until
+ * the organizer marks it paid. Several unpaid sessions combine into one total
+ * with one Venmo button. The button fills in the amount and a note like
+ * "Pickleball Tue Nov 3 - Ryan" when Venmo allows it; otherwise the note shows
+ * with Copy. Opening Venmo never marks anyone paid.
  */
-function PayButton({ g, cents, startsAt, compact }: { g: GroupView; cents: number; startsAt: string; compact?: boolean }) {
+function PayCard({ g }: { g: GroupView }) {
   const toast = useToast();
-  const note = venmoNote(startsAt, g.group.timezone, g.me?.name);
-  const pay = venmoPayUrl(g.group.venmoUrl, cents, note);
-  if (!pay.url) return null;
+  const tz = g.group.timezone;
+  const due = g.payDue;
+  const total = due.reduce((sum, o) => sum + o.amountCents, 0);
+  const note = venmoNote(
+    due.map((o) => o.startsAt),
+    tz,
+    g.me?.name,
+  );
+  const pay = venmoPayUrl(g.group.venmoUrl, total, note);
+  const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
+  const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
+  const title =
+    due.length > 1 ? `You owe ${formatPrice(total)} total` : tonight ? `Tonight: you owe ${formatPrice(total)}` : `You owe ${formatPrice(total)} for ${formatShortDate(due[0].startsAt, tz)}`;
+  const detail = (o: (typeof due)[number]) =>
+    [o.discount ? '6-person discount' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
+  const who = g.group.organizerName ?? 'The organizer';
   return (
-    <>
-      <a
-        className={compact ? 'btn small pay-btn' : 'btn block'}
-        href={pay.url}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Pay ${formatPrice(cents)} with Venmo`}
-      >
-        {compact ? 'Pay with Venmo' : `Pay ${formatPrice(cents)} with Venmo`}
-      </a>
-      {!pay.prefilled && (
+    <section className="card pay-card" aria-label="Payment">
+      <h2>{title}</h2>
+      {due.length > 1 ? (
+        <ul className="pay-list">
+          {due.map((o) => (
+            <li key={o.sessionId}>
+              {formatShortDate(o.startsAt, tz)}: {formatPrice(o.amountCents)}
+              {detail(o) && <span className="muted"> ({detail(o)})</span>}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        detail(due[0]) && (
+          <p className="small">
+            {formatPrice(due[0].amountCents)}, {detail(due[0])}
+          </p>
+        )
+      )}
+      {pay.url ? (
+        <a className="btn block big" href={pay.url} target="_blank" rel="noopener noreferrer" aria-label={`Pay ${formatPrice(total)} with Venmo`}>
+          Pay with Venmo
+        </a>
+      ) : (
+        <p className="small muted">Pay {who} however you usually do.</p>
+      )}
+      {pay.url && !pay.prefilled && (
         <div className="venmo-note">
           <span className="small">
-            Send {formatPrice(cents)} with the note <strong>{note}</strong>
+            Send {formatPrice(total)} with the note <strong>{note}</strong>
           </span>
-          <button
-            className="btn small secondary"
-            onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn't copy the note.", 'error'))}
-          >
+          <button className="btn small secondary" onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn't copy the note.", 'error'))}>
             Copy note
           </button>
         </div>
       )}
-    </>
+      {due.some((o) => o.reminder) && <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>}
+    </section>
   );
 }
 
@@ -395,14 +424,12 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   }
 
   if (joined) {
-    const inNow = joined.result === 'confirmed' || joined.result === 'already_confirmed';
     return (
       <section className="card stack suggest" aria-label="Your answer">
         <h2>{joinedText(joined)}</h2>
         <p className="muted small">
           {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
         </p>
-        {inNow && joined.result !== 'standby' && <PayButton g={g} cents={g.group.priceCents} startsAt={s.startsAt} />}
         <button className="btn secondary block" onClick={() => void onChanged()}>
           Done
         </button>
@@ -489,8 +516,6 @@ function ScheduleRow({
   const waiting = mine?.status === 'waitlisted';
   const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
-  const owed = g.owed.find((o) => o.sessionId === s.id);
-  const who = g.group.organizerName ?? 'The organizer';
 
   async function run(path: string, label: (data: any) => string) {
     setBusy(true);
@@ -568,25 +593,6 @@ function ScheduleRow({
           </div>
         )}
 
-        {inSession && !s.canceled && (
-          <div className="money" aria-label="Money for this session">
-            {mine.paymentStatus === 'paid' ? (
-              <span className="paid">✓ Paid</span>
-            ) : mine.oweCents > 0 ? (
-              <>
-                <div className="owe-line">
-                  <span>
-                    <strong>You owe {formatPrice(mine.oweCents)}</strong>
-                    {mine.creditCents > 0 && <span className="small muted"> (after {formatPrice(mine.creditCents)} credit)</span>}
-                    {mine.discount && <span className="small muted"> · 6-person discount</span>}
-                  </span>
-                  <PayButton g={g} cents={mine.oweCents} startsAt={s.startsAt} compact />
-                </div>
-                {owed?.reminder && <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>}
-              </>
-            ) : null}
-          </div>
-        )}
         {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
 
         {inSession && open && (

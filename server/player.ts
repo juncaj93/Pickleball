@@ -2,7 +2,8 @@ import type { GroupView } from '../shared/api';
 import { sessionCalendar } from '../shared/calendar';
 import { DEFAULT_VENUE_NAME } from '../shared/settings';
 import { joinOutcome } from '../shared/spots';
-import { localParts } from '../shared/time';
+import { localParts, zonedTimeToUtc } from '../shared/time';
+import { PAY_FROM_HOUR } from '../shared/money';
 import { clearCookie, type Ctx, PLAYER_COOKIE } from './context';
 import { currentPlayerId, forgetPlayer, rememberPlayer, requireAdmin, requireGroupKey } from './auth';
 import { HttpError } from './http';
@@ -143,14 +144,17 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     me: me ? { id: me.id, name: me.display_name } : null,
     viewingAs: !!viewAsName,
     now: ctx.nowIso,
-    // Upcoming sessions, plus played ones this player still owes for, so
-    // money lives in the same row as the session.
+    // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions
-      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs || owed.some((o) => o.sessionId === s.id))
+      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
       .map((s) =>
         playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, me ? (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) : 0),
       ),
     owed,
+    payDue: owed.filter((o) => {
+      const p = localParts(Date.parse(o.startsAt), tz);
+      return ctx.nowMs >= zonedTimeToUtc(p.year, p.month, p.day, PAY_FROM_HOUR, 0, tz);
+    }),
     creditBalanceCents,
     suggestion,
   };

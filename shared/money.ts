@@ -41,8 +41,17 @@ export function venmoPayUrl(profileUrl: string | null, cents: number, note: stri
   };
 }
 
-/** The Venmo note: "Pickleball Tue Nov 3 - Ryan". Date in the group's time zone, no commas. */
-export function venmoNote(startsAt: string, tz: string, name?: string | null): string {
-  const date = new Date(startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).replace(/,/g, '');
-  return name ? `Pickleball ${date} - ${name}` : `Pickleball ${date}`;
+/**
+ * The Venmo note: "Pickleball Tue Nov 3 - Ryan", or for several sessions
+ * "Pickleball Tue Nov 3, Thu Nov 5 - Ryan". Dates in the group's time zone.
+ */
+export function venmoNote(startsAt: string | string[], tz: string, name?: string | null): string {
+  const dates = (Array.isArray(startsAt) ? startsAt : [startsAt]).map((iso) =>
+    new Date(iso).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).replace(/,/g, ''),
+  );
+  const text = `Pickleball ${dates.join(', ')}`;
+  return name ? `${text} - ${name}` : text;
 }
+
+/** Payment is asked for from 8:00 AM on game day, in the group's time zone. */
+export const PAY_FROM_HOUR = 8;
