@@ -24,6 +24,8 @@
   --holiday-fg: #5b2a86;
   --holiday-bg: #efe6f8;
   --ok-edge: #1f8a4c;
+  --ext-bg: #1f5f7a;
+  --ext-fg: #ffffff;
   --pop-bg: #e6f3ea;
   --pop-fg: #14472f;
   --pop-line: #b9dcc5;
@@ -67,6 +69,8 @@
     --holiday-fg: #d9bdf5;
     --holiday-bg: #2e2140;
     --ok-edge: #4cc27a;
+    --ext-bg: #2a7192;
+    --ext-fg: #ffffff;
     --pop-bg: #1e3a2b;
     --pop-fg: #d6f2e0;
     --pop-line: #2f5a43;
@@ -105,6 +109,8 @@
   --holiday-fg: #d9bdf5;
   --holiday-bg: #2e2140;
   --ok-edge: #4cc27a;
+  --ext-bg: #2a7192;
+  --ext-fg: #ffffff;
   --pop-bg: #1e3a2b;
   --pop-fg: #d6f2e0;
   --pop-line: #2f5a43;
@@ -1773,4 +1779,17 @@ label.field {
   flex: 1;
   height: 1px;
   background: var(--line);
+}
+
+/* Links that leave for CourtReserve: their own blue-teal, with a small arrow. */
+.btn.external {
+  background: var(--ext-bg);
+  color: var(--ext-fg);
+  border-color: transparent;
+  gap: 4px;
+}
+.btn.external .ext-icon {
+  width: 15px;
+  height: 15px;
+  flex: none;
 }

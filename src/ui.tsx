@@ -463,3 +463,19 @@ export function PlayersLine({
     </div>
   );
 }
+
+/**
+ * A link to CourtReserve. Its own blue-teal color and a small arrow show it
+ * leaves this site; it always opens in a new tab.
+ */
+export function CourtReserveLink({ href, children, small }: { href: string; children: ReactNode; small?: boolean }) {
+  return (
+    <a className={`btn external${small ? ' small' : ''}`} href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+      <svg {...ICON} className="ext-icon" strokeWidth={2.2}>
+        <path d="M8 16 16.5 7.5M9.5 7.5h7v7" />
+      </svg>
+      <span className="sr-only"> (opens CourtReserve)</span>
+    </a>
+  );
+}
