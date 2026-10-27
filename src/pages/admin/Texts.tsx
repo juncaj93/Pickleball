@@ -38,13 +38,14 @@ export function DayBeforeTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView 
   const [showOther, setShowOther] = useState(false);
   const inNow = recipients(ctx.d, s, 'in');
   const notIn = recipients(ctx.d, s, 'notIn');
+  const short = shortOfPlayers(s);
+  // The draft that leads is the card's one green button; the other one, once opened, is gray.
   const toPlayers = (
-    <SmsDraft to="Players who are in" phone={null} phones={inNow.phones} missing={inNow.missing} openLabel="Text the players who are in" body={dayBeforePlayersMessage(s, tz, site)} />
+    <SmsDraft quiet={short} to="Players who are in" phone={null} phones={inNow.phones} missing={inNow.missing} openLabel="Text the players who are in" body={dayBeforePlayersMessage(s, tz, site)} />
   );
   const needMore = (
-    <SmsDraft to="Everyone not in yet" phone={null} phones={notIn.phones} missing={notIn.missing} openLabel="Text the group: need more players" body={dayBeforeMessage(s, tz, s.confirmedCount, site)} />
+    <SmsDraft quiet={!short} to="Everyone not in yet" phone={null} phones={notIn.phones} missing={notIn.missing} openLabel="Text the group: need more players" body={dayBeforeMessage(s, tz, s.confirmedCount, site)} />
   );
-  const short = shortOfPlayers(s);
   return (
     <div className="stack" style={{ gap: 8 }}>
       {short ? needMore : toPlayers}
