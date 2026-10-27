@@ -2513,7 +2513,7 @@ dialog.sheet::backdrop {
 .btn.small.me-in::before {
   content: '';
   position: absolute;
-  inset: -5px -2px;
+  inset: -7px -2px;
 }
 .me-state {
   display: inline-flex;

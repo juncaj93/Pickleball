@@ -2282,9 +2282,9 @@ async function main() {
       if (await all.count()) await all.click();
       const card = sessionCards(admin).filter({ hasText: '0 of 4 in' }).first();
       const count = await card.locator('.players-count').boundingBox();
-      const spot = await card.locator('.spots li').first().boundingBox();
+      const spot = await card.locator('.players-line .dot').first().boundingBox();
       assert(Math.abs(count.y + count.height / 2 - (spot.y + spot.height / 2)) < 6, 'count and spots should share a line');
-      const open = card.locator('.spots li.open');
+      const open = card.locator('.players-line .dot:not(.in):not(.me)');
       if (await open.count()) {
         const o = await open.first().boundingBox();
         assert(o.width <= 16 && o.height <= 16, `open spot should be a small circle (${o.width}x${o.height})`);
