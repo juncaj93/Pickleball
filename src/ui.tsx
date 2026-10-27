@@ -533,6 +533,7 @@ export function PlayersLine({
   waiting,
   waitingWord = 'on the waitlist',
   extra,
+  after,
 }: {
   /** Confirmed players, in sign-up order. */
   names: string[];
@@ -540,6 +541,8 @@ export function PlayersLine({
   waitingWord?: string;
   /** A short note at the end, like "2/4 paid". */
   extra?: string | null;
+  /** Something at the right end of the last line (the organizer's own I'm in). */
+  after?: ReactNode;
 }) {
   return (
     <div className="players players-line">
@@ -553,6 +556,7 @@ export function PlayersLine({
         </span>
       )}
       {extra && <span className="players-wait">· {extra}</span>}
+      {after && <span className="players-after">{after}</span>}
     </div>
   );
 }

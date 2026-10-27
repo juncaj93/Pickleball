@@ -2651,7 +2651,7 @@ section[aria-labelledby='sessions-title'] > .week-break {
   margin: 4px 0 -2px;
 }
 
-/* Session cards answer to their own width (for the calendar link below). */
+/* Session cards answer to their own width (for "Add to calendar" below). */
 .scard {
   container: scard / inline-size;
 }
@@ -2717,22 +2717,20 @@ section[aria-labelledby='sessions-title'] > .week-break {
   flex-wrap: wrap;
   margin: 2px 0 6px;
 }
-/* The players row: "0 of 4 in" on the left, the organizer's own I'm in on the right. */
-.players-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 8px;
-}
-.players-row > .players-line {
-  min-width: 0;
+/* The organizer's own I'm in: at the right end of the players line, after the pills. */
+.players-after {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
 }
 .btn.small.me-in {
   position: relative;
+  flex: none;
   min-height: 28px;
-  padding: 0 12px;
-  font-size: 0.82rem;
+  padding: 0 9px;
+  font-size: 0.78rem;
   border-radius: 999px;
+  margin-left: auto;
 }
 .btn.small.me-in::before {
   content: '';
@@ -2741,6 +2739,8 @@ section[aria-labelledby='sessions-title'] > .week-break {
 }
 .me-state {
   display: inline-flex;
+  flex: none;
+  margin-left: auto;
   min-height: 28px;
   align-items: center;
   gap: 6px;
@@ -2790,4 +2790,30 @@ section[aria-labelledby='sessions-title'] > .week-break {
 .text-who {
   font-size: 0.75rem;
   color: var(--ink-2);
+}
+
+/* The time row holds the time, the organizer's own I'm in, and the gear.
+   Once in, "You're in · Out" takes its own small line under the time. */
+.scard-top {
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.scard-top .sched-time {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.scard-top .btn.me-in {
+  order: 1;
+}
+.scard-top .card-icons {
+  order: 2;
+}
+.scard-top .me-state {
+  order: 3;
+  flex-basis: 100%;
+  justify-content: flex-end;
+  margin-top: -6px;
 }

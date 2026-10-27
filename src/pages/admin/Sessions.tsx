@@ -100,9 +100,10 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               {formatShortDate(s.startsAt, tz)}
             </h2>
             <span className="sched-time">
-              {formatTimeRange(s.startsAt, s.endsAt, tz)}
+              <span className="nowrap">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
               {s.extra && <span className="extra-tag">Extra game</span>}
             </span>
+            {live && <OrganizerInOut ctx={ctx} s={s} />}
             <div className="card-icons">
               <button
                 className="icon-round"
@@ -148,17 +149,14 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             </div>
           )}
           {!s.state.flags.canceled && (
-            <div className="players-row">
-              <PlayersLine
-                names={s.roster
-                  .filter((r) => r.status === 'confirmed')
-                  .sort((a, b) => (a.confirmedAt ?? '').localeCompare(b.confirmedAt ?? ''))
-                  .map((r) => r.name)}
-                waiting={s.waitlistCount}
-                waitingWord={courtWait ? 'on standby' : 'waiting'}
-              />
-              {live && <OrganizerInOut ctx={ctx} s={s} />}
-            </div>
+            <PlayersLine
+              names={s.roster
+                .filter((r) => r.status === 'confirmed')
+                .sort((a, b) => (a.confirmedAt ?? '').localeCompare(b.confirmedAt ?? ''))
+                .map((r) => r.name)}
+              waiting={s.waitlistCount}
+              waitingWord={courtWait ? 'on standby' : 'waiting'}
+            />
           )}
         </div>
       </div>

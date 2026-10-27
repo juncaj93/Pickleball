@@ -38,7 +38,7 @@ async function check(name, fn) {
   } catch (err) {
     failed++;
     failures.push(name);
-    console.log(`  ✗ ${name}\n      ${String(err && err.message ? err.message : err).split('\n')[0]}`);
+    console.log(`  ✗ ${name}\n      ${String(err && err.message ? err.message : err).replace(/\s*\n\s*/g, ' ⏎ ').slice(0, 600)}`);
   }
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { activityText } from '../../../shared/activity';
 import type { ActivityEntry, ActivityPage, AdminSessionView } from '../../../shared/api';
 import { formatDateTime, formatShortDate, formatTimeRange } from '../../../shared/time';
-import { api, ApiError, useNow } from '../../lib';
+import { api, ApiError } from '../../lib';
 import { Empty, ErrorState, Sheet, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
@@ -41,7 +41,8 @@ function moneyStatus(s: AdminSessionView): { text: string; tone: 'ok' | 'warn' }
 }
 
 function PastSessions({ ctx }: { ctx: AdminCtx }) {
-  const nowMs = useNow();
+  // The server's time, so the list matches what the server counts as played.
+  const nowMs = Date.parse(ctx.d.now);
   const tz = ctx.d.group.timezone;
   const [openId, setOpenId] = useState<string | null>(null);
   const past = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) <= nowMs).reverse();
