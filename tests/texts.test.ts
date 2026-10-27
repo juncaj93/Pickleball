@@ -102,3 +102,13 @@ describe('texting several people at once', () => {
     expect((await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((v: any) => v.id === sx.id).moved).toBe(true);
   });
 });
+
+describe('who each choice goes to', () => {
+  it('"Pick the chat" means no numbers and no missing names', async () => {
+    const { recipients, audienceLine } = await import('../src/pages/admin/todo');
+    const d = { me: null, players: [{ id: 'a', name: 'A', phone: null, isActive: true }] } as any;
+    expect(recipients(d, { roster: [] } as any, 'chat')).toEqual({ phones: [], missing: [], count: 0 });
+    expect(audienceLine('chat', 0)).toBe('Pick the chat');
+    expect(audienceLine('in', 5)).toBe('5 who are in');
+  });
+});

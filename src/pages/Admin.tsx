@@ -636,12 +636,9 @@ function LastCallDraft({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   );
 }
 
-/** A spot opened: tell everyone who isn't in. */
+/** A spot opened: Messages opens with just the words, to post in the group chat. */
 function SpotOpenDraft({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const r = recipients(ctx.d, s, 'notIn');
-  return (
-    <SmsDraft to="Everyone not in yet" phone={null} phones={r.phones} missing={r.missing} openLabel="Text the group: spot open" body={spotOpenMessage(s, ctx.d.group.timezone, ctx.d.group.playerLink)} />
-  );
+  return <SmsDraft to="Group chat" phone={null} openLabel="Text the group: spot open" body={spotOpenMessage(s, ctx.d.group.timezone, ctx.d.group.playerLink)} />;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');

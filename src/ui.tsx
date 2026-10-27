@@ -286,7 +286,7 @@ export function SmsDraft({
           <strong>{to}</strong>
           <span className="muted small">
             {' · '}
-            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'no numbers: pick a group chat') : phone ? formatPhone(phone) : 'pick who in Messages'}
+            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'no numbers: pick a group chat') : phone ? formatPhone(phone) : 'pick the chat in Messages'}
           </span>
         </span>
         {opened && <Chip tone="info">Message ready</Chip>}

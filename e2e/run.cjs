@@ -975,13 +975,13 @@ async function main() {
       await opts.waitFor({ state: 'detached' });
     });
 
-    await check('Share the game: the text matches the court, links straight to the session, and goes to everyone', async () => {
+    await check('Share the game: the text matches the court, links straight to the session, and opens with no numbers (pick the chat)', async () => {
       const card = sessionCards(admin).first();
       const id = (await card.getAttribute('id')).replace('session-', '');
       const menu = await textMenu(card);
       const href = await menu.locator('.text-row[data-text="share"] a').getAttribute('href');
       const { body, to } = smsOf(href);
-      assert(to.length === 6, `share should go to all 6 numbers, went to ${to.length}`);
+      assert(to.length === 0, `share should open with no numbers, had ${to.length}`);
       const kind = await card.getAttribute('data-court');
       const re =
         kind === 'booked'
@@ -1014,11 +1014,12 @@ async function main() {
       }
     });
 
-    await check('"Text" opens the choices; each opens Messages with the right people and words; the poll has the date and $14', async () => {
+    await check('"Text" opens the choices (no Poll); Share and Spot open pick the chat; Day before and Last call go to the players in', async () => {
       const card = sessionCards(admin).first();
       const menu = await textMenu(card);
       const names = (await menu.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
-      for (const want of ['Share the game', 'Poll', 'Day before', 'Last call']) assert(names.includes(want), `choices missing ${want}: ${names}`);
+      for (const want of ['Share the game', 'Day before', 'Last call']) assert(names.includes(want), `choices missing ${want}: ${names}`);
+      assert(!names.includes('Poll'), 'Poll is gone');
       assert(!names.includes('Canceled'), 'a live session has no Canceled text');
       const spots = await card.locator('.spots li.open').count();
       assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
@@ -1028,17 +1029,16 @@ async function main() {
         const link = row.locator('a.text-choice');
         const { to } = smsOf(await link.getAttribute('href'));
         const who = (await row.locator('.text-who').innerText()).trim();
-        if (id === 'share' || id === 'poll') assert(who === 'Everyone (6)' && to.length === 6, `${id} goes to everyone: ${who}, ${to.length}`);
+        if (id === 'share' || id === 'spot') {
+          assert(who === 'Pick the chat' && to.length === 0, `${id}: "${who}", ${to.length} numbers`);
+          assert((await row.locator('.missing-numbers').count()) === 0, `${id}: no missing-numbers note`);
+        }
         if (id === 'daybefore' || id === 'lastcall') assert(who === `${inCount} who ${inCount === 1 ? 'is' : 'are'} in` && to.length === inCount, `${id} goes to the ${inCount} in: ${who}, ${to.length}`);
-        if (id === 'spot') assert(/^\d+ not in yet$/.test(who), `spot open goes to everyone not in: ${who}`);
         assert((await link.boundingBox()).height >= 44, 'choices 44px+');
       }
-      const poll = smsOf(await menu.locator('.text-row[data-text="poll"] a').getAttribute('href')).body;
-      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. \$14 each\. In or out\? \S+$/.test(poll), `poll text was: ${poll}`);
-      assert(!poll.includes('48') && !/https?:/.test(poll), 'no court cost and only the plain address');
       // Tapping a choice opens Messages and says it's ready, never "sent".
-      await menu.locator('.text-row[data-text="poll"] a').evaluate((a) => a.addEventListener('click', (e) => e.preventDefault(), { once: true }));
-      await menu.locator('.text-row[data-text="poll"] a').click();
+      await menu.locator('.text-row[data-text="share"] a').evaluate((a) => a.addEventListener('click', (e) => e.preventDefault(), { once: true }));
+      await menu.locator('.text-row[data-text="share"] a').click();
       await menu.getByText('Message ready', { exact: true }).waitFor();
       assert(!/\bsent\b/i.test(await menu.innerText()), 'never say sent');
       await admin.screenshot({ path: path.join(SHOTS, 'texts-menu.png') });
@@ -1619,7 +1619,7 @@ async function main() {
     });
 
     console.log('Court waitlist');
-    await check('court waitlist: players go on standby; poll text has the link; Court opened moves them in', async () => {
+    await check('court waitlist: players go on standby; the share text says waitlist; Court opened moves them in', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
       await more(card);
@@ -1643,9 +1643,7 @@ async function main() {
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
       assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test(shareBody), `waitlist share text: ${shareBody}`);
-      const bubble = smsOf(await texts.locator('.text-row[data-text="poll"] a').getAttribute('href')).body;
-      const expectPoll = `Pickleball ${day.replace(',', '')}, 8:00 to 10:00 PM. I'm on the court waitlist. Want in if it opens? ${SITE}`;
-      assert(bubble === expectPoll, `court-waitlist poll was: ${bubble}`);
+      assert((await texts.locator('.text-row[data-text="poll"]').count()) === 0, 'no Poll');
       await closeOptions(card);
 
       for (const name of ['Casey', 'Devon']) {
@@ -1968,7 +1966,8 @@ async function main() {
         assert(/^A spot opened for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to grab it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
         const spotLink = card.getByRole('link', { name: 'Text the group: spot open' });
         const spot = smsOf(await spotLink.getAttribute('href'));
-        assert(spot.body === bubble && spot.to.length >= 1, 'spot open goes to the people not in');
+        assert(spot.body === bubble && spot.to.length === 0, 'spot open opens with no numbers, to pick the chat');
+        assert((await card.locator('.missing-numbers').count()) === 0, 'no missing-numbers note on spot open');
         assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the spot-open card');
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
@@ -3017,7 +3016,12 @@ async function main() {
           const link = row.locator('a.text-choice');
           assert((await link.getAttribute('href')).startsWith('sms:'), 'each choice opens Messages');
           const who = (await row.locator('.text-who').innerText()).trim();
-          assert(/^(Everyone \(\d+\)|\d+ who (is|are|was|were) in|\d+ not in yet)$/.test(who), `who line was "${who}"`);
+          assert(/^(Pick the chat|\d+ who (is|are|was|were) in)$/.test(who), `who line was "${who}"`);
+          const tid = await row.getAttribute('data-text');
+          const { to } = smsOf(await link.getAttribute('href'));
+          if (tid === 'share' || tid === 'spot') assert(to.length === 0 && who === 'Pick the chat' && (await row.locator('.missing-numbers').count()) === 0, `${tid}: should pick the chat`);
+          else assert(to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).split(',').filter((x) => x.trim()).length) === Number(who.match(/^\d+/)[0]), `${tid}: numbers plus missing should match "${who}"`);
+          assert(tid !== 'poll', 'no Poll');
         }
         const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
         assert(rep.problems.length === 0, `cards: ${rep.problems.slice(0, 3).join(' | ')}`);
