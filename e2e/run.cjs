@@ -314,9 +314,10 @@ async function main() {
       const dropped = admin.getByRole('article', { name: /Was 6, now 5: discount and credits are off/ });
       await dropped.getByText(/now owes \$14/).first().waitFor();
       await players.Frankie.reload();
+      await players.Frankie.getByRole('link', { name: 'Pay $14 with Venmo' }).first().waitFor();
       assert((await firstCard(players.Frankie).getByText('6-person discount').count()) === 0, 'discount text should be gone');
-      assert((await players.Frankie.getByRole('link', { name: 'Pay $14 with Venmo' }).count()) > 0, 'Frankie should be back to $14');
       await players.Alex.reload();
+      await firstCard(players.Alex).locator('.roster li.in').first().waitFor();
       assert((await firstCard(players.Alex).getByText(/credit toward your next session/).count()) === 0, 'credit text should be gone');
       await five.getByRole('button', { name: /Back to 4/ }).click();
       await admin.locator('.toast', { hasText: '4 going' }).waitFor();
@@ -711,9 +712,16 @@ async function main() {
       await admin.getByRole('button', { name: 'Save settings' }).click();
       await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
       await tab(admin, 'Home').click();
+      await admin
+        .waitForFunction((was) => {
+          const h = document.querySelector('section[aria-labelledby="sessions-title"] article h2');
+          return h && h.textContent !== was;
+        }, firstShown, { timeout: 10000 })
+        .catch(() => {});
       const nowFirst = await sessionCards(admin).first().locator('h2').innerText();
       assert(nowFirst !== firstShown, `Home still starts at ${firstShown}`);
       await players.Alex.reload();
+      await firstCard(players.Alex).locator('h2').waitFor();
       const playerFirst = await firstCard(players.Alex).locator('h2').innerText();
       assert(!playerFirst.includes(firstShown.split(', ')[1]), `players still see ${firstShown}`);
       // Put it back for the rest of the checks.

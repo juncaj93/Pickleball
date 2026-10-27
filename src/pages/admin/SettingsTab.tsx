@@ -125,8 +125,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         venueAddress: venueAddress || null,
         firstSessionDate: firstDate || null,
       });
-      toast('Settings saved');
       await ctx.reload();
+      toast('Settings saved');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save.');
     } finally {
