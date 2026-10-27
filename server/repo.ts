@@ -23,6 +23,8 @@ export interface GroupRow {
   open_access: number;
   group_word_hash: string | null;
   calendar_token: string | null;
+  /** The organizer's own player record (made the first time they tap I'm in). */
+  organizer_player_id: string | null;
 }
 
 export interface PlayerRow {
@@ -67,6 +69,9 @@ export interface SessionRow {
   holiday_hours_ok_at: string | null;
   day_before_done_at: string | null;
   last_call_done_at: string | null;
+  /** 1 for a one-off game the organizer added. */
+  is_extra: number;
+  note: string | null;
   updated_at: string;
 }
 
@@ -82,6 +87,8 @@ export interface RosterRow {
   attendance_confirmed_at: string | null;
   payment_status: PaymentStatus;
   paid_at: string | null;
+  /** The player marked it paid themselves ("I paid"). */
+  self_paid_at: string | null;
   payment_amount_cents: number | null;
   promoted_at: string | null;
   promotion_reason: 'made_six' | 'spot_opened' | null;

@@ -14,16 +14,13 @@ import {
   smsHref,
   spotOpenMessage,
 } from '../../../shared/messages';
-import { DEFAULT_VENUE_NAME } from '../../../shared/settings';
-import { copyText, isIOS } from '../../lib';
-import { SmsDraft, useToast } from '../../ui';
+import { isIOS } from '../../lib';
+import { MessageIcon, SmsDraft } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { playersIn, shortOfPlayers } from './todo';
+import { type Audience, audienceLine, recipients, shortOfPlayers } from './todo';
 
-// Every text the site prepares for one session. Each opens Messages with
-// Copy as a backup; nothing here ever sends or says "sent".
-
-const venueOf = (ctx: AdminCtx) => ctx.d.group.venueName || DEFAULT_VENUE_NAME;
+// Every text the site prepares for one session. Each opens Messages with the
+// words and the numbers filled in; nothing here ever sends or says "sent".
 
 /** "Share the game": worded for where the court stands, linking straight to the session. */
 export function shareGameText(ctx: AdminCtx, s: AdminSessionView): string {
@@ -32,28 +29,23 @@ export function shareGameText(ctx: AdminCtx, s: AdminSessionView): string {
   return shareGameMessage(s, tz, kind === 'booked' ? 'booked' : kind === 'waitlist' ? 'waitlist' : 'open', sessionLink(ctx.d.group.playerLink, s.id));
 }
 
-
 /**
- * The day-before card: the main button texts the players who are in and
- * gives them a link to back out. When we're short of 4 or 6, the "need more
- * players" group text is the main one instead; the other is one tap away.
+ * The day-before card: the main button texts the players who are in. When
+ * we're short of 4 or 6, the "need more players" text (to everyone not in)
+ * is the main one instead; the other is one tap away.
  */
 export function DayBeforeTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
-  const link = sessionLink(ctx.d.group.playerLink, s.id);
+  const site = ctx.d.group.playerLink;
   const [showOther, setShowOther] = useState(false);
-  const { phones, missing } = playersIn(s);
+  const inNow = recipients(ctx.d, s, 'in');
+  const notIn = recipients(ctx.d, s, 'notIn');
   const toPlayers = (
-    <SmsDraft
-      to="Players who are in"
-      phone={null}
-      phones={phones}
-      missing={missing}
-      openLabel="Text the players who are in"
-      body={dayBeforePlayersMessage(s, tz, venueOf(ctx), link)}
-    />
+    <SmsDraft to="Players who are in" phone={null} phones={inNow.phones} missing={inNow.missing} openLabel="Text the players who are in" body={dayBeforePlayersMessage(s, tz, site)} />
   );
-  const needMore = <SmsDraft to="Group chat" phone={null} openLabel="Text the group: need more players" body={dayBeforeMessage(s, tz, s.confirmedCount, link)} />;
+  const needMore = (
+    <SmsDraft to="Everyone not in yet" phone={null} phones={notIn.phones} missing={notIn.missing} openLabel="Text the group: need more players" body={dayBeforeMessage(s, tz, s.confirmedCount, site)} />
+  );
   const short = shortOfPlayers(s);
   return (
     <div className="stack" style={{ gap: 8 }}>
@@ -73,77 +65,69 @@ export function DayBeforeTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView 
   );
 }
 
-interface TextItem {
-  id: string;
+export interface TextChoice {
+  id: 'share' | 'poll' | 'daybefore' | 'lastcall' | 'spot' | 'canceled' | 'moved';
   label: string;
   body: string;
-  phones?: string[];
-  missing?: string[];
+  who: Audience;
 }
 
-/** The texts for the phone icon, in the order they're usually needed. */
-export function sessionTexts(ctx: AdminCtx, s: AdminSessionView): TextItem[] {
+/** The choices under a card's "Text" button: only the ones that make sense for this session. */
+export function sessionTexts(ctx: AdminCtx, s: AdminSessionView): TextChoice[] {
   const tz = ctx.d.group.timezone;
-  const link = sessionLink(ctx.d.group.playerLink, s.id);
-  const items: TextItem[] = [];
+  const site = ctx.d.group.playerLink;
+  const items: TextChoice[] = [];
   const live = !s.state.flags.canceled && !s.state.flags.started;
-  if (s.state.flags.canceled) items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz) });
-  if (live && s.moved) items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, tz) });
+  if (s.state.flags.canceled) items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz), who: 'wereIn' });
   if (live) {
-    items.push({ id: 'share', label: 'Share the game', body: shareGameText(ctx, s) });
+    if (s.moved) items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, tz), who: 'in' });
+    items.push({ id: 'share', label: 'Share the game', body: shareGameText(ctx, s), who: 'everyone' });
     items.push({
       id: 'poll',
       label: 'Poll',
-      body: s.courtState === 'waitlist' ? courtWaitlistPollMessage(s, tz, link) : pollMessage(s, tz, venueOf(ctx), ctx.d.group.settings.pricePerPlayerCents),
+      body: s.courtState === 'waitlist' ? courtWaitlistPollMessage(s, tz, site) : pollMessage(s, tz, ctx.d.group.settings.pricePerPlayerCents, site),
+      who: 'everyone',
     });
-    const { phones, missing } = playersIn(s);
-    items.push({ id: 'daybefore', label: 'Day before', body: dayBeforePlayersMessage(s, tz, venueOf(ctx), link), phones, missing });
-    items.push({ id: 'lastcall', label: 'Last call', body: lastCallMessage(s, tz, s.confirmedCount, link) });
-    if (s.state.flags.openSpots > 0) items.push({ id: 'spot', label: 'Spot open', body: spotOpenMessage(s, tz, ctx.d.group.playerLink) });
+    items.push({ id: 'daybefore', label: 'Day before', body: dayBeforePlayersMessage(s, tz, site), who: 'in' });
+    items.push({ id: 'lastcall', label: 'Last call', body: lastCallMessage(s, tz, s.confirmedCount), who: 'in' });
+    if (s.state.flags.openSpots > 0) items.push({ id: 'spot', label: 'Spot open', body: spotOpenMessage(s, tz, site), who: 'notIn' });
   }
   return items;
 }
 
-/** One compact row: the text's name, Open (Messages) and Copy. Tap the name to read it. */
-function TextRow({ item }: { item: TextItem }) {
-  const toast = useToast();
-  const [show, setShow] = useState(false);
-  const [opened, setOpened] = useState(false);
+/**
+ * The gear panel's "Text" button. It opens a short list; each choice opens
+ * Messages with the words and the right numbers. With no numbers saved it
+ * opens with just the words, so a group chat can be picked.
+ */
+export function TextButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const [open, setOpen] = useState(false);
+  const [opened, setOpened] = useState<string | null>(null);
+  const items = sessionTexts(ctx, s);
+  if (items.length === 0) return null;
   return (
-    <li className="text-row" data-text={item.id}>
-      <div className="text-row-top">
-        <button className="link-btn text-name" aria-expanded={show} onClick={() => setShow((v) => !v)}>
-          {item.label}
-        </button>
-        <div className="text-row-btns">
-          <a className="btn small" href={smsHref(item.phones && item.phones.length ? item.phones : null, item.body, isIOS)} onClick={() => setOpened(true)} aria-label={`Open ${item.label} in Messages`}>
-            Open
-          </a>
-          <button
-            className="btn small secondary copy-text"
-            aria-label={`Copy text: ${item.label}`}
-            onClick={async () => ((await copyText(item.body)) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error'))}
-          >
-            Copy text
-          </button>
-        </div>
-      </div>
-      {item.missing && item.missing.length > 0 && <div className="small missing-numbers">Missing numbers: {item.missing.join(', ')}</div>}
-      {opened && <div className="small muted">Message ready. Press send in Messages when it looks right.</div>}
-      {show && <p className="bubble">{item.body}</p>}
-    </li>
-  );
-}
-
-/** "Other texts" in a card's gear panel: this session's prepared texts. */
-export function TextsMenu({ ctx, s, skip = [] }: { ctx: AdminCtx; s: AdminSessionView; skip?: string[] }) {
-  const items = sessionTexts(ctx, s).filter((it) => !skip.includes(it.id));
-  if (items.length === 0) return <p className="muted small">No texts for a session that's already played.</p>;
-  return (
-    <ul className="text-menu" aria-label="Texts">
-      {items.map((it) => (
-        <TextRow key={it.id} item={it} />
-      ))}
-    </ul>
+    <div className="text-pick">
+      <button className="btn text-btn" aria-expanded={open} aria-controls={`texts-${s.id}`} onClick={() => setOpen((v) => !v)}>
+        <MessageIcon />
+        Text
+      </button>
+      {open && (
+        <ul className="text-menu" id={`texts-${s.id}`} aria-label="Texts">
+          {items.map((it) => {
+            const r = recipients(ctx.d, s, it.who);
+            return (
+              <li key={it.id} className="text-row" data-text={it.id}>
+                <a className="text-choice" href={smsHref(r.phones.length ? r.phones : null, it.body, isIOS)} onClick={() => setOpened(it.id)}>
+                  <span className="text-name">{it.label}</span>
+                  <span className="text-who">{audienceLine(it.who, r.count)}</span>
+                </a>
+                {r.missing.length > 0 && <div className="small missing-numbers">Missing numbers: {r.missing.join(', ')}</div>}
+                {opened === it.id && <div className="small muted message-ready">Message ready</div>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

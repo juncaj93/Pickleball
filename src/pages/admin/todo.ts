@@ -19,6 +19,9 @@ const upcoming = (s: AdminSessionView) => !s.state.flags.canceled && !s.state.fl
 /** Late drops the organizer hasn't tapped Done on. */
 export const lateDrops = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt && !r.lateDropDoneAt);
 
+/** Every late drop on a session, handled or not (the card tag and History). */
+export const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
+
 /** Who to pay back: everyone who paid for a canceled session, or anyone who paid and then dropped. */
 export const refundRows = (s: AdminSessionView) =>
   s.roster.filter((r) => r.paymentStatus === 'paid' && (s.state.flags.canceled || r.status === 'withdrawn'));
@@ -78,13 +81,58 @@ export function homeBadgeCount(d: AdminDashboard): number {
 }
 
 /** The players who are in: their numbers, and the names with none saved. */
-export function playersIn(s: AdminSessionView) {
-  const inNow = s.roster.filter((r) => r.status === 'confirmed');
+export function playersIn(s: AdminSessionView, meId?: string | null) {
+  const inNow = s.roster.filter((r) => r.status === 'confirmed' && r.playerId !== meId);
   return {
     phones: inNow.filter((r) => r.phone).map((r) => r.phone!),
     missing: inNow.filter((r) => !r.phone).map((r) => r.name),
   };
 }
 
+export type Audience = 'everyone' | 'in' | 'notIn' | 'wereIn';
+
+/**
+ * Who a text goes to, never including the organizer: everyone on the list,
+ * the players who are in (or were, on a canceled game), or everyone not in.
+ */
+export function recipients(d: AdminDashboard, s: AdminSessionView, who: Audience) {
+  const me = d.me?.id ?? null;
+  if (who === 'in' || who === 'wereIn') {
+    const r = playersIn(s, me);
+    return { ...r, count: r.phones.length + r.missing.length };
+  }
+  const inIds = new Set(s.roster.filter((r) => r.status === 'confirmed').map((r) => r.playerId));
+  const people = d.players.filter((p) => p.isActive && p.id !== me && (who === 'everyone' || !inIds.has(p.id)));
+  return {
+    phones: people.filter((p) => p.phone).map((p) => p.phone!),
+    missing: people.filter((p) => !p.phone).map((p) => p.name),
+    count: people.length,
+  };
+}
+
+/** "5 who are in", "Everyone (8)", "6 not in yet", "4 who were in". */
+export function audienceLine(who: Audience, count: number): string {
+  if (who === 'everyone') return `Everyone (${count})`;
+  if (who === 'in') return `${count} who ${count === 1 ? 'is' : 'are'} in`;
+  if (who === 'wereIn') return `${count} who ${count === 1 ? 'was' : 'were'} in`;
+  return `${count} not in yet`;
+}
+
 /** Short of 4 or 6: the day-before card leads with "need more players". */
 export const shortOfPlayers = (s: AdminSessionView) => s.confirmedCount !== 4 && s.confirmedCount !== 6;
+
+/**
+ * One person's money right now: what they owe (sessions from the day-before
+ * check-in on, unpaid) and their unused credit. Same rules as "Who owes".
+ */
+export function balanceOf(d: AdminDashboard, playerId: string): { owedCents: number; creditCents: number } {
+  const nowMs = Date.parse(d.now);
+  let owed = 0;
+  for (const s of d.sessions) {
+    if (s.state.flags.canceled || nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
+    for (const r of s.roster) {
+      if (r.playerId === playerId && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) owed += r.shareCents - r.creditCents;
+    }
+  }
+  return { owedCents: Math.max(0, owed), creditCents: d.credits.find((c) => c.playerId === playerId)?.balanceCents ?? 0 };
+}

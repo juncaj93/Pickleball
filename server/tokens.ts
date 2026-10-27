@@ -4,7 +4,7 @@ import type { Ctx } from './context';
 import { newId, randomToken, sha256 } from './crypto';
 import type { D1Database } from './db';
 import { HttpError } from './http';
-import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, waitlistOf } from './repo';
+import { audit, confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, waitlistOf } from './repo';
 import { clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
 import * as v from './validate';
 
@@ -104,6 +104,11 @@ const SCOPE_ACTIONS: Record<TokenScope, readonly string[]> = {
  * Act on a link. The player is whoever the token was issued to; nothing in
  * the request can point it at someone else.
  */
+/** A tap on a texted link goes in the Activity log under the player's name. */
+async function logLinkAction(ctx: Ctx, r: Resolved, action: string, result: string, extra: Record<string, unknown> = {}) {
+  await audit(ctx.db, r.group.id, r.session.id, `player_${action}`, { player: r.playerName, result, via: 'link', ...extra }, ctx.nowIso, r.playerName);
+}
+
 export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
   const r = await resolve(ctx, body.token);
   const action = v.oneOf(body.action, 'action', ['confirm', 'withdraw', 'claim'] as const);
@@ -117,6 +122,7 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
   if (action === 'confirm') {
     await confirmAttendance(ctx.db, r.session, r.token.player_id, ctx.nowMs);
     outcome = 'confirmed_attendance';
+    await logLinkAction(ctx, r, 'check_in', outcome);
   } else if (action === 'withdraw') {
     // Burn the link first so a double tap can't withdraw twice.
     const burned = await ctx.db
@@ -125,8 +131,9 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .run();
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
     const res = await withdraw(ctx.db, r.session, r.token.player_id, ctx.nowMs);
-    if (res.freedSpot) await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group).checkInHours);
+    const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group).checkInHours) : false;
     outcome = 'withdrawn';
+    if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late });
   } else {
     const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only');
     await clearLateDrop(ctx.db, r.session.id, r.token.player_id);
@@ -138,6 +145,7 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .bind(ctx.nowIso, r.token.id)
       .run();
     outcome = res.result === 'already_confirmed' ? 'already_confirmed' : 'claimed';
+    if (outcome === 'claimed') await logLinkAction(ctx, r, 'claim', outcome);
   }
   const fresh = await resolve(ctx, body.token);
   return { outcome, view: await view(ctx, fresh) };

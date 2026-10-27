@@ -9,10 +9,9 @@ import {
   paymentMessage,
   courtWaitlistPollMessage,
   pollMessage,
-  smsHref,
 } from '../../../shared/messages';
 import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
-import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, DEFAULT_VENUE_NAME } from '../../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
 import type { BookingStatus } from '../../../shared/status';
 import {
@@ -25,15 +24,12 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from '../../../shared/time';
-import { api, ApiError, copyText, isIOS, useNow } from '../../lib';
-import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { api, ApiError, useNow } from '../../lib';
+import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
-import { refundRows } from './todo';
-import { shareGameText, TextsMenu } from './Texts';
-
-/** Every late drop on this session, done or not, for the tag on the card. */
-const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
+import { lateDropsAll, recipients, refundRows } from './todo';
+import { TextButton } from './Texts';
 
 export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'poll' | 'canceled' | 'moved';
 
@@ -62,7 +58,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const [more, setMore] = useState(false);
-  const toast = useToast();
   const court = courtStatus(
     { ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen },
     tz,
@@ -104,7 +99,13 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             <h2 id={`as-${s.id}`} className="sr-only">
               {formatShortDate(s.startsAt, tz)}
             </h2>
-            <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+            <div className="top-left">
+              <span className="sched-time">
+                <span className="nowrap">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+                {s.extra && <span className="extra-tag">Extra game</span>}
+              </span>
+              {live && <OrganizerInOut ctx={ctx} s={s} />}
+            </div>
             <div className="card-icons">
               <button
                 className="icon-round"
@@ -117,6 +118,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               </button>
             </div>
           </div>
+          {s.note && <div className="game-note">{s.note}</div>}
           {s.holiday && <HolidayControl ctx={ctx} s={s} />}
           {lateDropsAll(s).length > 0 && (
             <div className="late-line">
@@ -132,7 +134,8 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                 </div>
                 {live && (
                   <a className="cal-link court-cal" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
-                    Add to calendar
+                    <CalendarPlusIcon />
+                    <span className="cal-text">Add to calendar</span>
                   </a>
                 )}
               </div>
@@ -161,29 +164,12 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
       </div>
       {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
 
-      {/* Options, from the gear: Share the game, then a 2 by 2 grid. */}
+      {/* Options, from the gear: the Text button, then a 2 by 2 grid. */}
       {more && (
         <div className="options" id={`opts-${s.id}`}>
           {details.length > 0 && <p className="small muted court-details">{details.join(' · ')}</p>}
-          <div className="share-row">
-            {live ? (
-              <a className="btn share-btn" href={smsHref(null, shareGameText(ctx, s), isIOS)}>
-                Share the game
-              </a>
-            ) : (
-              <button className="btn share-btn" disabled>
-                Share the game
-              </button>
-            )}
-            <button
-              className="btn secondary share-copy copy-text"
-              disabled={!live}
-              aria-label="Copy text: Share the game"
-              onClick={async () => ((await copyText(shareGameText(ctx, s))) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error'))}
-            >
-              Copy text
-            </button>
-          </div>
+          {/* One "Text" button: Share the game, Poll, Day before, and the rest. */}
+          <TextButton ctx={ctx} s={s} />
           <div className="opt-grid">
             <button className="btn secondary" onClick={() => ctx.open('booking', s.id)}>
               Edit booking
@@ -196,13 +182,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
             </button>
           </div>
-          {/* The rest of the prepared texts, tucked away until needed. */}
-          {live && (
-            <details className="other-texts">
-              <summary>Other texts</summary>
-              <TextsMenu ctx={ctx} s={s} skip={['share']} />
-            </details>
-          )}
           {(later || needsCourt || s.shownEarly) && (
             <div className="opt-extra">
               {later && <BookedButton ctx={ctx} s={s} small />}
@@ -221,6 +200,39 @@ function shortDeadline(s: AdminSessionView, tz: string, nowMs: number): string {
   if (!s.cancellationDeadlineAt) return 'not set';
   const when = `${formatMonthDay(s.cancellationDeadlineAt, tz)}, ${formatTime(s.cancellationDeadlineAt, tz)}`;
   return Date.parse(s.cancellationDeadlineAt) <= nowMs ? `${when} (passed)` : when;
+}
+
+/**
+ * The organizer playing: a compact "I'm in" in the players row, which turns
+ * into "You're in" with a small "Out". Real sign-ups under their name from
+ * Settings, with the same rules as everyone.
+ */
+function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  const toast = useToast();
+  const me = ctx.d.me;
+  const mine = me ? s.roster.find((r) => r.playerId === me.id && (r.status === 'confirmed' || r.status === 'waitlisted')) : undefined;
+  const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  const set = (goingIn: boolean) =>
+    run(async () => {
+      const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
+      toast(!goingIn ? "You're out" : res.result === 'waitlisted' || res.result === 'standby' ? `You're #${res.position} on the waitlist` : "You're in");
+    });
+  if (!mine) {
+    return (
+      <button className="btn small me-in" disabled={busy} aria-label={`I'm in for ${day}`} onClick={() => set(true)}>
+        {busy ? 'Saving…' : "I'm in"}
+      </button>
+    );
+  }
+  return (
+    <span className="me-state">
+      <span className="me-tag">{mine.status === 'confirmed' ? "You're in" : 'Waitlist'}</span>
+      <button className="link-btn me-out" disabled={busy} aria-label={`Out of ${day}`} onClick={() => set(false)}>
+        Out
+      </button>
+    </span>
+  );
 }
 
 /** "I booked it": one tap, no questions. The deadline starts at 12 hours before play. */
@@ -419,7 +431,7 @@ export function SessionSheets({
             body={
               s.courtState === 'waitlist'
                 ? courtWaitlistPollMessage(s, tz, ctx.d.group.playerLink)
-                : pollMessage(s, tz, ctx.d.group.venueName || DEFAULT_VENUE_NAME, ctx.d.group.settings.pricePerPlayerCents)
+                : pollMessage(s, tz, ctx.d.group.settings.pricePerPlayerCents, ctx.d.group.playerLink)
             }
           />
         </div>
@@ -439,13 +451,14 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
   const tz = ctx.d.group.timezone;
   const [reason, setReason] = useState('');
   const body = canceled ? canceledMessage(s, tz, reason) : movedMessage(s, tz, reason);
+  const who = recipients(ctx.d, s, canceled ? 'wereIn' : 'in');
   return (
     <div className="stack">
       <label className="field">
         Reason (optional)
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder={canceled ? 'Rain in the forecast' : 'Court swap'} />
       </label>
-      <SmsDraft to="Group chat" phone={null} openLabel="Text the group" body={body} />
+      <SmsDraft to={canceled ? 'Players who were in' : 'Players who are in'} phone={null} phones={who.phones} missing={who.missing} openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'} body={body} />
       {canceled && <RefundList ctx={ctx} s={s} />}
     </div>
   );
@@ -549,8 +562,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
         ))}
       </div>
       <label className="field">
-        Cancellation deadline (Eastern time)
-        <span className="hint">Starts at {defaultHours} hours before play. Change it if this booking's rule is different.</span>
+        Cancellation deadline
         <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
       </label>
       <button
@@ -573,8 +585,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
             <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
           </label>
           <label className="field">
-            Court cost (optional)
-            <span className="hint">Your own record. Players never see it, and it's never in a text.</span>
+            Court cost (only you see this)
             <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="48.00" aria-invalid={costError ? true : undefined} />
             {costError && <span className="field-error">{costError}</span>}
           </label>
@@ -608,7 +619,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
   return (
     <div className="stack">
-      {!live && <Notice tone="muted" title="This session is closed">You can view it but not change who's playing.</Notice>}
+      {!live && <Notice tone="muted">Closed. View only.</Notice>}
       <ul className="list">
         {s.roster.map((r) => (
           <li key={r.playerId} className="stack" style={{ gap: 8 }}>
@@ -726,6 +737,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
             <div className="spread">
               <div>
                 <strong>{r.name}</strong>
+                {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                 <div className="small muted">
                   {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
                   {r.paidAt
@@ -739,9 +751,16 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
             </div>
             <div className="btn-row">
               {r.paymentStatus === 'paid' ? (
-                <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
-                  Mark unpaid
-                </button>
+                <>
+                  {r.selfPaid && (
+                    <button className="btn small" disabled={busy} onClick={() => setPaid(r, true)}>
+                      Mark paid
+                    </button>
+                  )}
+                  <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
+                    Unmark
+                  </button>
+                </>
               ) : (
                 r.status === 'confirmed' &&
                 !s.state.flags.canceled && (
@@ -875,7 +894,6 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
           New time: <strong>{formatShortDate(startsAt, tz)}, {formatTimeRange(startsAt, endsAt, tz)}</strong>
         </p>
       )}
-      <p className="small muted">The cancellation deadline resets to {ctx.d.group.settings.defaultDeadlineHours} hours before the new time.</p>
       <button className="btn" type="submit" disabled={busy || !startsAt || !endsAt}>
         {busy ? 'Saving…' : 'Move session'}
       </button>

@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
-import { copyText, isIOS } from './lib';
+import { isIOS } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -276,57 +276,28 @@ export function SmsDraft({
   openLabel?: string;
 }) {
   const [opened, setOpened] = useState(false);
-  const toast = useToast();
-  const [showFallback, setShowFallback] = useState(false);
+  // No numbers saved: Messages opens with just the words, to pick a group chat.
   const href = smsHref(phones && phones.length ? phones : phone, body, isIOS);
   return (
     <div className="draft">
-      <div className="spread">
-        <div>
+      {/* Who, on one line; "Message ready" appears once Messages has opened. */}
+      <div className="draft-head">
+        <span className="draft-to">
           <strong>{to}</strong>
-          <div className="muted small">
-            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'No numbers saved') : phone ? formatPhone(phone) : 'No phone number saved'}
-          </div>
-          {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
-        </div>
-        <Chip tone="info">{opened ? 'Message ready' : 'Draft'}</Chip>
+          <span className="muted small">
+            {' · '}
+            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'no numbers: pick a group chat') : phone ? formatPhone(phone) : 'pick who in Messages'}
+          </span>
+        </span>
+        {opened && <Chip tone="info">Message ready</Chip>}
       </div>
+      {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
       <p className="bubble">{body}</p>
-      <p className="muted small" aria-live="polite">
-        {opened ? <span className="message-ready">Message ready.</span> : null} {opened ? 'Press send in Messages when it looks right.' : ''}
-      </p>
-      <div className="btn-row" style={{ marginTop: 10 }}>
-        <a
-          className="btn small"
-          href={href}
-          onClick={() => {
-            setOpened(true);
-            // If nothing happens (desktop, no SMS app), offer the copy fallback.
-            setTimeout(() => setShowFallback(true), 1500);
-          }}
-        >
+      <div className="btn-row">
+        <a className="btn small" href={href} onClick={() => setOpened(true)}>
           {openLabel}
         </a>
-        <button
-          className="btn small secondary copy-text"
-          onClick={async () => (await copyText(body)) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error')}
-        >
-          Copy text
-        </button>
-        {phone && (
-          <button
-            className="btn small secondary"
-            onClick={async () => (await copyText(phone)) ? toast('Number copied') : toast("Couldn't copy the number.", 'error')}
-          >
-            Copy number
-          </button>
-        )}
       </div>
-      {showFallback && (
-        <p className="muted small" style={{ marginTop: 8 }}>
-          Messages didn't open? Tap Copy text and paste it into any texting app.
-        </p>
-      )}
     </div>
   );
 }
@@ -447,6 +418,30 @@ export const GearIcon = () => (
   </svg>
 );
 
+/** A speech bubble: the card's "Text" button. */
+export const MessageIcon = () => (
+  <svg {...ICON} data-icon="message">
+    <path d="M4.5 5.5h15a1.5 1.5 0 0 1 1.5 1.5v8.5a1.5 1.5 0 0 1-1.5 1.5H10l-4.5 3.5V17h-1A1.5 1.5 0 0 1 3 15.5V7a1.5 1.5 0 0 1 1.5-1.5z" />
+  </svg>
+);
+
+/** A small calendar page with a plus: "Add to calendar" on narrow cards. */
+export const CalendarPlusIcon = () => (
+  <svg {...ICON} data-icon="calendar-plus" className="cal-icon">
+    <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+    <path d="M3.5 9.5h17M8 3v4M16 3v4M12 12.5v5M9.5 15h5" />
+  </svg>
+);
+
+/** History: a clock with an arrow curling back around it. */
+export const HistoryIcon = () => (
+  <svg {...ICON} data-icon="history">
+    <path d="M3.8 12a8.2 8.2 0 1 0 2.4-5.8" />
+    <path d="M3.5 4.2v3.6h3.6" />
+    <path d="M12 7.6V12l3 1.9" />
+  </svg>
+);
+
 /** Auto: a circle, half filled. */
 export const AutoModeIcon = () => (
   <svg {...ICON} data-icon="auto">
@@ -537,6 +532,7 @@ export function PlayersLine({
   waiting,
   waitingWord = 'on the waitlist',
   extra,
+  after,
 }: {
   /** Confirmed players, in sign-up order. */
   names: string[];
@@ -544,6 +540,8 @@ export function PlayersLine({
   waitingWord?: string;
   /** A short note at the end, like "2/4 paid". */
   extra?: string | null;
+  /** Something at the right end of the last line (the organizer's own I'm in). */
+  after?: ReactNode;
 }) {
   return (
     <div className="players players-line">
@@ -557,6 +555,7 @@ export function PlayersLine({
         </span>
       )}
       {extra && <span className="players-wait">· {extra}</span>}
+      {after && <span className="players-after">{after}</span>}
     </div>
   );
 }
@@ -565,9 +564,9 @@ export function PlayersLine({
  * A link to CourtReserve. Its own blue-teal color and a small arrow show it
  * leaves this site; it always opens in a new tab.
  */
-export function CourtReserveLink({ href, children, small }: { href: string; children: ReactNode; small?: boolean }) {
+export function CourtReserveLink({ href, children, small, pill }: { href: string; children: ReactNode; small?: boolean; pill?: boolean }) {
   return (
-    <a className={`btn external${small ? ' small' : ''}`} href={href} target="_blank" rel="noopener noreferrer">
+    <a className={`btn external${small ? ' small' : ''}${pill ? ' pill' : ''}`} href={href} target="_blank" rel="noopener noreferrer">
       {children}
       <svg {...ICON} className="ext-icon" strokeWidth={2.2}>
         <path d="M8 16 16.5 7.5M9.5 7.5h7v7" />

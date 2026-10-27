@@ -1,4 +1,4 @@
-import type { ActionLinkDraft, AdminDashboard, AuditEntry } from '../shared/api';
+import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
@@ -30,7 +30,7 @@ import {
   syncSix,
   visibleFrom,
 } from './repo';
-import { confirmAttendance, joinSession, moveToWaitlist, settle, withdraw } from './roster';
+import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -85,6 +85,15 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .bind(group.id)
     .all<{ id: string; n: number }>();
   const lateDrops = new Map(lateRows.results.map((r) => [r.id, Number(r.n)]));
+  // Sessions each person has played, ever: in, not canceled, and over.
+  const playedRows = await ctx.db
+    .prepare(
+      `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? GROUP BY sp.player_id`,
+    )
+    .bind(group.id, ctx.nowIso)
+    .all<{ id: string; n: number }>();
+  const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
   return {
     group: {
       name: group.name,
@@ -100,7 +109,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       openAccess: !!group.open_access,
       hasGroupWord: !!group.group_word_hash,
     },
-    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0 })),
+    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) => {
       const roster = rosters.get(s.id) ?? [];
       return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster));
@@ -110,6 +119,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     credits: [...balances]
       .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
       .sort((a, b) => a.name.localeCompare(b.name)),
+    me: await organizerPlayer(ctx, group, false),
     now: ctx.nowIso,
   };
 }
@@ -409,6 +419,16 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
   const paid = v.bool(body.paid, 'paid');
+  return applyPayment(ctx, group, session, playerId, paid, null);
+}
+
+/**
+ * Mark one seat paid or unpaid. `self` is the player's name when they did it
+ * themselves ("I paid" / "Didn't pay?"), or null for the organizer. A paid
+ * seat uses up any credit planned for it; unmarking gives the credit back.
+ * The organizer marking a self-marked seat paid confirms it (the tag goes).
+ */
+export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean, self: string | null, actor?: string) {
   const roster = await loadRoster(ctx.db, session.id);
   const row = roster.find((r) => r.player_id === playerId);
   if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
@@ -418,32 +438,49 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
     if (row.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
     const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
     if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
-    if (row.payment_status === 'paid') return { ok: true, changed: false };
+    if (row.payment_status === 'paid') {
+      if (self || !row.self_paid_at) return { ok: true, changed: false };
+      await ctx.db
+        .prepare('UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
+        .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
+        .run();
+      await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
+      return { ok: true, changed: true };
+    }
     // Any credit planned for this seat is used up now.
     const credit = (await moneyPicture(ctx, group)).plan.get(`${session.id}:${playerId}`) ?? { cents: 0, ids: [] };
     const share = price - credit.cents;
     await ctx.db.batch([
       ctx.db
         .prepare(
-          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?,
+          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = ?,
              payment_updated_at = ?, updated_at = ?
            WHERE session_id = ? AND player_id = ?`,
         )
-        .bind(ctx.nowIso, share, ctx.nowIso, ctx.nowIso, session.id, playerId),
+        .bind(ctx.nowIso, share, self ? ctx.nowIso : null, ctx.nowIso, ctx.nowIso, session.id, playerId),
       ...credit.ids.map((id) =>
         ctx.db
           .prepare('UPDATE credits SET used_session_id = ?, used_at = ? WHERE id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
           .bind(session.id, ctx.nowIso, id),
       ),
     ]);
-    await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, amountCents: share, creditCents: credit.cents }, ctx.nowIso);
+    await audit(
+      ctx.db,
+      group.id,
+      session.id,
+      self ? 'player_self_paid' : 'marked_paid',
+      { player: row.display_name, amountCents: share, creditCents: credit.cents },
+      ctx.nowIso,
+      actor ?? (self ? self : 'organizer'),
+    );
   } else {
     if (row.payment_status !== 'paid') return { ok: true, changed: false };
+    if (self && !row.self_paid_at) throw new HttpError(409, 'organizer_marked', 'The organizer marked this paid. Ask them to change it.');
     await ctx.db.batch([
       ctx.db
         .prepare(
           `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
-             paid_at = NULL, payment_amount_cents = NULL, payment_updated_at = ?, updated_at = ?
+             paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?, updated_at = ?
            WHERE session_id = ? AND player_id = ?`,
         )
         .bind(ctx.nowIso, ctx.nowIso, session.id, playerId),
@@ -454,9 +491,10 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
       ctx.db,
       group.id,
       session.id,
-      'marked_unpaid',
+      self ? 'player_self_unpaid' : 'marked_unpaid',
       { player: row.display_name, previousAmountCents: row.payment_amount_cents, previousPaidAt: row.paid_at },
       ctx.nowIso,
+      actor ?? (self ? self : 'organizer'),
     );
   }
   return { ok: true, changed: true };
@@ -745,4 +783,131 @@ export async function exportData(ctx: Ctx): Promise<Response> {
       'Cache-Control': 'no-store',
     },
   });
+}
+
+const ACTIVITY_PAGE = 80;
+
+/** GET /api/admin/activity?before=<iso>: History > Activity, newest first. */
+export async function activity(ctx: Ctx): Promise<ActivityPage> {
+  const group = await requireAdmin(ctx);
+  const before = ctx.url.searchParams.get('before');
+  const until = before && !Number.isNaN(Date.parse(before)) ? before : '9999';
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT a.*, s.starts_at AS session_starts_at FROM admin_audit_log a LEFT JOIN sessions s ON s.id = a.session_id
+       WHERE a.group_id = ? AND a.created_at < ? ORDER BY a.created_at DESC LIMIT ?`,
+    )
+    .bind(group.id, until, ACTIVITY_PAGE + 1)
+    .all<{ id: string; actor_label: string; action: string; details_json: string; created_at: string; session_starts_at: string | null }>();
+  return {
+    entries: results.slice(0, ACTIVITY_PAGE).map((a) => ({
+      id: a.id,
+      actorLabel: a.actor_label,
+      action: a.action,
+      details: safeParse(a.details_json),
+      createdAt: a.created_at,
+      sessionStartsAt: a.session_starts_at,
+    })),
+    more: results.length > ACTIVITY_PAGE,
+  };
+}
+
+/**
+ * POST /api/admin/sessions { startsAt, endsAt, note? }: a one-off game.
+ * It works like any other session from then on. The same date and time as
+ * an existing game is refused, so a double tap can't make two.
+ */
+export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const startsAt = v.isoTime(body.startsAt, 'startsAt');
+  const endsAt = v.isoTime(body.endsAt, 'endsAt');
+  if (!startsAt || !endsAt) throw new HttpError(400, 'invalid_time', 'Pick a date, start time, and end time.');
+  const length = Date.parse(endsAt) - Date.parse(startsAt);
+  if (length <= 0) throw new HttpError(400, 'invalid_time', 'The end time must be after the start time.');
+  if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
+  if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
+  const note = v.optionalText(body.note, 'note', 80);
+  const tz = group.timezone;
+  const clash = await ctx.db
+    .prepare('SELECT id, status FROM sessions WHERE group_id = ? AND starts_at = ?')
+    .bind(group.id, startsAt)
+    .first<{ id: string; status: string }>();
+  if (clash) {
+    const when = formatDateTime(startsAt, tz);
+    throw new HttpError(
+      409,
+      'game_exists',
+      clash.status === 'canceled' ? `There's already a canceled game at ${when}. Reopen it instead.` : `There's already a game at ${when}.`,
+    );
+  }
+  const settings = settingsOf(group);
+  const id = newId();
+  // Before the first session date, a game still shows (like "Show this session").
+  const early = startsAt < visibleFrom(group) ? 1 : 0;
+  try {
+    await ctx.db
+      .prepare(
+        `INSERT INTO sessions (id, group_id, starts_at, ends_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+      )
+      .bind(id, group.id, startsAt, endsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso)
+      .run();
+  } catch (err) {
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There's already a game at ${formatDateTime(startsAt, tz)}.`);
+    throw err;
+  }
+  await audit(ctx.db, group.id, id, 'session_added', { startsAt, note }, ctx.nowIso);
+  return { id };
+}
+
+/** The organizer's own player record: the saved one, else a player with their name. */
+export async function organizerPlayer(ctx: Ctx, group: GroupRow, create: boolean): Promise<{ id: string; name: string } | null> {
+  if (group.organizer_player_id) {
+    const p = await ctx.db
+      .prepare('SELECT id, display_name FROM players WHERE id = ? AND group_id = ?')
+      .bind(group.organizer_player_id, group.id)
+      .first<{ id: string; display_name: string }>();
+    if (p) return { id: p.id, name: p.display_name };
+  }
+  const name = (group.organizer_name ?? '').trim();
+  if (!name) return null;
+  const all = await getPlayers(ctx.db, group.id);
+  let p = all.find((x) => x.display_name.trim().toLowerCase() === name.toLowerCase());
+  if (!p && !create) return null;
+  let id = p?.id;
+  if (!id) {
+    id = newId();
+    await ctx.db
+      .prepare(
+        `INSERT INTO players (id, group_id, display_name, is_regular, is_active, can_receive_substitute_invites, sort_order, created_at)
+         VALUES (?, ?, ?, 1, 1, 0, ?, ?)`,
+      )
+      .bind(id, group.id, name, all.length, ctx.nowIso)
+      .run();
+  } else if (!p!.is_active) {
+    await ctx.db.prepare('UPDATE players SET is_active = 1 WHERE id = ?').bind(id).run();
+  }
+  if (create) await ctx.db.prepare('UPDATE groups SET organizer_player_id = ? WHERE id = ?').bind(id, group.id).run();
+  return { id, name: p?.display_name ?? name };
+}
+
+/**
+ * POST /api/admin/sessions/:id/me { in }: the organizer signs up (or drops
+ * out) like any player, under their name from Settings. Real, and logged.
+ */
+export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const goingIn = v.bool(body.in, 'in');
+  const me = await organizerPlayer(ctx, group, true);
+  if (!me) throw new HttpError(400, 'name_needed', 'Add your name in Settings first (Group > Your name).');
+  if (goingIn) {
+    const res = await joinSession(ctx.db, session, me.id, ctx.nowMs, 'auto');
+    await clearLateDrop(ctx.db, session.id, me.id);
+    if (res.result !== 'already_confirmed') await audit(ctx.db, group.id, session.id, 'player_join', { player: me.name, result: res.result, organizer: true }, ctx.nowIso, me.name);
+    return res;
+  }
+  const res = await withdraw(ctx.db, session, me.id, ctx.nowMs);
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group).checkInHours) : false;
+  if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
+  return { result: res.changed ? 'withdrawn' : 'not_in_session' };
 }

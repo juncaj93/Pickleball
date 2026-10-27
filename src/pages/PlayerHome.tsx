@@ -152,7 +152,7 @@ export function PlayerHome({
 
         {g && !pickName && (
           <>
-            {g.payDue.length > 0 && <PayCard g={g} />}
+            {g.payDue.length > 0 && <PayCard g={g} onChanged={load.reload} />}
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
@@ -220,7 +220,6 @@ function NamePicker({
   if (adding) return <AddMyName onPick={pick} onDone={onPicked} onBack={() => setAdding(false)} />;
   return (
     <section className="stack" aria-label="Pick your name">
-      <p className="muted">Tap your name. This phone remembers it.</p>
       {error && <Notice tone="danger">{error}</Notice>}
       <div className="name-grid">
         {g.players.map((p) => (
@@ -383,7 +382,7 @@ export function HomeScreenSteps() {
 
 /**
  * "I tapped Pay with Venmo" for these sessions, remembered on this phone only.
- * It never marks anyone paid; only the organizer's Mark paid does.
+ * It never marks anyone paid; the "I paid" button that follows does.
  */
 function useSent(playerId: string | undefined, sessionIds: string[]) {
   const keys = sessionIds.map((id) => `pb_sent_${playerId}_${id}`);
@@ -397,10 +396,24 @@ function useSent(playerId: string | undefined, sessionIds: string[]) {
   };
 }
 
-/** Quiet note after tapping Pay: the organizer confirms. */
-function SentNote({ g }: { g: GroupView }) {
-  const who = g.group.organizerName ?? 'The organizer';
-  return <span className="sent-note">Sent? {who} confirms when it arrives.</span>;
+/** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */
+function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function set(paid: boolean) {
+    setBusy(true);
+    try {
+      for (const id of sessionIds) await api('POST', `/api/sessions/${id}/paid`, { paid });
+      toast(paid ? 'Marked paid' : 'Marked not paid');
+      await onChanged();
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, set };
 }
 
 /**
@@ -410,7 +423,7 @@ function SentNote({ g }: { g: GroupView }) {
  * "Pickleball Tue Nov 3 - Ryan" when Venmo allows it; otherwise the note shows
  * with Copy. Opening Venmo never marks anyone paid.
  */
-function PayCard({ g }: { g: GroupView }) {
+function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void> }) {
   const toast = useToast();
   const tz = g.group.timezone;
   const due = g.payDue;
@@ -422,6 +435,7 @@ function PayCard({ g }: { g: GroupView }) {
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
   const { sent, markSent } = useSent(g.me?.id, due.map((o) => o.sessionId));
+  const paid = usePaid(due.map((o) => o.sessionId), onChanged);
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
   const title =
@@ -448,14 +462,18 @@ function PayCard({ g }: { g: GroupView }) {
           </p>
         )
       )}
-      {pay.url && sent ? (
-        <p className="small">
-          <SentNote g={g} />{' '}
-          <a className="link-btn inline" href={pay.url} target="_blank" rel="noopener noreferrer">
-            Open Venmo again
-          </a>
-        </p>
-      ) : pay.url ? (
+      {!pay.url || sent ? (
+        <>
+          <button className="btn block big" disabled={paid.busy} onClick={() => paid.set(true)}>
+            {paid.busy ? 'Saving…' : 'I paid'}
+          </button>
+          {pay.url && (
+            <a className="link-btn inline small" href={pay.url} target="_blank" rel="noopener noreferrer">
+              Open Venmo again
+            </a>
+          )}
+        </>
+      ) : (
         <a
           className="btn block big"
           href={pay.url}
@@ -466,9 +484,8 @@ function PayCard({ g }: { g: GroupView }) {
         >
           Pay with Venmo
         </a>
-      ) : (
-        <p className="small muted">Pay {who} however you usually do.</p>
       )}
+      {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
         <div className="venmo-note">
           <span className="small">
@@ -479,7 +496,6 @@ function PayCard({ g }: { g: GroupView }) {
           </button>
         </div>
       )}
-      {due.some((o) => o.reminder) && <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>}
     </section>
   );
 }
@@ -580,12 +596,31 @@ function countLine(s: PlayerSessionView): string {
  * note filled in), then a quiet "Sent?" note once tapped, or "Paid" once the
  * organizer marks it. On game day after 8:00 AM the card at the top takes over.
  */
-function RowPay({ g, s, onTop }: { g: GroupView; s: PlayerSessionView; onTop: boolean }) {
+function RowPay({ g, s, onTop, onChanged }: { g: GroupView; s: PlayerSessionView; onTop: boolean; onChanged: () => Promise<void> }) {
   const mine = s.mine!;
   const { sent, markSent } = useSent(g.me?.id, [s.id]);
-  if (mine.paymentStatus === 'paid') return <span className="paid-tag">✓ Paid</span>;
+  const paid = usePaid([s.id], onChanged);
+  if (mine.paymentStatus === 'paid') {
+    return (
+      <span className="paid-wrap">
+        <span className="paid-tag">✓ Paid</span>
+        {/* Only their own "I paid" can be undone here; the organizer's stays. */}
+        {mine.selfPaid && (
+          <button className="link-btn didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
+            Didn't pay?
+          </button>
+        )}
+      </span>
+    );
+  }
   if (onTop || mine.oweCents <= 0) return <span />;
-  if (sent) return <SentNote g={g} />;
+  if (sent || !g.group.venmoUrl) {
+    return (
+      <button className="btn small pay-small" disabled={paid.busy} onClick={() => paid.set(true)}>
+        I paid
+      </button>
+    );
+  }
   const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
   if (!pay.url) return <span />;
   return (
@@ -659,6 +694,7 @@ function ScheduleRow({
         <div className="sched-head">
           <div className="sched-when">
             <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+            {s.extra && <span className="extra-tag">Extra game</span>}
             {inSession && !s.canceled && <span className="me-tag">You're in</span>}
             {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
           </div>
@@ -682,6 +718,7 @@ function ScheduleRow({
           {s.holiday && <HolidayPill name={s.holiday} />}
         </div>
 
+        {s.note && <p className="game-note">{s.note}</p>}
         {goodNews && <Notice tone="ok">{goodNews}</Notice>}
         {inSession && mine.creditComing && (
           <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
@@ -712,7 +749,7 @@ function ScheduleRow({
 
         {inSession && !s.canceled && (
           <div className="row-foot">
-            <RowPay g={g} s={s} onTop={g.payDue.some((o) => o.sessionId === s.id)} />
+            <RowPay g={g} s={s} onTop={g.payDue.some((o) => o.sessionId === s.id)} onChanged={onChanged} />
             {open && (
               <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
                 Add to calendar

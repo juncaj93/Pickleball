@@ -24,6 +24,9 @@ export interface PlayerSessionView {
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** A one-off game the organizer added, with its optional note. */
+  extra: boolean;
+  note: string | null;
   /** Inside the booking window (14 days by default), and when it opens. */
   bookingOpen: boolean;
   bookingOpensAt: string;
@@ -39,6 +42,8 @@ export interface PlayerSessionView {
     /** Price for this session before any credit ($14, or $9 with the 6-person discount). */
     shareCents: number | null;
     paymentStatus: PaymentStatus;
+    /** They tapped "I paid" themselves. */
+    selfPaid: boolean;
     /** One of the last two of six, paying the discounted price. */
     discount: boolean;
     /** One of the first four of six: earns a credit if 6 play. */
@@ -89,6 +94,8 @@ export interface AdminRosterEntry {
   confirmedAt: string | null;
   attendanceConfirmedAt: string | null;
   paymentStatus: PaymentStatus;
+  /** The player marked it paid themselves; the organizer sees a "self-marked" tag. */
+  selfPaid: boolean;
   paidAt: string | null;
   paymentAmountCents: number | null;
   shareCents: number | null;
@@ -138,6 +145,9 @@ export interface AdminSessionView {
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   /** Moved from its usual time (rescheduled). */
   moved: boolean;
+  /** A one-off game the organizer added, with its optional note. */
+  extra: boolean;
+  note: string | null;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;
@@ -165,6 +175,26 @@ export interface AdminPlayer {
   isNew: boolean;
   /** Organizer only: how many times they dropped out late. */
   lateDrops: number;
+  /** Organizer only: sessions they've played, ever. */
+  played: number;
+}
+
+/** One line in History > Activity. */
+export interface ActivityEntry {
+  id: string;
+  /** Who did it: a player's name, "organizer", or "organizer as Name". */
+  actorLabel: string;
+  action: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+  /** The session it was about, if any. */
+  sessionStartsAt: string | null;
+}
+
+export interface ActivityPage {
+  entries: ActivityEntry[];
+  /** More, older entries exist (ask with ?before=<oldest createdAt>). */
+  more: boolean;
 }
 
 export interface AuditEntry {
@@ -200,6 +230,8 @@ export interface AdminDashboard {
   hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
   /** Open credit per player (earned, not yet used or cleared). */
   credits: { playerId: string; name: string; balanceCents: number }[];
+  /** The organizer's own player record, once they have one (their name from Settings). */
+  me: { id: string; name: string } | null;
   now: string;
 }
 

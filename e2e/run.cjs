@@ -23,6 +23,8 @@ const BASE = REMOTE ?? `http://localhost:${PORT}`;
 const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? 'e2e-setup-token-0123456789';
 const PIN = '482913';
 const SHOTS = path.join(__dirname, 'screenshots');
+/** The plain site address the texts use ("pickleball.juncaj.net" live). */
+const SITE = BASE.replace(/^https?:\/\//, '');
 
 let passed = 0;
 let failed = 0;
@@ -36,7 +38,7 @@ async function check(name, fn) {
   } catch (err) {
     failed++;
     failures.push(name);
-    console.log(`  ✗ ${name}\n      ${String(err && err.message ? err.message : err).split('\n')[0]}`);
+    console.log(`  ✗ ${name}\n      ${String(err && err.message ? err.message : err).replace(/\s*\n\s*/g, ' ⏎ ').slice(0, 600)}`);
   }
 }
 
@@ -73,13 +75,21 @@ async function showAll(page) {
   if (await btn.count()) await btn.click();
 }
 
-/** Open a card's gear panel and its "Other texts" list. */
-async function otherTexts(card) {
+/** Open a card's gear panel and its "Text" choices. */
+async function textMenu(card) {
   await more(card);
-  const d = card.locator('details.other-texts');
-  if (!(await d.evaluate((el) => el.open))) await d.locator('summary').click();
-  await d.locator('.text-row').first().waitFor();
-  return d;
+  const btn = card.getByRole('button', { name: 'Text', exact: true });
+  if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
+  const menu = card.locator('.text-menu');
+  await menu.locator('.text-row').first().waitFor();
+  return menu;
+}
+
+/** Who and what an sms: link opens Messages with (iPhone and Android forms). */
+function smsOf(href) {
+  const m = href.match(/^sms:(?:\/\/open\?addresses=)?([^?&]*)[?&]body=(.*)$/);
+  if (!m) throw new Error(`not an sms link: ${href}`);
+  return { to: m[1] ? m[1].split(',') : [], body: decodeURIComponent(m[2]) };
 }
 
 /** Close a session card's options panel. */
@@ -142,7 +152,7 @@ function layoutReport({ roots, items }) {
   for (const root of document.querySelectorAll(roots)) {
     if (!root.offsetParent) continue;
     const card = root.getBoundingClientRect();
-    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && !e.closest('[hidden], dialog:not([open])'));
+    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && e.checkVisibility() && !e.closest('[hidden], dialog:not([open]), .sr-only'));
     const boxes = els.map((e) => ({ e, b: visual(e), label: (e.getAttribute('aria-label') || e.innerText || e.className || e.tagName).trim().slice(0, 30) }));
     for (const x of boxes) {
       checked++;
@@ -429,11 +439,11 @@ async function main() {
 
     await check('sessions are grouped by calendar week with a divider', async () => {
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
-      const labels = await section.locator('.week-break').allInnerTexts();
+      const labels = await section.locator('.week-break h3').allInnerTexts();
       assert(labels.length >= 2, `expected week dividers, got ${labels}`);
       assert(/^(This week|Next week|Week of [A-Z][a-z]{2} \d{1,2})$/i.test(labels[0].trim()), `first divider was ${labels[0]}`);
       // No two dividers in a row, and never more than 2 sessions (Tue + Thu) between them.
-      const kids = await section.evaluate((el) => [...el.querySelectorAll(':scope > .week-break, :scope > article')].map((n) => n.tagName));
+      const kids = await section.evaluate((el) => [...el.querySelectorAll(':scope > .week-break, :scope > article')].map((n) => (n.matches('.week-break') ? 'H3' : n.tagName)));
       let run = 0;
       for (const k of kids) {
         if (k === 'H3') {
@@ -445,15 +455,15 @@ async function main() {
       }
     });
 
-    await check('tab bar: four equal tabs (Home, Players, Money, Settings) with their own icons in every state; short and low', async () => {
+    await check('tab bar: five equal tabs (Home, Players, Money, History, Settings) with their own icons in every state; short and low', async () => {
       const icons = async () => admin.getByRole('navigation', { name: 'Organizer sections' }).locator('button svg').evaluateAll((s) => s.map((x) => x.getAttribute('data-icon')));
-      for (const name of ['Settings', 'Players', 'Money', 'Home']) {
+      for (const name of ['Settings', 'History', 'Players', 'Money', 'Home']) {
         await tab(admin, name).click();
         const got = await icons();
-        assert(JSON.stringify(got) === JSON.stringify(['home', 'people', 'dollar', 'gear']), `icons with ${name} selected were ${got}`);
+        assert(JSON.stringify(got) === JSON.stringify(['home', 'people', 'dollar', 'history', 'gear']), `icons with ${name} selected were ${got}`);
       }
       const widths = await admin.locator('nav.tabbar button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().width)));
-      assert(widths.length === 4 && Math.max(...widths) - Math.min(...widths) <= 1, `tabs should be equal: ${widths}`);
+      assert(widths.length === 5 && Math.max(...widths) - Math.min(...widths) <= 1, `tabs should be equal: ${widths}`);
       const gaps = await admin.locator('nav.tabbar li').evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().left));
       const steps = gaps.slice(1).map((x, i) => Math.round(x - gaps[i]));
       assert(Math.max(...steps) - Math.min(...steps) <= 1, `tabs should be evenly spaced: ${steps}`);
@@ -467,16 +477,16 @@ async function main() {
       assert(tabs.every((h) => h >= 44), `tabs too short to tap: ${tabs}`);
     });
 
-    await check('floating tab pill has exactly Home, Players, Money, Settings', async () => {
+    await check('floating tab pill has exactly Home, Players, Money, History, Settings', async () => {
       const nav = admin.getByRole('navigation', { name: 'Organizer sections' });
       const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
-      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'Settings']), `tabs were ${labels}`);
+      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'History', 'Settings']), `tabs were ${labels}`);
       const box = await nav.boundingBox();
       const vw = admin.viewportSize().width;
       assert(box.x > 8 && box.x + box.width < vw - 8, 'pill should float clear of the screen edges');
       const radius = await nav.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius));
       assert(radius >= 24, 'pill should be fully rounded');
-      assert((await nav.locator('svg').count()) === 4, 'expected four drawn icons');
+      assert((await nav.locator('svg').count()) === 5, 'expected five drawn icons');
       const pillBg = await nav.evaluate((el) => getComputedStyle(el).backgroundColor);
       // "rgb(r g b)", "rgba(r, g, b, a)" or "color(srgb r g b / a)": the alpha is the 4th number, or after "/".
       const nums = pillBg.match(/[\d.]+/g).map(Number);
@@ -510,10 +520,11 @@ async function main() {
       await tab(admin, 'Settings').click();
       await admin.locator('details.set-sect').first().waitFor();
       const titles = (await admin.locator('details.set-sect > summary > span:first-child').allInnerTexts()).map((s) => s.trim());
-      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Add to Home Screen', 'Change PIN', 'Backup', 'Recent changes']) {
+      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Add to Home Screen', 'Change PIN', 'Backup']) {
         assert(titles.includes(want), `missing section ${want}: ${titles}`);
       }
       assert(!titles.includes('Calendar'), 'the Calendar section is gone');
+      assert(!titles.includes('Recent changes'), 'Recent changes moved to History');
       assert((await admin.locator('details.set-sect[open]').count()) === 0, 'every section should start closed');
       assert((await admin.getByText('How this works').count()) === 0, '"How this works" should be gone');
       assert((await admin.getByText(/Texts are never sent automatically/).count()) === 0, 'How this works notes should be gone');
@@ -566,11 +577,12 @@ async function main() {
       await tab(admin, 'Settings').click();
       await openSections(admin);
       assert((await admin.getByLabel(/Day-before check-in/).inputValue()) === '30', 'check-in hours did not stick');
-      // Pausing for a second saves too, without leaving the box.
+      // Text boxes save after a one-second pause too, without leaving the box.
       const name = admin.getByLabel('Your name');
       await name.fill('Robin');
+      await savedIn(name);
       await name.blur();
-      await autoSet(admin.getByLabel(/Day-before check-in/), '24', { pause: true });
+      await autoSet(admin.getByLabel(/Day-before check-in/), '24');
       assert((await admin.getByText('Warn before cancellation deadline').count()) === 0, 'old setting still shown');
       await admin.getByLabel(/Plan sessions ahead/).waitFor();
     });
@@ -798,7 +810,7 @@ async function main() {
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
       const BOOK = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
       const CANCEL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
-      const link = section.locator('.sessions-bar').getByRole('link', { name: /^Book/ });
+      const link = section.locator('.week-break').first().getByRole('link', { name: /^Book a court/ });
       assert((await link.getAttribute('href')) === BOOK, 'wrong CourtReserve link');
       assert((await link.getAttribute('target')) === '_blank', 'CourtReserve should open in a new tab');
       assert((await admin.getByText('Book on CourtReserve').count()) === 0, 'old button wording still shown');
@@ -860,7 +872,7 @@ async function main() {
       for (const scheme of ['light', 'dark']) {
         await admin.emulateMedia({ colorScheme: scheme });
         await card.screenshot({ path: path.join(SHOTS, `card-needs-${scheme}.png`) });
-        await admin.locator('.sessions-bar').screenshot({ path: path.join(SHOTS, `sessions-bar-${scheme}.png`) });
+        await admin.locator('.week-break').first().screenshot({ path: path.join(SHOTS, `book-pill-${scheme}.png`) });
       }
       await admin.emulateMedia({ colorScheme: 'light' });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-not-booked.png') });
@@ -887,7 +899,7 @@ async function main() {
       await edit.getByText('More details').click();
       await edit.getByLabel(/Reservation number/).fill('R-1042');
       await edit.getByLabel(/Court cost/).fill('48.37');
-      await edit.getByText("Your own record. Players never see it, and it's never in a text.").waitFor();
+      await edit.getByLabel('Court cost (only you see this)').waitFor();
       assert((await edit.getByText(/Split four ways/i).count()) === 0, 'old split helper text still shown');
       await edit.getByText(/Deadline: .*8:00 AM$/).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
@@ -923,20 +935,22 @@ async function main() {
       const gb = await gear.boundingBox();
       const cb = await card.boundingBox();
       assert(gb.x + gb.width > cb.x + cb.width - 24, 'gear at the top right');
-      const tapArea = { w: gb.width, h: gb.height };
+      const tapArea = { w: gb.width, h: Math.max(gb.height, await gear.evaluate((b) => parseFloat(getComputedStyle(b, '::before').height) || 0)) };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: no main button any more (the poll lives in Texts).
-      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK)$/.test(x));
+      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x));
       assert(JSON.stringify(await visible()) === '[]', `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
       const opts = card.locator('.options');
-      const share = opts.getByRole('link', { name: 'Share the game' });
-      const sb = await share.boundingBox();
+      const textBtn = opts.getByRole('button', { name: 'Text', exact: true });
+      const sb = await textBtn.boundingBox();
       const ob = await opts.boundingBox();
-      assert(sb.width > ob.width * 0.6, 'Share the game should be the full-width main button');
-      const copyShare = opts.getByRole('button', { name: 'Copy text: Share the game' });
-      assert((await copyShare.innerText()).trim() === 'Copy text', 'the copy button next to Share the game says Copy text');
+      assert(sb.width > ob.width * 0.9, 'Text should be the full-width main button');
+      assert((await textBtn.locator('svg[data-icon="message"]').count()) === 1, 'Text has a message icon');
+      const gb2 = await opts.locator('.opt-grid').boundingBox();
+      assert(sb.y < gb2.y, 'Text sits above the grid');
+      assert((await opts.getByRole('button', { name: /^Copy/ }).count()) === 0 && (await opts.locator('.other-texts').count()) === 0, 'no Copy or Other texts');
       const grid = await opts.locator('.opt-grid > *').evaluateAll((els) =>
         els.map((e) => {
           const r = e.getBoundingClientRect();
@@ -961,12 +975,13 @@ async function main() {
       await opts.waitFor({ state: 'detached' });
     });
 
-    await check('Share the game: the text matches the court, links straight to the session, and has Copy', async () => {
+    await check('Share the game: the text matches the court, links straight to the session, and goes to everyone', async () => {
       const card = sessionCards(admin).first();
       const id = (await card.getAttribute('id')).replace('session-', '');
-      await more(card);
-      const href = await card.getByRole('link', { name: 'Share the game' }).getAttribute('href');
-      const body = decodeURIComponent(href.split('body=')[1]);
+      const menu = await textMenu(card);
+      const href = await menu.locator('.text-row[data-text="share"] a').getAttribute('href');
+      const { body, to } = smsOf(href);
+      assert(to.length === 6, `share should go to all 6 numbers, went to ${to.length}`);
       const kind = await card.getAttribute('data-court');
       const re =
         kind === 'booked'
@@ -978,9 +993,6 @@ async function main() {
       assert(m, `share text (${kind}) was: ${body}`);
       const link = m[m.length - 1];
       assert(link.endsWith(`s=${id}`), `share link should point at the session: ${link}`);
-      await card.getByRole('button', { name: 'Copy text: Share the game' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      assert((await admin.evaluate(() => navigator.clipboard.readText())) === body, 'clipboard should hold the share text');
       // The link opens the player screen with that session highlighted, after picking a name.
       const p = await newPage();
       await p.goto(BASE + new URL(link).pathname + new URL(link).search);
@@ -1002,35 +1014,33 @@ async function main() {
       }
     });
 
-    await check('"Other texts" in the gear panel: a short list; the poll has the date, venue and $14, with Copy text', async () => {
+    await check('"Text" opens the choices; each opens Messages with the right people and words; the poll has the date and $14', async () => {
       const card = sessionCards(admin).first();
-      const sheet = await otherTexts(card);
-      const names = (await sheet.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
-      for (const want of ['Poll', 'Day before', 'Last call']) assert(names.includes(want), `texts menu is missing ${want}: ${names}`);
-      assert(!names.includes('Share the game'), 'Share the game stays the main button, not in Other texts');
+      const menu = await textMenu(card);
+      const names = (await menu.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
+      for (const want of ['Share the game', 'Poll', 'Day before', 'Last call']) assert(names.includes(want), `choices missing ${want}: ${names}`);
       assert(!names.includes('Canceled'), 'a live session has no Canceled text');
       const spots = await card.locator('.spots li.open').count();
       assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
-      for (const row of await sheet.locator('.text-row').all()) {
-        const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
-        assert((await open.getAttribute('href')).startsWith('sms:'), 'each text opens Messages');
-        assert((await row.getByRole('button', { name: /^Copy text: / }).innerText()).trim() === 'Copy text', 'Copy text label');
-        const h = (await open.boundingBox()).height;
-        assert(h >= 44, 'menu buttons 44px+');
+      const inCount = await card.locator('.spots li:not(.open)').count();
+      for (const row of await menu.locator('.text-row').all()) {
+        const id = await row.getAttribute('data-text');
+        const link = row.locator('a.text-choice');
+        const { to } = smsOf(await link.getAttribute('href'));
+        const who = (await row.locator('.text-who').innerText()).trim();
+        if (id === 'share' || id === 'poll') assert(who === 'Everyone (6)' && to.length === 6, `${id} goes to everyone: ${who}, ${to.length}`);
+        if (id === 'daybefore' || id === 'lastcall') assert(who === `${inCount} who ${inCount === 1 ? 'is' : 'are'} in` && to.length === inCount, `${id} goes to the ${inCount} in: ${who}, ${to.length}`);
+        if (id === 'spot') assert(/^\d+ not in yet$/.test(who), `spot open goes to everyone not in: ${who}`);
+        assert((await link.boundingBox()).height >= 44, 'choices 44px+');
       }
-      await sheet.locator('.text-row[data-text="poll"] .text-name').click();
-      const bubble = (await sheet.locator('.text-row[data-text="poll"] .bubble').innerText()).trim();
-      assert(
-        /^Pickleball: (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 8:00 to 10:00 PM at Northville Pickleball Club\. \$14 each\. In or out\?$/.test(bubble),
-        `poll text was: ${bubble}`,
-      );
-      assert(!bubble.includes('48'), 'court cost in the poll');
-      const href = await sheet.getByRole('link', { name: 'Open Poll in Messages' }).getAttribute('href');
-      assert(href.startsWith('sms:&body=Pickleball'), `bad sms link ${href}`);
-      await sheet.getByRole('button', { name: 'Copy text: Poll' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      assert((await admin.evaluate(() => navigator.clipboard.readText())) === bubble, 'clipboard should hold the poll');
-      assert(!/\bsent\b/i.test(await sheet.innerText()), 'never say sent');
+      const poll = smsOf(await menu.locator('.text-row[data-text="poll"] a').getAttribute('href')).body;
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. \$14 each\. In or out\? \S+$/.test(poll), `poll text was: ${poll}`);
+      assert(!poll.includes('48') && !/https?:/.test(poll), 'no court cost and only the plain address');
+      // Tapping a choice opens Messages and says it's ready, never "sent".
+      await menu.locator('.text-row[data-text="poll"] a').evaluate((a) => a.addEventListener('click', (e) => e.preventDefault(), { once: true }));
+      await menu.locator('.text-row[data-text="poll"] a').click();
+      await menu.getByText('Message ready', { exact: true }).waitFor();
+      assert(!/\bsent\b/i.test(await menu.innerText()), 'never say sent');
       await admin.screenshot({ path: path.join(SHOTS, 'texts-menu.png') });
       await closeOptions(card);
     });
@@ -1074,18 +1084,16 @@ async function main() {
       const blairRow = sheet.locator('li', { hasText: 'Blair' }).first();
       await blairRow.getByRole('button', { name: 'Payment reminder' }).click();
       const draft = blairRow.locator('.draft');
-      await draft.getByText('Draft', { exact: true }).first().waitFor();
+      assert((await draft.getByText('Message ready', { exact: true }).count()) === 0, 'not ready until Messages opens');
       await draft.getByText(/Hey Blair! You owe \$14 for pickleball/).waitFor();
       const href = await draft.getByRole('link', { name: 'Open in Messages' }).getAttribute('href');
       assert(href.startsWith('sms:+13135550101&body='), `bad sms link ${href}`);
     });
 
-    await check('copy message fallback works', async () => {
+    await check('message drafts have no Copy buttons: the main button opens Messages', async () => {
       const draft = admin.locator('details.money-sess[data-session][open] .draft').first();
-      await draft.getByRole('button', { name: 'Copy text' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      const clip = await admin.evaluate(() => navigator.clipboard.readText());
-      assert(clip.includes('You owe $14'), `clipboard was ${clip}`);
+      assert((await draft.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy next to a message');
+      await draft.getByRole('link', { name: 'Open in Messages' }).waitFor();
     });
 
     await check('opening Messages shows "Message ready", never "sent"', async () => {
@@ -1095,13 +1103,13 @@ async function main() {
         el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault());
       });
       await draft.getByRole('link', { name: 'Open in Messages' }).click();
-      await draft.getByText('Message ready.').waitFor();
+      await draft.getByText('Message ready', { exact: true }).waitFor();
       assert(!/\bsent\b/i.test(await draft.innerText()), 'the draft must never say it was sent');
       assert((await draft.getByRole('button', { name: /sent/i }).count()) === 0, 'no "I sent it" button');
       await tab(admin, 'Home').click();
     });
 
-    await check('after signing up: a small Pay button; "Sent?" after tapping never marks paid; Paid once marked', async () => {
+    await check('after signing up: Pay opens Venmo but never marks paid; "I paid" marks paid (self-marked); "Didn\'t pay?" undoes it; my Mark paid has no tag; all logged', async () => {
       const p = players.Devon;
       await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
       await p.reload();
@@ -1116,22 +1124,52 @@ async function main() {
       assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} - Devon$/.test(note), `Venmo note was ${note}`);
       const [popup] = await Promise.all([p.waitForEvent('popup'), pay.click()]);
       await popup.close();
-      await row.getByText(/^Sent\? \w+ confirms when it arrives\.$/).waitFor();
-      assert((await row.locator('.pay-small').count()) === 0, 'Pay button should turn into the quiet note');
+      // Back from Venmo: an "I paid" button, still not paid.
+      const iPaid = row.getByRole('button', { name: 'I paid' });
+      await iPaid.waitFor();
       await p.reload();
-      await firstCard(p).getByText(/^Sent\? \w+ confirms when it arrives\.$/).waitFor();
-      // Not marked paid: the organizer still sees Devon owing.
+      await firstCard(p).getByRole('button', { name: 'I paid' }).waitFor();
+      assert((await p.getByText(/may not have marked this paid|Already paid\?/).count()) === 0, 'the old note is gone');
       await admin.reload();
-      const card = sessionCards(admin).first();
-      const sheet = await moneyFor(admin, card);
-      const devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
+      let sheet = await moneyFor(admin, sessionCards(admin).first());
+      let devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
       await devonRow.getByText(/owes \$14/).waitFor();
+      // "I paid": Paid with a check and a tiny "Didn't pay?" right under it.
+      await firstCard(p).getByRole('button', { name: 'I paid' }).click();
+      await p.locator('.toast', { hasText: 'Marked paid' }).waitFor();
+      const paidTag = firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' });
+      await paidTag.waitFor();
+      const undo = firstCard(p).getByRole('button', { name: "Didn't pay?" });
+      const tb = await paidTag.boundingBox();
+      const ub = await undo.boundingBox();
+      assert(ub.y >= tb.y + tb.height - 1 && Math.abs(ub.x - tb.x) < 4, '"Didn\'t pay?" sits right under Paid');
+      assert((await undo.evaluate((b) => parseFloat(getComputedStyle(b).fontSize))) <= 12, 'very small');
+      await admin.reload();
+      sheet = await moneyFor(admin, sessionCards(admin).first());
+      devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
+      await devonRow.locator('.self-tag', { hasText: 'self-marked' }).waitFor();
+      // "Didn't pay?" takes it back.
+      await undo.click();
+      await firstCard(p).getByRole('button', { name: 'I paid' }).waitFor();
+      // The organizer marks it: no tag, and no "Didn't pay?" for the player.
+      await admin.reload();
+      sheet = await moneyFor(admin, sessionCards(admin).first());
+      devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
       await devonRow.getByRole('button', { name: 'Mark paid' }).click();
       await admin.locator('.toast', { hasText: 'Devon marked paid' }).waitFor();
-      await tab(admin, 'Home').click();
+      assert((await devonRow.locator('.self-tag').count()) === 0, 'no tag when I mark it');
       await p.reload();
       await firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
+      assert((await firstCard(p).getByRole('button', { name: "Didn't pay?" }).count()) === 0, 'no undo for the organizer\'s mark');
       assert((await firstCard(p).getByRole('link', { name: /Pay \$/ }).count()) === 0, 'Pay should be gone once paid');
+      // Logged.
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      const acts = admin.getByRole('list', { name: 'Activity' });
+      await acts.getByText(/^Devon marked their payment paid for /).first().waitFor();
+      await acts.getByText(/^Devon unmarked their payment for /).first().waitFor();
+      await acts.getByText(/^Robin marked Devon paid for /).first().waitFor();
+      await tab(admin, 'Home').click();
     });
 
     await check('game day: the payment card shows at the top from 8:00 AM, with the right amount and a Venmo note', async () => {
@@ -1167,7 +1205,7 @@ async function main() {
         const note = new URL(href).searchParams.get('note');
         assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} - Blair$/.test(note), `Venmo note was ${note}`);
         assert((await pay.boundingBox()).height >= 48, 'big Pay with Venmo button');
-        assert((await card.getByText(/may not have marked this paid/).count()) === 0, 'reminder shown too early');
+        assert((await card.getByText(/Already paid\? Ignore this/).count()) === 0, 'reminder shown too early');
         assert((await p.locator('.schedule').getByText(/You owe|Pay with Venmo/).count()) === 0, 'rows stay free of money');
         for (const scheme of ['light', 'dark']) {
           await p.emulateMedia({ colorScheme: scheme });
@@ -1226,7 +1264,7 @@ async function main() {
       await sheet.getByRole('group', { name: 'Usual days' }).getByRole('button', { name: 'Thu' }).click();
       await sheet.getByRole('button', { name: 'Save' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await admin.locator('li', { hasText: 'Devon' }).getByText('Tue & Thu').waitFor();
+      await admin.locator('li', { hasText: 'Devon' }).locator('.p-line2', { hasText: /Tue Thu$/ }).waitFor();
       await admin.getByRole('button', { name: 'Add a person' }).click();
       const add = admin.locator('dialog[open]');
       await add.getByLabel('Name', { exact: true }).fill('Ryan');
@@ -1523,7 +1561,7 @@ async function main() {
       await tab(admin, 'Players').click();
       const row = admin.locator('li', { hasText: 'Morgan' });
       await row.locator('.new-tag', { hasText: 'New' }).waitFor();
-      await row.getByText('Tue & Thu').waitFor();
+      await row.locator('.p-line2', { hasText: /Tue Thu$/ }).waitFor();
     });
 
     await check('removing a name: deleted if no history, hidden if they have some', async () => {
@@ -1555,9 +1593,10 @@ async function main() {
       await tab(admin, 'Home').waitFor();
       await players.Blair.reload();
       await players.Blair.locator('article').nth(1).getByText("You're in", { exact: true }).waitFor();
-      await tab(admin, 'Settings').click();
-      await openSections(admin);
-      await admin.getByText('As player: joined').first().waitFor();
+      // Logged in History > Activity as the organizer acting as Blair.
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(/^Robin \(as Blair\) said I'm in for /).first().waitFor();
       await tab(admin, 'Home').click();
     });
 
@@ -1588,7 +1627,7 @@ async function main() {
       const banner = card.locator('.court-banner');
       await banner.getByRole('button', { name: 'Court opened' }).waitFor();
       await banner.getByRole('button', { name: "Didn't open" }).waitFor();
-      await banner.getByText('On the court waitlist', { exact: true }).waitFor();
+      await banner.getByText('Court waitlist', { exact: true }).waitFor();
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
       assert((await card.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist card should not offer I booked it');
       // Words and both buttons on a single row inside the banner.
@@ -1601,15 +1640,12 @@ async function main() {
       assert(!hit(words, opened) && !hit(words, didnt), 'banner words should not overlap the buttons');
       await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
-      const texts = await otherTexts(card);
-      const shareHref = await card.locator('.options').getByRole('link', { name: 'Share the game' }).getAttribute('href');
-      const shareBody = decodeURIComponent(shareHref.split('body=')[1]);
+      const texts = await textMenu(card);
+      const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
       assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test(shareBody), `waitlist share text: ${shareBody}`);
-      const pollRow = texts.locator('.text-row[data-text="poll"]');
-      await pollRow.locator('.text-name').click();
-      const bubble = (await pollRow.locator('.bubble').innerText()).trim();
-      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://[^\\s/]+(/g/[A-Za-z0-9_-]+)?/?\\?s=[0-9a-f-]+$`);
-      assert(re.test(bubble), `court-waitlist poll was: ${bubble}`);
+      const bubble = smsOf(await texts.locator('.text-row[data-text="poll"] a').getAttribute('href')).body;
+      const expectPoll = `Pickleball ${day.replace(',', '')}, 8:00 to 10:00 PM. I'm on the court waitlist. Want in if it opens? ${SITE}`;
+      assert(bubble === expectPoll, `court-waitlist poll was: ${bubble}`);
       await closeOptions(card);
 
       for (const name of ['Casey', 'Devon']) {
@@ -1666,10 +1702,12 @@ async function main() {
         const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
         assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
         const body = (await main.locator('.bubble').innerText()).trim();
-        const re = new RegExp(`^Pickleball tomorrow, (Tue|Thu), [A-Z][a-z]{2} \\d{1,2}, \\d{1,2}:\\d{2} to 10:00 PM at .+\\. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: \\S+\\?s=${first.id}$`);
-        assert(re.test(body), `day-before text was: ${body}`);
+        const dayWord = new Date(first.startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' }).replace(',', '');
+        const want = `Pickleball tomorrow, ${dayWord}, 8:00 to 10:00 PM. You're in! If you need to back out, text me ASAP. ${SITE}`;
+        assert(body === want, `day-before text was: ${body}`);
+        assert(smsOf(href).body === want, 'Messages opens with the same words');
         assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
-        await main.getByRole('button', { name: 'Copy text' }).waitFor();
+        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the day-before card');
         // The "need more players" text is a smaller second button.
         const second = card.getByRole('button', { name: 'Text the group: need more players' });
         assert((await second.boundingBox()).height < (await open.boundingBox()).height + 1, 'second button should be smaller or equal');
@@ -1677,16 +1715,19 @@ async function main() {
         await card.getByRole('link', { name: 'Text the group: need more players' }).waitFor();
         await main.evaluate((el) => el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault()));
         await open.click();
-        await main.getByText('Message ready.').waitFor();
+        await main.getByText('Message ready', { exact: true }).waitFor();
         assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
         await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
-        // Last call at 13 hours: links to the session too.
+        // Last call at 13 hours: to the players who are in, no link.
         await clock(Date.parse(first.startsAt) - 12.5 * 3600_000); // between last call (13h) and the deadline (12h)
         await admin.reload();
         const last = admin.getByRole('article', { name: /^Last call, / });
         await last.waitFor();
         const lbody = (await last.locator('.bubble').innerText()).trim();
-        assert(new RegExp(`^Last call for pickleball tonight, \\d{1,2}:\\d{2} to 10:00 PM\\. We have 4 in\\. If you can't make it, tell me now or tap here: \\S+\\?s=${first.id}$`).test(lbody), `last call was: ${lbody}`);
+        assert(lbody === "Last call: pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, text me ASAP.", `last call was: ${lbody}`);
+        const lhref = await last.getByRole('link', { name: 'Text the players who are in' }).getAttribute('href');
+        assert(smsOf(lhref).to.length === 4 && smsOf(lhref).body === lbody, 'last call opens Messages to the 4 who are in');
+        assert((await last.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the last-call card');
         assert(!/\bsent\b/i.test(await last.innerText()), 'never say sent');
       } finally {
         await clock(Date.now() + BASE_OFFSET);
@@ -1716,8 +1757,8 @@ async function main() {
       assert(/^Pickleball moved to (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 7:30 to 10:00 PM\.$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
       await moved.getByLabel(/Reason/).fill('Court swap');
       await bubble.getByText(/7:30 to 10:00 PM\. Court swap\.$/).waitFor();
-      await moved.getByRole('link', { name: 'Text the group' }).waitFor();
-      await moved.getByRole('button', { name: 'Copy text' }).waitFor();
+      await moved.getByRole('link', { name: 'Text the players who are in' }).waitFor();
+      assert((await moved.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy');
       assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
@@ -1764,7 +1805,7 @@ async function main() {
       assert(/^Pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2} is canceled\.$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       await after.getByLabel(/Reason/).fill('Rain');
       await bubble.getByText(/is canceled\. Rain\.$/).waitFor();
-      await after.getByRole('link', { name: 'Text the group' }).waitFor();
+      await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
       assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
       // Who to pay back, with Refunded.
       const back = after.getByRole('region', { name: 'Pay back' });
@@ -1924,9 +1965,11 @@ async function main() {
         await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
         await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
         const bubble = (await card.locator('.bubble').innerText()).trim();
-        assert(/^A spot just opened for pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to claim it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
-        await card.getByRole('link', { name: 'Text the group: spot open' }).waitFor();
-        await card.getByRole('button', { name: 'Copy text' }).waitFor();
+        assert(/^A spot opened for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to grab it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
+        const spotLink = card.getByRole('link', { name: 'Text the group: spot open' });
+        const spot = smsOf(await spotLink.getAttribute('href'));
+        assert(spot.body === bubble && spot.to.length >= 1, 'spot open goes to the people not in');
+        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the spot-open card');
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
         await sc.locator('.late-tag').waitFor();
@@ -1938,7 +1981,7 @@ async function main() {
         await card.waitFor({ state: 'detached' });
         // Count on Players, organizer only.
         await tab(admin, 'Players').click();
-        await admin.locator('li', { hasText: 'Frankie' }).getByText('Late drops: 1').waitFor();
+        await admin.locator('li', { hasText: 'Frankie' }).getByText(/1 late drop\b/).waitFor();
         await tab(admin, 'Home').click();
         await players.Alex.reload();
         await players.Alex.locator('.schedule article').first().waitFor();
@@ -2026,17 +2069,28 @@ async function main() {
       await admin.request.put(`${BASE}/api/admin/sessions/${sid}/booking`, { data: { bookingStatus: 'needs_booking', cancellationDeadlineAt: sess.cancellationDeadlineAt }, headers: { Origin: BASE } });
     });
 
-    await check('slim sessions row: Upcoming | Past and Book on one row; small week labels; spots on the count line', async () => {
+    await check('no Upcoming / Past toggle: sessions start right under the header; "Book a court" rides on the first divider; small week labels; spots on the count line', async () => {
       await admin.reload();
-      const bar = admin.locator('.sessions-bar');
-      const box = await bar.boundingBox();
-      assert(box.height <= 48, `sessions row is ${box.height}px tall`);
+      await sessionCards(admin).first().waitFor();
+      assert((await admin.locator('.sessions-bar').count()) === 0, 'the old sessions row should be gone');
+      assert((await admin.getByRole('group', { name: 'Which sessions' }).count()) === 0, 'no Upcoming / Past toggle');
+      assert((await admin.getByRole('button', { name: 'Past', exact: true }).count()) === 0, 'no Past button');
+      const now = Date.parse(await admin.evaluate(async () => (await (await fetch('/api/admin/dashboard')).json()).now));
+      const ends = await admin.evaluate(async () => (await (await fetch('/api/admin/dashboard')).json()).sessions.map((x) => [x.id, x.endsAt]));
+      const shownIds = await sessionCards(admin).evaluateAll((cs) => cs.map((c) => c.id.replace('session-', '')));
+      for (const id of shownIds) assert(Date.parse(ends.find((e) => e[0] === id)[1]) > now, 'Home should only show upcoming sessions');
       assert((await admin.getByRole('heading', { name: 'Sessions', exact: true }).evaluate((h) => h.getBoundingClientRect().width <= 1)), '"Sessions" heading should be hidden');
-      const toggle = await bar.getByRole('group', { name: 'Which sessions' }).boundingBox();
-      const book = bar.getByRole('link', { name: /^Book/ });
-      assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await book.getAttribute('target')) === '_blank', 'Book opens CourtReserve in a new tab');
-      const bb = await book.boundingBox();
-      assert(toggle.x < bb.x && Math.abs(toggle.y + toggle.height / 2 - (bb.y + bb.height / 2)) < 6, 'toggle left, Book right, one row');
+      // The pill sits at the right end of the first divider and adds no height to it.
+      const first = admin.locator('.week-break').first();
+      const pill = first.getByRole('link', { name: /^Book a court/ });
+      assert((await pill.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await pill.getAttribute('target')) === '_blank', 'Book a court opens CourtReserve in a new tab');
+      const line = await first.boundingBox();
+      const plain = await admin.locator('.week-break').nth(1).boundingBox();
+      assert(Math.abs(line.height - plain.height) <= 1, `the divider with the pill is ${line.height}px, a plain one is ${plain.height}px`);
+      const pb = await pill.boundingBox();
+      const vw = admin.viewportSize().width;
+      assert(pb.x + pb.width > vw - 40, 'pill at the right end of the line');
+      assert((await pill.locator('svg.ext-icon').count()) === 1, 'pill has the arrow');
       const wk = await admin.locator('.week-break').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       assert(wk <= 11.5, `week label is ${wk}px`);
       // A card with nobody in yet: "0 of 4 in" and four small circles on one line.
@@ -2104,7 +2158,7 @@ async function main() {
     });
 
     for (const [width, scheme] of [[360, 'light'], [390, 'dark'], [430, 'light'], [375, 'dark']]) {
-      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer ${width >= 390 ? 4 : 3}+, player 3+`, async () => {
+      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer 4+ on a short 664px screen (was 3 at 360/375), player 3+`, async () => {
         const ctx = await browser.newContext({ ...phone(width), viewport: { width, height: 664 }, colorScheme: scheme });
         const p = await ctx.newPage();
         await p.goto(`${BASE}/admin`);
@@ -2120,11 +2174,17 @@ async function main() {
           }).length;
         });
         await p.screenshot({ path: path.join(SHOTS, `dense-admin-${width}-${scheme}.png`) });
-        assert(fitAdmin >= (width >= 390 ? 4 : 3), `only ${fitAdmin} organizer session cards fit on screen`);
+        // On this short screen it was 3 at 360/375 and 4 at 390/430 before; now 4 everywhere (5 to 6 on a full-height phone).
+        assert(fitAdmin >= 4, `only ${fitAdmin} organizer session cards fit on screen`);
         const small = await p.evaluate(() =>
           [...document.querySelectorAll('main button:not(.link-btn), main a.btn, header button, nav.tabbar button')]
             .filter((b) => b.offsetParent !== null)
-            .map((b) => [b.textContent.trim(), b.getBoundingClientRect().height])
+            .map((b) => {
+              // A small-looking button can carry an invisible 44px tap area (::before).
+              const tap = getComputedStyle(b, '::before');
+              const extra = tap.content !== 'none' && tap.position === 'absolute' ? parseFloat(tap.height) || 0 : 0;
+              return [b.textContent.trim(), Math.max(b.getBoundingClientRect().height, extra)];
+            })
             .filter(([, h]) => h < 43.5),
         );
         assert(small.length === 0, `buttons under 44px: ${JSON.stringify(small)}`);
@@ -2349,6 +2409,7 @@ async function main() {
         assert(await notYou.isVisible(), '"not you?" should show in the simulation');
         assert(await p.locator('.topbar .mode-btn').isVisible(), 'mode button should show in the simulation');
         assert((await p.getByText(/Welcome,/).count()) === 0, 'no "Welcome,"');
+        assert((await p.getByRole('button', { name: /^History/ }).count()) === 0 && (await p.locator('nav.tabbar').count()) === 0, 'no History tab in View as');
         // The exit bar is its own row above the header, covering nothing.
         const barBox = await bar.boundingBox();
         const headBox = await p.locator('header.topbar').boundingBox();
@@ -2454,10 +2515,485 @@ async function main() {
       });
     }
 
-    // ---------- Cards: gear only, Other texts, "Copy text" ----------
+    // ---------- History: past sessions and the activity log ----------
+    await check('History > Activity: marking someone paid shows up at the top with the right Eastern time', async () => {
+      const api = (method, url, data) => admin.request.fetch(`${BASE}${url}`, { method, data, headers: { Origin: BASE } });
+      const d = await (await api('GET', '/api/admin/dashboard')).json();
+      const s = d.sessions.find((x) => x.roster.some((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null));
+      assert(s, 'need someone unpaid');
+      const r = s.roster.find((x) => x.status === 'confirmed' && x.paymentStatus === 'unpaid' && x.shareCents !== null);
+      const res = await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true });
+      assert(res.ok(), `mark paid failed ${res.status()}`);
+      const serverNow = Date.parse((await (await api('GET', '/api/admin/dashboard')).json()).now);
+      const fmt = (ms) => new Date(ms).toLocaleString('en-US', { timeZone: 'America/Detroit', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/ at /, ', ');
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      const day = new Date(s.startsAt).toLocaleDateString('en-US', { timeZone: 'America/Detroit', weekday: 'short', month: 'short', day: 'numeric' });
+      // (Earlier checks moved the test clock ahead and back, so entries from "later" can sit above it.)
+      const top = admin.getByRole('list', { name: 'Activity' }).locator('li').filter({ hasText: `Robin marked ${r.name} paid for ${day}` }).first();
+      await top.waitFor();
+      const when = (await top.locator('.a-time').innerText()).trim();
+      assert([fmt(serverNow), fmt(serverNow - 60_000)].includes(when), `time was "${when}", expected about "${fmt(serverNow)}" Eastern`);
+      assert(/, \d{1,2}:\d{2} (AM|PM)$/.test(when), 'AM/PM time');
+      // Players' own taps are there too, under their names.
+      const all = (await admin.getByRole('list', { name: 'Activity' }).locator('.a-text').allInnerTexts()).join('\n');
+      assert(/^(Alex|Blair|Casey|Devon|Emery|Frankie) said I'm in for /m.test(all), 'player sign-ups should be logged by name');
+      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false });
+      await tab(admin, 'Home').click();
+    });
+
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`cards at ${width}px (${scheme}): no phone button, the gear works, Other texts open and copy, every message copy says "Copy text" on one line`, async () => {
+      await check(`History at ${width}px (${scheme}): Sessions and Activity chips, compact past rows that open, no overlaps`, async () => {
+        // Two days on, so this week's sessions have been played.
+        await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() + BASE_OFFSET + 2 * 24 * 3600_000 }) });
+        try {
+          const p = await admin.context().newPage();
+          p.setDefaultTimeout(10000);
+          await p.setViewportSize({ width, height: 844 });
+          await p.emulateMedia({ colorScheme: scheme });
+          await p.goto(`${BASE}/admin`);
+          await tab(p, 'History').click();
+          const chips = p.getByRole('group', { name: 'Show' });
+          assert((await chips.getByRole('button', { name: 'Sessions' }).getAttribute('aria-pressed')) === 'true', 'Sessions is the default');
+          const list = p.getByRole('list', { name: 'Past sessions' });
+          await list.waitFor();
+          const rows = list.locator('li');
+          assert((await rows.count()) >= 1, 'no past sessions listed');
+          const first = (await rows.first().locator('.h-top').innerText()).replace(/\s+/g, ' ');
+          assert(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2} \d{1,2}(:\d{2})? (to|PM)/.test(first), `row top was "${first}"`);
+          const who = (await rows.first().locator('.h-who').innerText()).trim();
+          assert(/^(\d+ played|Canceled|Court didn't open)/.test(who), `row said "${who}"`);
+          // Newest first.
+          const ids = await rows.evaluateAll((ls) => ls.map((l) => l.dataset.session));
+          const starts = await p.evaluate(async (ids) => {
+            const d = await (await fetch('/api/admin/dashboard')).json();
+            return ids.map((id) => d.sessions.find((x) => x.id === id).startsAt);
+          }, ids);
+          assert(starts.every((x, i) => i === 0 || x <= starts[i - 1]), 'past sessions should be newest first');
+          const rep = await p.evaluate(layoutReport, { roots: 'main .history-list li', items: '.h-date, .h-time, .h-money, .h-who strong, .h-names, .h-canceled, .late-tag' });
+          assert(rep.problems.length === 0, `History rows: ${rep.problems.slice(0, 3).join(' | ')}`);
+          const tall = await rows.evaluateAll((ls) => Math.max(...ls.map((l) => l.getBoundingClientRect().height)));
+          assert(tall <= 110, `rows should be compact, tallest was ${tall}px`);
+          await rows.first().locator('button').click();
+          const sheet = p.locator('dialog[open]');
+          await sheet.locator('article.scard').waitFor();
+          await p.keyboard.press('Escape');
+          await sheet.waitFor({ state: 'detached' });
+          await chips.getByRole('button', { name: 'Activity' }).click();
+          assert((await chips.getByRole('button', { name: 'Activity' }).getAttribute('aria-pressed')) === 'true', 'Activity chip pressed');
+          const acts = p.getByRole('list', { name: 'Activity' }).locator('li');
+          await acts.first().waitFor();
+          const times = await acts.locator('.a-time').allInnerTexts();
+          assert(times.every((t) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/.test(t.trim())), `bad times: ${times.slice(0, 3)}`);
+          const stamps = await acts.locator('time').evaluateAll((ts) => ts.map((t) => t.dateTime));
+          assert(stamps.every((x, i) => i === 0 || x <= stamps[i - 1]), 'activity newest first');
+          assert(!/\bsent\b/i.test(await p.locator('main').innerText()), 'never say sent');
+          assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scrolling');
+          await p.screenshot({ path: path.join(SHOTS, `history-${width}-${scheme}.png`) });
+          await chips.getByRole('button', { name: 'Sessions' }).click();
+          await list.waitFor();
+          await p.close();
+        } finally {
+          await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() + BASE_OFFSET }) });
+        }
+      });
+    }
+
+    await check('players never see History', async () => {
+      const p = players.Alex;
+      await p.reload();
+      await p.locator('.schedule article').first().waitFor();
+      assert((await p.getByText(/^History$/).count()) === 0 && (await p.locator('nav.tabbar').count()) === 0, 'History on the player screen');
+      assert((await p.request.get(`${BASE}/api/admin/activity`)).status() === 401, 'players can read the activity log');
+    });
+
+    // ---------- Court strips: one row when it fits, else label then two equal halves ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`court strips at ${width}px (${scheme}): one row if it fits, else label above two equal-half buttons; no gaps, overlaps or cut-off text`, async () => {
         const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        await showAll(p);
+        const kinds = await p.locator('.court-banner').evaluateAll((bs) => bs.map((b) => b.closest('article').dataset.court));
+        assert(kinds.includes('needs') && kinds.includes('waitlist'), `need both strips, got ${kinds}`);
+        const report = await p.evaluate(() =>
+          [...document.querySelectorAll('.court-banner')].map((b) => {
+            const cs = getComputedStyle(b);
+            const padL = parseFloat(cs.paddingLeft);
+            const padR = parseFloat(cs.paddingRight);
+            const box = b.getBoundingClientRect();
+            const left = box.left + padL;
+            const right = box.right - padR;
+            const label = b.querySelector('.court-status').getBoundingClientRect();
+            const btns = [...b.querySelectorAll('.banner-btns > .btn')].map((x) => x.getBoundingClientRect());
+            // How wide one row would need to be: a hidden copy that never wraps.
+            const copy = b.cloneNode(true);
+            copy.querySelectorAll('dialog').forEach((d) => d.remove());
+            Object.assign(copy.style, { position: 'absolute', visibility: 'hidden', width: 'max-content', flexWrap: 'nowrap', left: '0', top: '0' });
+            b.parentElement.appendChild(copy);
+            const need = copy.getBoundingClientRect().width;
+            copy.remove();
+            const oneRow = btns.every((x) => Math.abs(x.top - btns[0].top) < 1) && btns[0].top < label.bottom - 2;
+            const btnStyle = getComputedStyle(b.querySelector('.banner-btns > .btn'));
+            const body = b.closest('article').querySelector('.scard-main').getBoundingClientRect();
+            return {
+              kind: b.closest('article').dataset.court,
+              label: b.querySelector('.court-status').innerText.trim(),
+              oneRow,
+              fits: need <= box.width + 0.5,
+              need: Math.round(need),
+              have: Math.round(box.width),
+              halves: btns.length === 2 && Math.abs(btns[0].width - btns[1].width) <= 1 && Math.abs(btns[0].left - left) <= 1 && Math.abs(btns[1].right - right) <= 1,
+              below: btns.every((x) => x.top >= label.bottom - 1),
+              sideBySide: btns.length === 2 && Math.abs(btns[0].top - btns[1].top) < 1 && btns[0].right <= btns[1].left,
+              overlap: btns.some((x) => x.left < label.right - 1 && x.top < label.bottom - 1 && x.bottom > label.top + 1),
+              inside: btns.every((x) => x.left >= box.left && x.right <= box.right + 0.5) && label.right <= box.right + 0.5,
+              cut: [...b.querySelectorAll('.banner-btns > .btn')].some((x) => x.scrollWidth > x.clientWidth + 1),
+              btnH: Math.round(btns[0].height),
+              font: parseFloat(btnStyle.fontSize),
+              padTop: Math.round(parseFloat(cs.paddingTop)),
+              padBottom: Math.round(parseFloat(cs.paddingBottom)),
+              gapBelow: Math.round(body.top - box.bottom),
+            };
+          }),
+        );
+        for (const r of report) {
+          const where = `${r.kind} strip "${r.label}"`;
+          assert(r.label === (r.kind === 'waitlist' ? 'Court waitlist' : 'Court not booked'), `${where}: label`);
+          assert(r.oneRow === r.fits, `${where}: ${r.oneRow ? 'one row but it does not fit' : 'two rows but one would fit'} (needs ${r.need}px, has ${r.have}px)`);
+          if (!r.oneRow) assert(r.halves && r.below && r.sideBySide, `${where}: buttons should be equal halves under the label ${JSON.stringify(r)}`);
+          assert(!r.overlap && r.inside && !r.cut, `${where}: overlap or cut off ${JSON.stringify(r)}`);
+          assert(r.btnH >= 34 && r.btnH <= 38 && Math.abs(r.font - 15) < 0.5, `${where}: buttons ${r.btnH}px tall, ${r.font}px text`);
+          assert(r.padTop >= 10 && r.padTop <= 12 && r.padTop === r.padBottom, `${where}: padding ${r.padTop}/${r.padBottom}`);
+          assert(Math.abs(r.gapBelow - r.padTop) <= 2, `${where}: ${r.gapBelow}px between strip and card body, padding is ${r.padTop}px`);
+        }
+        // The card Book link sits on the same row as I booked it and goes to CourtReserve.
+        const amber = p.locator('article[data-court="needs"] .court-banner').first();
+        const book = amber.getByRole('link', { name: /^Book/ });
+        assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await book.getAttribute('target')) === '_blank', 'card Book link');
+        const bb = await book.boundingBox();
+        const ib = await amber.getByRole('button', { name: 'I booked it' }).boundingBox();
+        assert(Math.abs(bb.y - ib.y) < 1 && bb.x < ib.x, 'Book and I booked it on one row');
+        // Date tile and time line up under every strip.
+        const aligned = await p.evaluate(() =>
+          [...document.querySelectorAll('.court-banner')].every((b) => {
+            const a = b.closest('article');
+            const tile = a.querySelector('.tile').getBoundingClientRect();
+            const time = a.querySelector('.sched-time').getBoundingClientRect();
+            return tile.top >= b.getBoundingClientRect().bottom && time.top >= b.getBoundingClientRect().bottom && Math.abs(tile.top - (time.top - 6)) < 14;
+          }),
+        );
+        assert(aligned, 'date tile and time should sit just under the strip');
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
+        assert(rep.problems.length === 0, `Home: ${rep.problems.slice(0, 3).join(' | ')}`);
+        await p.locator('article[data-court="waitlist"]').first().screenshot({ path: path.join(SHOTS, `strip-waitlist-${width}-${scheme}.png`) });
+        await amber.locator('xpath=ancestor::article[1]').screenshot({ path: path.join(SHOTS, `strip-needs-${width}-${scheme}.png`) });
+        await p.close();
+      });
+    }
+
+    // ---------- Number and dollar boxes save on leave or Enter, never on a pause ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`number boxes at ${width}px (${scheme}): "1" on the way to "14" is never saved; Enter or leaving saves`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        p.setDefaultTimeout(10000);
+        await p.goto(`${BASE}/admin`);
+        await tab(p, 'Settings').click();
+        await openSections(p);
+        const saved = async () => (await (await p.request.get(`${BASE}/api/admin/dashboard`)).json()).group.settings;
+        const price = p.getByLabel('Price per player');
+        const before = await price.inputValue();
+        const target = before === '14' ? '15' : '14';
+        await price.fill('');
+        await price.pressSequentially('1');
+        await p.waitForTimeout(1600);
+        assert((await rowOf(price).locator('.save-mark').count()) === 0, 'a pause must not save a number');
+        assert((await saved()).pricePerPlayerCents === Number(before) * 100, 'the half-typed "1" reached the server');
+        await price.pressSequentially(target[1]);
+        await price.press('Enter');
+        await savedIn(price);
+        assert((await saved()).pricePerPlayerCents === Number(target) * 100, `Enter should save ${target}`);
+        // Leaving the box saves too (hours this time).
+        const hours = p.getByLabel(/Last call/);
+        const hBefore = await hours.inputValue();
+        await hours.fill('');
+        await hours.pressSequentially('1');
+        await p.waitForTimeout(1600);
+        assert((await saved()).lastCallHours === Number(hBefore), 'a pause must not save hours');
+        const hTarget = hBefore === '11' ? '12' : '11';
+        await hours.pressSequentially(hTarget[1]);
+        await hours.blur();
+        await savedIn(hours);
+        assert((await saved()).lastCallHours === Number(hTarget), `leaving should save ${hTarget}`);
+        await autoSet(hours, hBefore);
+        await autoSet(price, before);
+        await p.close();
+      });
+    }
+
+    // ---------- Fewer words: every screen still clean, and shorter ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`every screen at ${width}px (${scheme}): no overlaps, nothing cut off, no sideways scrolling; Settings and Home drafts are shorter`, async () => {
+        const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        const ITEMS = 'button, a[href], input, h2, h3, .chip, .late-tag, .me-tag, .extra-tag, .bubble, .set-label, summary > span, .h-date, .h-time, .h-money, .a-text, .a-time';
+        const screens = { Home: 'main article, main .card', Players: 'main .card', Money: 'main .card, main details', History: 'main .card', Settings: 'main .card' };
+        for (const [name, roots] of Object.entries(screens)) {
+          await tab(p, name).click();
+          await p.waitForTimeout(250);
+          if (name === 'Settings') await openSections(p);
+          const rep = await p.evaluate(layoutReport, { roots, items: ITEMS });
+          assert(rep.problems.length === 0, `${name}: ${rep.problems.slice(0, 3).join(' | ')}`);
+          assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, `${name} scrolls sideways`);
+        }
+        // Settings with every section open was 2623px tall at 390px before the trim.
+        if (width === 390) {
+          const h = await p.evaluate(() => document.documentElement.scrollHeight);
+          assert(h <= 2623 - 100, `Settings is ${h}px tall (was 2623px)`);
+        }
+        // Message drafts on Home: who and the number on one line, no "Draft" tag.
+        await tab(p, 'Home').click();
+        const heads = await p.locator('.draft .draft-head').evaluateAll((hs) => hs.map((h) => h.getBoundingClientRect().height));
+        assert(heads.every((h) => h <= 30), `draft headers wrap: ${heads}`);
+        assert((await p.locator('.draft').getByText('Draft', { exact: true }).count()) === 0, 'no Draft tag');
+        // The player screen too.
+        const pl = await newPage(width, scheme);
+        await pl.goto(BASE);
+        await pl.locator('.name-grid, .schedule').first().waitFor();
+        if (await pl.locator('.name-grid').count()) await pl.getByRole('button', { name: 'Blair', exact: true }).click();
+        await pl.locator('.schedule article').first().waitFor();
+        const pr = await pl.evaluate(layoutReport, { roots: 'main article, main section.card', items: 'button, a[href], .sched-time, .me-tag, .extra-tag, .court-status, .in-count, .tile' });
+        assert(pr.problems.length === 0, `player screen: ${pr.problems.slice(0, 3).join(' | ')}`);
+        assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player screen scrolls sideways');
+        await pl.close();
+        await p.close();
+      });
+    }
+
+    // ---------- Players tab: compact rows with money; Money tab leads with the month ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`Players at ${width}px (${scheme}): 8+ rows on a screen, pills by the name, balance and played count, Edit, tap a row for the money; Money tab summary first`, async () => {
+        const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await tab(p, 'Players').click();
+        const list = p.getByRole('list', { name: 'Players' });
+        await list.waitFor();
+        assert((await p.getByText(/Want in\?" nudge|Regulars get/).count()) === 0, 'the top sentence is gone');
+        assert((await p.getByText(/No usual day/).count()) === 0, 'no "No usual day"');
+        const rows = list.locator('li.player-row');
+        assert((await rows.count()) >= 8, `only ${await rows.count()} people to show`);
+        const heights = await rows.evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().height));
+        const typical = heights.slice().sort((a, b) => a - b)[Math.floor(heights.length / 2)];
+        assert(typical >= 50 && typical <= 66, `rows are ${typical}px tall`);
+        const fit = await p.evaluate(() => {
+          const top = document.querySelector('main').getBoundingClientRect().top + window.scrollY;
+          const limit = document.querySelector('.tabbar').getBoundingClientRect().top - top;
+          return [...document.querySelectorAll('li.player-row')].filter((l) => l.getBoundingClientRect().bottom + window.scrollY - top <= limit).length;
+        });
+        assert(fit >= 8, `only ${fit} rows fit on one screen`);
+        // Pills sit on the name's line; nothing overlaps or gets cut off.
+        const pill = await rows.first().evaluate((r) => {
+          const n = r.querySelector('.p-name').getBoundingClientRect();
+          const pl = r.querySelector('.p-pill').getBoundingClientRect();
+          return Math.abs(n.top + n.height / 2 - (pl.top + pl.height / 2)) < 6 && pl.left > n.right;
+        });
+        assert(pill, 'the pill should sit right after the name');
+        const rep = await p.evaluate(layoutReport, { roots: 'main .player-list', items: '.p-name, .p-pill, .new-tag, .p-line2, .p-bal, .p-played, .p-edit' });
+        assert(rep.problems.length === 0, `Players: ${rep.problems.slice(0, 3).join(' | ')}`);
+        assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scrolling');
+        // Balance words match the money: owed (normal), credit (green), $0 (gray); no red.
+        const d = await (await p.request.get(`${BASE}/api/admin/dashboard`)).json();
+        for (const r of await rows.all()) {
+          const name = await r.getAttribute('data-player');
+          const pl = d.players.find((x) => x.name === name);
+          const bal = (await r.locator('.p-bal').innerText()).trim();
+          assert(/^(Owes \$\d+(\.\d\d)?|Credit \$\d+(\.\d\d)?|\$0)$/.test(bal), `${name}: balance "${bal}"`);
+          assert((await r.locator('.p-played').innerText()).trim() === `${pl.played} played`, `${name}: played count`);
+          const color = await r.locator('.p-bal').evaluate((e) => getComputedStyle(e).color);
+          const danger = await p.evaluate(() => getComputedStyle(document.body).getPropertyValue('--danger-fg'));
+          assert(!color.includes(danger.trim()) || !danger.trim(), `${name}: no red`);
+        }
+        // Edit still opens the form; a row opens the money breakdown with Mark paid.
+        await rows.first().getByRole('button', { name: /^Edit / }).click();
+        await p.locator('dialog[open]').getByLabel('Name', { exact: true }).waitFor();
+        await p.keyboard.press('Escape');
+        await p.locator('dialog[open]').waitFor({ state: 'detached' });
+        const devon = rows.filter({ has: p.locator('.p-name', { hasText: /^Devon$/ }) });
+        await devon.locator('.player-open').click();
+        const sheet = p.locator('dialog[open]');
+        await sheet.getByRole('list', { name: 'Sessions' }).waitFor();
+        await sheet.getByText(/played$/).first().waitFor();
+        assert((await sheet.getByRole('button', { name: /^(Mark paid|Unmark)$/ }).count()) >= 1, 'Mark paid or Unmark in the breakdown');
+        await p.keyboard.press('Escape');
+        // Money: the monthly summary comes first, and the old actions are all there.
+        await tab(p, 'Money').click();
+        await p.locator('.money-sum').waitFor();
+        const order = await p.evaluate(() => {
+          const y = (sel) => document.querySelector(sel)?.getBoundingClientRect().top ?? Infinity;
+          return { sum: y('.money-sum'), sess: y('details.money-sess[data-session]') };
+        });
+        assert(order.sum < order.sess, 'summary first');
+        for (const k of ['Collected', 'Court costs', 'Membership', 'Sessions played']) await p.locator('.money-sum dt', { hasText: k }).waitFor();
+        await p.getByRole('heading', { name: 'Who paid' }).waitFor();
+        const open = p.locator('details.money-sess[data-session]').first();
+        await open.evaluate((el) => (el.open = true));
+        assert((await open.getByRole('button', { name: /^(Mark paid|Unmark)$/ }).count()) >= 1, 'Mark paid / Unmark still in Money');
+        await p.close();
+      });
+    }
+
+    // ---------- One-off games ----------
+    await check('"+ Add game": pill on the line, sheet adds a game for everyone in date order with an Extra game tag; duplicates warn; 14-day rule; Activity', async () => {
+      await tab(admin, 'Home').click();
+      await sessionCards(admin).first().waitFor();
+      const line = admin.locator('.week-break').first();
+      const pill = line.getByRole('button', { name: '+ Add game' });
+      const lb = await line.boundingBox();
+      const plain = await admin.locator('.week-break').nth(1).boundingBox();
+      assert(Math.abs(lb.height - plain.height) <= 1, 'the pills add no height to the line');
+      assert((await line.getByRole('link', { name: /^Book a court/ }).count()) === 1, 'Book a court sits next to it');
+      await pill.click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByRole('heading', { name: 'Add a game' }).waitFor();
+      // Quick chips: the next Wed, Sat and Sun, soonest first.
+      const chips = (await sheet.getByRole('group', { name: 'Date' }).getByRole('button').allInnerTexts()).map((x) => x.trim());
+      assert(chips.length === 3 && ['Wed', 'Sat', 'Sun'].every((d) => chips.some((c) => c.startsWith(d))), `chips were ${chips}`);
+      assert((await sheet.getByLabel('Start').inputValue()) === '20:00' && (await sheet.getByLabel('End').inputValue()) === '22:00', 'default 8:00 to 10:00 PM');
+      // A Saturday about three weeks out, so booking isn't open yet.
+      const now = Date.now() + BASE_OFFSET;
+      let d = new Date(now + 17 * 24 * 3600_000);
+      while (d.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' }) !== 'Sat') d = new Date(d.getTime() + 24 * 3600_000);
+      const iso = d.toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
+      const label = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' });
+      await sheet.getByLabel('Pick a date').fill(iso);
+      await sheet.getByLabel('Start').fill('10:00');
+      await sheet.getByLabel('End').fill('12:00');
+      await sheet.getByLabel('Note (optional)').fill('Court 3');
+      await sheet.getByRole('button', { name: 'Add game', exact: true }).click();
+      await admin.locator('.toast', { hasText: 'Game added' }).waitFor();
+      await sheet.waitFor({ state: 'detached' });
+      await showAll(admin);
+      const card = sessionCards(admin).filter({ has: admin.locator('h2', { hasText: label }) }).first();
+      await card.locator('.extra-tag', { hasText: 'Extra game' }).waitFor();
+      await card.getByText('10:00 AM to 12:00 PM').waitFor();
+      await card.getByText('Court 3').waitFor();
+      assert((await card.getAttribute('data-court')) === 'later', 'three weeks out: booking not open yet');
+      const opens = new Date(Date.parse(`${iso}T12:00:00Z`) - 14 * 24 * 3600_000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+      await card.getByText(`Booking opens ${opens}`).waitFor();
+      // In date order on Home.
+      const starts = await sessionCards(admin).evaluateAll((cs) => cs.map((c) => c.id));
+      const all = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions;
+      const shownStarts = starts.map((id) => all.find((x) => `session-${x.id}` === id).startsAt);
+      assert(shownStarts.every((x, i) => i === 0 || x >= shownStarts[i - 1]), 'Home in date order');
+      // Duplicate: warned, not made.
+      await admin.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+      await sheet.getByLabel('Pick a date').fill(iso);
+      await sheet.getByLabel('Start').fill('10:00');
+      await sheet.getByLabel('End').fill('12:00');
+      await sheet.getByRole('button', { name: 'Add game', exact: true }).click();
+      await sheet.getByText(/^There's already a game at (Sat), [A-Z][a-z]{2} \d{1,2}, 10:00 AM\.$/).waitFor();
+      await admin.keyboard.press('Escape');
+      const count = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.filter((x) => x.extra).length;
+      assert(count === 1, `expected one extra game, found ${count}`);
+      // Players see it too, tagged, in order.
+      const pl = players.Alex;
+      await pl.reload();
+      await pl.locator('.schedule article').first().waitFor();
+      const more2 = pl.getByRole('button', { name: /^More sessions/ });
+      if (await more2.count()) await more2.click();
+      const prow = pl.locator('.schedule article').filter({ has: pl.locator('.extra-tag', { hasText: 'Extra game' }) });
+      await prow.waitFor();
+      await prow.getByText('Court 3').waitFor();
+      assert((await prow.getByRole('button', { name: "I'm in" }).count()) === 1, 'players can sign up for it');
+      // Logged in Activity.
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(`Robin added a game for ${label}`).first().waitFor();
+      await tab(admin, 'Home').click();
+    });
+
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`Add game sheet and organizer "I'm in" at ${width}px (${scheme}): no overlaps; my name shows and counts; Out takes it back`, async () => {
+        const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        await showAll(p);
+        // The sheet fits, nothing overlaps.
+        await p.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
+        const sheet = p.locator('dialog[open]');
+        await sheet.getByRole('button', { name: 'Add game', exact: true }).waitFor();
+        const sr = await p.evaluate(layoutReport, { roots: 'dialog[open] .sheet-body', items: 'button, input, .chip-btn' });
+        assert(sr.problems.length === 0, `Add game sheet: ${sr.problems.slice(0, 3).join(' | ')}`);
+        assert((await sheet.evaluate((d) => d.scrollWidth - d.clientWidth)) <= 0, 'sheet scrolls sideways');
+        await p.keyboard.press('Escape');
+        await sheet.waitFor({ state: 'detached' });
+        // I'm in on a card well ahead (not a late drop when I go Out).
+        const cards = sessionCards(p).filter({ has: p.getByRole('button', { name: /^I'm in for / }) });
+        const pickId = await cards.nth(Math.min(3, (await cards.count()) - 1)).getAttribute('id');
+        const card = p.locator(`#${pickId}`);
+        const before = Number((await card.locator('.players-count').innerText()).match(/^(\d+)/)[1]);
+        await card.getByRole('button', { name: /^I'm in for / }).click();
+        await card.locator('.me-tag', { hasText: /^(You're in|Waitlist)$/ }).waitFor();
+        const inNow = (await card.locator('.me-tag').innerText()).trim() === "You're in";
+        if (inNow) {
+          await card.locator('.spots li', { hasText: 'Robin' }).waitFor();
+          const after = Number((await card.locator('.players-count').innerText()).match(/^(\d+)/)[1]);
+          assert(after === before + 1, `count went ${before} to ${after}`);
+        }
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .me-tag' });
+        assert(rep.problems.length === 0, `cards with I'm in: ${rep.problems.slice(0, 3).join(' | ')}`);
+        const btnBox = await card.locator('.me-state').boundingBox();
+        const cardBox = await card.boundingBox();
+        assert(btnBox.x + btnBox.width <= cardBox.x + cardBox.width, 'You\'re in stays inside the card');
+        await card.getByRole('button', { name: /^Out of / }).click();
+        await card.getByRole('button', { name: /^I'm in for / }).waitFor();
+        assert((await card.locator('.spots li', { hasText: 'Robin' }).count()) === 0, 'Out takes my name off');
+        // Every card state still has no overlaps with the I'm in button there.
+        const rep2 = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
+        assert(rep2.problems.length === 0, `cards: ${rep2.problems.slice(0, 3).join(' | ')}`);
+        await p.close();
+      });
+    }
+
+    await check('organizer "I\'m in" is logged in Activity under my name, and players see me in the roster', async () => {
+      await tab(admin, 'Home').click();
+      await showAll(admin);
+      const cardId = await sessionCards(admin).filter({ has: admin.getByRole('button', { name: /^I'm in for / }) }).nth(2).getAttribute('id');
+      const card = admin.locator(`#${cardId}`);
+      const day = (await card.locator('h2').innerText()).trim();
+      await card.getByRole('button', { name: /^I'm in for / }).click();
+      await card.locator('.me-tag', { hasText: "You're in" }).waitFor();
+      const id = (await card.getAttribute('id')).replace('session-', '');
+      await players.Alex.reload();
+      await players.Alex.locator(`#row-${id} .in-pills li`, { hasText: 'Robin' }).waitFor();
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(`Robin said I'm in for ${day}`).first().waitFor();
+      await tab(admin, 'Home').click();
+      await showAll(admin);
+      await admin.locator(`#session-${id}`).getByRole('button', { name: /^Out of / }).click();
+      await admin.locator(`#session-${id}`).getByRole('button', { name: /^I'm in for / }).waitFor();
+    });
+
+    // ---------- Cards: gear only, one "Text" button, no Copy anywhere ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`cards at ${width}px (${scheme}): gear only; "Text" opens the choices with who they go to; no Copy or Other texts anywhere but the Settings Player link`, async () => {
+        const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
         await p.goto(`${BASE}/admin`);
@@ -2466,68 +3002,46 @@ async function main() {
         assert((await sessionCards(p).locator('[data-icon="phone"]').count()) === 0, 'a card still has the phone button');
         const gearX = await sessionCards(p).locator('.card-icons button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().right)));
         assert(gearX.length === (await sessionCards(p).count()), 'one gear per card');
-        assert(new Set(gearX).size <= 2 && Math.max(...gearX) - Math.min(...gearX) <= 8, `gears not lined up: ${gearX}`);
-        // A live card: Share the game on top, then Other texts under the grid.
+        assert(Math.max(...gearX) - Math.min(...gearX) <= 8, `gears not lined up: ${gearX}`);
         let card = null;
         for (const c of await sessionCards(p).all()) {
-          await more(c);
-          if (await c.locator('details.other-texts').count()) {
+          if ((await c.getAttribute('data-court')) !== 'off') {
             card = c;
             break;
           }
-          await closeOptions(c);
         }
-        assert(card, 'no live card with Other texts');
-        const order = await card.locator('.options').evaluate((o) => {
-          const y = (sel) => o.querySelector(sel).getBoundingClientRect().top;
-          return { share: y('.share-row'), grid: y('.opt-grid'), other: y('.other-texts') };
-        });
-        assert(order.share < order.grid && order.grid < order.other, 'Share the game, then the grid, then Other texts');
-        const texts = await otherTexts(card);
-        const names = (await texts.locator('.text-name').allInnerTexts()).map((x) => x.trim());
-        for (const want of ['Poll', 'Day before', 'Last call']) assert(names.includes(want), `Other texts missing ${want}: ${names}`);
-        const spots = await card.locator('.spots li.open').count();
-        assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
-        assert(!names.includes('Canceled'), 'Canceled only on canceled sessions');
-        for (const row of await texts.locator('.text-row').all()) {
-          const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
-          assert((await open.getAttribute('href')).startsWith('sms:'), 'each item opens Messages');
+        const menu = await textMenu(card);
+        const order = await card.locator('.options').evaluate((o) => ({ text: o.querySelector('.text-btn').getBoundingClientRect().top, grid: o.querySelector('.opt-grid').getBoundingClientRect().top }));
+        assert(order.text < order.grid, 'Text comes before the grid');
+        for (const row of await menu.locator('.text-row').all()) {
+          const link = row.locator('a.text-choice');
+          assert((await link.getAttribute('href')).startsWith('sms:'), 'each choice opens Messages');
+          const who = (await row.locator('.text-who').innerText()).trim();
+          assert(/^(Everyone \(\d+\)|\d+ who (is|are|was|were) in|\d+ not in yet)$/.test(who), `who line was "${who}"`);
         }
-        const lastRow = texts.locator('.text-row[data-text="lastcall"]');
-        await lastRow.getByRole('button', { name: 'Copy text: Last call' }).click();
-        await p.locator('.toast', { hasText: 'Message copied' }).last().waitFor();
-        // Every message copy button: "Copy text", one line, not overlapping anything near it.
-        const copies = await p.evaluate(() =>
-          [...document.querySelectorAll('main .btn')]
-            .filter((b) => b.offsetParent !== null && /^Copy/.test(b.textContent.trim()) && b.textContent.trim() !== 'Copy number')
-            .map((b) => {
-              const r = b.getBoundingClientRect();
-              const lh = parseFloat(getComputedStyle(b).lineHeight) || 20;
-              const sibs = [...b.parentElement.children].filter((x) => x !== b && x.offsetParent !== null).map((x) => x.getBoundingClientRect());
-              const hit = sibs.some((q) => Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1);
-              const range = document.createRange();
-              range.selectNodeContents(b);
-              return { text: b.textContent.trim(), lines: new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size, inside: r.right <= window.innerWidth, hit, lh };
-            }),
-        );
-        assert(copies.length >= 4, `only ${copies.length} copy buttons checked`);
-        for (const c of copies) {
-          assert(c.text === 'Copy text', `a message copy button says "${c.text}"`);
-          assert(c.lines === 1 && c.inside && !c.hit, `"Copy text" wraps, overlaps or runs off: ${JSON.stringify(c)}`);
-        }
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
+        assert(rep.problems.length === 0, `cards: ${rep.problems.slice(0, 3).join(' | ')}`);
         assert(!/\bsent\b/i.test(await p.locator('main').innerText()), 'never say sent');
-        await p.screenshot({ path: path.join(SHOTS, `other-texts-${width}-${scheme}.png`) });
-        // Settings: the player link's button is still just "Copy".
+        await p.screenshot({ path: path.join(SHOTS, `text-menu-${width}-${scheme}.png`) });
+        // No Copy or Other texts on any tab, except the Settings Player link.
+        for (const t of ['Home', 'Players', 'Money', 'History']) {
+          await tab(p, t).click();
+          await p.waitForTimeout(150);
+          const copies = await p.locator('main').getByRole('button', { name: /^Copy/ }).count();
+          assert(copies === 0, `${t} still has a Copy button`);
+          assert((await p.getByText('Other texts').count()) === 0, `${t} still says Other texts`);
+        }
         await tab(p, 'Settings').click();
         const quick = p.getByRole('region', { name: 'Quick settings' });
         assert((await quick.getByRole('button', { name: 'Copy', exact: true }).innerText()).trim() === 'Copy', 'Player link button should say Copy');
+        assert((await p.locator('main').getByRole('button', { name: /^Copy/ }).count()) === 1, 'only the Player link Copy in Settings');
         await p.close();
       });
     }
 
     // ---------- Tab bar: order, and tapping the tab you're on starts it fresh ----------
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`tab bar at ${width}px (${scheme}): Home, Players, Money, Settings; tapping the tab you're on goes back to its top and closes what's open`, async () => {
+      await check(`tab bar at ${width}px (${scheme}): Home, Players, Money, History, Settings; tapping the tab you're on goes back to its top and closes what's open`, async () => {
         const p = await admin.context().newPage();
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
@@ -2535,15 +3049,17 @@ async function main() {
         await sessionCards(p).first().waitFor();
         const nav = p.getByRole('navigation', { name: 'Organizer sections' });
         const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
-        assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'Settings']), `tabs were ${labels}`);
+        assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'History', 'Settings']), `tabs were ${labels}`);
+        const wraps = await nav.getByRole('button').evaluateAll((bs) => bs.filter((b) => [...b.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() && (() => { const r = document.createRange(); r.selectNodeContents(n); return r.getClientRects().length > 1; })())).map((b) => b.textContent));
+        assert(wraps.length === 0, `tab labels wrap: ${wraps}`);
         const sizes = await nav.getByRole('button').evaluateAll((bs) => bs.map((b) => [Math.round(b.getBoundingClientRect().width), b.getBoundingClientRect().height]));
         assert(sizes.every(([, h]) => h >= 44), `tabs under 44px: ${sizes}`);
         assert(Math.max(...sizes.map((x) => x[0])) - Math.min(...sizes.map((x) => x[0])) <= 1, `tabs not equal: ${sizes}`);
-        const screens = { Home: () => sessionCards(p).first(), Players: () => p.getByRole('button', { name: 'Edit Alex' }), Money: () => p.locator('details.money-sess').first(), Settings: () => p.getByRole('region', { name: 'Quick settings' }) };
+        const screens = { Home: () => sessionCards(p).first(), Players: () => p.getByRole('button', { name: 'Edit Alex' }), Money: () => p.locator('details.money-sess').first(), History: () => p.getByRole('group', { name: 'Show' }), Settings: () => p.getByRole('region', { name: 'Quick settings' }) };
         const scrollY = () => p.evaluate(() => window.scrollY);
         const scrollDown = () => p.evaluate(() => window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)));
         const waitTop = () => p.waitForFunction(() => window.scrollY === 0, null, { timeout: 4000 });
-        for (const name of ['Home', 'Players', 'Money', 'Settings']) {
+        for (const name of ['Home', 'Players', 'Money', 'History', 'Settings']) {
           await tab(p, name).click();
           await screens[name]().waitFor();
           assert((await tab(p, name).getAttribute('aria-current')) === 'page', `${name} should be highlighted`);

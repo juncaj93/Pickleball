@@ -45,6 +45,7 @@ route('PUT', '/api/me/days', player.setMyDays);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
 route('POST', '/api/sessions/:id/withdraw', (ctx) => player.playerWithdraw(ctx));
 route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));
+route('POST', '/api/sessions/:id/paid', player.playerPaid);
 route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
 route('GET', '/api/sessions/:id/calendar.ics', (ctx) => player.sessionCalendarFile(ctx));
 // The old calendar subscription feed is gone: its links now get a plain "Not found".
@@ -58,6 +59,9 @@ route('POST', '/api/link/act', actOnToken);
 route('POST', '/api/admin/login', admin.login);
 route('POST', '/api/admin/logout', (ctx) => admin.logout(ctx));
 route('GET', '/api/admin/dashboard', (ctx) => admin.dashboard(ctx));
+route('GET', '/api/admin/activity', (ctx) => admin.activity(ctx));
+route('POST', '/api/admin/sessions', admin.addGame);
+route('POST', '/api/admin/sessions/:id/me', admin.organizerInOut);
 route('PUT', '/api/admin/group', admin.updateGroup);
 route('POST', '/api/admin/pin', admin.changePin);
 route('POST', '/api/admin/rotate-link', (ctx) => admin.rotateLink(ctx));

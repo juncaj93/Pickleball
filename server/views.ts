@@ -57,6 +57,8 @@ export function playerSessionView(
     sixPlaying: six,
     holiday: holidayFor(session.starts_at, tz),
     courtState: session.court_state,
+    extra: !!session.is_extra,
+    note: session.note,
     bookingOpen: nowMs >= bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz),
     bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     past: nowMs >= Date.parse(session.ends_at),
@@ -70,6 +72,7 @@ export function playerSessionView(
           promotion: mine.status === 'confirmed' ? mine.promotion_reason : null,
           shareCents: prices.get(mine.player_id)?.cents ?? null,
           paymentStatus: mine.payment_status,
+          selfPaid: !!mine.self_paid_at,
           discount: prices.get(mine.player_id)?.discount ?? false,
           creditComing: prices.get(mine.player_id)?.creditComing ?? false,
           oweCents:
@@ -95,6 +98,7 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     usualDays: usualDaysOf(p),
     isNew: !!p.is_new,
     lateDrops: 0,
+    played: 0,
   };
 }
 
@@ -148,6 +152,7 @@ export function adminSessionView(
       confirmedAt: r.confirmed_at,
       attendanceConfirmedAt: r.attendance_confirmed_at,
       paymentStatus: r.payment_status,
+      selfPaid: !!r.self_paid_at,
       paidAt: r.paid_at,
       paymentAmountCents: r.payment_amount_cents,
       shareCents: prices.get(r.player_id)?.cents ?? null,
@@ -188,6 +193,8 @@ export function adminSessionView(
     courtCostCents: session.court_cost_cents,
     courtState: session.court_state,
     moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,
+    extra: !!session.is_extra,
+    note: session.note,
     bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     shownEarly: !!session.shown_early,
     holiday: holidayFor(session.starts_at, tz),

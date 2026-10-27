@@ -14,7 +14,7 @@ describe('court status words', () => {
     expect(courtStatus(base)).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked yet' });
     expect(courtStatus({ ...base, courtState: 'waitlist' })).toEqual({
       kind: 'waitlist',
-      text: 'On the court waitlist',
+      text: 'Court waitlist',
       playerText: 'Waiting on the court',
     });
   });

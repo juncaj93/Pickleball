@@ -31,6 +31,7 @@ import { newId } from './crypto';
 import { recentCount, recordEvent } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { playerSessionView } from './views';
+import { applyPayment } from './admin';
 import * as v from './validate';
 
 const OWED_LOOKBACK_MS = 90 * 86_400_000;
@@ -272,40 +273,61 @@ async function actingOn(ctx: Ctx) {
   return { ...who, playerId: who.playerId, session };
 }
 
-/** When the organizer acts through "View as...", the change is real and logged as theirs. */
-async function logIfViewingAs(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, action: string, result: unknown) {
-  if (!who.viewAsName) return;
-  await audit(ctx.db, who.group.id, who.session.id, `as_player_${action}`, { player: who.viewAsName, result }, ctx.nowIso, `organizer as ${who.viewAsName}`);
+/**
+ * Every player tap goes in the History > Activity log under the player's
+ * name. When the organizer acts through "View as...", it's logged as theirs.
+ */
+async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, action: string, result: unknown, extra: Record<string, unknown> = {}) {
+  if (who.viewAsName) {
+    await audit(ctx.db, who.group.id, who.session.id, `as_player_${action}`, { player: who.viewAsName, result, ...extra }, ctx.nowIso, `organizer as ${who.viewAsName}`);
+    return;
+  }
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  const name = p?.display_name ?? 'A player';
+  await audit(ctx.db, who.group.id, who.session.id, `player_${action}`, { player: name, result, ...extra }, ctx.nowIso, name);
 }
 
 export async function playerJoin(ctx: Ctx) {
   const who = await actingOn(ctx);
   const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto');
   await clearLateDrop(ctx.db, who.session.id, who.playerId);
-  await logIfViewingAs(ctx, who, 'join', res.result);
+  if (res.result !== 'already_confirmed') await logAction(ctx, who, 'join', res.result);
   return res;
 }
 
 export async function playerWithdraw(ctx: Ctx) {
   const who = await actingOn(ctx);
   const res = await withdraw(ctx.db, who.session, who.playerId, ctx.nowMs);
-  if (res.freedSpot) await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group).checkInHours);
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group).checkInHours) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
-  await logIfViewingAs(ctx, who, 'withdraw', result);
+  if (res.changed) await logAction(ctx, who, 'withdraw', result, { late });
   return { result };
+}
+
+/**
+ * POST /api/sessions/:id/paid { paid }: "I paid" (or "Didn't pay?") from the
+ * player. Opening Venmo never does this by itself. The organizer sees a
+ * "self-marked" tag until they confirm it, and can always change it.
+ */
+export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
+  const who = await actingOn(ctx);
+  const paid = v.bool(body.paid, 'paid');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  const name = p?.display_name ?? 'A player';
+  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, who.viewAsName ? `organizer as ${who.viewAsName}` : name);
 }
 
 export async function playerConfirm(ctx: Ctx) {
   const who = await actingOn(ctx);
   await confirmAttendance(ctx.db, who.session, who.playerId, ctx.nowMs);
-  await logIfViewingAs(ctx, who, 'check_in', 'confirmed_attendance');
+  await logAction(ctx, who, 'check_in', 'confirmed_attendance');
   return { result: 'confirmed_attendance' };
 }
 
 export async function playerDecline(ctx: Ctx) {
   const who = await actingOn(ctx);
   await decline(ctx.db, who.session, who.playerId, ctx.nowMs);
-  await logIfViewingAs(ctx, who, 'decline', 'declined');
+  await logAction(ctx, who, 'decline', 'declined');
   return { result: 'declined' };
 }
 

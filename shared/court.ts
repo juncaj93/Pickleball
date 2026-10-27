@@ -36,7 +36,7 @@ export function courtStatus(s: CourtInput, tz = 'America/Detroit'): CourtStatus 
   if (s.past) return off('Played');
   if (s.bookingStatus === 'booked') return { kind: 'booked', text: 'Court booked', playerText: 'Court booked' };
   if (s.started) return off('Started, no court was booked');
-  if (s.courtState === 'waitlist') return { kind: 'waitlist', text: 'On the court waitlist', playerText: 'Waiting on the court' };
+  if (s.courtState === 'waitlist') return { kind: 'waitlist', text: 'Court waitlist', playerText: 'Waiting on the court' };
   if (s.bookingStatus === 'unavailable') return off('No court available');
   if (s.bookingOpen === false && s.bookingOpensAt) {
     return { kind: 'later', text: `Booking opens ${formatShortDate(s.bookingOpensAt, tz)}`, playerText: 'Court not booked yet' };
