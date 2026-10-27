@@ -92,7 +92,6 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
             </ul>
             </details>
           )}
-          <p className="small muted">Counts sessions that were played. Uses the court cost you entered on a session, or your typical cost.</p>
         </>
       )}
     </section>

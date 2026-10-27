@@ -20,9 +20,6 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);
   return (
     <>
-      <p className="small muted">
-        Regulars get a "Want in?" nudge for their usual days. Occasional people can still sign up, they just don't get nudged.
-      </p>
       <ul className="list card" style={{ padding: '4px 16px' }}>
         {ctx.d.players.map((p) => (
           <li key={p.id} className="spread">
@@ -114,7 +111,6 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       </label>
       <label className="field">
         Phone (optional)
-        <span className="hint">Only with their OK. Used to fill in texts you send.</span>
         <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} placeholder="(248) 555-1234" />
       </label>
       <div className="stack" style={{ gap: 6 }}>
@@ -149,7 +145,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       </div>
       <label className="check">
         <input type="checkbox" checked={!isActive} onChange={(e) => setActive(!e.target.checked)} />
-        Hide from the name list (they stopped playing)
+        Hide from the name list
       </label>
       {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn" type="submit" disabled={busy}>

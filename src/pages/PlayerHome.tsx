@@ -220,7 +220,6 @@ function NamePicker({
   if (adding) return <AddMyName onPick={pick} onDone={onPicked} onBack={() => setAdding(false)} />;
   return (
     <section className="stack" aria-label="Pick your name">
-      <p className="muted">Tap your name. This phone remembers it.</p>
       {error && <Notice tone="danger">{error}</Notice>}
       <div className="name-grid">
         {g.players.map((p) => (
@@ -479,7 +478,7 @@ function PayCard({ g }: { g: GroupView }) {
           </button>
         </div>
       )}
-      {due.some((o) => o.reminder) && <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>}
+      {due.some((o) => o.reminder) && <p className="small muted">Already paid? Ignore this.</p>}
     </section>
   );
 }

@@ -122,7 +122,7 @@ export function TextButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
                   <span className="text-who">{audienceLine(it.who, r.count)}</span>
                 </a>
                 {r.missing.length > 0 && <div className="small missing-numbers">Missing numbers: {r.missing.join(', ')}</div>}
-                {opened === it.id && <div className="small muted">Message ready. Press send in Messages when it looks right.</div>}
+                {opened === it.id && <div className="small muted message-ready">Message ready</div>}
               </li>
             );
           })}

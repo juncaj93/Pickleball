@@ -716,11 +716,7 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
         Note (optional)
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder="Court 3, bring water" />
       </label>
-      {error && (
-        <Notice tone="danger" title="Not added">
-          {error}
-        </Notice>
-      )}
+      {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn block big" type="submit" disabled={busy}>
         {busy ? 'Adding…' : 'Add game'}
       </button>

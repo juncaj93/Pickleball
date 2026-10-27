@@ -1,7 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
-import { TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
 import { AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
@@ -111,13 +110,12 @@ function Section({
 const ADVANCED_SETTINGS: { key: WholeKey; label: string; hint?: string }[] = [
   { key: 'horizonWeeks', label: 'Plan sessions ahead (weeks)' },
   { key: 'bookingLeadDays', label: 'Booking reminder (days before play)' },
-  { key: 'defaultDeadlineHours', label: 'Cancellation deadline for new sessions (hours before play)', hint: "Northville's rule is 12. You can change it on any booking." },
+  { key: 'defaultDeadlineHours', label: 'Cancellation deadline for new sessions (hours before play)', hint: "Northville's rule: 12" },
 ];
 
 export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const g = ctx.d.group;
-  const tz = g.timezone;
   const auto = useAutosave(ctx);
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
   const [openAccess, setOpenAccess] = useState(g.openAccess);
@@ -203,7 +201,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     />
   );
 
-  const tzLabel = TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
   return (
     <>
       {/* The things used most, in one compact card. */}
@@ -248,13 +245,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       <div className="card set-list" role="group" aria-label="Group settings">
         <Section id="group" title="Group" note={g.name} sections={sections}>
           {text('name', 'Group name', g.name, { maxLength: 60 }, { required: 'Enter a group name.' })}
-          {text('organizerName', 'Your name', g.organizerName ?? '', { maxLength: 40 }, { hint: 'Players see it, like "Robin confirms when it arrives."' })}
+          {text('organizerName', 'Your name', g.organizerName ?? '', { maxLength: 40 })}
           {text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
             check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
           })}
           {text('venueName', 'Venue name', g.venueName ?? '', { maxLength: 80, placeholder: DEFAULT_VENUE_NAME })}
           {text('venueAddress', 'Venue street address', g.venueAddress ?? '', { maxLength: 160, autoComplete: 'street-address' })}
-          <p className="set-hint">Time zone: {tzLabel}. Tuesdays and Thursdays, 8:00 to 10:00 PM.</p>
         </Section>
 
         <Section id="money" title="Money" note={`$${dollars(g.settings.pricePerPlayerCents)} each`} sections={sections}>
@@ -314,7 +310,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               id="groupWord"
               layout="field"
               label="Group word (optional)"
-              hint={g.hasGroupWord ? 'One is set. Type a new one to change it.' : 'A new phone is asked for it once.'}
+              hint={g.hasGroupWord ? 'Set. Type to change.' : 'Asked once per phone'}
               initial=""
               parse={(t) => (t.trim().length >= 2 ? { value: t.trim() } : { error: 'The group word needs at least 2 letters.' })}
               body={(value) => ({ groupWord: value })}
@@ -329,7 +325,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {g.openAccess ? (
             <details className="advanced">
               <summary>Old private link</summary>
-              <p className="small muted">Still works for anyone who has it.</p>
               <code className="link">{g.privateLink}</code>
               <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
                 Replace private link
@@ -369,7 +364,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           </form>
         </Section>
         <Section id="backup" title="Backup" sections={sections}>
-          <p className="set-hint">Every session, player status and payment as a spreadsheet file (CSV).</p>
           <a className="btn secondary" href="/api/admin/export" download="pickleball-export.csv">
             Download CSV
           </a>

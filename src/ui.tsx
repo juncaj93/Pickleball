@@ -280,21 +280,20 @@ export function SmsDraft({
   const href = smsHref(phones && phones.length ? phones : phone, body, isIOS);
   return (
     <div className="draft">
-      <div className="spread">
-        <div>
+      {/* Who, on one line; "Message ready" appears once Messages has opened. */}
+      <div className="draft-head">
+        <span className="draft-to">
           <strong>{to}</strong>
-          <div className="muted small">
-            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'No numbers saved: pick a group chat') : phone ? formatPhone(phone) : 'Pick who to send it to in Messages'}
-          </div>
-          {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
-        </div>
-        <Chip tone="info">{opened ? 'Message ready' : 'Draft'}</Chip>
+          <span className="muted small">
+            {' · '}
+            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'no numbers: pick a group chat') : phone ? formatPhone(phone) : 'pick who in Messages'}
+          </span>
+        </span>
+        {opened && <Chip tone="info">Message ready</Chip>}
       </div>
+      {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
       <p className="bubble">{body}</p>
-      <p className="muted small" aria-live="polite">
-        {opened ? <span className="message-ready">Message ready.</span> : null} {opened ? 'Press send in Messages when it looks right.' : ''}
-      </p>
-      <div className="btn-row" style={{ marginTop: 10 }}>
+      <div className="btn-row">
         <a className="btn small" href={href} onClick={() => setOpened(true)}>
           {openLabel}
         </a>

@@ -560,8 +560,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
         ))}
       </div>
       <label className="field">
-        Cancellation deadline (Eastern time)
-        <span className="hint">Starts at {defaultHours} hours before play. Change it if this booking's rule is different.</span>
+        Cancellation deadline
         <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
       </label>
       <button
@@ -584,8 +583,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
             <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
           </label>
           <label className="field">
-            Court cost (optional)
-            <span className="hint">Your own record. Players never see it, and it's never in a text.</span>
+            Court cost (only you see this)
             <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="48.00" aria-invalid={costError ? true : undefined} />
             {costError && <span className="field-error">{costError}</span>}
           </label>
@@ -619,7 +617,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
   return (
     <div className="stack">
-      {!live && <Notice tone="muted" title="This session is closed">You can view it but not change who's playing.</Notice>}
+      {!live && <Notice tone="muted">Closed. View only.</Notice>}
       <ul className="list">
         {s.roster.map((r) => (
           <li key={r.playerId} className="stack" style={{ gap: 8 }}>
@@ -886,7 +884,6 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
           New time: <strong>{formatShortDate(startsAt, tz)}, {formatTimeRange(startsAt, endsAt, tz)}</strong>
         </p>
       )}
-      <p className="small muted">The cancellation deadline resets to {ctx.d.group.settings.defaultDeadlineHours} hours before the new time.</p>
       <button className="btn" type="submit" disabled={busy || !startsAt || !endsAt}>
         {busy ? 'Saving…' : 'Move session'}
       </button>
