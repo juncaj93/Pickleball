@@ -429,11 +429,11 @@ async function main() {
 
     await check('sessions are grouped by calendar week with a divider', async () => {
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
-      const labels = await section.locator('.week-break').allInnerTexts();
+      const labels = await section.locator('.week-break h3').allInnerTexts();
       assert(labels.length >= 2, `expected week dividers, got ${labels}`);
       assert(/^(This week|Next week|Week of [A-Z][a-z]{2} \d{1,2})$/i.test(labels[0].trim()), `first divider was ${labels[0]}`);
       // No two dividers in a row, and never more than 2 sessions (Tue + Thu) between them.
-      const kids = await section.evaluate((el) => [...el.querySelectorAll(':scope > .week-break, :scope > article')].map((n) => n.tagName));
+      const kids = await section.evaluate((el) => [...el.querySelectorAll(':scope > .week-break, :scope > article')].map((n) => (n.matches('.week-break') ? 'H3' : n.tagName)));
       let run = 0;
       for (const k of kids) {
         if (k === 'H3') {
@@ -445,15 +445,15 @@ async function main() {
       }
     });
 
-    await check('tab bar: four equal tabs (Home, Players, Money, Settings) with their own icons in every state; short and low', async () => {
+    await check('tab bar: five equal tabs (Home, Players, Money, History, Settings) with their own icons in every state; short and low', async () => {
       const icons = async () => admin.getByRole('navigation', { name: 'Organizer sections' }).locator('button svg').evaluateAll((s) => s.map((x) => x.getAttribute('data-icon')));
-      for (const name of ['Settings', 'Players', 'Money', 'Home']) {
+      for (const name of ['Settings', 'History', 'Players', 'Money', 'Home']) {
         await tab(admin, name).click();
         const got = await icons();
-        assert(JSON.stringify(got) === JSON.stringify(['home', 'people', 'dollar', 'gear']), `icons with ${name} selected were ${got}`);
+        assert(JSON.stringify(got) === JSON.stringify(['home', 'people', 'dollar', 'history', 'gear']), `icons with ${name} selected were ${got}`);
       }
       const widths = await admin.locator('nav.tabbar button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().width)));
-      assert(widths.length === 4 && Math.max(...widths) - Math.min(...widths) <= 1, `tabs should be equal: ${widths}`);
+      assert(widths.length === 5 && Math.max(...widths) - Math.min(...widths) <= 1, `tabs should be equal: ${widths}`);
       const gaps = await admin.locator('nav.tabbar li').evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().left));
       const steps = gaps.slice(1).map((x, i) => Math.round(x - gaps[i]));
       assert(Math.max(...steps) - Math.min(...steps) <= 1, `tabs should be evenly spaced: ${steps}`);
@@ -467,16 +467,16 @@ async function main() {
       assert(tabs.every((h) => h >= 44), `tabs too short to tap: ${tabs}`);
     });
 
-    await check('floating tab pill has exactly Home, Players, Money, Settings', async () => {
+    await check('floating tab pill has exactly Home, Players, Money, History, Settings', async () => {
       const nav = admin.getByRole('navigation', { name: 'Organizer sections' });
       const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
-      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'Settings']), `tabs were ${labels}`);
+      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'History', 'Settings']), `tabs were ${labels}`);
       const box = await nav.boundingBox();
       const vw = admin.viewportSize().width;
       assert(box.x > 8 && box.x + box.width < vw - 8, 'pill should float clear of the screen edges');
       const radius = await nav.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius));
       assert(radius >= 24, 'pill should be fully rounded');
-      assert((await nav.locator('svg').count()) === 4, 'expected four drawn icons');
+      assert((await nav.locator('svg').count()) === 5, 'expected five drawn icons');
       const pillBg = await nav.evaluate((el) => getComputedStyle(el).backgroundColor);
       // "rgb(r g b)", "rgba(r, g, b, a)" or "color(srgb r g b / a)": the alpha is the 4th number, or after "/".
       const nums = pillBg.match(/[\d.]+/g).map(Number);
@@ -510,10 +510,11 @@ async function main() {
       await tab(admin, 'Settings').click();
       await admin.locator('details.set-sect').first().waitFor();
       const titles = (await admin.locator('details.set-sect > summary > span:first-child').allInnerTexts()).map((s) => s.trim());
-      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Add to Home Screen', 'Change PIN', 'Backup', 'Recent changes']) {
+      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Add to Home Screen', 'Change PIN', 'Backup']) {
         assert(titles.includes(want), `missing section ${want}: ${titles}`);
       }
       assert(!titles.includes('Calendar'), 'the Calendar section is gone');
+      assert(!titles.includes('Recent changes'), 'Recent changes moved to History');
       assert((await admin.locator('details.set-sect[open]').count()) === 0, 'every section should start closed');
       assert((await admin.getByText('How this works').count()) === 0, '"How this works" should be gone');
       assert((await admin.getByText(/Texts are never sent automatically/).count()) === 0, 'How this works notes should be gone');
@@ -566,11 +567,12 @@ async function main() {
       await tab(admin, 'Settings').click();
       await openSections(admin);
       assert((await admin.getByLabel(/Day-before check-in/).inputValue()) === '30', 'check-in hours did not stick');
-      // Pausing for a second saves too, without leaving the box.
+      // Text boxes save after a one-second pause too, without leaving the box.
       const name = admin.getByLabel('Your name');
       await name.fill('Robin');
+      await savedIn(name);
       await name.blur();
-      await autoSet(admin.getByLabel(/Day-before check-in/), '24', { pause: true });
+      await autoSet(admin.getByLabel(/Day-before check-in/), '24');
       assert((await admin.getByText('Warn before cancellation deadline').count()) === 0, 'old setting still shown');
       await admin.getByLabel(/Plan sessions ahead/).waitFor();
     });
@@ -798,7 +800,7 @@ async function main() {
       const section = admin.locator('section[aria-labelledby="sessions-title"]');
       const BOOK = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
       const CANCEL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
-      const link = section.locator('.sessions-bar').getByRole('link', { name: /^Book/ });
+      const link = section.locator('.week-break').first().getByRole('link', { name: /^Book a court/ });
       assert((await link.getAttribute('href')) === BOOK, 'wrong CourtReserve link');
       assert((await link.getAttribute('target')) === '_blank', 'CourtReserve should open in a new tab');
       assert((await admin.getByText('Book on CourtReserve').count()) === 0, 'old button wording still shown');
@@ -860,7 +862,7 @@ async function main() {
       for (const scheme of ['light', 'dark']) {
         await admin.emulateMedia({ colorScheme: scheme });
         await card.screenshot({ path: path.join(SHOTS, `card-needs-${scheme}.png`) });
-        await admin.locator('.sessions-bar').screenshot({ path: path.join(SHOTS, `sessions-bar-${scheme}.png`) });
+        await admin.locator('.week-break').first().screenshot({ path: path.join(SHOTS, `book-pill-${scheme}.png`) });
       }
       await admin.emulateMedia({ colorScheme: 'light' });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-not-booked.png') });
@@ -923,7 +925,7 @@ async function main() {
       const gb = await gear.boundingBox();
       const cb = await card.boundingBox();
       assert(gb.x + gb.width > cb.x + cb.width - 24, 'gear at the top right');
-      const tapArea = { w: gb.width, h: gb.height };
+      const tapArea = { w: gb.width, h: Math.max(gb.height, await gear.evaluate((b) => parseFloat(getComputedStyle(b, '::before').height) || 0)) };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: no main button any more (the poll lives in Texts).
       const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK)$/.test(x));
@@ -1555,9 +1557,10 @@ async function main() {
       await tab(admin, 'Home').waitFor();
       await players.Blair.reload();
       await players.Blair.locator('article').nth(1).getByText("You're in", { exact: true }).waitFor();
-      await tab(admin, 'Settings').click();
-      await openSections(admin);
-      await admin.getByText('As player: joined').first().waitFor();
+      // Logged in History > Activity as the organizer acting as Blair.
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      await admin.getByRole('list', { name: 'Activity' }).getByText(/^Robin \(as Blair\) said I'm in for /).first().waitFor();
       await tab(admin, 'Home').click();
     });
 
@@ -2026,17 +2029,28 @@ async function main() {
       await admin.request.put(`${BASE}/api/admin/sessions/${sid}/booking`, { data: { bookingStatus: 'needs_booking', cancellationDeadlineAt: sess.cancellationDeadlineAt }, headers: { Origin: BASE } });
     });
 
-    await check('slim sessions row: Upcoming | Past and Book on one row; small week labels; spots on the count line', async () => {
+    await check('no Upcoming / Past toggle: sessions start right under the header; "Book a court" rides on the first divider; small week labels; spots on the count line', async () => {
       await admin.reload();
-      const bar = admin.locator('.sessions-bar');
-      const box = await bar.boundingBox();
-      assert(box.height <= 48, `sessions row is ${box.height}px tall`);
+      await sessionCards(admin).first().waitFor();
+      assert((await admin.locator('.sessions-bar').count()) === 0, 'the old sessions row should be gone');
+      assert((await admin.getByRole('group', { name: 'Which sessions' }).count()) === 0, 'no Upcoming / Past toggle');
+      assert((await admin.getByRole('button', { name: 'Past', exact: true }).count()) === 0, 'no Past button');
+      const now = Date.parse(await admin.evaluate(async () => (await (await fetch('/api/admin/dashboard')).json()).now));
+      const ends = await admin.evaluate(async () => (await (await fetch('/api/admin/dashboard')).json()).sessions.map((x) => [x.id, x.endsAt]));
+      const shownIds = await sessionCards(admin).evaluateAll((cs) => cs.map((c) => c.id.replace('session-', '')));
+      for (const id of shownIds) assert(Date.parse(ends.find((e) => e[0] === id)[1]) > now, 'Home should only show upcoming sessions');
       assert((await admin.getByRole('heading', { name: 'Sessions', exact: true }).evaluate((h) => h.getBoundingClientRect().width <= 1)), '"Sessions" heading should be hidden');
-      const toggle = await bar.getByRole('group', { name: 'Which sessions' }).boundingBox();
-      const book = bar.getByRole('link', { name: /^Book/ });
-      assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await book.getAttribute('target')) === '_blank', 'Book opens CourtReserve in a new tab');
-      const bb = await book.boundingBox();
-      assert(toggle.x < bb.x && Math.abs(toggle.y + toggle.height / 2 - (bb.y + bb.height / 2)) < 6, 'toggle left, Book right, one row');
+      // The pill sits at the right end of the first divider and adds no height to it.
+      const first = admin.locator('.week-break').first();
+      const pill = first.getByRole('link', { name: /^Book a court/ });
+      assert((await pill.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await pill.getAttribute('target')) === '_blank', 'Book a court opens CourtReserve in a new tab');
+      const line = await first.boundingBox();
+      const plain = await admin.locator('.week-break').nth(1).boundingBox();
+      assert(Math.abs(line.height - plain.height) <= 1, `the divider with the pill is ${line.height}px, a plain one is ${plain.height}px`);
+      const pb = await pill.boundingBox();
+      const vw = admin.viewportSize().width;
+      assert(pb.x + pb.width > vw - 40, 'pill at the right end of the line');
+      assert((await pill.locator('svg.ext-icon').count()) === 1, 'pill has the arrow');
       const wk = await admin.locator('.week-break').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
       assert(wk <= 11.5, `week label is ${wk}px`);
       // A card with nobody in yet: "0 of 4 in" and four small circles on one line.
@@ -2104,7 +2118,7 @@ async function main() {
     });
 
     for (const [width, scheme] of [[360, 'light'], [390, 'dark'], [430, 'light'], [375, 'dark']]) {
-      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer ${width >= 390 ? 4 : 3}+, player 3+`, async () => {
+      await check(`sessions per iPhone screen at ${width}px (${scheme}): organizer 5+ (one more than before), player 3+`, async () => {
         const ctx = await browser.newContext({ ...phone(width), viewport: { width, height: 664 }, colorScheme: scheme });
         const p = await ctx.newPage();
         await p.goto(`${BASE}/admin`);
@@ -2120,11 +2134,17 @@ async function main() {
           }).length;
         });
         await p.screenshot({ path: path.join(SHOTS, `dense-admin-${width}-${scheme}.png`) });
-        assert(fitAdmin >= (width >= 390 ? 4 : 3), `only ${fitAdmin} organizer session cards fit on screen`);
+        // Before History, 4 fit at every width (Home also stopped at 4). Now at least one more.
+        assert(fitAdmin >= 5, `only ${fitAdmin} organizer session cards fit on screen`);
         const small = await p.evaluate(() =>
           [...document.querySelectorAll('main button:not(.link-btn), main a.btn, header button, nav.tabbar button')]
             .filter((b) => b.offsetParent !== null)
-            .map((b) => [b.textContent.trim(), b.getBoundingClientRect().height])
+            .map((b) => {
+              // A small-looking button can carry an invisible 44px tap area (::before).
+              const tap = getComputedStyle(b, '::before');
+              const extra = tap.content !== 'none' && tap.position === 'absolute' ? parseFloat(tap.height) || 0 : 0;
+              return [b.textContent.trim(), Math.max(b.getBoundingClientRect().height, extra)];
+            })
             .filter(([, h]) => h < 43.5),
         );
         assert(small.length === 0, `buttons under 44px: ${JSON.stringify(small)}`);
@@ -2349,6 +2369,7 @@ async function main() {
         assert(await notYou.isVisible(), '"not you?" should show in the simulation');
         assert(await p.locator('.topbar .mode-btn').isVisible(), 'mode button should show in the simulation');
         assert((await p.getByText(/Welcome,/).count()) === 0, 'no "Welcome,"');
+        assert((await p.getByRole('button', { name: /^History/ }).count()) === 0 && (await p.locator('nav.tabbar').count()) === 0, 'no History tab in View as');
         // The exit bar is its own row above the header, covering nothing.
         const barBox = await bar.boundingBox();
         const headBox = await p.locator('header.topbar').boundingBox();
@@ -2454,6 +2475,226 @@ async function main() {
       });
     }
 
+    // ---------- History: past sessions and the activity log ----------
+    await check('History > Activity: marking someone paid shows up at the top with the right Eastern time', async () => {
+      const api = (method, url, data) => admin.request.fetch(`${BASE}${url}`, { method, data, headers: { Origin: BASE } });
+      const d = await (await api('GET', '/api/admin/dashboard')).json();
+      const s = d.sessions.find((x) => x.roster.some((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null));
+      assert(s, 'need someone unpaid');
+      const r = s.roster.find((x) => x.status === 'confirmed' && x.paymentStatus === 'unpaid' && x.shareCents !== null);
+      const res = await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true });
+      assert(res.ok(), `mark paid failed ${res.status()}`);
+      const serverNow = Date.parse((await (await api('GET', '/api/admin/dashboard')).json()).now);
+      const fmt = (ms) => new Date(ms).toLocaleString('en-US', { timeZone: 'America/Detroit', weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).replace(/ at /, ', ');
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      const day = new Date(s.startsAt).toLocaleDateString('en-US', { timeZone: 'America/Detroit', weekday: 'short', month: 'short', day: 'numeric' });
+      // (Earlier checks moved the test clock ahead and back, so entries from "later" can sit above it.)
+      const top = admin.getByRole('list', { name: 'Activity' }).locator('li').filter({ hasText: `Robin marked ${r.name} paid for ${day}` }).first();
+      await top.waitFor();
+      const when = (await top.locator('.a-time').innerText()).trim();
+      assert([fmt(serverNow), fmt(serverNow - 60_000)].includes(when), `time was "${when}", expected about "${fmt(serverNow)}" Eastern`);
+      assert(/, \d{1,2}:\d{2} (AM|PM)$/.test(when), 'AM/PM time');
+      // Players' own taps are there too, under their names.
+      const all = (await admin.getByRole('list', { name: 'Activity' }).locator('.a-text').allInnerTexts()).join('\n');
+      assert(/^(Alex|Blair|Casey|Devon|Emery|Frankie) said I'm in for /m.test(all), 'player sign-ups should be logged by name');
+      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false });
+      await tab(admin, 'Home').click();
+    });
+
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`History at ${width}px (${scheme}): Sessions and Activity chips, compact past rows that open, no overlaps`, async () => {
+        // Two days on, so this week's sessions have been played.
+        await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() + BASE_OFFSET + 2 * 24 * 3600_000 }) });
+        try {
+          const p = await admin.context().newPage();
+          p.setDefaultTimeout(10000);
+          await p.setViewportSize({ width, height: 844 });
+          await p.emulateMedia({ colorScheme: scheme });
+          await p.goto(`${BASE}/admin`);
+          await tab(p, 'History').click();
+          const chips = p.getByRole('group', { name: 'Show' });
+          assert((await chips.getByRole('button', { name: 'Sessions' }).getAttribute('aria-pressed')) === 'true', 'Sessions is the default');
+          const list = p.getByRole('list', { name: 'Past sessions' });
+          await list.waitFor();
+          const rows = list.locator('li');
+          assert((await rows.count()) >= 1, 'no past sessions listed');
+          const first = (await rows.first().locator('.h-top').innerText()).replace(/\s+/g, ' ');
+          assert(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2} \d{1,2}(:\d{2})? (to|PM)/.test(first), `row top was "${first}"`);
+          const who = (await rows.first().locator('.h-who').innerText()).trim();
+          assert(/^(\d+ played|Canceled|Court didn't open)/.test(who), `row said "${who}"`);
+          // Newest first.
+          const ids = await rows.evaluateAll((ls) => ls.map((l) => l.dataset.session));
+          const starts = await p.evaluate(async (ids) => {
+            const d = await (await fetch('/api/admin/dashboard')).json();
+            return ids.map((id) => d.sessions.find((x) => x.id === id).startsAt);
+          }, ids);
+          assert(starts.every((x, i) => i === 0 || x <= starts[i - 1]), 'past sessions should be newest first');
+          const rep = await p.evaluate(layoutReport, { roots: 'main .history-list li', items: '.h-date, .h-time, .h-money, .h-who strong, .h-names, .h-canceled, .late-tag' });
+          assert(rep.problems.length === 0, `History rows: ${rep.problems.slice(0, 3).join(' | ')}`);
+          const tall = await rows.evaluateAll((ls) => Math.max(...ls.map((l) => l.getBoundingClientRect().height)));
+          assert(tall <= 110, `rows should be compact, tallest was ${tall}px`);
+          await rows.first().locator('button').click();
+          const sheet = p.locator('dialog[open]');
+          await sheet.locator('article.scard').waitFor();
+          await p.keyboard.press('Escape');
+          await sheet.waitFor({ state: 'detached' });
+          await chips.getByRole('button', { name: 'Activity' }).click();
+          assert((await chips.getByRole('button', { name: 'Activity' }).getAttribute('aria-pressed')) === 'true', 'Activity chip pressed');
+          const acts = p.getByRole('list', { name: 'Activity' }).locator('li');
+          await acts.first().waitFor();
+          const times = await acts.locator('.a-time').allInnerTexts();
+          assert(times.every((t) => /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/.test(t.trim())), `bad times: ${times.slice(0, 3)}`);
+          const stamps = await acts.locator('time').evaluateAll((ts) => ts.map((t) => t.dateTime));
+          assert(stamps.every((x, i) => i === 0 || x <= stamps[i - 1]), 'activity newest first');
+          assert(!/\bsent\b/i.test(await p.locator('main').innerText()), 'never say sent');
+          assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scrolling');
+          await p.screenshot({ path: path.join(SHOTS, `history-${width}-${scheme}.png`) });
+          await chips.getByRole('button', { name: 'Sessions' }).click();
+          await list.waitFor();
+          await p.close();
+        } finally {
+          await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() + BASE_OFFSET }) });
+        }
+      });
+    }
+
+    await check('players never see History', async () => {
+      const p = players.Alex;
+      await p.reload();
+      await p.locator('.schedule article').first().waitFor();
+      assert((await p.getByText(/^History$/).count()) === 0 && (await p.locator('nav.tabbar').count()) === 0, 'History on the player screen');
+      assert((await p.request.get(`${BASE}/api/admin/activity`)).status() === 401, 'players can read the activity log');
+    });
+
+    // ---------- Court strips: one row when it fits, else label then two equal halves ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`court strips at ${width}px (${scheme}): one row if it fits, else label above two equal-half buttons; no gaps, overlaps or cut-off text`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        await showAll(p);
+        const kinds = await p.locator('.court-banner').evaluateAll((bs) => bs.map((b) => b.closest('article').dataset.court));
+        assert(kinds.includes('needs') && kinds.includes('waitlist'), `need both strips, got ${kinds}`);
+        const report = await p.evaluate(() =>
+          [...document.querySelectorAll('.court-banner')].map((b) => {
+            const cs = getComputedStyle(b);
+            const padL = parseFloat(cs.paddingLeft);
+            const padR = parseFloat(cs.paddingRight);
+            const box = b.getBoundingClientRect();
+            const left = box.left + padL;
+            const right = box.right - padR;
+            const label = b.querySelector('.court-status').getBoundingClientRect();
+            const btns = [...b.querySelectorAll('.banner-btns > .btn')].map((x) => x.getBoundingClientRect());
+            // How wide one row would need to be: a hidden copy that never wraps.
+            const copy = b.cloneNode(true);
+            copy.querySelectorAll('dialog').forEach((d) => d.remove());
+            Object.assign(copy.style, { position: 'absolute', visibility: 'hidden', width: 'max-content', flexWrap: 'nowrap', left: '0', top: '0' });
+            b.parentElement.appendChild(copy);
+            const need = copy.getBoundingClientRect().width;
+            copy.remove();
+            const oneRow = btns.every((x) => Math.abs(x.top - btns[0].top) < 1) && btns[0].top < label.bottom - 2;
+            const btnStyle = getComputedStyle(b.querySelector('.banner-btns > .btn'));
+            const body = b.closest('article').querySelector('.scard-main').getBoundingClientRect();
+            return {
+              kind: b.closest('article').dataset.court,
+              label: b.querySelector('.court-status').innerText.trim(),
+              oneRow,
+              fits: need <= box.width + 0.5,
+              need: Math.round(need),
+              have: Math.round(box.width),
+              halves: btns.length === 2 && Math.abs(btns[0].width - btns[1].width) <= 1 && Math.abs(btns[0].left - left) <= 1 && Math.abs(btns[1].right - right) <= 1,
+              below: btns.every((x) => x.top >= label.bottom - 1),
+              sideBySide: btns.length === 2 && Math.abs(btns[0].top - btns[1].top) < 1 && btns[0].right <= btns[1].left,
+              overlap: btns.some((x) => x.left < label.right - 1 && x.top < label.bottom - 1 && x.bottom > label.top + 1),
+              inside: btns.every((x) => x.left >= box.left && x.right <= box.right + 0.5) && label.right <= box.right + 0.5,
+              cut: [...b.querySelectorAll('.banner-btns > .btn')].some((x) => x.scrollWidth > x.clientWidth + 1),
+              btnH: Math.round(btns[0].height),
+              font: parseFloat(btnStyle.fontSize),
+              padTop: Math.round(parseFloat(cs.paddingTop)),
+              padBottom: Math.round(parseFloat(cs.paddingBottom)),
+              gapBelow: Math.round(body.top - box.bottom),
+            };
+          }),
+        );
+        for (const r of report) {
+          const where = `${r.kind} strip "${r.label}"`;
+          assert(r.label === (r.kind === 'waitlist' ? 'Court waitlist' : 'Court not booked'), `${where}: label`);
+          assert(r.oneRow === r.fits, `${where}: ${r.oneRow ? 'one row but it does not fit' : 'two rows but one would fit'} (needs ${r.need}px, has ${r.have}px)`);
+          if (!r.oneRow) assert(r.halves && r.below && r.sideBySide, `${where}: buttons should be equal halves under the label ${JSON.stringify(r)}`);
+          assert(!r.overlap && r.inside && !r.cut, `${where}: overlap or cut off ${JSON.stringify(r)}`);
+          assert(r.btnH >= 34 && r.btnH <= 38 && Math.abs(r.font - 15) < 0.5, `${where}: buttons ${r.btnH}px tall, ${r.font}px text`);
+          assert(r.padTop >= 10 && r.padTop <= 12 && r.padTop === r.padBottom, `${where}: padding ${r.padTop}/${r.padBottom}`);
+          assert(Math.abs(r.gapBelow - r.padTop) <= 2, `${where}: ${r.gapBelow}px between strip and card body, padding is ${r.padTop}px`);
+        }
+        // The card Book link sits on the same row as I booked it and goes to CourtReserve.
+        const amber = p.locator('article[data-court="needs"] .court-banner').first();
+        const book = amber.getByRole('link', { name: /^Book/ });
+        assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await book.getAttribute('target')) === '_blank', 'card Book link');
+        const bb = await book.boundingBox();
+        const ib = await amber.getByRole('button', { name: 'I booked it' }).boundingBox();
+        assert(Math.abs(bb.y - ib.y) < 1 && bb.x < ib.x, 'Book and I booked it on one row');
+        // Date tile and time line up under every strip.
+        const aligned = await p.evaluate(() =>
+          [...document.querySelectorAll('.court-banner')].every((b) => {
+            const a = b.closest('article');
+            const tile = a.querySelector('.tile').getBoundingClientRect();
+            const time = a.querySelector('.sched-time').getBoundingClientRect();
+            return tile.top >= b.getBoundingClientRect().bottom && time.top >= b.getBoundingClientRect().bottom && Math.abs(tile.top - (time.top - 6)) < 14;
+          }),
+        );
+        assert(aligned, 'date tile and time should sit just under the strip');
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
+        assert(rep.problems.length === 0, `Home: ${rep.problems.slice(0, 3).join(' | ')}`);
+        await p.locator('article[data-court="waitlist"]').first().screenshot({ path: path.join(SHOTS, `strip-waitlist-${width}-${scheme}.png`) });
+        await amber.locator('xpath=ancestor::article[1]').screenshot({ path: path.join(SHOTS, `strip-needs-${width}-${scheme}.png`) });
+        await p.close();
+      });
+    }
+
+    // ---------- Number and dollar boxes save on leave or Enter, never on a pause ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`number boxes at ${width}px (${scheme}): "1" on the way to "14" is never saved; Enter or leaving saves`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        p.setDefaultTimeout(10000);
+        await p.goto(`${BASE}/admin`);
+        await tab(p, 'Settings').click();
+        await openSections(p);
+        const saved = async () => (await (await p.request.get(`${BASE}/api/admin/dashboard`)).json()).group.settings;
+        const price = p.getByLabel('Price per player');
+        const before = await price.inputValue();
+        const target = before === '14' ? '15' : '14';
+        await price.fill('');
+        await price.pressSequentially('1');
+        await p.waitForTimeout(1600);
+        assert((await rowOf(price).locator('.save-mark').count()) === 0, 'a pause must not save a number');
+        assert((await saved()).pricePerPlayerCents === Number(before) * 100, 'the half-typed "1" reached the server');
+        await price.pressSequentially(target[1]);
+        await price.press('Enter');
+        await savedIn(price);
+        assert((await saved()).pricePerPlayerCents === Number(target) * 100, `Enter should save ${target}`);
+        // Leaving the box saves too (hours this time).
+        const hours = p.getByLabel(/Last call/);
+        const hBefore = await hours.inputValue();
+        await hours.fill('');
+        await hours.pressSequentially('1');
+        await p.waitForTimeout(1600);
+        assert((await saved()).lastCallHours === Number(hBefore), 'a pause must not save hours');
+        const hTarget = hBefore === '11' ? '12' : '11';
+        await hours.pressSequentially(hTarget[1]);
+        await hours.blur();
+        await savedIn(hours);
+        assert((await saved()).lastCallHours === Number(hTarget), `leaving should save ${hTarget}`);
+        await autoSet(hours, hBefore);
+        await autoSet(price, before);
+        await p.close();
+      });
+    }
+
     // ---------- Cards: gear only, Other texts, "Copy text" ----------
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
       await check(`cards at ${width}px (${scheme}): no phone button, the gear works, Other texts open and copy, every message copy says "Copy text" on one line`, async () => {
@@ -2527,7 +2768,7 @@ async function main() {
 
     // ---------- Tab bar: order, and tapping the tab you're on starts it fresh ----------
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`tab bar at ${width}px (${scheme}): Home, Players, Money, Settings; tapping the tab you're on goes back to its top and closes what's open`, async () => {
+      await check(`tab bar at ${width}px (${scheme}): Home, Players, Money, History, Settings; tapping the tab you're on goes back to its top and closes what's open`, async () => {
         const p = await admin.context().newPage();
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
@@ -2535,15 +2776,17 @@ async function main() {
         await sessionCards(p).first().waitFor();
         const nav = p.getByRole('navigation', { name: 'Organizer sections' });
         const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
-        assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'Settings']), `tabs were ${labels}`);
+        assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'History', 'Settings']), `tabs were ${labels}`);
+        const wraps = await nav.getByRole('button').evaluateAll((bs) => bs.filter((b) => [...b.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim() && (() => { const r = document.createRange(); r.selectNodeContents(n); return r.getClientRects().length > 1; })())).map((b) => b.textContent));
+        assert(wraps.length === 0, `tab labels wrap: ${wraps}`);
         const sizes = await nav.getByRole('button').evaluateAll((bs) => bs.map((b) => [Math.round(b.getBoundingClientRect().width), b.getBoundingClientRect().height]));
         assert(sizes.every(([, h]) => h >= 44), `tabs under 44px: ${sizes}`);
         assert(Math.max(...sizes.map((x) => x[0])) - Math.min(...sizes.map((x) => x[0])) <= 1, `tabs not equal: ${sizes}`);
-        const screens = { Home: () => sessionCards(p).first(), Players: () => p.getByRole('button', { name: 'Edit Alex' }), Money: () => p.locator('details.money-sess').first(), Settings: () => p.getByRole('region', { name: 'Quick settings' }) };
+        const screens = { Home: () => sessionCards(p).first(), Players: () => p.getByRole('button', { name: 'Edit Alex' }), Money: () => p.locator('details.money-sess').first(), History: () => p.getByRole('group', { name: 'Show' }), Settings: () => p.getByRole('region', { name: 'Quick settings' }) };
         const scrollY = () => p.evaluate(() => window.scrollY);
         const scrollDown = () => p.evaluate(() => window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)));
         const waitTop = () => p.waitForFunction(() => window.scrollY === 0, null, { timeout: 4000 });
-        for (const name of ['Home', 'Players', 'Money', 'Settings']) {
+        for (const name of ['Home', 'Players', 'Money', 'History', 'Settings']) {
           await tab(p, name).click();
           await screens[name]().waitFor();
           assert((await tab(p, name).getAttribute('aria-current')) === 'page', `${name} should be highlighted`);

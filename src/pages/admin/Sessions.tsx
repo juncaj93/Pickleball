@@ -26,7 +26,7 @@ import {
   toLocalInputValue,
 } from '../../../shared/time';
 import { api, ApiError, copyText, isIOS, useNow } from '../../lib';
-import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 import { lateDropsAll, refundRows } from './todo';
@@ -131,7 +131,8 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                 </div>
                 {live && (
                   <a className="cal-link court-cal" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
-                    Add to calendar
+                    <CalendarPlusIcon />
+                    <span className="cal-text">Add to calendar</span>
                   </a>
                 )}
               </div>

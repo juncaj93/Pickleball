@@ -575,7 +575,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const [all, setAll] = useState(false);
   // Home is upcoming only; played sessions live under History.
   const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs);
-  const shown = all ? list : list.slice(0, 4);
+  const shown = all ? list : list.slice(0, 6);
   const tz = ctx.d.group.timezone;
 
   return (

@@ -447,6 +447,14 @@ export const GearIcon = () => (
   </svg>
 );
 
+/** A small calendar page with a plus: "Add to calendar" on narrow cards. */
+export const CalendarPlusIcon = () => (
+  <svg {...ICON} data-icon="calendar-plus" className="cal-icon">
+    <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+    <path d="M3.5 9.5h17M8 3v4M16 3v4M12 12.5v5M9.5 15h5" />
+  </svg>
+);
+
 /** History: a clock with an arrow curling back around it. */
 export const HistoryIcon = () => (
   <svg {...ICON} data-icon="history">
