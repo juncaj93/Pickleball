@@ -1,5 +1,5 @@
 import { formatPrice } from './money';
-import { formatDateTime, formatMonthDay, formatShortDate, formatTime, formatTimeRange, formatWeekday } from './time';
+import { formatDateTime, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday } from './time';
 
 // Short, prewritten texts. The site only drafts them; the organizer sends
 // each one from their own phone.
@@ -32,11 +32,11 @@ export function promotionMessage(
   name: string,
   s: SessionLike,
   tz: string,
-  reason: 'made_six' | 'spot_opened',
+  reason: 'made_six' | 'spot_opened' | 'court_opened',
   oweCents?: number,
 ): string {
   const w = when(s, tz);
-  const why = reason === 'made_six' ? 'We now have 6, an even number' : 'A spot opened up';
+  const why = reason === 'made_six' ? 'We now have 6, an even number' : reason === 'court_opened' ? 'The court opened up' : 'A spot opened up';
   const owe = oweCents === undefined ? '' : ` You owe ${formatPrice(oweCents)}${reason === 'made_six' ? ' (6-person discount)' : ''}.`;
   return `Good news, ${name}! ${why}, so you're in for pickleball ${w.day}, ${w.date}, ${w.time}.${owe}`;
 }
@@ -47,10 +47,26 @@ export function promotionMessage(
  * price only, never the court cost.
  */
 export function pollMessage(s: SessionLike, tz: string, venue: string, priceCents: number): string {
-  const start = formatTime(s.startsAt, tz);
-  const end = formatTime(s.endsAt, tz);
-  const startText = start.slice(-2) === end.slice(-2) ? start.slice(0, -3) : start;
-  return `Pickleball: ${formatShortDate(s.startsAt, tz)}, ${startText} to ${end} at ${venue}. ${formatPrice(priceCents)} each. In or out?`;
+  return `Pickleball: ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)} at ${venue}. ${formatPrice(priceCents)} each. In or out?`;
+}
+
+/** Poll while the organizer is on the venue's court waitlist. */
+export function courtWaitlistPollMessage(s: SessionLike, tz: string, link: string): string {
+  return `Pickleball ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. I'm on the court waitlist. Want to be ready if it opens? Tap here: ${link}`;
+}
+
+/** The day-before group text, worded for how many are in. */
+export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, link: string): string {
+  const head = `Pickleball tomorrow, ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`;
+  if (confirmed === 4 || confirmed === 6) return `${head} We're set with ${confirmed} in. See you there.`;
+  if (confirmed === 5) return `${head} We have 5, and we need either one more or one fewer. Sign up or drop here: ${link}`;
+  const need = confirmed < 4 ? 4 - confirmed : 6 - confirmed;
+  return `${head} We have ${confirmed} in and need ${need} more to fill. Sign up here: ${link}`;
+}
+
+/** The last-call group text, the day of. */
+export function lastCallMessage(s: SessionLike, tz: string, confirmed: number): string {
+  return `Last call for pickleball tonight, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, tell me now.`;
 }
 
 export function replacementMessage(s: SessionLike, tz: string, link: string): string {

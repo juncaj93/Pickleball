@@ -5,6 +5,7 @@ export interface GroupSettings {
   defaultDeadlineHours: number; // each session's cancellation deadline starts this many hours before play
   pricePerPlayerCents: number; // flat price each confirmed player pays, whether 4 or 6 play
   creditCentsWhenSix: number; // credit each of the first four earns when 6 play; the last two pay price minus this
+  lastCallHours: number; // the last-call card starts this many hours before play
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
@@ -14,6 +15,7 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   defaultDeadlineHours: 12,
   pricePerPlayerCents: 1400,
   creditCentsWhenSix: 500,
+  lastCallHours: 13,
 };
 
 const LIMITS: Record<keyof GroupSettings, [number, number]> = {
@@ -23,6 +25,7 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   defaultDeadlineHours: [0, 72],
   pricePerPlayerCents: [0, 100_00],
   creditCentsWhenSix: [0, 100_00],
+  lastCallHours: [1, 48],
 };
 
 export const SETTING_LIMITS = LIMITS;

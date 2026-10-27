@@ -5,6 +5,7 @@ import {
   confirmationMessage,
   deadlineAlertMessage,
   paymentMessage,
+  courtWaitlistPollMessage,
   pollMessage,
   replacementMessage,
 } from '../../../shared/messages';
@@ -24,7 +25,7 @@ import { api, ApiError, useNow } from '../../lib';
 import { Chip, ConfirmDialog, Notice, Sheet, SmsDraft, useToast } from '../../ui';
 import { type AdminCtx, deadlineLine } from '../Admin';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll' | 'booked' | 'opened';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -52,8 +53,9 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const tz = ctx.d.group.timezone;
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
-  // Far-off sessions stay compact until the organizer asks for the buttons.
-  const [expanded, setExpanded] = useState(s.state.flags.bookingWindowOpen || s.state.flags.canceled);
+  const [more, setMore] = useState(false);
+  const courtWait = s.courtState === 'waitlist';
+  const needsCourt = live && !courtWait && s.bookingStatus !== 'booked';
   return (
     <article className="card stack" aria-labelledby={`as-${s.id}`}>
       <div className="spread">
@@ -62,19 +64,27 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             {formatShortDate(s.startsAt, tz)}
           </h2>
           <div className="card-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</div>
-          {s.holiday && <HolidayPill name={s.holiday} venueNote />}
+          {s.holiday && <HolidayControl ctx={ctx} s={s} />}
         </div>
         <Chip tone={s.state.tone}>{s.state.text}</Chip>
       </div>
       <dl className="kv">
         <dt>Players</dt>
         <dd>
-          <strong>{s.confirmedCount} going</strong>
-          {s.waitlistCount > 0 ? ` · ${s.waitlistCount} waiting` : ''}
+          <strong>{s.confirmedCount} in</strong>
+          {s.waitlistCount > 0 ? ` · ${s.waitlistCount} ${courtWait ? 'on standby' : 'waiting'}` : ''}
         </dd>
         <dt>Court</dt>
         <dd>
-          {s.bookingStatus === 'booked' ? 'Booked' : s.bookingStatus === 'unavailable' ? 'Not available' : 'Needs booking'}
+          {courtWait
+            ? 'On the court waitlist'
+            : s.courtState === 'not_opened'
+              ? "Didn't open"
+              : s.bookingStatus === 'booked'
+                ? `Booked${s.courtNumber ? `, Court #${s.courtNumber}` : ''}`
+                : s.bookingStatus === 'unavailable'
+                  ? 'Not available'
+                  : 'Needs booking'}
           {s.reservationReference ? ` · #${s.reservationReference}` : ''}
           {s.courtCostCents !== null ? ` · ${formatCents(s.courtCostCents)} (only you see this)` : ''}
         </dd>
@@ -94,56 +104,155 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
         )}
         {s.state.flags.canceled && s.canceledAt && (
           <>
-            <dt>Canceled</dt>
-            <dd>
-              {formatDateTime(s.canceledAt, tz)} by {s.canceledBy}
-            </dd>
+            <dt>{s.courtState === 'not_opened' ? 'Marked off' : 'Canceled'}</dt>
+            <dd>{formatDateTime(s.canceledAt, tz)}</dd>
           </>
         )}
       </dl>
       {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
-      {!expanded && (
-        <button className="btn small ghost" onClick={() => setExpanded(true)} aria-expanded="false">
-          Show actions
+
+      {/* One main action, then the two everyday ones, then the rest under More. */}
+      {live && courtWait ? (
+        <CourtWaitButtons ctx={ctx} s={s} />
+      ) : needsCourt ? (
+        <button className="btn block" onClick={() => ctx.open('booked', s.id)}>
+          I booked it
         </button>
-      )}
-      {live && (
-        <button className="btn small block" onClick={() => ctx.open('poll', s.id)}>
+      ) : live ? (
+        <button className="btn block" onClick={() => ctx.open('poll', s.id)}>
           Text the group poll
         </button>
-      )}
-      {expanded && <div className="action-strip">
+      ) : null}
+      <div className="action-strip">
         <button className="btn small secondary" onClick={() => ctx.open('booking', s.id)}>
           Edit booking
         </button>
         <button className="btn small secondary" onClick={() => ctx.open('roster', s.id)}>
-          Manage players
+          Players
         </button>
-        <button className="btn small secondary" onClick={() => ctx.open('payments', s.id)}>
-          Money
-        </button>
-        {live && (
-          <button className="btn small secondary" onClick={() => ctx.open('reminders', s.id)}>
-            Texts
+      </div>
+      <button className="btn small ghost" aria-expanded={more} onClick={() => setMore((v) => !v)}>
+        {more ? 'Less' : 'More'}
+      </button>
+      {more && (
+        <div className="action-strip">
+          <button className="btn small secondary" onClick={() => ctx.open('payments', s.id)}>
+            Money
           </button>
-        )}
-        {live && (
-          <button className="btn small secondary" onClick={() => ctx.open('reschedule', s.id)}>
-            Reschedule
-          </button>
-        )}
-        {live && s.state.flags.openSpots > 0 && (
-          <button className="btn small secondary" onClick={() => ctx.open('invite', s.id)}>
-            Invite substitutes
-          </button>
-        )}
-        {!s.state.flags.started && (
-          <button className="btn small danger" onClick={() => ctx.open('cancel', s.id)}>
-            {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
-          </button>
-        )}
-      </div>}
+          {live && (
+            <button className="btn small secondary" onClick={() => ctx.open('reminders', s.id)}>
+              Texts
+            </button>
+          )}
+          {live && (needsCourt || courtWait) && (
+            <button className="btn small secondary" onClick={() => ctx.open('poll', s.id)}>
+              Text the group poll
+            </button>
+          )}
+          {live && (
+            <button className="btn small secondary" onClick={() => ctx.open('reschedule', s.id)}>
+              Reschedule
+            </button>
+          )}
+          {live && s.state.flags.openSpots > 0 && !courtWait && (
+            <button className="btn small secondary" onClick={() => ctx.open('invite', s.id)}>
+              Invite substitutes
+            </button>
+          )}
+          {needsCourt && (
+            <CourtWaitlistStart ctx={ctx} s={s} />
+          )}
+          {s.shownEarly && (
+            <HideAgain ctx={ctx} s={s} />
+          )}
+          {!s.state.flags.started && s.courtState !== 'not_opened' && (
+            <button className="btn small danger" onClick={() => ctx.open('cancel', s.id)}>
+              {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
+            </button>
+          )}
+        </div>
+      )}
     </article>
+  );
+}
+
+/** "Court opened" / "Didn't open" while on the venue's court waitlist. */
+export function CourtWaitButtons({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, error, run } = useAction(ctx);
+  const [ask, setAsk] = useState(false);
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <div className="btn-row">
+        <button className="btn" disabled={busy} onClick={() => ctx.open('opened', s.id)}>
+          Court opened
+        </button>
+        <button className="btn secondary" disabled={busy} onClick={() => setAsk(true)}>
+          Didn't open
+        </button>
+      </div>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <ConfirmDialog
+        open={ask}
+        title="The court didn't open?"
+        body={`This session gets marked off with "Court didn't open." Standby players see that, and nobody owes anything.`}
+        confirmLabel="Mark it off"
+        danger
+        busy={busy}
+        onConfirm={async () => {
+          await run(() => api('POST', `/api/admin/sessions/${s.id}/court`, { action: 'not_opened' }), "Marked: court didn't open");
+          setAsk(false);
+        }}
+        onCancel={() => setAsk(false)}
+      />
+    </div>
+  );
+}
+
+function CourtWaitlistStart({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  return (
+    <button
+      className="btn small secondary"
+      disabled={busy}
+      onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' }), "On the court waitlist")}
+    >
+      On court waitlist
+    </button>
+  );
+}
+
+function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  return (
+    <button className="btn small secondary" disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/show`, { shown: false }), 'Hidden again')}>
+      Hide this session
+    </button>
+  );
+}
+
+/**
+ * Holiday pill for the organizer: "Election Day · check venue hours" with
+ * "Venue is open normal hours". Once confirmed it shows "✓ Election Day"
+ * with Undo. Saved on the session, so it holds on every device.
+ */
+export function HolidayControl({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  if (!s.holiday) return null;
+  const set = (ok: boolean) =>
+    run(() => api('POST', `/api/admin/sessions/${s.id}/holiday-hours`, { ok }), ok ? 'Venue hours confirmed' : 'Undone');
+  return (
+    <div className="holiday-actions">
+      <HolidayPill name={s.holiday} venueNote confirmed={s.holidayHoursOk} />
+      {s.holidayHoursOk ? (
+        <button className="link-btn" disabled={busy} onClick={() => set(false)}>
+          Undo
+        </button>
+      ) : (
+        <button className="link-btn" disabled={busy} onClick={() => set(true)}>
+          Venue is open normal hours
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -223,6 +332,8 @@ export function SessionSheets({
     invite: `Invite people · ${title}`,
     reschedule: `Reschedule · ${title}`,
     poll: `Group poll · ${title}`,
+    booked: `I booked it · ${title}`,
+    opened: `Court opened · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -238,11 +349,80 @@ export function SessionSheets({
           <SmsDraft
             to="Group chat"
             phone={null}
-            body={pollMessage(s, tz, ctx.d.group.venueName || DEFAULT_VENUE_NAME, ctx.d.group.settings.pricePerPlayerCents)}
+            body={
+              s.courtState === 'waitlist'
+                ? courtWaitlistPollMessage(s, tz, ctx.d.group.playerLink)
+                : pollMessage(s, tz, ctx.d.group.venueName || DEFAULT_VENUE_NAME, ctx.d.group.settings.pricePerPlayerCents)
+            }
           />
         </div>
       )}
+      {s && (kind === 'booked' || kind === 'opened') && <BookedForm ctx={ctx} s={s} opened={kind === 'opened'} onDone={onClose} />}
     </Sheet>
+  );
+}
+
+// ---------- I booked it ----------
+
+/**
+ * One step: court number (optional), then Save marks the session booked.
+ * Venue defaults to the club and the deadline to 12 hours before play.
+ * Reservation number and court cost sit under "More details".
+ */
+function BookedForm({ ctx, s, opened, onDone }: { ctx: AdminCtx; s: AdminSessionView; opened: boolean; onDone: () => void }) {
+  const [court, setCourt] = useState(s.courtNumber ?? '');
+  const [ref, setRef] = useState(s.reservationReference ?? '');
+  const [cost, setCost] = useState(s.courtCostCents !== null ? (s.courtCostCents / 100).toFixed(2) : '');
+  const [costError, setCostError] = useState<string | null>(null);
+  const { busy, error, run } = useAction(ctx);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const cents = cost.trim() === '' ? null : parseDollars(cost);
+    setCostError(cost.trim() !== '' && cents === null ? 'Enter an amount like 48 or 48.50.' : null);
+    if (cost.trim() !== '' && cents === null) return;
+    const ok = await run(
+      () =>
+        api('POST', `/api/admin/sessions/${s.id}/booked`, {
+          courtNumber: court || null,
+          reservationReference: ref || null,
+          courtCostCents: cents,
+        }),
+      opened ? 'Court opened. Standby players moved in.' : 'Booked',
+    );
+    if (ok) onDone();
+  }
+
+  return (
+    <form className="stack" onSubmit={submit}>
+      <label className="field">
+        Court number (optional)
+        <input type="text" inputMode="numeric" value={court} onChange={(e) => setCourt(e.target.value)} maxLength={10} placeholder="7" autoFocus />
+      </label>
+      <details className="advanced">
+        <summary>More details</summary>
+        <div className="stack">
+          <label className="field">
+            Reservation number (optional)
+            <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
+          </label>
+          <label className="field">
+            Court cost (optional)
+            <span className="hint">Your own record. Players never see it, and it's never in a text.</span>
+            <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="48.00" />
+            {costError && <span className="field-error">{costError}</span>}
+          </label>
+        </div>
+      </details>
+      <p className="small muted">
+        Venue: {ctx.d.group.venueName || DEFAULT_VENUE_NAME}. Cancel by {ctx.d.group.settings.defaultDeadlineHours} hours before play unless you change it in
+        Edit booking.
+      </p>
+      {error && <Notice tone="danger">{error}</Notice>}
+      <button className="btn block" type="submit" disabled={busy}>
+        {busy ? 'Saving…' : opened ? 'Save: court opened' : 'Save: booked'}
+      </button>
+    </form>
   );
 }
 
@@ -252,6 +432,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
   const tz = ctx.d.group.timezone;
   const [status, setStatus] = useState<BookingStatus>(s.bookingStatus === 'needs_booking' ? 'booked' : s.bookingStatus);
   const [ref, setRef] = useState(s.reservationReference ?? '');
+  const [courtNo, setCourtNo] = useState(s.courtNumber ?? '');
   const [cost, setCost] = useState(s.courtCostCents !== null ? (s.courtCostCents / 100).toFixed(2) : '');
   const [costError, setCostError] = useState<string | null>(null);
   const [deadline, setDeadline] = useState(s.cancellationDeadlineAt ? toLocalInputValue(s.cancellationDeadlineAt, tz) : '');
@@ -271,6 +452,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
           venueName: s.venueName,
           venueBookingUrl: s.venueBookingUrl,
           reservationReference: ref || null,
+          courtNumber: courtNo || null,
           courtCostCents: cents,
           cancellationDeadlineAt: deadlineIso,
         }),
@@ -294,6 +476,10 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
           </button>
         ))}
       </div>
+      <label className="field">
+        Court # (optional)
+        <input type="text" inputMode="numeric" value={courtNo} onChange={(e) => setCourtNo(e.target.value)} maxLength={10} placeholder="7" />
+      </label>
       <label className="field">
         Reservation number (optional)
         <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
@@ -727,7 +913,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
       body={
         <div className="stack">
           {reopening ? (
-            <p>Players can sign up again. Links sent before the cancellation stay dead; prepare new ones if needed.</p>
+            <p>Players can sign up again. Links from before the cancellation stay dead; prepare new ones if needed.</p>
           ) : (
             <>
               <p>Players will see it as canceled, and reminders and payments stop for it.</p>

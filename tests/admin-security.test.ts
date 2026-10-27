@@ -303,7 +303,8 @@ describe('booking, deadlines, and decisions', () => {
     const res = await ctx.organizer.call('GET', '/api/admin/export');
     expect(res.headers.get('Content-Type')).toContain('text/csv');
     expect(res.text.split('\n')[0]).toContain('Date,Time,Session status');
-    expect(res.text).toContain('Tue, Oct 27,8:00–10:00 PM EDT'.replace('Tue, Oct 27', '"Tue, Oct 27"'));
+    expect(res.text).toContain('"Tue, Oct 27",8:00 to 10:00 PM');
+    expect(res.text).not.toMatch(/\bE[DS]T\b/);
     expect(res.text).toContain('Alex,confirmed');
     expect(res.text).not.toMatch(/T\d\d:\d\d:\d\d\.\d{3}Z/);
   });

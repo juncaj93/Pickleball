@@ -226,7 +226,8 @@ a {
 }
 
 .page.has-tabs {
-  padding-bottom: calc(env(safe-area-inset-bottom) + 112px);
+  /* Room for the floating pill (about 66px) plus breathing space. */
+  padding-bottom: calc(env(safe-area-inset-bottom) + 132px);
 }
 
 .stack {
@@ -607,9 +608,10 @@ textarea:focus {
   transform: translateX(-50%);
   bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   width: min(360px, calc(100% - 32px));
-  background: color-mix(in srgb, var(--surface) 84%, transparent);
-  backdrop-filter: blur(20px) saturate(1.5);
-  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  /* Nearly solid, so card text never shows through; a light blur softens the edge. */
+  background: color-mix(in srgb, var(--surface) 97%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border: 1px solid var(--line);
   border-radius: 999px;
   box-shadow: 0 10px 30px rgb(10 20 15 / 18%), 0 1px 3px rgb(10 20 15 / 10%);
@@ -1122,4 +1124,211 @@ input[type='datetime-local']::-webkit-date-and-time-value {
 
 label.field {
   min-width: 0;
+}
+
+/* ---------- Part 4: player schedule ---------- */
+
+.schedule {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sched {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.sched.off {
+  opacity: 0.75;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  align-self: start;
+  border-radius: 12px;
+  background: var(--court);
+  color: #fff;
+  padding: 6px 0 7px;
+  line-height: 1;
+  font-family: var(--display);
+}
+
+.tile .dow,
+.tile .mon {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.9;
+}
+
+.tile .day {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 3px 0;
+}
+
+.sched-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sched-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.sched-time {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.12rem;
+}
+
+.me-tag {
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.me-tag.outline {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--ink);
+}
+
+.sched-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.92rem;
+  color: var(--ink-2);
+}
+
+.sched-status .holiday {
+  margin-top: 0;
+}
+
+.in-line {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.in-pills {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.in-pills li {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.85rem;
+  font-weight: 650;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.in-pills li.me {
+  outline: 2px solid var(--ink-2);
+  outline-offset: 2px;
+}
+
+.waitlist-line {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  margin: 0;
+}
+
+.money {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.money .paid {
+  font-weight: 700;
+}
+
+.cal-link {
+  align-self: flex-start;
+  font-size: 0.88rem;
+  color: var(--ink-2);
+  text-underline-offset: 3px;
+  padding: 12px 2px;
+  margin: -12px 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Header logo: sits on a light rounded backing so its white edge looks
+   intentional in dark mode too. */
+.brand-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff;
+  padding: 2px;
+  flex: none;
+  object-fit: contain;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+.holiday-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.link-btn {
+  background: none;
+  border: 0;
+  padding: 10px 2px;
+  min-height: 44px;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.message-ready {
+  font-weight: 700;
+}
+
+/* Row buttons keep their size next to long text or a holiday pill. */
+.rows > li > .btn {
+  flex: none;
+  white-space: nowrap;
 }

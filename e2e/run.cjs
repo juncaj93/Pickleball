@@ -48,6 +48,15 @@ function assert(cond, msg) {
 const tab = (page, name) => page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: new RegExp(`^${name}`) });
 /** Session cards on the organizer Home (attention cards above them are articles too). */
 const sessionCards = (page) => page.locator('section[aria-labelledby="sessions-title"] article');
+/** Open a session card's "More" buttons (Money, Texts, Reschedule, Invite, Cancel). */
+async function more(card) {
+  const btn = card.getByRole('button', { name: 'More', exact: true });
+  const less = card.getByRole('button', { name: 'Less', exact: true });
+  // Wait until the card has drawn, then open it unless it's already open.
+  await btn.or(less).first().waitFor();
+  if (await btn.isVisible()) await btn.click();
+  await less.waitFor();
+}
 
 async function waitForServer() {
   for (let i = 0; i < 60; i++) {
@@ -163,6 +172,14 @@ async function main() {
       const radius = await nav.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius));
       assert(radius >= 24, 'pill should be fully rounded');
       assert((await nav.locator('svg').count()) === 3, 'expected three drawn icons');
+      const pillBg = await nav.evaluate((el) => getComputedStyle(el).backgroundColor);
+      // "rgb(r g b)", "rgba(r, g, b, a)" or "color(srgb r g b / a)": the alpha is the 4th number, or after "/".
+      const nums = pillBg.match(/[\d.]+/g).map(Number);
+      const alpha = pillBg.includes('/') ? Number(pillBg.split('/')[1].match(/[\d.]+/)[0]) : pillBg.startsWith('rgba') ? nums[3] : 1;
+      assert(alpha >= 0.95, `pill should be solid, background was ${pillBg}`);
+      const pad = await admin.evaluate(() => parseFloat(getComputedStyle(document.querySelector('main.page')).paddingBottom));
+      assert(pad >= box.height + 24, `not enough room under the last card for the pill (${pad}px)`);
+      await admin.locator('header img.brand-logo').waitFor();
       const bg = await admin.evaluate(() => [getComputedStyle(document.documentElement).backgroundColor, getComputedStyle(document.body).backgroundColor]);
       assert(bg[0] === bg[1] && bg[0] !== 'rgba(0, 0, 0, 0)', `page background not set on html: ${bg}`);
     });
@@ -233,10 +250,11 @@ async function main() {
     await check('the 5th person joins the waitlist as #1', async () => {
       const p = await openAs('Emery');
       await firstCard(p).getByRole('button', { name: 'Join waitlist' }).click();
-      await firstCard(p).getByText('#1 on waitlist').waitFor();
-      await firstCard(p).getByText('4 going · 1 more makes 6').waitFor();
-      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await firstCard(p).locator('.roster li.in', { hasText: n }).waitFor();
-      await firstCard(p).locator('.roster li.waiting', { hasText: 'Emery · waitlist #1' }).waitFor();
+      await firstCard(p).locator('.me-tag', { hasText: 'Waitlist #1' }).waitFor();
+      await firstCard(p).getByText('4 of 4 in').waitFor();
+      for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await firstCard(p).locator('.in-pills li', { hasText: n }).waitFor();
+      await firstCard(p).locator('.waitlist-line', { hasText: 'Waitlist: Emery' }).waitFor();
+      assert((await firstCard(p).locator('.in-pills li', { hasText: 'Frankie' }).count()) === 0, 'people who have not signed up should not show');
       await p.screenshot({ path: path.join(SHOTS, 'player-waitlist.png'), fullPage: true });
     });
 
@@ -290,9 +308,10 @@ async function main() {
       await firstCard(players.Casey).getByText("6 are playing. You'll get a $5 credit toward your next session.").waitFor();
       assert((await firstCard(players.Casey).getByText('6-person discount').count()) === 0, 'first four should not get the discount');
       await players.Frankie.reload();
-      await firstCard(players.Frankie).getByText('you owe $9').waitFor();
-      await players.Frankie.getByRole('region', { name: 'Payments' }).getByText('6-person discount').waitFor();
-      await players.Frankie.getByRole('region', { name: 'Payments' }).getByRole('link', { name: 'Pay $9 with Venmo' }).waitFor();
+      const money = firstCard(players.Frankie).getByLabel('Money for this session');
+      await money.getByText('You owe $9').waitFor();
+      await money.getByText('6-person discount').waitFor();
+      await money.getByRole('link', { name: 'Pay $9 with Venmo' }).waitFor();
       assert((await firstCard(players.Frankie).getByText(/credit toward your next/).count()) === 0, 'last two should not hear about a credit');
       await admin.reload();
       assert((await admin.getByText(/Refund \$5 each/).count()) === 0, 'old refund card still shown');
@@ -317,7 +336,7 @@ async function main() {
       await players.Frankie.getByRole('link', { name: 'Pay $14 with Venmo' }).first().waitFor();
       assert((await firstCard(players.Frankie).getByText('6-person discount').count()) === 0, 'discount text should be gone');
       await players.Alex.reload();
-      await firstCard(players.Alex).locator('.roster li.in').first().waitFor();
+      await firstCard(players.Alex).locator('.in-pills li').first().waitFor();
       assert((await firstCard(players.Alex).getByText(/credit toward your next session/).count()) === 0, 'credit text should be gone');
       await five.getByRole('button', { name: /Back to 4/ }).click();
       await admin.locator('.toast', { hasText: '4 going' }).waitFor();
@@ -328,25 +347,51 @@ async function main() {
     });
 
     console.log('Booking & payments');
-    await check('Book a court: CourtReserve button, then enter the details', async () => {
+    await check('"I booked it": court number in one step, extras under More details', async () => {
       const courts = admin.getByRole('article', { name: 'Courts to book' });
       const link = courts.getByRole('link', { name: 'Book on CourtReserve' });
       assert((await link.getAttribute('href')) === 'https://app.courtreserve.com/Online/PublicBookings/13765/Landing', 'wrong CourtReserve link');
+      assert((await courts.getByRole('button', { name: 'I booked it' }).count()) > 0, 'court rows need an I booked it button');
+      assert((await courts.getByRole('button', { name: 'Enter details' }).count()) === 0, 'old Enter details button still shown');
       const card = sessionCards(admin).first();
-      await card.getByRole('button', { name: 'Edit booking' }).click();
+      await card.getByRole('button', { name: 'I booked it' }).click();
       const sheet = admin.locator('dialog[open]');
-      await sheet.getByRole('button', { name: 'Booked', exact: true }).click();
+      await sheet.getByLabel(/Court number/).fill('7');
+      assert(!(await sheet.getByLabel(/Reservation number/).isVisible()), 'extras should be tucked under More details');
+      await sheet.getByText('More details').click();
       await sheet.getByLabel(/Reservation number/).fill('R-1042');
-      await sheet.getByText("Your own record. Players never see it, and it's never in a text.").waitFor();
-      assert((await sheet.getByText(/Split four ways/i).count()) === 0, 'old split helper text still shown');
       await sheet.getByLabel(/Court cost/).fill('48.37');
-      await sheet.getByText(/Deadline: .*8:00 AM E[DS]T/).waitFor();
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
-      await sheet.getByRole('button', { name: 'Save booking' }).click();
+      await sheet.getByText('Venue: Northville Pickleball Club', { exact: false }).waitFor();
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-i-booked-it.png') });
+      await sheet.getByRole('button', { name: 'Save: booked' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText('#R-1042').waitFor();
-      await card.getByText('$48.37 (only you see this)').waitFor();
+      await card.getByText(/Booked, Court #7/).waitFor();
+      await card.getByText('#R-1042', { exact: false }).waitFor();
+      await card.getByText('$48.37 (only you see this)', { exact: false }).waitFor();
       await card.getByText(/Cancel by/).waitFor();
+      // Edit booking has the same fields, a 12-hour deadline, and no split text.
+      await card.getByRole('button', { name: 'Edit booking' }).click();
+      const edit = admin.locator('dialog[open]');
+      assert((await edit.getByLabel(/Court #/).inputValue()) === '7', 'Court # missing from Edit booking');
+      await edit.getByText("Your own record. Players never see it, and it's never in a text.").waitFor();
+      assert((await edit.getByText(/Split four ways/i).count()) === 0, 'old split helper text still shown');
+      await edit.getByText(/Deadline: .*8:00 AM$/).waitFor();
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
+      await admin.keyboard.press('Escape');
+      await players.Alex.reload();
+      await firstCard(players.Alex).getByText('Court booked, Court #7').waitFor();
+    });
+
+    await check('session card: one main button, Edit booking, Players, and the rest under More', async () => {
+      const card = sessionCards(admin).first();
+      const visible = async () =>
+        (await card.locator('button:visible').allInnerTexts()).map((t) => t.trim()).filter((t) => !/^(Undo|Venue is open normal hours)$/.test(t));
+      const before = await visible();
+      assert(JSON.stringify(before) === JSON.stringify(['Text the group poll', 'Edit booking', 'Players', 'More']), `card buttons were ${before}`);
+      await more(card);
+      const after = await visible();
+      for (const b of ['Money', 'Texts', 'Reschedule', 'Cancel session']) assert(after.includes(b), `More is missing ${b}: ${after}`);
+      await card.getByRole('button', { name: 'Less' }).click();
     });
 
     await check('court cost never shows to players', async () => {
@@ -385,11 +430,24 @@ async function main() {
       const ok = await players.Alex.evaluate(() => getComputedStyle(document.querySelector('.tone-ok') || document.body).color);
       assert(color !== ok, 'holiday pill should not use a status color');
       await admin.reload();
-      await admin.locator('.holiday', { hasText: 'Election Day · check venue hours' }).first().waitFor();
+      const hcard = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
+      await hcard.locator('.holiday', { hasText: 'Election Day · check venue hours' }).waitFor();
+      await hcard.getByRole('button', { name: 'Venue is open normal hours' }).click();
+      await hcard.locator('.holiday', { hasText: /^✓ Election Day$/ }).waitFor();
+      await admin.reload();
+      const after = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
+      await after.locator('.holiday', { hasText: /^✓ Election Day$/ }).waitFor();
+      assert((await after.getByText('check venue hours').count()) === 0, 'check venue hours should be gone after confirming');
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-holiday-confirmed.png'), fullPage: true });
+      await after.getByRole('button', { name: 'Undo' }).click();
+      await after.locator('.holiday', { hasText: 'Election Day · check venue hours' }).waitFor();
+      await players.Alex.reload();
+      assert(!(await players.Alex.content()).includes('venue hours'), 'players must never see "check venue hours"');
     });
 
     await check('everyone confirmed owes a flat $14; mark paid updates only that player', async () => {
       const card = sessionCards(admin).first();
+      await more(card);
       await card.getByRole('button', { name: 'Money' }).click();
       const sheet = admin.locator('dialog[open]');
       assert((await sheet.getByText('owes $14').count()) === 4, 'expected four people owing $14');
@@ -404,7 +462,7 @@ async function main() {
       const blairRow = sheet.locator('li', { hasText: 'Blair' }).first();
       await blairRow.getByRole('button', { name: 'Payment reminder' }).click();
       const draft = blairRow.locator('.draft');
-      await draft.getByText('Draft ready').first().waitFor();
+      await draft.getByText('Draft', { exact: true }).first().waitFor();
       await draft.getByText(/Hey Blair! You owe \$14 for pickleball/).waitFor();
       const href = await draft.getByRole('link', { name: 'Open in Messages' }).getAttribute('href');
       assert(href.startsWith('sms:+13135550101&body='), `bad sms link ${href}`);
@@ -418,40 +476,45 @@ async function main() {
       assert(clip.includes('You owe $14'), `clipboard was ${clip}`);
     });
 
-    await check('opening the composer does not mark it sent', async () => {
+    await check('opening Messages shows "Message ready", never "sent"', async () => {
       const draft = admin.locator('dialog[open] .draft').first();
       await draft.evaluate((el) => {
         // Don't let the test browser try to launch an SMS app.
         el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault());
       });
       await draft.getByRole('link', { name: 'Open in Messages' }).click();
-      await draft.getByText('Not sent until you press send there').waitFor();
-      assert((await draft.getByText('Marked sent').count()) === 0, 'claimed sent');
-      await draft.getByRole('button', { name: 'I sent it' }).click();
-      await draft.getByText('Marked sent').waitFor();
+      await draft.getByText('Message ready.').waitFor();
+      assert(!/\bsent\b/i.test(await draft.innerText()), 'the draft must never say it was sent');
+      assert((await draft.getByRole('button', { name: /sent/i }).count()) === 0, 'no "I sent it" button');
       await admin.keyboard.press('Escape');
     });
 
-    await check('player sees "You owe $14" with a Pay with Venmo button, amount filled in', async () => {
+    await check('money lives inside each session row: owe + Venmo, or Paid; no money card', async () => {
       const p = players.Blair;
       await p.reload();
-      const owe = p.getByRole('region', { name: 'Payments' });
-      await owe.getByText(/You owe \$14 for /).first().waitFor();
-      const href = await owe.getByRole('link', { name: 'Pay $14 with Venmo' }).first().getAttribute('href');
+      const money = firstCard(p).getByLabel('Money for this session');
+      await money.getByText('You owe $14').waitFor();
+      const href = await money.getByRole('link', { name: 'Pay $14 with Venmo' }).getAttribute('href');
       assert(href.startsWith('https://venmo.com/organizer?txn=pay&amount=14.00&note=Pickleball'), `bad Venmo link ${href}`);
-      assert((await owe.getByText(/may not have marked this paid/).count()) === 0, 'unpaid reminder shown too early');
+      assert((await money.getByText(/may not have marked this paid/).count()) === 0, 'unpaid reminder shown too early');
+      assert((await p.getByRole('region', { name: 'Payments' }).count()) === 0, 'separate money card should be gone');
       await p.screenshot({ path: path.join(SHOTS, 'player-owe.png'), fullPage: true });
-      // Alex is marked paid for the first session, so it isn't in Alex's list.
+      // Alex is marked paid for the first session.
       await players.Alex.reload();
-      const blairOwes = await owe.innerText();
-      const alexOwes = (await players.Alex.getByRole('region', { name: 'Payments' }).count())
-        ? await players.Alex.getByRole('region', { name: 'Payments' }).innerText()
-        : '';
-      const firstLine = blairOwes.split('\n').find((l) => l.startsWith('You owe'));
-      assert(!alexOwes.includes(firstLine), `Alex still owes for the session marked paid: ${firstLine}`);
+      await firstCard(players.Alex).getByLabel('Money for this session').getByText('✓ Paid').waitFor();
     });
 
-    await check('Add to Calendar downloads a Pickleball event at 8:00–10:00 PM', async () => {
+    await check('schedule rows: date tile, time without EDT/EST, and a small calendar link', async () => {
+      const row = firstCard(players.Blair);
+      const tile = (await row.locator('.tile').innerText()).replace(/\s+/g, ' ').trim();
+      assert(/^(TUE|THU) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
+      await row.locator('.sched-time', { hasText: /^8:00 to 10:00 PM$|^7:30 to 10:00 PM$/ }).waitFor();
+      assert(!/\b(EDT|EST)\b/.test(await players.Blair.locator('main').innerText()), 'EDT/EST still on screen');
+      const cal = row.getByRole('link', { name: 'Add to Calendar' });
+      assert(!(await cal.getAttribute('class')).includes('btn'), 'calendar should be a small link, not a big button');
+    });
+
+    await check('Add to Calendar downloads a Pickleball event at 8:00 to 10:00 PM', async () => {
       const link = firstCard(players.Blair).getByRole('link', { name: 'Add to Calendar' });
       const href = await link.getAttribute('href');
       assert(/^\/api\/sessions\/[0-9a-f-]{36}\/calendar\.ics$/.test(href), `bad calendar link ${href}`);
@@ -516,30 +579,20 @@ async function main() {
     });
 
     console.log('Roster, names, home screen');
-    await check('who\'s going: signed up = solid pill with a check, everyone else faded', async () => {
+    await check('who\'s in: only people who signed up, as neutral pills; nobody else listed', async () => {
       await players.Alex.reload();
       const card = firstCard(players.Alex);
-      const pill = card.locator('.roster li.in', { hasText: 'Alex' });
-      await pill.waitFor();
-      assert((await pill.innerText()).startsWith('✓'), 'signed-up name should have a check mark');
-      const out = card.locator('.roster li.out').first();
-      await out.waitFor();
+      await card.locator('.in-pills li', { hasText: 'Alex' }).waitFor();
+      assert((await card.locator('.roster li.out').count()) === 0, 'faded not-signed-up names should be gone');
       const styles = await players.Alex.evaluate(() => {
-        const css = (sel) => getComputedStyle(document.querySelector(sel));
         const probe = document.createElement('span');
-        probe.className = 'chip tone-ok';
         document.body.appendChild(probe);
-        const green = getComputedStyle(probe).backgroundColor;
-        probe.className = 'chip tone-warn';
-        const amber = getComputedStyle(probe).backgroundColor;
-        probe.className = 'chip tone-danger';
-        const red = getComputedStyle(probe).backgroundColor;
+        const bg = (c) => ((probe.className = c), getComputedStyle(probe).backgroundColor);
+        const colors = [bg('chip tone-ok'), bg('chip tone-warn'), bg('chip tone-danger')];
         probe.remove();
-        return { inBg: css('.roster li.in').backgroundColor, outBg: css('.roster li.out').backgroundColor, outColor: css('.roster li.out').color, inColor: css('.roster li.in').color, green, amber, red };
+        return { pill: getComputedStyle(document.querySelector('.in-pills li')).backgroundColor, colors };
       });
-      assert(![styles.green, styles.amber, styles.red].includes(styles.inBg), `pill uses a status color: ${styles.inBg}`);
-      assert(styles.outBg === 'rgba(0, 0, 0, 0)', 'not-signed-up names should be plain text, not pills');
-      assert(styles.outColor !== styles.inBg, 'faded names should look different');
+      assert(!styles.colors.includes(styles.pill), `pill uses a status color: ${styles.pill}`);
     });
 
     await check('first visit shows the Add to Home Screen tip once; Settings has the steps', async () => {
@@ -630,12 +683,13 @@ async function main() {
       for (const name of ['Alex', 'Casey']) {
         const card = players[name].locator('article').nth(1);
         await players[name].reload();
-        if ((await card.locator('p', { hasText: /^\d going/ }).innerText()).startsWith('3 going')) break;
+        if ((await card.locator('.in-line .small').innerText()).startsWith('3 of 4 in')) break;
         await card.getByRole('button', { name: "I'm in" }).click();
         await card.getByText("You're in", { exact: true }).waitFor();
       }
       await admin.reload();
       const card = sessionCards(admin).nth(1);
+      await more(card);
       await card.getByRole('button', { name: 'Invite substitutes' }).click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByText('Frankie').first().waitFor();
@@ -669,21 +723,86 @@ async function main() {
       await admin.keyboard.press('Escape');
     });
 
+    console.log('Court waitlist');
+    await check('court waitlist: players go on standby; poll text has the link; Court opened moves them in', async () => {
+      const card = sessionCards(admin).nth(3);
+      const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
+      await more(card);
+      await card.getByRole('button', { name: 'On court waitlist' }).click();
+      await card.getByRole('button', { name: 'Court opened' }).waitFor();
+      await card.getByText('Waiting on the court', { exact: true }).first().waitFor();
+      await more(card);
+      await card.getByRole('button', { name: 'Text the group poll' }).click();
+      const bubble = (await admin.locator('dialog[open] .bubble').innerText()).trim();
+      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://\\S+/g/[A-Za-z0-9_-]+$`);
+      assert(re.test(bubble), `court-waitlist poll was: ${bubble}`);
+      await admin.keyboard.press('Escape');
+
+      for (const name of ['Casey', 'Devon']) {
+        const p = players[name];
+        await p.reload();
+        const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
+        await row.getByText("Waiting on the court. Join the list so we're ready if it opens.").waitFor();
+        await row.getByRole('button', { name: 'Put me on standby' }).click();
+        await row.locator('.me-tag', { hasText: /Standby #\d/ }).waitFor();
+        assert((await row.getByLabel('Money for this session').count()) === 0, 'standby players owe nothing');
+      }
+      await players.Casey.screenshot({ path: path.join(SHOTS, 'player-standby.png'), fullPage: true });
+
+      await admin.reload();
+      await admin.getByRole('article', { name: new RegExp(`^Waiting on the court: ${day}`) }).waitFor();
+      const c2 = sessionCards(admin).nth(3);
+      await c2.getByRole('button', { name: 'Court opened' }).click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByLabel(/Court number/).fill('4');
+      await sheet.getByRole('button', { name: 'Save: court opened' }).click();
+      await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
+      await c2.getByText(/Booked, Court #4/).waitFor();
+      const tell = admin.getByRole('article', { name: new RegExp(`Tell them they're in: ${day}`) });
+      await tell.getByText(/Good news, Casey! The court opened up/).waitFor();
+
+      const p = players.Casey;
+      await p.reload();
+      const row = p.locator('article', { hasText: 'Court booked, Court #4' });
+      await row.getByText("Good news, the court opened, so you're in.").waitFor();
+      await row.getByLabel('Money for this session').getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
+    });
+
+    await check('day-before card (when one is due right now): Text the group, Copy, Done; never "sent"', async () => {
+      await admin.reload();
+      const card = admin.getByRole('article', { name: /^(Tue|Thu), [A-Z][a-z]{2} \d{1,2}: \d in, / });
+      if ((await card.count()) === 0) return; // no session inside its 24-hour window at this moment
+      const first = card.first();
+      const body = (await first.locator('.bubble').innerText()).trim();
+      assert(/^Pickleball tomorrow, (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. /.test(body), `day-before text was: ${body}`);
+      await first.evaluate((el) => el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault()));
+      await first.getByRole('link', { name: 'Text the group' }).click();
+      await first.getByText('Message ready.').waitFor();
+      assert(!/\bsent\b/i.test(await first.innerText()), 'card must never say sent');
+      await first.getByRole('button', { name: 'Copy message' }).click();
+      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
+      await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
+      const label = await first.getAttribute('aria-label');
+      await first.getByRole('button', { name: 'Done' }).click();
+      await admin.getByRole('article', { name: label }).waitFor({ state: 'detached' });
+    });
+
     console.log('Reschedule & cancel');
     await check('organizer can move a session to a new time', async () => {
       const card = sessionCards(admin).first();
+      await more(card);
       await card.getByRole('button', { name: 'Reschedule' }).first().click();
       const sheet = admin.locator('dialog[open]');
       await sheet.getByLabel('Start').fill('19:30');
-      await sheet.getByText(/New time: .*7:30–10:00 PM E[DS]T/).waitFor();
+      await sheet.getByText(/New time: .*7:30 to 10:00 PM$/).waitFor();
       await sheet.getByRole('button', { name: 'Move session' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText(/7:30–10:00 PM E[DS]T/).waitFor();
+      await card.getByText('7:30 to 10:00 PM', { exact: true }).waitFor();
     });
 
     await check('canceling needs confirmation and warns it does not cancel the court', async () => {
       const card = sessionCards(admin).nth(1);
-      await card.getByRole('button', { name: 'Show actions' }).click().catch(() => {});
+      await more(card);
       await card.getByRole('button', { name: 'Cancel session' }).click();
       const dlg = admin.locator('dialog[open]');
       await dlg.getByText('This does not cancel your court').waitFor();
@@ -724,6 +843,22 @@ async function main() {
       await firstCard(players.Alex).locator('h2').waitFor();
       const playerFirst = await firstCard(players.Alex).locator('h2').innerText();
       assert(!playerFirst.includes(firstShown.split(', ')[1]), `players still see ${firstShown}`);
+      // "Show this session" brings one back; then the court never opens.
+      await tab(admin, 'Home').click();
+      const hidden = admin.getByRole('region', { name: 'Before your first session date' });
+      const row = hidden.locator('li').filter({ hasText: 'Nov 3' });
+      if (await row.count()) {
+        await row.getByRole('button', { name: 'Show this session' }).click();
+        await admin.locator('.toast', { hasText: 'is showing' }).waitFor();
+        const shown = sessionCards(admin).filter({ hasText: 'Tue, Nov 3' }).first();
+        await more(shown);
+        await shown.getByRole('button', { name: 'On court waitlist' }).click();
+        await shown.getByRole('button', { name: "Didn't open" }).click();
+        await admin.locator('dialog[open]').getByRole('button', { name: 'Mark it off' }).click();
+        await shown.getByText("Court didn't open").first().waitFor();
+        await players.Alex.reload();
+        await players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' }).getByText("Court didn't open").waitFor();
+      }
       // Put it back for the rest of the checks.
       await tab(admin, 'Settings').click();
       await admin.getByLabel('First session').fill('');
@@ -772,7 +907,8 @@ async function main() {
     await check('times show in Eastern 12-hour format, never UTC', async () => {
       await tab(admin, 'Home').click();
       const text = await admin.locator('main').innerText();
-      assert(/8:00–10:00 PM E[DS]T/.test(text), 'missing Eastern time range');
+      assert(/8:00 to 10:00 PM/.test(text), 'missing time range');
+      assert(!/\b(EDT|EST)\b/.test(text), 'EDT/EST should be gone from screens');
       assert(!/UTC|GMT|\d{2}:\d{2}:\d{2}/.test(text), 'found UTC or 24h time');
     });
 
@@ -818,6 +954,7 @@ async function main() {
         await fits('booking form');
         await p.screenshot({ path: path.join(SHOTS, `booking-${width}-${scheme}.png`) });
         await p.keyboard.press('Escape');
+        await more(card);
         await card.getByRole('button', { name: 'Reschedule' }).first().click();
         await p.locator('dialog[open]').getByLabel('Date').waitFor();
         await fits('reschedule form');

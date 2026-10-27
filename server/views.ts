@@ -5,6 +5,7 @@ import type {
   EligibleSubstitute,
   PlayerSessionView,
 } from '../shared/api';
+import { cardWindows } from '../shared/cards';
 import { holidayFor } from '../shared/holidays';
 import type { GroupSettings } from '../shared/settings';
 import { goingText, joinOutcome, openSpots } from '../shared/spots';
@@ -28,6 +29,8 @@ export function playerSessionView(
   nowMs: number,
   settings: GroupSettings,
   tz: string,
+  /** Credit coming off this player's seat in this session (unpaid seats only). */
+  myCredit = 0,
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -52,6 +55,9 @@ export function playerSessionView(
     joinAs: joinOutcome(confirmed.length, othersWaiting),
     sixPlaying: six,
     holiday: holidayFor(session.starts_at, tz),
+    courtNumber: session.court_number,
+    courtState: session.court_state,
+    past: nowMs >= Date.parse(session.ends_at),
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
     mine: mine
@@ -64,6 +70,11 @@ export function playerSessionView(
           paymentStatus: mine.payment_status,
           discount: prices.get(mine.player_id)?.discount ?? false,
           creditComing: prices.get(mine.player_id)?.creditComing ?? false,
+          oweCents:
+            mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id)
+              ? Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit)
+              : 0,
+          creditCents: mine.payment_status === 'unpaid' ? myCredit : 0,
         }
       : null,
   };
@@ -168,7 +179,22 @@ export function adminSessionView(
     paidCount,
     payableCount: payable,
     courtCostCents: session.court_cost_cents,
+    courtNumber: session.court_number,
+    courtState: session.court_state,
+    shownEarly: !!session.shown_early,
     holiday: holidayFor(session.starts_at, tz),
+    holidayHoursOk: !!session.holiday_hours_ok_at,
+    cards: cardWindows(
+      {
+        startsAt: session.starts_at,
+        cancellationDeadlineAt: session.cancellation_deadline_at,
+        canceled: session.status === 'canceled',
+        dayBeforeDone: !!session.day_before_done_at,
+        lastCallDone: !!session.last_call_done_at,
+      },
+      nowMs,
+      settings,
+    ),
     sixDropped:
       session.status !== 'canceled' && !!session.six_reached_at && !session.six_drop_resolved_at && confirmed.length < 6,
     eligibleSubstitutes: state.flags.openSpots > 0 ? eligibleSubstitutes(roster, players) : [],

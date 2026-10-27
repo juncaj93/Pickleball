@@ -120,19 +120,20 @@ export function zoneAbbreviation(iso: string, tz: string): string {
   return parts.find((p) => p.type === 'timeZoneName')?.value ?? '';
 }
 
-/** "8:00–10:00 PM EDT" */
+/**
+ * "8:00 to 10:00 PM". No EST/EDT: everyone is in Michigan, and Settings
+ * says the times are Eastern.
+ */
 export function formatTimeRange(startIso: string, endIso: string, tz: string): string {
   const start = formatTime(startIso, tz);
   const end = formatTime(endIso, tz);
-  const startMer = start.slice(-2);
-  const endMer = end.slice(-2);
-  const left = startMer === endMer ? start.slice(0, -3) : start;
-  return `${left}–${end} ${zoneAbbreviation(startIso, tz)}`;
+  const left = start.slice(-2) === end.slice(-2) ? start.slice(0, -3) : start;
+  return `${left} to ${end}`;
 }
 
-/** "Tue, Oct 28, 8:00 AM EDT" */
+/** "Tue, Oct 28, 8:00 AM" */
 export function formatDateTime(iso: string, tz: string): string {
-  return `${formatShortDate(iso, tz)}, ${formatTime(iso, tz)} ${zoneAbbreviation(iso, tz)}`;
+  return `${formatShortDate(iso, tz)}, ${formatTime(iso, tz)}`;
 }
 
 /** Value for <input type="datetime-local"> in the group's zone: "2026-10-28T08:00" */
