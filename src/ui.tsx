@@ -188,7 +188,15 @@ export function Sheet({
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => {
-        if (e.target === ref.current) onClose();
+        if (e.target !== ref.current) return;
+        // A tap outside closes the sheet. If it landed on the tab bar, that tab gets the tap too.
+        // (Measured by position: the page behind an open sheet doesn't take taps itself.)
+        const under = [...document.querySelectorAll<HTMLButtonElement>('.tabbar button')].find((b) => {
+          const r = b.getBoundingClientRect();
+          return e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+        });
+        onClose();
+        if (under) setTimeout(() => under.click(), 0);
       }}
     >
       {open && (
@@ -300,10 +308,10 @@ export function SmsDraft({
           {openLabel}
         </a>
         <button
-          className="btn small secondary"
+          className="btn small secondary copy-text"
           onClick={async () => (await copyText(body)) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error')}
         >
-          Copy message
+          Copy text
         </button>
         {phone && (
           <button
@@ -316,7 +324,7 @@ export function SmsDraft({
       </div>
       {showFallback && (
         <p className="muted small" style={{ marginTop: 8 }}>
-          Messages didn't open? Tap Copy message and paste it into any texting app.
+          Messages didn't open? Tap Copy text and paste it into any texting app.
         </p>
       )}
     </div>

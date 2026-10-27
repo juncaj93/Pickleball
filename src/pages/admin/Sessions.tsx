@@ -26,7 +26,7 @@ import {
   toLocalInputValue,
 } from '../../../shared/time';
 import { api, ApiError, copyText, isIOS, useNow } from '../../lib';
-import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, GearIcon, PhoneIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 import { refundRows } from './todo';
@@ -35,7 +35,7 @@ import { shareGameText, TextsMenu } from './Texts';
 /** Every late drop on this session, done or not, for the tag on the card. */
 const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'poll' | 'canceled' | 'moved' | 'texts';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'poll' | 'canceled' | 'moved';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -106,9 +106,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             </h2>
             <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
             <div className="card-icons">
-              <button className="icon-round" aria-label={`Texts for ${formatShortDate(s.startsAt, tz)}`} onClick={() => ctx.open('texts', s.id)}>
-                <PhoneIcon />
-              </button>
               <button
                 className="icon-round"
                 aria-label={`Session options for ${formatShortDate(s.startsAt, tz)}`}
@@ -179,12 +176,12 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               </button>
             )}
             <button
-              className="btn secondary share-copy"
+              className="btn secondary share-copy copy-text"
               disabled={!live}
-              aria-label="Copy the share text"
+              aria-label="Copy text: Share the game"
               onClick={async () => ((await copyText(shareGameText(ctx, s))) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error'))}
             >
-              Copy
+              Copy text
             </button>
           </div>
           <div className="opt-grid">
@@ -199,6 +196,13 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
             </button>
           </div>
+          {/* The rest of the prepared texts, tucked away until needed. */}
+          {live && (
+            <details className="other-texts">
+              <summary>Other texts</summary>
+              <TextsMenu ctx={ctx} s={s} skip={['share']} />
+            </details>
+          )}
           {(later || needsCourt || s.shownEarly) && (
             <div className="opt-extra">
               {later && <BookedButton ctx={ctx} s={s} small />}
@@ -386,7 +390,6 @@ export function SessionSheets({
     roster: `Players · ${title}`,
     payments: `Money · ${title}`,
     reminders: `Reminders · ${title}`,
-    texts: `Texts · ${title}`,
     poll: `Group poll · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
@@ -404,7 +407,6 @@ export function SessionSheets({
           )}
         </div>
       )}
-      {s && kind === 'texts' && <TextsMenu ctx={ctx} s={s} />}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}

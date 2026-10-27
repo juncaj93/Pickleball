@@ -120,11 +120,11 @@ function TextRow({ item }: { item: TextItem }) {
             Open
           </a>
           <button
-            className="btn small secondary"
-            aria-label={`Copy ${item.label}`}
+            className="btn small secondary copy-text"
+            aria-label={`Copy text: ${item.label}`}
             onClick={async () => ((await copyText(item.body)) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error'))}
           >
-            Copy
+            Copy text
           </button>
         </div>
       </div>
@@ -135,9 +135,9 @@ function TextRow({ item }: { item: TextItem }) {
   );
 }
 
-/** The phone icon's menu: this session's prepared texts. */
-export function TextsMenu({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const items = sessionTexts(ctx, s);
+/** "Other texts" in a card's gear panel: this session's prepared texts. */
+export function TextsMenu({ ctx, s, skip = [] }: { ctx: AdminCtx; s: AdminSessionView; skip?: string[] }) {
+  const items = sessionTexts(ctx, s).filter((it) => !skip.includes(it.id));
   if (items.length === 0) return <p className="muted small">No texts for a session that's already played.</p>;
   return (
     <ul className="text-menu" aria-label="Texts">

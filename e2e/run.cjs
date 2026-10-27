@@ -73,6 +73,15 @@ async function showAll(page) {
   if (await btn.count()) await btn.click();
 }
 
+/** Open a card's gear panel and its "Other texts" list. */
+async function otherTexts(card) {
+  await more(card);
+  const d = card.locator('details.other-texts');
+  if (!(await d.evaluate((el) => el.open))) await d.locator('summary').click();
+  await d.locator('.text-row').first().waitFor();
+  return d;
+}
+
 /** Close a session card's options panel. */
 async function closeOptions(card) {
   const gear = card.getByRole('button', { name: /^Session options/ });
@@ -161,7 +170,8 @@ function lastNotCovered() {
   const bar = document.querySelector('.tabbar');
   if (!bar) return null;
   const top = bar.getBoundingClientRect().top;
-  const all = [...document.querySelectorAll('main button, main a[href], main input, main summary')].filter((e) => e.offsetParent !== null);
+  // Only things on screen: not the insides of a closed section.
+  const all = [...document.querySelectorAll('main button, main a[href], main input, main summary')].filter((e) => e.offsetParent !== null && e.checkVisibility() && e.getBoundingClientRect().height > 0);
   const last = all.sort((a, b) => a.getBoundingClientRect().bottom - b.getBoundingClientRect().bottom).pop();
   const r = last.getBoundingClientRect();
   return r.bottom > top + 1 ? `"${(last.innerText || last.getAttribute('aria-label') || '').trim()}" sits under the tab bar (${Math.round(r.bottom - top)}px)` : null;
@@ -435,12 +445,12 @@ async function main() {
       }
     });
 
-    await check('tab bar: four equal tabs (Home, Money, Players, Settings) with their own icons in every state; short and low', async () => {
+    await check('tab bar: four equal tabs (Home, Players, Money, Settings) with their own icons in every state; short and low', async () => {
       const icons = async () => admin.getByRole('navigation', { name: 'Organizer sections' }).locator('button svg').evaluateAll((s) => s.map((x) => x.getAttribute('data-icon')));
       for (const name of ['Settings', 'Players', 'Money', 'Home']) {
         await tab(admin, name).click();
         const got = await icons();
-        assert(JSON.stringify(got) === JSON.stringify(['home', 'dollar', 'people', 'gear']), `icons with ${name} selected were ${got}`);
+        assert(JSON.stringify(got) === JSON.stringify(['home', 'people', 'dollar', 'gear']), `icons with ${name} selected were ${got}`);
       }
       const widths = await admin.locator('nav.tabbar button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().width)));
       assert(widths.length === 4 && Math.max(...widths) - Math.min(...widths) <= 1, `tabs should be equal: ${widths}`);
@@ -457,10 +467,10 @@ async function main() {
       assert(tabs.every((h) => h >= 44), `tabs too short to tap: ${tabs}`);
     });
 
-    await check('floating tab pill has exactly Home, Money, Players, Settings', async () => {
+    await check('floating tab pill has exactly Home, Players, Money, Settings', async () => {
       const nav = admin.getByRole('navigation', { name: 'Organizer sections' });
       const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
-      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Money', 'Players', 'Settings']), `tabs were ${labels}`);
+      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'Settings']), `tabs were ${labels}`);
       const box = await nav.boundingBox();
       const vw = admin.viewportSize().width;
       assert(box.x > 8 && box.x + box.width < vw - 8, 'pill should float clear of the screen edges');
@@ -901,19 +911,18 @@ async function main() {
       assert((await admin.getByText(/\d+ needs? a court/).count()) === 0, 'summary text should be gone');
     });
 
-    await check('session card: two round icons (Texts, options) top right; the gear opens Share the game and a 2 by 2 grid', async () => {
+    await check('session card: only the gear at the top right (no phone button); it opens Share the game and a 2 by 2 grid', async () => {
       const card = sessionCards(admin).first();
       await card.locator('.tile').waitFor();
       await card.locator('.spots li').first().waitFor();
       await closeOptions(card);
       assert((await card.getByRole('button', { name: /^(More|Less)$/ }).count()) === 0, 'More / Less should be gone');
-      const phone = card.getByRole('button', { name: /^Texts for / });
+      assert((await card.locator('[data-icon="phone"]').count()) === 0, 'no phone button on the card');
+      assert((await card.locator('.card-icons button').count()) === 1, 'only the gear at the top right');
       const gear = card.getByRole('button', { name: /^Session options for / });
-      const pb = await phone.boundingBox();
       const gb = await gear.boundingBox();
       const cb = await card.boundingBox();
-      assert(Math.abs(pb.width - gb.width) < 1 && Math.abs(pb.height - gb.height) < 1 && Math.abs(pb.y - gb.y) < 1, 'icons should match and sit side by side');
-      assert(pb.x < gb.x && gb.x + gb.width > cb.x + cb.width - 24, 'phone left, gear right, at the top right');
+      assert(gb.x + gb.width > cb.x + cb.width - 24, 'gear at the top right');
       const tapArea = { w: gb.width, h: gb.height };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: no main button any more (the poll lives in Texts).
@@ -926,7 +935,8 @@ async function main() {
       const sb = await share.boundingBox();
       const ob = await opts.boundingBox();
       assert(sb.width > ob.width * 0.6, 'Share the game should be the full-width main button');
-      await opts.getByRole('button', { name: 'Copy the share text' }).waitFor();
+      const copyShare = opts.getByRole('button', { name: 'Copy text: Share the game' });
+      assert((await copyShare.innerText()).trim() === 'Copy text', 'the copy button next to Share the game says Copy text');
       const grid = await opts.locator('.opt-grid > *').evaluateAll((els) =>
         els.map((e) => {
           const r = e.getBoundingClientRect();
@@ -968,7 +978,7 @@ async function main() {
       assert(m, `share text (${kind}) was: ${body}`);
       const link = m[m.length - 1];
       assert(link.endsWith(`s=${id}`), `share link should point at the session: ${link}`);
-      await card.getByRole('button', { name: 'Copy the share text' }).click();
+      await card.getByRole('button', { name: 'Copy text: Share the game' }).click();
       await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
       assert((await admin.evaluate(() => navigator.clipboard.readText())) === body, 'clipboard should hold the share text');
       // The link opens the player screen with that session highlighted, after picking a name.
@@ -992,19 +1002,19 @@ async function main() {
       }
     });
 
-    await check('phone icon: a compact menu of this session\'s texts; the poll has the date, venue and $14, with Copy', async () => {
+    await check('"Other texts" in the gear panel: a short list; the poll has the date, venue and $14, with Copy text', async () => {
       const card = sessionCards(admin).first();
-      await card.getByRole('button', { name: /^Texts for / }).click();
-      const sheet = admin.locator('dialog[open]');
+      const sheet = await otherTexts(card);
       const names = (await sheet.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
-      for (const want of ['Share the game', 'Poll', 'Day before', 'Last call']) assert(names.includes(want), `texts menu is missing ${want}: ${names}`);
+      for (const want of ['Poll', 'Day before', 'Last call']) assert(names.includes(want), `texts menu is missing ${want}: ${names}`);
+      assert(!names.includes('Share the game'), 'Share the game stays the main button, not in Other texts');
       assert(!names.includes('Canceled'), 'a live session has no Canceled text');
       const spots = await card.locator('.spots li.open').count();
       assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
       for (const row of await sheet.locator('.text-row').all()) {
         const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
         assert((await open.getAttribute('href')).startsWith('sms:'), 'each text opens Messages');
-        await row.getByRole('button', { name: /^Copy / }).waitFor();
+        assert((await row.getByRole('button', { name: /^Copy text: / }).innerText()).trim() === 'Copy text', 'Copy text label');
         const h = (await open.boundingBox()).height;
         assert(h >= 44, 'menu buttons 44px+');
       }
@@ -1017,12 +1027,12 @@ async function main() {
       assert(!bubble.includes('48'), 'court cost in the poll');
       const href = await sheet.getByRole('link', { name: 'Open Poll in Messages' }).getAttribute('href');
       assert(href.startsWith('sms:&body=Pickleball'), `bad sms link ${href}`);
-      await sheet.getByRole('button', { name: 'Copy Poll' }).click();
+      await sheet.getByRole('button', { name: 'Copy text: Poll' }).click();
       await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
       assert((await admin.evaluate(() => navigator.clipboard.readText())) === bubble, 'clipboard should hold the poll');
       assert(!/\bsent\b/i.test(await sheet.innerText()), 'never say sent');
       await admin.screenshot({ path: path.join(SHOTS, 'texts-menu.png') });
-      await admin.keyboard.press('Escape');
+      await closeOptions(card);
     });
 
     await check('holiday pill shows on sessions that fall on one (Election Day, Nov 3)', async () => {
@@ -1072,7 +1082,7 @@ async function main() {
 
     await check('copy message fallback works', async () => {
       const draft = admin.locator('details.money-sess[data-session][open] .draft').first();
-      await draft.getByRole('button', { name: 'Copy message' }).click();
+      await draft.getByRole('button', { name: 'Copy text' }).click();
       await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
       const clip = await admin.evaluate(() => navigator.clipboard.readText());
       assert(clip.includes('You owe $14'), `clipboard was ${clip}`);
@@ -1591,16 +1601,16 @@ async function main() {
       assert(!hit(words, opened) && !hit(words, didnt), 'banner words should not overlap the buttons');
       await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
-      await card.getByRole('button', { name: /^Texts for / }).click();
-      const share = admin.locator('dialog[open] .text-row[data-text="share"]');
-      await share.locator('.text-name').click();
-      assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test((await share.locator('.bubble').innerText()).trim()), 'waitlist share text');
-      const pollRow = admin.locator('dialog[open] .text-row[data-text="poll"]');
+      const texts = await otherTexts(card);
+      const shareHref = await card.locator('.options').getByRole('link', { name: 'Share the game' }).getAttribute('href');
+      const shareBody = decodeURIComponent(shareHref.split('body=')[1]);
+      assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test(shareBody), `waitlist share text: ${shareBody}`);
+      const pollRow = texts.locator('.text-row[data-text="poll"]');
       await pollRow.locator('.text-name').click();
       const bubble = (await pollRow.locator('.bubble').innerText()).trim();
       const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://[^\\s/]+(/g/[A-Za-z0-9_-]+)?/?\\?s=[0-9a-f-]+$`);
       assert(re.test(bubble), `court-waitlist poll was: ${bubble}`);
-      await admin.keyboard.press('Escape');
+      await closeOptions(card);
 
       for (const name of ['Casey', 'Devon']) {
         const p = players[name];
@@ -1659,7 +1669,7 @@ async function main() {
         const re = new RegExp(`^Pickleball tomorrow, (Tue|Thu), [A-Z][a-z]{2} \\d{1,2}, \\d{1,2}:\\d{2} to 10:00 PM at .+\\. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: \\S+\\?s=${first.id}$`);
         assert(re.test(body), `day-before text was: ${body}`);
         assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
-        await main.getByRole('button', { name: 'Copy message' }).waitFor();
+        await main.getByRole('button', { name: 'Copy text' }).waitFor();
         // The "need more players" text is a smaller second button.
         const second = card.getByRole('button', { name: 'Text the group: need more players' });
         assert((await second.boundingBox()).height < (await open.boundingBox()).height + 1, 'second button should be smaller or equal');
@@ -1707,7 +1717,7 @@ async function main() {
       await moved.getByLabel(/Reason/).fill('Court swap');
       await bubble.getByText(/7:30 to 10:00 PM\. Court swap\.$/).waitFor();
       await moved.getByRole('link', { name: 'Text the group' }).waitFor();
-      await moved.getByRole('button', { name: 'Copy message' }).waitFor();
+      await moved.getByRole('button', { name: 'Copy text' }).waitFor();
       assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
@@ -1916,7 +1926,7 @@ async function main() {
         const bubble = (await card.locator('.bubble').innerText()).trim();
         assert(/^A spot just opened for pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to claim it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
         await card.getByRole('link', { name: 'Text the group: spot open' }).waitFor();
-        await card.getByRole('button', { name: 'Copy message' }).waitFor();
+        await card.getByRole('button', { name: 'Copy text' }).waitFor();
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
         await sc.locator('.late-tag').waitFor();
@@ -2440,6 +2450,157 @@ async function main() {
         await tab(o, 'Home').waitFor();
         assert((await o.evaluate(() => getComputedStyle(document.body).backgroundColor)) === orgBg, 'organizer colors should come back after Exit');
         await o.close();
+        await p.close();
+      });
+    }
+
+    // ---------- Cards: gear only, Other texts, "Copy text" ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`cards at ${width}px (${scheme}): no phone button, the gear works, Other texts open and copy, every message copy says "Copy text" on one line`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        await showAll(p);
+        assert((await sessionCards(p).locator('[data-icon="phone"]').count()) === 0, 'a card still has the phone button');
+        const gearX = await sessionCards(p).locator('.card-icons button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().right)));
+        assert(gearX.length === (await sessionCards(p).count()), 'one gear per card');
+        assert(new Set(gearX).size <= 2 && Math.max(...gearX) - Math.min(...gearX) <= 8, `gears not lined up: ${gearX}`);
+        // A live card: Share the game on top, then Other texts under the grid.
+        let card = null;
+        for (const c of await sessionCards(p).all()) {
+          await more(c);
+          if (await c.locator('details.other-texts').count()) {
+            card = c;
+            break;
+          }
+          await closeOptions(c);
+        }
+        assert(card, 'no live card with Other texts');
+        const order = await card.locator('.options').evaluate((o) => {
+          const y = (sel) => o.querySelector(sel).getBoundingClientRect().top;
+          return { share: y('.share-row'), grid: y('.opt-grid'), other: y('.other-texts') };
+        });
+        assert(order.share < order.grid && order.grid < order.other, 'Share the game, then the grid, then Other texts');
+        const texts = await otherTexts(card);
+        const names = (await texts.locator('.text-name').allInnerTexts()).map((x) => x.trim());
+        for (const want of ['Poll', 'Day before', 'Last call']) assert(names.includes(want), `Other texts missing ${want}: ${names}`);
+        const spots = await card.locator('.spots li.open').count();
+        assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
+        assert(!names.includes('Canceled'), 'Canceled only on canceled sessions');
+        for (const row of await texts.locator('.text-row').all()) {
+          const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
+          assert((await open.getAttribute('href')).startsWith('sms:'), 'each item opens Messages');
+        }
+        const lastRow = texts.locator('.text-row[data-text="lastcall"]');
+        await lastRow.getByRole('button', { name: 'Copy text: Last call' }).click();
+        await p.locator('.toast', { hasText: 'Message copied' }).last().waitFor();
+        // Every message copy button: "Copy text", one line, not overlapping anything near it.
+        const copies = await p.evaluate(() =>
+          [...document.querySelectorAll('main .btn')]
+            .filter((b) => b.offsetParent !== null && /^Copy/.test(b.textContent.trim()) && b.textContent.trim() !== 'Copy number')
+            .map((b) => {
+              const r = b.getBoundingClientRect();
+              const lh = parseFloat(getComputedStyle(b).lineHeight) || 20;
+              const sibs = [...b.parentElement.children].filter((x) => x !== b && x.offsetParent !== null).map((x) => x.getBoundingClientRect());
+              const hit = sibs.some((q) => Math.min(r.right, q.right) - Math.max(r.left, q.left) > 1 && Math.min(r.bottom, q.bottom) - Math.max(r.top, q.top) > 1);
+              const range = document.createRange();
+              range.selectNodeContents(b);
+              return { text: b.textContent.trim(), lines: new Set([...range.getClientRects()].map((x) => Math.round(x.top))).size, inside: r.right <= window.innerWidth, hit, lh };
+            }),
+        );
+        assert(copies.length >= 4, `only ${copies.length} copy buttons checked`);
+        for (const c of copies) {
+          assert(c.text === 'Copy text', `a message copy button says "${c.text}"`);
+          assert(c.lines === 1 && c.inside && !c.hit, `"Copy text" wraps, overlaps or runs off: ${JSON.stringify(c)}`);
+        }
+        assert(!/\bsent\b/i.test(await p.locator('main').innerText()), 'never say sent');
+        await p.screenshot({ path: path.join(SHOTS, `other-texts-${width}-${scheme}.png`) });
+        // Settings: the player link's button is still just "Copy".
+        await tab(p, 'Settings').click();
+        const quick = p.getByRole('region', { name: 'Quick settings' });
+        assert((await quick.getByRole('button', { name: 'Copy', exact: true }).innerText()).trim() === 'Copy', 'Player link button should say Copy');
+        await p.close();
+      });
+    }
+
+    // ---------- Tab bar: order, and tapping the tab you're on starts it fresh ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`tab bar at ${width}px (${scheme}): Home, Players, Money, Settings; tapping the tab you're on goes back to its top and closes what's open`, async () => {
+        const p = await admin.context().newPage();
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await sessionCards(p).first().waitFor();
+        const nav = p.getByRole('navigation', { name: 'Organizer sections' });
+        const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
+        assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Money', 'Settings']), `tabs were ${labels}`);
+        const sizes = await nav.getByRole('button').evaluateAll((bs) => bs.map((b) => [Math.round(b.getBoundingClientRect().width), b.getBoundingClientRect().height]));
+        assert(sizes.every(([, h]) => h >= 44), `tabs under 44px: ${sizes}`);
+        assert(Math.max(...sizes.map((x) => x[0])) - Math.min(...sizes.map((x) => x[0])) <= 1, `tabs not equal: ${sizes}`);
+        const screens = { Home: () => sessionCards(p).first(), Players: () => p.getByRole('button', { name: 'Edit Alex' }), Money: () => p.locator('details.money-sess').first(), Settings: () => p.getByRole('region', { name: 'Quick settings' }) };
+        const scrollY = () => p.evaluate(() => window.scrollY);
+        const scrollDown = () => p.evaluate(() => window.scrollTo(0, Math.max(0, document.documentElement.scrollHeight - window.innerHeight)));
+        const waitTop = () => p.waitForFunction(() => window.scrollY === 0, null, { timeout: 4000 });
+        for (const name of ['Home', 'Players', 'Money', 'Settings']) {
+          await tab(p, name).click();
+          await screens[name]().waitFor();
+          assert((await tab(p, name).getAttribute('aria-current')) === 'page', `${name} should be highlighted`);
+          const covered = await p.evaluate(lastNotCovered);
+          assert(!covered, `${name}: ${covered}`);
+          // Scrolled down, then tap it again: back at the top.
+          await scrollDown();
+          if ((await scrollY()) > 0) {
+            await tab(p, name).click();
+            await waitTop();
+          }
+        }
+        // Home: an open gear panel closes and the page goes back to the top.
+        await tab(p, 'Home').click();
+        await showAll(p);
+        const card = sessionCards(p).nth(2);
+        await more(card);
+        await scrollDown();
+        await tab(p, 'Home').click();
+        await waitTop();
+        assert((await p.locator('.options').count()) === 0, 'the gear panel should close');
+        assert((await p.getByRole('button', { name: /^Show all \d+$/ }).count()) === 1, 'the expanded list should fold back');
+        // Players: a person's page is open; tapping Players goes back to the list.
+        await tab(p, 'Players').click();
+        await p.getByRole('button', { name: 'Edit Alex' }).click();
+        await p.locator('dialog[open]').waitFor();
+        const tb = await tab(p, 'Players').boundingBox();
+        await p.mouse.click(tb.x + tb.width / 2, tb.y + tb.height / 2);
+        await p.locator('dialog[open]').waitFor({ state: 'detached' });
+        await p.getByRole('button', { name: 'Edit Alex' }).waitFor();
+        await waitTop();
+        // Edit booking open on Home: tapping Home closes it.
+        await tab(p, 'Home').click();
+        await more(sessionCards(p).first());
+        await sessionCards(p).first().getByRole('button', { name: 'Edit booking' }).click();
+        await p.locator('dialog[open]').waitFor();
+        const hb = await tab(p, 'Home').boundingBox();
+        await p.mouse.click(hb.x + hb.width / 2, hb.y + hb.height / 2);
+        await p.locator('dialog[open]').waitFor({ state: 'detached' });
+        await waitTop();
+        // A different tab keeps its own spot: Home scrolled, visit Money, come back.
+        await scrollDown();
+        const homeAt = await scrollY();
+        await tab(p, 'Money').click();
+        await screens.Money().waitFor();
+        assert((await scrollY()) === 0, 'Money opens at its own top');
+        await tab(p, 'Home').click();
+        await sessionCards(p).first().waitFor();
+        assert(Math.abs((await scrollY()) - homeAt) <= 2, `Home should come back where it was (${homeAt}), was ${await scrollY()}`);
+        // Settings: open sections stay open; only the scroll resets.
+        await tab(p, 'Settings').click();
+        await openSections(p);
+        const openBefore = await p.locator('details.set-sect[open]').count();
+        await scrollDown();
+        await tab(p, 'Settings').click();
+        await waitTop();
+        assert((await p.locator('details.set-sect[open]').count()) === openBefore, 'Settings sections should stay open');
         await p.close();
       });
     }
