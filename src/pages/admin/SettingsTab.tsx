@@ -135,7 +135,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       setGroupWord('');
       setRemoveWord(false);
       await ctx.reload();
-      toast('Settings saved');
+      toast('Saved');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save.');
     } finally {
@@ -394,9 +394,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           try {
             await api('POST', '/api/admin/rotate-link', {});
             await ctx.reload();
-            toast('New link ready. Copy and share it.');
+            toast('New link ready');
           } catch {
-            toast("Couldn't replace the link.");
+            toast("Couldn't replace the link.", 'error');
           }
         }}
         onCancel={() => setAskRotate(false)}

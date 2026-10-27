@@ -1,4 +1,4 @@
--- Pickleball Club schema (SQLite / Cloudflare D1).
+-- Pickleball Bros schema (SQLite / Cloudflare D1).
 -- All timestamps are UTC ISO-8601 strings, e.g. 2026-10-27T00:00:00.000Z.
 
 CREATE TABLE groups (

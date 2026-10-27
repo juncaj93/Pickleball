@@ -68,7 +68,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
     setBusy(true);
     try {
       const res = await api<{ result: 'deleted' | 'hidden' }>('DELETE', `/api/admin/players/${player.id}`);
-      toast(res.result === 'deleted' ? `${player.name} removed` : `${player.name} hidden (they have history, so records stay)`);
+      toast(res.result === 'deleted' ? `${player.name} removed` : `${player.name} hidden`);
       await ctx.reload();
       onDone();
     } catch (err) {

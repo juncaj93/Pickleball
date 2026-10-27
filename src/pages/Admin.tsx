@@ -7,6 +7,7 @@ import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
 import { Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
+import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, type TodoItem } from './admin/todo';
 import { PlayersTab } from './admin/PlayersTab';
@@ -209,7 +210,6 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-const COURTRESERVE_URL = 'https://app.courtreserve.com/Online/PublicBookings/13765/Landing';
 
 function when(s: AdminSessionView, tz: string) {
   return `${formatShortDate(s.startsAt, tz)} · ${formatTimeRange(s.startsAt, s.endsAt, tz)}`;
@@ -227,7 +227,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       await ctx.reload();
       toast(msg);
     } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.');
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {
       setBusy(false);
     }
@@ -404,7 +404,7 @@ function CreditsCard({ ctx }: { ctx: AdminCtx }) {
                   await ctx.reload();
                   toast(`${c.name}'s credit cleared`);
                 } catch (err) {
-                  toast(err instanceof ApiError ? err.message : "Couldn't clear it.");
+                  toast(err instanceof ApiError ? err.message : "Couldn't clear it.", 'error');
                 } finally {
                   setBusy(false);
                 }
@@ -433,7 +433,7 @@ function FivePanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       toast(msg);
       await ctx.reload();
     } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work.');
+      toast(err instanceof ApiError ? err.message : 'That did not work.', 'error');
     } finally {
       setBusy(false);
     }
@@ -498,7 +498,7 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
                   await ctx.reload();
                   toast(`${formatShortDate(h.startsAt, tz)} is showing`);
                 } catch (err) {
-                  toast(err instanceof ApiError ? err.message : "Couldn't show it.");
+                  toast(err instanceof ApiError ? err.message : "Couldn't show it.", 'error');
                 } finally {
                   setBusy(false);
                 }
@@ -528,7 +528,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
         <h2 id="sessions-title" className="section-title">
           Sessions
         </h2>
-        <a className="btn small secondary" href={COURTRESERVE_URL} target="_blank" rel="noopener noreferrer">
+        <a className="btn small secondary" href={COURTRESERVE_BOOKING_URL} target="_blank" rel="noopener noreferrer">
           Book on CourtReserve
         </a>
       </div>

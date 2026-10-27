@@ -1,4 +1,4 @@
-# Pickleball Club
+# Pickleball Bros
 
 A private, phone-friendly website for a group that plays every **Tuesday and
 Thursday, 8:00–10:00 PM Eastern** on one court. It handles sign-ups (exactly
@@ -18,7 +18,7 @@ tap their name once ("Who are you?"), and the phone remembers it. After that eve
   they're confirmed (opening Venmo never marks anything paid)
 - a schedule of date tiles (TUE / 3 / NOV) with the time, court status
   (Court booked / Court not booked yet / Waiting on the court), any holiday, who's in ("3 of 4 in"), **one big
-  button** (I'm in / I'm out / Join waitlist / Put me on standby), their money
+  button** (I'm in / I'm out / Join waitlist / Join standby), their money
   for that session (You owe $14 + Pay with Venmo, Paid, or Credit), and a small
   Add to Calendar link
 
@@ -85,7 +85,7 @@ The status says "Draft ready" or "Composer opened", never "Sent".
 
 When the organizer is on the venue's own waitlist for a court ("On court
 waitlist" under More), players see "Waiting on the court. Join the
-standby list so we're ready if it opens." and tap **Put me on standby**. Standby players owe
+standby list so we're ready if it opens." and tap **Join standby**. Standby players owe
 nothing. **Court opened** (one tap) confirms them in order by
 the 4-or-6 rules and prepares a text for each; **Didn't open** marks the
 session off as "Court didn't open". A session before the first session date

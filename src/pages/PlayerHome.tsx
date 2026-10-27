@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react';
+import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekLabel, weekStart } from '../../shared/time';
@@ -67,7 +68,7 @@ export function PlayerHome({
   if (load.error?.status === 404 && !viewAs) {
     return (
       <>
-        <TopBar eyebrow="Pickleball" title="Link not working" />
+        <TopBar eyebrow={SITE_NAME} title="Link not working" />
         <main className="page">
           <Notice tone="danger" title="This group link isn't valid">
             It may have been replaced with a new one. Ask the organizer for the current link.
@@ -94,11 +95,11 @@ export function PlayerHome({
         </div>
       )}
       <TopBar
-        eyebrow={g?.group.name ?? 'Pickleball'}
-        title={!g ? 'Pickleball' : pickName ? 'Who are you?' : `Welcome, ${g.me?.name ?? viewAs?.name}`}
-        sub={
+        eyebrow={g?.group.name ?? SITE_NAME}
+        title={!g ? SITE_NAME : pickName ? 'Who are you?' : `Welcome, ${g.me?.name ?? viewAs?.name}`}
+        action={
           g?.me && !pickName && !viewAs ? (
-            <button className="not-you" onClick={() => setSwitching(true)}>
+            <button className="topbar-btn" onClick={() => setSwitching(true)}>
               Not you?
             </button>
           ) : undefined
@@ -336,12 +337,18 @@ function payLink(g: GroupView, cents: number, startsAt: string) {
   return venmoPayUrl(g.group.venmoUrl, cents, note);
 }
 
-function PayButton({ g, cents, startsAt }: { g: GroupView; cents: number; startsAt: string }) {
+function PayButton({ g, cents, startsAt, compact }: { g: GroupView; cents: number; startsAt: string; compact?: boolean }) {
   const pay = payLink(g, cents, startsAt);
   if (!pay.url) return null;
   return (
-    <a className="btn block" href={pay.url} target="_blank" rel="noopener noreferrer">
-      Pay {formatPrice(cents)} with Venmo
+    <a
+      className={compact ? 'btn small pay-btn' : 'btn block'}
+      href={pay.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Pay ${formatPrice(cents)} with Venmo`}
+    >
+      {compact ? 'Pay with Venmo' : `Pay ${formatPrice(cents)} with Venmo`}
     </a>
   );
 }
@@ -420,7 +427,7 @@ export function HolidayPill({ name, venueNote, confirmed }: { name: string; venu
 const TILE_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 /** "TUE / 3 / NOV" tile for the left of a schedule row. */
-function DateTile({ iso, tz }: { iso: string; tz: string }) {
+export function DateTile({ iso, tz }: { iso: string; tz: string }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   return (
@@ -460,7 +467,6 @@ function ScheduleRow({
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [askOut, setAskOut] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
   const waiting = mine?.status === 'waitlisted';
@@ -471,12 +477,11 @@ function ScheduleRow({
 
   async function run(path: string, label: (data: any) => string) {
     setBusy(true);
-    setError(null);
     try {
       toast(label(await api<any>('POST', `/api/sessions/${s.id}/${path}`, {})));
       await onChanged();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
       setBusy(false);
@@ -495,9 +500,22 @@ function ScheduleRow({
           {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}
         </h2>
         <div className="sched-head">
-          <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
-          {inSession && !s.canceled && <span className="me-tag">You're in</span>}
-          {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
+          <div className="sched-when">
+            <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+            {inSession && !s.canceled && <span className="me-tag">You're in</span>}
+            {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
+          </div>
+          {/* Sign-up never depends on the court being booked. */}
+          {open &&
+            (inSession || waiting ? (
+              <button className="btn secondary sched-btn" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
+                I'm out
+              </button>
+            ) : (
+              <button className="btn sched-btn" disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
+                {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
+              </button>
+            ))}
         </div>
         <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
           <span className="court-status">
@@ -514,7 +532,10 @@ function ScheduleRow({
 
         {!s.canceled && (s.confirmed.length > 0 || !courtWait) && (
           <div className="in-line">
-            <span className="small muted">{countLine(s)}</span>
+            <span className="in-count">
+              {countLine(s)}
+              {s.confirmed.length > 0 ? ':' : ''}
+            </span>
             {s.confirmed.length > 0 && (
               <ul className="in-pills" aria-label="Who's in">
                 {s.confirmed.map((p) => (
@@ -532,21 +553,10 @@ function ScheduleRow({
           </p>
         )}
 
-        {error && <Notice tone="danger">{error}</Notice>}
-        {open &&
-          (inSession || waiting ? (
-            <button className="btn secondary block big" disabled={busy} onClick={() => setAskOut(true)}>
-              I'm out
-            </button>
-          ) : (
-            <button className="btn block big" disabled={busy} onClick={() => run('join', joinedText)}>
-              {courtWait ? 'Put me on standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
-            </button>
-          ))}
         {open && inSession && s.confirmationOpen && !mine.attendanceConfirmed && (
           <div className="spread" style={{ alignItems: 'center' }}>
             <span className="small">Still coming?</span>
-            <button className="btn small" disabled={busy} onClick={() => run('confirm', () => 'Thanks, see you there')}>
+            <button className="btn small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
               Yes, I'm coming
             </button>
           </div>
@@ -558,13 +568,15 @@ function ScheduleRow({
               <span className="paid">✓ Paid</span>
             ) : mine.oweCents > 0 ? (
               <>
-                <p>
-                  <strong>You owe {formatPrice(mine.oweCents)}</strong>
-                  {mine.creditCents > 0 && <> (includes your {formatPrice(mine.creditCents)} credit)</>}
-                  {mine.discount && <span className="small muted"> · 6-person discount</span>}
-                </p>
+                <div className="owe-line">
+                  <span>
+                    <strong>You owe {formatPrice(mine.oweCents)}</strong>
+                    {mine.creditCents > 0 && <span className="small muted"> (after {formatPrice(mine.creditCents)} credit)</span>}
+                    {mine.discount && <span className="small muted"> · 6-person discount</span>}
+                  </span>
+                  <PayButton g={g} cents={mine.oweCents} startsAt={s.startsAt} compact />
+                </div>
                 {owed?.reminder && <p className="small muted">{who} may not have marked this paid yet. If you already paid, no action needed.</p>}
-                <PayButton g={g} cents={mine.oweCents} startsAt={s.startsAt} />
               </>
             ) : null}
           </div>
@@ -585,7 +597,7 @@ function ScheduleRow({
         confirmLabel="I'm out"
         danger
         busy={busy}
-        onConfirm={() => run('withdraw', () => "You're out for this one")}
+        onConfirm={() => run('withdraw', () => "You're out")}
         onCancel={() => setAskOut(false)}
       />
     </article>

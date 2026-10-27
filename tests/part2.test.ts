@@ -299,8 +299,9 @@ describe('calendar file', () => {
     expect(res.headers.get('Content-Disposition')).toContain('pickleball-2026-10-27.ics');
     expect(res.text).toContain('SUMMARY:Pickleball');
     expect(res.text).toContain('LOCATION:Northville Pickleball Club\r\n');
-    expect(res.text).toContain('DTSTART:20261028T000000Z'); // 8:00 PM Eastern
-    expect(res.text).toContain('DTEND:20261028T020000Z'); // 10:00 PM Eastern
+    expect(res.text).toContain('DTSTART;TZID=America/Detroit:20261027T200000'); // 8:00 PM Eastern
+    expect(res.text).toContain('DTEND;TZID=America/Detroit:20261027T220000'); // 10:00 PM Eastern
+    expect(res.text).toContain('TZID:America/Detroit\r\n');
 
     await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', venmoUrl: null, venueAddress: '123 Main St, Northville, MI' });
     res = await ctx.app.client().call('GET', `/api/sessions/${s.id}/calendar.ics`);

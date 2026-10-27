@@ -11,11 +11,13 @@ import {
 } from '../../../shared/messages';
 import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME } from '../../../shared/settings';
-import { HolidayPill } from '../PlayerHome';
+import { DateTile, HolidayPill } from '../PlayerHome';
 import type { BookingStatus } from '../../../shared/status';
 import {
   formatDateTime,
+  formatMonthDay,
   formatRelative,
+  formatTime,
   formatShortDate,
   formatTimeRange,
   fromLocalInputValue,
@@ -31,23 +33,21 @@ export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invit
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   async function run(fn: () => Promise<unknown>, success?: string) {
     setBusy(true);
-    setError(null);
     try {
       await fn();
       await ctx.reload();
       if (success) toast(success);
       return true;
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       return false;
     } finally {
       setBusy(false);
     }
   }
-  return { busy, error, run };
+  return { busy, run };
 }
 
 export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
@@ -66,8 +66,9 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
     s.reservationReference ? `Reservation #${s.reservationReference}` : null,
     s.courtCostCents !== null ? `${formatCents(s.courtCostCents)} (only you see this)` : null,
   ].filter(Boolean);
+  const paid = s.payableCount > 0 ? `${s.paidCount}/${s.payableCount} paid` : null;
   return (
-    <article id={`session-${s.id}`} tabIndex={-1} className={`card stack scard court-${court.kind}`} data-court={court.kind} aria-labelledby={`as-${s.id}`}>
+    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} aria-labelledby={`as-${s.id}`}>
       {needsCourt && (
         <div className="court-banner" role="group" aria-label="Court">
           <div className="court-status">
@@ -86,61 +87,59 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           {live && <CourtWaitButtons ctx={ctx} s={s} />}
         </div>
       )}
-      <div>
-        <h2 id={`as-${s.id}`} className="card-date">
-          {formatShortDate(s.startsAt, tz)}
-        </h2>
-        <div className="card-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</div>
-        {s.holiday && <HolidayControl ctx={ctx} s={s} />}
+      <div className="scard-main">
+        <DateTile iso={s.startsAt} tz={tz} />
+        <div className="scard-body">
+          <div className="scard-top">
+            <h2 id={`as-${s.id}`} className="sr-only">
+              {formatShortDate(s.startsAt, tz)}
+            </h2>
+            <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+            <button className="btn small ghost more-btn" aria-expanded={more} onClick={() => setMore((v) => !v)}>
+              {more ? 'Less' : 'More'}
+            </button>
+          </div>
+          {s.holiday && <HolidayControl ctx={ctx} s={s} />}
+          {court.kind === 'booked' && (
+            <div className="court-line">
+              <div className="court-status">
+                <CourtIcon kind="booked" />
+                <span>{court.text}</span>
+              </div>
+              {!s.state.flags.past && <div className="court-sub">Cancel by {shortDeadline(s, tz, now)}</div>}
+            </div>
+          )}
+          {(court.kind === 'off' || later) && (
+            <div className="court-line">
+              <div className="court-status">
+                <CourtIcon kind={court.kind} />
+                <span>{court.text}</span>
+              </div>
+              {s.state.flags.canceled && s.canceledAt && <div className="court-sub muted">{formatDateTime(s.canceledAt, tz)}</div>}
+            </div>
+          )}
+          {!s.state.flags.canceled && (
+            <PlayersLine confirmed={s.confirmedCount} waiting={s.waitlistCount} waitingWord={courtWait ? 'on standby' : 'waiting'} extra={paid} />
+          )}
+        </div>
       </div>
-      {court.kind === 'booked' && (
-        <div className="court-line">
-          <div className="court-status">
-            <CourtIcon kind="booked" />
-            <span>{court.text}</span>
-          </div>
-          {!s.state.flags.past && <div className="court-sub">Cancel by {deadlineLine(s, tz, now)}</div>}
-          {details.length > 0 && <div className="court-sub muted">{details.join(' · ')}</div>}
-        </div>
-      )}
-      {(court.kind === 'off' || later) && (
-        <div className="court-line">
-          <div className="court-status">
-            <CourtIcon kind={court.kind} />
-            <span>{court.text}</span>
-          </div>
-          {s.state.flags.canceled && s.canceledAt && <div className="court-sub muted">{formatDateTime(s.canceledAt, tz)}</div>}
-        </div>
-      )}
-      {!s.state.flags.canceled && (
-        <PlayersLine confirmed={s.confirmedCount} waiting={s.waitlistCount} waitingWord={courtWait ? 'on standby' : 'on the waitlist'} />
-      )}
-      {s.payableCount > 0 && (
-        <p className="small muted">
-          {s.paidCount} of {s.payableCount} paid
-        </p>
-      )}
       {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
 
-      {/* Court actions live in the banner above. Then the everyday ones, then the rest under More. */}
+      {/* One main button; court actions live in the banner above, everything else under More. */}
       {live && court.kind === 'booked' && (
-        <button className="btn block" onClick={() => ctx.open('poll', s.id)}>
+        <button className="btn block main-btn" onClick={() => ctx.open('poll', s.id)}>
           Text the group poll
         </button>
       )}
-      <div className="action-strip">
-        <button className="btn small secondary" onClick={() => ctx.open('booking', s.id)}>
-          Edit booking
-        </button>
-        <button className="btn small secondary" onClick={() => ctx.open('roster', s.id)}>
-          Players
-        </button>
-      </div>
-      <button className="btn small ghost" aria-expanded={more} onClick={() => setMore((v) => !v)}>
-        {more ? 'Less' : 'More'}
-      </button>
+      {more && details.length > 0 && <p className="small muted court-details">{details.join(' · ')}</p>}
       {more && (
         <div className="action-strip">
+          <button className="btn small secondary" onClick={() => ctx.open('booking', s.id)}>
+            Edit booking
+          </button>
+          <button className="btn small secondary" onClick={() => ctx.open('roster', s.id)}>
+            Players
+          </button>
           <button className="btn small secondary" onClick={() => ctx.open('payments', s.id)}>
             Money
           </button>
@@ -178,38 +177,41 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   );
 }
 
+/** "Oct 27, 7:30 AM", plus "(passed)" once it's gone. Short enough for one line on the card. */
+function shortDeadline(s: AdminSessionView, tz: string, nowMs: number): string {
+  if (!s.cancellationDeadlineAt) return 'not set';
+  const when = `${formatMonthDay(s.cancellationDeadlineAt, tz)}, ${formatTime(s.cancellationDeadlineAt, tz)}`;
+  return Date.parse(s.cancellationDeadlineAt) <= nowMs ? `${when} (passed)` : when;
+}
+
 /** "I booked it": one tap, no questions. The deadline starts at 12 hours before play. */
 function BookedButton({ ctx, s, small }: { ctx: AdminCtx; s: AdminSessionView; small?: boolean }) {
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   return (
     <>
       <button className={small ? 'btn small secondary' : 'btn'} disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court booked')}>
         {busy ? 'Saving…' : 'I booked it'}
       </button>
-      {error && <Notice tone="danger">{error}</Notice>}
     </>
   );
 }
 
 /** "Court opened" / "Didn't open" while on the venue's court waitlist. Both one tap, "Didn't open" asks first. */
 export function CourtWaitButtons({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const [ask, setAsk] = useState(false);
   return (
-    <div className="stack" style={{ gap: 8 }}>
-      <div className="btn-row">
-        <button
-          className="btn"
-          disabled={busy}
-          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court opened. Standby players moved in.')}
-        >
-          Court opened
-        </button>
-        <button className="btn secondary" disabled={busy} onClick={() => setAsk(true)}>
-          Didn't open
-        </button>
-      </div>
-      {error && <Notice tone="danger">{error}</Notice>}
+    <div className="banner-btns">
+      <button
+        className="btn"
+        disabled={busy}
+        onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court opened')}
+      >
+        Court opened
+      </button>
+      <button className="btn secondary" disabled={busy} onClick={() => setAsk(true)}>
+        Didn't open
+      </button>
       <ConfirmDialog
         open={ask}
         title="The court didn't open?"
@@ -283,7 +285,7 @@ export function HolidayControl({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView 
 export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const now = useNow();
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const passed = s.state.flags.deadlinePassed;
   const booked = s.bookingStatus === 'booked';
   const open = s.state.flags.openSpots;
@@ -298,7 +300,6 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
               : 'The cancellation deadline passed.'
             : `Reschedule or cancel by ${deadlineLine(s, tz, now)}.`)}
       </p>
-      {error && <Notice tone="danger">{error}</Notice>}
       <div className="action-strip">
         <button className="btn small" disabled={busy} onClick={() => ctx.open('invite', s.id)}>
           Invite people
@@ -386,7 +387,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
   const [cost, setCost] = useState(s.courtCostCents !== null ? (s.courtCostCents / 100).toFixed(2) : '');
   const [costError, setCostError] = useState<string | null>(null);
   const [deadline, setDeadline] = useState(s.cancellationDeadlineAt ? toLocalInputValue(s.cancellationDeadlineAt, tz) : '');
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const deadlineIso = deadline ? fromLocalInputValue(deadline, tz) : null;
   const defaultHours = ctx.d.group.settings.defaultDeadlineHours;
 
@@ -457,7 +458,6 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
           </label>
         </div>
       </details>
-      {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn" type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save booking'}
       </button>
@@ -475,7 +475,7 @@ const ROSTER_LABEL: Record<string, string> = {
 };
 
 function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const [removing, setRemoving] = useState<AdminRosterEntry | null>(null);
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>
@@ -487,7 +487,6 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   return (
     <div className="stack">
       {!live && <Notice tone="muted" title="This session is closed">You can view it but not change who's playing.</Notice>}
-      {error && <Notice tone="danger">{error}</Notice>}
       <ul className="list">
         {s.roster.map((r) => (
           <li key={r.playerId} className="stack" style={{ gap: 8 }}>
@@ -573,7 +572,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const venmo = ctx.d.group.venmoUrl;
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
   const rows = s.roster.filter((r) => r.status === 'confirmed' || r.paymentStatus === 'paid');
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
@@ -596,7 +595,6 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           Nobody owes for it. Anyone who already paid shows under Refunds on Home.
         </Notice>
       )}
-      {error && <Notice tone="danger">{error}</Notice>}
       <ul className="list">
         {rows.map((r) => (
           <li key={r.playerId} className="stack" style={{ gap: 8 }}>
@@ -805,7 +803,7 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
   const [date, setDate] = useState(startLocal.slice(0, 10));
   const [start, setStart] = useState(startLocal.slice(11));
   const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
   const endsAt = date && end ? fromLocalInputValue(`${date}T${end}`, tz) : null;
 
@@ -837,7 +835,6 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
         </p>
       )}
       <p className="small muted">The cancellation deadline resets to {ctx.d.group.settings.defaultDeadlineHours} hours before the new time.</p>
-      {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn" type="submit" disabled={busy || !startsAt || !endsAt}>
         {busy ? 'Saving…' : 'Move session'}
       </button>
@@ -850,7 +847,7 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
 function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; onClose: () => void }) {
   const tz = ctx.d.group.timezone;
   const now = useNow();
-  const { busy, error, run } = useAction(ctx);
+  const { busy, run } = useAction(ctx);
   const reopening = s.state.flags.canceled;
   return (
     <ConfirmDialog
@@ -869,7 +866,6 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
               </Notice>
             </>
           )}
-          {error && <Notice tone="danger">{error}</Notice>}
         </div>
       }
       confirmLabel={reopening ? 'Reopen session' : 'Cancel session'}
