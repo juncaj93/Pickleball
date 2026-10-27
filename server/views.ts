@@ -72,6 +72,7 @@ export function playerSessionView(
           promotion: mine.status === 'confirmed' ? mine.promotion_reason : null,
           shareCents: prices.get(mine.player_id)?.cents ?? null,
           paymentStatus: mine.payment_status,
+          selfPaid: !!mine.self_paid_at,
           discount: prices.get(mine.player_id)?.discount ?? false,
           creditComing: prices.get(mine.player_id)?.creditComing ?? false,
           oweCents:
@@ -97,6 +98,7 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     usualDays: usualDaysOf(p),
     isNew: !!p.is_new,
     lateDrops: 0,
+    played: 0,
   };
 }
 
@@ -150,6 +152,7 @@ export function adminSessionView(
       confirmedAt: r.confirmed_at,
       attendanceConfirmedAt: r.attendance_confirmed_at,
       paymentStatus: r.payment_status,
+      selfPaid: !!r.self_paid_at,
       paidAt: r.paid_at,
       paymentAmountCents: r.payment_amount_cents,
       shareCents: prices.get(r.player_id)?.cents ?? null,

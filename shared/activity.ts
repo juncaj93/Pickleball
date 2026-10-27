@@ -38,10 +38,15 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
   const who = organizer;
   const changes = d as Record<string, { to?: unknown } | undefined>;
   switch (e.action) {
+    case 'player_self_paid':
+    case 'player_self_unpaid': {
+      const by = e.actorLabel.startsWith('organizer as') ? `${organizer} (as ${player})` : player;
+      return e.action === 'player_self_paid' ? `${by} marked their payment paid${forDay}` : `${by} unmarked their payment${forDay}`;
+    }
     case 'player_self_added':
       return `${player} added their own name`;
     case 'marked_paid':
-      return `${who} marked ${player} paid${forDay}`;
+      return d.confirmed ? `${who} confirmed ${player}'s payment${forDay}` : `${who} marked ${player} paid${forDay}`;
     case 'marked_unpaid':
       return `${who} marked ${player} unpaid${forDay}`;
     case 'refund_marked':

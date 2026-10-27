@@ -31,6 +31,7 @@ import { newId } from './crypto';
 import { recentCount, recordEvent } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { playerSessionView } from './views';
+import { applyPayment } from './admin';
 import * as v from './validate';
 
 const OWED_LOOKBACK_MS = 90 * 86_400_000;
@@ -301,6 +302,19 @@ export async function playerWithdraw(ctx: Ctx) {
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late });
   return { result };
+}
+
+/**
+ * POST /api/sessions/:id/paid { paid }: "I paid" (or "Didn't pay?") from the
+ * player. Opening Venmo never does this by itself. The organizer sees a
+ * "self-marked" tag until they confirm it, and can always change it.
+ */
+export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
+  const who = await actingOn(ctx);
+  const paid = v.bool(body.paid, 'paid');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  const name = p?.display_name ?? 'A player';
+  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, who.viewAsName ? `organizer as ${who.viewAsName}` : name);
 }
 
 export async function playerConfirm(ctx: Ctx) {

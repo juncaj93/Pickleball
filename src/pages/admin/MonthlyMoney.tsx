@@ -66,6 +66,8 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               </dd>
               <dt>Membership</dt>
               <dd>{formatPrice(m.membershipCents)}</dd>
+              <dt>Sessions played</dt>
+              <dd>{m.sessions.filter((x) => x.state === 'played').length}</dd>
             </dl>
           </div>
           {m.sessions.length === 0 ? (

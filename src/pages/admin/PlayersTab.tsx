@@ -1,44 +1,56 @@
 import { type FormEvent, useState } from 'react';
-import type { AdminPlayer } from '../../../shared/api';
+import type { AdminPlayer, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPhone } from '../../../shared/messages';
+import { formatPrice } from '../../../shared/money';
+import { formatShortDate } from '../../../shared/time';
 import { api, ApiError } from '../../lib';
-import { Chip, ConfirmDialog, Notice, Sheet, useToast } from '../../ui';
+import { ConfirmDialog, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import { balanceOf } from './todo';
 
 const DAYS = [
   { day: 2, label: 'Tue' },
   { day: 4, label: 'Thu' },
 ];
 
-function daysText(days: number[]): string {
-  if (days.length === 2) return 'Tue & Thu';
-  if (days.length === 1) return days[0] === 2 ? 'Tuesdays' : 'Thursdays';
-  return 'No usual day';
-}
-
 export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);
+  const [viewing, setViewing] = useState<string | null>(null);
+  const shown = viewing ? ctx.d.players.find((p) => p.id === viewing) ?? null : null;
   return (
     <>
-      <ul className="list card" style={{ padding: '4px 16px' }}>
-        {ctx.d.players.map((p) => (
-          <li key={p.id} className="spread">
-            <div>
-              <strong>{p.name}</strong>
-              {p.isNew && <span className="new-tag">New</span>}
-              <div className="small muted">{p.phone ? formatPhone(p.phone) : 'No phone'}</div>
-              {p.lateDrops > 0 && <div className="small late-count">Late drops: {p.lateDrops}</div>}
-              <div className="row" style={{ marginTop: 4 }}>
-                <Chip tone={p.isRegular ? 'ok' : 'info'}>{p.isRegular ? 'Regular' : 'Occasional'}</Chip>
-                <Chip tone="muted">{daysText(p.usualDays)}</Chip>
-                {!p.isActive && <Chip tone="muted">Hidden</Chip>}
-              </div>
-            </div>
-            <button className="btn small secondary" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
-              Edit
-            </button>
-          </li>
-        ))}
+      <ul className="card player-list" aria-label="Players">
+        {ctx.d.players.map((p) => {
+          const { owedCents, creditCents } = balanceOf(ctx.d, p.id);
+          const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
+          const second = [p.phone ? formatPhone(p.phone) : 'No phone', days, p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ');
+          return (
+            <li key={p.id} className="player-row" data-player={p.name}>
+              <button className="player-open" onClick={() => setViewing(p.id)} aria-label={`${p.name}: money and sessions`}>
+                <span className="p-line1">
+                  <strong className="p-name">{p.name}</strong>
+                  <span className={`p-pill ${p.isRegular ? 'reg' : 'occ'}`}>{p.isRegular ? 'Regular' : 'Occasional'}</span>
+                  {p.isNew && <span className="new-tag">New</span>}
+                  {!p.isActive && <span className="p-pill hidden-pill">Hidden</span>}
+                </span>
+                <span className="p-line2">{second}</span>
+              </button>
+              <span className="p-money">
+                {owedCents > 0 ? (
+                  <span className="p-bal owes">Owes {formatPrice(owedCents)}</span>
+                ) : creditCents > 0 ? (
+                  <span className="p-bal credit">Credit {formatPrice(creditCents)}</span>
+                ) : (
+                  <span className="p-bal zero">$0</span>
+                )}
+                <span className="p-played">{p.played} played</span>
+              </span>
+              <button className="btn small secondary p-edit" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
+                Edit
+              </button>
+            </li>
+          );
+        })}
       </ul>
       <button className="btn block" onClick={() => setEditing('new')}>
         Add a person
@@ -46,7 +58,87 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
       <Sheet open={!!editing} title={editing === 'new' ? 'Add a person' : `Edit ${editing?.name ?? ''}`} onClose={() => setEditing(null)}>
         {editing && <PlayerForm ctx={ctx} player={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />}
       </Sheet>
+      <Sheet open={!!shown} title={shown?.name ?? ''} onClose={() => setViewing(null)}>
+        {shown && <PlayerMoney ctx={ctx} player={shown} />}
+      </Sheet>
     </>
+  );
+}
+
+/** A player's page: their balance, then each session's money with Mark paid. */
+function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
+  const tz = ctx.d.group.timezone;
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const { owedCents, creditCents } = balanceOf(ctx.d, player.id);
+  const rows = ctx.d.sessions
+    .map((s) => ({ s, r: s.roster.find((r) => r.playerId === player.id && (r.status === 'confirmed' || r.paymentStatus === 'paid')) }))
+    .filter((x): x is { s: AdminSessionView; r: AdminRosterEntry } => !!x.r && !x.s.state.flags.canceled)
+    .reverse();
+  async function setPaid(s: AdminSessionView, paid: boolean) {
+    setBusy(true);
+    try {
+      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid });
+      await ctx.reload();
+      toast(paid ? `${player.name} marked paid` : `${player.name} marked unpaid`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="stack">
+      <p className="p-summary">
+        {owedCents > 0 ? <strong>Owes {formatPrice(owedCents)}</strong> : <span>Owes nothing</span>}
+        {creditCents > 0 && <span className="p-bal credit"> · Credit {formatPrice(creditCents)}</span>}
+        <span className="muted"> · {player.played} played</span>
+      </p>
+      {rows.length === 0 ? (
+        <p className="muted">No sessions yet.</p>
+      ) : (
+        <ul className="rows player-money" aria-label="Sessions">
+          {rows.map(({ s, r }) => {
+            const amount = r.paymentStatus === 'paid' ? (r.paymentAmountCents ?? 0) : r.shareCents !== null ? r.shareCents - r.creditCents : null;
+            return (
+              <li key={s.id} data-session={s.id}>
+                <span className="who">
+                  <span>
+                    <strong>{formatShortDate(s.startsAt, tz)}</strong>
+                    {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
+                  </span>
+                  <span className="small muted">
+                    {r.paymentStatus === 'paid' ? `Paid ${formatPrice(amount ?? 0)}` : amount !== null ? `${formatPrice(amount)} unpaid` : 'Nothing owed'}
+                    {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit` : ''}
+                  </span>
+                </span>
+                <span className="btn-row">
+                  {r.paymentStatus === 'paid' ? (
+                    <>
+                      {r.selfPaid && (
+                        <button className="btn small" disabled={busy} onClick={() => setPaid(s, true)}>
+                          Mark paid
+                        </button>
+                      )}
+                      <button className="btn small secondary" disabled={busy} onClick={() => setPaid(s, false)}>
+                        Unmark
+                      </button>
+                    </>
+                  ) : (
+                    r.status === 'confirmed' &&
+                    amount !== null && (
+                      <button className="btn small" disabled={busy} onClick={() => setPaid(s, true)}>
+                        Mark paid
+                      </button>
+                    )
+                  )}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 

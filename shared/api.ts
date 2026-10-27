@@ -42,6 +42,8 @@ export interface PlayerSessionView {
     /** Price for this session before any credit ($14, or $9 with the 6-person discount). */
     shareCents: number | null;
     paymentStatus: PaymentStatus;
+    /** They tapped "I paid" themselves. */
+    selfPaid: boolean;
     /** One of the last two of six, paying the discounted price. */
     discount: boolean;
     /** One of the first four of six: earns a credit if 6 play. */
@@ -92,6 +94,8 @@ export interface AdminRosterEntry {
   confirmedAt: string | null;
   attendanceConfirmedAt: string | null;
   paymentStatus: PaymentStatus;
+  /** The player marked it paid themselves; the organizer sees a "self-marked" tag. */
+  selfPaid: boolean;
   paidAt: string | null;
   paymentAmountCents: number | null;
   shareCents: number | null;
@@ -171,6 +175,8 @@ export interface AdminPlayer {
   isNew: boolean;
   /** Organizer only: how many times they dropped out late. */
   lateDrops: number;
+  /** Organizer only: sessions they've played, ever. */
+  played: number;
 }
 
 /** One line in History > Activity. */

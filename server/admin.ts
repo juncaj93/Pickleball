@@ -85,6 +85,15 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .bind(group.id)
     .all<{ id: string; n: number }>();
   const lateDrops = new Map(lateRows.results.map((r) => [r.id, Number(r.n)]));
+  // Sessions each person has played, ever: in, not canceled, and over.
+  const playedRows = await ctx.db
+    .prepare(
+      `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? GROUP BY sp.player_id`,
+    )
+    .bind(group.id, ctx.nowIso)
+    .all<{ id: string; n: number }>();
+  const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
   return {
     group: {
       name: group.name,
@@ -100,7 +109,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       openAccess: !!group.open_access,
       hasGroupWord: !!group.group_word_hash,
     },
-    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0 })),
+    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) => {
       const roster = rosters.get(s.id) ?? [];
       return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster));
@@ -410,6 +419,16 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
   const paid = v.bool(body.paid, 'paid');
+  return applyPayment(ctx, group, session, playerId, paid, null);
+}
+
+/**
+ * Mark one seat paid or unpaid. `self` is the player's name when they did it
+ * themselves ("I paid" / "Didn't pay?"), or null for the organizer. A paid
+ * seat uses up any credit planned for it; unmarking gives the credit back.
+ * The organizer marking a self-marked seat paid confirms it (the tag goes).
+ */
+export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean, self: string | null, actor?: string) {
   const roster = await loadRoster(ctx.db, session.id);
   const row = roster.find((r) => r.player_id === playerId);
   if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
@@ -419,32 +438,49 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
     if (row.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
     const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
     if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
-    if (row.payment_status === 'paid') return { ok: true, changed: false };
+    if (row.payment_status === 'paid') {
+      if (self || !row.self_paid_at) return { ok: true, changed: false };
+      await ctx.db
+        .prepare('UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
+        .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
+        .run();
+      await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
+      return { ok: true, changed: true };
+    }
     // Any credit planned for this seat is used up now.
     const credit = (await moneyPicture(ctx, group)).plan.get(`${session.id}:${playerId}`) ?? { cents: 0, ids: [] };
     const share = price - credit.cents;
     await ctx.db.batch([
       ctx.db
         .prepare(
-          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?,
+          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = ?,
              payment_updated_at = ?, updated_at = ?
            WHERE session_id = ? AND player_id = ?`,
         )
-        .bind(ctx.nowIso, share, ctx.nowIso, ctx.nowIso, session.id, playerId),
+        .bind(ctx.nowIso, share, self ? ctx.nowIso : null, ctx.nowIso, ctx.nowIso, session.id, playerId),
       ...credit.ids.map((id) =>
         ctx.db
           .prepare('UPDATE credits SET used_session_id = ?, used_at = ? WHERE id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
           .bind(session.id, ctx.nowIso, id),
       ),
     ]);
-    await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, amountCents: share, creditCents: credit.cents }, ctx.nowIso);
+    await audit(
+      ctx.db,
+      group.id,
+      session.id,
+      self ? 'player_self_paid' : 'marked_paid',
+      { player: row.display_name, amountCents: share, creditCents: credit.cents },
+      ctx.nowIso,
+      actor ?? (self ? self : 'organizer'),
+    );
   } else {
     if (row.payment_status !== 'paid') return { ok: true, changed: false };
+    if (self && !row.self_paid_at) throw new HttpError(409, 'organizer_marked', 'The organizer marked this paid. Ask them to change it.');
     await ctx.db.batch([
       ctx.db
         .prepare(
           `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
-             paid_at = NULL, payment_amount_cents = NULL, payment_updated_at = ?, updated_at = ?
+             paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?, updated_at = ?
            WHERE session_id = ? AND player_id = ?`,
         )
         .bind(ctx.nowIso, ctx.nowIso, session.id, playerId),
@@ -455,9 +491,10 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
       ctx.db,
       group.id,
       session.id,
-      'marked_unpaid',
+      self ? 'player_self_unpaid' : 'marked_unpaid',
       { player: row.display_name, previousAmountCents: row.payment_amount_cents, previousPaidAt: row.paid_at },
       ctx.nowIso,
+      actor ?? (self ? self : 'organizer'),
     );
   }
   return { ok: true, changed: true };

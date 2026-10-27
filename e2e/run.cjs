@@ -152,7 +152,7 @@ function layoutReport({ roots, items }) {
   for (const root of document.querySelectorAll(roots)) {
     if (!root.offsetParent) continue;
     const card = root.getBoundingClientRect();
-    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && !e.closest('[hidden], dialog:not([open]), .sr-only'));
+    const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && e.checkVisibility() && !e.closest('[hidden], dialog:not([open]), .sr-only'));
     const boxes = els.map((e) => ({ e, b: visual(e), label: (e.getAttribute('aria-label') || e.innerText || e.className || e.tagName).trim().slice(0, 30) }));
     for (const x of boxes) {
       checked++;
@@ -1109,7 +1109,7 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
-    await check('after signing up: a small Pay button; "Sent?" after tapping never marks paid; Paid once marked', async () => {
+    await check('after signing up: Pay opens Venmo but never marks paid; "I paid" marks paid (self-marked); "Didn\'t pay?" undoes it; my Mark paid has no tag; all logged', async () => {
       const p = players.Devon;
       await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
       await p.reload();
@@ -1124,22 +1124,52 @@ async function main() {
       assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} - Devon$/.test(note), `Venmo note was ${note}`);
       const [popup] = await Promise.all([p.waitForEvent('popup'), pay.click()]);
       await popup.close();
-      await row.getByText(/^Sent\? \w+ confirms when it arrives\.$/).waitFor();
-      assert((await row.locator('.pay-small').count()) === 0, 'Pay button should turn into the quiet note');
+      // Back from Venmo: an "I paid" button, still not paid.
+      const iPaid = row.getByRole('button', { name: 'I paid' });
+      await iPaid.waitFor();
       await p.reload();
-      await firstCard(p).getByText(/^Sent\? \w+ confirms when it arrives\.$/).waitFor();
-      // Not marked paid: the organizer still sees Devon owing.
+      await firstCard(p).getByRole('button', { name: 'I paid' }).waitFor();
+      assert((await p.getByText(/may not have marked this paid|Already paid\?/).count()) === 0, 'the old note is gone');
       await admin.reload();
-      const card = sessionCards(admin).first();
-      const sheet = await moneyFor(admin, card);
-      const devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
+      let sheet = await moneyFor(admin, sessionCards(admin).first());
+      let devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
       await devonRow.getByText(/owes \$14/).waitFor();
+      // "I paid": Paid with a check and a tiny "Didn't pay?" right under it.
+      await firstCard(p).getByRole('button', { name: 'I paid' }).click();
+      await p.locator('.toast', { hasText: 'Marked paid' }).waitFor();
+      const paidTag = firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' });
+      await paidTag.waitFor();
+      const undo = firstCard(p).getByRole('button', { name: "Didn't pay?" });
+      const tb = await paidTag.boundingBox();
+      const ub = await undo.boundingBox();
+      assert(ub.y >= tb.y + tb.height - 1 && Math.abs(ub.x - tb.x) < 4, '"Didn\'t pay?" sits right under Paid');
+      assert((await undo.evaluate((b) => parseFloat(getComputedStyle(b).fontSize))) <= 12, 'very small');
+      await admin.reload();
+      sheet = await moneyFor(admin, sessionCards(admin).first());
+      devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
+      await devonRow.locator('.self-tag', { hasText: 'self-marked' }).waitFor();
+      // "Didn't pay?" takes it back.
+      await undo.click();
+      await firstCard(p).getByRole('button', { name: 'I paid' }).waitFor();
+      // The organizer marks it: no tag, and no "Didn't pay?" for the player.
+      await admin.reload();
+      sheet = await moneyFor(admin, sessionCards(admin).first());
+      devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
       await devonRow.getByRole('button', { name: 'Mark paid' }).click();
       await admin.locator('.toast', { hasText: 'Devon marked paid' }).waitFor();
-      await tab(admin, 'Home').click();
+      assert((await devonRow.locator('.self-tag').count()) === 0, 'no tag when I mark it');
       await p.reload();
       await firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
+      assert((await firstCard(p).getByRole('button', { name: "Didn't pay?" }).count()) === 0, 'no undo for the organizer\'s mark');
       assert((await firstCard(p).getByRole('link', { name: /Pay \$/ }).count()) === 0, 'Pay should be gone once paid');
+      // Logged.
+      await tab(admin, 'History').click();
+      await admin.getByRole('button', { name: 'Activity' }).click();
+      const acts = admin.getByRole('list', { name: 'Activity' });
+      await acts.getByText(/^Devon marked their payment paid for /).first().waitFor();
+      await acts.getByText(/^Devon unmarked their payment for /).first().waitFor();
+      await acts.getByText(/^Robin marked Devon paid for /).first().waitFor();
+      await tab(admin, 'Home').click();
     });
 
     await check('game day: the payment card shows at the top from 8:00 AM, with the right amount and a Venmo note', async () => {
@@ -1234,7 +1264,7 @@ async function main() {
       await sheet.getByRole('group', { name: 'Usual days' }).getByRole('button', { name: 'Thu' }).click();
       await sheet.getByRole('button', { name: 'Save' }).click();
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await admin.locator('li', { hasText: 'Devon' }).getByText('Tue & Thu').waitFor();
+      await admin.locator('li', { hasText: 'Devon' }).locator('.p-line2', { hasText: /Tue Thu$/ }).waitFor();
       await admin.getByRole('button', { name: 'Add a person' }).click();
       const add = admin.locator('dialog[open]');
       await add.getByLabel('Name', { exact: true }).fill('Ryan');
@@ -1531,7 +1561,7 @@ async function main() {
       await tab(admin, 'Players').click();
       const row = admin.locator('li', { hasText: 'Morgan' });
       await row.locator('.new-tag', { hasText: 'New' }).waitFor();
-      await row.getByText('Tue & Thu').waitFor();
+      await row.locator('.p-line2', { hasText: /Tue Thu$/ }).waitFor();
     });
 
     await check('removing a name: deleted if no history, hidden if they have some', async () => {
@@ -1951,7 +1981,7 @@ async function main() {
         await card.waitFor({ state: 'detached' });
         // Count on Players, organizer only.
         await tab(admin, 'Players').click();
-        await admin.locator('li', { hasText: 'Frankie' }).getByText('Late drops: 1').waitFor();
+        await admin.locator('li', { hasText: 'Frankie' }).getByText(/1 late drop\b/).waitFor();
         await tab(admin, 'Home').click();
         await players.Alex.reload();
         await players.Alex.locator('.schedule article').first().waitFor();
@@ -2744,6 +2774,81 @@ async function main() {
         assert(pr.problems.length === 0, `player screen: ${pr.problems.slice(0, 3).join(' | ')}`);
         assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player screen scrolls sideways');
         await pl.close();
+        await p.close();
+      });
+    }
+
+    // ---------- Players tab: compact rows with money; Money tab leads with the month ----------
+    for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
+      await check(`Players at ${width}px (${scheme}): 8+ rows on a screen, pills by the name, balance and played count, Edit, tap a row for the money; Money tab summary first`, async () => {
+        const p = await admin.context().newPage();
+        p.setDefaultTimeout(10000);
+        await p.setViewportSize({ width, height: 844 });
+        await p.emulateMedia({ colorScheme: scheme });
+        await p.goto(`${BASE}/admin`);
+        await tab(p, 'Players').click();
+        const list = p.getByRole('list', { name: 'Players' });
+        await list.waitFor();
+        assert((await p.getByText(/Want in\?" nudge|Regulars get/).count()) === 0, 'the top sentence is gone');
+        assert((await p.getByText(/No usual day/).count()) === 0, 'no "No usual day"');
+        const rows = list.locator('li.player-row');
+        assert((await rows.count()) >= 8, `only ${await rows.count()} people to show`);
+        const heights = await rows.evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().height));
+        const typical = heights.slice().sort((a, b) => a - b)[Math.floor(heights.length / 2)];
+        assert(typical >= 50 && typical <= 66, `rows are ${typical}px tall`);
+        const fit = await p.evaluate(() => {
+          const top = document.querySelector('main').getBoundingClientRect().top + window.scrollY;
+          const limit = document.querySelector('.tabbar').getBoundingClientRect().top - top;
+          return [...document.querySelectorAll('li.player-row')].filter((l) => l.getBoundingClientRect().bottom + window.scrollY - top <= limit).length;
+        });
+        assert(fit >= 8, `only ${fit} rows fit on one screen`);
+        // Pills sit on the name's line; nothing overlaps or gets cut off.
+        const pill = await rows.first().evaluate((r) => {
+          const n = r.querySelector('.p-name').getBoundingClientRect();
+          const pl = r.querySelector('.p-pill').getBoundingClientRect();
+          return Math.abs(n.top + n.height / 2 - (pl.top + pl.height / 2)) < 6 && pl.left > n.right;
+        });
+        assert(pill, 'the pill should sit right after the name');
+        const rep = await p.evaluate(layoutReport, { roots: 'main .player-list', items: '.p-name, .p-pill, .new-tag, .p-line2, .p-bal, .p-played, .p-edit' });
+        assert(rep.problems.length === 0, `Players: ${rep.problems.slice(0, 3).join(' | ')}`);
+        assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scrolling');
+        // Balance words match the money: owed (normal), credit (green), $0 (gray); no red.
+        const d = await (await p.request.get(`${BASE}/api/admin/dashboard`)).json();
+        for (const r of await rows.all()) {
+          const name = await r.getAttribute('data-player');
+          const pl = d.players.find((x) => x.name === name);
+          const bal = (await r.locator('.p-bal').innerText()).trim();
+          assert(/^(Owes \$\d+(\.\d\d)?|Credit \$\d+(\.\d\d)?|\$0)$/.test(bal), `${name}: balance "${bal}"`);
+          assert((await r.locator('.p-played').innerText()).trim() === `${pl.played} played`, `${name}: played count`);
+          const color = await r.locator('.p-bal').evaluate((e) => getComputedStyle(e).color);
+          const danger = await p.evaluate(() => getComputedStyle(document.body).getPropertyValue('--danger-fg'));
+          assert(!color.includes(danger.trim()) || !danger.trim(), `${name}: no red`);
+        }
+        // Edit still opens the form; a row opens the money breakdown with Mark paid.
+        await rows.first().getByRole('button', { name: /^Edit / }).click();
+        await p.locator('dialog[open]').getByLabel('Name').waitFor();
+        await p.keyboard.press('Escape');
+        await p.locator('dialog[open]').waitFor({ state: 'detached' });
+        const devon = rows.filter({ has: p.locator('.p-name', { hasText: /^Devon$/ }) });
+        await devon.locator('.player-open').click();
+        const sheet = p.locator('dialog[open]');
+        await sheet.getByRole('list', { name: 'Sessions' }).waitFor();
+        await sheet.getByText(/played$/).first().waitFor();
+        assert((await sheet.getByRole('button', { name: /^(Mark paid|Unmark)$/ }).count()) >= 1, 'Mark paid or Unmark in the breakdown');
+        await p.keyboard.press('Escape');
+        // Money: the monthly summary comes first, and the old actions are all there.
+        await tab(p, 'Money').click();
+        await p.locator('.money-sum').waitFor();
+        const order = await p.evaluate(() => {
+          const y = (sel) => document.querySelector(sel)?.getBoundingClientRect().top ?? Infinity;
+          return { sum: y('.money-sum'), sess: y('details.money-sess[data-session]') };
+        });
+        assert(order.sum < order.sess, 'summary first');
+        for (const k of ['Collected', 'Court costs', 'Membership', 'Sessions played']) await p.locator('.money-sum dt', { hasText: k }).waitFor();
+        await p.getByRole('heading', { name: 'Who paid' }).waitFor();
+        const open = p.locator('details.money-sess[data-session]').first();
+        await open.evaluate((el) => (el.open = true));
+        assert((await open.getByRole('button', { name: /^(Mark paid|Unmark)$/ }).count()) >= 1, 'Mark paid / Unmark still in Money');
         await p.close();
       });
     }

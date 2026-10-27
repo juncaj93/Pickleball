@@ -2846,3 +2846,140 @@ section[aria-labelledby='sessions-title'] > .week-break {
   display: inline;
   margin-left: 6px;
 }
+
+/* "✓ Paid" with a tiny "Didn't pay?" right under it (only after "I paid"). */
+.paid-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  line-height: 1.2;
+}
+.link-btn.didnt-pay {
+  position: relative;
+  min-height: 0;
+  padding: 0;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.link-btn.didnt-pay::before {
+  content: '';
+  position: absolute;
+  inset: -14px -8px;
+}
+/* A payment the player marked themselves, until the organizer confirms it. */
+.self-tag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* ---------- Players: one compact row each ---------- */
+.player-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 12px;
+}
+.player-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 6px 0;
+}
+.player-row + .player-row {
+  border-top: 1px solid var(--line);
+}
+.player-open {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 2px 0;
+  min-height: 44px;
+  justify-content: center;
+  background: none;
+  border: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.player-open:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.p-line1 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.p-name {
+  overflow-wrap: anywhere;
+}
+.p-pill {
+  font-size: 0.68rem;
+  font-weight: 650;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+.p-pill.reg {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 45%, transparent);
+}
+.p-line2 {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.p-money {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.p-bal {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.p-bal.owes {
+  color: var(--ink);
+}
+.p-bal.credit {
+  color: var(--ok-fg);
+}
+.p-bal.zero {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.p-played {
+  font-size: 0.72rem;
+  color: var(--ink-2);
+}
+.btn.small.p-edit {
+  min-height: 36px;
+  padding: 0 10px;
+  position: relative;
+}
+.btn.small.p-edit::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+.p-summary {
+  margin: 0;
+}

@@ -45,6 +45,7 @@ route('PUT', '/api/me/days', player.setMyDays);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
 route('POST', '/api/sessions/:id/withdraw', (ctx) => player.playerWithdraw(ctx));
 route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));
+route('POST', '/api/sessions/:id/paid', player.playerPaid);
 route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
 route('GET', '/api/sessions/:id/calendar.ics', (ctx) => player.sessionCalendarFile(ctx));
 // The old calendar subscription feed is gone: its links now get a plain "Not found".

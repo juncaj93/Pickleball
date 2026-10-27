@@ -120,3 +120,19 @@ export function audienceLine(who: Audience, count: number): string {
 
 /** Short of 4 or 6: the day-before card leads with "need more players". */
 export const shortOfPlayers = (s: AdminSessionView) => s.confirmedCount !== 4 && s.confirmedCount !== 6;
+
+/**
+ * One person's money right now: what they owe (sessions from the day-before
+ * check-in on, unpaid) and their unused credit. Same rules as "Who owes".
+ */
+export function balanceOf(d: AdminDashboard, playerId: string): { owedCents: number; creditCents: number } {
+  const nowMs = Date.parse(d.now);
+  let owed = 0;
+  for (const s of d.sessions) {
+    if (s.state.flags.canceled || nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
+    for (const r of s.roster) {
+      if (r.playerId === playerId && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) owed += r.shareCents - r.creditCents;
+    }
+  }
+  return { owedCents: Math.max(0, owed), creditCents: d.credits.find((c) => c.playerId === playerId)?.balanceCents ?? 0 };
+}

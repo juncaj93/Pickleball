@@ -737,6 +737,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
             <div className="spread">
               <div>
                 <strong>{r.name}</strong>
+                {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                 <div className="small muted">
                   {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
                   {r.paidAt
@@ -750,9 +751,16 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
             </div>
             <div className="btn-row">
               {r.paymentStatus === 'paid' ? (
-                <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
-                  Mark unpaid
-                </button>
+                <>
+                  {r.selfPaid && (
+                    <button className="btn small" disabled={busy} onClick={() => setPaid(r, true)}>
+                      Mark paid
+                    </button>
+                  )}
+                  <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
+                    Unmark
+                  </button>
+                </>
               ) : (
                 r.status === 'confirmed' &&
                 !s.state.flags.canceled && (

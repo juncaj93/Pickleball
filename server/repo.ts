@@ -87,6 +87,8 @@ export interface RosterRow {
   attendance_confirmed_at: string | null;
   payment_status: PaymentStatus;
   paid_at: string | null;
+  /** The player marked it paid themselves ("I paid"). */
+  self_paid_at: string | null;
   payment_amount_cents: number | null;
   promoted_at: string | null;
   promotion_reason: 'made_six' | 'spot_opened' | null;
