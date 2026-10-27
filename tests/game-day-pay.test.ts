@@ -64,7 +64,7 @@ describe('payment waits for game day', () => {
     );
     expect(note).toBe('Pickleball Tue Oct 27, Thu Oct 29 - Devon');
     expect(venmoPayUrl('https://venmo.com/u/club', total, note).url).toBe(
-      'https://venmo.com/club?txn=pay&amount=28.00&note=Pickleball%20Tue%20Oct%2027%2C%20Thu%20Oct%2029%20-%20Devon',
+      'https://venmo.com/?txn=pay&recipients=club&amount=28&note=Pickleball%20Tue%20Oct%2027%2C%20Thu%20Oct%2029%20-%20Devon',
     );
   });
 

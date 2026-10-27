@@ -153,3 +153,18 @@ describe('week dividers', () => {
     expect(weekLabel('2026-11-02T03:30:00Z', now, tz)).toBe('This week'); // Sun, Nov 1, 10:30 PM
   });
 });
+
+describe('later weeks fade gently', () => {
+  it('this week and next week are full strength, then each later week is a step lighter (up to 3)', async () => {
+    const { weekFade } = await import('../shared/time');
+    const tz = 'America/Detroit';
+    const now = Date.parse('2026-10-27T15:00:00Z'); // Tue, Oct 27
+    expect(weekFade('2026-10-20T23:00:00Z', now, tz)).toBe(0); // last week
+    expect(weekFade('2026-10-29T23:00:00Z', now, tz)).toBe(0); // this week
+    expect(weekFade('2026-11-05T23:00:00Z', now, tz)).toBe(0); // next week
+    expect(weekFade('2026-11-10T23:00:00Z', now, tz)).toBe(1);
+    expect(weekFade('2026-11-17T23:00:00Z', now, tz)).toBe(2);
+    expect(weekFade('2026-11-24T23:00:00Z', now, tz)).toBe(3);
+    expect(weekFade('2026-12-29T23:00:00Z', now, tz)).toBe(3);
+  });
+});

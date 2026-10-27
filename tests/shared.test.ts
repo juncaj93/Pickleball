@@ -126,11 +126,15 @@ describe('money', () => {
 
   it('fills the amount into Venmo when it can read the username', () => {
     const pay = venmoPayUrl('https://venmo.com/u/Alex-Smith', 1400, 'Pickleball Tue Oct 27');
-    expect(pay).toEqual({ url: 'https://venmo.com/Alex-Smith?txn=pay&amount=14.00&note=Pickleball%20Tue%20Oct%2027', prefilled: true });
+    expect(pay).toEqual({
+      url: 'https://venmo.com/?txn=pay&recipients=Alex-Smith&amount=14&note=Pickleball%20Tue%20Oct%2027',
+      appUrl: 'venmo://paycharge?txn=pay&recipients=Alex-Smith&amount=14&note=Pickleball%20Tue%20Oct%2027',
+      prefilled: true,
+    });
     expect(venmoPayUrl('https://account.venmo.com/u/alex', 1400, 'x').prefilled).toBe(true);
-    expect(venmoPayUrl('https://venmo.com/alex', 1400, 'x').url).toContain('venmo.com/alex?txn=pay&amount=14.00');
+    expect(venmoPayUrl('https://venmo.com/alex', 1400, 'x').url).toContain('recipients=alex&amount=14&');
     // Anything else: open the saved link and let the page show the amount.
-    expect(venmoPayUrl('https://example.com/pay', 1400, 'x')).toEqual({ url: 'https://example.com/pay', prefilled: false });
+    expect(venmoPayUrl('https://example.com/pay', 1400, 'x')).toEqual({ url: 'https://example.com/pay', appUrl: null, prefilled: false });
     expect(venmoPayUrl(null, 1400, 'x').url).toBeNull();
   });
 });

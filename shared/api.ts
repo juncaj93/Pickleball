@@ -44,6 +44,8 @@ export interface PlayerSessionView {
     paymentStatus: PaymentStatus;
     /** They tapped "I paid" themselves. */
     selfPaid: boolean;
+    /** When this sign-up started. A fresh "I'm in" after "I'm out" gets a new one. */
+    signupAt: string;
     /** One of the last two of six, paying the discounted price. */
     discount: boolean;
     /** One of the first four of six: earns a credit if 6 play. */
@@ -73,6 +75,8 @@ export interface GroupView {
     creditCents: number;
     discount: boolean;
     reminder: boolean;
+    /** When this sign-up started (see `mine.signupAt`). */
+    signupAt: string;
   }[];
   /**
    * What to pay now, for the card at the top of the screen: owed sessions

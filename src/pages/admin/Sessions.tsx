@@ -21,6 +21,7 @@ import {
   formatTimeRange,
   fromLocalInputValue,
   toLocalInputValue,
+  weekFade,
 } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
@@ -68,7 +69,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
     s.courtCostCents !== null ? `${formatCents(s.courtCostCents)} (only you see this)` : null,
   ].filter(Boolean);
   return (
-    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
+    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       {needsCourt && (
         <div className="court-banner" role="group" aria-label="Court">
           <div className="court-status">
@@ -102,7 +103,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                 <span className="nowrap">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
                 {s.extra && <span className="extra-tag">Extra game</span>}
               </span>
-              {live && <OrganizerInOut ctx={ctx} s={s} />}
             </div>
             <div className="card-icons">
               <button
@@ -130,12 +130,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                   <CourtIcon kind="booked" />
                   <span>{court.text}</span>
                 </div>
-                {/* Add to calendar: a round icon right under the gear. */}
-                {live && (
-                  <a className="icon-round cal-btn" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
-                    <CalendarPlusIcon />
-                  </a>
-                )}
               </div>
               {!s.state.flags.past && <div className="court-sub">Cancel by {shortDeadline(s, tz, now)}</div>}
             </div>
@@ -156,6 +150,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
                 .map((r) => r.name)}
               waiting={s.waitlistCount}
               waitingWord={courtWait ? 'on standby' : 'waiting'}
+              after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}
             />
           )}
         </div>
@@ -176,6 +171,13 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               Players
             </button>
             <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Modify court</CourtReserveLink>
+            {/* Once the court is booked, Add to calendar sits here with the other options. */}
+            {court.kind === 'booked' && live && (
+              <a className="btn secondary cal-opt" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+                <CalendarPlusIcon />
+                Add to calendar
+              </a>
+            )}
             <button className="btn danger" disabled={s.state.flags.started || s.courtState === 'not_opened'} onClick={() => ctx.open('cancel', s.id)}>
               {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
             </button>
@@ -201,9 +203,10 @@ function shortDeadline(s: AdminSessionView, tz: string, nowMs: number): string {
 }
 
 /**
- * The organizer playing: a compact "I'm in" in the players row, which turns
- * into "You're in" with a small "Out". Real sign-ups under their name from
- * Settings, with the same rules as everyone.
+ * The organizer playing: a small gray "I'm in" at the right end of the
+ * players row (never a second green button), which turns into "✓ You're in"
+ * with a small "Out". Real sign-ups under their name from Settings, with the
+ * same rules as everyone.
  */
 function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
@@ -218,14 +221,14 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
     });
   if (!mine) {
     return (
-      <button className="btn small me-in" disabled={busy} aria-label={`I'm in for ${day}`} onClick={() => set(true)}>
+      <button className="btn small secondary me-in" disabled={busy} aria-label={`I'm in for ${day}`} onClick={() => set(true)}>
         {busy ? 'Saving…' : "I'm in"}
       </button>
     );
   }
   return (
     <span className="me-state">
-      <span className="me-tag">{mine.status === 'confirmed' ? "You're in" : 'Waitlist'}</span>
+      <span className="me-in-text">{mine.status === 'confirmed' ? "You're in" : 'Waitlist'}</span>
       <button className="link-btn me-out" disabled={busy} aria-label={`Out of ${day}`} onClick={() => set(false)}>
         Out
       </button>

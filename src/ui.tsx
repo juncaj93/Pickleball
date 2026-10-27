@@ -529,7 +529,55 @@ export function SpotPills({ names, me }: { names: string[]; me?: string | null }
   );
 }
 
-/** "3 of 4 in" plus any waitlist and a short note, then a pill per spot with names. */
+/**
+ * The player card's who's in: a dot per spot (filled once taken, green for
+ * you) and the names as one line of small plain text, cut to "+2" when long.
+ */
+export function SpotDots({ names, me }: { names: string[]; me?: string | null }) {
+  const slots = playerSlots(names.length);
+  return (
+    <span className="dots" role="img" aria-label={`${names.length} of ${slots} spots taken`}>
+      {Array.from({ length: slots }, (_, i) => (
+        <span key={i} className={`dot${i < names.length ? (names[i] === me ? ' me' : ' in') : ''}`} />
+      ))}
+    </span>
+  );
+}
+
+/** About 20 letters of names (or `budget`), then "+N". */
+export function shortNames(names: string[], budget = 20): { shown: string[]; more: number } {
+  const shown: string[] = [];
+  let used = 0;
+  for (const n of names) {
+    if (shown.length > 0 && used + n.length > budget) break;
+    shown.push(n);
+    used += n.length + 2;
+  }
+  return { shown, more: names.length - shown.length };
+}
+
+export function NamesLine({ names, me, budget }: { names: string[]; me?: string | null; budget?: number }) {
+  if (names.length === 0) return null;
+  // Your own name first, so it never hides behind "+1".
+  const order = me && names.includes(me) ? [me, ...names.filter((n) => n !== me)] : names;
+  const { shown, more } = shortNames(order, budget);
+  return (
+    <>
+      <span className="names-line" title={names.join(', ')}>
+        {shown.map((n, i) => (
+          <span key={n + i}>
+            {i > 0 && ', '}
+            {n === me ? <strong>{n}</strong> : n}
+          </span>
+        ))}
+      </span>
+      {/* "+2" never gets cut off with the names. */}
+      {more > 0 && <span className="names-more">+{more}</span>}
+    </>
+  );
+}
+
+/** "3 of 4 in", a dot per spot and the names (as on the player cards), plus any waitlist and a short note. */
 export function PlayersLine({
   names,
   waiting,
@@ -547,17 +595,21 @@ export function PlayersLine({
   after?: ReactNode;
 }) {
   return (
-    <div className="players players-line">
+    <div className={`players players-line${after ? ' has-after' : ''}`}>
       <span className="players-count">
         {names.length} of {playerSlots(names.length)} in
       </span>
-      <SpotPills names={names} />
-      {waiting > 0 && (
-        <span className="players-wait">
-          · {waiting} {waitingWord}
-        </span>
-      )}
-      {extra && <span className="players-wait">· {extra}</span>}
+      {/* Dots and names in their own column, cut short with "+2", so the button at the end stays on the line. */}
+      <span className="players-mid">
+        <SpotDots names={names} />
+        <NamesLine names={names} budget={after ? 11 : 20} />
+        {waiting > 0 && (
+          <span className="players-wait">
+            · {waiting} {waitingWord}
+          </span>
+        )}
+        {extra && <span className="players-wait">· {extra}</span>}
+      </span>
       {after && <span className="players-after">{after}</span>}
     </div>
   );

@@ -4,7 +4,6 @@ import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../..
 import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
 import { AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
-import { HomeScreenSteps } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
 
 type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
@@ -343,10 +342,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       </div>
 
       <div className="card set-list">
-        <Section id="a2hs" title="Add to Home Screen" sections={sections}>
-          <p className="set-hint">On iPhone, in Safari:</p>
-          <HomeScreenSteps />
-        </Section>
         <Section id="pin" title="Change PIN" sections={sections}>
           <form className="stack" onSubmit={changePin}>
             <label className="field">

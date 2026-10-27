@@ -2,10 +2,10 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
-import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekLabel, weekStart } from '../../shared/time';
+import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad, copyText } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
-import { ConfirmDialog, CourtIcon, Empty, SpotPills, ErrorState, Notice, Spinner, useToast } from '../ui';
+import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 
@@ -176,10 +176,12 @@ export function PlayerHome({
                 {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
               </button>
             )}
-            {!viewAs && <HomeScreenTip />}
+            {/* The end of the page: just a thin line and a little space. */}
+            <div className="page-end" aria-hidden="true" />
           </>
         )}
-        {plain && !viewAs && <OrganizerLink />}
+        {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
+        {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
     </>
   );
@@ -343,57 +345,42 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
 }
 
 /**
- * A small tip at the very end of the page, shown once per phone and never
- * inside the Home Screen app itself.
+ * "I tapped Pay" for these sign-ups, remembered on this phone only. It never
+ * marks anyone paid; it only brings out the quiet "I paid" button. Keyed by
+ * the sign-up time, so "I'm out" then "I'm in" again starts fresh.
  */
-function HomeScreenTip() {
-  const [show, setShow] = useState(() => {
-    const standalone =
-      window.matchMedia?.('(display-mode: standalone)').matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    return !standalone && !storageGet('pb_seen_a2hs');
-  });
-  if (!show) return null;
-  return (
-    <div className="footer-tip" role="note" aria-label="Add to Home Screen">
-      <p>Tip: add Pickleball to your Home Screen. Tap Share, then Add to Home Screen, then Add.</p>
-      <button
-        className="icon-btn"
-        aria-label="Dismiss"
-        onClick={() => {
-          storageSet('pb_seen_a2hs', '1');
-          setShow(false);
-        }}
-      >
-        ✕
-      </button>
-    </div>
-  );
-}
-
-export function HomeScreenSteps() {
-  return (
-    <ol className="steps small">
-      <li>Tap the Share button.</li>
-      <li>Tap Add to Home Screen.</li>
-      <li>Tap Add.</li>
-    </ol>
-  );
-}
-
-/**
- * "I tapped Pay with Venmo" for these sessions, remembered on this phone only.
- * It never marks anyone paid; the "I paid" button that follows does.
- */
-function useSent(playerId: string | undefined, sessionIds: string[]) {
-  const keys = sessionIds.map((id) => `pb_sent_${playerId}_${id}`);
-  const [sent, setSent] = useState(() => keys.length > 0 && keys.every((k) => storageGet(k) === '1'));
+function useSent(playerId: string | undefined, signups: { sessionId: string; signupAt: string }[]) {
+  const keys = signups.map((x) => `pb_sent_${playerId}_${x.sessionId}_${x.signupAt}`);
+  const [, bump] = useState(0);
   return {
-    sent,
+    sent: keys.length > 0 && keys.every((k) => storageGet(k) === '1'),
     markSent: () => {
       for (const k of keys) storageSet(k, '1');
-      setSent(true);
+      bump((n) => n + 1);
     },
   };
+}
+
+const PHONE = /iPhone|iPad|iPod|Android/i;
+
+/**
+ * Pay: on a phone, open the Venmo app link first, and the web link if the
+ * app didn't open within a moment. Elsewhere the web link opens in a new tab.
+ */
+function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: string | null; appUrl: string | null }) {
+  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+  e.preventDefault();
+  const web = pay.url;
+  let left = false;
+  const onHide = () => {
+    if (document.hidden) left = true;
+  };
+  document.addEventListener('visibilitychange', onHide);
+  window.setTimeout(() => {
+    document.removeEventListener('visibilitychange', onHide);
+    if (!left && !document.hidden) window.location.href = web;
+  }, 1500);
+  window.location.href = pay.appUrl;
 }
 
 /** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */
@@ -434,7 +421,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
-  const { sent, markSent } = useSent(g.me?.id, due.map((o) => o.sessionId));
+  const { sent, markSent } = useSent(g.me?.id, due);
   const paid = usePaid(due.map((o) => o.sessionId), onChanged);
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
@@ -462,28 +449,33 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
           </p>
         )
       )}
-      {!pay.url || sent ? (
+      {/* Pay always stays; "I paid" joins it, quiet, once they've tapped Pay. */}
+      {pay.url ? (
         <>
-          <button className="btn block big" disabled={paid.busy} onClick={() => paid.set(true)}>
-            {paid.busy ? 'Saving…' : 'I paid'}
-          </button>
-          {pay.url && (
-            <a className="link-btn inline small" href={pay.url} target="_blank" rel="noopener noreferrer">
-              Open Venmo again
-            </a>
+          <a
+            className="btn block big"
+            href={pay.url}
+            data-app-href={pay.appUrl ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Pay ${formatPrice(total)} with Venmo`}
+            onClick={(e) => {
+              markSent();
+              openVenmo(e, pay);
+            }}
+          >
+            Pay with Venmo
+          </a>
+          {sent && (
+            <button className="btn block secondary" disabled={paid.busy} onClick={() => paid.set(true)}>
+              {paid.busy ? 'Saving…' : 'I paid'}
+            </button>
           )}
         </>
       ) : (
-        <a
-          className="btn block big"
-          href={pay.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={`Pay ${formatPrice(total)} with Venmo`}
-          onClick={markSent}
-        >
-          Pay with Venmo
-        </a>
+        <button className="btn block big" disabled={paid.busy} onClick={() => paid.set(true)}>
+          {paid.busy ? 'Saving…' : 'I paid'}
+        </button>
       )}
       {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
@@ -571,15 +563,26 @@ export function HolidayPill({ name, venueNote, confirmed }: { name: string; venu
 
 const TILE_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
-/** "TUE / 3 / NOV" tile for the left of a schedule row. */
-export function DateTile({ iso, tz }: { iso: string; tz: string }) {
+/**
+ * "TUE / 3 / NOV" tile for the left of a schedule row, like a paper
+ * calendar: red weekday, big dark day, small gray month. `mine` adds a small
+ * green check in the corner (you're in).
+ */
+export function DateTile({ iso, tz, mine }: { iso: string; tz: string; mine?: boolean }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   return (
-    <div className="tile" aria-hidden="true">
+    <div className={`tile${mine ? ' mine' : ''}`} aria-hidden="true">
       <span className="dow">{TILE_DOW[p.weekday]}</span>
       <span className="day">{p.day}</span>
       <span className="mon">{month}</span>
+      {mine && (
+        <span className="tile-check">
+          <svg viewBox="0 0 12 12" aria-hidden="true">
+            <path d="m3.2 6.2 1.9 1.9 3.8-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </span>
+      )}
     </div>
   );
 }
@@ -600,19 +603,16 @@ function RowPay({
   g,
   s,
   onTop,
-  quiet,
   onChanged,
 }: {
   g: GroupView;
   s: PlayerSessionView;
   onTop: boolean;
-  /** Another green button is on this card: Pay and I paid use the gray style. */
-  quiet?: boolean;
   onChanged: () => Promise<void>;
 }) {
   const mine = s.mine!;
-  const btn = `btn small pay-small${quiet ? ' secondary' : ''}`;
-  const { sent, markSent } = useSent(g.me?.id, [s.id]);
+  const btn = 'btn small pay-small';
+  const { sent, markSent } = useSent(g.me?.id, [{ sessionId: s.id, signupAt: mine.signupAt }]);
   const paid = usePaid([s.id], onChanged);
   if (mine.paymentStatus === 'paid') {
     return (
@@ -628,26 +628,38 @@ function RowPay({
     );
   }
   if (onTop || mine.oweCents <= 0) return <span />;
-  if (sent || !g.group.venmoUrl) {
+  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
+  // No usable Venmo link: "I paid" is the only thing to tap.
+  if (!pay.url) {
     return (
       <button className={btn} disabled={paid.busy} onClick={() => paid.set(true)}>
         I paid
       </button>
     );
   }
-  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
-  if (!pay.url) return <span />;
+  // Pay always stays while they owe; a quiet "I paid" joins it once they've tapped Pay.
   return (
-    <a
-      className={btn}
-      href={pay.url}
-      target="_blank"
-      rel="noopener noreferrer"
-      aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
-      onClick={markSent}
-    >
-      Pay {formatPrice(mine.oweCents)}
-    </a>
+    <span className="pay-pair">
+      <a
+        className={btn}
+        href={pay.url}
+        data-app-href={pay.appUrl ?? undefined}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
+        onClick={(e) => {
+          markSent();
+          openVenmo(e, pay);
+        }}
+      >
+        Pay {formatPrice(mine.oweCents)}
+      </a>
+      {sent && (
+        <button className="btn small secondary pay-small" disabled={paid.busy} onClick={() => paid.set(true)}>
+          I paid
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -699,22 +711,41 @@ function ScheduleRow({
   const court = courtStatus(s, tz);
   const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
 
+  const names = s.confirmed.map((p) => p.name);
+  const onTop = g.payDue.some((o) => o.sessionId === s.id);
+  // Row 4 holds Pay (or Paid) and the calendar icon. With nothing to pay
+  // there, the calendar icon sits at the end of the who's in row instead, so
+  // the card stays short.
+  const payShows = inSession && !s.canceled && (mine.paymentStatus === 'paid' || (!onTop && mine.oweCents > 0));
+  const rowFour = payShows;
+  const calLink = inSession && open && (
+    <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+      <CalendarPlusIcon />
+    </a>
+  );
+  const showCount = !s.canceled && (s.confirmed.length > 0 || !courtWait);
+  const fade = weekFade(s.startsAt, Date.parse(g.now), tz);
+
   return (
-    <article id={`row-${s.id}`} className={`sched${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`} aria-labelledby={`s-${s.id}`}>
-      <DateTile iso={s.startsAt} tz={tz} />
+    <article
+      id={`row-${s.id}`}
+      className={`sched${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
+      data-fade={fade || undefined}
+      data-mine={inSession && !s.canceled ? 'in' : undefined}
+      data-holiday={s.holiday || s.extra ? 'yes' : undefined}
+      aria-labelledby={`s-${s.id}`}
+    >
+      <DateTile iso={s.startsAt} tz={tz} mine={inSession && !s.canceled} />
       <div className="sched-body">
         <h2 id={`s-${s.id}`} className="sr-only">
           {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}
+          {inSession && !s.canceled ? ". You're in" : ''}
         </h2>
+        {/* Row 1: the time. */}
         <div className="sched-head">
-          <div className="sched-when">
-            <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
-            {s.extra && <span className="extra-tag">Extra game</span>}
-            {inSession && !s.canceled && <span className="me-tag">You're in</span>}
-            {waiting && !s.canceled && <span className="me-tag outline">{courtWait ? 'Standby' : 'Waitlist'} #{mine.waitlistPosition}</span>}
-          </div>
+          <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
         </div>
-        {/* The one button, in its own column beside the first lines. Sign-up never depends on the court being booked. */}
+        {/* The one button, in its own column beside rows 1 and 2. Sign-up never depends on the court being booked. */}
         {open && (
           <div className="sched-act">
             {inSession || waiting ? (
@@ -728,22 +759,28 @@ function ScheduleRow({
             )}
           </div>
         )}
+        {/* Row 2: court status, with a holiday or "Extra game" as small colored words on the same line. */}
         <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
           <span className="court-status">
             <CourtIcon kind={court.kind} />
             <span>{court.playerText}</span>
           </span>
-          {s.holiday && <HolidayPill name={s.holiday} />}
+          {s.holiday && <span className="holiday-text">{s.holiday}</span>}
+          {s.extra && <span className="holiday-text extra-text">Extra game</span>}
         </div>
-        {!s.canceled && (s.confirmed.length > 0 || !courtWait) && (
+        {/* Row 3: "2 of 4 in", a dot per spot, and the names in plain text. */}
+        {showCount && (
           <div className="in-line">
             <span className="in-count">{countLine(s)}</span>
-            <SpotPills names={s.confirmed.map((p) => p.name)} me={g.me?.name} />
+            <SpotDots names={names} me={g.me?.name} />
+            <NamesLine names={names} me={g.me?.name} />
+            {!rowFour && calLink}
           </div>
         )}
-        {!s.canceled && s.waitlist.length > 0 && (
+        {!s.canceled && (s.waitlist.length > 0 || waiting) && (
           <p className="waitlist-line">
             {courtWait ? 'Standby' : 'Waitlist'}: {s.waitlist.map((w) => w.name).join(', ')}
+            {waiting && <strong> · you're #{mine.waitlistPosition}</strong>}
           </p>
         )}
 
@@ -753,26 +790,23 @@ function ScheduleRow({
           <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
         )}
 
+        {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
+
+        {/* The day-before check-in, only while it's asked: a quiet button, so Pay stays the one green one. */}
         {askCheckIn && (
           <div className="confirm-row">
             <span className="small">Still coming?</span>
-            <button className="btn small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
+            <button className="btn small secondary pay-small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
               Yes, I'm coming
             </button>
           </div>
         )}
 
-        {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
-
-        {inSession && !s.canceled && (
+        {/* Row 4, only when needed: Pay (the card's one green button) and the calendar icon. */}
+        {rowFour && (
           <div className="row-foot">
-            {/* "Yes, I'm coming" is the card's green button while it shows, so Pay goes quiet. */}
-            <RowPay g={g} s={s} quiet={askCheckIn} onTop={g.payDue.some((o) => o.sessionId === s.id)} onChanged={onChanged} />
-            {open && (
-              <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
-                Add to calendar
-              </a>
-            )}
+            <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} />
+            {calLink}
           </div>
         )}
       </div>
