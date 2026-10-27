@@ -3104,7 +3104,7 @@ async function main() {
       await pl.locator('.schedule article').first().waitFor();
       const more2 = pl.getByRole('button', { name: /^More sessions/ });
       if (await more2.count()) await more2.click();
-      const prow = pl.locator('.schedule article').filter({ has: pl.locator('.extra-tag', { hasText: 'Extra game' }) });
+      const prow = pl.locator('.schedule article').filter({ has: pl.locator('.sched-status .extra-text', { hasText: 'Extra game' }) });
       await prow.waitFor();
       await prow.getByText('Court 3').waitFor();
       assert((await prow.getByRole('button', { name: "I'm in" }).count()) === 1, 'players can sign up for it');
@@ -3264,6 +3264,13 @@ async function main() {
         await pl.locator('.schedule article').first().waitFor();
         const more = pl.getByRole('button', { name: /^More sessions/ });
         if (await more.count()) await more.click();
+        // Sign up for a plain later session (no holiday), so there's a calm signed-in card to measure.
+        const joinable = pl.locator('.schedule article:not([data-holiday]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I'm in" }) });
+        const joinId = await joinable.nth(Math.min(2, (await joinable.count()) - 1)).getAttribute('id');
+        const joined = pl.locator(`#${joinId}`);
+        await joined.getByRole('button', { name: "I'm in" }).click();
+        await joined.locator('.tile-check').waitFor();
+        await pl.locator('.pop, .toast').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
         const d = await pl.evaluate(designReport);
         assert(d.problems.length === 0, `player: ${d.problems.slice(0, 4).join(' | ')}`);
         assert(d.levels.includes(0) && d.levels.length >= 2, `expected full-strength and lighter weeks, saw fade levels ${d.levels}`);
@@ -3300,6 +3307,9 @@ async function main() {
         assert(lp.problems.length === 0, `player cards: ${lp.problems.slice(0, 3).join(' | ')}`);
         assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player page scrolls sideways');
         await pl.screenshot({ path: path.join(SHOTS, `design-player-${width}-${scheme}.png`), fullPage: true });
+        await joined.getByRole('button', { name: "I'm out" }).click();
+        await pl.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+        await joined.getByRole('button', { name: "I'm in" }).waitFor();
         await pl.close();
 
         // The organizer: tiles, fade, one green button, no calendar icon under the gear.

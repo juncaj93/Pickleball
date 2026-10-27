@@ -766,7 +766,7 @@ function ScheduleRow({
             <span>{court.playerText}</span>
           </span>
           {s.holiday && <span className="holiday-text">{s.holiday}</span>}
-          {s.extra && <span className="holiday-text">Extra game</span>}
+          {s.extra && <span className="holiday-text extra-text">Extra game</span>}
         </div>
         {/* Row 3: "2 of 4 in", a dot per spot, and the names in plain text. */}
         {showCount && (

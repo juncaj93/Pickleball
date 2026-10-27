@@ -1943,6 +1943,13 @@ dialog.sheet::backdrop {
   font-size: 0.8rem;
   color: var(--ink-2);
 }
+.names-more {
+  flex: none;
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--ink-2);
+  margin-left: -2px;
+}
 .names-line strong {
   color: var(--ink);
   font-weight: 650;

@@ -544,32 +544,34 @@ export function SpotDots({ names, me }: { names: string[]; me?: string | null })
   );
 }
 
-/** About 20 letters of names, then "+N". */
-const NAME_BUDGET = 20;
-export function shortNames(names: string[]): { shown: string[]; more: number } {
+/** About 20 letters of names (or `budget`), then "+N". */
+export function shortNames(names: string[], budget = 20): { shown: string[]; more: number } {
   const shown: string[] = [];
   let used = 0;
   for (const n of names) {
-    if (shown.length > 0 && used + n.length > NAME_BUDGET) break;
+    if (shown.length > 0 && used + n.length > budget) break;
     shown.push(n);
     used += n.length + 2;
   }
   return { shown, more: names.length - shown.length };
 }
 
-export function NamesLine({ names, me }: { names: string[]; me?: string | null }) {
+export function NamesLine({ names, me, budget }: { names: string[]; me?: string | null; budget?: number }) {
   if (names.length === 0) return null;
-  const { shown, more } = shortNames(names);
+  const { shown, more } = shortNames(names, budget);
   return (
-    <span className="names-line" title={names.join(', ')}>
-      {shown.map((n, i) => (
-        <span key={n + i}>
-          {i > 0 && ', '}
-          {n === me ? <strong>{n}</strong> : n}
-        </span>
-      ))}
-      {more > 0 && <span className="names-more"> +{more}</span>}
-    </span>
+    <>
+      <span className="names-line" title={names.join(', ')}>
+        {shown.map((n, i) => (
+          <span key={n + i}>
+            {i > 0 && ', '}
+            {n === me ? <strong>{n}</strong> : n}
+          </span>
+        ))}
+      </span>
+      {/* "+2" never gets cut off with the names. */}
+      {more > 0 && <span className="names-more">+{more}</span>}
+    </>
   );
 }
 
@@ -598,7 +600,7 @@ export function PlayersLine({
       {/* Dots and names in their own column, cut short with "+2", so the button at the end stays on the line. */}
       <span className="players-mid">
         <SpotDots names={names} />
-        <NamesLine names={names} />
+        <NamesLine names={names} budget={after ? 11 : 20} />
         {waiting > 0 && (
           <span className="players-wait">
             · {waiting} {waitingWord}
