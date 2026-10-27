@@ -3,7 +3,7 @@
 A private, phone-friendly website for a group that plays every **Tuesday and
 Thursday, 8:00–10:00 PM Eastern** on one court. It handles sign-ups (exactly
 4 or 6 players), the waitlist, court booking notes, cancellation deadlines,
-substitutes, payments, and refunds. It drafts text messages for the organizer,
+substitutes, payments, and credits. It drafts text messages for the organizer,
 but **it never sends a text by itself**.
 
 ## What each person sees
@@ -28,7 +28,9 @@ short "Needs attention" list:
   Reschedule / Cancel / Keep as is
 - "5 going, need 4 or 6" with the choices
 - "Tell them they're in": a text draft for each person moved off the waitlist
-- "6 going. Everyone paid $14. Refund $5 each" with a Refunded checkbox per person
+- "Was 6, now 5: discount and credits are off" when a session drops below 6
+  after the discount was shown, listing anything to sort out by hand
+- each person's credit balance, with **Clear credit**
 - who owes you, with one-tap **Mark paid**
 - check-in texts that are due
 
@@ -54,11 +56,46 @@ The status says "Draft ready" or "Composer opened", never "Sent".
 
 ## How money works
 
-Everyone confirmed pays a flat **$14** per session, whether 4 or 6 play.
-Waitlisted people owe nothing until they're confirmed. When 6 play, the
-organizer refunds **$5** to each person (both amounts are in Settings). A
-player only sees a soft "may not have marked this paid yet" note once the
-session ended more than 24 hours ago.
+Everyone confirmed pays a flat **$14** per session. Waitlisted people owe
+nothing until they're confirmed.
+
+When exactly 6 are confirmed:
+
+- the two who moved in when the 6th joined owe **$9** ("6-person discount")
+- the first four see "6 are playing. You'll get a $5 credit toward your next
+  session."
+- after the session ends with 6, each of the first four gets a **$5 credit**,
+  and their next session shows "You owe $9 (includes your $5 credit)"
+
+If the count drops below 6, everyone is back to $14 and no credits are
+issued; the organizer gets a card to sort out anything already paid by hand.
+Settings has "Price per player" and "Credit per person when 6 play" ($5).
+The organizer's **court cost** is a private record on the booking form: it is
+never on a player screen, in a text, or in the export. A player only sees a
+soft "may not have marked this paid yet" note once the session ended more
+than 24 hours ago.
+
+## Holidays and the first session date
+
+Sessions on New Year's Day, Memorial Day, July 4, Labor Day, Election Day,
+the day before Thanksgiving, Thanksgiving, Christmas Eve, Christmas Day, and
+New Year's Eve get a holiday pill (plus "check venue hours" for the
+organizer). The list is built in; no outside service. Settings > "First
+session" hides and stops creating any session before that date.
+
+## Players adding themselves
+
+"Who are you?" has **Add my name**. If the name looks like someone already
+listed, it asks "Is this you?" first. New names get a "New" tag on the
+Players screen. Removing a name deletes it if the person never signed up or
+paid; otherwise it's hidden so old records stay correct.
+
+## Home Screen app
+
+Settings shows the 3 iPhone steps (Share > Add to Home Screen > Add), and
+players see them once. The icon opens the site full screen. To use the club
+logo, replace `public/apple-touch-icon.png` (180x180) and
+`public/icon-512.png` (512x512) and redeploy.
 
 ## Day-before check-in and deadlines
 
@@ -190,15 +227,19 @@ production.
 ## Tests
 
 ```bash
-npm test               # 89 server and logic tests
-npm run test:e2e       # 51 browser checks (needs Playwright + Chromium)
+npm test               # 111 server and logic tests
+npm run test:e2e       # 63 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
 The tests cover Tue/Thu generation across both daylight-saving changes,
 duplicate prevention, the 4-then-waitlist-then-6 flow (including promotion
 when someone drops from 4, the "5 going" warning, and everyone tapping at
-once), the 7-player database cap, the flat $14 and the $5 refund when 6 play,
+once), the 7-player database cap, the flat $14, the $9 discount and $5
+credits when 6 play (including drops below 6), the first session date,
+holidays (Thanksgiving and Election Day 2026), the group poll text, the court
+cost never reaching players, add-your-name with the duplicate check, delete
+vs hide, the roster,
 the unpaid reminder only after 24 hours, the 24-hour check-in and 12-hour
 deadline, rescheduling, the remembered name, usual-day suggestions, View as,
 the calendar file, expired and reused links, admin lockout, input validation,

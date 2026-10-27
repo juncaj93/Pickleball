@@ -135,67 +135,7 @@ describe('one court: exactly 4 or 6', () => {
   });
 });
 
-describe('flat price and refunds', () => {
-  it('charges each confirmed player a flat $14, whether 4 or 6 play', async () => {
-    const ctx = await setupGroup();
-    const s = await firstSession(ctx);
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']) await join(ctx, name, s.id);
-    let x = await adminSession(ctx, s.id);
-    expect(x.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.shareCents)).toEqual([1400, 1400, 1400, 1400]);
-    // Waitlisted people don't owe anything.
-    expect(x.roster.find((r: any) => r.name === 'Emery').shareCents).toBeNull();
-    const emery = (await (await playerPhone(ctx, 'Emery')).call('GET', '/api/group')).data;
-    expect(emery.owed).toEqual([]);
-
-    await join(ctx, 'Frankie', s.id);
-    x = await adminSession(ctx, s.id);
-    expect(x.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.shareCents)).toEqual(Array(6).fill(1400));
-    expect(x.payableCount).toBe(6);
-  });
-
-  it('shows a $5 refund for each person when 6 play, with a Refunded checkbox', async () => {
-    const ctx = await setupGroup();
-    const s = await firstSession(ctx);
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) await join(ctx, name, s.id);
-    expect((await adminSession(ctx, s.id)).refunds).toEqual([]);
-    for (const name of ['Emery', 'Frankie']) await join(ctx, name, s.id);
-    let x = await adminSession(ctx, s.id);
-    expect(x.refunds).toHaveLength(6);
-    expect(x.refunds.every((r: any) => r.amountCents === 500 && r.reason === 'six' && !r.refunded)).toBe(true);
-
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName.Casey, refunded: true });
-    x = await adminSession(ctx, s.id);
-    expect(x.refunds.filter((r: any) => r.refunded).map((r: any) => r.name)).toEqual(['Casey']);
-
-    const casey = (await (await playerPhone(ctx, 'Casey')).call('GET', '/api/group')).data.sessions.find((v: any) => v.id === s.id);
-    expect(casey.mine).toMatchObject({ shareCents: 1400, refundCents: 500 });
-    expect(casey.sixPlaying).toBe(true);
-  });
-
-  it('uses the price and refund amounts from Settings', async () => {
-    const ctx = await setupGroup();
-    await ctx.organizer.call('PUT', '/api/admin/group', {
-      name: 'Dinks',
-      venmoUrl: null,
-      settings: { pricePerPlayerCents: 1500, refundCentsWhenSix: 600 },
-    });
-    const s = await firstSession(ctx);
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await join(ctx, name, s.id);
-    const x = await adminSession(ctx, s.id);
-    expect(x.roster[0].shareCents).toBe(1500);
-    expect(x.refunds[0].amountCents).toBe(600);
-  });
-
-  it('flags a full refund for someone who paid and then dropped out', async () => {
-    const ctx = await setupGroup();
-    const s = await firstSession(ctx);
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) await join(ctx, name, s.id);
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
-    await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
-    const x = await adminSession(ctx, s.id);
-    expect(x.refunds).toEqual([expect.objectContaining({ name: 'Blair', amountCents: 1400, reason: 'dropped', refunded: false })]);
-  });
-
+describe('flat price', () => {
   it('marks paid for the right player and session only', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);

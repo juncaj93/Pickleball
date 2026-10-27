@@ -21,6 +21,8 @@ export interface PlayerSessionView {
   /** What the big button does for someone not in yet. */
   joinAs: 'in' | 'waitlist';
   sixPlaying: boolean;
+  /** US holiday on this date, e.g. "Thanksgiving". */
+  holiday: string | null;
   confirmationOpen: boolean;
   mine: null | {
     status: RosterStatus;
@@ -28,15 +30,18 @@ export interface PlayerSessionView {
     attendanceConfirmed: boolean;
     /** Moved in from the waitlist: show the "Good news" line. */
     promotion: 'made_six' | 'spot_opened' | null;
+    /** Price for this session before any credit ($14, or $9 with the 6-person discount). */
     shareCents: number | null;
     paymentStatus: PaymentStatus;
-    /** Coming back to them because 6 played. */
-    refundCents: number | null;
+    /** One of the last two of six, paying the discounted price. */
+    discount: boolean;
+    /** One of the first four of six: earns a credit if 6 play. */
+    creditComing: boolean;
   };
 }
 
 export interface GroupView {
-  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number };
+  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; creditCents: number };
   players: { id: string; name: string }[];
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */
@@ -44,9 +49,20 @@ export interface GroupView {
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
-  owed: { sessionId: string; startsAt: string; endsAt: string; amountCents: number; reminder: boolean }[];
+  owed: {
+    sessionId: string;
+    startsAt: string;
+    endsAt: string;
+    /** What they actually owe, after any credit. */
+    amountCents: number;
+    creditCents: number;
+    discount: boolean;
+    reminder: boolean;
+  }[];
+  /** Credit waiting for a future session they haven't signed up for yet. */
+  creditBalanceCents: number;
   /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
-  suggestion: { sessionId: string; startsAt: string; endsAt: string; joinAs: 'in' | 'waitlist' } | null;
+  suggestion: { sessionId: string; startsAt: string; endsAt: string; joinAs: 'in' | 'waitlist'; holiday: string | null } | null;
 }
 
 export interface AdminRosterEntry {
@@ -65,16 +81,10 @@ export interface AdminRosterEntry {
   promotedAt: string | null;
   promotionReason: 'made_six' | 'spot_opened' | null;
   promotionNotifiedAt: string | null;
-  refundedAt: string | null;
-}
-
-export interface RefundDue {
-  playerId: string;
-  name: string;
-  amountCents: number;
-  refunded: boolean;
-  /** `six`: 6 played. `dropped`: paid, then left the session. */
-  reason: 'six' | 'dropped';
+  /** Last two of six. */
+  discount: boolean;
+  /** Credit coming off this seat (planned if unpaid). */
+  creditCents: number;
 }
 
 export interface EligibleSubstitute {
@@ -104,7 +114,11 @@ export interface AdminSessionView {
   waitlistCount: number;
   paidCount: number;
   payableCount: number;
-  refunds: RefundDue[];
+  /** Organizer's private record of the court cost. Never sent to players. */
+  courtCostCents: number | null;
+  holiday: string | null;
+  /** Had 6 (discount shown), now fewer: the organizer should sort out payments by hand. */
+  sixDropped: boolean;
   eligibleSubstitutes: EligibleSubstitute[];
 }
 
@@ -118,6 +132,8 @@ export interface AdminPlayer {
   sortOrder: number;
   /** 2 = Tuesday, 4 = Thursday. */
   usualDays: number[];
+  /** Added their own name and the organizer hasn't reviewed them yet. */
+  isNew: boolean;
 }
 
 export interface AuditEntry {
@@ -137,12 +153,15 @@ export interface AdminDashboard {
     organizerName: string | null;
     venueName: string | null;
     venueAddress: string | null;
+    firstSessionDate: string | null;
     settings: GroupSettings;
     playerLink: string;
   };
   players: AdminPlayer[];
   sessions: AdminSessionView[];
   audit: AuditEntry[];
+  /** Open credit per player (earned, not yet used or cleared). */
+  credits: { playerId: string; name: string; balanceCents: number }[];
   now: string;
 }
 

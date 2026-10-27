@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react';
 import type { AdminPlayer } from '../../../shared/api';
 import { formatPhone } from '../../../shared/messages';
 import { api, ApiError } from '../../lib';
-import { Chip, Notice, Sheet, useToast } from '../../ui';
+import { Chip, ConfirmDialog, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 
 const DAYS = [
@@ -28,6 +28,7 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
           <li key={p.id} className="spread">
             <div>
               <strong>{p.name}</strong>
+              {p.isNew && <span className="new-tag">New</span>}
               <div className="small muted">{p.phone ? formatPhone(p.phone) : 'No phone'}</div>
               <div className="row" style={{ marginTop: 4 }}>
                 <Chip tone={p.isRegular ? 'ok' : 'info'}>{p.isRegular ? 'Regular' : 'Occasional'}</Chip>
@@ -60,6 +61,23 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
   const [isActive, setActive] = useState(player?.isActive ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [askRemove, setAskRemove] = useState(false);
+
+  async function remove() {
+    if (!player) return;
+    setBusy(true);
+    try {
+      const res = await api<{ result: 'deleted' | 'hidden' }>('DELETE', `/api/admin/players/${player.id}`);
+      toast(res.result === 'deleted' ? `${player.name} removed` : `${player.name} hidden (they have history, so records stay)`);
+      await ctx.reload();
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not remove.');
+    } finally {
+      setBusy(false);
+      setAskRemove(false);
+    }
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -87,6 +105,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
   }
 
   return (
+    <>
     <form className="stack" onSubmit={submit}>
       <label className="field">
         Name
@@ -135,6 +154,22 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       <button className="btn" type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save'}
       </button>
+      {player && (
+        <button type="button" className="btn danger" disabled={busy} onClick={() => setAskRemove(true)}>
+          Remove from list
+        </button>
+      )}
     </form>
+      <ConfirmDialog
+        open={askRemove}
+        title={`Remove ${player?.name ?? ''}?`}
+        body="If they never signed up or paid, the name is deleted. If they have any history, it's hidden instead so old sessions and payments stay correct."
+        confirmLabel="Remove"
+        danger
+        busy={busy}
+        onConfirm={remove}
+        onCancel={() => setAskRemove(false)}
+      />
+    </>
   );
 }

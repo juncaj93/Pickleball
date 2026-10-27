@@ -9,17 +9,24 @@ import { HttpError } from './http';
 import {
   audit,
   confirmedOf,
+  creditPlan,
   ensureSessions,
   getPlayers,
   getSession,
   type GroupRow,
+  issueCredits,
+  loadCredits,
   loadRosters,
   loadSessions,
+  openCredits,
+  pricesFor,
   settingsOf,
-  sharesFor,
   usualDaysOf,
+  visibleFrom,
   waitlistOf,
 } from './repo';
+import { holidayFor } from '../shared/holidays';
+import { newId } from './crypto';
 import { confirmAttendance, decline, joinSession, withdraw } from './roster';
 import { playerSessionView } from './views';
 import * as v from './validate';
@@ -60,32 +67,46 @@ async function viewer(ctx: Ctx): Promise<Viewer> {
 export async function groupView(ctx: Ctx): Promise<GroupView> {
   const { group, playerId: meId, viewAsName } = await viewer(ctx);
   await ensureSessions(ctx.db, group, ctx.nowMs);
+  await issueCredits(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
+  const tz = group.timezone;
   const allPlayers = await getPlayers(ctx.db, group.id);
   const players = allPlayers.filter((p) => p.is_active);
   const since = new Date(ctx.nowMs - OWED_LOOKBACK_MS).toISOString();
-  const sessions = await loadSessions(ctx.db, group.id, since);
-  const rosters = await loadRosters(ctx.db, group.id, since);
+  const from = visibleFrom(group);
+  const sessions = await loadSessions(ctx.db, group.id, since, from);
+  const rosters = await loadRosters(ctx.db, group.id, since, from);
+  const credits = await loadCredits(ctx.db, group.id);
+  const plan = creditPlan(sessions, rosters, credits, settings);
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
 
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
+  let creditBalanceCents = 0;
   if (me) {
     for (const s of sessions) {
       if (s.status === 'canceled') continue;
       const roster = rosters.get(s.id) ?? [];
       const mine = roster.find((r) => r.player_id === me.id && r.status === 'confirmed' && r.payment_status === 'unpaid');
-      const share = mine ? sharesFor(s, roster, settings).get(me.id) : undefined;
-      if (share) {
-        owed.push({
-          sessionId: s.id,
-          startsAt: s.starts_at,
-          endsAt: s.ends_at,
-          amountCents: share,
-          reminder: ctx.nowMs >= Date.parse(s.ends_at) + DAY_MS,
-        });
-      }
+      const price = mine ? pricesFor(s, roster, settings).get(me.id) : undefined;
+      if (!price) continue;
+      const credit = plan.get(`${s.id}:${me.id}`)?.cents ?? 0;
+      if (price.cents - credit <= 0) continue;
+      owed.push({
+        sessionId: s.id,
+        startsAt: s.starts_at,
+        endsAt: s.ends_at,
+        amountCents: price.cents - credit,
+        creditCents: credit,
+        discount: price.discount,
+        reminder: ctx.nowMs >= Date.parse(s.ends_at) + DAY_MS,
+      });
     }
+    // Credit not yet matched to a session they've signed up for.
+    const planned = new Set([...plan.values()].flatMap((p) => p.ids));
+    creditBalanceCents = openCredits(credits)
+      .filter((c) => c.playerId === me.id && !planned.has(c.id))
+      .reduce((sum, c) => sum + c.amountCents, 0);
     // Regulars get a nudge for the next usual day they haven't answered.
     const days = usualDaysOf(me);
     if (me.is_regular && days.length > 0) {
@@ -100,6 +121,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
           startsAt: s.starts_at,
           endsAt: s.ends_at,
           joinAs: joinOutcome(confirmedOf(roster).length, waitlistOf(roster).length),
+          holiday: holidayFor(s.starts_at, tz),
         };
         break;
       }
@@ -113,6 +135,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       venmoUrl: group.venmo_url,
       organizerName: group.organizer_name,
       priceCents: settings.pricePerPlayerCents,
+      creditCents: settings.creditCentsWhenSix,
     },
     players: players.map((p) => ({ id: p.id, name: p.display_name })),
     me: me ? { id: me.id, name: me.display_name } : null,
@@ -120,8 +143,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     now: ctx.nowIso,
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
-      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings)),
+      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz)),
     owed,
+    creditBalanceCents,
     suggestion,
   };
 }
@@ -136,6 +160,87 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'That name is not on the list.');
   await rememberPlayer(ctx, group, player.id);
   return { me: { id: player.id, name: player.display_name } };
+}
+
+/** Lowercase letters and single spaces, for comparing names. */
+function nameKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/** Typos between two names: letters added, dropped, changed, or two swapped ("Rayn" vs "Ryan") each count as one. */
+function editDistance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)));
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  }
+  return d[a.length][b.length];
+}
+
+/** "Ryan" vs "Ryan", "ryan s", "Rayn": probably the same person. */
+export function looksLike(typed: string, existing: string): boolean {
+  const a = nameKey(typed);
+  const b = nameKey(existing);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.split(' ')[0] === b.split(' ')[0]) return true;
+  return Math.min(a.length, b.length) >= 4 && editDistance(a, b) <= 1;
+}
+
+/**
+ * "Add my name" on Who are you?. If the name looks like someone already on
+ * the list, the player is asked "Is this you?" first (confirmNew skips that
+ * once they say no). The new name gets a "New" tag for the organizer.
+ */
+export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireGroupKey(ctx);
+  const name = v.playerName(body.name);
+  const all = await getPlayers(ctx.db, group.id);
+  const matches = all.filter((p) => p.is_active && looksLike(name, p.display_name));
+  if (body.confirmNew !== true && matches.length > 0) {
+    return { result: 'looks_like', matches: matches.map((p) => ({ id: p.id, name: p.display_name })) };
+  }
+  if (all.some((p) => nameKey(p.display_name) === nameKey(name))) {
+    throw new HttpError(409, 'name_taken', `Someone already uses "${name}". Add your last initial, like "${name} S."`);
+  }
+  if (all.length >= 30) throw new HttpError(409, 'too_many_players', 'The list is full. Ask the organizer to add you.');
+  const id = newId();
+  try {
+    await ctx.db
+      .prepare(
+        `INSERT INTO players (id, group_id, display_name, is_regular, is_active, sort_order, created_at, self_added_at, is_new)
+         VALUES (?, ?, ?, 0, 1, ?, ?, ?, 1)`,
+      )
+      .bind(id, group.id, name, all.length, ctx.nowIso, ctx.nowIso)
+      .run();
+  } catch (err) {
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) {
+      throw new HttpError(409, 'name_taken', `Someone already uses "${name}". Add your last initial, like "${name} S."`);
+    }
+    throw err;
+  }
+  await rememberPlayer(ctx, group, id);
+  await audit(ctx.db, group.id, null, 'player_self_added', { name }, ctx.nowIso, 'player');
+  return { result: 'added', me: { id, name } };
+}
+
+/** "Any preferred days?" right after adding a name. Only touches the player on this phone. */
+export async function setMyDays(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, playerId } = await viewer(ctx);
+  if (!playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
+  const days = v.usualDays(body.days) ?? '';
+  await ctx.db
+    .prepare(
+      `UPDATE players SET usual_days = ?,
+         is_regular = CASE WHEN is_new = 1 THEN (CASE WHEN ? <> '' THEN 1 ELSE 0 END) ELSE is_regular END
+       WHERE id = ? AND group_id = ?`,
+    )
+    .bind(days, days, playerId, group.id)
+    .run();
+  return { ok: true, usualDays: days };
 }
 
 export async function forgetName(ctx: Ctx) {

@@ -5,9 +5,12 @@ import {
   confirmationMessage,
   deadlineAlertMessage,
   paymentMessage,
+  pollMessage,
   replacementMessage,
 } from '../../../shared/messages';
-import { formatPrice } from '../../../shared/money';
+import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
+import { DEFAULT_VENUE_NAME } from '../../../shared/settings';
+import { HolidayPill } from '../PlayerHome';
 import type { BookingStatus } from '../../../shared/status';
 import {
   formatDateTime,
@@ -21,7 +24,7 @@ import { api, ApiError, useNow } from '../../lib';
 import { Chip, ConfirmDialog, Notice, Sheet, SmsDraft, useToast } from '../../ui';
 import { type AdminCtx, deadlineLine } from '../Admin';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -59,6 +62,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             {formatShortDate(s.startsAt, tz)}
           </h2>
           <div className="card-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</div>
+          {s.holiday && <HolidayPill name={s.holiday} venueNote />}
         </div>
         <Chip tone={s.state.tone}>{s.state.text}</Chip>
       </div>
@@ -72,6 +76,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
         <dd>
           {s.bookingStatus === 'booked' ? 'Booked' : s.bookingStatus === 'unavailable' ? 'Not available' : 'Needs booking'}
           {s.reservationReference ? ` · #${s.reservationReference}` : ''}
+          {s.courtCostCents !== null ? ` · ${formatCents(s.courtCostCents)} (only you see this)` : ''}
         </dd>
         {s.bookingStatus === 'booked' && (
           <>
@@ -100,6 +105,11 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
       {!expanded && (
         <button className="btn small ghost" onClick={() => setExpanded(true)} aria-expanded="false">
           Show actions
+        </button>
+      )}
+      {live && (
+        <button className="btn small block" onClick={() => ctx.open('poll', s.id)}>
+          Text the group poll
         </button>
       )}
       {expanded && <div className="action-strip">
@@ -212,6 +222,7 @@ export function SessionSheets({
     reminders: `Reminders · ${title}`,
     invite: `Invite people · ${title}`,
     reschedule: `Reschedule · ${title}`,
+    poll: `Group poll · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -221,6 +232,16 @@ export function SessionSheets({
       {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}
       {s && kind === 'invite' && <InviteSubs ctx={ctx} s={s} />}
       {s && kind === 'reschedule' && <RescheduleForm ctx={ctx} s={s} onDone={onClose} />}
+      {s && kind === 'poll' && (
+        <div className="stack">
+          <p className="small muted">Opens Messages with no recipient. Pick your group chat there.</p>
+          <SmsDraft
+            to="Group chat"
+            phone={null}
+            body={pollMessage(s, tz, ctx.d.group.venueName || DEFAULT_VENUE_NAME, ctx.d.group.settings.pricePerPlayerCents)}
+          />
+        </div>
+      )}
     </Sheet>
   );
 }
@@ -231,6 +252,8 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
   const tz = ctx.d.group.timezone;
   const [status, setStatus] = useState<BookingStatus>(s.bookingStatus === 'needs_booking' ? 'booked' : s.bookingStatus);
   const [ref, setRef] = useState(s.reservationReference ?? '');
+  const [cost, setCost] = useState(s.courtCostCents !== null ? (s.courtCostCents / 100).toFixed(2) : '');
+  const [costError, setCostError] = useState<string | null>(null);
   const [deadline, setDeadline] = useState(s.cancellationDeadlineAt ? toLocalInputValue(s.cancellationDeadlineAt, tz) : '');
   const { busy, error, run } = useAction(ctx);
   const deadlineIso = deadline ? fromLocalInputValue(deadline, tz) : null;
@@ -238,6 +261,9 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
 
   async function submit(e: FormEvent) {
     e.preventDefault();
+    const cents = cost.trim() === '' ? null : parseDollars(cost);
+    setCostError(cost.trim() !== '' && cents === null ? 'Enter an amount like 48 or 48.50.' : null);
+    if (cost.trim() !== '' && cents === null) return;
     const ok = await run(
       () =>
         api('PUT', `/api/admin/sessions/${s.id}/booking`, {
@@ -245,7 +271,7 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
           venueName: s.venueName,
           venueBookingUrl: s.venueBookingUrl,
           reservationReference: ref || null,
-          courtCostCents: null,
+          courtCostCents: cents,
           cancellationDeadlineAt: deadlineIso,
         }),
       'Booking saved',
@@ -271,6 +297,12 @@ function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; o
       <label className="field">
         Reservation number (optional)
         <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
+      </label>
+      <label className="field">
+        Court cost (optional)
+        <span className="hint">Your own record. Players never see it, and it's never in a text.</span>
+        <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="48.00" aria-invalid={costError ? true : undefined} />
+        {costError && <span className="field-error">{costError}</span>}
       </label>
       <label className="field">
         Cancellation deadline (Eastern time)
@@ -438,7 +470,11 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                 <strong>{r.name}</strong>
                 <div className="small muted">
                   {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
-                  {r.paidAt ? `paid ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}` : `owes ${formatPrice(r.shareCents ?? price)}`}
+                  {r.paidAt
+                    ? `paid ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}`
+                    : `owes ${formatPrice((r.shareCents ?? price) - r.creditCents)}`}
+                  {r.discount ? ' · 6-person discount' : ''}
+                  {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit used` : ''}
                 </div>
               </div>
               <Chip tone={r.paymentStatus === 'paid' ? 'ok' : 'warn'}>{r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}</Chip>
@@ -463,7 +499,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               )}
             </div>
             {draftFor === r.playerId && r.shareCents !== null && (
-              <SmsDraft to={r.name} phone={r.phone} body={paymentMessage(r.name, r.shareCents, s, tz, venmo)} />
+              <SmsDraft to={r.name} phone={r.phone} body={paymentMessage(r.name, r.shareCents - r.creditCents, s, tz, venmo)} />
             )}
           </li>
         ))}

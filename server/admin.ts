@@ -22,6 +22,11 @@ import {
   settingsOf,
   sharesFor,
   waitlistOf,
+  creditPlan,
+  issueCredits,
+  loadCredits,
+  openCredits,
+  visibleFrom,
 } from './repo';
 import { confirmAttendance, joinSession, moveToWaitlist, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
@@ -45,11 +50,18 @@ export async function logout(ctx: Ctx) {
 export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const group = await requireAdmin(ctx);
   await ensureSessions(ctx.db, group, ctx.nowMs);
+  await issueCredits(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
-  const since = new Date(ctx.nowMs - HISTORY_MS).toISOString();
   const players = await getPlayers(ctx.db, group.id);
-  const sessions = await loadSessions(ctx.db, group.id, since);
-  const rosters = await loadRosters(ctx.db, group.id, since);
+  const { sessions, rosters, credits, plan } = await moneyPicture(ctx, group);
+  const usedOn = (sessionId: string, playerId: string) =>
+    credits.filter((c) => c.used_session_id === sessionId && c.player_id === playerId).reduce((sum, c) => sum + c.amount_cents, 0);
+  const creditFor = (s: { id: string }, roster: { player_id: string; payment_status: string }[]) => (playerId: string) => {
+    const row = roster.find((r) => r.player_id === playerId);
+    return row?.payment_status === 'paid' ? usedOn(s.id, playerId) : (plan.get(`${s.id}:${playerId}`)?.cents ?? 0);
+  };
+  const balances = new Map<string, number>();
+  for (const c of openCredits(credits)) balances.set(c.playerId, (balances.get(c.playerId) ?? 0) + c.amountCents);
   const { results: auditRows } = await ctx.db
     .prepare('SELECT * FROM admin_audit_log WHERE group_id = ? ORDER BY created_at DESC LIMIT 60')
     .bind(group.id)
@@ -70,14 +82,33 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       organizerName: group.organizer_name,
       venueName: group.venue_name,
       venueAddress: group.venue_address,
+      firstSessionDate: group.first_session_date,
       settings,
       playerLink: `${ctx.url.origin}/g/${group.group_key}`,
     },
     players: players.map(adminPlayerView),
-    sessions: sessions.map((s) => adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings)),
+    sessions: sessions.map((s) => {
+      const roster = rosters.get(s.id) ?? [];
+      return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster));
+    }),
     audit: auditEntries,
+    credits: [...balances]
+      .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     now: ctx.nowIso,
   };
+}
+
+/** Visible sessions from the last 90 days on, their rosters, all credits, and where open credits will land. */
+async function moneyPicture(ctx: Ctx, group: GroupRow) {
+  // Credits from sessions that just ended exist before anything is paid or cleared.
+  await issueCredits(ctx.db, group, ctx.nowMs);
+  const since = new Date(ctx.nowMs - HISTORY_MS).toISOString();
+  const from = visibleFrom(group);
+  const sessions = await loadSessions(ctx.db, group.id, since, from);
+  const rosters = await loadRosters(ctx.db, group.id, since, from);
+  const credits = await loadCredits(ctx.db, group.id);
+  return { sessions, rosters, credits, plan: creditPlan(sessions, rosters, credits, settingsOf(group)) };
 }
 
 function safeParse(s: string): Record<string, unknown> {
@@ -244,28 +275,40 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   if (paid) {
     if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
     if (row.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
-    const share = sharesFor(session, roster, settingsOf(group)).get(playerId);
-    if (share === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
+    const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
+    if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
     if (row.payment_status === 'paid') return { ok: true, changed: false };
-    await ctx.db
-      .prepare(
-        `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?,
-           payment_updated_at = ?, updated_at = ?
-         WHERE session_id = ? AND player_id = ?`,
-      )
-      .bind(ctx.nowIso, share, ctx.nowIso, ctx.nowIso, session.id, playerId)
-      .run();
-    await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, amountCents: share }, ctx.nowIso);
+    // Any credit planned for this seat is used up now.
+    const credit = (await moneyPicture(ctx, group)).plan.get(`${session.id}:${playerId}`) ?? { cents: 0, ids: [] };
+    const share = price - credit.cents;
+    await ctx.db.batch([
+      ctx.db
+        .prepare(
+          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?,
+             payment_updated_at = ?, updated_at = ?
+           WHERE session_id = ? AND player_id = ?`,
+        )
+        .bind(ctx.nowIso, share, ctx.nowIso, ctx.nowIso, session.id, playerId),
+      ...credit.ids.map((id) =>
+        ctx.db
+          .prepare('UPDATE credits SET used_session_id = ?, used_at = ? WHERE id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
+          .bind(session.id, ctx.nowIso, id),
+      ),
+    ]);
+    await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, amountCents: share, creditCents: credit.cents }, ctx.nowIso);
   } else {
     if (row.payment_status !== 'paid') return { ok: true, changed: false };
-    await ctx.db
-      .prepare(
-        `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
-           paid_at = NULL, payment_amount_cents = NULL, payment_updated_at = ?, updated_at = ?
-         WHERE session_id = ? AND player_id = ?`,
-      )
-      .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
-      .run();
+    await ctx.db.batch([
+      ctx.db
+        .prepare(
+          `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
+             paid_at = NULL, payment_amount_cents = NULL, payment_updated_at = ?, updated_at = ?
+           WHERE session_id = ? AND player_id = ?`,
+        )
+        .bind(ctx.nowIso, ctx.nowIso, session.id, playerId),
+      // Credits used on this payment go back to the player.
+      ctx.db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE used_session_id = ? AND player_id = ?').bind(session.id, playerId),
+    ]);
     await audit(
       ctx.db,
       group.id,
@@ -278,20 +321,60 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true, changed: true };
 }
 
-/** The organizer's "Refunded" checkbox for one player in one session. */
-export async function setRefund(ctx: Ctx, body: Record<string, unknown>) {
+/** Dismiss the "had 6, now fewer" card once payments are sorted out by hand. */
+export async function sixSorted(ctx: Ctx) {
   const { group, session } = await adminSession(ctx);
-  const playerId = v.id(body.playerId, 'playerId');
-  const refunded = v.bool(body.refunded, 'refunded');
-  const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
-  if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
-  if (!!row.refunded_at === refunded) return { ok: true, changed: false };
-  await ctx.db
-    .prepare('UPDATE session_players SET refunded_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
-    .bind(refunded ? ctx.nowIso : null, ctx.nowIso, session.id, playerId)
+  await ctx.db.prepare('UPDATE sessions SET six_drop_resolved_at = ?, updated_at = ? WHERE id = ?').bind(ctx.nowIso, ctx.nowIso, session.id).run();
+  await audit(ctx.db, group.id, session.id, 'six_drop_sorted', {}, ctx.nowIso);
+  return { ok: true };
+}
+
+/** "Clear credit": the organizer paid this player back by hand. Clears all of their open credit. */
+export async function clearCredit(ctx: Ctx) {
+  const group = await requireAdmin(ctx);
+  const playerId = v.id(ctx.params.id, 'player');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>();
+  if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
+  await issueCredits(ctx.db, group, ctx.nowMs);
+  const res = await ctx.db
+    .prepare('UPDATE credits SET cleared_at = ? WHERE player_id = ? AND group_id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
+    .bind(ctx.nowIso, playerId, group.id)
     .run();
-  await audit(ctx.db, group.id, session.id, refunded ? 'marked_refunded' : 'unmarked_refunded', { player: row.display_name }, ctx.nowIso);
-  return { ok: true, changed: true };
+  await audit(ctx.db, group.id, null, 'credit_cleared', { player: p.display_name, count: res.meta.changes }, ctx.nowIso);
+  return { ok: true, cleared: res.meta.changes };
+}
+
+/**
+ * Remove a name. Someone with no history (never signed up, never paid) is
+ * deleted completely. Anyone with history is hidden instead, so old
+ * sessions and payments stay intact.
+ */
+export async function removePlayer(ctx: Ctx) {
+  const group = await requireAdmin(ctx);
+  const id = v.id(ctx.params.id, 'player');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(id, group.id).first<{ display_name: string }>();
+  if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
+  const history = await ctx.db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM session_players WHERE player_id = ?1 AND (status <> 'declined' OR payment_status = 'paid')) +
+         (SELECT COUNT(*) FROM credits WHERE player_id = ?1) AS n`,
+    )
+    .bind(id)
+    .first<{ n: number }>();
+  if ((history?.n ?? 0) > 0) {
+    await ctx.db.prepare('UPDATE players SET is_active = 0, is_new = 0 WHERE id = ?').bind(id).run();
+    await audit(ctx.db, group.id, null, 'player_hidden', { name: p.display_name }, ctx.nowIso);
+    return { result: 'hidden' };
+  }
+  await ctx.db.batch([
+    ctx.db.prepare('DELETE FROM player_devices WHERE player_id = ?').bind(id),
+    ctx.db.prepare('DELETE FROM session_action_tokens WHERE player_id = ?').bind(id),
+    ctx.db.prepare('DELETE FROM session_players WHERE player_id = ?').bind(id),
+    ctx.db.prepare('DELETE FROM players WHERE id = ? AND group_id = ?').bind(id, group.id),
+  ]);
+  await audit(ctx.db, group.id, null, 'player_deleted', { name: p.display_name }, ctx.nowIso);
+  return { result: 'deleted' };
 }
 
 /** The organizer sent the "Good news, you're in" text to someone moved off the waitlist. */
@@ -393,7 +476,7 @@ export async function updatePlayer(ctx: Ctx, body: Record<string, unknown>) {
     res = await ctx.db
       .prepare(
         `UPDATE players SET display_name = ?, phone_number = ?, is_regular = ?, is_active = ?, can_receive_substitute_invites = ?,
-           usual_days = COALESCE(?, usual_days)
+           usual_days = COALESCE(?, usual_days), is_new = 0
          WHERE id = ? AND group_id = ?`,
       )
       .bind(f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, f.usualDays, id, group.id)
@@ -414,13 +497,23 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const organizerName = body.organizerName === undefined ? group.organizer_name : v.optionalText(body.organizerName, 'organizerName', 40);
   const venueName = body.venueName === undefined ? group.venue_name : v.optionalText(body.venueName, 'venueName', 80);
   const venueAddress = body.venueAddress === undefined ? group.venue_address : v.optionalText(body.venueAddress, 'venueAddress', 160);
+  const firstSessionDate = body.firstSessionDate === undefined ? group.first_session_date : v.optionalDate(body.firstSessionDate, 'firstSessionDate');
   const settings = normalizeSettings({ ...settingsOf(group), ...(body.settings as object) });
   await ctx.db
-    .prepare('UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ? WHERE id = ?')
-    .bind(name, venmoUrl, JSON.stringify(settings), organizerName, venueName, venueAddress, group.id)
+    .prepare(
+      'UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ? WHERE id = ?',
+    )
+    .bind(name, venmoUrl, JSON.stringify(settings), organizerName, venueName, venueAddress, firstSessionDate, group.id)
     .run();
-  await audit(ctx.db, group.id, null, 'settings_updated', { name, venmoUrl, organizerName, venueName, venueAddress, settings }, ctx.nowIso);
-  await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(settings) }, ctx.nowMs);
+  await audit(
+    ctx.db,
+    group.id,
+    null,
+    'settings_updated',
+    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, settings },
+    ctx.nowIso,
+  );
+  await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(settings), first_session_date: firstSessionDate }, ctx.nowMs);
   return { ok: true };
 }
 
