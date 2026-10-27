@@ -8,8 +8,8 @@ but **it never sends a text by itself**.
 
 ## What each person sees
 
-**Players** open the private group link, tap their name once ("Who are
-you?"), and the phone remembers it. After that every visit opens on
+**Players** open https://pickleball.juncaj.net (or the old private link),
+tap their name once ("Who are you?"), and the phone remembers it. After that every visit opens on
 "Welcome, Ryan" with a small "Not you?" button. One screen shows:
 
 - a "Want in on Tuesday? Yes / No" card for a usual day they haven't
@@ -247,8 +247,8 @@ production.
 ## Tests
 
 ```bash
-npm test               # 129 server and logic tests
-npm run test:e2e       # 67 browser checks (needs Playwright + Chromium)
+npm test               # 140 server and logic tests
+npm run test:e2e       # 70 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
@@ -267,6 +267,18 @@ the unpaid reminder only after 24 hours, the 24-hour check-in and 12-hour
 deadline, rescheduling, the remembered name, usual-day suggestions, View as,
 the calendar file, expired and reused links, admin lockout, input validation,
 and phone layouts at 360 to 430 px wide in light and dark mode.
+
+## Open address
+
+By default anyone with the site address can use it: it opens straight to
+"Who are you?". Settings > "Anyone with the site address can use it" turns
+that off (back to the long private link only, which always keeps working).
+An optional **group word** is asked once on a new phone, then remembered;
+phones that already picked a name aren't asked. Adding new names is limited
+to 3 per phone per hour (by network address), new names get a "New" tag, and
+"Is this you?" still catches near-duplicates. Every page and API response is
+marked noindex. The player link in Settings shows the `SITE_URL` from
+`wrangler.toml` (or whatever address you opened it on).
 
 ## Security notes (plain version)
 

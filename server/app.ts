@@ -3,7 +3,7 @@ import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
 import { HttpError, json, readJson } from './http';
 import * as player from './player';
-import { runSetup, setupStatus } from './setup';
+import { enterGroupWord, runSetup, setupStatus } from './setup';
 import { actOnToken, lookupToken } from './tokens';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>;
@@ -33,6 +33,7 @@ function route(method: string, path: string, handler: Handler) {
 // Setup
 route('GET', '/api/status', (ctx) => setupStatus(ctx));
 route('POST', '/api/setup', runSetup);
+route('POST', '/api/access', enterGroupWord);
 
 // Players (private group link)
 route('GET', '/api/group', (ctx) => player.groupView(ctx));

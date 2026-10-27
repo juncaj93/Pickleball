@@ -342,8 +342,9 @@ describe('add my name', () => {
     expect((await phone.call('POST', '/api/players/self', { name: 'Morgan' })).data.result).toBe('added');
   });
 
-  it('needs the group link', async () => {
+  it('needs the group link when the open address is off', async () => {
     const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', openAccess: false });
     expect((await ctx.app.client().call('POST', '/api/players/self', { name: 'Morgan' })).status).toBe(404);
   });
 });

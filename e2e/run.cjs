@@ -145,7 +145,8 @@ async function main() {
       await admin.getByRole('button', { name: 'Create group' }).click();
       await admin.getByText('Share this link with your players').waitFor();
       playerLink = (await admin.locator('code.link').textContent()).trim();
-      assert(/\/g\/[A-Za-z0-9_-]{20,}$/.test(playerLink), `unexpected link ${playerLink}`);
+      // The player link is now just the site address.
+      assert(playerLink === BASE, `player link should be the plain address, was ${playerLink}`);
       await admin.screenshot({ path: path.join(SHOTS, 'setup-done.png'), fullPage: true });
     });
 
@@ -578,6 +579,74 @@ async function main() {
       assert((await p.getByRole('region', { name: /Want in on/ }).count()) === 0, 'occasional player got a suggestion');
     });
 
+    console.log('Open address');
+    let privateLink = '';
+    await check('the plain address opens "Who are you?" with a small Organizer sign-in link; no private-site screen', async () => {
+      const p = await newPage();
+      await p.goto(BASE);
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      assert((await p.getByText(/private group site/i).count()) === 0, 'old private-site screen still shown');
+      const signIn = p.getByRole('link', { name: 'Organizer sign-in' });
+      await signIn.waitFor();
+      const box = await signIn.boundingBox();
+      const lastBtn = await p.getByRole('button', { name: 'Add my name' }).boundingBox();
+      assert(box.y > lastBtn.y, 'Organizer sign-in should be at the bottom');
+      await p.getByRole('button', { name: 'Blair', exact: true }).click();
+      await p.getByRole('heading', { name: 'Welcome, Blair' }).waitFor();
+      await p.reload();
+      await p.getByRole('heading', { name: 'Welcome, Blair' }).waitFor();
+      await p.screenshot({ path: path.join(SHOTS, 'player-plain-address.png'), fullPage: true });
+    });
+
+    await check('Settings: turning the open address OFF goes back to link-only; the long link still works', async () => {
+      await tab(admin, 'Settings').click();
+      await admin.getByText('Old private link').click();
+      privateLink = (await admin.locator('details code.link').textContent()).trim();
+      assert(/\/g\/[A-Za-z0-9_-]{20,}$/.test(privateLink), `private link was ${privateLink}`);
+      await admin.getByLabel('Anyone with the site address can use it').uncheck();
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      assert((await admin.locator('section[aria-labelledby="link-title"] code.link').first().textContent()).includes('/g/'), 'link-only should show the long link');
+      const p = await newPage();
+      await p.goto(BASE);
+      await p.getByText('Open the link your organizer sent you').waitFor();
+      await p.getByRole('link', { name: 'Organizer sign-in' }).waitFor();
+      await p.goto(privateLink);
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      await admin.getByLabel('Anyone with the site address can use it').check();
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      await p.goto(BASE);
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+    });
+
+    await check('Settings: a group word is asked once on a new phone, then remembered', async () => {
+      await admin.getByLabel(/Group word/).fill('Dink');
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      const p = await newPage();
+      await p.goto(BASE);
+      await p.getByLabel("What's the group word?").fill('nope');
+      await p.getByRole('button', { name: 'Continue' }).click();
+      await p.getByText("That's not the group word.").waitFor();
+      await p.getByLabel("What's the group word?").fill('dink');
+      await p.getByRole('button', { name: 'Continue' }).click();
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      await p.reload();
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      // Phones that already picked their name aren't asked.
+      await players.Alex.reload();
+      await firstCard(players.Alex).waitFor();
+      assert((await players.Alex.getByLabel("What's the group word?").count()) === 0, 'known phones should not be asked');
+      await admin.getByRole('button', { name: 'Remove the group word' }).click();
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Settings saved' }).waitFor();
+      const q = await newPage();
+      await q.goto(BASE);
+      await q.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      await tab(admin, 'Home').click();
+    });
+
     console.log('Roster, names, home screen');
     await check('who\'s in: only people who signed up, as neutral pills; nobody else listed', async () => {
       await players.Alex.reload();
@@ -595,14 +664,17 @@ async function main() {
       assert(!styles.colors.includes(styles.pill), `pill uses a status color: ${styles.pill}`);
     });
 
-    await check('first visit shows the Add to Home Screen tip once; Settings has the steps', async () => {
+    await check('the Home Screen tip is one small line at the very bottom, shown once; Settings has the steps', async () => {
       const p = await newPage();
       await p.goto(playerLink);
       await p.getByRole('button', { name: 'Alex', exact: true }).click();
       const tip = p.getByRole('note', { name: 'Add to Home Screen' });
-      await tip.getByText('Tap the Share button.').waitFor();
-      await tip.getByText('Tap Add to Home Screen.').waitFor();
-      await tip.getByText('Tap Add.').waitFor();
+      await tip.getByText('Tip: add Pickleball to your Home Screen. Tap Share, then Add to Home Screen, then Add.').waitFor();
+      // It sits at the very end of the page, below every session.
+      const tipTop = (await tip.boundingBox()).y;
+      const lastRow = await p.locator('article').last().boundingBox();
+      assert(tipTop > lastRow.y + lastRow.height - 1, 'the tip should be at the bottom, after the sessions');
+      assert((await p.getByText(/never texts you/i).count()) === 0, '"This site never texts you" should be gone');
       await tip.getByRole('button', { name: 'Dismiss' }).click();
       await p.reload();
       await p.locator('article').first().waitFor();
@@ -734,7 +806,7 @@ async function main() {
       await more(card);
       await card.getByRole('button', { name: 'Text the group poll' }).click();
       const bubble = (await admin.locator('dialog[open] .bubble').innerText()).trim();
-      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://\\S+/g/[A-Za-z0-9_-]+$`);
+      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://[^\\s/]+(/g/[A-Za-z0-9_-]+)?$`);
       assert(re.test(bubble), `court-waitlist poll was: ${bubble}`);
       await admin.keyboard.press('Escape');
 

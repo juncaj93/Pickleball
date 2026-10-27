@@ -1,6 +1,9 @@
 import { DEFAULT_SETTINGS, normalizeSettings } from '../shared/settings';
 import { DEFAULT_TIMEZONE, isValidTimezone } from '../shared/time';
-import { startAdminSession } from './auth';
+import { ACCESS_COOKIE, accessToken, hashGroupWord, hasGroupAccess, startAdminSession } from './auth';
+import { setCookie } from './context';
+import { playerLinkFor } from './admin';
+import { recentCount, recordEvent } from './rate';
 import type { Ctx } from './context';
 import { hashPin, newId, randomToken, timingSafeEqual } from './crypto';
 import { HttpError } from './http';
@@ -9,7 +12,33 @@ import * as v from './validate';
 
 export async function setupStatus(ctx: Ctx) {
   const group = await getGroup(ctx.db);
-  return { setupComplete: !!group, setupEnabled: !!ctx.env.SETUP_TOKEN && ctx.env.SETUP_TOKEN.length >= 16 };
+  return {
+    setupComplete: !!group,
+    setupEnabled: !!ctx.env.SETUP_TOKEN && ctx.env.SETUP_TOKEN.length >= 16,
+    // The plain site address works for players (no private link needed).
+    openAccess: !!group?.open_access,
+    // A group word is set and this phone hasn't entered it yet.
+    wordRequired: !!group?.open_access && !(await hasGroupAccess(ctx, group)),
+  };
+}
+
+const WORD_GUESSES_PER_15_MIN = 10;
+
+/** A new phone types the group word once; the cookie remembers it for a year. */
+export async function enterGroupWord(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await getGroup(ctx.db);
+  if (!group || !group.open_access) throw new HttpError(404, 'group_not_found', 'Open the link your organizer sent you.');
+  if (!group.group_word_hash) return { ok: true };
+  if ((await recentCount(ctx, 'group_word_wrong', 15 * 60_000)) >= WORD_GUESSES_PER_15_MIN) {
+    throw new HttpError(429, 'too_many_tries', 'Too many tries. Wait 15 minutes and try again.');
+  }
+  const word = typeof body.word === 'string' ? body.word.slice(0, 60) : '';
+  if (!word.trim() || !timingSafeEqual(await hashGroupWord(word), group.group_word_hash)) {
+    await recordEvent(ctx, 'group_word_wrong');
+    throw new HttpError(401, 'wrong_group_word', "That's not the group word. Ask in the group chat.");
+  }
+  setCookie(ctx, ACCESS_COOKIE, await accessToken(group), 365 * 86_400, 'Lax');
+  return { ok: true };
 }
 
 /**
@@ -67,5 +96,5 @@ export async function runSetup(ctx: Ctx, body: Record<string, unknown>) {
   const group = (await ctx.db.prepare('SELECT * FROM groups WHERE id = ?').bind(groupId).first<GroupRow>()) as GroupRow;
   await ensureSessions(ctx.db, group, ctx.nowMs);
   await startAdminSession(ctx, groupId);
-  return { playerLink: `${ctx.url.origin}/g/${groupKey}` };
+  return { playerLink: playerLinkFor(ctx, group) };
 }

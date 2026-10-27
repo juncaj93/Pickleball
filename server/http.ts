@@ -13,6 +13,7 @@ export function json(data: unknown, status = 200, extraHeaders: Record<string, s
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'X-Content-Type-Options': 'nosniff',
+    'X-Robots-Tag': 'noindex, nofollow',
   });
   for (const h of extraHeaders) for (const [k, v] of Object.entries(h)) headers.append(k, v);
   return new Response(JSON.stringify(data), { status, headers });

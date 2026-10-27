@@ -1,5 +1,5 @@
 import { ADMIN_COOKIE, type Ctx, PLAYER_COOKIE, setCookie } from './context';
-import { newId, randomToken, sha256, verifyPin } from './crypto';
+import { newId, randomToken, sha256, timingSafeEqual, verifyPin } from './crypto';
 import { HttpError } from './http';
 import { type GroupRow, getGroup } from './repo';
 
@@ -89,12 +89,51 @@ export async function revokeAdminSessions(ctx: Ctx, groupId: string) {
   await ctx.db.prepare('DELETE FROM admin_sessions WHERE group_id = ?').bind(groupId).run();
 }
 
-/** Player routes: the private group link's key, sent as a header (never a cookie, never in an API URL). */
+export const ACCESS_COOKIE = 'pb_access';
+
+/** The group word as stored: SHA-256 of the trimmed, lowercased word. */
+export async function hashGroupWord(word: string): Promise<string> {
+  return sha256(`group-word:${word.trim().toLowerCase()}`);
+}
+
+/**
+ * What a phone that typed the right group word keeps in its cookie. It
+ * changes whenever the word changes or the private link is replaced, so
+ * old phones get asked again.
+ */
+export async function accessToken(group: GroupRow): Promise<string> {
+  return sha256(`access:${group.group_key}:${group.group_word_hash ?? ''}`);
+}
+
+/**
+ * No group word, the word already entered on this phone, or a phone that
+ * already picked a name (they're clearly in the group) all count.
+ */
+export async function hasGroupAccess(ctx: Ctx, group: GroupRow): Promise<boolean> {
+  if (!group.group_word_hash) return true;
+  const c = ctx.cookies[ACCESS_COOKIE];
+  if (c && timingSafeEqual(c, await accessToken(group))) return true;
+  return (await currentPlayerId(ctx, group)) !== null;
+}
+
+/**
+ * Player routes. Two ways in:
+ * - the private link's key, sent as a header (never a cookie, never in an
+ *   API URL); always works
+ * - the plain site address, when "Anyone with the site address can use it"
+ *   is on; if a group word is set, the phone must have entered it once
+ */
 export async function requireGroupKey(ctx: Ctx): Promise<GroupRow> {
   const key = ctx.req.headers.get('X-Group-Key') ?? '';
-  if (!/^[A-Za-z0-9_-]{20,64}$/.test(key)) throw new HttpError(404, 'group_not_found', 'This group link is not valid.');
-  const group = await ctx.db.prepare('SELECT * FROM groups WHERE group_key = ?').bind(key).first<GroupRow>();
-  if (!group) throw new HttpError(404, 'group_not_found', 'This group link is not valid.');
+  if (key) {
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(key)) throw new HttpError(404, 'group_not_found', 'This group link is not valid.');
+    const group = await ctx.db.prepare('SELECT * FROM groups WHERE group_key = ?').bind(key).first<GroupRow>();
+    if (!group) throw new HttpError(404, 'group_not_found', 'This group link is not valid.');
+    return group;
+  }
+  const group = await getGroup(ctx.db);
+  if (!group || !group.open_access) throw new HttpError(404, 'group_not_found', 'Open the link your organizer sent you.');
+  if (!(await hasGroupAccess(ctx, group))) throw new HttpError(403, 'group_word_required', 'Enter the group word.');
   return group;
 }
 

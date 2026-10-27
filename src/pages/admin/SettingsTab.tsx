@@ -89,6 +89,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const [venueName, setVenueName] = useState(g.venueName ?? '');
   const [venueAddress, setVenueAddress] = useState(g.venueAddress ?? '');
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
+  const [openAccess, setOpenAccess] = useState(g.openAccess);
+  const [groupWord, setGroupWord] = useState('');
+  const [removeWord, setRemoveWord] = useState(false);
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +128,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         venueName: venueName || null,
         venueAddress: venueAddress || null,
         firstSessionDate: firstDate || null,
+        openAccess,
+        // Leave the word alone unless a new one was typed or Remove was tapped.
+        ...(groupWord.trim() ? { groupWord: groupWord.trim() } : removeWord ? { groupWord: null } : {}),
       });
+      setGroupWord('');
+      setRemoveWord(false);
       await ctx.reload();
       toast('Settings saved');
     } catch (err) {
@@ -152,16 +160,32 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     <>
       <section className="card stack" aria-labelledby="link-title">
         <h2 id="link-title">Player link</h2>
-        <p className="small muted">Send this to your players. Anyone with it can see the schedule, so keep it in the group.</p>
+        <p className="small muted">
+          {g.openAccess
+            ? 'Send this to your players. Anyone with the site address can use it.'
+            : 'Send this to your players. Anyone with it can see the schedule, so keep it in the group.'}
+        </p>
         <code className="link">{g.playerLink}</code>
         <div className="btn-row">
           <button className="btn small" onClick={async () => toast((await copyText(g.playerLink)) ? 'Link copied' : "Couldn't copy")}>
             Copy link
           </button>
-          <button className="btn small ghost" onClick={() => setAskRotate(true)}>
-            Replace link
-          </button>
+          {!g.openAccess && (
+            <button className="btn small ghost" onClick={() => setAskRotate(true)}>
+              Replace link
+            </button>
+          )}
         </div>
+        {g.openAccess && (
+          <details className="advanced">
+            <summary>Old private link</summary>
+            <p className="small muted">Still works for anyone who has it.</p>
+            <code className="link">{g.privateLink}</code>
+            <button className="btn small ghost" onClick={() => setAskRotate(true)}>
+              Replace private link
+            </button>
+          </details>
+        )}
       </section>
 
       <form className="card stack" onSubmit={save}>
@@ -198,6 +222,30 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <p className="small muted">
           Time zone: {TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz}. Sessions are Tuesdays and Thursdays, 8:00–10:00 PM.
         </p>
+        <label className="check">
+          <input type="checkbox" checked={openAccess} onChange={(e) => setOpenAccess(e.target.checked)} />
+          Anyone with the site address can use it
+        </label>
+        <p className="small muted" style={{ marginTop: -6 }}>
+          {openAccess ? 'Players just open the site. Turn off to go back to the private link only.' : 'Only people with the private link can get in.'}
+        </p>
+        {openAccess && (
+          <label className="field">
+            Group word (optional)
+            <span className="hint">
+              {g.hasGroupWord && !removeWord
+                ? 'A group word is set. A new phone is asked for it once. Type a new one to change it.'
+                : 'If you set one, a new phone is asked for it once and then remembers it.'}
+            </span>
+            <input type="text" value={groupWord} onChange={(e) => setGroupWord(e.target.value)} autoCapitalize="none" autoComplete="off" maxLength={40} />
+          </label>
+        )}
+        {openAccess && g.hasGroupWord && !removeWord && (
+          <button type="button" className="btn small ghost" onClick={() => setRemoveWord(true)}>
+            Remove the group word
+          </button>
+        )}
+        {removeWord && <p className="small">The group word will be removed when you save.</p>}
         <label className="field">
           First session
           <span className="hint">Nothing before this date shows to players or on your Home.</span>

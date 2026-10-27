@@ -72,8 +72,9 @@ export async function setupGroup(app = new TestApp()) {
     players: PLAYER_NAMES.map((name, i) => ({ name, phone: `(313) 555-01${String(i).padStart(2, '0')}` })),
   });
   if (res.status !== 200) throw new Error(`setup failed: ${res.text}`);
-  const groupKey = String(res.data.playerLink).split('/g/')[1];
   const dash = await organizer.call('GET', '/api/admin/dashboard');
+  // The plain address is the player link now; tests use the private link's key.
+  const groupKey = String(dash.data.group.privateLink).split('/g/')[1];
   const players: { id: string; name: string }[] = dash.data.players;
   const byName = Object.fromEntries(players.map((p) => [p.name, p.id]));
   return { app, organizer, groupKey, players, byName, dashboard: dash.data };

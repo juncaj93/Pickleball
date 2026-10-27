@@ -3,7 +3,7 @@ import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
 import { formatDateTime, formatShortDate, formatTimeRange } from '../shared/time';
-import { adminLogin, adminLogout, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
+import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
 import { HttpError } from './http';
@@ -86,7 +86,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       venueAddress: group.venue_address,
       firstSessionDate: group.first_session_date,
       settings,
-      playerLink: `${ctx.url.origin}/g/${group.group_key}`,
+      playerLink: playerLinkFor(ctx, group),
+      privateLink: `${ctx.url.origin}/g/${group.group_key}`,
+      openAccess: !!group.open_access,
+      hasGroupWord: !!group.group_word_hash,
     },
     players: players.map(adminPlayerView),
     sessions: sessions.map((s) => {
@@ -100,6 +103,15 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       .sort((a, b) => a.name.localeCompare(b.name)),
     now: ctx.nowIso,
   };
+}
+
+/**
+ * The link to send players: the plain site address when it's open to
+ * anyone, otherwise the long private link.
+ */
+export function playerLinkFor(ctx: Ctx, group: GroupRow): string {
+  if (!group.open_access) return `${ctx.url.origin}/g/${group.group_key}`;
+  return (ctx.env.SITE_URL || ctx.url.origin).replace(/\/$/, '');
 }
 
 /** Visible sessions from the last 90 days on, their rosters, all credits, and where open credits will land. */
@@ -591,19 +603,29 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const venueName = body.venueName === undefined ? group.venue_name : v.optionalText(body.venueName, 'venueName', 80);
   const venueAddress = body.venueAddress === undefined ? group.venue_address : v.optionalText(body.venueAddress, 'venueAddress', 160);
   const firstSessionDate = body.firstSessionDate === undefined ? group.first_session_date : v.optionalDate(body.firstSessionDate, 'firstSessionDate');
+  const openAccess = body.openAccess === undefined ? !!group.open_access : v.bool(body.openAccess, 'openAccess');
+  // Group word: leave out to keep it, null or "" to remove it.
+  let wordHash = group.group_word_hash;
+  if (body.groupWord !== undefined) {
+    const word = v.optionalText(body.groupWord, 'groupWord', 40);
+    if (word !== null && word.length < 2) throw new HttpError(400, 'invalid_groupWord', 'The group word needs at least 2 letters.');
+    wordHash = word === null ? null : await hashGroupWord(word);
+  }
   const settings = normalizeSettings({ ...settingsOf(group), ...(body.settings as object) });
   await ctx.db
     .prepare(
-      'UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ? WHERE id = ?',
+      `UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ?,
+         open_access = ?, group_word_hash = ?
+       WHERE id = ?`,
     )
-    .bind(name, venmoUrl, JSON.stringify(settings), organizerName, venueName, venueAddress, firstSessionDate, group.id)
+    .bind(name, venmoUrl, JSON.stringify(settings), organizerName, venueName, venueAddress, firstSessionDate, openAccess ? 1 : 0, wordHash, group.id)
     .run();
   await audit(
     ctx.db,
     group.id,
     null,
     'settings_updated',
-    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, settings },
+    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings },
     ctx.nowIso,
   );
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(settings), first_session_date: firstSessionDate }, ctx.nowMs);
@@ -628,7 +650,7 @@ export async function rotateLink(ctx: Ctx) {
   const key = randomToken(18);
   await ctx.db.prepare('UPDATE groups SET group_key = ? WHERE id = ?').bind(key, group.id).run();
   await audit(ctx.db, group.id, null, 'player_link_rotated', {}, ctx.nowIso);
-  return { playerLink: `${ctx.url.origin}/g/${key}` };
+  return { playerLink: playerLinkFor(ctx, { ...group, group_key: key }) };
 }
 
 function csvCell(value: unknown): string {

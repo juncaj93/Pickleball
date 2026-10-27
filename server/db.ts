@@ -23,6 +23,8 @@ export interface Env {
   DB: D1Database;
   /** One-time secret the organizer types into the setup page. */
   SETUP_TOKEN?: string;
+  /** The public site address, e.g. https://pickleball.juncaj.net. Falls back to whatever address was used. */
+  SITE_URL?: string;
 }
 
 /** True when a write was rejected by one of the schema's RAISE(ABORT, ...) triggers. */
