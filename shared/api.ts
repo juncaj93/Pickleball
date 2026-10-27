@@ -136,6 +136,8 @@ export interface AdminSessionView {
   /** Organizer's private record of the court cost. Never sent to players. */
   courtCostCents: number | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** Moved from its usual time (rescheduled). */
+  moved: boolean;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;

@@ -253,24 +253,33 @@ export function ConfirmDialog({
 export function SmsDraft({
   to,
   phone,
+  phones,
+  missing,
   body,
   openLabel = 'Open in Messages',
 }: {
   to: string;
   phone: string | null;
+  /** Several recipients at once (a group message). */
+  phones?: string[];
+  /** Names with no number saved, shown in small text. */
+  missing?: string[];
   body: string;
   openLabel?: string;
 }) {
   const [opened, setOpened] = useState(false);
   const toast = useToast();
   const [showFallback, setShowFallback] = useState(false);
-  const href = smsHref(phone, body, isIOS);
+  const href = smsHref(phones && phones.length ? phones : phone, body, isIOS);
   return (
     <div className="draft">
       <div className="spread">
         <div>
           <strong>{to}</strong>
-          <div className="muted small">{phone ? formatPhone(phone) : 'No phone number saved'}</div>
+          <div className="muted small">
+            {phones ? (phones.length ? `${phones.length} number${phones.length === 1 ? '' : 's'}` : 'No numbers saved') : phone ? formatPhone(phone) : 'No phone number saved'}
+          </div>
+          {missing && missing.length > 0 && <div className="small missing-numbers">Missing numbers: {missing.join(', ')}</div>}
         </div>
         <Chip tone="info">{opened ? 'Message ready' : 'Draft'}</Chip>
       </div>
@@ -406,6 +415,19 @@ export const PeopleIcon = () => (
     <path d="M3.2 19.2c.6-3.2 3-5 5.8-5s5.2 1.8 5.8 5" />
     <circle cx="16.8" cy="9.3" r="2.6" />
     <path d="M16.4 14.3c2.3.1 4 1.6 4.5 4.3" />
+  </svg>
+);
+
+export const PhoneIcon = () => (
+  <svg {...ICON} data-icon="phone">
+    <path d="M6.6 3.5h2.6l1.4 4-1.9 1.3a11 11 0 0 0 6.5 6.5l1.3-1.9 4 1.4v2.6a2 2 0 0 1-2.1 2A16.5 16.5 0 0 1 4.5 5.6a2 2 0 0 1 2.1-2.1z" />
+  </svg>
+);
+
+export const DollarIcon = () => (
+  <svg {...ICON} data-icon="dollar">
+    <path d="M12 3v18" />
+    <path d="M16.5 7.2c-.8-1.3-2.4-2-4.4-2-2.6 0-4.3 1.3-4.3 3.2 0 4.4 9 2.4 9 7 0 2-1.9 3.4-4.6 3.4-2.2 0-4-.8-4.8-2.3" />
   </svg>
 );
 

@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import type { ActionLinkDraft, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   bookingMessage,
@@ -9,7 +9,7 @@ import {
   paymentMessage,
   courtWaitlistPollMessage,
   pollMessage,
-  replacementMessage,
+  smsHref,
 } from '../../../shared/messages';
 import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, DEFAULT_VENUE_NAME } from '../../../shared/settings';
@@ -25,16 +25,17 @@ import {
   fromLocalInputValue,
   toLocalInputValue,
 } from '../../../shared/time';
-import { api, ApiError, useNow } from '../../lib';
-import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { api, ApiError, copyText, isIOS, useNow } from '../../lib';
+import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, GearIcon, PhoneIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 import { refundRows } from './todo';
+import { shareGameText, TextsMenu } from './Texts';
 
 /** Every late drop on this session, done or not, for the tag on the card. */
 const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.status === 'withdrawn' && r.lateDropAt);
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'invite' | 'cancel' | 'reschedule' | 'poll' | 'canceled' | 'moved';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'poll' | 'canceled' | 'moved' | 'texts';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -61,6 +62,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const [more, setMore] = useState(false);
+  const toast = useToast();
   const court = courtStatus(
     { ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen },
     tz,
@@ -103,9 +105,20 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               {formatShortDate(s.startsAt, tz)}
             </h2>
             <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
-            <button className="btn small ghost more-btn" aria-expanded={more} onClick={() => setMore((v) => !v)}>
-              {more ? 'Less' : 'More'}
-            </button>
+            <div className="card-icons">
+              <button className="icon-round" aria-label={`Texts for ${formatShortDate(s.startsAt, tz)}`} onClick={() => ctx.open('texts', s.id)}>
+                <PhoneIcon />
+              </button>
+              <button
+                className="icon-round"
+                aria-label={`Session options for ${formatShortDate(s.startsAt, tz)}`}
+                aria-expanded={more}
+                aria-controls={`opts-${s.id}`}
+                onClick={() => setMore((v) => !v)}
+              >
+                <GearIcon />
+              </button>
+            </div>
           </div>
           {s.holiday && <HolidayControl ctx={ctx} s={s} />}
           {lateDropsAll(s).length > 0 && (
@@ -144,56 +157,47 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
       </div>
       {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
 
-      {/* One main button; court actions live in the banner above, everything else under More. */}
-      {live && court.kind === 'booked' && (
-        <button className="btn block main-btn" onClick={() => ctx.open('poll', s.id)}>
-          Text the group poll
-        </button>
-      )}
-      {more && details.length > 0 && <p className="small muted court-details">{details.join(' · ')}</p>}
+      {/* Options, from the gear: Share the game, then a 2 by 2 grid. */}
       {more && (
-        <div className="action-strip">
-          <button className="btn small secondary" onClick={() => ctx.open('booking', s.id)}>
-            Edit booking
-          </button>
-          <button className="btn small secondary" onClick={() => ctx.open('roster', s.id)}>
-            Players
-          </button>
-          <button className="btn small secondary" onClick={() => ctx.open('payments', s.id)}>
-            Money
-          </button>
-          {live && (
-            <button className="btn small secondary" onClick={() => ctx.open('reminders', s.id)}>
-              Texts
+        <div className="options" id={`opts-${s.id}`}>
+          {details.length > 0 && <p className="small muted court-details">{details.join(' · ')}</p>}
+          <div className="share-row">
+            {live ? (
+              <a className="btn share-btn" href={smsHref(null, shareGameText(ctx, s), isIOS)}>
+                Share the game
+              </a>
+            ) : (
+              <button className="btn share-btn" disabled>
+                Share the game
+              </button>
+            )}
+            <button
+              className="btn secondary share-copy"
+              disabled={!live}
+              aria-label="Copy the share text"
+              onClick={async () => ((await copyText(shareGameText(ctx, s))) ? toast('Message copied') : toast("Couldn't copy. Select the text instead.", 'error'))}
+            >
+              Copy
             </button>
-          )}
-          {live && (needsCourt || courtWait || later) && (
-            <button className="btn small secondary" onClick={() => ctx.open('poll', s.id)}>
-              Text the group poll
+          </div>
+          <div className="opt-grid">
+            <button className="btn secondary" onClick={() => ctx.open('booking', s.id)}>
+              Edit booking
             </button>
-          )}
-          {live && (
-            <button className="btn small secondary" onClick={() => ctx.open('reschedule', s.id)}>
-              Reschedule
+            <button className="btn secondary" onClick={() => ctx.open('roster', s.id)}>
+              Players
             </button>
-          )}
-          {live && s.state.flags.openSpots > 0 && !courtWait && (
-            <button className="btn small secondary" onClick={() => ctx.open('invite', s.id)}>
-              Invite substitutes
-            </button>
-          )}
-          {later && <BookedButton ctx={ctx} s={s} small />}
-          {live && s.bookingStatus === 'booked' && (
-            <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
-              Change or cancel court
-            </CourtReserveLink>
-          )}
-          {(needsCourt || later) && <CourtWaitlistStart ctx={ctx} s={s} />}
-          {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
-          {!s.state.flags.started && s.courtState !== 'not_opened' && (
-            <button className="btn small danger" onClick={() => ctx.open('cancel', s.id)}>
+            <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Modify court</CourtReserveLink>
+            <button className="btn danger" disabled={s.state.flags.started || s.courtState === 'not_opened'} onClick={() => ctx.open('cancel', s.id)}>
               {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
             </button>
+          </div>
+          {(later || needsCourt || s.shownEarly) && (
+            <div className="opt-extra">
+              {later && <BookedButton ctx={ctx} s={s} small />}
+              {(needsCourt || later) && <CourtWaitlistStart ctx={ctx} s={s} />}
+              {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
+            </div>
           )}
         </div>
       )}
@@ -325,11 +329,8 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
             : `Reschedule or cancel by ${deadlineLine(s, tz, now)}.`)}
       </p>
       <div className="action-strip">
-        <button className="btn small" disabled={busy} onClick={() => ctx.open('invite', s.id)}>
-          Invite people
-        </button>
-        <button className="btn small secondary" disabled={busy} onClick={() => ctx.open('reschedule', s.id)}>
-          Reschedule
+        <button className="btn small secondary" disabled={busy} onClick={() => ctx.open('booking', s.id)}>
+          Edit booking
         </button>
         <button className="btn small danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
           Cancel session
@@ -378,20 +379,28 @@ export function SessionSheets({
     roster: `Players · ${title}`,
     payments: `Money · ${title}`,
     reminders: `Reminders · ${title}`,
-    invite: `Invite people · ${title}`,
-    reschedule: `Reschedule · ${title}`,
+    texts: `Texts · ${title}`,
     poll: `Group poll · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
-      {s && kind === 'booking' && <BookingForm ctx={ctx} s={s} onDone={onClose} />}
+      {s && kind === 'booking' && (
+        <div className="stack">
+          <BookingForm ctx={ctx} s={s} onDone={onClose} />
+          {!s.state.flags.started && (
+            <details className="advanced move-session">
+              <summary>Move this session</summary>
+              <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />
+            </details>
+          )}
+        </div>
+      )}
+      {s && kind === 'texts' && <TextsMenu ctx={ctx} s={s} />}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}
-      {s && kind === 'invite' && <InviteSubs ctx={ctx} s={s} />}
-      {s && kind === 'reschedule' && <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />}
       {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
       {s && kind === 'poll' && (
         <div className="stack">
@@ -809,95 +818,6 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         <h3>Group text about booking</h3>
         <SmsDraft to="Group chat" phone={null} body={bookingMessage(s, tz)} />
       </section>
-    </div>
-  );
-}
-
-// ---------- Substitutes ----------
-
-function InviteSubs({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const tz = ctx.d.group.timezone;
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(s.eligibleSubstitutes.map((e) => e.playerId)));
-  const [drafts, setDrafts] = useState<ActionLinkDraft[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const full = s.state.flags.openSpots === 0;
-
-  // While invitations are out, check every 8 seconds whether someone claimed the spot.
-  useEffect(() => {
-    if (!drafts || full) return;
-    const t = setInterval(() => void ctx.reload(), 8000);
-    return () => clearInterval(t);
-  }, [drafts, full, ctx]);
-
-  async function prepare() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api<{ drafts: ActionLinkDraft[] }>('POST', `/api/admin/sessions/${s.id}/links`, {
-        kind: 'claim',
-        playerIds: [...selected],
-      });
-      setDrafts(res.drafts);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not prepare invitations.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const sourceLabel = { waitlist: 'Waitlist', regular: 'Regular', substitute: 'Sub' };
-
-  return (
-    <div className="stack">
-      {full ? (
-        <Notice tone="ok" title="Spot filled">
-          {s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name).join(', ')} are playing. You can stop sending invitations.
-        </Notice>
-      ) : (
-        <p>
-          <strong>{s.state.flags.openSpots}</strong> open spot{s.state.flags.openSpots === 1 ? '' : 's'}. Everyone you invite gets a personal link; the first to tap
-          it gets the spot.
-        </p>
-      )}
-      {error && <Notice tone="danger">{error}</Notice>}
-      {!drafts && !full && (
-        <>
-          {s.eligibleSubstitutes.length === 0 && <p className="muted">Nobody else is available to invite.</p>}
-          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            <legend className="section-title">Who to invite</legend>
-            {s.eligibleSubstitutes.map((e) => (
-              <label key={e.playerId} className="check">
-                <input
-                  type="checkbox"
-                  checked={selected.has(e.playerId)}
-                  onChange={(ev) =>
-                    setSelected((cur) => {
-                      const next = new Set(cur);
-                      if (ev.target.checked) next.add(e.playerId);
-                      else next.delete(e.playerId);
-                      return next;
-                    })
-                  }
-                />
-                <span>
-                  {e.name} <span className="muted small">· {sourceLabel[e.source]}{e.phone ? '' : ' · no phone saved'}</span>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          <button className="btn" disabled={busy || selected.size === 0} onClick={prepare}>
-            {busy ? 'Preparing…' : `Prepare invitations (${selected.size})`}
-          </button>
-        </>
-      )}
-      {drafts && (
-        <div className="stack" style={{ opacity: full ? 0.55 : 1 }}>
-          {drafts.map((d) => (
-            <SmsDraft key={d.playerId} to={d.name} phone={d.phone} body={replacementMessage(s, tz, d.url)} />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ tap their name once ("Who are you?"), and the phone remembers it. After that eve
   their sessions, kept up to date (Apple refreshes on its own schedule)
 
 **The organizer** signs in at `/admin` with a PIN. A floating pill at the
-bottom has three tabs: **Home**, **Players**, **Settings**.
+bottom has four tabs: **Home**, **Money**, **Players**, **Settings**.
 
 Every session card on Home shows the court and the players as two separate
 lines, and each session appears once:
@@ -104,6 +104,34 @@ Canceling a session opens a ready text ("Pickleball Tue, Nov 3 is canceled.")
 and moving one opens "Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM.", each
 with an optional one-line reason, **Text the group** and **Copy message**.
 After a cancel, the same screen lists who already paid, with **Refunded**.
+
+## Session cards
+
+Each card has two round icons at the top right. The **phone** opens that
+session's prepared texts (Share the game, Poll, Day before, Last call, Spot
+open, Canceled or Moved), each with Open and Copy. The **gear** opens the
+options: a full-width **Share the game** (a text for the group linking
+straight to that session, worded for booked / not booked / court waitlist)
+with Copy, then Edit booking | Players and Modify court | Cancel session.
+Moving a session lives inside Edit booking ("Move this session").
+
+Shared links end in `?s=<session>`: the player screen opens with that session
+highlighted (after picking a name on a new phone).
+
+## Day before and last call
+
+From 24 hours before, Home shows **Text the players who are in**: one message
+to all their saved numbers ("Missing numbers: ..." for anyone without one)
+with a link to back out, plus a smaller **Text the group: need more players**.
+When we're short of 4 or 6, that one leads instead. The last-call text (13
+hours before) links to the session too.
+
+## Money tab
+
+The month's summary at the top (collected, court costs, credits owed,
+Surplus/Short), then each session's payments with Mark paid, the Pay back
+list with Refunded, and credits with Clear credit. "Mark paid tonight" stays
+on Home on game day.
 
 ## Late drops
 

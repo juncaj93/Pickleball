@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
@@ -53,12 +53,23 @@ export function PlayerHome({
   const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id]);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // A shared link like ?s=<session id> opens with that session highlighted.
+  const [focusId] = useState(() => new URLSearchParams(window.location.search).get('s'));
+  const scrolled = useRef(false);
 
   useEffect(() => {
     if (load.data && groupKey && !viewAs) storageSet('pb_group_key', groupKey);
   }, [load.data, groupKey, viewAs]);
 
   const g = load.data;
+  // Scroll to a shared session once the schedule shows (after picking a name).
+  const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
+  const choosing = !!g && !viewAs && (!g.me || switching);
+  useEffect(() => {
+    if (!g || choosing || focusIndex < 0 || scrolled.current) return;
+    scrolled.current = true;
+    requestAnimationFrame(() => document.getElementById(`row-${focusId}`)?.scrollIntoView({ block: 'center' }));
+  }, [g, choosing, focusIndex, focusId]);
   useEffect(() => {
     if (!plain || !load.error) return;
     if (load.error.status === 404) onLinkOnly?.();
@@ -80,7 +91,7 @@ export function PlayerHome({
 
   const pickName = !!g && !viewAs && (!g.me || switching);
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
-  const sessions = g ? (showAll ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
+  const sessions = g ? (showAll || focusIndex >= SHOW_FIRST ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
 
   return (
     <>
@@ -134,6 +145,7 @@ export function PlayerHome({
                   <ScheduleRow
                     s={s}
                     g={g}
+                    highlight={s.id === focusId}
                     creditNote={s.id === g.sessions.find((x) => !x.past)?.id ? g.creditBalanceCents : 0}
                     onChanged={load.reload}
                   />
@@ -565,12 +577,15 @@ function ScheduleRow({
   g,
   creditNote,
   onChanged,
+  highlight,
 }: {
   s: PlayerSessionView;
   g: GroupView;
   /** Credit waiting for a session they haven't joined yet; shown on the first upcoming row. */
   creditNote: number;
   onChanged: () => Promise<void>;
+  /** Opened from a shared link to this session. */
+  highlight?: boolean;
 }) {
   const tz = g.group.timezone;
   const toast = useToast();
@@ -600,7 +615,7 @@ function ScheduleRow({
   const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
 
   return (
-    <article className={`sched${s.canceled ? ' off' : ''}`} aria-labelledby={`s-${s.id}`}>
+    <article id={`row-${s.id}`} className={`sched${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`} aria-labelledby={`s-${s.id}`}>
       <DateTile iso={s.startsAt} tz={tz} />
       <div className="sched-body">
         <h2 id={`s-${s.id}`} className="sr-only">

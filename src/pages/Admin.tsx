@@ -1,19 +1,21 @@
 import { Fragment, type FormEvent, type ReactElement, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
-import { dayBeforeMessage, lastCallMessage, promotionMessage, spotOpenMessage } from '../../shared/messages';
+import { lastCallMessage, promotionMessage, sessionLink, spotOpenMessage } from '../../shared/messages';
+import { DayBeforeTexts } from './admin/Texts';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useLoad, useNow } from '../lib';
 import { TopBar } from '../Shell';
-import { CourtReserveLink, Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
+import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
 import { RefundList, type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
+import { MoneyTab } from './admin/MoneyTab';
 
-type Tab = 'home' | 'players' | 'settings';
+type Tab = 'home' | 'money' | 'players' | 'settings';
 
 export interface AdminCtx {
   d: AdminDashboard;
@@ -93,6 +95,7 @@ function Login({ onDone }: { onDone: () => Promise<void> }) {
 
 const TABS: { id: Tab; label: string; Icon: () => ReactElement }[] = [
   { id: 'home', label: 'Home', Icon: HomeIcon },
+  { id: 'money', label: 'Money', Icon: DollarIcon },
   { id: 'players', label: 'Players', Icon: PeopleIcon },
   { id: 'settings', label: 'Settings', Icon: GearIcon },
 ];
@@ -132,6 +135,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
       />
       <main className="page has-tabs stack-lg">
         {tab === 'home' && <HomeTab ctx={ctx} />}
+        {tab === 'money' && <MoneyTab ctx={ctx} />}
         {tab === 'players' && <PlayersTab ctx={ctx} />}
         {tab === 'settings' && <SettingsTab ctx={ctx} />}
       </main>
@@ -203,7 +207,6 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
         </section>
       )}
 
-      <CreditsCard ctx={ctx} />
       <SessionsSection ctx={ctx} />
       <HiddenSessions ctx={ctx} />
     </>
@@ -372,16 +375,16 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       )}
       {(item.kind === 'daybefore' || item.kind === 'lastcall') && (
         <>
-          <SmsDraft
-            to="Group chat"
-            phone={null}
-            openLabel="Text the group"
-            body={
-              item.kind === 'daybefore'
-                ? dayBeforeMessage(s, tz, s.confirmedCount, ctx.d.group.playerLink)
-                : lastCallMessage(s, tz, s.confirmedCount)
-            }
-          />
+          {item.kind === 'daybefore' ? (
+            <DayBeforeTexts ctx={ctx} s={s} />
+          ) : (
+            <SmsDraft
+              to="Group chat"
+              phone={null}
+              openLabel="Text the group"
+              body={lastCallMessage(s, tz, s.confirmedCount, sessionLink(ctx.d.group.playerLink, s.id))}
+            />
+          )}
           <button
             className="btn small ghost"
             disabled={busy}
@@ -412,7 +415,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
 }
 
 /** Each person's open credit, with "Clear credit" for when the organizer paid them back by hand. */
-function CreditsCard({ ctx }: { ctx: AdminCtx }) {
+export function CreditsCard({ ctx }: { ctx: AdminCtx }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   if (ctx.d.credits.length === 0) return null;
@@ -479,9 +482,6 @@ function FivePanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
             Move {firstWaiting.name} in (makes 6)
           </button>
         )}
-        <button className="btn small secondary" disabled={busy} onClick={() => ctx.open('invite', s.id)}>
-          Invite someone to make 6
-        </button>
         {lastIn && (
           <button className="btn small secondary" disabled={busy} onClick={() => roster(lastIn.playerId, 'waitlist', `${lastIn.name} moved to the waitlist. 4 going.`)}>
             Back to 4: move {lastIn.name} to the waitlist

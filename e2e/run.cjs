@@ -50,13 +50,32 @@ const tab = (page, name) => page.getByRole('navigation', { name: 'Organizer sect
 const sessionCards = (page) => page.locator('section[aria-labelledby="sessions-title"] article');
 /** Open a session card's "More" buttons (Money, Texts, Reschedule, Invite, Cancel). */
 async function more(card) {
-  const btn = card.getByRole('button', { name: 'More', exact: true });
-  const less = card.getByRole('button', { name: 'Less', exact: true });
-  // Wait until the card has drawn, then open it unless it's already open.
-  await btn.or(less).first().waitFor();
-  if (await btn.isVisible()) await btn.click();
-  await less.waitFor();
+  const gear = card.getByRole('button', { name: /^Session options/ });
+  // Wait until the card has drawn, then open the options unless they're open.
+  await gear.waitFor();
+  if ((await gear.getAttribute('aria-expanded')) !== 'true') await gear.click();
+  await card.locator('.options').waitFor();
 }
+
+/** The Money tab, with this session's payments opened. */
+async function moneyFor(page, card) {
+  const id = (await card.getAttribute('id')).replace('session-', '');
+  await tab(page, 'Money').click();
+  const d = page.locator(`details.money-sess[data-session="${id}"]`);
+  await d.waitFor();
+  await d.evaluate((el) => (el.open = true));
+  return d;
+}
+
+/** Close a session card's options panel. */
+async function closeOptions(card) {
+  const gear = card.getByRole('button', { name: /^Session options/ });
+  if ((await gear.getAttribute('aria-expanded')) === 'true') await gear.click();
+  await card.locator('.options').waitFor({ state: 'detached' });
+}
+
+/** How far the test server's clock is pinned from real time (see the start of the run). */
+let BASE_OFFSET = 0;
 
 /** Open every collapsed Settings section (they remember being open). */
 async function openSections(page) {
@@ -128,6 +147,20 @@ async function main() {
 
   try {
     await waitForServer();
+    // Pin the test server's clock so results don't depend on when this runs:
+    // on a Tuesday or Thursday, it's 12:30 AM that day (before the 8:00 AM
+    // game-day money card); other days it's the real time.
+    {
+      const tz = 'America/Detroit';
+      const now = new Date();
+      const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: tz });
+      if (dow === 'Tue' || dow === 'Thu') {
+        const date = now.toLocaleDateString('en-CA', { timeZone: tz });
+        const at = [`${date}T00:30:00-04:00`, `${date}T00:30:00-05:00`].map(Date.parse).find((ms) => new Date(ms).toLocaleTimeString('en-US', { hour: '2-digit', hour12: false, timeZone: tz }).startsWith('00'));
+        BASE_OFFSET = at - Date.now();
+      }
+      await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() + BASE_OFFSET }) });
+    }
     const admin = await newPage();
     let playerLink = '';
 
@@ -267,14 +300,19 @@ async function main() {
       }
     });
 
-    await check('tab bar: Home, Players and a clear cog for Settings, in every state; short and low', async () => {
+    await check('tab bar: four equal tabs (Home, Money, Players, Settings) with their own icons in every state; short and low', async () => {
       const icons = async () => admin.getByRole('navigation', { name: 'Organizer sections' }).locator('button svg').evaluateAll((s) => s.map((x) => x.getAttribute('data-icon')));
-      for (const name of ['Settings', 'Players', 'Home']) {
+      for (const name of ['Settings', 'Players', 'Money', 'Home']) {
         await tab(admin, name).click();
         const got = await icons();
-        assert(JSON.stringify(got) === JSON.stringify(['home', 'people', 'gear']), `icons with ${name} selected were ${got}`);
+        assert(JSON.stringify(got) === JSON.stringify(['home', 'dollar', 'people', 'gear']), `icons with ${name} selected were ${got}`);
       }
-      const gear = await admin.locator('svg[data-icon="gear"] path').getAttribute('d');
+      const widths = await admin.locator('nav.tabbar button').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().width)));
+      assert(widths.length === 4 && Math.max(...widths) - Math.min(...widths) <= 1, `tabs should be equal: ${widths}`);
+      const gaps = await admin.locator('nav.tabbar li').evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().left));
+      const steps = gaps.slice(1).map((x, i) => Math.round(x - gaps[i]));
+      assert(Math.max(...steps) - Math.min(...steps) <= 1, `tabs should be evenly spaced: ${steps}`);
+      const gear = await admin.locator('nav.tabbar svg[data-icon="gear"] path').getAttribute('d');
       assert((gear.match(/L/g) || []).length >= 28, 'Settings icon should be a cog with teeth');
       const bar = await admin.locator('nav.tabbar').boundingBox();
       const vh = admin.viewportSize().height;
@@ -284,16 +322,16 @@ async function main() {
       assert(tabs.every((h) => h >= 44), `tabs too short to tap: ${tabs}`);
     });
 
-    await check('floating tab pill has exactly Home, Players, Settings', async () => {
+    await check('floating tab pill has exactly Home, Money, Players, Settings', async () => {
       const nav = admin.getByRole('navigation', { name: 'Organizer sections' });
-      const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim());
-      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Players', 'Settings']), `tabs were ${labels}`);
+      const labels = (await nav.getByRole('button').allInnerTexts()).map((t) => t.trim().split('\n')[0].trim().replace(/\d+$/, '').trim());
+      assert(JSON.stringify(labels) === JSON.stringify(['Home', 'Money', 'Players', 'Settings']), `tabs were ${labels}`);
       const box = await nav.boundingBox();
       const vw = admin.viewportSize().width;
       assert(box.x > 8 && box.x + box.width < vw - 8, 'pill should float clear of the screen edges');
       const radius = await nav.evaluate((el) => parseFloat(getComputedStyle(el).borderTopLeftRadius));
       assert(radius >= 24, 'pill should be fully rounded');
-      assert((await nav.locator('svg').count()) === 3, 'expected three drawn icons');
+      assert((await nav.locator('svg').count()) === 4, 'expected four drawn icons');
       const pillBg = await nav.evaluate((el) => getComputedStyle(el).backgroundColor);
       // "rgb(r g b)", "rgba(r, g, b, a)" or "color(srgb r g b / a)": the alpha is the 4th number, or after "/".
       const nums = pillBg.match(/[\d.]+/g).map(Number);
@@ -335,7 +373,7 @@ async function main() {
       assert((await admin.getByText(/Texts are never sent automatically/).count()) === 0, 'How this works notes should be gone');
       // The most used things are at the top.
       const quick = admin.getByRole('region', { name: 'Quick settings' });
-      await quick.getByText('Monthly money').waitFor();
+      assert((await quick.getByText('Monthly money').count()) === 0, 'Monthly money moved to the Money tab');
       await quick.getByRole('button', { name: 'Copy' }).waitFor();
       await quick.getByRole('button', { name: 'Dark', exact: true }).waitFor();
       const quickBox = await quick.boundingBox();
@@ -555,7 +593,7 @@ async function main() {
       const five = admin.getByRole('article', { name: /5 going, need 4 or 6/ });
       await admin.getByRole('heading', { name: 'Needs attention' }).waitFor();
       await five.getByRole('button', { name: /Back to 4: move .* to the waitlist/ }).waitFor();
-      await five.getByRole('button', { name: 'Invite someone to make 6' }).waitFor();
+      assert((await five.getByRole('button', { name: /Invite/ }).count()) === 0, 'no invite button any more');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-five.png'), fullPage: true });
       // The discount is gone: everyone is back to $14, and the organizer gets a card to sort it out.
       const dropped = admin.getByRole('article', { name: /Was 6, now 5: discount and credits are off/ });
@@ -693,20 +731,86 @@ async function main() {
       assert((await admin.getByText(/\d+ needs? a court/).count()) === 0, 'summary text should be gone');
     });
 
-    await check('session card: date tile, court, players line, one main button; Edit booking, Players and the rest under More', async () => {
+    await check('session card: two round icons (Texts, options) top right; the gear opens Share the game and a 2 by 2 grid', async () => {
       const card = sessionCards(admin).first();
-      const less = card.getByRole('button', { name: 'Less', exact: true });
-      if (await less.count()) await less.click();
-      const visible = async () =>
-        (await card.locator('button:visible').allInnerTexts()).map((t) => t.trim()).filter((t) => !/^(Undo|Hours OK)$/.test(t));
-      const before = await visible();
-      assert(JSON.stringify(before) === JSON.stringify(['More', 'Text the group poll']), `card buttons were ${before}`);
       await card.locator('.tile').waitFor();
       await card.locator('.spots li').first().waitFor();
+      await closeOptions(card);
+      assert((await card.getByRole('button', { name: /^(More|Less)$/ }).count()) === 0, 'More / Less should be gone');
+      const phone = card.getByRole('button', { name: /^Texts for / });
+      const gear = card.getByRole('button', { name: /^Session options for / });
+      const pb = await phone.boundingBox();
+      const gb = await gear.boundingBox();
+      const cb = await card.boundingBox();
+      assert(Math.abs(pb.width - gb.width) < 1 && Math.abs(pb.height - gb.height) < 1 && Math.abs(pb.y - gb.y) < 1, 'icons should match and sit side by side');
+      assert(pb.x < gb.x && gb.x + gb.width > cb.x + cb.width - 24, 'phone left, gear right, at the top right');
+      const tapArea = { w: gb.width, h: gb.height };
+      assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
+      // Collapsed: no main button any more (the poll lives in Texts).
+      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK)$/.test(x));
+      assert(JSON.stringify(await visible()) === '[]', `collapsed card buttons were ${await visible()}`);
+      await gear.click();
+      assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
+      const opts = card.locator('.options');
+      const share = opts.getByRole('link', { name: 'Share the game' });
+      const sb = await share.boundingBox();
+      const ob = await opts.boundingBox();
+      assert(sb.width > ob.width * 0.6, 'Share the game should be the full-width main button');
+      await opts.getByRole('button', { name: 'Copy the share text' }).waitFor();
+      const grid = await opts.locator('.opt-grid > *').evaluateAll((els) =>
+        els.map((e) => {
+          const r = e.getBoundingClientRect();
+          return { text: e.textContent.trim().replace(/\s+/g, ' ').replace(' (opens CourtReserve)', ''), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
+        }),
+      );
+      assert(JSON.stringify(grid.map((g) => g.text)) === JSON.stringify(['Edit booking', 'Players', 'Modify court', 'Cancel session']), `grid was ${grid.map((g) => g.text)}`);
+      assert(grid[0].y === grid[1].y && grid[2].y === grid[3].y && grid[0].x === grid[2].x && grid[1].x === grid[3].x, 'grid should be 2 by 2');
+      assert(new Set(grid.map((g) => g.w)).size === 1 && new Set(grid.map((g) => g.h)).size === 1, `grid buttons should match: ${JSON.stringify(grid)}`);
+      assert(grid.every((g) => g.h >= 44 && g.h < 60), 'grid buttons fit on one line, 44px+');
+      const modify = opts.getByRole('link', { name: /^Modify court/ });
+      assert((await modify.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1' && (await modify.getAttribute('target')) === '_blank', 'Modify court link');
+      const cancelBg = await opts.getByRole('button', { name: 'Cancel session' }).evaluate((el) => getComputedStyle(el).color);
+      const dangerFg = await admin.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--danger-fg').trim());
+      assert(cancelBg !== '' && dangerFg !== '', 'Cancel session uses the red style');
+      for (const gone of ['Text the group poll', 'Money', 'Texts', 'Reschedule', 'Invite substitutes', 'Change or cancel court']) {
+        assert((await card.getByRole('button', { name: gone, exact: true }).count()) === 0 && (await card.getByRole('link', { name: gone, exact: true }).count()) === 0, `${gone} should be gone from the card`);
+      }
+      assert((await admin.getByText(/Invite (substitutes|people|someone)/).count()) === 0, 'Invite substitutes should be gone everywhere');
+      await card.screenshot({ path: path.join(SHOTS, 'card-options.png') });
+      await gear.click();
+      await opts.waitFor({ state: 'detached' });
+    });
+
+    await check('Share the game: the text matches the court, links straight to the session, and has Copy', async () => {
+      const card = sessionCards(admin).first();
+      const id = (await card.getAttribute('id')).replace('session-', '');
       await more(card);
-      const after = await visible();
-      for (const b of ['Edit booking', 'Players', 'Money', 'Texts', 'Reschedule', 'Cancel session']) assert(after.includes(b), `More is missing ${b}: ${after}`);
-      await card.getByRole('button', { name: 'Less' }).click();
+      const href = await card.getByRole('link', { name: 'Share the game' }).getAttribute('href');
+      const body = decodeURIComponent(href.split('body=')[1]);
+      const kind = await card.getAttribute('data-court');
+      const re =
+        kind === 'booked'
+          ? /^We booked a court for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to reserve your spot: (\S+)$/
+          : kind === 'waitlist'
+            ? /^I'm on the court waitlist for .* Tap here to join the standby list: (\S+)$/
+            : /^Thinking of playing (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to say if you're in: (\S+)$/;
+      const m = body.match(re);
+      assert(m, `share text (${kind}) was: ${body}`);
+      const link = m[m.length - 1];
+      assert(link.endsWith(`s=${id}`), `share link should point at the session: ${link}`);
+      await card.getByRole('button', { name: 'Copy the share text' }).click();
+      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
+      assert((await admin.evaluate(() => navigator.clipboard.readText())) === body, 'clipboard should hold the share text');
+      // The link opens the player screen with that session highlighted, after picking a name.
+      const p = await newPage();
+      await p.goto(BASE + new URL(link).pathname + new URL(link).search);
+      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
+      await p.getByRole('button', { name: 'Casey', exact: true }).click();
+      const row = p.locator(`#row-${id}`);
+      await row.waitFor();
+      assert((await row.getAttribute('class')).includes('highlight'), 'the shared session should be highlighted');
+      await p.close();
+      await closeOptions(card);
     });
 
     await check('court cost never shows to players', async () => {
@@ -718,21 +822,36 @@ async function main() {
       }
     });
 
-    await check('"Text the group poll" opens Messages with the date, venue and $14, and has Copy', async () => {
+    await check('phone icon: a compact menu of this session\'s texts; the poll has the date, venue and $14, with Copy', async () => {
       const card = sessionCards(admin).first();
-      await card.getByRole('button', { name: 'Text the group poll' }).click();
+      await card.getByRole('button', { name: /^Texts for / }).click();
       const sheet = admin.locator('dialog[open]');
-      const bubble = (await sheet.locator('.bubble').innerText()).trim();
+      const names = (await sheet.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
+      for (const want of ['Share the game', 'Poll', 'Day before', 'Last call']) assert(names.includes(want), `texts menu is missing ${want}: ${names}`);
+      assert(!names.includes('Canceled'), 'a live session has no Canceled text');
+      const spots = await card.locator('.spots li.open').count();
+      assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
+      for (const row of await sheet.locator('.text-row').all()) {
+        const open = row.getByRole('link', { name: /^Open .* in Messages$/ });
+        assert((await open.getAttribute('href')).startsWith('sms:'), 'each text opens Messages');
+        await row.getByRole('button', { name: /^Copy / }).waitFor();
+        const h = (await open.boundingBox()).height;
+        assert(h >= 44, 'menu buttons 44px+');
+      }
+      await sheet.locator('.text-row[data-text="poll"] .text-name').click();
+      const bubble = (await sheet.locator('.text-row[data-text="poll"] .bubble').innerText()).trim();
       assert(
         /^Pickleball: (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 8:00 to 10:00 PM at Northville Pickleball Club\. \$14 each\. In or out\?$/.test(bubble),
         `poll text was: ${bubble}`,
       );
       assert(!bubble.includes('48'), 'court cost in the poll');
-      const href = await sheet.getByRole('link', { name: 'Open in Messages' }).getAttribute('href');
+      const href = await sheet.getByRole('link', { name: 'Open Poll in Messages' }).getAttribute('href');
       assert(href.startsWith('sms:&body=Pickleball'), `bad sms link ${href}`);
-      await sheet.getByRole('button', { name: 'Copy message' }).click();
+      await sheet.getByRole('button', { name: 'Copy Poll' }).click();
       await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
       assert((await admin.evaluate(() => navigator.clipboard.readText())) === bubble, 'clipboard should hold the poll');
+      assert(!/\bsent\b/i.test(await sheet.innerText()), 'never say sent');
+      await admin.screenshot({ path: path.join(SHOTS, 'texts-menu.png') });
       await admin.keyboard.press('Escape');
     });
 
@@ -762,9 +881,7 @@ async function main() {
 
     await check('everyone confirmed owes a flat $14; mark paid updates only that player', async () => {
       const card = sessionCards(admin).first();
-      await more(card);
-      await card.getByRole('button', { name: 'Money' }).click();
-      const sheet = admin.locator('dialog[open]');
+      const sheet = await moneyFor(admin, card);
       assert((await sheet.getByText('owes $14').count()) === 4, 'expected four people owing $14');
       const alexRow = sheet.locator('li', { hasText: 'Alex' }).first();
       await alexRow.getByRole('button', { name: 'Mark paid' }).click();
@@ -773,7 +890,7 @@ async function main() {
     });
 
     await check('payment reminder is a draft, not a sent text', async () => {
-      const sheet = admin.locator('dialog[open]');
+      const sheet = admin.locator('details.money-sess[data-session][open]').first();
       const blairRow = sheet.locator('li', { hasText: 'Blair' }).first();
       await blairRow.getByRole('button', { name: 'Payment reminder' }).click();
       const draft = blairRow.locator('.draft');
@@ -784,7 +901,7 @@ async function main() {
     });
 
     await check('copy message fallback works', async () => {
-      const draft = admin.locator('dialog[open] .draft').first();
+      const draft = admin.locator('details.money-sess[data-session][open] .draft').first();
       await draft.getByRole('button', { name: 'Copy message' }).click();
       await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
       const clip = await admin.evaluate(() => navigator.clipboard.readText());
@@ -792,7 +909,7 @@ async function main() {
     });
 
     await check('opening Messages shows "Message ready", never "sent"', async () => {
-      const draft = admin.locator('dialog[open] .draft').first();
+      const draft = admin.locator('details.money-sess[data-session][open] .draft').first();
       await draft.evaluate((el) => {
         // Don't let the test browser try to launch an SMS app.
         el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault());
@@ -801,7 +918,7 @@ async function main() {
       await draft.getByText('Message ready.').waitFor();
       assert(!/\bsent\b/i.test(await draft.innerText()), 'the draft must never say it was sent');
       assert((await draft.getByRole('button', { name: /sent/i }).count()) === 0, 'no "I sent it" button');
-      await admin.keyboard.press('Escape');
+      await tab(admin, 'Home').click();
     });
 
     await check('after signing up: a small Pay button; "Sent?" after tapping never marks paid; Paid once marked', async () => {
@@ -826,14 +943,12 @@ async function main() {
       // Not marked paid: the organizer still sees Devon owing.
       await admin.reload();
       const card = sessionCards(admin).first();
-      await more(card);
-      await card.getByRole('button', { name: 'Money' }).click();
-      const sheet = admin.locator('dialog[open]');
+      const sheet = await moneyFor(admin, card);
       const devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
       await devonRow.getByText(/owes \$14/).waitFor();
       await devonRow.getByRole('button', { name: 'Mark paid' }).click();
       await admin.locator('.toast', { hasText: 'Devon marked paid' }).waitFor();
-      await admin.keyboard.press('Escape');
+      await tab(admin, 'Home').click();
       await p.reload();
       await firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
       assert((await firstCard(p).getByRole('link', { name: /Pay \$/ }).count()) === 0, 'Pay should be gone once paid');
@@ -895,7 +1010,7 @@ async function main() {
         await p.locator('.schedule article').first().waitFor();
         assert((await p.getByRole('region', { name: 'Payment' }).count()) === 0, 'card should go once marked paid');
       } finally {
-        await clock(undefined);
+        await clock(Date.now() + BASE_OFFSET);
       }
     });
 
@@ -1271,51 +1386,22 @@ async function main() {
       await tab(admin, 'Home').click();
     });
 
-    console.log('Substitutes');
-    let links = {};
-    await check('organizer prepares invitations when a spot is open', async () => {
-      // Fill the second session up to 3 (Blair, plus Devon if the suggestion put him in).
-      for (const name of ['Alex', 'Casey']) {
-        const card = players[name].locator('article').nth(1);
+    console.log('Filling a session');
+    await check('players fill the second session themselves (Invite substitutes is gone)', async () => {
+      for (const name of ['Alex', 'Casey', 'Frankie']) {
         await players[name].reload();
-        if ((await card.locator('.in-line .in-count').innerText()).startsWith('3 of 4 in')) break;
-        await card.getByRole('button', { name: "I'm in" }).click();
-        await card.getByText("You're in", { exact: true }).waitFor();
+        const card = players[name].locator('article').nth(1);
+        await card.locator('.in-line .in-count').waitFor();
+        if ((await card.locator('.in-line .in-count').innerText()).startsWith('4 of 4 in')) break;
+        const btn = card.getByRole('button', { name: "I'm in" });
+        if (await btn.count()) {
+          await btn.click();
+          await card.getByText("You're in", { exact: true }).waitFor();
+        }
       }
       await admin.reload();
-      const card = sessionCards(admin).nth(1);
-      await more(card);
-      await card.getByRole('button', { name: 'Invite substitutes' }).click();
-      const sheet = admin.locator('dialog[open]');
-      await sheet.getByText('Frankie').first().waitFor();
-      await sheet.getByRole('button', { name: /Prepare invitations/ }).click();
-      await sheet.locator('.draft').first().waitFor();
-      for (const d of await sheet.locator('.draft').all()) {
-        const who = (await d.locator('strong').first().textContent()).trim();
-        const body = await d.locator('.bubble').textContent();
-        links[who] = body.match(/https?:\/\/\S+\/t\/[A-Za-z0-9_-]+/)[0];
-      }
-      assert(links.Emery && links.Frankie, `missing links: ${Object.keys(links)}`);
-      assert(links.Emery !== links.Frankie, 'links must be personal');
-    });
-
-    await check('first claimer gets the spot', async () => {
-      const p = await newPage();
-      await p.goto(links.Frankie);
-      await p.getByRole('button', { name: 'Claim this spot' }).click();
-      await p.getByText("You're in!").waitFor();
-    });
-
-    await check('later claimer is told the spot is gone', async () => {
-      const p = await newPage();
-      await p.goto(links.Emery);
-      await p.getByText('No spots are open right now.').waitFor();
-      assert((await p.getByRole('button', { name: 'Claim this spot' }).count()) === 0, 'claim button still shown');
-    });
-
-    await check('invite sheet notices the spot was filled', async () => {
-      await admin.locator('dialog[open]').getByText('Spot filled').waitFor({ timeout: 15000 });
-      await admin.keyboard.press('Escape');
+      await sessionCards(admin).first().waitFor();
+      assert((await admin.getByText(/Invite substitutes/).count()) === 0, 'Invite substitutes should be gone');
     });
 
     console.log('Court waitlist');
@@ -1337,10 +1423,14 @@ async function main() {
       assert(Math.abs(opened.y - didnt.y) < 4 && words.y < opened.y + opened.height && words.y + words.height > opened.y, 'banner should be one row');
       await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
-      await more(card);
-      await card.getByRole('button', { name: 'Text the group poll' }).click();
-      const bubble = (await admin.locator('dialog[open] .bubble').innerText()).trim();
-      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://[^\\s/]+(/g/[A-Za-z0-9_-]+)?$`);
+      await card.getByRole('button', { name: /^Texts for / }).click();
+      const share = admin.locator('dialog[open] .text-row[data-text="share"]');
+      await share.locator('.text-name').click();
+      assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test((await share.locator('.bubble').innerText()).trim()), 'waitlist share text');
+      const pollRow = admin.locator('dialog[open] .text-row[data-text="poll"]');
+      await pollRow.locator('.text-name').click();
+      const bubble = (await pollRow.locator('.bubble').innerText()).trim();
+      const re = new RegExp(`^Pickleball ${day}, 8:00 to 10:00 PM\\. I'm on the court waitlist\\. Want to be ready if it opens\\? Tap here: https?://[^\\s/]+(/g/[A-Za-z0-9_-]+)?/?\\?s=[0-9a-f-]+$`);
       assert(re.test(bubble), `court-waitlist poll was: ${bubble}`);
       await admin.keyboard.press('Escape');
 
@@ -1375,34 +1465,70 @@ async function main() {
       // The court-waitlist banner keeps its words and buttons on one row (checked before it opened).
     });
 
-    await check('day-before card (when one is due right now): Text the group, Copy, Done; never "sent"', async () => {
-      await admin.reload();
-      const card = admin.getByRole('article', { name: /^(Tue|Thu), [A-Z][a-z]{2} \d{1,2}: \d in, / });
-      if ((await card.count()) === 0) return; // no session inside its 24-hour window at this moment
-      const first = card.first();
-      const body = (await first.locator('.bubble').innerText()).trim();
-      assert(/^Pickleball tomorrow, (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. /.test(body), `day-before text was: ${body}`);
-      await first.evaluate((el) => el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault()));
-      await first.getByRole('link', { name: 'Text the group' }).click();
-      await first.getByText('Message ready.').waitFor();
-      assert(!/\bsent\b/i.test(await first.innerText()), 'card must never say sent');
-      await first.getByRole('button', { name: 'Copy message' }).click();
-      await admin.locator('.toast', { hasText: 'Message copied' }).waitFor();
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
-      const label = await first.getAttribute('aria-label');
-      await first.getByRole('button', { name: 'Done' }).click();
-      await admin.getByRole('article', { name: label }).waitFor({ state: 'detached' });
+    await check('day-before card: "Text the players who are in" (all their numbers, link to the session), then last call with the link; never "sent"', async () => {
+      const first = await admin.evaluate(async () => {
+        const d = await (await fetch('/api/admin/dashboard')).json();
+        // A later session whose day-before card hasn't been seen (and dismissed) yet.
+        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.now() + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
+      });
+      assert(first, 'need a later session with 4 in');
+      const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
+      try {
+        await clock(Date.parse(first.startsAt) - 20 * 3600_000);
+        await admin.reload();
+        const card = admin.getByRole('article', { name: /^(Tue|Thu), [A-Z][a-z]{2} \d{1,2}: 4 in, / });
+        await card.waitFor({ timeout: 5000 }).catch(async () => {
+          const names = await admin.locator('article').evaluateAll((as) => as.map((a) => a.getAttribute('aria-label')).filter(Boolean));
+          throw new Error(`no day-before card for ${first.startsAt}; Home shows: ${names.join(' | ')}`);
+        });
+        const main = card.locator('.draft').first();
+        const open = main.getByRole('link', { name: 'Text the players who are in' });
+        const href = await open.getAttribute('href');
+        const phones = first.roster.filter((r) => r.status === 'confirmed' && r.phone).length;
+        const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
+        assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
+        const body = (await main.locator('.bubble').innerText()).trim();
+        const re = new RegExp(`^Pickleball tomorrow, (Tue|Thu), [A-Z][a-z]{2} \\d{1,2}, \\d{1,2}:\\d{2} to 10:00 PM at .+\\. You're in! If anything comes up and you need to back out, tap here so we can find a replacement: \\S+\\?s=${first.id}$`);
+        assert(re.test(body), `day-before text was: ${body}`);
+        assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
+        await main.getByRole('button', { name: 'Copy message' }).waitFor();
+        // The "need more players" text is a smaller second button.
+        const second = card.getByRole('button', { name: 'Text the group: need more players' });
+        assert((await second.boundingBox()).height < (await open.boundingBox()).height + 1, 'second button should be smaller or equal');
+        await second.click();
+        await card.getByRole('link', { name: 'Text the group: need more players' }).waitFor();
+        await main.evaluate((el) => el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault()));
+        await open.click();
+        await main.getByText('Message ready.').waitFor();
+        assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
+        await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
+        // Last call at 13 hours: links to the session too.
+        await clock(Date.parse(first.startsAt) - 12.5 * 3600_000); // between last call (13h) and the deadline (12h)
+        await admin.reload();
+        const last = admin.getByRole('article', { name: /^Last call, / });
+        await last.waitFor();
+        const lbody = (await last.locator('.bubble').innerText()).trim();
+        assert(new RegExp(`^Last call for pickleball tonight, \\d{1,2}:\\d{2} to 10:00 PM\\. We have 4 in\\. If you can't make it, tell me now or tap here: \\S+\\?s=${first.id}$`).test(lbody), `last call was: ${lbody}`);
+        assert(!/\bsent\b/i.test(await last.innerText()), 'never say sent');
+      } finally {
+        await clock(Date.now() + BASE_OFFSET);
+        await admin.reload();
+      }
     });
 
     console.log('Reschedule & cancel');
     await check('organizer can move a session to a new time', async () => {
       const card = sessionCards(admin).first();
       await more(card);
-      await card.getByRole('button', { name: 'Reschedule' }).first().click();
+      assert((await card.getByRole('button', { name: 'Reschedule' }).count()) === 0, 'no separate Reschedule button');
+      await card.getByRole('button', { name: 'Edit booking' }).click();
       const sheet = admin.locator('dialog[open]');
+      // Moving lives inside Edit booking, tucked away until needed.
+      assert(!(await sheet.getByLabel('Start', { exact: true }).isVisible()), 'Move this session should start closed');
+      await sheet.getByText('Move this session').click();
       const change = sheet.getByRole('link', { name: /^Change court on CourtReserve/ });
       assert((await change.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1', 'reschedule should link to the modify/cancel page');
-      await sheet.getByLabel('Start').fill('19:30');
+      await sheet.getByLabel('Start', { exact: true }).fill('19:30');
       await sheet.getByText(/New time: .*7:30 to 10:00 PM$/).waitFor();
       await sheet.getByRole('button', { name: 'Move session' }).click();
       // Straight to a ready text for the group, with an optional reason.
@@ -1425,7 +1551,7 @@ async function main() {
       const card = sessionCards(admin).first();
       assert((await card.getAttribute('data-court')) === 'booked', 'first card should be booked here');
       await more(card);
-      const link = card.getByRole('link', { name: /^Change or cancel court/ });
+      const link = card.getByRole('link', { name: /^Modify court/ });
       assert((await link.getAttribute('href')) === CANCEL && (await link.getAttribute('target')) === '_blank', 'More should link to the modify/cancel page');
       await card.getByRole('button', { name: 'Cancel session' }).click();
       const dlg = admin.locator('dialog[open]');
@@ -1445,14 +1571,13 @@ async function main() {
       await dlg.getByRole('button', { name: 'Go back' }).click();
       await card.getByRole('button', { name: 'Cancel session' }).waitFor();
       assert((await card.getByText('Canceled', { exact: true }).count()) === 0, 'canceled without confirming');
-      // Someone pays first, so there's someone to pay back.
-      await card.getByRole('button', { name: 'Money' }).click();
-      const moneySheet = admin.locator('dialog[open]');
+      // Someone pays first (on the Money tab), so there's someone to pay back.
+      const moneySheet = await moneyFor(admin, card);
       const payer = (await moneySheet.locator('li', { has: admin.getByRole('button', { name: 'Mark paid' }) }).first().locator('strong').innerText()).trim();
       await moneySheet.getByRole('button', { name: 'Mark paid' }).first().click();
       await admin.locator('.toast', { hasText: 'marked paid' }).waitFor();
-      await admin.keyboard.press('Escape');
-      await moneySheet.waitFor({ state: 'detached' }).catch(() => {});
+      await tab(admin, 'Home').click();
+      await more(card);
       await card.getByRole('button', { name: 'Cancel session' }).click();
       await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
       const after = admin.locator('dialog[open]');
@@ -1477,11 +1602,20 @@ async function main() {
       assert((await admin.getByRole('article', { name: /^Pay back/ }).count()) === 0, 'Pay back card should be gone once refunded');
     });
 
-    await check('Monthly money: from Settings, month picker, bottom line; organizer only', async () => {
+    await check('Money tab: monthly summary on top, who paid per session, pay back and credits; organizer only', async () => {
       await tab(admin, 'Settings').click();
-      await openSections(admin);
-      await admin.getByRole('region', { name: 'Quick settings' }).getByRole('button', { name: 'Open' }).click();
+      assert((await admin.getByText('Monthly money').count()) === 0, 'Monthly money moved out of Settings');
+      await tab(admin, 'Money').click();
       await admin.getByRole('heading', { name: 'Monthly money' }).waitFor();
+      // Order: the month first, then Who paid, then pay back / credits.
+      const order = await admin.evaluate(() => [...document.querySelectorAll('main h2')].map((h) => h.textContent.trim()));
+      assert(order[0] === 'Monthly money' && order.indexOf('Who paid') > 0, `Money tab order: ${order}`);
+      const sess = admin.locator('details.money-sess[data-session]').first();
+      await sess.waitFor();
+      assert(/^(Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2} · \d of \d paid/.test((await sess.locator('summary').innerText()).trim()), 'session summary shows who paid');
+      await sess.evaluate((el) => (el.open = true));
+      await sess.getByRole('button', { name: /^Mark (un)?paid$/ }).first().waitFor();
+      assert((await admin.getByRole('button', { name: 'Back to Settings' }).count()) === 0, 'no Back to Settings on the Money tab');
       const month = admin.getByLabel('Month', { exact: true });
       const now = await month.inputValue();
       assert(/^\d{4}-\d{2}$/.test(now), `month picker value ${now}`);
@@ -1491,7 +1625,7 @@ async function main() {
       await admin.getByRole('button', { name: 'Next month' }).click();
       await admin.waitForFunction((was) => document.querySelector('#mm-month').value !== was, now);
       await admin.screenshot({ path: path.join(SHOTS, 'admin-monthly-money.png'), fullPage: true });
-      await admin.getByRole('button', { name: 'Back to Settings' }).click();
+      await tab(admin, 'Settings').click();
       await openSections(admin);
       await admin.getByLabel('Typical court cost').waitFor();
       assert((await admin.getByLabel('Typical court cost').inputValue()) === '48', 'typical court cost defaults to $48');
@@ -1513,10 +1647,15 @@ async function main() {
         await p.goto(`${BASE}/admin`);
         await p.getByLabel('Organizer PIN').fill(PIN);
         await p.getByRole('button', { name: 'Sign in' }).click();
-        await tab(p, 'Settings').click();
-        await openSections(p);
-        await p.getByRole('region', { name: 'Quick settings' }).getByRole('button', { name: 'Open' }).click();
+        await tab(p, 'Money').click();
         await p.locator('.bottom-line').waitFor();
+        const small = await p.evaluate(() =>
+          [...document.querySelectorAll('main button, main a.btn, main summary')]
+            .filter((b) => b.offsetParent !== null)
+            .map((b) => [b.textContent.trim().slice(0, 20), b.getBoundingClientRect().height])
+            .filter(([, h]) => h < 43.5),
+        );
+        assert(small.length === 0, `Money tab buttons under 44px: ${JSON.stringify(small)}`);
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(overflow <= 0, `monthly money overflows by ${overflow}px`);
         await p.screenshot({ path: path.join(SHOTS, `monthly-${width}-${scheme}.png`), fullPage: true });
@@ -1629,7 +1768,7 @@ async function main() {
         await players.Alex.locator('.schedule article').first().waitFor();
         assert((await players.Alex.getByText(/Late drop/i).count()) === 0, 'players never see late drops');
       } finally {
-        await clock(undefined);
+        await clock(Date.now() + BASE_OFFSET);
       }
     });
 
@@ -1709,9 +1848,14 @@ async function main() {
     await check('touch targets are at least 44px tall', async () => {
       for (const p of [admin, players.Alex]) {
         const small = await p.evaluate(() =>
-          [...document.querySelectorAll('.btn, .tabbar button, .icon-btn, .segmented button')]
+          [...document.querySelectorAll('.btn, .tabbar button, .icon-btn, .icon-round, .segmented button')]
             .filter((el) => el.offsetParent !== null)
-            .filter((el) => el.getBoundingClientRect().height < 43.5)
+            .filter((el) => {
+              // Count an invisible tap area drawn with ::before (small Pay, "not you?").
+              const b = getComputedStyle(el, '::before');
+              const extra = b.content !== 'none' && b.position === 'absolute' ? -2 * Math.min(0, parseFloat(b.top) || 0) + Math.max(0, (parseFloat(b.height) || 0) - el.getBoundingClientRect().height) : 0;
+              return el.getBoundingClientRect().height + extra < 43.5;
+            })
             .map((el) => el.textContent.trim()),
         );
         assert(small.length === 0, `too small: ${small.join(', ')}`);
@@ -1787,7 +1931,7 @@ async function main() {
     for (const [width, scheme] of [[360, 'light'], [375, 'dark'], [390, 'light'], [430, 'dark'], [360, 'dark'], [430, 'light']]) {
       await check(`no sideways scrolling at ${width}px in ${scheme} mode (player, organizer, link page)`, async () => {
         const p = await newPage(width, scheme);
-        const urls = [playerLink, `${BASE}/admin`, links.Emery];
+        const urls = [playerLink, `${BASE}/admin`];
         for (const url of urls) {
           await p.goto(url);
           await p.waitForLoadState('networkidle');
@@ -1880,9 +2024,10 @@ async function main() {
         await p.screenshot({ path: path.join(SHOTS, `booking-${width}-${scheme}.png`) });
         await p.keyboard.press('Escape');
         await more(card);
-        await card.getByRole('button', { name: 'Reschedule' }).first().click();
+        await card.getByRole('button', { name: 'Edit booking' }).click();
+        await p.locator('dialog[open]').getByText('Move this session').click();
         await p.locator('dialog[open]').getByLabel('Date').waitFor();
-        await fits('reschedule form');
+        await fits('move-this-session form');
         await p.keyboard.press('Escape');
         await tab(p, 'Settings').click();
         await openSections(p);
