@@ -58,6 +58,13 @@ async function more(card) {
   await less.waitFor();
 }
 
+/** Open every collapsed Settings section (they remember being open). */
+async function openSections(page) {
+  await page.locator('details.set-sect').first().waitFor();
+  await page.evaluate(() => document.querySelectorAll('details.set-sect:not([open])').forEach((d) => (d.open = true)));
+  await page.waitForFunction(() => document.querySelectorAll('details.set-sect:not([open])').length === 0);
+}
+
 async function waitForServer() {
   for (let i = 0; i < 60; i++) {
     try {
@@ -316,8 +323,50 @@ async function main() {
       assert(bg[0] === bg[1] && bg[0] !== 'rgba(0, 0, 0, 0)', `page background not set on html: ${bg}`);
     });
 
+    await check('Settings: short page; sections start closed, open and close with a tap, and remember', async () => {
+      await tab(admin, 'Settings').click();
+      await admin.locator('details.set-sect').first().waitFor();
+      const titles = (await admin.locator('details.set-sect > summary > span:first-child').allInnerTexts()).map((s) => s.trim());
+      for (const want of ['Group', 'Money', 'Schedule', 'Access', 'Advanced', 'Calendar', 'Add to Home Screen', 'Change PIN', 'Backup', 'Recent changes']) {
+        assert(titles.includes(want), `missing section ${want}: ${titles}`);
+      }
+      assert((await admin.locator('details.set-sect[open]').count()) === 0, 'every section should start closed');
+      assert((await admin.getByText('How this works').count()) === 0, '"How this works" should be gone');
+      assert((await admin.getByText(/Texts are never sent automatically/).count()) === 0, 'How this works notes should be gone');
+      // The most used things are at the top.
+      const quick = admin.getByRole('region', { name: 'Quick settings' });
+      await quick.getByText('Monthly money').waitFor();
+      await quick.getByRole('button', { name: 'Copy' }).waitFor();
+      await quick.getByRole('button', { name: 'Dark', exact: true }).waitFor();
+      const quickBox = await quick.boundingBox();
+      const firstSect = await admin.locator('details.set-sect').first().boundingBox();
+      assert(quickBox.y < firstSect.y, 'quick settings should come first');
+      // Sign out is the last thing on the page.
+      const signOut = await admin.getByRole('button', { name: 'Sign out' }).boundingBox();
+      const lastSect = await admin.locator('details.set-sect').last().boundingBox();
+      assert(signOut.y > lastSect.y, 'Sign out should be at the very bottom');
+      // Short: about two iPhone screens even with everything closed.
+      const height = await admin.evaluate(() => document.documentElement.scrollHeight);
+      assert(height <= 2 * 844, `Settings is ${height}px tall`);
+      const rows = await admin.locator('details.set-sect > summary').evaluateAll((s) => s.map((x) => x.getBoundingClientRect().height));
+      assert(rows.every((h) => h >= 44), `section rows too short to tap: ${rows}`);
+      await admin.screenshot({ path: path.join(SHOTS, 'settings-closed.png'), fullPage: true });
+      // Open and close; open ones are remembered after a reload.
+      await admin.locator('details[data-section="schedule"] > summary').click();
+      await admin.getByLabel(/Day-before check-in/).waitFor();
+      await admin.locator('details[data-section="advanced"] > summary').click();
+      await admin.getByLabel(/Plan sessions ahead/).waitFor();
+      await admin.locator('details[data-section="advanced"] > summary').click();
+      assert(!(await admin.getByLabel(/Plan sessions ahead/).isVisible()), 'Advanced should close again');
+      await admin.reload();
+      await tab(admin, 'Settings').click();
+      await admin.locator('details[data-section="schedule"][open]').waitFor();
+      assert((await admin.locator('details[data-section="advanced"][open]').count()) === 0, 'closed sections stay closed');
+    });
+
     await check('Settings: check-in hours field clears, retypes, and is checked on Save', async () => {
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       const field = admin.getByLabel(/Day-before check-in/);
       assert((await field.getAttribute('inputmode')) === 'numeric', 'should show the number keypad');
       await field.fill('');
@@ -332,9 +381,49 @@ async function main() {
       await admin.getByRole('button', { name: 'Save settings' }).click();
       await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
       assert((await admin.getByText('Warn before cancellation deadline').count()) === 0, 'old setting still shown');
-      assert((await admin.getByLabel(/Plan sessions ahead/).isVisible()) === false, 'Advanced should start collapsed');
-      await admin.getByText('Advanced').click();
       await admin.getByLabel(/Plan sessions ahead/).waitFor();
+    });
+
+    await check('Settings: every setting still saves (a few changed and put back)', async () => {
+      await openSections(admin);
+      const set = async (label, value) => admin.getByLabel(label).fill(value);
+      const before = {
+        membership: await admin.getByLabel('Monthly membership').inputValue(),
+        last: await admin.getByLabel(/Last call/).inputValue(),
+        venue: await admin.getByLabel('Venue street address').inputValue(),
+        reminder: await admin.getByLabel(/Booking reminder/).inputValue(),
+      };
+      await set('Monthly membership', '31');
+      await set(/Last call/, '12');
+      await set('Venue street address', '40100 Six Mile Rd, Northville, MI');
+      await set(/Booking reminder/, '13');
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
+      await admin.reload();
+      await tab(admin, 'Settings').click();
+      await openSections(admin);
+      assert((await admin.getByLabel('Monthly membership').inputValue()) === '31', 'membership did not save');
+      assert((await admin.getByLabel(/Last call/).inputValue()) === '12', 'last call did not save');
+      assert((await admin.getByLabel('Venue street address').inputValue()) === '40100 Six Mile Rd, Northville, MI', 'address did not save');
+      assert((await admin.getByLabel(/Booking reminder/).inputValue()) === '13', 'booking reminder did not save');
+      // A bad number in a closed section reopens it and says what's wrong.
+      await set(/Booking reminder/, '99');
+      await admin.locator('details[data-section="advanced"] > summary').click();
+      assert((await admin.locator('details[data-section="advanced"][open]').count()) === 0, 'Advanced should be closed now');
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('details[data-section="advanced"][open]').waitFor();
+      await admin.getByText('Enter a number from 1 to 30.').waitFor();
+      // Put everything back.
+      await set('Monthly membership', before.membership);
+      await set(/Last call/, before.last);
+      await set('Venue street address', before.venue);
+      await set(/Booking reminder/, before.reminder);
+      await admin.getByRole('button', { name: 'Save settings' }).click();
+      await admin.locator('.toast', { hasText: 'Saved' }).last().waitFor();
+      await admin.reload();
+      await tab(admin, 'Settings').click();
+      await openSections(admin);
+      assert((await admin.getByLabel('Monthly membership').inputValue()) === before.membership, 'membership not put back');
     });
 
     await check('Settings: dark mode follows the phone, or Light / Dark', async () => {
@@ -348,6 +437,7 @@ async function main() {
       assert((await bgOf()) === dark, 'Dark was not remembered after reload');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-dark.png'), fullPage: true });
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       await admin.getByRole('button', { name: 'System', exact: true }).click();
       assert((await bgOf()) === light, 'System should follow the (light) phone setting');
       await tab(admin, 'Home').click();
@@ -905,13 +995,14 @@ async function main() {
 
     await check('Settings: turning the open address OFF goes back to link-only; the long link still works', async () => {
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       await admin.getByText('Old private link').click();
       privateLink = (await admin.locator('details code.link').textContent()).trim();
       assert(/\/g\/[A-Za-z0-9_-]{20,}$/.test(privateLink), `private link was ${privateLink}`);
       await admin.getByLabel('Anyone with the site address can use it').uncheck();
       await admin.getByRole('button', { name: 'Save settings' }).click();
       await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
-      assert((await admin.locator('section[aria-labelledby="link-title"] code.link').first().textContent()).includes('/g/'), 'link-only should show the long link');
+      assert((await admin.getByRole('region', { name: 'Quick settings' }).locator('.set-link').textContent()).includes('/g/'), 'link-only should show the long link');
       const p = await newPage();
       await p.goto(BASE);
       await p.getByText('Open the link your organizer sent you').waitFor();
@@ -1113,7 +1204,9 @@ async function main() {
       assert(!manifest.start_url, 'no start_url, so each player keeps their own link');
       assert((await p.locator('link[rel="apple-touch-icon"]').getAttribute('href')) === '/apple-touch-icon.png', 'icon spot missing');
       await tab(admin, 'Settings').click();
-      await admin.getByRole('heading', { name: 'Add to Home Screen' }).waitFor();
+      await openSections(admin);
+      const a2hs = admin.locator('details[data-section="a2hs"]');
+      await a2hs.getByText('Tap Add to Home Screen.').waitFor();
       await tab(admin, 'Home').click();
     });
 
@@ -1173,6 +1266,7 @@ async function main() {
       await players.Blair.reload();
       await players.Blair.locator('article').nth(1).getByText("You're in", { exact: true }).waitFor();
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       await admin.getByText('As player: joined').first().waitFor();
       await tab(admin, 'Home').click();
     });
@@ -1385,7 +1479,8 @@ async function main() {
 
     await check('Monthly money: from Settings, month picker, bottom line; organizer only', async () => {
       await tab(admin, 'Settings').click();
-      await admin.getByRole('region', { name: 'Monthly money' }).getByRole('button', { name: 'Open' }).click();
+      await openSections(admin);
+      await admin.getByRole('region', { name: 'Quick settings' }).getByRole('button', { name: 'Open' }).click();
       await admin.getByRole('heading', { name: 'Monthly money' }).waitFor();
       const month = admin.getByLabel('Month', { exact: true });
       const now = await month.inputValue();
@@ -1397,6 +1492,7 @@ async function main() {
       await admin.waitForFunction((was) => document.querySelector('#mm-month').value !== was, now);
       await admin.screenshot({ path: path.join(SHOTS, 'admin-monthly-money.png'), fullPage: true });
       await admin.getByRole('button', { name: 'Back to Settings' }).click();
+      await openSections(admin);
       await admin.getByLabel('Typical court cost').waitFor();
       assert((await admin.getByLabel('Typical court cost').inputValue()) === '48', 'typical court cost defaults to $48');
       assert((await admin.getByLabel('Monthly membership').inputValue()) === '30', 'membership defaults to $30');
@@ -1418,7 +1514,8 @@ async function main() {
         await p.getByLabel('Organizer PIN').fill(PIN);
         await p.getByRole('button', { name: 'Sign in' }).click();
         await tab(p, 'Settings').click();
-        await p.getByRole('region', { name: 'Monthly money' }).getByRole('button', { name: 'Open' }).click();
+        await openSections(p);
+        await p.getByRole('region', { name: 'Quick settings' }).getByRole('button', { name: 'Open' }).click();
         await p.locator('.bottom-line').waitFor();
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(overflow <= 0, `monthly money overflows by ${overflow}px`);
@@ -1430,11 +1527,13 @@ async function main() {
     console.log('First session date');
     await check('Settings "First session" hides earlier sessions from Home and players', async () => {
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       const field = admin.getByLabel('First session');
       // A date one week after the first upcoming session.
       await tab(admin, 'Home').click();
       const firstShown = await sessionCards(admin).first().locator('h2').innerText();
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       const iso = await admin.evaluate(() => {
         const d = new Date();
         d.setDate(d.getDate() + 9);
@@ -1474,6 +1573,7 @@ async function main() {
       }
       // Put it back for the rest of the checks.
       await tab(admin, 'Settings').click();
+      await openSections(admin);
       await admin.getByLabel('First session').fill('');
       await admin.getByRole('button', { name: 'Save settings' }).click();
       await admin.locator('.toast', { hasText: 'Saved' }).waitFor();
@@ -1547,7 +1647,8 @@ async function main() {
       const ics = await (await p.request.get(BASE + new URL(url).pathname)).text();
       assert(ics.includes('BEGIN:VEVENT') && ics.includes('TZID:America/Detroit') && !/Blair|Devon|\$/.test(ics), 'feed should hold only times and the club');
       await tab(admin, 'Settings').click();
-      const cal = admin.getByRole('region', { name: 'Calendar' });
+      await openSections(admin);
+      const cal = admin.locator('details[data-section="calendar"]');
       await cal.getByRole('button', { name: 'Subscribe in Apple Calendar' }).waitFor();
       await cal.getByText(/refreshes subscribed calendars on its own schedule/).waitFor();
       // Turning Alex's link off from Players.
@@ -1720,6 +1821,36 @@ async function main() {
         await p.locator('article').first().waitFor();
         const overflow = await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         assert(overflow <= 0, `player home overflows by ${overflow}px`);
+        // "Welcome, Alex  not you?": small gray underlined text on the same line, never a button shape.
+        const nu = await p.evaluate(() => {
+          const b = document.querySelector('header .not-you');
+          const h = document.querySelector('header h1');
+          const sq = document.querySelector('header .today');
+          const line = document.querySelector('header .title-line');
+          const r = b.getBoundingClientRect();
+          const hr = h.getBoundingClientRect();
+          const cs = getComputedStyle(b);
+          const before = getComputedStyle(b, '::before');
+          return {
+            text: b.textContent.trim(),
+            name: b.getAttribute('aria-label'),
+            sameLine: r.top < hr.bottom && r.bottom > hr.top,
+            rightOfName: r.left >= hr.right - 1,
+            size: parseFloat(cs.fontSize),
+            border: cs.borderTopWidth,
+            bg: cs.backgroundColor,
+            underline: cs.textDecorationLine,
+            tap: parseFloat(before.height),
+            oneLine: line.getBoundingClientRect().height < 40,
+            squareInside: sq.getBoundingClientRect().right <= window.innerWidth,
+            notOverSquare: r.right <= sq.getBoundingClientRect().left,
+          };
+        });
+        assert(nu.text === 'not you?' && nu.name === 'Not you?', `not you text: ${nu.text}`);
+        assert(nu.sameLine && nu.rightOfName, 'not you? should sit right next to the name');
+        assert(nu.size <= 13 && nu.border === '0px' && nu.bg === 'rgba(0, 0, 0, 0)' && nu.underline.includes('underline'), `not you? should be small plain text: ${JSON.stringify(nu)}`);
+        assert(nu.tap >= 44, `not you? tap area is ${nu.tap}px`);
+        assert(nu.oneLine && nu.squareInside && nu.notOverSquare, `header wraps or pushes the date square at ${width}px`);
         await p.screenshot({ path: path.join(SHOTS, `player-${width}-${scheme}.png`), fullPage: false });
       });
     }
@@ -1754,6 +1885,7 @@ async function main() {
         await fits('reschedule form');
         await p.keyboard.press('Escape');
         await tab(p, 'Settings').click();
+        await openSections(p);
         await p.getByLabel('First session').waitFor();
         await fits('Settings');
         await p.close();

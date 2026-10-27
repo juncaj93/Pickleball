@@ -20,7 +20,20 @@ export function TodaySquare() {
 }
 
 /** The green band: logo, eyebrow over the title, an optional button, and today's date, all on one row. */
-export function TopBar({ eyebrow, title, sub, action }: { eyebrow: string; title: string; sub?: ReactNode; action?: ReactNode }) {
+export function TopBar({
+  eyebrow,
+  title,
+  sub,
+  action,
+  titleExtra,
+}: {
+  eyebrow: string;
+  title: string;
+  sub?: ReactNode;
+  action?: ReactNode;
+  /** Small text right after the title, on the same line (like "not you?"). */
+  titleExtra?: ReactNode;
+}) {
   useEffect(() => {
     document.title = title === SITE_NAME ? SITE_NAME : `${title} · ${SITE_NAME}`;
   }, [title]);
@@ -30,7 +43,14 @@ export function TopBar({ eyebrow, title, sub, action }: { eyebrow: string; title
         <img className="brand-logo" src="/logo-header.png" alt="" width="32" height="32" />
         <div className="topbar-text">
           <div className="eyebrow">{eyebrow}</div>
-          <h1>{title}</h1>
+          {titleExtra ? (
+            <div className="title-line">
+              <h1>{title}</h1>
+              {titleExtra}
+            </div>
+          ) : (
+            <h1>{title}</h1>
+          )}
           {sub && <div className="sub">{sub}</div>}
         </div>
         {action}

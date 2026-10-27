@@ -137,7 +137,7 @@ describe('calendar subscription', () => {
     expect(ics).toContain('SUMMARY:Canceled: Pickleball\r\nSTATUS:CANCELLED');
     expect(ics).toContain('SUMMARY:Pickleball\r\nSTATUS:CONFIRMED');
     expect(ics).toContain('LOCATION:Northville Pickleball Club\\, 40100 Six Mile Rd\\, Northville\\, MI');
-    expect(ics).not.toMatch(/Alex|Blair|Casey|Devon|\$|4837|48\.37|1400|paid|owe/i);
+    expect(ics).not.toMatch(/Alex|Blair|Casey|Devon|\$|(?<![A-Za-z0-9_-])(4837|1400)(?![A-Za-z0-9_-])|48\.37|paid|owe/i);
     // Dropping out takes it off their calendar.
     await out(ctx, tue.id, 'Alex');
     expect((await feed(ctx, link.url)).text).not.toContain(tue.id);

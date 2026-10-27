@@ -1,8 +1,8 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
-import { api, ApiError, copyText, getTheme, navigate, setTheme, type ThemeChoice } from '../../lib';
+import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
 import { HomeScreenSteps, SubscribeBlock } from '../PlayerHome';
 import { MonthlyMoneyPage } from './MonthlyMoney';
@@ -13,24 +13,84 @@ type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
-/** A dollar amount: decimal keypad, checked on Save. */
-function MoneyField({ label, value, onChange, error }: { label: string; value: string; onChange: (v: string) => void; error?: string }) {
+/** A dollar amount: label on the left, "$ 14" on the right, decimal keypad, checked on Save. */
+function MoneyField({ label, value, onChange, error, hint }: { label: string; value: string; onChange: (v: string) => void; error?: string; hint?: string }) {
   return (
-    <label className="field">
-      {label}
-      <span className="money-input">
-        <span aria-hidden="true">$</span>
-        <input type="text" inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={error ? true : undefined} />
-      </span>
+    <div className="set-row-wrap">
+      <label className="set-row">
+        <span className="set-label">
+          {label}
+          {hint && <span className="set-hint">{hint}</span>}
+        </span>
+        <span className="money-input set-input">
+          <span aria-hidden="true">$</span>
+          <input type="text" inputMode="decimal" autoComplete="off" value={value} onChange={(e) => onChange(e.target.value)} aria-invalid={error ? true : undefined} />
+        </span>
+      </label>
       {error && <span className="field-error">{error}</span>}
-    </label>
+    </div>
   );
 }
 
-const MAIN_SETTING = {
-  key: 'checkInHours' as const,
-  label: 'Day-before check-in (hours before play)',
-  hint: 'When check-in texts and the "short on players" warning start.',
+/** Which collapsed Settings sections are open, remembered on this phone. */
+const OPEN_KEY = 'pb_settings_open';
+function useOpenSections() {
+  const [open, setOpen] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(storageGet(OPEN_KEY) || '[]') as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  function set(id: string, isOpen: boolean) {
+    setOpen((cur) => {
+      if (cur.has(id) === isOpen) return cur;
+      const next = new Set(cur);
+      if (isOpen) next.add(id);
+      else next.delete(id);
+      storageSet(OPEN_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }
+  return { open, set };
+}
+
+/** A collapsed section: one 44px row that opens with a tap. */
+function Section({
+  id,
+  title,
+  note,
+  sections,
+  children,
+}: {
+  id: string;
+  title: string;
+  note?: string;
+  sections: ReturnType<typeof useOpenSections>;
+  children: ReactNode;
+}) {
+  return (
+    <details className="set-sect" data-section={id} open={sections.open.has(id)} onToggle={(e) => sections.set(id, e.currentTarget.open)}>
+      <summary>
+        <span>{title}</span>
+        {note && <span className="set-note">{note}</span>}
+      </summary>
+      <div className="set-body">{children}</div>
+    </details>
+  );
+}
+
+/** Which section each number lives in, so a bad value opens its section on Save. */
+const SECTION_OF: Record<keyof GroupSettings, string> = {
+  pricePerPlayerCents: 'money',
+  creditCentsWhenSix: 'money',
+  typicalCourtCostCents: 'money',
+  monthlyMembershipCents: 'money',
+  checkInHours: 'schedule',
+  lastCallHours: 'schedule',
+  horizonWeeks: 'advanced',
+  bookingLeadDays: 'advanced',
+  defaultDeadlineHours: 'advanced',
 };
 
 const ADVANCED_SETTINGS: { key: WholeKey; label: string; hint?: string }[] = [
@@ -103,6 +163,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const [curPin, setCurPin] = useState('');
   const [newPin, setNewPin] = useState('');
   const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const sections = useOpenSections();
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -121,6 +182,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       else settings[k] = cents;
     }
     setNumErrors(errors);
+    for (const k of Object.keys(errors) as (keyof GroupSettings)[]) sections.set(SECTION_OF[k], true);
     if (Object.keys(errors).length) return setError('Fix the highlighted numbers, then save.');
     setBusy(true);
     try {
@@ -162,11 +224,16 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
 
   if (moneyPage) return <MonthlyMoneyPage ctx={ctx} onBack={() => setMoneyPage(false)} />;
 
+  const tzLabel = TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz;
   return (
     <>
-      <section className="card stack" aria-labelledby="money-title">
-        <div className="spread" style={{ alignItems: 'center' }}>
-          <h2 id="money-title">Monthly money</h2>
+      {/* The things used most, in one compact card. */}
+      <section className="card set-top" aria-label="Quick settings">
+        <div className="set-line">
+          <span className="set-label">
+            <strong>Monthly money</strong>
+            <span className="set-hint">Only you see it</span>
+          </span>
           <button
             className="btn small"
             onClick={() => {
@@ -177,244 +244,212 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             Open
           </button>
         </div>
-        <p className="small muted">Collected, court costs, credits and your membership. Only you see this.</p>
-      </section>
-
-      <section className="card stack" aria-labelledby="link-title">
-        <h2 id="link-title">Player link</h2>
-        <p className="small muted">
-          {g.openAccess
-            ? 'Send this to your players. Anyone with the site address can use it.'
-            : 'Send this to your players. Anyone with it can see the schedule, so keep it in the group.'}
-        </p>
-        <code className="link">{g.playerLink}</code>
-        <div className="btn-row">
-          <button className="btn small" onClick={async () => toast((await copyText(g.playerLink)) ? 'Link copied' : "Couldn't copy")}>
-            Copy link
+        <div className="set-line">
+          <span className="set-label">
+            <strong>Player link</strong>
+            <code className="set-link">{g.playerLink.replace(/^https?:\/\//, '')}</code>
+          </span>
+          <button className="btn small" onClick={async () => ((await copyText(g.playerLink)) ? toast('Link copied') : toast("Couldn't copy", 'error'))}>
+            Copy
           </button>
-          {!g.openAccess && (
-            <button className="btn small ghost" onClick={() => setAskRotate(true)}>
-              Replace link
-            </button>
-          )}
         </div>
-        {g.openAccess && (
-          <details className="advanced">
-            <summary>Old private link</summary>
-            <p className="small muted">Still works for anyone who has it.</p>
-            <code className="link">{g.privateLink}</code>
-            <button className="btn small ghost" onClick={() => setAskRotate(true)}>
-              Replace private link
-            </button>
-          </details>
-        )}
+        <div className="set-line">
+          <span className="set-label">
+            <strong>Appearance</strong>
+          </span>
+          <div className="segmented compact" role="group" aria-label="Light or dark">
+            {(
+              [
+                ['system', 'System'],
+                ['light', 'Light'],
+                ['dark', 'Dark'],
+              ] as const
+            ).map(([v, label]) => (
+              <button
+                key={v}
+                aria-pressed={theme === v}
+                onClick={() => {
+                  setTheme(v);
+                  setThemeChoice(v);
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
       </section>
 
-      <form className="card stack" onSubmit={save}>
-        <h2>Group</h2>
-        <label className="field">
-          Group name
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
-        </label>
-        <label className="field">
-          Your name
-          <span className="hint">Players see it, for example "Alex may not have marked this paid yet."</span>
-          <input type="text" value={organizerName} onChange={(e) => setOrganizerName(e.target.value)} maxLength={40} />
-        </label>
-        <label className="field">
-          Venmo link
-          <input type="url" inputMode="url" value={venmo} onChange={(e) => setVenmo(e.target.value)} placeholder="https://venmo.com/u/" />
-        </label>
-        <MoneyField label="Price per player" value={money.pricePerPlayerCents} onChange={(v) => setMoney((m) => ({ ...m, pricePerPlayerCents: v }))} error={numErrors.pricePerPlayerCents} />
-        <MoneyField
-          label="Credit per person when 6 play"
-          value={money.creditCentsWhenSix}
-          onChange={(v) => setMoney((m) => ({ ...m, creditCentsWhenSix: v }))}
-          error={numErrors.creditCentsWhenSix}
-        />
-        <fieldset className="private-money">
-          <legend>Only you see these</legend>
+      <form className="card set-list" onSubmit={save} aria-label="Group settings">
+        <Section id="group" title="Group" note={g.name} sections={sections}>
+          <label className="field">
+            Group name
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} required />
+          </label>
+          <label className="field">
+            Your name
+            <span className="hint">Players see it, like "Robin confirms when it arrives."</span>
+            <input type="text" value={organizerName} onChange={(e) => setOrganizerName(e.target.value)} maxLength={40} />
+          </label>
+          <label className="field">
+            Venmo link
+            <input type="url" inputMode="url" value={venmo} onChange={(e) => setVenmo(e.target.value)} placeholder="https://venmo.com/u/" />
+          </label>
+          <label className="field">
+            Venue name
+            <input type="text" value={venueName} onChange={(e) => setVenueName(e.target.value)} maxLength={80} placeholder={DEFAULT_VENUE_NAME} />
+          </label>
+          <label className="field">
+            Venue street address
+            <input type="text" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} maxLength={160} autoComplete="street-address" />
+          </label>
+          <p className="set-hint">Time zone: {tzLabel}. Tuesdays and Thursdays, 8:00 to 10:00 PM.</p>
+        </Section>
+
+        <Section id="money" title="Money" note={`$${money.pricePerPlayerCents} each`} sections={sections}>
+          <MoneyField label="Price per player" value={money.pricePerPlayerCents} onChange={(v) => setMoney((m) => ({ ...m, pricePerPlayerCents: v }))} error={numErrors.pricePerPlayerCents} />
+          <MoneyField
+            label="Credit per person when 6 play"
+            value={money.creditCentsWhenSix}
+            onChange={(v) => setMoney((m) => ({ ...m, creditCentsWhenSix: v }))}
+            error={numErrors.creditCentsWhenSix}
+          />
           <MoneyField
             label="Typical court cost"
+            hint="Only you see this"
             value={money.typicalCourtCostCents}
             onChange={(v) => setMoney((m) => ({ ...m, typicalCourtCostCents: v }))}
             error={numErrors.typicalCourtCostCents}
           />
           <MoneyField
             label="Monthly membership"
+            hint="Only you see this"
             value={money.monthlyMembershipCents}
             onChange={(v) => setMoney((m) => ({ ...m, monthlyMembershipCents: v }))}
             error={numErrors.monthlyMembershipCents}
           />
-        </fieldset>
-        <label className="field">
-          Venue name
-          <span className="hint">Goes on calendar invites.</span>
-          <input type="text" value={venueName} onChange={(e) => setVenueName(e.target.value)} maxLength={80} placeholder={DEFAULT_VENUE_NAME} />
-        </label>
-        <label className="field">
-          Venue street address
-          <input type="text" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} maxLength={160} autoComplete="street-address" />
-        </label>
-        <p className="small muted">
-          Time zone: {TIMEZONE_OPTIONS.find((o) => o.value === tz)?.label ?? tz}. Sessions are Tuesdays and Thursdays, 8:00–10:00 PM.
-        </p>
-        <label className="check">
-          <input type="checkbox" checked={openAccess} onChange={(e) => setOpenAccess(e.target.checked)} />
-          Anyone with the site address can use it
-        </label>
-        <p className="small muted" style={{ marginTop: -6 }}>
-          {openAccess ? 'Players just open the site. Turn off to go back to the private link only.' : 'Only people with the private link can get in.'}
-        </p>
-        {openAccess && (
-          <label className="field">
-            Group word (optional)
-            <span className="hint">
-              {g.hasGroupWord && !removeWord
-                ? 'A group word is set. A new phone is asked for it once. Type a new one to change it.'
-                : 'If you set one, a new phone is asked for it once and then remembers it.'}
+        </Section>
+
+        <Section id="schedule" title="Schedule" sections={sections}>
+          <label className="set-row">
+            <span className="set-label">
+              First session
+              <span className="set-hint">Nothing before it shows</span>
             </span>
-            <input type="text" value={groupWord} onChange={(e) => setGroupWord(e.target.value)} autoCapitalize="none" autoComplete="off" maxLength={40} />
+            <input className="set-input wide" type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} />
           </label>
-        )}
-        {openAccess && g.hasGroupWord && !removeWord && (
-          <button type="button" className="btn small ghost" onClick={() => setRemoveWord(true)}>
-            Remove the group word
-          </button>
-        )}
-        {removeWord && <p className="small">The group word will be removed when you save.</p>}
-        <label className="field">
-          First session
-          <span className="hint">Nothing before this date shows to players or on your Home.</span>
-          <input type="date" value={firstDate} onChange={(e) => setFirstDate(e.target.value)} />
-        </label>
-        <NumberField
-          label={MAIN_SETTING.label}
-          hint={MAIN_SETTING.hint}
-          value={nums[MAIN_SETTING.key]}
-          onChange={(v) => setNums((n) => ({ ...n, [MAIN_SETTING.key]: v }))}
-          error={numErrors[MAIN_SETTING.key]}
-        />
-        <NumberField
-          label="Last call (hours before play)"
-          hint="When the last-call card shows on Home. It stays until the cancellation deadline."
-          value={nums.lastCallHours}
-          onChange={(v) => setNums((n) => ({ ...n, lastCallHours: v }))}
-          error={numErrors.lastCallHours}
-        />
-        <details className="advanced" open={ADVANCED_SETTINGS.some((a) => numErrors[a.key]) || undefined}>
-          <summary>Advanced</summary>
-          <div className="stack">
-            {ADVANCED_SETTINGS.map((a) => (
-              <NumberField
-                key={a.key}
-                label={a.label}
-                hint={a.hint}
-                value={nums[a.key]}
-                onChange={(v) => setNums((n) => ({ ...n, [a.key]: v }))}
-                error={numErrors[a.key]}
-              />
-            ))}
-          </div>
-        </details>
-        {error && <Notice tone="danger">{error}</Notice>}
-        <button className="btn" type="submit" disabled={busy}>
-          {busy ? 'Saving…' : 'Save settings'}
-        </button>
-      </form>
+          <NumberField
+            compact
+            label="Day-before check-in (hours before play)"
+            value={nums.checkInHours}
+            onChange={(v) => setNums((n) => ({ ...n, checkInHours: v }))}
+            error={numErrors.checkInHours}
+          />
+          <NumberField
+            compact
+            label="Last call (hours before play)"
+            value={nums.lastCallHours}
+            onChange={(v) => setNums((n) => ({ ...n, lastCallHours: v }))}
+            error={numErrors.lastCallHours}
+          />
+        </Section>
 
-      <section className="card stack" aria-labelledby="look-title">
-        <h2 id="look-title">Appearance</h2>
-        <div className="segmented" role="group" aria-label="Light or dark">
-          {(
-            [
-              ['system', 'System'],
-              ['light', 'Light'],
-              ['dark', 'Dark'],
-            ] as const
-          ).map(([v, label]) => (
-            <button
-              key={v}
-              aria-pressed={theme === v}
-              onClick={() => {
-                setTheme(v);
-                setThemeChoice(v);
-              }}
-            >
-              {label}
+        <Section id="access" title="Access" note={openAccess ? 'Open' : 'Link only'} sections={sections}>
+          <label className="check">
+            <input type="checkbox" checked={openAccess} onChange={(e) => setOpenAccess(e.target.checked)} />
+            Anyone with the site address can use it
+          </label>
+          {openAccess && (
+            <label className="field">
+              Group word (optional)
+              <span className="hint">{g.hasGroupWord && !removeWord ? 'One is set. Type a new one to change it.' : 'A new phone is asked for it once.'}</span>
+              <input type="text" value={groupWord} onChange={(e) => setGroupWord(e.target.value)} autoCapitalize="none" autoComplete="off" maxLength={40} />
+            </label>
+          )}
+          {openAccess && g.hasGroupWord && !removeWord && (
+            <button type="button" className="btn small ghost" onClick={() => setRemoveWord(true)}>
+              Remove the group word
             </button>
+          )}
+          {removeWord && <p className="small">The group word will be removed when you save.</p>}
+          {g.openAccess ? (
+            <details className="advanced">
+              <summary>Old private link</summary>
+              <p className="small muted">Still works for anyone who has it.</p>
+              <code className="link">{g.privateLink}</code>
+              <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
+                Replace private link
+              </button>
+            </details>
+          ) : (
+            <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
+              Replace link
+            </button>
+          )}
+        </Section>
+
+        <Section id="advanced" title="Advanced" sections={sections}>
+          {ADVANCED_SETTINGS.map((a) => (
+            <NumberField compact key={a.key} label={a.label} value={nums[a.key]} onChange={(v) => setNums((n) => ({ ...n, [a.key]: v }))} error={numErrors[a.key]} />
           ))}
+        </Section>
+
+        {error && <Notice tone="danger">{error}</Notice>}
+        <div className="set-save">
+          <button className="btn block" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save settings'}
+          </button>
         </div>
-        <p className="small muted">System follows your phone's setting. Saved on this phone only.</p>
-      </section>
-
-      <section className="card stack" aria-labelledby="a2hs-title">
-        <h2 id="a2hs-title">Add to Home Screen</h2>
-        <p className="small muted">On iPhone, in Safari:</p>
-        <HomeScreenSteps />
-        <p className="small muted">The icon then opens the site full screen, like an app.</p>
-      </section>
-
-      <section className="card stack" aria-labelledby="cal-title">
-        <h2 id="cal-title">Calendar</h2>
-        <p className="small muted">Every session, with cancellations and time changes. Players get their own link, with only their sessions, at the bottom of their screen. You can turn a person's link off under Players.</p>
-        <OrganizerSubscribe />
-      </section>
-
-      <form className="card stack" onSubmit={changePin}>
-        <h2>Change PIN</h2>
-        <label className="field">
-          Current PIN
-          <input type="password" inputMode="numeric" autoComplete="current-password" value={curPin} onChange={(e) => setCurPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
-        </label>
-        <label className="field">
-          New PIN (6–12 digits)
-          <input type="password" inputMode="numeric" autoComplete="new-password" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
-        </label>
-        {pinMsg && <Notice tone={pinMsg.ok ? 'ok' : 'danger'}>{pinMsg.text}</Notice>}
-        <button className="btn secondary" type="submit" disabled={curPin.length < 6 || newPin.length < 6}>
-          Change PIN
-        </button>
       </form>
 
-      <section className="card stack">
-        <h2>Backup</h2>
-        <p className="small muted">Download every session, player status, and payment as a spreadsheet file (CSV).</p>
-        <a className="btn secondary" href="/api/admin/export" download="pickleball-export.csv">
-          Download CSV
-        </a>
-      </section>
-
-      <section className="card stack">
-        <h2>How this works</h2>
-        <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
-          <li>Texts are never sent automatically. The site writes each message; you review it and press send in your phone's Messages app.</li>
-          <li>Alerts only appear when you open this page. Nothing pings your phone in the background.</li>
-          <li>Times are shown in Eastern time.</li>
-          <li>Payments are marked by you after you check Venmo. Nothing connects to Venmo or a bank.</li>
-          <li>When 6 play, the last two pay the 6-person discount and the first four each earn a credit toward their next session.</li>
-          <li>One court: exactly 4 or 6 players. The 5th waits; a 6th brings both in. If 6 drops to 5, nothing moves until you choose.</li>
-          <li>The PIN and private link are light protection for a friend group, not bank-grade security.</li>
-        </ul>
-      </section>
-
-      <section className="card stack" aria-labelledby="audit-title">
-        <h2 id="audit-title">Recent changes</h2>
-        {ctx.d.audit.length === 0 ? (
-          <p className="muted">No changes yet.</p>
-        ) : (
-          <ul className="list small">
-            {ctx.d.audit.slice(0, 30).map((a) => (
-              <li key={a.id}>
-                <strong>{ACTION_TEXT[a.action] ?? a.action}</strong>
-                {typeof a.details.player === 'string' ? ` · ${a.details.player}` : ''}
-                {typeof a.details.name === 'string' ? ` · ${a.details.name}` : ''}
-                <div className="muted">{formatDateTime(a.createdAt, tz)}</div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <div className="card set-list">
+        <Section id="calendar" title="Calendar" sections={sections}>
+          <p className="set-hint">Every session, with cancellations and time changes. Players get their own link at the bottom of their screen; turn a person's off under Players.</p>
+          <OrganizerSubscribe />
+        </Section>
+        <Section id="a2hs" title="Add to Home Screen" sections={sections}>
+          <p className="set-hint">On iPhone, in Safari:</p>
+          <HomeScreenSteps />
+        </Section>
+        <Section id="pin" title="Change PIN" sections={sections}>
+          <form className="stack" onSubmit={changePin}>
+            <label className="field">
+              Current PIN
+              <input type="password" inputMode="numeric" autoComplete="current-password" value={curPin} onChange={(e) => setCurPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
+            </label>
+            <label className="field">
+              New PIN (6–12 digits)
+              <input type="password" inputMode="numeric" autoComplete="new-password" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
+            </label>
+            {pinMsg && <Notice tone={pinMsg.ok ? 'ok' : 'danger'}>{pinMsg.text}</Notice>}
+            <button className="btn secondary" type="submit" disabled={curPin.length < 6 || newPin.length < 6}>
+              Change PIN
+            </button>
+          </form>
+        </Section>
+        <Section id="backup" title="Backup" sections={sections}>
+          <p className="set-hint">Every session, player status and payment as a spreadsheet file (CSV).</p>
+          <a className="btn secondary" href="/api/admin/export" download="pickleball-export.csv">
+            Download CSV
+          </a>
+        </Section>
+        <Section id="audit" title="Recent changes" sections={sections}>
+          {ctx.d.audit.length === 0 ? (
+            <p className="muted">No changes yet.</p>
+          ) : (
+            <ul className="list small">
+              {ctx.d.audit.slice(0, 30).map((a) => (
+                <li key={a.id}>
+                  <strong>{ACTION_TEXT[a.action] ?? a.action}</strong>
+                  {typeof a.details.player === 'string' ? ` · ${a.details.player}` : ''}
+                  {typeof a.details.name === 'string' ? ` · ${a.details.name}` : ''}
+                  <div className="muted">{formatDateTime(a.createdAt, tz)}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Section>
+      </div>
 
       <button
         className="btn ghost block"

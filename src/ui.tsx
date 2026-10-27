@@ -325,14 +325,41 @@ export function NumberField({
   value,
   onChange,
   error,
+  compact,
 }: {
   label: string;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
   error?: string | null;
+  /** Label on the left, a small box on the right. */
+  compact?: boolean;
 }) {
   const id = useId();
+  if (compact) {
+    return (
+      <div className="set-row-wrap">
+        <label className="set-row" htmlFor={id}>
+          <span className="set-label">
+            {label}
+            {hint && <span className="set-hint">{hint}</span>}
+          </span>
+          <input
+            id={id}
+            className="set-input"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            aria-invalid={error ? true : undefined}
+          />
+        </label>
+        {error && <span className="field-error">{error}</span>}
+      </div>
+    );
+  }
   return (
     <label className="field" htmlFor={id}>
       {label}

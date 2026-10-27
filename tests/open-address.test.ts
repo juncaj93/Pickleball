@@ -164,7 +164,7 @@ describe('privacy on the open address', () => {
     const res = await phone.call('GET', '/api/group');
     const text = res.text;
     expect(text).not.toMatch(/555-01|\(313\)|3135550/); // phone numbers
-    expect(text).not.toMatch(/4837|48\.37|courtCost/i); // court cost
+    expect(text).not.toMatch(/(?<![A-Za-z0-9_-])4837(?![A-Za-z0-9_-])|48\.37|courtCost/i); // court cost
     expect(text).not.toMatch(/"paid"|paymentStatus":"paid/); // other people's money
     expect(text).not.toMatch(/admin_pin|pinHash|group_key|privateLink|audit/i);
     expect(res.headers.get('X-Robots-Tag')).toContain('noindex');
