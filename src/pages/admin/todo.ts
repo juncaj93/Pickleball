@@ -89,7 +89,8 @@ export function playersIn(s: AdminSessionView, meId?: string | null) {
   };
 }
 
-export type Audience = 'everyone' | 'in' | 'notIn' | 'wereIn';
+/** 'chat': no numbers; Messages opens with just the words so the group chat can be picked. */
+export type Audience = 'everyone' | 'in' | 'notIn' | 'wereIn' | 'chat';
 
 /**
  * Who a text goes to, never including the organizer: everyone on the list,
@@ -97,6 +98,7 @@ export type Audience = 'everyone' | 'in' | 'notIn' | 'wereIn';
  */
 export function recipients(d: AdminDashboard, s: AdminSessionView, who: Audience) {
   const me = d.me?.id ?? null;
+  if (who === 'chat') return { phones: [] as string[], missing: [] as string[], count: 0 };
   if (who === 'in' || who === 'wereIn') {
     const r = playersIn(s, me);
     return { ...r, count: r.phones.length + r.missing.length };
@@ -112,6 +114,7 @@ export function recipients(d: AdminDashboard, s: AdminSessionView, who: Audience
 
 /** "5 who are in", "Everyone (8)", "6 not in yet", "4 who were in". */
 export function audienceLine(who: Audience, count: number): string {
+  if (who === 'chat') return 'Pick the chat';
   if (who === 'everyone') return `Everyone (${count})`;
   if (who === 'in') return `${count} who ${count === 1 ? 'is' : 'are'} in`;
   if (who === 'wereIn') return `${count} who ${count === 1 ? 'was' : 'were'} in`;

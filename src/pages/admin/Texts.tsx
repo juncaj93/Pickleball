@@ -3,12 +3,10 @@ import type { AdminSessionView } from '../../../shared/api';
 import { courtStatus } from '../../../shared/court';
 import {
   canceledMessage,
-  courtWaitlistPollMessage,
   dayBeforeMessage,
   dayBeforePlayersMessage,
   lastCallMessage,
   movedMessage,
-  pollMessage,
   sessionLink,
   shareGameMessage,
   smsHref,
@@ -66,7 +64,7 @@ export function DayBeforeTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView 
 }
 
 export interface TextChoice {
-  id: 'share' | 'poll' | 'daybefore' | 'lastcall' | 'spot' | 'canceled' | 'moved';
+  id: 'share' | 'daybefore' | 'lastcall' | 'spot' | 'canceled' | 'moved';
   label: string;
   body: string;
   who: Audience;
@@ -81,24 +79,19 @@ export function sessionTexts(ctx: AdminCtx, s: AdminSessionView): TextChoice[] {
   if (s.state.flags.canceled) items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz), who: 'wereIn' });
   if (live) {
     if (s.moved) items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, tz), who: 'in' });
-    items.push({ id: 'share', label: 'Share the game', body: shareGameText(ctx, s), who: 'everyone' });
-    items.push({
-      id: 'poll',
-      label: 'Poll',
-      body: s.courtState === 'waitlist' ? courtWaitlistPollMessage(s, tz, site) : pollMessage(s, tz, ctx.d.group.settings.pricePerPlayerCents, site),
-      who: 'everyone',
-    });
+    // Share the game and Spot open go to a group chat you pick, so no numbers.
+    items.push({ id: 'share', label: 'Share the game', body: shareGameText(ctx, s), who: 'chat' });
     items.push({ id: 'daybefore', label: 'Day before', body: dayBeforePlayersMessage(s, tz, site), who: 'in' });
     items.push({ id: 'lastcall', label: 'Last call', body: lastCallMessage(s, tz, s.confirmedCount), who: 'in' });
-    if (s.state.flags.openSpots > 0) items.push({ id: 'spot', label: 'Spot open', body: spotOpenMessage(s, tz, site), who: 'notIn' });
+    if (s.state.flags.openSpots > 0) items.push({ id: 'spot', label: 'Spot open', body: spotOpenMessage(s, tz, site), who: 'chat' });
   }
   return items;
 }
 
 /**
  * The gear panel's "Text" button. It opens a short list; each choice opens
- * Messages with the words and the right numbers. With no numbers saved it
- * opens with just the words, so a group chat can be picked.
+ * Messages with the words, and the players' numbers when it's for them.
+ * Share the game and Spot open open with just the words, to pick the chat.
  */
 export function TextButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const [open, setOpen] = useState(false);

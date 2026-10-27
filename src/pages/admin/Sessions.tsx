@@ -7,8 +7,6 @@ import {
   confirmationMessage,
   deadlineAlertMessage,
   paymentMessage,
-  courtWaitlistPollMessage,
-  pollMessage,
 } from '../../../shared/messages';
 import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
@@ -31,7 +29,7 @@ import { type AdminCtx, deadlineLine } from '../Admin';
 import { lateDropsAll, recipients, refundRows } from './todo';
 import { TextButton } from './Texts';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'poll' | 'canceled' | 'moved';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'canceled' | 'moved';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -168,7 +166,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
       {more && (
         <div className="options" id={`opts-${s.id}`}>
           {details.length > 0 && <p className="small muted court-details">{details.join(' · ')}</p>}
-          {/* One "Text" button: Share the game, Poll, Day before, and the rest. */}
+          {/* One "Text" button: Share the game, Day before, Last call, and the rest. */}
           <TextButton ctx={ctx} s={s} />
           <div className="opt-grid">
             <button className="btn secondary" onClick={() => ctx.open('booking', s.id)}>
@@ -402,7 +400,6 @@ export function SessionSheets({
     roster: `Players · ${title}`,
     payments: `Money · ${title}`,
     reminders: `Reminders · ${title}`,
-    poll: `Group poll · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
   };
@@ -423,19 +420,6 @@ export function SessionSheets({
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
-      {s && kind === 'poll' && (
-        <div className="stack">
-          <SmsDraft
-            to="Group chat"
-            phone={null}
-            body={
-              s.courtState === 'waitlist'
-                ? courtWaitlistPollMessage(s, tz, ctx.d.group.playerLink)
-                : pollMessage(s, tz, ctx.d.group.settings.pricePerPlayerCents, ctx.d.group.playerLink)
-            }
-          />
-        </div>
-      )}
     </Sheet>
   );
 }
