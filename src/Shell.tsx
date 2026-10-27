@@ -1,6 +1,9 @@
 import { type ReactNode, useEffect } from 'react';
+import { DEFAULT_TIMEZONE, formatShortDate } from '../shared/time';
+import { useNow } from './lib';
 
 export function TopBar({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: ReactNode }) {
+  const now = useNow();
   useEffect(() => {
     document.title = `${title} · Pickleball`;
   }, [title]);
@@ -10,6 +13,10 @@ export function TopBar({ eyebrow, title, sub }: { eyebrow: string; title: string
         <div className="eyebrow">
           <img className="brand-logo" src="/logo-header.png" alt="" width="32" height="32" />
           {eyebrow}
+          <span className="today">
+            <span className="sr-only">Today is </span>
+            {formatShortDate(new Date(now).toISOString(), DEFAULT_TIMEZONE)}
+          </span>
         </div>
         <h1>{title}</h1>
         {sub && <div className="sub">{sub}</div>}

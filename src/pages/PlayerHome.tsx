@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoPayUrl } from '../../shared/money';
-import { formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts } from '../../shared/time';
+import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad } from '../lib';
 import { TopBar } from '../Shell';
 import { ConfirmDialog, CourtIcon, Empty, ErrorState, Notice, Spinner, useToast } from '../ui';
@@ -78,6 +78,7 @@ export function PlayerHome({
   }
 
   const pickName = !!g && !viewAs && (!g.me || switching);
+  const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
   const sessions = g ? (showAll ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
 
   return (
@@ -123,14 +124,18 @@ export function PlayerHome({
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
-              {sessions.map((s) => (
-                <ScheduleRow
-                  key={s.id}
-                  s={s}
-                  g={g}
-                  creditNote={s.id === g.sessions.find((x) => !x.past)?.id ? g.creditBalanceCents : 0}
-                  onChanged={load.reload}
-                />
+              {sessions.map((s, i) => (
+                <Fragment key={s.id}>
+                  {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(sessions[i - 1].startsAt, tz)) && (
+                    <h3 className="week-break">{weekLabel(s.startsAt, Date.parse(g.now), tz)}</h3>
+                  )}
+                  <ScheduleRow
+                    s={s}
+                    g={g}
+                    creditNote={s.id === g.sessions.find((x) => !x.past)?.id ? g.creditBalanceCents : 0}
+                    onChanged={load.reload}
+                  />
+                </Fragment>
               ))}
             </div>
             {g.sessions.length > SHOW_FIRST && (
@@ -502,8 +507,6 @@ function ScheduleRow({
           {s.holiday && <HolidayPill name={s.holiday} />}
         </div>
 
-        {courtWait && open && !waiting && <p className="small">Join the standby list so we're ready if it opens.</p>}
-        {s.courtState === 'not_opened' && waiting && <p className="small muted">The court didn't open, so this one is off.</p>}
         {goodNews && <Notice tone="ok">{goodNews}</Notice>}
         {inSession && mine.creditComing && (
           <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
@@ -528,7 +531,6 @@ function ScheduleRow({
             {courtWait ? 'Standby' : 'Waitlist'}: {s.waitlist.map((w) => w.name).join(', ')}
           </p>
         )}
-        {courtWait && s.waitlist.length === 0 && open && <p className="small muted">Nobody on standby yet.</p>}
 
         {error && <Notice tone="danger">{error}</Notice>}
         {open &&
