@@ -165,10 +165,6 @@ export interface AdminPlayer {
   isNew: boolean;
   /** Organizer only: how many times they dropped out late. */
   lateDrops: number;
-  /** Their calendar subscription link is allowed (the organizer can turn it off). */
-  calendarOn: boolean;
-  /** They've made a calendar link. */
-  calendarMade: boolean;
 }
 
 export interface AuditEntry {

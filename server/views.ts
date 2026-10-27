@@ -20,6 +20,7 @@ import {
   usualDaysOf,
   waitlistOf,
 } from './repo';
+import { bookingOpensMs } from '../shared/time';
 
 /** What a player sees. No phone numbers, and payment details only for their own row. */
 export function playerSessionView(
@@ -56,8 +57,8 @@ export function playerSessionView(
     sixPlaying: six,
     holiday: holidayFor(session.starts_at, tz),
     courtState: session.court_state,
-    bookingOpen: nowMs >= bookingOpensMs(session.starts_at, settings),
-    bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings)).toISOString(),
+    bookingOpen: nowMs >= bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz),
+    bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     past: nowMs >= Date.parse(session.ends_at),
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
@@ -81,10 +82,6 @@ export function playerSessionView(
   };
 }
 
-/** The booking window opens this many days before play (14 by default). */
-function bookingOpensMs(startsAt: string, settings: GroupSettings): number {
-  return Date.parse(startsAt) - settings.bookingLeadDays * 24 * 3600_000;
-}
 
 export function adminPlayerView(p: PlayerRow): AdminPlayer {
   return {
@@ -98,8 +95,6 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     usualDays: usualDaysOf(p),
     isNew: !!p.is_new,
     lateDrops: 0,
-    calendarOn: !p.calendar_off,
-    calendarMade: !!p.calendar_token,
   };
 }
 
@@ -137,7 +132,7 @@ export function adminSessionView(
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
   const prices = pricesFor(session, roster, settings);
-  const state = computeSessionState(statusInput(session, roster), nowMs, settings);
+  const state = computeSessionState(statusInput(session, roster), nowMs, settings, tz);
   const order = new Map<string, number>();
   confirmed.forEach((r, i) => order.set(r.id, i));
   waitlist.forEach((r, i) => order.set(r.id, 100 + i));
@@ -193,7 +188,7 @@ export function adminSessionView(
     courtCostCents: session.court_cost_cents,
     courtState: session.court_state,
     moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,
-    bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings)).toISOString(),
+    bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     shownEarly: !!session.shown_early,
     holiday: holidayFor(session.starts_at, tz),
     holidayHoursOk: !!session.holiday_hours_ok_at,

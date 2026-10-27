@@ -157,7 +157,6 @@ export function PlayerHome({
                 {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
               </button>
             )}
-            {!viewAs && g.me && <CalendarSubscribe />}
             {!viewAs && <HomeScreenTip />}
           </>
         )}
@@ -679,8 +678,8 @@ function ScheduleRow({
           <div className="row-foot">
             <RowPay g={g} s={s} onTop={g.payDue.some((o) => o.sessionId === s.id)} />
             {open && (
-              <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`}>
-                Add to Calendar
+              <a className="cal-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+                Add to calendar
               </a>
             )}
           </div>
@@ -698,43 +697,5 @@ function ScheduleRow({
         onCancel={() => setAskOut(false)}
       />
     </article>
-  );
-}
-
-/**
- * "Subscribe in Apple Calendar": a private link listing only this player's
- * sessions. Their phone keeps it up to date with new times and cancellations.
- */
-function CalendarSubscribe() {
-  const toast = useToast();
-  const [off, setOff] = useState(false);
-  const [busy, setBusy] = useState(false);
-  async function go() {
-    setBusy(true);
-    try {
-      const res = await api<{ off: boolean; webcal?: string }>('GET', '/api/me/calendar');
-      if (res.off || !res.webcal) setOff(true);
-      else window.location.href = res.webcal;
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : "Couldn't make the calendar link.", 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return <SubscribeBlock busy={busy} off={off} onTap={go} />;
-}
-
-export function SubscribeBlock({ busy, off, onTap, label = 'Subscribe in Apple Calendar' }: { busy: boolean; off?: boolean; onTap: () => void; label?: string }) {
-  return (
-    <div className="subscribe">
-      <button className="link-btn" disabled={busy} onClick={onTap}>
-        {busy ? 'Getting your link…' : label}
-      </button>
-      <p className="small muted">
-        {off
-          ? 'Your calendar link is turned off. Ask the organizer.'
-          : 'Apple Calendar refreshes subscribed calendars on its own schedule, so changes can take a while to show.'}
-      </p>
-    </div>
   );
 }

@@ -4,7 +4,7 @@ import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../..
 import { formatDateTime, TIMEZONE_OPTIONS } from '../../../shared/time';
 import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, NumberField, parseWhole, useToast } from '../../ui';
-import { HomeScreenSteps, SubscribeBlock } from '../PlayerHome';
+import { HomeScreenSteps } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
 
 type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
@@ -385,10 +385,6 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       </form>
 
       <div className="card set-list">
-        <Section id="calendar" title="Calendar" sections={sections}>
-          <p className="set-hint">Every session, with cancellations and time changes. Players get their own link at the bottom of their screen; turn a person's off under Players.</p>
-          <OrganizerSubscribe />
-        </Section>
         <Section id="a2hs" title="Add to Home Screen" sections={sections}>
           <p className="set-hint">On iPhone, in Safari:</p>
           <HomeScreenSteps />
@@ -463,21 +459,4 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       />
     </>
   );
-}
-
-function OrganizerSubscribe() {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  async function go() {
-    setBusy(true);
-    try {
-      const res = await api<{ webcal: string }>('GET', '/api/admin/calendar');
-      window.location.href = res.webcal;
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : "Couldn't make the calendar link.", 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return <SubscribeBlock busy={busy} onTap={go} />;
 }

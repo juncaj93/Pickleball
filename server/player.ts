@@ -337,6 +337,7 @@ export async function sessionCalendarFile(ctx: Ctx): Promise<Response> {
     location,
     nowIso: ctx.nowIso,
     timezone: group?.timezone,
+    url: `${ctx.url.origin}/?s=${session.id}`,
   });
   const p = localParts(Date.parse(session.starts_at), group?.timezone ?? 'America/Detroit');
   const date = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;

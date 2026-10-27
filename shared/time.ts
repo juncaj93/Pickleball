@@ -185,3 +185,17 @@ export function weekLabel(iso: string, nowMs: number, tz: string): string {
   const monday = new Date(weekStart(iso, tz) * DAY_MS);
   return `Week of ${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
 }
+
+/** The organizer is reminded to book a newly opened court from this hour (7:00 AM local) on the day it opens. */
+export const BOOKING_PROMPT_HOUR = 7;
+
+/**
+ * When a session opens to book: 12:00 AM local on the calendar day that is
+ * `leadDays` days before the game. Counted by date, not by hours, so a Tue
+ * game is open all day on the Tue two weeks before, across clock changes.
+ */
+export function bookingOpensMs(startsAt: string, leadDays: number, tz: string, hour = 0): number {
+  const p = localParts(Date.parse(startsAt), tz);
+  const d = new Date(Date.UTC(p.year, p.month - 1, p.day - leadDays));
+  return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), hour, 0, tz);
+}

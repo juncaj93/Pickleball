@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courtStatus, playerSlots } from '../shared/court';
 import { buildTodo, homeBadgeCount } from '../src/pages/admin/todo';
-import { formatShortDate } from '../shared/time';
+import { bookingOpensMs, formatDateTime, formatShortDate } from '../shared/time';
 import { firstSession, HOUR, playerPhone, setupGroup } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
@@ -53,15 +53,16 @@ describe('organizer Home', () => {
     const live = d.sessions.filter((s: any) => Date.parse(s.startsAt) > nowMs);
     const look = (s: any) =>
       courtStatus({ ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen }, d.group.timezone);
-    const inside = live.filter((s: any) => Date.parse(s.startsAt) - nowMs <= 14 * 24 * HOUR);
-    const outside = live.filter((s: any) => Date.parse(s.startsAt) - nowMs > 14 * 24 * HOUR);
+    const inside = live.filter((s: any) => nowMs >= Date.parse(s.bookingOpensAt));
+    const outside = live.filter((s: any) => nowMs < Date.parse(s.bookingOpensAt));
     expect(inside.length).toBeGreaterThan(0);
     expect(outside.length).toBeGreaterThan(0);
     for (const s of inside) expect(look(s)).toMatchObject({ kind: 'needs', text: 'Court not booked' });
     for (const s of outside) {
       const c = look(s);
       expect(c.kind).toBe('later');
-      expect(Date.parse(s.startsAt) - Date.parse(s.bookingOpensAt)).toBe(14 * 24 * HOUR);
+      expect(Date.parse(s.bookingOpensAt)).toBe(bookingOpensMs(s.startsAt, 14, d.group.timezone));
+      expect(formatDateTime(s.bookingOpensAt, d.group.timezone)).toMatch(/12:00 AM$/);
       expect(c.text).toBe(`Booking opens ${formatShortDate(s.bookingOpensAt, d.group.timezone)}`);
       expect(c.text).toMatch(/^Booking opens (Sun|Mon|Tue|Wed|Thu|Fri|Sat), [A-Z][a-z]{2} \d{1,2}$/);
     }
@@ -77,8 +78,7 @@ describe('organizer Home', () => {
   it('the Home badge counts only courts inside the booking window', async () => {
     const ctx = await setupGroup();
     const d = await dash(ctx);
-    const nowMs = Date.parse(d.now);
-    const inside = d.sessions.filter((s: any) => Date.parse(s.startsAt) > nowMs && Date.parse(s.startsAt) - nowMs <= 14 * 24 * HOUR);
+    const inside = d.sessions.filter((s: any) => s.state.flags.bookingPromptDue);
     expect(homeBadgeCount(d)).toBe(buildTodo(d).length + inside.length);
     expect(homeBadgeCount(d)).toBeLessThan(d.sessions.length);
     // Booking one drops the count by one.

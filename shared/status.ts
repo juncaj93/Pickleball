@@ -1,5 +1,6 @@
 import type { GroupSettings } from './settings';
 import { MIN_PLAYERS, openSpots as spotsOpen } from './spots';
+import { BOOKING_PROMPT_HOUR, bookingOpensMs, DEFAULT_TIMEZONE } from './time';
 
 export type SessionRecordStatus = 'planned' | 'booked' | 'canceled' | 'completed';
 export type BookingStatus = 'needs_booking' | 'booked' | 'unavailable';
@@ -71,6 +72,8 @@ export interface SessionFlags {
   started: boolean;
   needsBooking: boolean; // not booked and inside the booking lead window
   bookingWindowOpen: boolean;
+  /** Needs booking and it's 7:00 AM or later on the day booking opened: counts on the Home badge. */
+  bookingPromptDue: boolean;
   courtUnavailable: boolean;
   underfilled: boolean; // fewer than 4
   /** Exactly 5 confirmed: the organizer needs to get to 4 or 6. */
@@ -92,7 +95,6 @@ export interface SessionState {
 }
 
 const HOUR = 3600_000;
-const DAY = 24 * HOUR;
 
 /**
  * Derive a session's status from stored timestamps and counts. Called every
@@ -104,14 +106,14 @@ const DAY = 24 * HOUR;
  * cancellation deadline (12 hours before by default) the organizer can
  * reschedule or cancel. After that it shows "Deadline passed".
  */
-export function computeSessionState(s: StatusInput, nowMs: number, settings: GroupSettings): SessionState {
+export function computeSessionState(s: StatusInput, nowMs: number, settings: GroupSettings, tz = DEFAULT_TIMEZONE): SessionState {
   const start = Date.parse(s.startsAt);
   const end = Date.parse(s.endsAt);
   const canceled = s.status === 'canceled';
   const past = nowMs >= end || s.status === 'completed';
   const started = nowMs >= start;
   const live = !canceled && !started;
-  const bookingWindowOpen = nowMs >= start - settings.bookingLeadDays * DAY;
+  const bookingWindowOpen = nowMs >= bookingOpensMs(s.startsAt, settings.bookingLeadDays, tz);
   const openSpots = spotsOpen(s.confirmedCount, s.waitlistCount);
   const underfilled = live && s.confirmedCount < MIN_PLAYERS;
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
@@ -119,12 +121,14 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const deadlinePassed = live && deadline !== null && nowMs >= deadline;
   const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep' && s.courtState !== 'waitlist';
 
+  const needsBooking = live && s.bookingStatus === 'needs_booking' && s.courtState !== 'waitlist' && bookingWindowOpen;
   const flags: SessionFlags = {
     canceled,
     past,
     started,
-    needsBooking: live && s.bookingStatus === 'needs_booking' && s.courtState !== 'waitlist' && bookingWindowOpen,
+    needsBooking,
     bookingWindowOpen,
+    bookingPromptDue: needsBooking && nowMs >= bookingOpensMs(s.startsAt, settings.bookingLeadDays, tz, BOOKING_PROMPT_HOUR),
     courtUnavailable: live && s.bookingStatus === 'unavailable',
     underfilled,
     fiveGoing: live && s.confirmedCount === 5,

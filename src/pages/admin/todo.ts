@@ -72,9 +72,9 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   return items;
 }
 
-/** The red number on the Home tab: Needs attention items plus courts to book inside the booking window. */
+/** The red number on the Home tab: Needs attention items plus courts to book, from 7:00 AM on the day booking opens. */
 export function homeBadgeCount(d: AdminDashboard): number {
-  return buildTodo(d).length + d.sessions.filter((s) => s.state.flags.needsBooking).length;
+  return buildTodo(d).length + d.sessions.filter((s) => s.state.flags.bookingPromptDue).length;
 }
 
 /** The players who are in: their numbers, and the names with none saved. */

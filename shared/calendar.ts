@@ -73,6 +73,8 @@ export function sessionCalendar(input: {
   location: string;
   nowIso: string;
   timezone?: string;
+  /** The site, opened at this session. */
+  url?: string;
 }): string {
   const tz = input.timezone && ZONES[input.timezone] ? input.timezone : DEFAULT_TIMEZONE;
   const lines = [
@@ -89,55 +91,9 @@ export function sessionCalendar(input: {
     `DTEND;TZID=${tz}:${localStamp(input.endsAt, tz)}`,
     'SUMMARY:Pickleball',
     `LOCATION:${esc(input.location)}`,
+    ...(input.url ? [`URL:${input.url}`, `DESCRIPTION:${esc(input.url)}`] : []),
     'END:VEVENT',
     'END:VCALENDAR',
   ];
-  return lines.join('\r\n') + '\r\n';
-}
-
-/**
- * A subscribed calendar: one event per session, in the group's time zone.
- * Canceled sessions stay with STATUS:CANCELLED and "Canceled:" in the title,
- * so phones show the change. Only titles, times and the club's address are
- * in it; never money or anyone's name.
- */
-export function calendarFeed(input: {
-  name: string;
-  timezone?: string;
-  location: string;
-  nowIso: string;
-  events: { id: string; startsAt: string; endsAt: string; canceled: boolean; updatedAt?: string | null }[];
-}): string {
-  const tz = input.timezone && ZONES[input.timezone] ? input.timezone : DEFAULT_TIMEZONE;
-  const lines = [
-    'BEGIN:VCALENDAR',
-    'VERSION:2.0',
-    'PRODID:-//Pickleball Bros//EN',
-    'CALSCALE:GREGORIAN',
-    'METHOD:PUBLISH',
-    `X-WR-CALNAME:${esc(input.name)}`,
-    `X-WR-TIMEZONE:${tz}`,
-    // A hint to check hourly; Apple Calendar still refreshes on its own schedule.
-    'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
-    'X-PUBLISHED-TTL:PT1H',
-    ...vtimezone(tz),
-  ];
-  for (const e of input.events) {
-    const changed = e.updatedAt ? Math.floor(Date.parse(e.updatedAt) / 1000) % 2_000_000_000 : 0;
-    lines.push(
-      'BEGIN:VEVENT',
-      `UID:${e.id}@pickleball-club`,
-      `DTSTAMP:${stamp(input.nowIso)}`,
-      ...(e.updatedAt ? [`LAST-MODIFIED:${stamp(e.updatedAt)}`] : []),
-      `SEQUENCE:${changed}`,
-      `DTSTART;TZID=${tz}:${localStamp(e.startsAt, tz)}`,
-      `DTEND;TZID=${tz}:${localStamp(e.endsAt, tz)}`,
-      `SUMMARY:${e.canceled ? 'Canceled: Pickleball' : 'Pickleball'}`,
-      `STATUS:${e.canceled ? 'CANCELLED' : 'CONFIRMED'}`,
-      `LOCATION:${esc(input.location)}`,
-      'END:VEVENT',
-    );
-  }
-  lines.push('END:VCALENDAR');
   return lines.join('\r\n') + '\r\n';
 }
