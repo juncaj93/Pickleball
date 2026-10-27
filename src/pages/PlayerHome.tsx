@@ -97,10 +97,10 @@ export function PlayerHome({
       <TopBar
         eyebrow={g?.group.name ?? SITE_NAME}
         title={!g ? SITE_NAME : pickName ? 'Who are you?' : `Welcome, ${g.me?.name ?? viewAs?.name}`}
-        action={
+        titleExtra={
           g?.me && !pickName && !viewAs ? (
-            <button className="topbar-btn" onClick={() => setSwitching(true)}>
-              Not you?
+            <button className="not-you" aria-label="Not you?" onClick={() => setSwitching(true)}>
+              not you?
             </button>
           ) : undefined
         }

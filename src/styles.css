@@ -1994,3 +1994,158 @@ label.field {
   width: 19px;
   height: 19px;
 }
+
+/* ---------- Settings: compact rows and collapsed sections ---------- */
+.set-top {
+  padding: 4px 14px;
+  display: flex;
+  flex-direction: column;
+}
+.set-line,
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 52px;
+}
+.set-top .set-line + .set-line {
+  border-top: 1px solid var(--line);
+}
+.set-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+.set-hint {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+  font-weight: 400;
+}
+.set-link {
+  font-size: 0.8rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: none;
+  padding: 0;
+}
+.set-row-wrap {
+  display: flex;
+  flex-direction: column;
+}
+.set-input {
+  flex: none;
+  width: 84px;
+  min-height: 44px;
+  text-align: right;
+}
+.set-input.wide {
+  width: 150px;
+  text-align: left;
+}
+.money-input.set-input {
+  width: 96px;
+}
+.set-top .segmented.compact {
+  flex: 0 0 auto;
+}
+.set-list {
+  padding: 0 14px;
+  display: flex;
+  flex-direction: column;
+}
+.set-sect + .set-sect,
+.set-list > .set-save {
+  border-top: 1px solid var(--line);
+}
+.set-sect > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.set-sect > summary::-webkit-details-marker {
+  display: none;
+}
+.set-sect > summary::after {
+  content: '›';
+  font-size: 1.3rem;
+  color: var(--ink-2);
+  transition: transform 0.15s;
+}
+.set-sect[open] > summary::after {
+  transform: rotate(90deg);
+}
+.set-note {
+  margin-left: auto;
+  font-weight: 400;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+.set-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 0 12px;
+}
+.set-save {
+  padding: 10px 0 12px;
+}
+
+/* "Welcome, Brandon  not you?": small gray underlined text on the title line. */
+.title-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.title-line h1 {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+.not-you {
+  position: relative;
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #c9dcd1;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+/* An invisible tap area at least 44px tall around the small text. */
+.not-you::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  right: -8px;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+.not-you:focus-visible {
+  outline: 2px solid var(--ball);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
