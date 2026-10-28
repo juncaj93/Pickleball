@@ -296,8 +296,7 @@ describe('message templates', () => {
   });
 
   it('includes the right player and amount in payment reminders', () => {
-    const m = paymentMessage('Blair', 1125, s, TZ, 'https://venmo.com/u/organizer');
-    expect(m).toBe('Hey Blair! You owe $11.25 for pickleball on Tuesday, Oct 27. Please send it here: https://venmo.com/u/organizer');
+    expect(paymentMessage('Blair', 1125, [s], TZ, 'pickleball.juncaj.net')).toBe('Hey Blair, you owe $11.25 for pickleball Tue Oct 27. Pay here: pickleball.juncaj.net');
   });
 
   it('states the exact deadline in the organizer alert', () => {

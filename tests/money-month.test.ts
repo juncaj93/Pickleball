@@ -47,17 +47,17 @@ describe('Venmo note', () => {
 describe('texts when a session changes', () => {
   const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
   const moved = { startsAt: '2026-11-06T01:00:00.000Z', endsAt: '2026-11-06T03:00:00.000Z' };
-  it('cancel: "Pickleball Tue, Nov 3 is canceled." with an optional reason', () => {
-    expect(canceledMessage(s, TZ)).toBe('Pickleball Tue, Nov 3 is canceled.');
-    expect(canceledMessage(s, TZ, '  rain in the forecast ')).toBe('Pickleball Tue, Nov 3 is canceled. rain in the forecast.');
-    expect(canceledMessage(s, TZ, 'Court closed!')).toBe('Pickleball Tue, Nov 3 is canceled. Court closed!');
+  it('cancel: "Pickleball Tue Nov 3 is canceled. {link}" with an optional reason before the link', () => {
+    expect(canceledMessage(s, TZ, 'pickleball.juncaj.net')).toBe('Pickleball Tue Nov 3 is canceled. pickleball.juncaj.net');
+    expect(canceledMessage(s, TZ, 'pickleball.juncaj.net', '  rain in the forecast ')).toBe('Pickleball Tue Nov 3 is canceled. rain in the forecast. pickleball.juncaj.net');
+    expect(canceledMessage(s, TZ, 'pickleball.juncaj.net', 'Court closed!')).toBe('Pickleball Tue Nov 3 is canceled. Court closed! pickleball.juncaj.net');
   });
-  it('reschedule: "Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM."', () => {
-    expect(movedMessage(moved, TZ)).toBe('Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM.');
-    expect(movedMessage(moved, TZ, 'Court swap')).toBe('Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM. Court swap.');
+  it('reschedule: "Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. {link}"', () => {
+    expect(movedMessage(moved, s.startsAt, TZ, 'pickleball.juncaj.net')).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. pickleball.juncaj.net');
+    expect(movedMessage(moved, s.startsAt, TZ, 'pickleball.juncaj.net', 'Court swap')).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. Court swap. pickleball.juncaj.net');
   });
   it('never says a message was sent', () => {
-    for (const m of [canceledMessage(s, TZ, 'x'), movedMessage(moved, TZ, 'y')]) expect(m).not.toMatch(/\bsent\b/i);
+    for (const m of [canceledMessage(s, TZ, 'L', 'x'), movedMessage(moved, s.startsAt, TZ, 'L', 'y')]) expect(m).not.toMatch(/\bsent\b/i);
   });
   it('players see Canceled or the new time', async () => {
     const ctx = await setupGroup();
@@ -213,8 +213,8 @@ describe('monthly money is private', () => {
       (await alex.call('GET', '/api/group')).text,
       (await ctx.app.client().call('GET', `/api/sessions/${s.id}/calendar.ics`)).text,
       (await ctx.app.client().call('GET', '/api/status')).text,
-      canceledMessage(s, TZ, 'x'),
-      movedMessage(s, TZ, 'y'),
+      canceledMessage(s, TZ, 'L', 'x'),
+      movedMessage(s, s.startsAt, TZ, 'L', 'y'),
     ];
     for (const t of texts) {
       expect(t).not.toMatch(/(?<![A-Za-z0-9_-])(4321|2987)(?![A-Za-z0-9_-])|43\.21|29\.87|membership|typicalCourtCost|monthlyMembership|Monthly money|Surplus|You covered|Players covered/i);

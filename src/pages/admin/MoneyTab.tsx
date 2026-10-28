@@ -4,6 +4,8 @@ import { useNow } from '../../lib';
 import { type AdminCtx, CreditsCard } from '../Admin';
 import { MonthlyMoneyPage } from './MonthlyMoney';
 import { PaymentsManager } from './Sessions';
+import { unpaidPeople } from './textMenu';
+import { SmsDraft } from '../../ui';
 import { refundRows } from './todo';
 
 /**
@@ -12,6 +14,7 @@ import { refundRows } from './todo';
  */
 export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
+  const unpaid = unpaidPeople(ctx.d);
   const tz = ctx.d.group.timezone;
   // Every session with a court to pay for: players' payments, and the organizer's court row.
   // A canceled game stays here while it has money to give back (or was given back), so Refund sits on its row.
@@ -44,6 +47,9 @@ export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
           Who paid
         </h2>
         {withMoney.length === 0 && <p className="muted small">Nobody is signed up yet.</p>}
+        {unpaid.count >= 2 && (
+          <SmsDraft to="Everyone who owes" phone={null} phones={unpaid.phones} missing={unpaid.missing} openLabel="Remind all unpaid" body={unpaid.body} quiet />
+        )}
         {started.map((s) => session(s, s.paidCount < s.payableCount || s.court?.paid === false || refundRows(s).some((r) => !r.refundedAt)))}
         {upcoming.map((s) => session(s, s.state.flags.canceled && refundRows(s).some((r) => !r.refundedAt)))}
       </section>

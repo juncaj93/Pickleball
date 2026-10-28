@@ -1,8 +1,7 @@
 import { Fragment, type FormEvent, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
-import { lastCallMessage, promotionMessage, spotOpenMessage } from '../../shared/messages';
-import { DayBeforeTexts } from './admin/Texts';
-import { recipients } from './admin/todo';
+import { nowSixMessage, promotedMessage, siteAddress } from '../../shared/messages';
+import { DayBeforeTexts, SpotOpenTexts } from './admin/Texts';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
@@ -336,7 +335,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
             ))}
           </ul>
           <RefundList ctx={ctx} s={s} only={lateDrops(s).map((r) => r.playerId)} />
-          <SpotOpenDraft ctx={ctx} s={s} />
+          <SpotOpenTexts ctx={ctx} s={s} />
           <button
             className="btn small ghost"
             disabled={busy}
@@ -359,13 +358,11 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 quiet={i > 0}
                 to={r.name}
                 phone={r.phone}
-                body={promotionMessage(
-                  r.name,
-                  s,
-                  tz,
-                  s.courtState === 'opened' && r.promotionReason === 'spot_opened' ? 'court_opened' : (r.promotionReason ?? 'spot_opened'),
-                  r.shareCents !== null ? r.shareCents - r.creditCents : undefined,
-                )}
+                body={
+                  r.promotionReason === 'made_six' && s.confirmedCount === 6
+                    ? nowSixMessage(s, tz, siteAddress(ctx.d.group.playerLink))
+                    : promotedMessage(s, tz, siteAddress(ctx.d.group.playerLink))
+                }
               />
               <button
                 className="btn small secondary"
@@ -410,11 +407,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       )}
       {(item.kind === 'daybefore' || item.kind === 'lastcall') && (
         <>
-          {item.kind === 'daybefore' ? (
-            <DayBeforeTexts ctx={ctx} s={s} />
-          ) : (
-            <LastCallDraft ctx={ctx} s={s} />
-          )}
+          <DayBeforeTexts ctx={ctx} s={s} />
           <button
             className="btn small ghost"
             disabled={busy}
@@ -636,19 +629,6 @@ export function deadlineLine(s: AdminSessionView, tz: string, nowMs: number): st
   const when = formatDateTime(s.cancellationDeadlineAt, tz);
   const passed = Date.parse(s.cancellationDeadlineAt) <= nowMs;
   return passed ? `${when} (passed)` : `${when} (${formatRelative(s.cancellationDeadlineAt, nowMs)})`;
-}
-
-/** Last call goes to the players who are in. */
-function LastCallDraft({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const r = recipients(ctx.d, s, 'in');
-  return (
-    <SmsDraft to="Players who are in" phone={null} phones={r.phones} missing={r.missing} openLabel="Text the players who are in" body={lastCallMessage(s, ctx.d.group.timezone, s.confirmedCount)} />
-  );
-}
-
-/** A spot opened: Messages opens with just the words, to post in the group chat. */
-function SpotOpenDraft({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  return <SmsDraft to="Group chat" phone={null} openLabel="Text the group: spot open" body={spotOpenMessage(s, ctx.d.group.timezone, ctx.d.group.playerLink)} />;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');

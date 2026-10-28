@@ -3,11 +3,8 @@ import { cardWindows } from '../shared/cards';
 import {
   confirmationMessage,
   courtWaitlistPollMessage,
-  dayBeforeMessage,
-  lastCallMessage,
   paymentMessage,
   pollMessage,
-  promotionMessage,
   replacementMessage,
 } from '../shared/messages';
 import { DEFAULT_SETTINGS } from '../shared/settings';
@@ -172,9 +169,6 @@ describe('court waitlist', () => {
     expect(courtWaitlistPollMessage(s, TZ, 'https://pickleball.juncaj.net')).toBe(
       "Pickleball Thu Oct 29, 8:00 to 10:00 PM. I'm on the court waitlist. Want in if it opens? pickleball.juncaj.net",
     );
-    expect(promotionMessage('Ryan', s, TZ, 'court_opened', 1400)).toBe(
-      "Good news, Ryan! The court opened up, so you're in for pickleball Thursday, Oct 29, 8:00 to 10:00 PM. You owe $14.",
-    );
   });
 });
 
@@ -261,30 +255,13 @@ describe('day-before and last-call cards', () => {
     expect((await adminSession(ctx, s.id)).cards).toEqual({ dayBefore: false, lastCall: false });
   });
 
-  it('words the day-before text for how many are in', () => {
-    const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
-    const link = 'https://pickleball.juncaj.net';
-    const head = 'Pickleball tomorrow, Tue Nov 3, 8:00 to 10:00 PM.';
-    expect(dayBeforeMessage(s, TZ, 3, link)).toBe(`${head} We have 3 in and need 1 more. Sign up: pickleball.juncaj.net`);
-    expect(dayBeforeMessage(s, TZ, 1, link)).toBe(`${head} We have 1 in and need 3 more. Sign up: pickleball.juncaj.net`);
-    expect(dayBeforeMessage(s, TZ, 4, link)).toBe(`${head} We're set with 4. See you there.`);
-    expect(dayBeforeMessage(s, TZ, 6, link)).toBe(`${head} We're set with 6. See you there.`);
-    expect(dayBeforeMessage(s, TZ, 5, link)).toBe(`${head} We have 5 and need 1 more or 1 fewer. pickleball.juncaj.net`);
-    expect(lastCallMessage(s, TZ, 4)).toBe("Last call: pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, text me ASAP.");
-  });
-
   it('no text ever says it was sent, or carries the court cost', () => {
     const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
     const all = [
-      dayBeforeMessage(s, TZ, 3, 'L'),
-      dayBeforeMessage(s, TZ, 5, 'L'),
-      dayBeforeMessage(s, TZ, 6, 'L'),
-      lastCallMessage(s, TZ, 4),
       pollMessage(s, TZ, 1400, 'L'),
       courtWaitlistPollMessage(s, TZ, 'L'),
-      promotionMessage('A', s, TZ, 'made_six', 900),
       confirmationMessage('A', s, TZ, 'L'),
-      paymentMessage('A', 1400, s, TZ, null),
+      paymentMessage('A', 1400, [s], TZ, 'L'),
       replacementMessage(s, TZ, 'L'),
     ];
     for (const m of all) {

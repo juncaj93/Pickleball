@@ -237,6 +237,7 @@ export function adminSessionView(
       : null,
     courtCostCents: session.court_cost_cents,
     courtState: session.court_state,
+    plannedStartsAt: session.planned_starts_at,
     moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,
     extra: !!session.is_extra,
     note: session.note,

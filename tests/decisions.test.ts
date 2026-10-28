@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createNodeD1 } from '../dev/nodeD1';
 import { BACKUP_TABLES } from '../server/admin';
-import { lastCallMessage } from '../shared/messages';
+import { checkInMessage } from '../shared/messages';
 import { backupToSql, TABLES } from '../scripts/restore-backup.mjs';
 import { DAY, HOUR, PIN, firstSession, playerPhone, setupGroup, TestApp } from './harness';
 
@@ -119,13 +119,14 @@ describe('unpaid amounts stay until paid', () => {
   });
 });
 
-describe('last call wording', () => {
+describe('check-in wording', () => {
   it('says "tonight" for the usual game and "today" for one before 5:00 PM', () => {
     const at = (start: string, end: string) => ({ startsAt: start, endsAt: end });
-    expect(lastCallMessage(at('2026-11-04T01:00:00Z', '2026-11-04T03:00:00Z'), TZ, 4)).toMatch(/^Last call: pickleball tonight, 8:00 to 10:00 PM\./);
-    expect(lastCallMessage(at('2026-11-07T15:00:00Z', '2026-11-07T17:00:00Z'), TZ, 4)).toMatch(/^Last call: pickleball today, 10:00 AM to 12:00 PM\./);
-    expect(lastCallMessage(at('2026-11-07T21:30:00Z', '2026-11-07T23:30:00Z'), TZ, 4)).toMatch(/^Last call: pickleball today, 4:30 to 6:30 PM\./);
-    expect(lastCallMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, 4)).toMatch(/^Last call: pickleball tonight, 5:00 to 7:00 PM\./);
+    const noon = (iso: string) => Date.parse(iso);
+    expect(checkInMessage(at('2026-11-04T01:00:00Z', '2026-11-04T03:00:00Z'), TZ, noon('2026-11-03T15:00:00Z'), 'L')).toBe('Pickleball tonight, 8:00 PM. Still in? Update here: L');
+    expect(checkInMessage(at('2026-11-07T15:00:00Z', '2026-11-07T17:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 10:00 AM. Still in? Update here: L');
+    expect(checkInMessage(at('2026-11-07T21:30:00Z', '2026-11-07T23:30:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 4:30 PM. Still in? Update here: L');
+    expect(checkInMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball tonight, 5:00 PM. Still in? Update here: L');
   });
 });
 

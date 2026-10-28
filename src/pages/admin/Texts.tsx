@@ -1,103 +1,61 @@
 import { useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
-import { courtStatus } from '../../../shared/court';
-import {
-  canceledMessage,
-  dayBeforeMessage,
-  dayBeforePlayersMessage,
-  lastCallMessage,
-  movedMessage,
-  sessionLink,
-  shareGameMessage,
-  smsHref,
-  spotOpenMessage,
-} from '../../../shared/messages';
+import { smsHref } from '../../../shared/messages';
 import { isIOS } from '../../lib';
 import { MessageIcon, SmsDraft } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { type Audience, audienceLine, recipients, shortOfPlayers } from './todo';
+import { fillTexts, sessionTexts, type TextItem } from './textMenu';
 
 // Every text the site prepares for one session. Each opens Messages with the
 // words and the numbers filled in; nothing here ever sends or says "sent".
+// What is offered (and to whom) is worked out in textMenu.ts.
 
-/** "Share the game": worded for where the court stands, linking straight to the session. */
-export function shareGameText(ctx: AdminCtx, s: AdminSessionView): string {
-  const tz = ctx.d.group.timezone;
-  const kind = courtStatus({ ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past }, tz).kind;
-  return shareGameMessage(s, tz, kind === 'booked' ? 'booked' : kind === 'waitlist' ? 'waitlist' : 'open', sessionLink(ctx.d.group.playerLink, s.id));
-}
+const OPEN_LABEL: Partial<Record<TextItem['id'], string>> = {
+  checkin: 'Text the players who are in',
+  need: 'Text the group: need more players',
+  down5: 'Text the group: need 1 more or 1 out',
+  share: 'Text the group',
+};
 
 /**
- * The day-before card: the main button texts the players who are in. When
- * we're short of 4 or 6, the "need more players" text (to everyone not in)
- * is the main one instead; the other is one tap away.
+ * The texts on a "needs players" or check-in card: whichever of Down to 5,
+ * Need players and Check-in fits this game (or Share the game). The first is
+ * the card's one green button; any other is gray.
  */
 export function DayBeforeTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const tz = ctx.d.group.timezone;
-  const site = ctx.d.group.playerLink;
-  const [showOther, setShowOther] = useState(false);
-  const inNow = recipients(ctx.d, s, 'in');
-  const notIn = recipients(ctx.d, s, 'notIn');
-  const short = shortOfPlayers(s);
-  // The draft that leads is the card's one green button; the other one, once opened, is gray.
-  const toPlayers = (
-    <SmsDraft quiet={short} to="Players who are in" phone={null} phones={inNow.phones} missing={inNow.missing} openLabel="Text the players who are in" body={dayBeforePlayersMessage(s, tz, site)} />
-  );
-  const needMore = (
-    <SmsDraft quiet={!short} to="Everyone not in yet" phone={null} phones={notIn.phones} missing={notIn.missing} openLabel="Text the group: need more players" body={dayBeforeMessage(s, tz, s.confirmedCount, site)} />
-  );
+  const items = fillTexts(ctx.d, s, Date.parse(ctx.d.now));
   return (
     <div className="stack" style={{ gap: 8 }}>
-      {short ? needMore : toPlayers}
-      {showOther ? (
-        short ? (
-          toPlayers
-        ) : (
-          needMore
-        )
-      ) : (
-        <button className="btn small secondary" onClick={() => setShowOther(true)}>
-          {short ? 'Text the players who are in' : 'Text the group: need more players'}
-        </button>
-      )}
+      {items.map((it, i) => (
+        <SmsDraft
+          key={it.id}
+          quiet={i > 0}
+          to={it.chat ? 'Group chat' : it.who.split(' · ')[0]}
+          phone={null}
+          phones={it.chat ? undefined : it.phones}
+          missing={it.chat ? undefined : it.missing}
+          openLabel={OPEN_LABEL[it.id] ?? 'Open in Messages'}
+          body={it.body}
+        />
+      ))}
     </div>
   );
 }
 
-export interface TextChoice {
-  id: 'share' | 'daybefore' | 'lastcall' | 'spot' | 'canceled' | 'moved';
-  label: string;
-  body: string;
-  who: Audience;
-}
-
-/** The choices under a card's "Text" button: only the ones that make sense for this session. */
-export function sessionTexts(ctx: AdminCtx, s: AdminSessionView): TextChoice[] {
-  const tz = ctx.d.group.timezone;
-  const site = ctx.d.group.playerLink;
-  const items: TextChoice[] = [];
-  const live = !s.state.flags.canceled && !s.state.flags.started;
-  if (s.state.flags.canceled) items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz), who: 'wereIn' });
-  if (live) {
-    if (s.moved) items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, tz), who: 'in' });
-    // Share the game and Spot open go to a group chat you pick, so no numbers.
-    items.push({ id: 'share', label: 'Share the game', body: shareGameText(ctx, s), who: 'chat' });
-    items.push({ id: 'daybefore', label: 'Day before', body: dayBeforePlayersMessage(s, tz, site), who: 'in' });
-    items.push({ id: 'lastcall', label: 'Last call', body: lastCallMessage(s, tz, s.confirmedCount), who: 'in' });
-    if (s.state.flags.openSpots > 0) items.push({ id: 'spot', label: 'Spot open', body: spotOpenMessage(s, tz, site), who: 'chat' });
-  }
-  return items;
+/** A card's text for a spot that just opened: the same choice as the cards that ask you to fill the game. */
+export function SpotOpenTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  return <DayBeforeTexts ctx={ctx} s={s} />;
 }
 
 /**
- * The gear panel's "Text" button. It opens a short list; each choice opens
- * Messages with the words, and the players' numbers when it's for them.
- * Share the game and Spot open open with just the words, to pick the chat.
+ * The gear panel's "Text" button. It opens a short list of only the texts that
+ * fit this game right now. Each choice opens Messages with the words, and the
+ * right people's numbers when it's for them; the gray line says who.
  */
 export function TextButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState<string | null>(null);
-  const items = sessionTexts(ctx, s);
+  const items = sessionTexts(ctx.d, s, Date.parse(ctx.d.now));
   if (items.length === 0) return null;
   return (
     <div className="text-pick">
@@ -108,15 +66,15 @@ export function TextButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       {open && (
         <ul className="text-menu" id={`texts-${s.id}`} aria-label="Texts">
           {items.map((it) => {
-            const r = recipients(ctx.d, s, it.who);
+            const key = `${it.id}-${it.label}`;
             return (
-              <li key={it.id} className="text-row" data-text={it.id}>
-                <a className="text-choice" href={smsHref(r.phones.length ? r.phones : null, it.body, isIOS)} onClick={() => setOpened(it.id)}>
+              <li key={key} className="text-row" data-text={it.id}>
+                <a className="text-choice" href={smsHref(it.phones.length ? it.phones : null, it.body, isIOS)} onClick={() => setOpened(key)}>
                   <span className="text-name">{it.label}</span>
-                  <span className="text-who">{audienceLine(it.who, r.count)}</span>
+                  <span className="text-who">{it.who}</span>
                 </a>
-                {r.missing.length > 0 && <div className="small missing-numbers">Missing numbers: {r.missing.join(', ')}</div>}
-                {opened === it.id && <div className="small muted message-ready">Message ready</div>}
+                {it.missing.length > 0 && <div className="small missing-numbers">Missing numbers: {it.missing.join(', ')}</div>}
+                {opened === key && <div className="small muted message-ready">Message ready</div>}
               </li>
             );
           })}
