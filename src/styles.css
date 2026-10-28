@@ -580,6 +580,10 @@ a {
 .pretend-bar + .topbar {
   padding-top: 10px;
 }
+.pretend-bar-btns {
+  display: inline-flex;
+  flex: none;
+}
 .pretend-bar .btn.small {
   min-height: 44px;
   padding: 0 4px 0 14px;
@@ -3777,24 +3781,7 @@ dialog.sheet[open]::backdrop {
 /* Pay $14 with the quiet "I paid" beside it. */
 .pay-pair {
   display: inline-flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
-/* "No Venmo app? Open Venmo website": only when the app didn't open. Its
-   own line, small, with a full-size tap area. */
-.venmo-web {
-  flex-basis: 100%;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  margin: -8px 0;
-  font-size: 0.85rem;
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.pay-card .venmo-web {
-  justify-content: center;
-  margin: -4px 0;
-}
+

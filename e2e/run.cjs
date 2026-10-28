@@ -88,33 +88,25 @@ async function venmoLinkOk(link, dollars, name) {
   }
 }
 
-/** Tap Pay (the test iPhone has no Venmo app), open the website in its new tab, then come back. */
+/** Tap Pay, then come back: the pickleball page never leaves its tab. */
 async function payAndComeBack(page, link) {
   await toVenmo(page, link);
   await page.locator('.schedule article').first().waitFor();
 }
 
 /**
- * Tap Pay. The pickleball page never leaves its tab: the app link goes
- * nowhere on the test iPhone, so after a moment "No Venmo app? Open Venmo
- * website" appears; it opens the exact same web link in a new tab. Then
- * that tab is closed, like switching back to the pickleball tab.
+ * Tap Pay on the test iPhone: the Venmo app link goes nowhere here (no app),
+ * the pickleball page stays put, no other tab opens, and no website link is
+ * offered.
  */
 async function toVenmo(page, link) {
   const before = page.url();
-  const href = await link.getAttribute('href');
+  const tabs = page.context().pages().length;
   await link.click();
-  const web = page.getByRole('link', { name: 'No Venmo app? Open Venmo website' }).first();
-  await web.waitFor();
+  await page.waitForTimeout(1800);
   assert(page.url() === before, `Pay left the pickleball page: ${page.url()}`);
-  assert((await web.getAttribute('href')) === href && (await web.getAttribute('target')) === '_blank', 'the website link opens the same Venmo link in a new tab');
-  const [tab] = await Promise.all([page.context().waitForEvent('page'), web.click()]);
-  await tab.waitForLoadState();
-  assert(tab.url() === href, `new tab went to ${tab.url()}`);
-  await tab.getByText('Venmo').waitFor();
-  await tab.close();
-  await page.bringToFront();
-  assert(page.url() === before, 'still on the pickleball page');
+  assert(page.context().pages().length === tabs, 'Pay opened another tab on the phone');
+  assert((await page.getByText(/Open Venmo website/).count()) === 0, 'no website link under Pay');
 }
 
 /** "I paid" is a quiet gray button right next to Pay, never a second green one. */
@@ -1811,87 +1803,131 @@ async function main() {
     });
 
     console.log('View as');
-    await check('"View as..." shows the player\'s screen with a small bar above it, and is look-only ("Demo only")', async () => {
-      await admin.reload();
-      await admin.getByRole('button', { name: 'View as…' }).click();
-      await admin.locator('dialog[open]').getByText('Demo only: taps here change nothing.').waitFor();
-      await admin.locator('dialog[open]').getByRole('button', { name: 'Blair', exact: true }).click();
-      await admin.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
-      await admin.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
-      await admin.getByRole('button', { name: 'Not you?' }).waitFor();
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
+    /** Every row of every table in the test site's database, to prove a demo saved nothing. */
+    const dbRows = () => {
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(dbFile, { readOnly: true });
+      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((t) => t.name);
+      const out = {};
+      for (const t of tables) out[t] = JSON.stringify(db.prepare(`SELECT * FROM "${t}" ORDER BY rowid`).all());
+      db.close();
+      return out;
+    };
+    /** Changes sent to the test site while `fn` runs (sign-out aside). */
+    const changesSent = async (page, fn) => {
       const sent = [];
-      const onReq = (r) => r.method() !== 'GET' && r.url().includes('/api/') && sent.push(r.url());
-      admin.on('request', onReq);
-      const second = admin.locator('article').nth(1);
-      await second.getByRole('button', { name: "I'm in" }).click();
-      const note = admin.locator('.pop', { hasText: 'Demo only. Nothing was saved.' });
-      await note.waitFor();
-      assert(!(await note.getAttribute('class')).includes('pop-error'), '"Demo only" is a plain note, not a red error');
-      await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
-      admin.off('request', onReq);
-      assert(sent.length === 0, `View as sent changes: ${sent}`);
-      await second.getByRole('button', { name: "I'm in" }).waitFor();
-      assert((await second.locator('.tile-check').count()) === 0, 'nothing changed on the card');
-      await admin.getByRole('button', { name: 'Exit' }).click();
-      await tab(admin, 'Home').waitFor();
+      const onReq = (r) => r.method() !== 'GET' && r.url().includes('/api/') && !r.url().endsWith('/api/admin/logout') && sent.push(`${r.method()} ${r.url()}`);
+      page.context().on('request', onReq);
+      try {
+        await fn();
+      } finally {
+        page.context().off('request', onReq);
+      }
+      return sent;
+    };
+    const sameRows = (before, after) => {
+      const diff = Object.keys({ ...before, ...after }).filter((t) => before[t] !== after[t]);
+      assert(diff.length === 0, `the demo changed the database: ${diff}`);
+    };
+
+    await check('"View as..." demo: taps show their effect (I\'m in, Pay then I paid, Paid, I\'m out), and nothing is saved', async () => {
+      await admin.reload();
+      const before = dbRows();
+      const sent = await changesSent(admin, async () => {
+        await admin.getByRole('button', { name: 'View as…' }).click();
+        await admin.locator('dialog[open]').getByText('Demo: taps work, nothing is saved.').waitFor();
+        await admin.locator('dialog[open]').getByRole('button', { name: 'Blair', exact: true }).click();
+        await admin.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
+        await admin.locator('.demo-bars .pretend-bar', { hasText: 'Demo, nothing is saved' }).waitFor();
+        await admin.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
+        await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
+        const second = admin.locator('article').nth(1);
+        await second.getByRole('button', { name: "I'm in" }).click();
+        await second.locator('.tile-check').waitFor();
+        await second.locator('.in-line', { hasText: 'Blair' }).waitFor();
+        // Pay shows the next step and opens nothing.
+        const url = admin.url();
+        const pay = second.getByRole('link', { name: /^Pay \$\d+ with Venmo$/ });
+        if (await pay.count()) {
+          await pay.click();
+          await second.getByRole('button', { name: 'I paid' }).click();
+          await second.locator('.paid-tag', { hasText: 'Paid' }).waitFor();
+          await second.getByRole('button', { name: "Didn't pay?" }).waitFor();
+          assert(admin.url() === url && admin.context().pages().length === 1, 'Pay opened something in the demo');
+        }
+        await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
+        await second.getByRole('button', { name: "I'm out" }).click();
+        await admin.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+        await second.getByRole('button', { name: "I'm in" }).waitFor();
+        // Reset throws the demo changes away.
+        await second.getByRole('button', { name: "I'm in" }).click();
+        await second.locator('.tile-check').waitFor();
+        await admin.locator('.pretend-bar').getByRole('button', { name: 'Reset' }).click();
+        await second.getByRole('button', { name: "I'm in" }).waitFor();
+        assert((await second.locator('.tile-check').count()) === 0, 'Reset should throw the sign-up away');
+        await admin.getByRole('button', { name: 'Exit' }).click();
+        await tab(admin, 'Home').waitFor();
+        assert((await admin.locator('.pretend-bar').count()) === 0, 'leaving the demo hides the bar');
+      });
+      assert(sent.length === 0, `the demo sent changes to the site: ${sent}`);
+      sameRows(before, dbRows());
       await players.Blair.reload();
-      assert((await players.Blair.locator('article').nth(1).locator('.tile-check').count()) === 0, 'Blair is not signed up');
-      // Nothing in History > Activity.
-      await tab(admin, 'History').click();
-      await admin.getByRole('button', { name: 'Activity' }).click();
-      await admin.getByRole('list', { name: 'Activity' }).waitFor();
-      assert((await admin.getByRole('list', { name: 'Activity' }).getByText(/\(as Blair\)/).count()) === 0, 'View as left an Activity line');
-      await tab(admin, 'Home').click();
+      assert((await players.Blair.locator('article').nth(1).locator('.tile-check').count()) === 0, 'Blair is not really signed up');
       // Blair signs up on her own phone (the next checks start from here).
       const own = players.Blair.locator('article').nth(1);
       await own.getByRole('button', { name: "I'm in" }).click();
       await own.locator('.tile-check').waitFor();
     });
 
-    await check('"Pretend it\'s...": a preset shows the bar, the site follows that time, taps say "Demo only", Reset ends it', async () => {
+    await check('"Pretend it\'s..." demo: the site follows that time, organizer taps show their effect (Mark paid), Reset and End work, nothing is saved', async () => {
       await admin.reload();
-      await admin.getByRole('button', { name: 'View as…' }).click();
-      const sheet = admin.locator('dialog[open]');
-      await sheet.getByRole('heading', { name: "Pretend it's…" }).waitFor();
-      await sheet.getByRole('button', { name: 'After the game' }).click();
-      const bar = admin.locator('.pretend-bar');
-      await bar.waitFor();
-      const label = await bar.innerText();
-      assert(/^Pretending it's (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, 10:30 PM/.test(label), `bar says: ${label}`);
-      assert(!/UTC|GMT|EDT|EST/.test(label), 'no time zone letters in the bar');
-      // Kept in this tab only, and the server builds pages for that time.
-      const at = await admin.evaluate(() => new Date(JSON.parse(sessionStorage.getItem('pb_pretend')).atMs).toISOString());
-      const d = await admin.evaluate((iso) => fetch('/api/admin/dashboard', { headers: { 'X-Pretend-Now': iso } }).then((r) => r.json()), at);
-      assert(d.now === at, 'the dashboard follows the pretend time');
-      const real = await admin.evaluate(() => fetch('/api/admin/dashboard').then((r) => r.json()));
-      // A change answers "Demo only" and nothing changes.
-      const before = real.audit.length;
-      await tab(admin, 'Money').click();
-      const markPaid = admin.getByRole('button', { name: /^Mark .* paid$|^Mark paid$/ }).first();
-      if (await markPaid.count()) {
-        await markPaid.click();
-        await admin.locator('.pop', { hasText: 'Demo only. Nothing was saved.' }).waitFor();
-      }
-      const after = await admin.evaluate(() => fetch('/api/admin/dashboard').then((r) => r.json()));
-      assert(after.audit.length === before, 'nothing was logged');
-      // The bar stays on every tab and in View as.
-      await tab(admin, 'Home').click();
-      await bar.waitFor();
-      await admin.getByRole('button', { name: 'View as…' }).click();
-      await admin.locator('dialog[open]').getByRole('button', { name: 'Alex', exact: true }).click();
-      await admin.getByRole('region', { name: 'Viewing as a player' }).waitFor();
-      await admin.locator('.demo-bars .pretend-bar').waitFor();
-      await admin.getByRole('button', { name: 'Exit' }).click();
-      // Reset ends it.
-      await admin.locator('.pretend-bar').getByRole('button', { name: 'Reset' }).click();
-      assert((await admin.locator('.pretend-bar').count()) === 0, 'Reset hides the bar');
-      assert((await admin.evaluate(() => sessionStorage.getItem('pb_pretend'))) === null, 'nothing kept after Reset');
-      // It also ends on its own after 30 minutes.
-      await admin.evaluate(() => sessionStorage.setItem('pb_pretend', JSON.stringify({ atMs: Date.now(), untilMs: Date.now() - 1 })));
-      await admin.reload();
-      await tab(admin, 'Home').waitFor();
-      assert((await admin.locator('.pretend-bar').count()) === 0, 'an expired pretend time is gone after 30 minutes');
+      const before = dbRows();
+      const sent = await changesSent(admin, async () => {
+        await admin.getByRole('button', { name: 'View as…' }).click();
+        const sheet = admin.locator('dialog[open]');
+        await sheet.getByRole('heading', { name: "Pretend it's…" }).waitFor();
+        await sheet.getByRole('button', { name: 'After the game' }).click();
+        const bar = admin.locator('.pretend-bar');
+        await bar.waitFor();
+        const label = await bar.innerText();
+        assert(/Demo, nothing is saved · (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, 10:30 PM/.test(label), `bar says: ${label}`);
+        assert(!/UTC|GMT|EDT|EST/.test(label), 'no time zone letters in the bar');
+        // Mark paid works in the demo.
+        await tab(admin, 'Money').click();
+        // The payment lists fold closed when the page refreshes; open them to look.
+        const openAll = () => admin.locator('details.money-sess').evaluateAll((els) => els.forEach((el) => (el.open = true)));
+        await admin.locator('details.money-sess').first().waitFor();
+        await openAll();
+        const sess = admin.locator('details.money-sess', { has: admin.getByRole('button', { name: 'Mark paid' }) }).first();
+        if (await sess.count()) {
+          const id = await sess.getAttribute('data-session');
+          const inSess = () => admin.locator(`details.money-sess[data-session="${id}"]`);
+          const unmarks = async () => {
+            await openAll();
+            return inSess().getByRole('button', { name: 'Unmark' }).count();
+          };
+          const before = await unmarks();
+          await inSess().getByRole('button', { name: 'Mark paid' }).first().click();
+          for (let i = 0; i < 50 && (await unmarks()) === before; i++) await admin.waitForTimeout(100);
+          assert((await unmarks()) === before + 1, 'Mark paid should show its effect in the demo');
+          // Reset: back to how it was.
+          await bar.getByRole('button', { name: 'Reset' }).click();
+          for (let i = 0; i < 50 && (await unmarks()) !== before; i++) await admin.waitForTimeout(100);
+          assert((await unmarks()) === before, 'Reset should throw the payment away');
+        }
+        await tab(admin, 'Home').click();
+        await bar.getByRole('button', { name: 'End' }).click();
+        assert((await admin.locator('.pretend-bar').count()) === 0, 'End hides the bar');
+        // A reload ends it too.
+        await admin.getByRole('button', { name: 'View as…' }).click();
+        await admin.locator('dialog[open]').getByRole('button', { name: 'Game day, 8:30 AM' }).click();
+        await bar.waitFor();
+        await admin.reload();
+        await tab(admin, 'Home').waitFor();
+        assert((await admin.locator('.pretend-bar').count()) === 0, 'a reload ends the demo');
+      });
+      assert(sent.length === 0, `the demo sent changes to the site: ${sent}`);
+      sameRows(before, dbRows());
     });
 
     await check('coming back to the page after 30 seconds quietly shows the latest (no reload, no spinner)', async () => {

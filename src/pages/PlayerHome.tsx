@@ -3,7 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, isDemo, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText } from '../lib';
+import { api, ApiError, isDemo, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, demoOn, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
@@ -66,7 +66,8 @@ export function PlayerHome({
   useEffect(() => {
     if (!viewAs) setPretend(null);
   }, [viewAs]);
-  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend]);
+  const demo = useDemoVersion();
+  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend, demo]);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -178,7 +179,6 @@ export function PlayerHome({
                     s={s}
                     g={g}
                     highlight={s.id === focusId}
-                    creditNote={s.id === g.sessions.find((x) => !x.past)?.id ? g.creditBalanceCents : 0}
                     onChanged={load.reload}
                   />
                 </Fragment>
@@ -375,40 +375,21 @@ function useSent(playerId: string | undefined, signups: { sessionId: string; sig
 }
 
 const PHONE = /iPhone|iPad|iPod|Android/i;
-/** How long the Venmo app gets to open before the website link is offered. */
-const APP_WAIT_MS = 1500;
 
 /**
  * Pay. This page never leaves its tab, so coming back lands right on it with
- * "I paid" ready. On a phone the Venmo app opens (the page stays put under
- * it); if it hasn't after a moment, "No Venmo app? Open Venmo website"
- * appears, which opens the website in a new tab. On a computer the website
- * opens in a new tab straight away (the link's target="_blank").
+ * "I paid" ready. On a phone the Venmo app opens on top of it; on a computer
+ * the Venmo website opens in a new tab (the link's target="_blank"). In the
+ * organizer's demo nothing opens: "I paid" just shows, as it would.
  */
-function useVenmo(pay: { url: string | null; appUrl: string | null }) {
-  const [web, setWeb] = useState<string | null>(null);
-  function open(e: React.MouseEvent<HTMLAnchorElement>) {
-    if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: string | null; appUrl: string | null }) {
+  if (demoOn()) {
     e.preventDefault();
-    const url = pay.url;
-    let left = false;
-    const onHide = () => {
-      if (document.hidden) left = true;
-    };
-    document.addEventListener('visibilitychange', onHide);
-    window.setTimeout(() => {
-      document.removeEventListener('visibilitychange', onHide);
-      if (!left && !document.hidden) setWeb(url);
-    }, APP_WAIT_MS);
-    // A link to the app: the app opens on top and this page stays as it is.
-    window.location.href = pay.appUrl;
+    return;
   }
-  const fallback = web && (
-    <a className="link-btn venmo-web" href={web} target="_blank" rel="noopener noreferrer">
-      No Venmo app? Open Venmo website
-    </a>
-  );
-  return { open, fallback };
+  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+  e.preventDefault();
+  window.location.href = pay.appUrl;
 }
 
 /** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */
@@ -452,7 +433,6 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
   const { sent, markSent } = useSent(g.me?.id, due);
   const paid = usePaid(due.map((o) => o.sessionId), onChanged);
-  const venmo = useVenmo(pay);
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
   const title =
@@ -491,12 +471,11 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
             onClick={(e) => {
               markSent();
-              venmo.open(e);
+              openVenmo(e, pay);
             }}
           >
             Pay with Venmo
           </a>
-          {venmo.fallback}
           {sent && (
             <button className="btn block secondary" disabled={paid.busy} onClick={() => paid.set(true)}>
               {paid.busy ? 'Saving…' : 'I paid'}
@@ -647,8 +626,6 @@ function RowPay({
   const btn = 'btn small pay-small';
   const { sent, markSent } = useSent(g.me?.id, [{ sessionId: s.id, signupAt: mine.signupAt }]);
   const paid = usePaid([s.id], onChanged);
-  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
-  const venmo = useVenmo(pay);
   if (mine.paymentStatus === 'paid') {
     return (
       <span className="paid-wrap">
@@ -663,6 +640,7 @@ function RowPay({
     );
   }
   if (onTop || mine.oweCents <= 0) return <span />;
+  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
   // No usable Venmo link: "I paid" is the only thing to tap.
   if (!pay.url) {
     return (
@@ -683,7 +661,7 @@ function RowPay({
         aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
         onClick={(e) => {
           markSent();
-          venmo.open(e);
+          openVenmo(e, pay);
         }}
       >
         Pay {formatPrice(mine.oweCents)}
@@ -693,7 +671,6 @@ function RowPay({
           I paid
         </button>
       )}
-      {venmo.fallback}
     </span>
   );
 }
@@ -706,14 +683,11 @@ function RowPay({
 function ScheduleRow({
   s,
   g,
-  creditNote,
   onChanged,
   highlight,
 }: {
   s: PlayerSessionView;
   g: GroupView;
-  /** Credit waiting for a session they haven't joined yet; shown on the first upcoming row. */
-  creditNote: number;
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
@@ -826,7 +800,12 @@ function ScheduleRow({
           <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
         )}
 
-        {creditNote > 0 && <p className="small">Credit: {formatPrice(creditNote)} toward your next session.</p>}
+        {/* A credit shows only on the game it comes off, and only while that game is unpaid (the pay card says it on game day). */}
+        {inSession && !onTop && mine.oweCents > 0 && mine.creditCents > 0 && (
+          <p className="small">
+            {formatPrice(mine.oweCents)}, after your {formatPrice(mine.creditCents)} credit
+          </p>
+        )}
 
         {/* The day-before check-in, only while it's asked: a quiet button, so Pay stays the one green one. */}
         {askCheckIn && (

@@ -44,7 +44,7 @@ Sheets are made from the pictures with a small image script after `node e2e/gall
 
 <img src="player/02-game-day-pay-card-390-light.jpg" width="240" alt="390px light"> <img src="player/02-game-day-pay-card-390-dark.jpg" width="240" alt="390px dark">
 
-### After tapping Pay: "I paid" appears (and, with no Venmo app, "Open Venmo website")
+### After tapping Pay: "I paid" appears next to it
 
 <img src="player/03-pay-then-i-paid-390-light.jpg" width="240" alt="390px light"> <img src="player/03-pay-then-i-paid-390-dark.jpg" width="240" alt="390px dark">
 
@@ -88,7 +88,7 @@ Sheets are made from the pictures with a small image script after `node e2e/gall
 
 <img src="player/13-row-on-standby-390-light.jpg" width="240" alt="390px light"> <img src="player/13-row-on-standby-390-dark.jpg" width="240" alt="390px dark">
 
-### Credit line: $5 toward the next session
+### A $5 credit but no game yet: nothing about it shows (it appears on the game it comes off)
 
 <img src="player/14-credit-line-390-light.jpg" width="240" alt="390px light"> <img src="player/14-credit-line-390-dark.jpg" width="240" alt="390px dark">
 
@@ -238,7 +238,7 @@ Sheets are made from the pictures with a small image script after `node e2e/gall
 
 <img src="organizer/20-history-activity-390-light.jpg" width="240" alt="390px light"> <img src="organizer/20-history-activity-390-dark.jpg" width="240" alt="390px dark">
 
-### View as… (look only)
+### View as… (a demo: taps work, nothing is saved)
 
 <img src="organizer/21-view-as-390-light.jpg" width="240" alt="390px light"> <img src="organizer/21-view-as-390-dark.jpg" width="240" alt="390px dark">
 
@@ -246,7 +246,7 @@ Sheets are made from the pictures with a small image script after `node e2e/gall
 
 <img src="organizer/21-view-as-pretend-390-light.jpg" width="240" alt="390px light"> <img src="organizer/21-view-as-pretend-390-dark.jpg" width="240" alt="390px dark">
 
-### Pretending it's game day, 8:30 AM: the bar with Reset
+### Pretend it's game day, 8:30 AM: "Demo, nothing is saved" bar with Reset and End
 
 <img src="organizer/22-pretending-390-light.jpg" width="240" alt="390px light"> <img src="organizer/22-pretending-390-dark.jpg" width="240" alt="390px dark">
 

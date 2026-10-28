@@ -25,6 +25,12 @@ export interface Env {
   SETUP_TOKEN?: string;
   /** The public site address, e.g. https://pickleball.juncaj.net. Falls back to whatever address was used. */
   SITE_URL?: string;
+  /**
+   * Set only by the organizer's in-browser demo copy (src/demo/sandbox.ts),
+   * never on Cloudflare: there, taps in "View as" really run, on a throwaway
+   * copy of the data that lives in that browser tab.
+   */
+  SANDBOX?: boolean;
 }
 
 /** True when a write was rejected by one of the schema's RAISE(ABORT, ...) triggers. */

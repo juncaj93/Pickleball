@@ -126,16 +126,23 @@ export const shortOfPlayers = (s: AdminSessionView) => s.confirmedCount !== 4 &&
 
 /**
  * One person's money right now: what they owe (sessions from the day-before
- * check-in on, unpaid) and their unused credit. Same rules as "Who owes".
+ * check-in on, unpaid, after any credit) and credit not yet counted there.
+ * A credit coming off a game that's already owed shows once, inside "owes
+ * $9", never again as "credit $5". Same rules as "Who owes" and the player's own screen.
  */
 export function balanceOf(d: AdminDashboard, playerId: string): { owedCents: number; creditCents: number } {
   const nowMs = Date.parse(d.now);
   let owed = 0;
+  let planned = 0;
   for (const s of d.sessions) {
-    if (s.state.flags.canceled || nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
+    if (s.state.flags.canceled) continue;
     for (const r of s.roster) {
-      if (r.playerId === playerId && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) owed += r.shareCents - r.creditCents;
+      if (r.playerId !== playerId || r.status !== 'confirmed' || r.paymentStatus !== 'unpaid' || r.shareCents === null) continue;
+      if (nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
+      planned += r.creditCents;
+      owed += r.shareCents - r.creditCents;
     }
   }
-  return { owedCents: Math.max(0, owed), creditCents: d.credits.find((c) => c.playerId === playerId)?.balanceCents ?? 0 };
+  const open = d.credits.find((c) => c.playerId === playerId)?.balanceCents ?? 0;
+  return { owedCents: Math.max(0, owed), creditCents: Math.max(0, open - planned) };
 }

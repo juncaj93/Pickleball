@@ -205,8 +205,7 @@ async function main() {
     await snap(page, 'player', '02-game-day-pay-card', 'Game day from 8:00 AM: "Tonight: you owe $14", unpaid', t);
     await payCard.getByRole('link', { name: /^Pay \$14 with Venmo$/ }).click();
     await payCard.getByRole('button', { name: 'I paid' }).waitFor();
-    await payCard.getByRole('link', { name: 'No Venmo app? Open Venmo website' }).waitFor();
-    await snap(payCard, 'player', '03-pay-then-i-paid', 'After tapping Pay: "I paid" appears (and, with no Venmo app, "Open Venmo website")', t);
+    await snap(payCard, 'player', '03-pay-then-i-paid', 'After tapping Pay: "I paid" appears next to it', t);
     await ctx.close();
   }
   await paid(A, 'Ryan');
@@ -300,12 +299,12 @@ async function main() {
       await tab(page, 'Home').click();
       await page.getByRole('button', { name: 'View as…' }).click();
       await page.locator('dialog[open]').waitFor();
-      await snap(page, 'organizer', '21-view-as', 'View as… (look only)', t);
+      await snap(page, 'organizer', '21-view-as', 'View as… (a demo: taps work, nothing is saved)', t);
       await snap(page.locator('.pretend-pick'), 'organizer', '21-view-as-pretend', '"Pretend it\'s…": presets for the next game, or any date and time', t);
       await page.locator('dialog[open]').getByRole('button', { name: 'Game day, 8:30 AM' }).click();
       await page.locator('.pretend-bar').waitFor();
       await page.waitForTimeout(300);
-      await snap(page, 'organizer', '22-pretending', 'Pretending it\'s game day, 8:30 AM: the bar with Reset', t);
+      await snap(page, 'organizer', '22-pretending', 'Pretend it\'s game day, 8:30 AM: "Demo, nothing is saved" bar with Reset and End', t);
     }
     await ctx.close();
 
@@ -333,7 +332,7 @@ async function main() {
     await ryan.ctx.close();
     for (const [name, file, title] of [
       ['Julian', '13-row-on-standby', 'On the standby list (court waitlist)'],
-      ['Armen', '14-credit-line', 'Credit line: $5 toward the next session'],
+      ['Armen', '14-credit-line', 'A $5 credit but no game yet: nothing about it shows (it appears on the game it comes off)'],
       ['Mitchel', '15-after-refund', 'After a refund (canceled game, money given back): nothing owed'],
     ]) {
       if (busy) continue;

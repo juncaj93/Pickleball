@@ -14,7 +14,7 @@
     "skipLibCheck": true,
     "isolatedModules": true,
     "noEmit": true,
-    "types": []
+    "types": ["vite/client"]
   },
   "include": ["src", "shared", "server", "functions"]
 }
