@@ -191,6 +191,26 @@ from the Venmo app (or type @Name); only the username is saved. It is organizer
 only and is never in any player screen or response. It is in the backup file
 and comes back on restore.
 
+## The Text menu (organizer only)
+
+The gear panel's **Text** button lists only the texts that fit that game right
+now, each with a small gray line saying who it goes to. Every text ends with
+the plain site address, and every game time reads like "Tue Nov 3, 8:00 PM".
+The site only opens Messages with the words ready; it never sends anything.
+
+- Group chat (you pick the chat): **Share the game** (any upcoming game),
+  **Need players** (fewer than 4 in), **Down to 5** (a game that fell from 6 to 5).
+- Saved numbers (one group text, with a "Missing numbers" note): **Check-in**
+  (exactly 4 or 6 in, to everyone signed up), **Now 6** (the 2 players the
+  waitlist moved up), **Spot opened** (one waitlisted player who moved in),
+  **Canceled** or **Moved** (everyone signed up and on the waitlist).
+- Money tab: each unpaid player has a **Payment reminder** (the total if they
+  owe for several games), and with 2 or more unpaid, **Remind all unpaid**.
+
+The unpaid card on a player's screen starts at 8:00 AM on game day and stays
+at the top until they pay, even after the game. One compact card lists every
+game they owe for. Never for canceled games or the organizer.
+
 ## Late drops
 
 A confirmed player who drops out after the cancellation deadline (12 hours
@@ -425,8 +445,8 @@ production.
 ## Tests
 
 ```bash
-npm test               # 311 server and logic tests
-npm run test:e2e       # 471 browser checks (needs Playwright + Chromium)
+npm test               # 330 server and logic tests
+npm run test:e2e       # 521 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
