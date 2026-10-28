@@ -40,7 +40,7 @@ describe('fewer words on screen', () => {
       "You'll get a",
       'Cancel by',
       'Missing numbers:',
-      'Demo only: taps here change nothing.',
+      'Demo: taps work, nothing is saved.',
     ]) {
       expect(source, kept).toContain(kept);
     }

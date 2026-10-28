@@ -146,3 +146,35 @@ describe('moved in when 6 joined, then back to 5', () => {
     expect(row.discount).toBe(false);
   });
 });
+
+describe('credit shows once, where it applies', () => {
+  it('player screen: only on the game it comes off; Players tab: "credit $5" until that game is owed, then "owes $9", never both', async () => {
+    const { balanceOf } = await import('../src/pages/admin/todo');
+    const ctx = await setupGroup();
+    const s = await firstSession(ctx);
+    const names = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
+    for (const n of names) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
+    ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR); // Alex earns $5
+    const alex = await playerPhone(ctx, 'Alex');
+    let g = (await alex.call('GET', '/api/group')).data;
+    // Not in any game: nothing about the credit on any card.
+    expect(g.sessions.every((x: any) => !x.mine || x.mine.creditCents === 0)).toBe(true);
+    let d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    expect(balanceOf(d, ctx.byName.Alex)).toEqual({ owedCents: 0, creditCents: 500 });
+    // He joins a game: the credit sits on that game only.
+    const next = g.sessions.find((x: any) => !x.mine);
+    await alex.call('POST', `/api/sessions/${next.id}/join`, {});
+    g = (await alex.call('GET', '/api/group')).data;
+    expect(g.sessions.filter((x: any) => x.mine?.creditCents > 0).map((x: any) => [x.id, x.mine.oweCents, x.mine.creditCents])).toEqual([[next.id, 900, 500]]);
+    // From the day before: Players tab says owes $9, and no extra credit.
+    ctx.app.now = Date.parse(next.startsAt) - 20 * HOUR;
+    await ctx.organizer.call('POST', '/api/admin/login', { pin: '246810' });
+    d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    expect(balanceOf(d, ctx.byName.Alex)).toEqual({ owedCents: 900, creditCents: 0 });
+    // The game-day pay card on the player's screen agrees.
+    ctx.app.now = Date.parse(next.startsAt) - 11 * HOUR;
+    g = (await alex.call('GET', '/api/group')).data;
+    expect(g.payDue.map((o: any) => [o.amountCents, o.creditCents])).toEqual([[900, 500]]);
+  });
+});

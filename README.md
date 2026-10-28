@@ -69,22 +69,28 @@ session's court (hidden when there's nothing in it):
 - check-in texts that are due
 
 **View as…** in the header shows exactly what any player sees, with a "Viewing as
-Ryan" banner and Exit. It's look-only: taps there say "Demo only. Nothing was
-saved." and change nothing, and nothing goes in the Activity log.
+Ryan" banner and Exit.
 
-**Pretend it's…** (in the View as menu) previews the site at any moment, Eastern
+**View as… and Pretend it's… are a demo.** Taps work and show what would
+really happen (I'm in fills a dot, the 4-or-6 rule and waitlist react, Pay then
+"I paid" then Paid, Mark paid, Refunded, Add game, Cancel, Move, I booked it),
+but nothing is saved: the browser loads a copy of the data (the same
+organizer-only backup file) and runs the site's own rules on it, in that tab
+only. The live site is never asked to save anything. A dark bar says "Demo,
+nothing is saved" with **Reset** (throw the demo changes away). Leaving the
+demo, signing out, reloading or closing the tab throws them away too. Pay opens
+nothing in the demo; Messages and Add to calendar work as usual.
+
+**Pretend it's…** (in the View as menu) runs the demo at any moment, Eastern
 time: pick a date and time or a preset (Game day 7:00 AM or 8:30 AM, Day
 before 8:00 PM, Last call, Booking opens 12:00 AM, After the game). Every card
-and line follows that time, on the organizer screens and in View as. A dark bar
-says "Pretending it's Tue Nov 3, 8:30 AM" with Reset. It's look-only like View
-as, kept only in that browser tab, and ends after 30 minutes, on Reset, on
-sign-out, or when the tab closes. Players never get it.
+and line follows that time. The bar adds the time and an **End** button; it
+also ends after 30 minutes. Players never get any of this.
 
 **Pay** never takes the player away from the site: on a phone it opens the
-Venmo app with the amount and note; if the app doesn't open, "No Venmo app?
-Open Venmo website" opens the website in a new tab. On a computer the website
-opens in a new tab. Back in Safari, the pickleball page is right where it was,
-with "I paid" ready.
+Venmo app with the amount and note, on top of the page; on a computer the
+Venmo website opens in a new tab. Back in Safari, the pickleball page is right
+where it was, with "I paid" ready.
 
 Pictures of every screen state: `docs/state-gallery/` (made by `node e2e/gallery.cjs`).
 

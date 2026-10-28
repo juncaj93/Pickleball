@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { formatShortDate, localParts } from '../../../shared/time';
-import { api, useLoad, usePretend } from '../../lib';
+import { api, useDemoVersion, useLoad, usePretend } from '../../lib';
 import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 
@@ -30,7 +30,8 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
     return `${p.year}-${String(p.month).padStart(2, '0')}`;
   });
   const pretend = usePretend();
-  const load = useLoad(() => api<MonthlyMoney>('GET', `/api/admin/money?month=${month}`), [month, pretend]);
+  const demo = useDemoVersion();
+  const load = useLoad(() => api<MonthlyMoney>('GET', `/api/admin/money?month=${month}`), [month, pretend, demo]);
   const m = load.data;
   return (
     <section className="stack" aria-labelledby="mm-title">

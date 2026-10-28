@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import type { AdminDashboard } from '../../../shared/api';
 import { formatShortDate, formatTime, fromLocalInputValue, localParts, toLocalInputValue, zonedTimeToUtc } from '../../../shared/time';
-import { setPretend, usePretend } from '../../lib';
+import { resetDemo, setPretend, useDemoOn, usePretend } from '../../lib';
 
 // "Pretend it's...": see the site as it will look at another moment, to
-// check the time-based cards. Look-only, this tab only, 30 minutes at most.
+// check the time-based cards. Part of the demo: taps work on a throwaway
+// copy, nothing is saved. This tab only, 30 minutes at most.
 
 /** "Tue Nov 3, 8:30 AM" in the group's time zone. */
 export function pretendLabel(ms: number, tz: string): string {
@@ -53,7 +54,7 @@ export function PretendPicker({ d, onPicked }: { d: AdminDashboard; onPicked: ()
   return (
     <section className="stack pretend-pick" aria-labelledby="pretend-title">
       <h3 id="pretend-title">Pretend it's…</h3>
-      <p className="small muted">See any moment. Look only, ends in 30 minutes.</p>
+      <p className="small muted">Taps work, nothing is saved. Ends in 30 minutes.</p>
       {game && (
         <>
           <p className="small">
@@ -86,18 +87,31 @@ export function PretendPicker({ d, onPicked }: { d: AdminDashboard; onPicked: ()
   );
 }
 
-/** "Pretending it's Tue Nov 3, 8:30 AM" with Reset, at the top while it's on. */
-export function PretendBar({ tz }: { tz: string }) {
-  const on = usePretend();
-  if (on === null) return null;
+/**
+ * "Demo, nothing is saved" at the top while View as or Pretend it's... is on,
+ * with the pretend time if there is one. Reset throws away the demo changes;
+ * End stops pretending.
+ */
+export function DemoBar({ tz }: { tz: string }) {
+  const on = useDemoOn();
+  const at = usePretend();
+  if (!on) return null;
   return (
     <div className="pretend-bar" role="status">
       <span>
-        Pretending it's <strong>{pretendLabel(on, tz)}</strong>
+        <strong>Demo, nothing is saved</strong>
+        {at !== null && <> · {pretendLabel(at, tz)}</>}
       </span>
-      <button className="btn small" onClick={() => setPretend(null)}>
-        Reset
-      </button>
+      <span className="pretend-bar-btns">
+        <button className="btn small" onClick={resetDemo}>
+          Reset
+        </button>
+        {at !== null && (
+          <button className="btn small" onClick={() => setPretend(null)}>
+            End
+          </button>
+        )}
+      </span>
     </div>
   );
 }

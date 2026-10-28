@@ -5,8 +5,8 @@ import { DayBeforeTexts } from './admin/Texts';
 import { recipients } from './admin/todo';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
-import { PretendBar, PretendPicker } from './admin/Pretend';
+import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
@@ -28,7 +28,8 @@ export interface AdminCtx {
 
 export function AdminApp() {
   const pretend = usePretend();
-  const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend]);
+  const demo = useDemoVersion();
+  const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend, demo]);
   useRefreshOnReturn(load.refresh);
   if (load.loading && !load.data && !load.error) {
     return (
@@ -141,7 +142,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
     return (
       <>
         <PlayerHome
-          topBar={<PretendBar tz={d.group.timezone} />}
+          topBar={<DemoBar tz={d.group.timezone} />}
           groupKey={null}
           viewAs={viewing}
           onViewAs={setViewing}
@@ -157,7 +158,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
   return (
     <>
-      <PretendBar tz={d.group.timezone} />
+      <DemoBar tz={d.group.timezone} />
       <TopBar
         eyebrow="Organizer"
         title={d.group.name}
@@ -198,7 +199,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
       <SessionSheets ctx={ctx} sheet={sheet} onClose={() => setSheet(null)} />
       <Sheet open={pickViewAs} title="View as…" onClose={() => setPickViewAs(false)}>
         <div className="stack">
-          <p className="small muted">Demo only: taps here change nothing.</p>
+          <p className="small muted">Demo: taps work, nothing is saved.</p>
           <div className="name-grid">
             {d.players
               .filter((p) => p.isActive)

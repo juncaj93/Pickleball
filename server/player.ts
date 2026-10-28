@@ -249,7 +249,7 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
 /** "Any preferred days?" right after adding a name. Only touches the player on this phone. */
 export async function setMyDays(ctx: Ctx, body: Record<string, unknown>) {
   const who = await viewer(ctx);
-  refuseDemo(who);
+  refuseDemo(ctx, who);
   const { group, playerId } = who;
   if (!playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const days = v.usualDays(body.days) ?? '';
@@ -270,14 +270,17 @@ export async function forgetName(ctx: Ctx) {
   return { me: null };
 }
 
-/** "View as..." is look-only: the server refuses its writes too. */
-function refuseDemo(who: Viewer) {
-  if (who.viewAsName) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
+/**
+ * "View as..." never changes the real data: the live server refuses its
+ * taps. The organizer's demo runs them on a throwaway copy in the browser.
+ */
+function refuseDemo(ctx: Ctx, who: Viewer) {
+  if (who.viewAsName && !ctx.env.SANDBOX) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
 }
 
 async function actingOn(ctx: Ctx) {
   const who = await viewer(ctx);
-  refuseDemo(who);
+  refuseDemo(ctx, who);
   if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const session = await getSession(ctx.db, who.group.id, v.id(ctx.params.id, 'session'));
   if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
