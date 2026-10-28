@@ -2318,9 +2318,9 @@ async function main() {
         assert((await card.locator('.bubble').count()) === 0, 'the late-drop card no longer carries a text');
         const sug = admin.locator(`article[data-suggest][data-session="${first.id}"]`);
         await sug.waitFor();
-        // Whichever fits the game now: need players, or the check-in once it is back to 4 or 6.
+        // Whichever fits the game now: the spot opened for someone moved in, need players, or the check-in once it is back to 4 or 6.
         const spot = smsOf(await sug.getByRole('link', { name: /^Text/ }).getAttribute('href'));
-        assert(/^(Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
+        assert(/^(A spot opened and you're in for pickleball [^.]+, \d{1,2}:\d{2} PM\.|Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
         assert(!/ASAP|text me/i.test(spot.body), 'no "text me ASAP"');
         assert((await sug.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
         assert(!/\bsent\b/i.test(await sug.innerText()), 'never say sent');
