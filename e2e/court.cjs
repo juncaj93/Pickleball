@@ -85,8 +85,8 @@ async function main() {
   // The next game: Alex is not playing; Ryan and Brandon are.
   for (const n of ['Ryan', 'Brandon']) await call(api.request, 'POST', `/api/admin/sessions/${six.id}/roster`, { playerId: id[n], action: 'confirm' });
 
-  for (const width of [360, 390]) {
-    const ctx = await browser.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true });
+  for (const [width, scheme] of [360, 375, 390, 430].flatMap((w) => [[w, 'light'], [w, 'dark']])) {
+    const ctx = await browser.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true, colorScheme: scheme });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(String(e)));
@@ -98,7 +98,7 @@ async function main() {
       await sess(s).waitFor();
       if (!(await sess(s).evaluate((el) => el.open))) await sess(s).locator('summary').click();
     };
-    const tag = `${width}px`;
+    const tag = `${width}px ${scheme}`;
 
     await check(`${tag}: header counts other players only ("0 of 3 paid", "3 owe")`, async () => {
       await sess(four).waitFor();
@@ -119,7 +119,7 @@ async function main() {
       // The other three still have their reminder.
       assert((await sess(four).getByRole('button', { name: 'Payment reminder' }).count()) === 3, 'players lost their reminder buttons');
     });
-    await page.screenshot({ path: path.join(SHOTS, `court-${width}-due.png`), fullPage: true });
+    await page.screenshot({ path: path.join(SHOTS, `court-${width}-${scheme}-due.png`), fullPage: true });
 
     await check(`${tag}: Mark paid on the court row says Court paid and leaves the counts alone; Unmark undoes it`, async () => {
       const row = sess(four).locator('[data-court]');
@@ -163,8 +163,38 @@ async function main() {
       const sheet = squash(await page.locator('dialog[open]').innerText());
       assert(/You pay the court directly/.test(sheet) && !/\$14/.test(sheet), sheet);
     });
-    await page.screenshot({ path: path.join(SHOTS, `court-${width}-players.png`), fullPage: true });
+    await page.screenshot({ path: path.join(SHOTS, `court-${width}-${scheme}-players.png`), fullPage: true });
 
+    await check(`${tag}: Who paid layout: court name and $48 on one line, equal-width buttons, 44px taps, nothing cut off or overlapping`, async () => {
+      await page.keyboard.press('Escape');
+      await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
+      await page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: /^Money/ }).click();
+      await open(four);
+      await sess(four).getByRole('button', { name: 'Payment reminder' }).first().waitFor();
+      const m = await sess(four).evaluate((el) => {
+        const r = (e) => e.getBoundingClientRect();
+        const court = el.querySelector('[data-court]');
+        const name = r(court.querySelector('.pc-name'));
+        const cost = r(court.querySelector('.court-cost'));
+        const sub = r(court.querySelector('.pc-sub'));
+        const cr = r(court);
+        const pairs = [...el.querySelectorAll('.pay-btns')].map((g) => [...g.children].map((b) => { const q = r(b); return { w: q.width, h: q.height, l: q.left, rt: q.right, cut: b.scrollWidth > b.clientWidth + 1 }; }));
+        const rows = [...el.querySelectorAll('.pay-row')].map((x) => r(x).height);
+        const text = [...el.querySelectorAll('.pay-who, .pc-name, .pc-sub span')].filter((x) => x.scrollWidth > x.clientWidth + 1).length;
+        const overlap = (a, b) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
+        return { nameTop: name.top, costTop: cost.top, nameH: name.height, costH: cost.height, costRight: cost.right, courtRight: cr.right, subTop: sub.top, nameBottom: name.bottom, ov: overlap(name, cost), pairs, rows, text, padL: cost.left - cr.left, nameL: name.left - cr.left };
+      });
+      assert(Math.abs(m.nameTop + m.nameH / 2 - (m.costTop + m.costH / 2)) < 6 || width < 375, `$48 not beside name: ${JSON.stringify(m)}`);
+      assert(!m.ov && m.costRight <= m.courtRight - 8, 'cost overlaps or touches the edge');
+      assert(m.nameL >= 8, `court text only ${m.nameL}px from the edge`);
+      assert(m.text === 0, 'cut-off text');
+      for (const g of m.pairs) {
+        for (const b of g) assert(b.h >= 44 && !b.cut, `button ${b.w}x${b.h} cut=${b.cut}`);
+        assert(g.length === 2 || g.length === 1, 'pair size');
+        for (const b of m.pairs.flat()) assert(Math.abs(b.w - m.pairs[0][0].w) < 1.5 && Math.abs(b.h - m.pairs[0][0].h) < 1.5, `unequal buttons: ${JSON.stringify(m.pairs)}`);
+      }
+      assert(m.rows.every((h) => h < 150), `player rows too tall: ${m.rows}`);
+    });
     await check(`${tag}: nothing spills sideways`, async () => {
       const over = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       assert(over <= 0, `page scrolls sideways by ${over}px`);
