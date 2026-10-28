@@ -2150,9 +2150,9 @@ async function main() {
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
       const bubble = after.locator('.bubble');
-      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. \S+$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. If you paid, it stays as your credit\. Want a refund instead\? Text me\. \S+$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       await after.getByLabel(/Reason/).fill('Rain');
-      await bubble.getByText(/is canceled\. Rain\. \S+$/).waitFor();
+      await bubble.getByText(/is canceled\. Rain\. If you paid, it stays as your credit\. Want a refund instead\? Text me\. \S+$/).waitFor();
       await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
       assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
       // Who to pay back, with Refunded.

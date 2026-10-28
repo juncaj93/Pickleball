@@ -77,45 +77,56 @@ export function textWhen(iso: string, tz: string): string {
   return `${textDay(iso, tz)}, ${formatTime(iso, tz)}`;
 }
 
-/** Share the game: for any upcoming game, to a group chat. */
-export function shareMessage(s: SessionLike, tz: string, link: string): string {
-  return `Pickleball ${textWhen(s.startsAt, tz)}. In or out here: ${link}`;
-}
-
-/** Fewer than 4 in. */
-export function needPlayersMessage(s: SessionLike, tz: string, need: number, link: string): string {
-  return `Need ${need} more for pickleball ${textWhen(s.startsAt, tz)}. In? ${link}`;
-}
-
-/** A game that dropped from 6 to 5. */
-export function downToFiveMessage(s: SessionLike, tz: string, link: string): string {
-  return `Down to 5 for pickleball ${textDay(s.startsAt, tz)}. Need 1 more or 1 out to make 4 or 6. ${link}`;
-}
-
-/** "tonight", "today", "tomorrow (Tue)" or "Tue Nov 3": whichever fits the time left. */
-export function whenPhrase(iso: string, tz: string, nowMs: number): string {
+/**
+ * How a text names the day of a game, by calendar days in the group's time
+ * zone (never 24-hour math, so midnight and the November clock change are
+ * safe): "tonight" or "today" for a game on this calendar day, "tomorrow" for
+ * the next one, otherwise the date, like "Tue Nov 3". A game before 5:00 PM
+ * is "today"; a game from 5:00 PM on is "tonight".
+ */
+export function dayWord(iso: string, tz: string, nowMs: number): string {
   const g = localParts(Date.parse(iso), tz);
   const n = localParts(nowMs, tz);
   const dayNum = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / 86_400_000;
   const gap = dayNum(g) - dayNum(n);
   if (gap === 0) return g.hour < 17 ? 'today' : 'tonight';
-  if (gap === 1) return `tomorrow (${textDay(iso, tz).split(" ")[0]})`;
+  if (gap === 1) return 'tomorrow';
   return textDay(iso, tz);
+}
+
+/** "tomorrow, 8:00 PM", "tonight, 8:00 PM" or "Tue Nov 3, 8:00 PM". */
+export function textWhenAt(iso: string, tz: string, nowMs: number): string {
+  return `${dayWord(iso, tz, nowMs)}, ${formatTime(iso, tz)}`;
+}
+
+/** Share the game: for any upcoming game, to a group chat. */
+export function shareMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
+  return `Pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. In or out here: ${link}`;
+}
+
+/** Fewer than 4 in. */
+export function needPlayersMessage(s: SessionLike, tz: string, nowMs: number, need: number, link: string): string {
+  return `Need ${need} more for pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. In? ${link}`;
+}
+
+/** A game that dropped from 6 to 5. */
+export function downToFiveMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
+  return `Down to 5 for pickleball ${dayWord(s.startsAt, tz, nowMs)}. Need 1 more or 1 out to make 4 or 6. ${link}`;
 }
 
 /** Exactly 4 or 6 in: are you still coming. */
 export function checkInMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
-  return `Pickleball ${whenPhrase(s.startsAt, tz, nowMs)}, ${formatTime(s.startsAt, tz)}. Still in? Update here: ${link}`;
+  return `Pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. Still in? Update here: ${link}`;
 }
 
 /** The game reached 6 because the waitlist moved in: to the 2 extra players. */
-export function nowSixMessage(s: SessionLike, tz: string, link: string): string {
-  return `Good news, we have 6 for pickleball ${textWhen(s.startsAt, tz)}. You're both in. Can't make it? Update here: ${link}`;
+export function nowSixMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
+  return `Good news, we have 6 for pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. You're both in. Can't make it? Update here: ${link}`;
 }
 
 /** A waitlisted player moved into the 4 after a drop. */
-export function promotedMessage(s: SessionLike, tz: string, link: string): string {
-  return `A spot opened and you're in for pickleball ${textWhen(s.startsAt, tz)}. ${link}`;
+export function promotedMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
+  return `A spot opened and you're in for pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. ${link}`;
 }
 
 /** One optional line from the organizer, ending with a period. */
@@ -125,14 +136,18 @@ function withReason(text: string, reason?: string | null): string {
   return `${text} ${/[.!?]$/.test(r) ? r : `${r}.`}`;
 }
 
-/** "Pickleball Tue Nov 3 is canceled. pickleball.juncaj.net", with an optional reason before the link. */
-export function canceledMessage(s: SessionLike, tz: string, link: string, reason?: string | null): string {
-  return `${withReason(`Pickleball ${textDay(s.startsAt, tz)} is canceled.`, reason)} ${link}`;
+/**
+ * "Pickleball Tue Nov 3 is canceled. If you paid, it stays as your credit.
+ * Want a refund instead? Text me. pickleball.juncaj.net", with an optional
+ * reason right after the first sentence.
+ */
+export function canceledMessage(s: SessionLike, tz: string, nowMs: number, link: string, reason?: string | null): string {
+  return `${withReason(`Pickleball ${dayWord(s.startsAt, tz, nowMs)} is canceled.`, reason)} If you paid, it stays as your credit. Want a refund instead? Text me. ${link}`;
 }
 
 /** "Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. pickleball.juncaj.net". `was` is the game's original time. */
-export function movedMessage(s: SessionLike, was: string, tz: string, link: string, reason?: string | null): string {
-  return `${withReason(`Pickleball ${textDay(was, tz)} is moved to ${textWhen(s.startsAt, tz)}.`, reason)} ${link}`;
+export function movedMessage(s: SessionLike, was: string, tz: string, nowMs: number, link: string, reason?: string | null): string {
+  return `${withReason(`Pickleball ${textDay(was, tz)} is moved to ${textWhenAt(s.startsAt, tz, nowMs)}.`, reason)} ${link}`;
 }
 
 /** One game: names it. Several games: just the total. */

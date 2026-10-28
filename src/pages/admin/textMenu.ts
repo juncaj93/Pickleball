@@ -54,29 +54,29 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   const signed = s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted');
 
   if (s.state.flags.canceled) {
-    items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
+    items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
     return items;
   }
   const n = s.confirmedCount;
   const confirmed = s.roster.filter((r) => r.status === 'confirmed');
 
   if (s.moved && s.plannedStartsAt) {
-    items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, s.plannedStartsAt, tz, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
+    items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, s.plannedStartsAt, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
   }
-  items.push({ id: 'share', label: 'Share the game', body: shareMessage(s, tz, link), ...GROUP });
-  if (n < 4) items.push({ id: 'need', label: 'Need players', body: needPlayersMessage(s, tz, 4 - n, link), ...GROUP });
-  if (n === 5 && s.sixDropped) items.push({ id: 'down5', label: 'Down to 5', body: downToFiveMessage(s, tz, link), ...GROUP });
+  items.push({ id: 'share', label: 'Share the game', body: shareMessage(s, tz, nowMs, link), ...GROUP });
+  if (n < 4) items.push({ id: 'need', label: 'Need players', body: needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
+  if (n === 5 && s.sixDropped) items.push({ id: 'down5', label: 'Down to 5', body: downToFiveMessage(s, tz, nowMs, link), ...GROUP });
   if (n === 4 || n === 6) items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', confirmed, me) });
   if (n === 6) {
     const extras = confirmed.filter((r) => r.promotionReason === 'made_six');
     const toTell = extras.filter((r) => !r.promotionNotifiedAt);
     if (extras.length === 2 && reach(toTell, me).count > 0) {
-      items.push({ id: 'now6', label: 'Now 6', body: nowSixMessage(s, tz, link), ...toNumbers('The 2 extra players', toTell, me) });
+      items.push({ id: 'now6', label: 'Now 6', body: nowSixMessage(s, tz, nowMs, link), ...toNumbers('The 2 extra players', toTell, me) });
     }
   }
   // A waitlisted player who moved into the 4 after a drop (not the extras at 6, and not a game that fell from 6 to 5).
   for (const r of n <= 4 ? confirmed.filter((x) => x.promotionReason === 'spot_opened' && x.promotedAt && !x.promotionNotifiedAt && x.playerId !== me) : []) {
-    items.push({ id: 'promoted', label: `Spot opened: ${r.name}`, body: promotedMessage(s, tz, link), ...toNumbers(r.name, [r], me) });
+    items.push({ id: 'promoted', label: `Spot opened: ${r.name}`, body: promotedMessage(s, tz, nowMs, link), ...toNumbers(r.name, [r], me) });
   }
   return items;
 }

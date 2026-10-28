@@ -20,6 +20,8 @@ import { playerPhone, setupGroup } from './harness';
 const TZ = 'America/Detroit';
 const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' }; // Tue Nov 3, 8 PM
 const LINK = 'https://pickleball.juncaj.net/?s=abc';
+/** A week before the sample game, so texts name the date. */
+const LONG_BEFORE = Date.parse('2026-10-26T16:00:00Z');
 
 describe('links straight to a session', () => {
   it('adds ?s=<id> to the plain address or the private link', () => {
@@ -32,17 +34,17 @@ describe('links straight to a session', () => {
 describe('the Text menu wording', () => {
   const link = 'pickleball.juncaj.net';
   it('Share, Need players, Down to 5, Check-in, Now 6 and Spot opened read exactly as written', () => {
-    expect(shareMessage(s, TZ, link)).toBe('Pickleball Tue Nov 3, 8:00 PM. In or out here: pickleball.juncaj.net');
-    expect(needPlayersMessage(s, TZ, 2, link)).toBe('Need 2 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
-    expect(downToFiveMessage(s, TZ, link)).toBe('Down to 5 for pickleball Tue Nov 3. Need 1 more or 1 out to make 4 or 6. pickleball.juncaj.net');
-    expect(nowSixMessage(s, TZ, link)).toBe("Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can't make it? Update here: pickleball.juncaj.net");
-    expect(promotedMessage(s, TZ, link)).toBe("A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. pickleball.juncaj.net");
-    expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow (Tue), 8:00 PM. Still in? Update here: pickleball.juncaj.net');
+    expect(shareMessage(s, TZ, LONG_BEFORE, link)).toBe('Pickleball Tue Nov 3, 8:00 PM. In or out here: pickleball.juncaj.net');
+    expect(needPlayersMessage(s, TZ, LONG_BEFORE, 2, link)).toBe('Need 2 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
+    expect(downToFiveMessage(s, TZ, LONG_BEFORE, link)).toBe('Down to 5 for pickleball Tue Nov 3. Need 1 more or 1 out to make 4 or 6. pickleball.juncaj.net');
+    expect(nowSixMessage(s, TZ, LONG_BEFORE, link)).toBe("Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can't make it? Update here: pickleball.juncaj.net");
+    expect(promotedMessage(s, TZ, LONG_BEFORE, link)).toBe("A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. pickleball.juncaj.net");
+    expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow, 8:00 PM. Still in? Update here: pickleball.juncaj.net');
   });
-  it('Check-in says tonight, today, tomorrow (Weekday) or the date, whichever fits the time left', () => {
+  it('Check-in says tonight, today, tomorrow or the date, whichever fits the time left', () => {
     const at = (iso: string) => checkInMessage(s, TZ, Date.parse(iso), link);
     expect(at('2026-11-03T15:00:00Z')).toBe('Pickleball tonight, 8:00 PM. Still in? Update here: pickleball.juncaj.net'); // Tue 10:00 AM Eastern
-    expect(at('2026-11-02T05:00:00Z')).toBe('Pickleball tomorrow (Tue), 8:00 PM. Still in? Update here: pickleball.juncaj.net'); // Mon 12:00 AM
+    expect(at('2026-11-02T05:00:00Z')).toBe('Pickleball tomorrow, 8:00 PM. Still in? Update here: pickleball.juncaj.net'); // Mon 12:00 AM
     expect(at('2026-10-30T16:00:00Z')).toBe('Pickleball Tue Nov 3, 8:00 PM. Still in? Update here: pickleball.juncaj.net');
     const morning = { startsAt: '2026-11-07T15:00:00.000Z', endsAt: '2026-11-07T17:00:00.000Z' };
     expect(checkInMessage(morning, TZ, Date.parse('2026-11-07T11:00:00Z'), link)).toBe('Pickleball today, 10:00 AM. Still in? Update here: pickleball.juncaj.net');
@@ -54,12 +56,12 @@ describe('the Text menu wording', () => {
   });
   it('nothing ever says "sent" or "text me ASAP"', () => {
     const all = [
-      shareMessage(s, TZ, link), needPlayersMessage(s, TZ, 1, link), downToFiveMessage(s, TZ, link), nowSixMessage(s, TZ, link), promotedMessage(s, TZ, link),
-      checkInMessage(s, TZ, 0, link), canceledMessage(s, TZ, link), movedMessage(s, s.startsAt, TZ, link), paymentMessage('A', 1400, [s], TZ, link), remindAllMessage(link),
+      shareMessage(s, TZ, LONG_BEFORE, link), needPlayersMessage(s, TZ, LONG_BEFORE, 1, link), downToFiveMessage(s, TZ, LONG_BEFORE, link), nowSixMessage(s, TZ, LONG_BEFORE, link), promotedMessage(s, TZ, LONG_BEFORE, link),
+      checkInMessage(s, TZ, 0, link), canceledMessage(s, TZ, LONG_BEFORE, link), movedMessage(s, s.startsAt, TZ, LONG_BEFORE, link), paymentMessage('A', 1400, [s], TZ, link), remindAllMessage(link),
       pollMessage(s, TZ, 1400, LINK),
     ];
     for (const m of all) {
-      expect(m).not.toMatch(/\bsent\b|ASAP|text me/i);
+      expect(m).not.toMatch(/\bsent\b|ASAP/i);
       expect(m).toContain('pickleball.juncaj.net');
     }
   });
