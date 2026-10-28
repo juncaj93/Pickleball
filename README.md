@@ -150,10 +150,24 @@ hours before) links to the session too.
 
 ## Money tab
 
-The month's summary at the top (collected, court costs, credits owed,
-Surplus/Short), then each session's payments with Mark paid, the Pay back
-list with Refunded, and credits with Clear credit. "Mark paid tonight" stays
-on Home on game day.
+The month's summary at the top (collected, court costs, credits owed, and a
+bottom line), then each session's payments with Mark paid, the Pay back list
+with Refunded, and credits with Clear credit. "Mark paid tonight" stays on
+Home on game day.
+
+**You are the one who pays the venue.** In every session's Who paid list, your
+own row is a court row: "You pay Northville Pickleball", the full court cost
+(the booking's cost, else the typical cost, $48 to start), and a small gray
+line "Players cover $42, your share $6" (what the other players owe under the
+usual rules, and the rest is yours, never below $0; "Players cover the court"
+when they cover it all). Your Mark paid / Unmark mean "I paid the venue", and
+the badge says **Court due** or **Court paid**. There is no Payment reminder
+on that row. Counts like "1 of 3 paid" and "2 owe" count the other players
+only. Your own $14 is never money collected from players, you get no player
+balance on the Players tab, no Pay button or pay card, and you earn no $5
+credit. A game you are not in still has the court row (marking it paid adds a
+quiet "declined" record for you on that game; it never takes a spot).
+Canceled games have no court row. Players never see any of this.
 
 ## Late drops
 
@@ -200,17 +214,21 @@ from Players; the old link stops working for good.
 
 ## Monthly money (organizer only)
 
-Settings → **Monthly money** shows, for any month: collected (people marked
-paid), court costs (the cost entered on a session, or the **Typical court
-cost** setting, default $48), credits still owed, and a bottom line like
-"Surplus: $14 toward the $30 membership" or "Short: $8" (membership from the
-**Monthly membership** setting). Only sessions that were played count;
+Settings → **Monthly money** shows, for any month: collected (what the other
+players paid; your own payment to the venue is never in it), court costs (the
+full cost entered on a session, or the **Typical court cost** setting, default
+$48), credits still owed to players, and a bottom line. When players paid more
+than the courts cost it says "Surplus: $14 toward the $30 membership". When
+they paid less it says "You covered $8 of the court costs". You never show up
+as the source of a surplus. The membership stays your own separate $30 (from
+the **Monthly membership** setting). Only sessions that were played count;
 canceled ones never do. None of it is ever sent to players.
 
 ## How money works
 
-Everyone confirmed pays a flat **$14** per session. Waitlisted people owe
-nothing until they're confirmed.
+Everyone confirmed pays a flat **$14** per session, except the organizer, who
+pays the venue the full court cost and is reimbursed by the others' $14s.
+Waitlisted people owe nothing until they're confirmed.
 
 When exactly 6 are confirmed:
 

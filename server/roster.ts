@@ -339,6 +339,51 @@ export async function decline(db: D1Database, session: SessionRow, playerId: str
     .run();
 }
 
+/**
+ * The organizer paid the venue ("Court paid") or took that back ("Court due").
+ * It uses the organizer's own row for the session, the same paid mark as
+ * before. A game they aren't in has no row yet, so one is added as "declined"
+ * (not playing) to hold the mark; it never takes a spot. Returns false when
+ * nothing changed. Never touches credits.
+ */
+export async function setCourtPaid(db: D1Database, session: SessionRow, playerId: string, paid: boolean, amountCents: number, nowIso: string): Promise<boolean> {
+  const existing = await db
+    .prepare('SELECT id, status, payment_status FROM session_players WHERE session_id = ? AND player_id = ?')
+    .bind(session.id, playerId)
+    .first<{ id: string; status: RosterStatus; payment_status: string }>();
+  if (paid) {
+    if (existing?.payment_status === 'paid') return false;
+    if (existing) {
+      await db
+        .prepare(
+          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = NULL, refunded_at = NULL,
+             payment_updated_at = ?, updated_at = ? WHERE id = ?`,
+        )
+        .bind(nowIso, amountCents, nowIso, nowIso, existing.id)
+        .run();
+      return true;
+    }
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO session_players
+           (id, session_id, player_id, status, claimed_at, claim_seq, payment_status, paid_at, payment_amount_cents, payment_updated_at, updated_at)
+         VALUES (?3, ?1, ?4, 'declined', ?2, ${NEXT_CLAIM_SEQ}, 'paid', ?2, ?5, ?2, ?2)`,
+      )
+      .bind(session.id, nowIso, newId(), playerId, amountCents)
+      .run();
+    return true;
+  }
+  if (existing?.payment_status !== 'paid') return false;
+  await db
+    .prepare(
+      `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
+         paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?, updated_at = ? WHERE id = ?`,
+    )
+    .bind(nowIso, nowIso, existing.id)
+    .run();
+  return true;
+}
+
 /** Check-in: "Still coming" for a player who already holds a spot. */
 export async function confirmAttendance(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);

@@ -22,6 +22,8 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
       <ul className="card player-list" aria-label="Players">
         {ctx.d.players.map((p) => {
           const { owedCents, creditCents } = balanceOf(ctx.d, p.id);
+          // You pay the venue, so there is no player balance on your own row.
+          const isMe = ctx.d.me?.id === p.id;
           const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
           const second = [p.phone ? formatPhone(p.phone) : 'No phone', days, p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ');
           return (
@@ -36,7 +38,7 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
                 <span className="p-line2">{second}</span>
               </button>
               <span className="p-money">
-                {owedCents > 0 ? (
+                {isMe ? null : owedCents > 0 ? (
                   <span className="p-bal owes">Owes {formatPrice(owedCents)}</span>
                 ) : creditCents > 0 ? (
                   <span className="p-bal credit">Credit {formatPrice(creditCents)}</span>
@@ -71,6 +73,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const { owedCents, creditCents } = balanceOf(ctx.d, player.id);
+  const isMe = ctx.d.me?.id === player.id;
   const rows = ctx.d.sessions
     .map((s) => ({ s, r: s.roster.find((r) => r.playerId === player.id && (r.status === 'confirmed' || r.paymentStatus === 'paid')) }))
     .filter((x): x is { s: AdminSessionView; r: AdminRosterEntry } => !!x.r && !x.s.state.flags.canceled)
@@ -86,6 +89,17 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
     } finally {
       setBusy(false);
     }
+  }
+  if (isMe) {
+    return (
+      <div className="stack">
+        <p className="p-summary">
+          <span>You pay the court directly</span>
+          <span className="muted"> · {player.played} played</span>
+        </p>
+        <p className="muted small">Your court payments are on the Money tab, under Who paid.</p>
+      </div>
+    );
   }
   return (
     <div className="stack">

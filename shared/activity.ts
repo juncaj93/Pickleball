@@ -49,6 +49,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return d.confirmed ? `${who} confirmed ${player}'s payment${forDay}` : `${who} marked ${player} paid${forDay}`;
     case 'marked_unpaid':
       return `${who} marked ${player} unpaid${forDay}`;
+    case 'court_paid':
+      return `${who} marked the court paid${forDay}`;
+    case 'court_unpaid':
+      return `${who} marked the court as not paid yet${forDay}`;
     case 'refund_marked':
       return `${who} paid ${player} back${forDay}`;
     case 'refund_cleared':

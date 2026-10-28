@@ -3093,7 +3093,7 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
   color: var(--ok-fg);
 }
 .money-sum.short .big-amount {
-  color: var(--danger-fg);
+  color: var(--warn-fg);
 }
 .money-sum .bottom-line {
   margin: 0;
@@ -3165,6 +3165,16 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
   border-radius: 999px;
   padding: 2px 8px;
   white-space: nowrap;
+}
+
+/* The organizer's own row on a session's Who paid list: the court they pay the venue. */
+.court-row {
+  border-left: 3px solid var(--court);
+  padding-left: 10px;
+}
+.court-cost {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 /* A payment the player marked themselves, until the organizer confirms it. */

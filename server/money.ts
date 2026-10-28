@@ -8,13 +8,20 @@ import { localParts, zonedTimeToUtc } from '../shared/time';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { HttpError } from './http';
-import { issueCredits, loadCredits, loadRoster, type SessionRow, settingsOf } from './repo';
+import { courtCostOf, issueCredits, loadCredits, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-/** "Surplus: $14 toward the $30 membership" or "Short: $8". */
-export function bottomLine(netCents: number, membershipCents: number): string {
-  return netCents >= 0 ? `Surplus: ${formatPrice(netCents)} toward the ${formatPrice(membershipCents)} membership` : `Short: ${formatPrice(-netCents)}`;
+/**
+ * "Surplus: $14 toward the $30 membership" only when the players paid more
+ * than the courts cost. When they paid less, the organizer covered the rest:
+ * "You covered $8 of the court costs". Never a surplus from the organizer.
+ */
+export function bottomLine(netCents: number, membershipCents: number, sessionsPlayed = 1): string {
+  if (sessionsPlayed === 0) return 'No sessions played yet';
+  if (netCents > 0) return `Surplus: ${formatPrice(netCents)} toward the ${formatPrice(membershipCents)} membership`;
+  if (netCents < 0) return `You covered ${formatPrice(-netCents)} of the court costs`;
+  return 'Players covered the court costs';
 }
 
 export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
@@ -42,7 +49,9 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at')
     .bind(group.id, from, to)
     .all<SessionRow>();
-  const credits = await loadCredits(ctx.db, group.id);
+  // The organizer pays the venue themselves: their own row and credits are never money from players.
+  const organizerId = await organizerIdOf(ctx.db, group);
+  const credits = (await loadCredits(ctx.db, group.id)).filter((c) => c.player_id !== organizerId);
 
   let collected = 0;
   let courts = 0;
@@ -56,9 +65,9 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     const state: MonthlyMoney['sessions'][number]['state'] =
       s.status === 'canceled' ? 'canceled' : !over ? 'upcoming' : s.booking_status === 'booked' || confirmed > 0 ? 'played' : 'not_played';
     const paid = roster
-      .filter((r) => r.payment_status === 'paid' && !r.refunded_at)
+      .filter((r) => r.player_id !== organizerId && r.payment_status === 'paid' && !r.refunded_at)
       .reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
-    const cost = s.court_cost_cents ?? settings.typicalCourtCostCents;
+    const cost = courtCostOf(s, settings);
     if (state === 'played') {
       collected += paid;
       courts += cost;
@@ -84,8 +93,10 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     courtCostCents: courts,
     creditsOwedCents: creditsOwed,
     netCents: net,
+    surplusCents: Math.max(0, net),
+    coveredCents: Math.max(0, -net),
     membershipCents: settings.monthlyMembershipCents,
-    bottomLine: bottomLine(net, settings.monthlyMembershipCents),
+    bottomLine: bottomLine(net, settings.monthlyMembershipCents, sessions.filter((x) => x.state === 'played').length),
     sessions,
   };
 }

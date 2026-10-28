@@ -80,10 +80,10 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
       {m && (
         <>
           <div className={`card money-sum ${m.netCents >= 0 ? 'surplus' : 'short'}`}>
-            {/* "Left" in big numbers, the one-line sentence under it, then the breakdown. */}
+            {/* The big number: what players paid beyond the courts, or what you covered. Never you as the source of a surplus. */}
             <div className="money-head">
-              <span className="money-left-label">Left</span>
-              <span className="big-amount">{m.netCents < 0 ? `−${formatPrice(-m.netCents)}` : formatPrice(m.netCents)}</span>
+              <span className="money-left-label">{m.coveredCents > 0 ? 'You covered' : m.surplusCents > 0 ? 'Surplus' : 'Left'}</span>
+              <span className="big-amount">{formatPrice(m.coveredCents > 0 ? m.coveredCents : m.surplusCents)}</span>
               <p className="bottom-line">{m.bottomLine}</p>
             </div>
             <dl className="kv">

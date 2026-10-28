@@ -76,3 +76,20 @@ export function allocateCredits(credits: OpenCredit[], dues: Due[]): Map<string,
   }
   return out;
 }
+
+// The organizer pays the venue the full court cost. The other players'
+// payments reimburse them, so the organizer's own share is what is left.
+
+export interface CourtSplit {
+  /** What the other players owe (or paid) for this session, after any credit. */
+  playersCoverCents: number;
+  /** The organizer's own share: court cost minus what players cover, never below 0. */
+  yourShareCents: number;
+  /** Players cover the whole court or more. */
+  covered: boolean;
+}
+
+export function courtSplit(courtCostCents: number, otherPlayerCents: number[]): CourtSplit {
+  const cover = otherPlayerCents.reduce((sum, c) => sum + Math.max(0, c), 0);
+  return { playersCoverCents: cover, yourShareCents: Math.max(0, courtCostCents - cover), covered: cover >= courtCostCents };
+}

@@ -2208,7 +2208,7 @@ async function main() {
       assert(/^\d{4}-\d{2}$/.test(now), `month picker value ${now}`);
       for (const label of ['Collected', 'Court costs', 'Credits owed', 'Membership']) await admin.locator('.money-sum dt', { hasText: label }).waitFor();
       const line = (await admin.locator('.bottom-line').innerText()).trim();
-      assert(/^(Surplus: \$[\d.]+ toward the \$30 membership|Short: \$[\d.]+)$/.test(line), `bottom line was ${line}`);
+      assert(/^(Surplus: \$[\d.]+ toward the \$30 membership|You covered \$[\d.]+ of the court costs|Players covered the court costs|No sessions played yet)$/.test(line), `bottom line was ${line}`);
       await admin.getByRole('button', { name: 'Next month' }).click();
       await admin.waitForFunction((was) => document.querySelector('#mm-month').value !== was, now);
       await admin.screenshot({ path: path.join(SHOTS, 'admin-monthly-money.png'), fullPage: true });
@@ -2223,7 +2223,7 @@ async function main() {
         await players[name].reload();
         await players[name].locator('.schedule article').first().waitFor();
         const text = await players[name].locator('body').innerText();
-        assert(!/Monthly money|membership|Surplus|Short:|court cost/i.test(text), `${name} sees private money`);
+        assert(!/Monthly money|membership|Surplus|You covered|Players covered|court cost/i.test(text), `${name} sees private money`);
       }
     });
 

@@ -383,7 +383,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           </p>
           <ul className="rows">
             {s.roster
-              .filter((r) => r.paymentStatus === 'paid' || r.promotedAt)
+              .filter((r) => !r.isOrganizer && (r.paymentStatus === 'paid' || r.promotedAt))
               .map((r) => (
                 <li key={r.playerId}>
                   <span className="who">

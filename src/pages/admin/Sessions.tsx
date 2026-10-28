@@ -692,10 +692,14 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const venmo = ctx.d.group.venmoUrl;
   const { busy, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
-  const rows = s.roster.filter((r) => r.status === 'confirmed' || r.paymentStatus === 'paid');
+  // The organizer is not a row of their own money: they pay the venue (the court row below).
+  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
   const price = ctx.d.group.settings.pricePerPlayerCents;
+  const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
+  const setCourtPaid = (paid: boolean) =>
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
 
   return (
     <div className="stack">
@@ -704,9 +708,11 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           <div className="muted small">Each player pays</div>
           <div className="big-amount">{formatPrice(price)}</div>
         </div>
-        <Chip tone={s.paidCount === s.payableCount && s.payableCount > 0 ? 'ok' : 'warn'}>
-          {s.paidCount}/{s.payableCount} paid
-        </Chip>
+        {s.payableCount > 0 && (
+          <Chip tone={s.paidCount === s.payableCount ? 'ok' : 'warn'}>
+            {s.paidCount}/{s.payableCount} paid
+          </Chip>
+        )}
       </div>
       {s.state.flags.canceled && (
         <>
@@ -717,6 +723,31 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
         </>
       )}
       <ul className="list">
+        {s.court && (
+          <li className="stack court-row" style={{ gap: 8 }} data-court={s.id}>
+            <div className="spread">
+              <div>
+                <strong>You pay Northville Pickleball</strong>
+                <div className="court-cost">{formatPrice(s.court.costCents)}</div>
+                <div className="small muted">
+                  {s.court.covered
+                    ? 'Players cover the court'
+                    : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}
+                </div>
+              </div>
+              <Chip tone={s.court.paid ? 'ok' : 'warn'}>{s.court.paid ? 'Court paid' : 'Court due'}</Chip>
+            </div>
+            <div className="btn-row">
+              {myId ? (
+                <button className="btn small secondary" disabled={busy} onClick={() => setCourtPaid(!s.court!.paid)}>
+                  {s.court.paid ? 'Unmark' : 'Mark paid'}
+                </button>
+              ) : (
+                <span className="small muted">Add your name in Settings (Group &gt; Your name) to mark this paid.</span>
+              )}
+            </div>
+          </li>
+        )}
         {rows.map((r) => (
           <li key={r.playerId} className="stack" style={{ gap: 8 }}>
             <div className="spread">
@@ -780,7 +811,7 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const [error, setError] = useState<string | null>(null);
   const unconfirmed = s.roster.filter((r) => r.status === 'confirmed' && !r.attendanceConfirmedAt);
   const dueAt = new Date(Date.parse(s.startsAt) - ctx.d.group.settings.checkInHours * 3600_000).toISOString();
-  const unpaid = s.roster.filter((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
+  const unpaid = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
 
   async function prepare() {
     setBusy(true);

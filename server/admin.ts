@@ -11,6 +11,7 @@ import { HttpError } from './http';
 import {
   audit,
   confirmedOf,
+  courtCostOf,
   defaultDeadline,
   ensureSessions,
   getPlayers,
@@ -29,10 +30,11 @@ import {
   loadHiddenSessions,
   lookbackIso,
   openCredits,
+  organizerIdOf,
   syncSix,
   visibleFrom,
 } from './repo';
-import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, settle, withdraw } from './roster';
+import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -64,8 +66,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     const row = roster.find((r) => r.player_id === playerId);
     return row?.payment_status === 'paid' ? usedOn(s.id, playerId) : (plan.get(`${s.id}:${playerId}`)?.cents ?? 0);
   };
+  const organizerId = await organizerIdOf(ctx.db, group);
   const balances = new Map<string, number>();
-  for (const c of openCredits(credits)) balances.set(c.playerId, (balances.get(c.playerId) ?? 0) + c.amountCents);
+  // The organizer pays the venue, so any credit under their name is not a balance anyone owes.
+  for (const c of openCredits(credits)) if (c.playerId !== organizerId) balances.set(c.playerId, (balances.get(c.playerId) ?? 0) + c.amountCents);
   const { results: auditRows } = await ctx.db
     .prepare('SELECT * FROM admin_audit_log WHERE group_id = ? ORDER BY created_at DESC LIMIT 60')
     .bind(group.id)
@@ -114,7 +118,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) => {
       const roster = rosters.get(s.id) ?? [];
-      return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster));
+      return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster), organizerId);
     }),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
@@ -468,6 +472,11 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
  */
 export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean, self: string | null, actor?: string) {
   const roster = await loadRoster(ctx.db, session.id);
+  // The organizer pays the venue, not the other players. Their Mark paid / Unmark mean "Court paid" / "Court due".
+  if (playerId === (await organizerIdOf(ctx.db, group))) {
+    if (self) throw new HttpError(409, 'organizer_pays_court', 'There is nothing for you to pay here.');
+    return applyCourtPayment(ctx, group, session, playerId, paid);
+  }
   const row = roster.find((r) => r.player_id === playerId);
   if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
 
@@ -536,6 +545,15 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
     );
   }
   return { ok: true, changed: true };
+}
+
+/** The organizer paid the venue (or took that back). No share, no credit, nothing counted as collected. */
+async function applyCourtPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean) {
+  if (paid && session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  const amountCents = courtCostOf(session, settingsOf(group));
+  const changed = await setCourtPaid(ctx.db, session, playerId, paid, amountCents, ctx.nowIso);
+  if (changed) await audit(ctx.db, group.id, session.id, paid ? 'court_paid' : 'court_unpaid', paid ? { amountCents } : {}, ctx.nowIso);
+  return { ok: true, changed };
 }
 
 /** Dismiss the "had 6, now fewer" card once payments are sorted out by hand. */
@@ -777,6 +795,7 @@ export async function exportData(ctx: Ctx): Promise<Response> {
   const tz = group.timezone;
   const sessions = await loadSessions(ctx.db, group.id, '0000');
   const rosters = await loadRosters(ctx.db, group.id, '0000');
+  const organizerId = await organizerIdOf(ctx.db, group);
   const header = [
     'Date', 'Time', 'Session status', 'Court booking', 'Venue', 'Reservation',
     'Cancellation deadline', 'Player', 'Player status', 'Price', 'Payment', 'Paid at', 'Amount paid', 'Refunded at',
@@ -797,14 +816,16 @@ export async function exportData(ctx: Ctx): Promise<Response> {
     ];
     if (roster.length === 0) lines.push([...base, '', '', '', '', '', '', ''].map(csvCell).join(','));
     for (const r of roster) {
-      const share = shares.get(r.player_id);
+      // The organizer pays the venue: no player price, and their paid mark is the court.
+      const isMe = r.player_id === organizerId;
+      const share = isMe ? undefined : shares.get(r.player_id);
       lines.push(
         [
           ...base,
           r.display_name,
           r.status,
           share === undefined ? '' : formatCents(share),
-          r.payment_status,
+          isMe && r.payment_status !== 'not_applicable' ? (r.payment_status === 'paid' ? 'court paid' : 'court due') : r.payment_status,
           r.paid_at ? formatDateTime(r.paid_at, tz) : '',
           r.payment_amount_cents === null ? '' : formatCents(r.payment_amount_cents),
           r.refunded_at ? formatDateTime(r.refunded_at, tz) : '',

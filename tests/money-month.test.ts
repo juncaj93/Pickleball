@@ -154,7 +154,8 @@ describe('monthly money', () => {
     expect(m.courtCostCents).toBe(5000 + 4800);
     expect(m.creditsOwedCents).toBe(0);
     expect(m.netCents).toBe(-1400);
-    expect(m.bottomLine).toBe('Short: $14');
+    expect(m.bottomLine).toBe('You covered $14 of the court costs');
+    expect(m).toMatchObject({ surplusCents: 0, coveredCents: 1400 });
     expect(m.sessions.find((x: any) => x.id === b.id)).toMatchObject({ state: 'played', typicalCost: true, courtCostCents: 4800 });
     expect(m.sessions.find((x: any) => x.id === c.id)).toMatchObject({ state: 'canceled', collectedCents: 0, courtCostCents: 0 });
     // Sessions nobody played don't count either.
@@ -165,7 +166,7 @@ describe('monthly money', () => {
     await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', settings: { ...settings, typicalCourtCostCents: 4000, monthlyMembershipCents: 3000 } });
     m = await money(ctx, '2026-11');
     expect(m.courtCostCents).toBe(9000);
-    expect(m.bottomLine).toBe('Short: $6');
+    expect(m.bottomLine).toBe('You covered $6 of the court costs');
   });
 
   it('subtracts credits still owed when 6 played', async () => {
@@ -185,8 +186,9 @@ describe('monthly money', () => {
 
   it('bottom line wording', () => {
     expect(bottomLine(1400, 3000)).toBe('Surplus: $14 toward the $30 membership');
-    expect(bottomLine(0, 3000)).toBe('Surplus: $0 toward the $30 membership');
-    expect(bottomLine(-800, 3000)).toBe('Short: $8');
+    // No surplus unless the players paid more than the courts cost; otherwise it is what the organizer covered.
+    expect(bottomLine(0, 3000)).toBe('Players covered the court costs');
+    expect(bottomLine(-800, 3000)).toBe('You covered $8 of the court costs');
   });
 
   it('defaults: typical court cost $48, membership $30; a bad month is refused', async () => {
@@ -215,7 +217,7 @@ describe('monthly money is private', () => {
       movedMessage(s, TZ, 'y'),
     ];
     for (const t of texts) {
-      expect(t).not.toMatch(/(?<![A-Za-z0-9_-])(4321|2987)(?![A-Za-z0-9_-])|43\.21|29\.87|membership|typicalCourtCost|monthlyMembership|Monthly money|Surplus|Short:/i);
+      expect(t).not.toMatch(/(?<![A-Za-z0-9_-])(4321|2987)(?![A-Za-z0-9_-])|43\.21|29\.87|membership|typicalCourtCost|monthlyMembership|Monthly money|Surplus|You covered|Players covered/i);
     }
   });
 });
