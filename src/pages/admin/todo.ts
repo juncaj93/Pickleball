@@ -3,7 +3,7 @@ import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { localParts } from '../../../shared/time';
 
 export type TodoItem =
-  | { kind: 'five' | 'tell' | 'sixdrop' | 'checkin' | 'daybefore' | 'lastcall' | 'refund' | 'latedrop'; session: AdminSessionView }
+  | { kind: 'five' | 'sixdrop' | 'checkin' | 'refund' | 'latedrop'; session: AdminSessionView }
   | { kind: 'owed'; rows: OwedRow[] }
   | { kind: 'tonight'; rows: OwedRow[] };
 
@@ -53,11 +53,6 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   const nowMs = Date.parse(d.now);
   const s = d.sessions;
   for (const x of s) if (x.state.flags.fiveGoing) items.push({ kind: 'five', session: x });
-  for (const x of s)
-    if (upcoming(x) && x.roster.some((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt))
-      items.push({ kind: 'tell', session: x });
-  for (const x of s) if (x.cards.lastCall) items.push({ kind: 'lastcall', session: x });
-  for (const x of s) if (x.cards.dayBefore) items.push({ kind: 'daybefore', session: x });
   for (const x of s) if (x.state.flags.checkInsDue) items.push({ kind: 'checkin', session: x });
   for (const x of s) if (x.sixDropped) items.push({ kind: 'sixdrop', session: x });
   // Late drops not yet looked at, while the session is still ahead.

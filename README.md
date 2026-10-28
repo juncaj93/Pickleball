@@ -55,11 +55,7 @@ under More details in Edit booking.
 Home starts with a short "Needs attention" list for things that aren't one
 session's court (hidden when there's nothing in it):
 
-- the **day-before** card (from 24 hours before play) and the **last-call** card
-  (from 13 hours before), each with Text the group, Copy message, and Done, until
-  the cancellation deadline
 - "5 going, need 4 or 6" with the choices
-- "Tell them they're in": a text draft for each person moved off the waitlist
 - "Was 6, now 5: discount and credits are off" when a session drops below 6
   after the discount was shown, listing anything to sort out by hand
 - each person's credit balance, with **Clear credit**
@@ -142,11 +138,9 @@ highlighted (after picking a name on a new phone).
 
 ## Day before and last call
 
-From 24 hours before, Home shows **Text the players who are in**: one message
-to all their saved numbers ("Missing numbers: ..." for anyone without one)
-with a link to back out, plus a smaller **Text the group: need more players**.
-When we're short of 4 or 6, that one leads instead. The last-call text (13
-hours before) links to the session too.
+The old day-before and last-call cards are gone. The same texts now come from the
+**Text suggestion cards** at the top of Home (see below): Need players, and Check-in to the
+players who are in with their saved numbers ("Missing numbers: ..." for anyone without one).
 
 ## Money tab
 
@@ -191,6 +185,67 @@ from the Venmo app (or type @Name); only the username is saved. It is organizer
 only and is never in any player screen or response. It is in the backup file
 and comes back on restore.
 
+## Credit (organizer and players)
+
+When a game is canceled, or a paid player leaves it, the **Refund needed** card on Home
+and that game's row in Money > Who paid now offer two choices for each payment:
+
+- **Refund** opens Venmo with the exact amount, as before. **Mark refunded** records it.
+- **Keep as credit** turns the payment into that player's credit. Until you choose, the
+  money stays held. A game canceled before credit existed can still be kept as credit
+  later. **Undo** takes it back, as long as none of that credit has been spent yet.
+  Late drops work the same way and keep their "Late drop" tag.
+
+Credit is **one pot per player**, with no expiry, usable on any later game. It adds to the
+older $5 credit (that rule and its wording are unchanged). On their own screen a player sees
+a small "You have $14 credit" line, and on a game they owe for a **Use credit** button. It
+takes the smaller of their credit and what they owe, and only when they tap it. If it covers
+everything the game shows "Paid with credit"; otherwise they pay the rest with the normal
+Pay button for the remaining amount. At most one green button per card: Use credit is the
+green one when it covers the whole amount, otherwise Pay stays green. If they drop out of a
+game paid with credit, or it is canceled, the credit goes back to them. You can **Unmark**
+any credit use. Nobody sees anyone else's credit.
+
+Players tab: each row shows the credit with the balance; tapping a row shows the history by
+game. **Refund credit balance** opens Venmo (their saved Venmo, note "Pickleball credit
+refund") for the full credit; **Mark refunded** then drops the balance to $0, with **Undo**.
+Opening Venmo never marks anything.
+
+Money tab: kept credit counts in **Credits owed** (in the month of the canceled game, oldest
+credit spent first) and leaves **Held**. It was never in Collected, so it is not taken off
+**Left**; the card says so. Credit used for a game counts as collected in the month that
+game is played.
+
+Canceling within 12 hours of the start asks **Were you charged for this court?** (No is the
+default). A Yes with an amount counts as that canceled game's court cost. Outside 12 hours it
+is not asked, and canceled games stay at $0 court cost. The Canceled text now reads "...is
+canceled. If you paid, it stays as your credit. Want a refund instead? Text me."
+
+All of it is in one new table, `credit_ledger` (migration 0012). Entries are never deleted:
+an undone entry, or credit that went back to the player, just stops counting. The table is in
+the backup file; older backups without it still restore.
+
+## Text suggestion cards (organizer only)
+
+At the top of Home, one card per game that needs a text (at most 2, with a small "more"
+link). Each shows the game and time, a one-line preview, who it goes to ("Group chat" or "4
+players"), and one green **Text** button that opens Messages with the words and numbers
+ready. The site never sends anything and never says it did.
+
+- **Need players**: fewer than 4 in and the game is within 48 hours (group chat).
+- **Check-in**: exactly 4 or exactly 6 in, from 6:00 PM the day before until the game
+  (to the players who are in).
+- **Down to 5**, **Now 6**, **Spot opened**: right when it happens, while it lasts.
+- **Payment reminder**: a played game, 7 or more calendar days ago, someone still unpaid. One
+  unpaid player gets a one-person text; two or more get "Remind all unpaid".
+- Canceled or moved, and Share the game, are not cards (they stay in the gear menu).
+
+After you tap Text the card hides until the situation changes (the number of players
+changes, or something else happens). That is remembered on your phone only; nothing is saved
+on the server. Players and "View as" never see the cards. With nothing to suggest, Home
+looks as it always did. These cards replace the old day-before, last-call, "Tell them
+they're in" and late-drop text cards, so nothing shows twice.
+
 ## The Text menu (organizer only)
 
 The gear panel's **Text** button lists only the texts that fit that game right
@@ -215,7 +270,7 @@ game they owe for. Never for canceled games or the organizer.
 
 A confirmed player who drops out after the cancellation deadline (12 hours
 before play by default, or that booking's own deadline) is a late drop: a "Late drop" card on Home with
-the name and time, a one-tap **Text the group: spot open** text, and, if they
+the name and time and, if they
 had paid, "Ryan paid $14 and dropped. Refund?" with **Refunded**. The session
 card shows a "Late drop" tag, and the Players screen counts them ("Late drops:
 2", organizer only). Removals by the organizer don't count.
