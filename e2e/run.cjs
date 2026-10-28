@@ -2020,7 +2020,7 @@ async function main() {
       assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
       await c2.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
       const tell = admin.getByRole('article', { name: new RegExp(`Tell them they're in: ${day}`) });
-      await tell.getByText(/^A spot opened and you're in for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. \S+$/).waitFor();
+      await tell.getByText(/^A spot opened and you're in for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. \S+$/).first().waitFor();
 
       const p = players.Casey;
       await p.reload();
@@ -2054,7 +2054,8 @@ async function main() {
         const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
         assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
         const body = (await main.locator('.bubble').innerText()).trim();
-        const want = `Pickleball tomorrow (${new Date(first.startsAt).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' })}), 8:00 PM. Still in? Update here: ${SITE}`;
+        // The game is 20 hours away, so later the same day: "tonight".
+        const want = `Pickleball tonight, 8:00 PM. Still in? Update here: ${SITE}`;
         assert(body === want, `check-in text was: ${body}`);
         assert(smsOf(href).body === want, 'Messages opens with the same words');
         assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
@@ -2151,7 +2152,7 @@ async function main() {
       const bubble = after.locator('.bubble');
       assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. \S+$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       await after.getByLabel(/Reason/).fill('Rain');
-      await bubble.getByText(/is canceled\. Rain\.$/).waitFor();
+      await bubble.getByText(/is canceled\. Rain\. \S+$/).waitFor();
       await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
       assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
       // Who to pay back, with Refunded.
