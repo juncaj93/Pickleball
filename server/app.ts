@@ -87,6 +87,7 @@ route('POST', '/api/admin/credits/:id/clear', (ctx) => admin.clearCredit(ctx));
 route('POST', '/api/admin/sessions/:id/told', admin.markTold);
 route('POST', '/api/admin/sessions/:id/links', admin.prepareLinks);
 route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
+route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
 
 export async function handleApi(req: Request, env: Env, nowMs = Date.now()): Promise<Response> {
   const ctx = makeCtx(req, env, nowMs);

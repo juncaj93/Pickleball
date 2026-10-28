@@ -131,7 +131,7 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .run();
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
     const res = await withdraw(ctx.db, r.session, r.token.player_id, ctx.nowMs);
-    const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group).checkInHours) : false;
+    const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group)) : false;
     outcome = 'withdrawn';
     if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late });
   } else {

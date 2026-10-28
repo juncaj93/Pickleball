@@ -392,6 +392,28 @@ async function main() {
 
   const proxy = REMOTE && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {};
   const browser = await chromium.launch(proxy);
+  // The browsers' clocks start where the test server's does (12:30 AM on a
+  // Tue or Thu, see below), so both agree on which games are over whatever
+  // time of day the tests run.
+  const newContext = browser.newContext.bind(browser);
+  browser.newContext = async (opts) => {
+    const ctx = await newContext(opts);
+    await ctx.addInitScript((off) => {
+      if (!off) return;
+      const RealDate = Date;
+      const now = () => RealDate.now() + off;
+      function PinnedDate(...args) {
+        if (!new.target) return new RealDate(now()).toString();
+        return args.length ? new RealDate(...args) : new RealDate(now());
+      }
+      PinnedDate.prototype = RealDate.prototype;
+      PinnedDate.now = now;
+      PinnedDate.parse = RealDate.parse;
+      PinnedDate.UTC = RealDate.UTC;
+      globalThis.Date = PinnedDate;
+    }, BASE_OFFSET);
+    return ctx;
+  };
   const pageErrors = [];
   const phone = (width = 390) => ({
     viewport: { width, height: 844 },
@@ -1762,28 +1784,81 @@ async function main() {
     });
 
     console.log('View as');
-    await check('"View as..." shows the player\'s screen with a small bar above it, and taps really happen', async () => {
+    await check('"View as..." shows the player\'s screen with a small bar above it, and is look-only ("Demo only")', async () => {
       await admin.reload();
       await admin.getByRole('button', { name: 'View as…' }).click();
+      await admin.locator('dialog[open]').getByText('Demo only: taps here change nothing.').waitFor();
       await admin.locator('dialog[open]').getByRole('button', { name: 'Blair', exact: true }).click();
       await admin.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
       await admin.getByRole('heading', { name: 'Blair', exact: true, level: 1 }).waitFor();
       await admin.getByRole('button', { name: 'Not you?' }).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as.png'), fullPage: true });
+      const sent = [];
+      const onReq = (r) => r.method() !== 'GET' && r.url().includes('/api/') && sent.push(r.url());
+      admin.on('request', onReq);
       const second = admin.locator('article').nth(1);
       await second.getByRole('button', { name: "I'm in" }).click();
-      await admin.locator('.pop, .toast').first().waitFor();
+      const note = admin.locator('.pop', { hasText: 'Demo only. Nothing was saved.' });
+      await note.waitFor();
+      assert(!(await note.getAttribute('class')).includes('pop-error'), '"Demo only" is a plain note, not a red error');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
-      await second.getByRole('button', { name: "I'm out" }).waitFor();
-      await second.locator('.tile-check').waitFor();
+      admin.off('request', onReq);
+      assert(sent.length === 0, `View as sent changes: ${sent}`);
+      await second.getByRole('button', { name: "I'm in" }).waitFor();
+      assert((await second.locator('.tile-check').count()) === 0, 'nothing changed on the card');
       await admin.getByRole('button', { name: 'Exit' }).click();
       await tab(admin, 'Home').waitFor();
       await players.Blair.reload();
-      await players.Blair.locator('article').nth(1).locator('.tile-check').waitFor();
-      // Logged in History > Activity as the organizer acting as Blair.
+      assert((await players.Blair.locator('article').nth(1).locator('.tile-check').count()) === 0, 'Blair is not signed up');
+      // Nothing in History > Activity.
       await tab(admin, 'History').click();
       await admin.getByRole('button', { name: 'Activity' }).click();
-      await admin.getByRole('list', { name: 'Activity' }).getByText(/^Robin \(as Blair\) said I'm in for /).first().waitFor();
+      await admin.getByRole('list', { name: 'Activity' }).waitFor();
+      assert((await admin.getByRole('list', { name: 'Activity' }).getByText(/\(as Blair\)/).count()) === 0, 'View as left an Activity line');
+      await tab(admin, 'Home').click();
+      // Blair signs up on her own phone (the next checks start from here).
+      const own = players.Blair.locator('article').nth(1);
+      await own.getByRole('button', { name: "I'm in" }).click();
+      await own.locator('.tile-check').waitFor();
+    });
+
+    await check('coming back to the page after 30 seconds quietly shows the latest (no reload, no spinner)', async () => {
+      const a = players.Alex;
+      await a.reload();
+      const before = await a.locator('article').nth(1).locator('.in-line').textContent();
+      // The phone goes to another app...
+      const away = (state) =>
+        a.evaluate((st) => {
+          Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => st });
+          document.dispatchEvent(new Event('visibilitychange'));
+        }, state);
+      await away('hidden');
+      // ...someone else signs up for that game meanwhile...
+      const sid = (await a.locator('article').nth(1).locator('[id^="s-"]').first().getAttribute('id')).slice(2);
+      const c = players.Casey;
+      const res = await c.evaluate((id) => fetch(`/api/sessions/${id}/join`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then((r) => r.json()), sid);
+      assert(res.result === 'confirmed' || res.result === 'waitlisted', `Casey's sign-up: ${JSON.stringify(res)}`);
+      // ...and 31 seconds later the phone comes back.
+      await a.evaluate(() => {
+        const real = Date.now;
+        Date.now = () => real() + 31_000;
+      });
+      await away('visible');
+      await a.waitForFunction((was) => document.querySelectorAll('article')[1]?.querySelector('.in-line')?.textContent !== was, before, { timeout: 5000 });
+      assert((await a.locator('.spinner').count()) === 0, 'no spinner on a quiet refresh');
+      // Casey goes back out so the next checks start as before.
+      await c.evaluate((id) => fetch(`/api/sessions/${id}/withdraw`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }), sid);
+      await a.reload();
+    });
+
+    await check('Settings > Backup downloads a backup file with everything in it', async () => {
+      await tab(admin, 'Settings').click();
+      await openSections(admin);
+      const [dl] = await Promise.all([admin.waitForEvent('download'), admin.getByRole('link', { name: 'Download backup file' }).click()]);
+      assert(/^pickleball-backup-\d{4}-\d{2}-\d{2}\.json$/.test(dl.suggestedFilename()), `file name: ${dl.suggestedFilename()}`);
+      const file = await dl.path();
+      const b = JSON.parse(require('node:fs').readFileSync(file, 'utf8'));
+      assert(b.format === 'pickleball-backup' && b.tables.players.length >= 6 && b.tables.sessions.length > 0, 'backup is missing data');
       await tab(admin, 'Home').click();
     });
 

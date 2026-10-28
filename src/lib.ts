@@ -23,7 +23,19 @@ export function setViewAs(playerId: string | null) {
   viewAsId = playerId;
 }
 
+/** What a tap says while the organizer is viewing as a player. */
+export const DEMO_MESSAGE = 'Demo only. Nothing was saved.';
+
+/** True for the "Demo only" answer, which is shown as a plain note, not an error. */
+export function isDemo(err: unknown): err is ApiError {
+  return err instanceof ApiError && err.code === 'demo_only';
+}
+
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+  // "View as..." is look-only: player taps never leave the phone.
+  if (viewAsId && method !== 'GET' && path.startsWith('/api/') && !path.startsWith('/api/admin/')) {
+    throw new ApiError(0, 'demo_only', DEMO_MESSAGE);
+  }
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -64,7 +76,46 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   useEffect(() => {
     void reload();
   }, [reload]);
-  return { data, error, loading, reload, setData };
+  /** Fetch again in the background: no spinner, and a failure keeps what's on screen. */
+  const refresh = useCallback(async () => {
+    try {
+      setData(await loader());
+      setError(null);
+    } catch {
+      /* offline for a moment: keep the screen as it is */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { data, error, loading, reload, refresh, setData };
+}
+
+/** How long the page must have been out of sight before coming back refreshes it. */
+const AWAY_MS = 30_000;
+
+/**
+ * Coming back to the page (switching apps, unlocking the phone) after 30
+ * seconds or more quietly loads the latest, so nobody acts on old info.
+ */
+export function useRefreshOnReturn(refresh: () => Promise<void>) {
+  useEffect(() => {
+    let hiddenAt = document.visibilityState === 'hidden' ? Date.now() : 0;
+    const onChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (hiddenAt && Date.now() - hiddenAt >= AWAY_MS) {
+        hiddenAt = 0;
+        void refresh();
+      }
+    };
+    // Safari brings a page back from its memory without reloading it.
+    const onShow = (e: PageTransitionEvent) => e.persisted && void refresh();
+    document.addEventListener('visibilitychange', onChange);
+    window.addEventListener('pageshow', onShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onChange);
+      window.removeEventListener('pageshow', onShow);
+    };
+  }, [refresh]);
 }
 
 // ---------- Routing (pushState, no library) ----------

@@ -50,12 +50,12 @@ describe('History > Activity', () => {
     expect((await activity(ctx)).entries.map((e) => activityText(e, TZ, 'Organizer'))[0]).toBe(`Organizer booked ${day}`);
   });
 
-  it('"View as" taps are logged as the organizer acting as that player', async () => {
+  it('"View as" taps change nothing, so nothing is logged', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
-    const day = new Date(s.startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: TZ });
-    await ctx.organizer.call('POST', `/api/sessions/${s.id}/join`, {}, { 'X-View-As': ctx.byName.Casey });
-    expect((await lines(ctx))[0]).toBe(`Robin (as Casey) said I'm in for ${day}`);
+    const before = await lines(ctx);
+    expect((await ctx.organizer.call('POST', `/api/sessions/${s.id}/join`, {}, { 'X-View-As': ctx.byName.Casey })).status).toBe(403);
+    expect(await lines(ctx)).toEqual(before);
   });
 
   it('shows the time in Eastern with AM/PM', async () => {

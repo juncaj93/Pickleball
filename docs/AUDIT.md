@@ -41,21 +41,21 @@ Severity: CRITICAL (data leak, money wrong, site down), HIGH, MEDIUM, LOW.
 - **Link preview:** title "Pickleball Bros", description and image tags are already there.
 - **Cost:** $0. About 15 players opening the site ~6 times a day is roughly 200 to 400 requests and ~150,000 database rows read per day, under 1% and ~3% of the free limits (100,000 requests, 5 million rows). No polling. Page is ~105 KB compressed.
 
-## Needs your decision (not changed)
+## Decisions (answered by Alex, Oct 27, 2026) and what was done
 
-| # | Sev | Finding | My recommendation |
-|---|-----|---------|-------------------|
-| D1 | HIGH | **"View as..." really acts for the player** (I'm in, I'm out, I paid all happen and are logged as you). SITE_RULES says it should be a no-write simulation. | Make it look-only: taps show "Preview only" and change nothing. Safer, matches your rules. |
-| D2 | MEDIUM | **Late drop timing:** the code tags a late drop from 24 hours before (day-before check-in). SITE_RULES says after the cancellation deadline (12 hours, per booking). | Follow your rules (cancellation deadline). It's fairer and matches when the court money is at stake. |
-| D3 | MEDIUM | **Backup** in Settings is a CSV report. It can't be restored and leaves out players, phone numbers, credits and settings. The real safety net is Cloudflare's own database history (Time Travel, last 7 days on the free plan). | Add a full "Backup file" download that can be restored, and keep the CSV as a report. Until then, see "Live backup" below. |
-| D4 | MEDIUM | Unpaid amounts older than 90 days drop off every screen (player and organizer). | Keep unpaid amounts visible until paid, however old. |
-| D5 | MEDIUM | Anyone with the address can pick any name and tap for that person (I'm out, I paid). That's how no-PIN works; the Activity log and "self-marked" tag show it. | Fine for friends. If it's ever abused, turn on the group word in Settings > Access. |
-| D6 | MEDIUM | The `SETUP_TOKEN` secret is still set in Cloudflare. With F7 it can't be used or guessed while the group exists, but it's no longer needed. | Delete it (Cloudflare > Workers & Pages > pickleball-club > Settings > Variables and Secrets > SETUP_TOKEN > Delete). Safe. |
-| D7 | LOW | A screen left open doesn't refresh when you come back to it later; it shows the last state until you reload or tap. | Reload quietly when the phone returns to the page. |
-| D8 | LOW | Last call says "tonight". An extra game in the daytime would get a wrong-sounding text. | Say "today" when the game starts before 5 PM. |
-| D9 | LOW | The "Pay $9" button is 34px tall (others reach 44px). | Make its tap area 44px without changing the look. |
-| D10 | LOW | 20 wrong PIN guesses from anywhere lock everyone out for 15 minutes, including you. Low risk because you stay signed in for 30 days. | Leave as is. |
-| D11 | LOW | The vitest test tool has known issues (developer computer only, not the site). Fixing needs a major upgrade. | Upgrade in a later round; zero effect on the live site. |
+| # | Sev | Finding | Decision | Done |
+|---|-----|---------|----------|------|
+| D1 | HIGH | "View as..." really acted for the player (sign-ups, I paid, all logged as you). SITE_RULES says look-only. | Make it look-only. | Taps show a small "Demo only. Nothing was saved." note. The phone sends nothing, and the server refuses View-as writes too. No Activity lines. The View as sheet says "Demo only: taps here change nothing." |
+| D2 | MEDIUM | Late drops counted from 24 hours before. SITE_RULES says after the cancellation deadline. | After the cancellation deadline. | A drop counts as late from the booking's own deadline, or 12 hours before play when none is set. |
+| D3 | MEDIUM | Settings "Backup" was a CSV that can't be restored. | Add a real backup file and a tested restore. | Settings > Backup > **Download backup file** (organizer only, everything in it). `scripts/restore-backup.mjs` turns it back into the database. Steps in `docs/RESTORE.md`. Tested in code and by hand on Cloudflare's local database engine. |
+| D4 | MEDIUM | Unpaid amounts older than 90 days dropped off every screen. | Keep until paid. | The site looks back as far as the oldest unpaid game. |
+| D5 | MEDIUM | Anyone with the address can pick any name and tap for them. | Keep (no change). | Turn on the group word in Settings > Access if it's ever abused. |
+| D6 | MEDIUM | SETUP_TOKEN secret still set in Cloudflare. | Alex deletes it. | Cloudflare > Workers & Pages > pickleball-club > Settings > Variables and Secrets > SETUP_TOKEN > Delete. |
+| D7 | LOW | An open screen didn't refresh when you came back to it. | Yes. | Coming back after 30 seconds or more quietly loads the latest. No spinner, and being offline for a moment leaves the screen as it was. |
+| D8 | LOW | Last call always said "tonight". | Yes. | "today" for games starting before 5:00 PM, "tonight" otherwise. |
+| D9 | LOW | Pay button looked 34px tall. | Yes. | Nothing to change: on a second look it already has a hidden 44px tap area (5px above and below). My first measurement only saw the visible part. |
+| D10 | LOW | 20 wrong PINs from anywhere lock everyone out for 15 minutes. | Leave. | No change. |
+| D11 | LOW | Test tool (vitest) needs a major upgrade for known issues. Developer computer only. | Later. | No change. |
 
 Also noted, no action needed: old organizer sign-ins (expired) stay in the database table (tiny); robots.txt blocks all crawlers, which some link-preview bots respect (iMessage ignores it, so the group text preview works).
 
@@ -69,6 +69,6 @@ I tried to export the live database before deploying, and this session's safety 
 
 ## Tests
 
-- Unit and API tests: 238 passed (7 new in `tests/audit-fixes.test.ts`).
-- Browser tests (`npm run test:e2e`): 205 passed, 0 failed.
+- Unit and API tests: 247 passed (`tests/audit-fixes.test.ts`, `tests/decisions.test.ts`).
+- Browser tests (`npm run test:e2e`): see the latest run in the final report.
 - Typecheck: clean.

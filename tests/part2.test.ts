@@ -275,17 +275,30 @@ describe('View as', () => {
     expect((await alex.call('GET', '/api/group', undefined, { 'X-View-As': ctx.byName.Casey })).status).toBe(401);
   });
 
-  it('really acts for the player, and logs that the organizer did it', async () => {
+  it('is look-only: every tap answers "Demo only", nothing changes, nothing is logged', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const as = { 'X-View-As': ctx.byName.Devon };
-    expect((await ctx.organizer.call('POST', `/api/sessions/${s.id}/join`, {}, as)).data).toEqual({ result: 'confirmed' });
-    const dash = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
-    expect(confirmedNames(dash.sessions.find((x: any) => x.id === s.id))).toEqual(['Devon']);
-    expect(dash.audit[0]).toMatchObject({ action: 'as_player_join', actorLabel: 'organizer as Devon', details: { player: 'Devon', result: 'confirmed' } });
-    await ctx.organizer.call('POST', `/api/sessions/${s.id}/withdraw`, {}, as);
-    const log = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.audit;
-    expect(log[0]).toMatchObject({ action: 'as_player_withdraw', actorLabel: 'organizer as Devon' });
+    const before = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const taps: [string, string, unknown][] = [
+      ['POST', `/api/sessions/${s.id}/join`, {}],
+      ['POST', `/api/sessions/${s.id}/withdraw`, {}],
+      ['POST', `/api/sessions/${s.id}/paid`, { paid: true }],
+      ['POST', `/api/sessions/${s.id}/confirm`, {}],
+      ['POST', `/api/sessions/${s.id}/decline`, {}],
+      ['PUT', '/api/me/days', { days: [2] }],
+    ];
+    for (const [m, p, b] of taps) {
+      const r = await ctx.organizer.call(m, p, b, as);
+      expect(r.status, p).toBe(403);
+      expect(r.data).toEqual({ error: 'demo_only', message: 'Demo only. Nothing was saved.' });
+    }
+    const after = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    expect(confirmedNames(after.sessions.find((x: any) => x.id === s.id))).toEqual([]);
+    expect(after.audit).toEqual(before.audit);
+    expect(after.players.find((p: any) => p.name === 'Devon').usualDays).toEqual(before.players.find((p: any) => p.name === 'Devon').usualDays);
+    // Looking still works.
+    expect((await ctx.organizer.call('GET', '/api/group', undefined, as)).data.me.name).toBe('Devon');
   });
 });
 

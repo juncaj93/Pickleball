@@ -19,6 +19,7 @@ import {
   loadCredits,
   loadRosters,
   loadSessions,
+  lookbackIso,
   openCredits,
   pricesFor,
   settingsOf,
@@ -76,7 +77,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const tz = group.timezone;
   const allPlayers = await getPlayers(ctx.db, group.id);
   const players = allPlayers.filter((p) => p.is_active);
-  const since = new Date(ctx.nowMs - OWED_LOOKBACK_MS).toISOString();
+  const since = await lookbackIso(ctx.db, group.id, ctx.nowMs, OWED_LOOKBACK_MS);
   const from = visibleFrom(group);
   const sessions = await loadSessions(ctx.db, group.id, since, from);
   const rosters = await loadRosters(ctx.db, group.id, since, from);
@@ -247,7 +248,9 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
 
 /** "Any preferred days?" right after adding a name. Only touches the player on this phone. */
 export async function setMyDays(ctx: Ctx, body: Record<string, unknown>) {
-  const { group, playerId } = await viewer(ctx);
+  const who = await viewer(ctx);
+  refuseDemo(who);
+  const { group, playerId } = who;
   if (!playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const days = v.usualDays(body.days) ?? '';
   await ctx.db
@@ -267,23 +270,22 @@ export async function forgetName(ctx: Ctx) {
   return { me: null };
 }
 
+/** "View as..." is look-only: the server refuses its writes too. */
+function refuseDemo(who: Viewer) {
+  if (who.viewAsName) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
+}
+
 async function actingOn(ctx: Ctx) {
   const who = await viewer(ctx);
+  refuseDemo(who);
   if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const session = await getSession(ctx.db, who.group.id, v.id(ctx.params.id, 'session'));
   if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
   return { ...who, playerId: who.playerId, session };
 }
 
-/**
- * Every player tap goes in the History > Activity log under the player's
- * name. When the organizer acts through "View as...", it's logged as theirs.
- */
+/** Every player tap goes in the History > Activity log under the player's name. */
 async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, action: string, result: unknown, extra: Record<string, unknown> = {}) {
-  if (who.viewAsName) {
-    await audit(ctx.db, who.group.id, who.session.id, `as_player_${action}`, { player: who.viewAsName, result, ...extra }, ctx.nowIso, `organizer as ${who.viewAsName}`);
-    return;
-  }
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
   await audit(ctx.db, who.group.id, who.session.id, `player_${action}`, { player: name, result, ...extra }, ctx.nowIso, name);
@@ -300,7 +302,7 @@ export async function playerJoin(ctx: Ctx) {
 export async function playerWithdraw(ctx: Ctx) {
   const who = await actingOn(ctx);
   const res = await withdraw(ctx.db, who.session, who.playerId, ctx.nowMs);
-  const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group).checkInHours) : false;
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group)) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late });
   return { result };
@@ -316,7 +318,7 @@ export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
   const paid = v.bool(body.paid, 'paid');
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
-  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, who.viewAsName ? `organizer as ${who.viewAsName}` : name);
+  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name);
 }
 
 export async function playerConfirm(ctx: Ctx) {

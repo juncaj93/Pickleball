@@ -1,5 +1,5 @@
 import { formatPrice } from './money';
-import { formatDateTime, formatMonthDay, formatShortDate, formatTime, formatTimeRange, formatWeekday } from './time';
+import { formatDateTime, localParts, formatMonthDay, formatShortDate, formatTime, formatTimeRange, formatWeekday } from './time';
 
 // Short, prewritten texts. The site only drafts them; the organizer sends
 // each one from their own phone.
@@ -96,7 +96,9 @@ export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, 
 
 /** The last-call text to the players who are in, the day of. */
 export function lastCallMessage(s: SessionLike, tz: string, confirmed: number): string {
-  return `Last call: pickleball tonight, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, text me ASAP.`;
+  // "tonight" for the usual 8:00 PM game; "today" for one before 5:00 PM.
+  const when = localParts(Date.parse(s.startsAt), tz).hour < 17 ? 'today' : 'tonight';
+  return `Last call: pickleball ${when}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, text me ASAP.`;
 }
 
 export function replacementMessage(s: SessionLike, tz: string, link: string): string {
