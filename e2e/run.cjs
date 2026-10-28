@@ -398,9 +398,8 @@ async function main() {
 
   const proxy = REMOTE && process.env.HTTPS_PROXY ? { proxy: { server: process.env.HTTPS_PROXY } } : {};
   const browser = await chromium.launch(proxy);
-  // The browsers' clocks start where the test server's does (12:30 AM on a
-  // Tue or Thu, see below), so both agree on which games are over whatever
-  // time of day the tests run.
+  // The browsers' clocks start where the test server's does (Tue Oct 27,
+  // 12:30 AM Eastern, see below), so both agree on which games are over.
   const newContext = browser.newContext.bind(browser);
   browser.newContext = async (opts) => {
     const ctx = await newContext(opts);
@@ -443,18 +442,13 @@ async function main() {
 
   try {
     await waitForServer();
-    // Pin the test server's clock so results don't depend on when this runs:
-    // on a Tuesday or Thursday, it's 12:30 AM that day (before the 8:00 AM
-    // game-day money card); other days it's the real time.
-    {
-      const tz = 'America/Detroit';
-      const now = new Date();
-      const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: tz });
-      if (dow === 'Tue' || dow === 'Thu') {
-        const date = now.toLocaleDateString('en-CA', { timeZone: tz });
-        const at = [`${date}T00:30:00-04:00`, `${date}T00:30:00-05:00`].map(Date.parse).find((ms) => new Date(ms).toLocaleTimeString('en-US', { hour: '2-digit', hour12: false, timeZone: tz }).startsWith('00'));
-        BASE_OFFSET = at - Date.now();
-      }
+    // Pin the test server's clock (and the browsers', below) so results never
+    // depend on the day or time this runs: every run starts at Tue Oct 27,
+    // 2026, 12:30 AM Eastern, game day before the 8:00 AM money card, with the
+    // first November games inside their booking window. Time then moves on
+    // normally from there.
+    if (!REMOTE) {
+      BASE_OFFSET = Date.parse('2026-10-27T00:30:00-04:00') - Date.now();
       await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() + BASE_OFFSET }) });
     }
     const admin = await newPage();
@@ -496,7 +490,7 @@ async function main() {
       }
       // Today as a calendar square: "MON" over a big "26", Eastern time.
       const square = admin.locator('header .today');
-      const now = new Date();
+      const now = new Date(Date.now() + BASE_OFFSET);
       const dow = now.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' }).toUpperCase();
       const day = now.toLocaleDateString('en-US', { day: 'numeric', timeZone: 'America/Detroit' });
       assert((await square.locator('.dow').innerText()).trim() === dow, `square weekday was not ${dow}`);
@@ -543,7 +537,7 @@ async function main() {
       const cards = sessionCards(admin);
       const all = admin.getByRole('button', { name: /^Show all/ });
       if (await all.count()) await all.click();
-      const today = Date.now();
+      const today = Date.now() + BASE_OFFSET;
       let amber = 0;
       let gray = 0;
       for (let i = 0; i < (await cards.count()); i++) {
@@ -1225,7 +1219,7 @@ async function main() {
     });
 
     await check('holiday pill shows on sessions that fall on one (Election Day, Nov 3)', async () => {
-      if (Date.now() > Date.parse('2026-11-04T03:00:00Z')) return; // only while Nov 3, 2026 is still upcoming
+      if (Date.now() + BASE_OFFSET > Date.parse('2026-11-04T03:00:00Z')) return; // only while Nov 3, 2026 is still upcoming
       await players.Alex.reload();
       const card = players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' });
       const hol = card.locator('.sched-status .holiday-text', { hasText: 'Election Day' });
@@ -1849,7 +1843,7 @@ async function main() {
         const second = admin.locator('article').nth(1);
         await second.getByRole('button', { name: "I'm in" }).click();
         await second.locator('.tile-check').waitFor();
-        await second.locator('.in-line', { hasText: 'Blair' }).waitFor();
+        await second.locator('.names-line', { hasText: 'Blair' }).waitFor();
         // Pay shows the next step and opens nothing.
         const url = admin.url();
         const pay = second.getByRole('link', { name: /^Pay \$\d+ with Venmo$/ });
@@ -2034,7 +2028,8 @@ async function main() {
 
       await admin.reload();
       const c2 = sessionCards(admin).nth(3);
-      await c2.locator('.players-line').getByText(/2 on standby/).waitFor();
+      // Everyone on standby, by name, on a line of its own.
+      await c2.locator('.players-line .waitlist-line', { hasText: /^Standby: \w+, \w+$/ }).waitFor();
       assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
       await c2.getByRole('button', { name: 'Court opened' }).click();
       await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
@@ -3455,7 +3450,11 @@ async function main() {
         const joinable = pl.locator('.schedule article:not([data-holiday]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I'm in" }) });
         const joinId = await joinable.nth(Math.min(2, (await joinable.count()) - 1)).getAttribute('id');
         const joined = pl.locator(`#${joinId}`);
-        const beforeH = (await joined.boundingBox()).height;
+        // The names line is counted separately: it's new once someone is in.
+        const beforeH = await joined.evaluate((a) => {
+          const n = a.querySelector('.names-line');
+          return a.getBoundingClientRect().height - (n ? n.getBoundingClientRect().height + 3 : 0);
+        });
         await joined.getByRole('button', { name: "I'm in" }).click();
         await joined.locator('.tile-check').waitFor();
         // Whatever happens below, sign Alex back out of that session for the checks after this one.
@@ -3488,13 +3487,15 @@ async function main() {
           });
           assert(cardLook.mineCount > 0 && cardLook.mine.length > 0 && cardLook.other, `need signed-in and not-signed-in cards: ${JSON.stringify(cardLook)}`);
           for (const m of cardLook.mine) {
-            assert(m.rows <= 4, `signed-in card has ${m.rows} rows`);
+            // Time, court, count and dots, the names, then Pay: no more.
+            assert(m.rows <= 5, `signed-in card has ${m.rows} rows`);
             assert(m.pills === 0, 'signed-in card has a pill or name chips');
           }
-          // The same card before and after I'm in: rows 1 to 3 keep their height; only the optional Pay row adds any.
+          // The same card before and after I'm in: rows 1 to 3 keep their height; only the names line and the optional Pay row add any.
           const after = await joined.evaluate((a) => {
             const f = a.querySelector('.row-foot');
-            return { h: a.getBoundingClientRect().height, foot: f ? f.getBoundingClientRect().height + 3 : 0 };
+            const n = a.querySelector('.names-line');
+            return { h: a.getBoundingClientRect().height - (n ? n.getBoundingClientRect().height + 3 : 0), foot: f ? f.getBoundingClientRect().height + 3 : 0 };
           });
           assert(after.h - after.foot <= beforeH + 3, `signed-in card is ${after.h}px (${after.foot}px Pay row) vs ${beforeH}px before`);
           const gp = await pl.evaluate(greenReport);
