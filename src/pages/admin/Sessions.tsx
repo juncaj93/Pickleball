@@ -144,12 +144,10 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           )}
           {!s.state.flags.canceled && (
             <PlayersLine
-              names={s.roster
-                .filter((r) => r.status === 'confirmed')
-                .sort((a, b) => (a.confirmedAt ?? '').localeCompare(b.confirmedAt ?? ''))
-                .map((r) => r.name)}
-              waiting={s.waitlistCount}
-              waitingWord={courtWait ? 'on standby' : 'waiting'}
+              names={s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name)}
+              waitlist={s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name)}
+              waitLabel={courtWait ? 'Standby' : 'Waitlist'}
+              everyone={ctx.d.players.map((p) => p.name)}
               after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}
             />
           )}

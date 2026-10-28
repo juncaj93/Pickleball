@@ -2043,23 +2043,19 @@ dialog.sheet::backdrop {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
-.names-line {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* Every name that's in (and the waitlist or standby line under it): small
+   plain text on lines of their own, all names, wrapping when they don't fit.
+   A very long name breaks rather than getting cut off. No extra spacing. */
+.names-line,
+.waitlist-line {
+  margin: 0;
   font-size: 0.8rem;
+  line-height: 1.35;
   color: var(--ink-2);
+  overflow-wrap: anywhere;
 }
-.names-more {
-  flex: none;
-  font-size: 0.8rem;
-  font-weight: 650;
-  color: var(--ink-2);
-  margin-left: -2px;
-}
-.names-line strong {
+.names-line strong,
+.waitlist-line strong {
   color: var(--ink);
   font-weight: 650;
 }
@@ -2096,12 +2092,6 @@ dialog.sheet::backdrop {
 .row-foot .cal-icon-link {
   margin-top: 0;
   margin-bottom: 0;
-}
-
-.waitlist-line {
-  font-size: 0.8rem;
-  color: var(--ink-2);
-  margin: 0;
 }
 
 .game-note {
@@ -2278,68 +2268,25 @@ dialog.sheet::backdrop {
 
 .players-line {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 6px;
+  flex-direction: column;
+  gap: 1px;
   font-size: 0.88rem;
 }
-.players-mid {
-  display: contents;
-}
-/* With the organizer's own I'm in: count, pills (wrapping in their own
-   column), then the button, always on the first line at the right. */
-.players-line.has-after {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: start;
-  column-gap: 6px;
-}
-.players-line.has-after > .players-count {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-}
-.players-line.has-after > .players-mid {
+/* "3 of 4 in", the dots, and the organizer's own "You're in" / "Out" at the
+   right. On a very narrow phone with 6 in, "You're in" drops under, still
+   at the right, instead of covering the dots. */
+.players-top {
   display: flex;
-  /* With 6 in, the names go under the dots rather than under the button. */
-  flex-wrap: wrap;
   align-items: center;
-  align-content: center;
-  gap: 4px 6px;
-  min-height: 34px;
-  min-width: 0;
+  flex-wrap: wrap;
+  gap: 2px 6px;
 }
-/* Under 360px six dots and "You're in" can't share one line, so the
-   button drops to its own line at the right. */
-@media (max-width: 359px) {
-  .players-line.has-after {
-    display: flex;
-    flex-wrap: wrap;
-  }
+.players-top .players-after {
+  margin-left: auto;
 }
 .players-count {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-}
-.players-wait {
-  flex: none;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
-.players-line .names-line {
-  font-size: 0.82rem;
-}
-/* Names and "+4" move as one piece: they go under the dots together when
-   there's no room beside them, and the names shrink (with "…") first. */
-.names-wrap {
-  display: contents;
-}
-.players-line.has-after .names-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  max-width: 100%;
 }
 
 .spots {
