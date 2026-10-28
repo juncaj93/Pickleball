@@ -896,7 +896,7 @@ async function main() {
       await admin.reload();
       const card = admin.getByRole('article', { name: /Tell them they're in/ });
       const draft = (n) => card.locator('.draft', { hasText: n });
-      await draft('Emery').getByText(/^Good news, we have 6 for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. You're both in\. Can't make it\? Update here: \S+$/).waitFor();
+      await draft('Emery').getByText(/^Good news, we have 6 for pickleball (?:tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. You're both in\. Can't make it\? Update here: \S+$/).waitFor();
       await draft('Frankie').getByText(/^Good news, we have 6 for pickleball/).waitFor();
       await card.getByRole('link', { name: 'Open in Messages' }).first().waitFor();
       await card.getByRole('button', { name: 'I told Emery' }).click();
@@ -1155,7 +1155,7 @@ async function main() {
       const href = await menu.locator('.text-row[data-text="share"] a').getAttribute('href');
       const { body, to } = smsOf(href);
       assert(to.length === 0, `share should open with no numbers, had ${to.length}`);
-      const m = body.match(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In or out here: (\S+)$/);
+      const m = body.match(/^Pickleball (tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In or out here: (\S+)$/);
       assert(m, `share text was: ${body}`);
       assert(m[2] === SITE, `share link should be the plain site address ${SITE}: ${m[2]}`);
       assert(!/\bsent\b|ASAP|text me/i.test(body), 'bad words');
@@ -1995,7 +1995,7 @@ async function main() {
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
-      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In or out here: \S+$/.test(shareBody), `waitlist share text: ${shareBody}`);
+      assert(/^Pickleball (?:tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In or out here: \S+$/.test(shareBody), `waitlist share text: ${shareBody}`);
       assert((await texts.locator('.text-row[data-text="poll"]').count()) === 0, 'no Poll');
       await closeOptions(card);
 
@@ -2102,7 +2102,7 @@ async function main() {
       const moved = admin.locator('dialog[open]');
       await moved.getByText(/^Moved · /).waitFor();
       const bubble = moved.locator('.bubble');
-      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is moved to (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, 7:30 PM\. \S+$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is moved to (?:tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), 7:30 PM\. \S+$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
       await moved.getByLabel(/Reason/).fill('Court swap');
       await bubble.getByText(/7:30 PM\. Court swap\. \S+$/).waitFor();
       await moved.getByRole('link', { name: 'Text the players who are in' }).waitFor();
