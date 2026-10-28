@@ -164,6 +164,33 @@ had paid, "Ryan paid $14 and dropped. Refund?" with **Refunded**. The session
 card shows a "Late drop" tag, and the Players screen counts them ("Late drops:
 2", organizer only). Removals by the organizer don't count.
 
+## Telegram alerts (organizer only)
+
+The site sends the organizer a short Telegram message when:
+
+- someone drops out of a game within 36 hours of its start
+- a game falls below 4 (4 to 3) or goes from 6 to 5
+- a game reaches 6 (so you can text the two who moved up)
+
+A drop after the game's cancellation deadline starts with "Late drop:". One tap
+that causes more than one of these sends one message, like "Late drop: Ryan
+dropped out of Thu Nov 5, 8:00 PM (9 hrs before). 3 in now, need 4 or 6.",
+with an **Open site** button to `/admin`. Names and game times only: no phone
+numbers, no money.
+
+Only player taps (on the site or a texted link) send alerts. Never your own
+taps, View as, Pretend it's..., canceled, hidden or past games, or anything
+else (payments, new names). The message goes out after the player's tap is
+done, with a 5-second limit, so Telegram being slow or down never slows down a
+tap. At most 20 alerts go out per hour, so a bug can't flood your phone.
+
+Settings > **Alerts** has an on/off switch, one switch per alert (all on to
+start), **Send test alert**, and a status line ("Connected · Last alert:
+7:12 AM", or "Last alert failed" with the reason). The bot token and your chat
+ID are Cloudflare secrets (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`); they never
+reach a browser, the repo, or the backup file, and the bot only messages that
+one chat. To turn alerts off for good, delete those two secrets and redeploy.
+
 ## Calendar subscriptions
 
 Each player's link lists only their sessions (title Pickleball, the club's
@@ -244,6 +271,7 @@ cancel; after that it shows "Deadline passed".
 | Database | Cloudflare D1 (free) | SQLite. All times stored in UTC, shown in Eastern |
 
 No SMS service, payment processor, AI service, maps, or analytics is used.
+The one outside service is Telegram's free bot API, for the organizer's alerts.
 
 ### Free-tier limits
 
@@ -357,8 +385,8 @@ production.
 ## Tests
 
 ```bash
-npm test               # 140 server and logic tests
-npm run test:e2e       # 70 browser checks (needs Playwright + Chromium)
+npm test               # 276 server and logic tests
+npm run test:e2e       # 316 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
@@ -409,8 +437,8 @@ marked noindex. The player link in Settings shows the `SITE_URL` from
 
 ## Known limitations
 
-- No push notifications or automatic texts. Warnings appear when the
-  organizer opens the dashboard.
+- No automatic texts to players. The organizer gets Telegram alerts for drops
+  and counts (above); everything else shows when the dashboard is opened.
 - The site can't book or cancel courts with the venue. It records what you
   did.
 - Payments are marked by hand after checking Venmo.

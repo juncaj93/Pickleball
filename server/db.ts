@@ -31,6 +31,11 @@ export interface Env {
    * copy of the data that lives in that browser tab.
    */
   SANDBOX?: boolean;
+  /** Cloudflare secrets for the organizer's Telegram alerts. Never sent to a browser. */
+  TELEGRAM_BOT_TOKEN?: string;
+  TELEGRAM_CHAT_ID?: string;
+  /** Tests only: a stand-in for fetch, so no real message is ever sent. */
+  TELEGRAM_FETCH?: typeof fetch;
 }
 
 /** True when a write was rejected by one of the schema's RAISE(ABORT, ...) triggers. */

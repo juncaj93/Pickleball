@@ -236,6 +236,17 @@ export interface AdminDashboard {
   credits: { playerId: string; name: string; balanceCents: number }[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
+  /** Settings > Alerts: the switches and whether Telegram is set up. Never the token or chat ID. */
+  alerts: {
+    enabled: boolean;
+    drop36: boolean;
+    belowMin: boolean;
+    reachedSix: boolean;
+    connected: boolean;
+    lastAt: string | null;
+    lastOk: boolean | null;
+    lastError: string | null;
+  };
   now: string;
 }
 

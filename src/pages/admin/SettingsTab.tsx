@@ -3,7 +3,8 @@ import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
-import { AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
+import { formatDateTime, formatTime, localParts } from '../../../shared/time';
+import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
 
 type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
@@ -124,6 +125,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const [newPin, setNewPin] = useState('');
   const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const sections = useOpenSections();
+  const a = ctx.d.alerts;
 
   async function changePin(e: FormEvent) {
     e.preventDefault();
@@ -336,6 +338,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           )}
         </Section>
 
+        <Section id="alerts" title="Alerts" note={!a.connected ? 'Not connected' : a.enabled ? 'On' : 'Off'} sections={sections}>
+          <AlertsBody ctx={ctx} auto={auto} />
+        </Section>
+
         <Section id="advanced" title="Advanced" sections={sections}>
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
         </Section>
@@ -398,6 +404,92 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         }}
         onCancel={() => setAskRotate(false)}
       />
+    </>
+  );
+}
+
+type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedSix';
+const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
+  { key: 'drop36', label: 'Someone drops within 36 hours' },
+  { key: 'belowMin', label: 'Under 4, or 6 down to 5' },
+  { key: 'reachedSix', label: 'A game reaches 6' },
+];
+
+/**
+ * Settings > Alerts: Telegram messages to the organizer only. The switches
+ * save themselves; the token and chat ID live on Cloudflare and never show.
+ */
+function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const a = ctx.d.alerts;
+  const tz = ctx.d.group.timezone;
+  const [on, setOn] = useState<Record<AlertKey, boolean>>({ enabled: a.enabled, drop36: a.drop36, belowMin: a.belowMin, reachedSix: a.reachedSix });
+  const [test, setTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
+
+  function flip(key: AlertKey, value: boolean) {
+    setOn((cur) => ({ ...cur, [key]: value }));
+    void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts');
+  }
+
+  async function sendTest() {
+    setTest({ status: 'sending' });
+    try {
+      await api('POST', '/api/admin/alerts/test', {});
+      setTest({ status: 'sent' });
+    } catch (err) {
+      setTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn't send the test alert." });
+    }
+    void ctx.reload();
+  }
+
+  const sameDay = (iso: string) => {
+    const x = localParts(Date.parse(iso), tz);
+    const y = localParts(Date.parse(ctx.d.now), tz);
+    return x.year === y.year && x.month === y.month && x.day === y.day;
+  };
+  const last = !a.lastAt
+    ? 'No alerts yet'
+    : a.lastOk === false
+      ? 'Last alert failed'
+      : `Last alert: ${sameDay(a.lastAt) ? formatTime(a.lastAt, tz) : formatDateTime(a.lastAt, tz)}`;
+
+  const row = (key: AlertKey, label: string, sub: boolean) => (
+    <div className="set-row-wrap" data-row={`alert-${key}`} key={key}>
+      <label className={`set-row alert-switch${sub ? ' sub' : ''}`}>
+        <span className="set-label">
+          <span className="set-name">
+            {label} <SaveMark state={auto.rows[`alert-${key}`]} />
+          </span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on[key]} disabled={sub && !on.enabled} onChange={(e) => flip(key, e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows[`alert-${key}`]} />
+    </div>
+  );
+
+  return (
+    <>
+      <p className="alert-status" data-testid="alert-status">
+        <span className={`alert-dot${a.connected ? ' on' : ''}`} aria-hidden="true" />
+        <span>
+          <strong>{a.connected ? 'Connected' : 'Not connected'}</strong>
+          <span className={a.lastOk === false ? 'alert-failed' : undefined}> · {last}</span>
+        </span>
+      </p>
+      {a.lastOk === false && a.lastError && <p className="set-hint alert-why">{a.lastError}</p>}
+      {row('enabled', 'Telegram alerts to me', false)}
+      <div className="alert-subs">{ALERT_SWITCHES.map((s) => row(s.key, s.label, true))}</div>
+      <div className="alert-test">
+        <button type="button" className="btn small secondary" onClick={sendTest} disabled={test?.status === 'sending'}>
+          {test?.status === 'sending' ? 'Sending…' : 'Send test alert'}
+        </button>
+        {test?.status === 'sent' && (
+          <span className="alert-result ok" role="status">
+            ✓ Sent to Telegram
+          </span>
+        )}
+      </div>
+      {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
+      <p className="set-hint">Only you get these. Player names and game times only.</p>
     </>
   );
 }

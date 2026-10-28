@@ -1,5 +1,6 @@
 import { handleApi } from '../server/app';
 import { createNodeD1 } from '../dev/nodeD1';
+import type { Env } from '../server/db';
 
 export const SETUP_TOKEN = 'test-setup-token-0123456789';
 export const PIN = '246810';
@@ -26,6 +27,7 @@ export class Client {
       new Request(ORIGIN + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }),
       this.app.env,
       this.app.now,
+      (work) => this.app.background.push(work),
     );
     for (const c of res.headers.getSetCookie()) {
       const [pair, ...attrs] = c.split(';');
@@ -46,8 +48,15 @@ export class Client {
 
 export class TestApp {
   db = createNodeD1(':memory:');
-  env = { DB: this.db, SETUP_TOKEN };
+  env: Env = { DB: this.db, SETUP_TOKEN };
   now = MONDAY_NOON;
+  /** Work a response left running (Telegram alerts). */
+  background: Promise<unknown>[] = [];
+
+  /** Wait for everything left running in the background. */
+  async settle() {
+    while (this.background.length) await Promise.allSettled(this.background.splice(0));
+  }
 
   client() {
     return new Client(this);
