@@ -403,8 +403,8 @@ production.
 ## Tests
 
 ```bash
-npm test               # 276 server and logic tests
-npm run test:e2e       # 316 browser checks (needs Playwright + Chromium)
+npm test               # 293 server and logic tests
+npm run test:e2e       # 337 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
