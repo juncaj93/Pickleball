@@ -1,13 +1,12 @@
 import { Fragment, type FormEvent, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
-import { nowSixMessage, promotedMessage, siteAddress } from '../../shared/messages';
-import { DayBeforeTexts, SpotOpenTexts } from './admin/Texts';
+import { SuggestionCards } from './admin/SuggestionCards';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
-import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
+import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
 import { RefundList, type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
@@ -229,6 +228,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   const items = buildTodo(ctx.d);
   return (
     <>
+      <SuggestionCards ctx={ctx} />
       {items.length > 0 && (
         <section className="stack" aria-labelledby="todo-title">
           <h2 id="todo-title" className="section-title">
@@ -303,11 +303,8 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   const s = item.session;
   const title = {
     five: '5 going, need 4 or 6',
-    tell: "Tell them they're in",
     sixdrop: `Was 6, now ${s.confirmedCount}: discount and credits are off`,
     checkin: 'Check-in texts due',
-    daybefore: `${formatShortDate(s.startsAt, tz)}: ${countSummary(s.confirmedCount)}`,
-    lastcall: `Last call, ${formatShortDate(s.startsAt, tz)}: ${s.confirmedCount} in`,
     refund: s.state.flags.canceled ? `${formatShortDate(s.startsAt, tz)} was canceled. Refund needed:` : `${formatShortDate(s.startsAt, tz)}: a paid player left. Refund needed:`,
     latedrop: 'Late drop',
   }[item.kind];
@@ -335,7 +332,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
             ))}
           </ul>
           <RefundList ctx={ctx} s={s} only={lateDrops(s).map((r) => r.playerId)} />
-          <SpotOpenTexts ctx={ctx} s={s} />
           <button
             className="btn small ghost"
             disabled={busy}
@@ -349,30 +345,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           </button>
         </>
       )}
-      {item.kind === 'tell' &&
-        s.roster
-          .filter((r) => r.status === 'confirmed' && r.promotedAt && !r.promotionNotifiedAt)
-          .map((r, i) => (
-            <div key={r.playerId} className="stack" style={{ gap: 8 }}>
-              <SmsDraft
-                quiet={i > 0}
-                to={r.name}
-                phone={r.phone}
-                body={
-                  r.promotionReason === 'made_six' && s.confirmedCount === 6
-                    ? nowSixMessage(s, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink))
-                    : promotedMessage(s, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink))
-                }
-              />
-              <button
-                className="btn small secondary"
-                disabled={busy}
-                onClick={() => act(() => api('POST', `/api/admin/sessions/${s.id}/told`, { playerId: r.playerId }), 'Done')}
-              >
-                I told {r.name}
-              </button>
-            </div>
-          ))}
       {item.kind === 'sixdrop' && (
         <>
           <p className="small">
@@ -402,20 +374,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
             onClick={() => act(() => api('POST', `/api/admin/sessions/${s.id}/six-sorted`, {}), 'Marked as sorted')}
           >
             Done, I sorted it out
-          </button>
-        </>
-      )}
-      {(item.kind === 'daybefore' || item.kind === 'lastcall') && (
-        <>
-          <DayBeforeTexts ctx={ctx} s={s} />
-          <button
-            className="btn small ghost"
-            disabled={busy}
-            onClick={() =>
-              act(() => api('POST', `/api/admin/sessions/${s.id}/card-done`, { card: item.kind === 'daybefore' ? 'day_before' : 'last_call' }), 'Hidden')
-            }
-          >
-            Done
           </button>
         </>
       )}

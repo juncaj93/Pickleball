@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courtStatus, playerSlots } from '../shared/court';
 import { buildTodo, homeBadgeCount } from '../src/pages/admin/todo';
+import { suggestions } from '../src/pages/admin/suggestions';
 import { bookingOpensMs, formatDateTime, formatShortDate } from '../shared/time';
 import { firstSession, HOUR, playerPhone, setupGroup } from './harness';
 
@@ -107,8 +108,9 @@ describe('organizer Home', () => {
     expect(kinds).not.toContain('courts');
     expect(kinds).not.toContain('courtwait');
     expect(kinds).not.toContain('short');
-    // Texts and money still show there.
-    expect(kinds).toContain('daybefore');
+    // The text to send is now a suggestion card at the top of Home (the old day-before card is gone, so nothing shows twice).
+    expect(kinds).not.toContain('daybefore');
+    expect(suggestions(d, Date.parse(d.now)).map((c) => c.kind)).toContain('need');
   });
 
   it('keeps the 5-going warning and who owes in "Needs attention"', async () => {

@@ -1,0 +1,71 @@
+/* The text suggestion cards at the top of the organizer's Home. */
+
+.suggest-cards {
+  gap: 10px;
+}
+
+.suggest-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.sg-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sg-kind {
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.sg-who {
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sg-when {
+  font-weight: 650;
+  min-width: 0;
+}
+
+/* One line of the words, cut with an ellipsis; the whole text is in the Messages draft. */
+.sg-preview {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.sg-text {
+  min-height: 44px;
+  margin-top: 2px;
+  gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sg-text svg {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.sg-more {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 4px;
+}

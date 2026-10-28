@@ -892,17 +892,23 @@ async function main() {
       await players.Emery.screenshot({ path: path.join(SHOTS, 'player-good-news.png'), fullPage: true });
     });
 
-    await check("organizer gets a text draft for each person moved in", async () => {
+    await check("organizer gets one Now 6 card for the two people moved in: one green Text button, both numbers, hides after the tap", async () => {
       await admin.reload();
-      const card = admin.getByRole('article', { name: /Tell them they're in/ });
-      const draft = (n) => card.locator('.draft', { hasText: n });
-      await draft('Emery').getByText(/^Good news, we have 6 for pickleball (?:tonight|tomorrow|today|(?:Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. You're both in\. Can't make it\? Update here: \S+$/).waitFor();
-      await draft('Frankie').getByText(/^Good news, we have 6 for pickleball/).waitFor();
-      await card.getByRole('link', { name: 'Open in Messages' }).first().waitFor();
-      await card.getByRole('button', { name: 'I told Emery' }).click();
-      await admin.locator('.toast', { hasText: 'Done' }).waitFor();
-      await draft('Emery').waitFor({ state: 'detached' });
-      await draft('Frankie').waitFor();
+      const card = admin.locator('article[data-suggest="now6"]');
+      await card.waitFor();
+      assert(/^Now 6: /.test(await card.getAttribute('aria-label')), 'card label');
+      assert(/2 players/.test(await card.innerText()), 'who it goes to');
+      const text = card.getByRole('link', { name: /^Text/ });
+      const href = await text.getAttribute('href');
+      const { body, to } = smsOf(href);
+      assert(to.length === 2, `both extra players are addressed: ${href}`);
+      assert(/^Good news, we have 6 for pickleball (tonight|tomorrow|today|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. You're both in\. Can't make it\? Update here: \S+$/.test(body), `body: ${body}`);
+      assert((await card.getByRole('button', { name: /I told/ }).count()) === 0, 'no "I told" button any more');
+      await card.evaluate((el) => el.querySelector('a[href^="sms"]').addEventListener('click', (e) => e.preventDefault()));
+      await text.click();
+      await card.waitFor({ state: 'detached' });
+      await admin.reload();
+      assert((await admin.locator('article[data-suggest="now6"]').count()) === 0, 'stays hidden on this device after a reload');
     });
 
     await check('6 going: the first four hear about a $5 credit; nobody is asked to pay on the row', async () => {
@@ -2019,8 +2025,11 @@ async function main() {
       await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
       assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
       await c2.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
-      const tell = admin.getByRole('article', { name: new RegExp(`Tell them they're in: ${day}`) });
-      await tell.getByText(/^A spot opened and you're in for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. \S+$/).first().waitFor();
+      await admin.reload();
+      if (await admin.locator('.sg-more').count()) await admin.locator('.sg-more').click();
+      const tell = admin.getByRole('article', { name: new RegExp(`^(Spot opened|Now 6): ${day}`) });
+      await tell.locator('.sg-preview').first().waitFor();
+      assert(/A spot opened and you're in for pickleball (tonight|tomorrow|today|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. \S+$|Good news, we have 6/.test(await tell.first().getByRole('link', { name: /^Text/ }).getAttribute('aria-label')), 'spot opened text');
 
       const p = players.Casey;
       await p.reload();
@@ -2031,10 +2040,9 @@ async function main() {
       // The court-waitlist banner keeps its words and buttons on one row (checked before it opened).
     });
 
-    await check('day-before card: the check-in text to the players who are in (all their numbers, the site address), then the same for tonight; never "sent"', async () => {
+    await check('check-in card: the text to the players who are in (all their numbers, the site address), hides after the tap; never "sent"', async () => {
       const first = await admin.evaluate(async () => {
         const d = await (await fetch('/api/admin/dashboard')).json();
-        // A later session whose day-before card hasn't been seen (and dismissed) yet.
         return d.sessions.find((s) => Date.parse(s.startsAt) > Date.parse(d.now) + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
       });
       assert(first, 'need a later session with 4 in');
@@ -2042,41 +2050,32 @@ async function main() {
       try {
         await clock(Date.parse(first.startsAt) - 20 * 3600_000);
         await admin.reload();
-        const card = admin.getByRole('article', { name: /^(Tue|Thu), [A-Z][a-z]{2} \d{1,2}: 4 in, / });
+        const card = admin.locator(`article[data-suggest="checkin"][data-session="${first.id}"]`);
         await card.waitFor({ timeout: 5000 }).catch(async () => {
           const names = await admin.locator('article').evaluateAll((as) => as.map((a) => a.getAttribute('aria-label')).filter(Boolean));
-          throw new Error(`no day-before card for ${first.startsAt}; Home shows: ${names.join(' | ')}`);
+          throw new Error(`no check-in card for ${first.startsAt}; Home shows: ${names.join(' | ')}`);
         });
-        const main = card.locator('.draft').first();
-        const open = main.getByRole('link', { name: 'Text the players who are in' });
+        const open = card.getByRole('link', { name: /^Text/ });
         const href = await open.getAttribute('href');
         const phones = first.roster.filter((r) => r.status === 'confirmed' && r.phone).length;
         const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
         assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
-        const body = (await main.locator('.bubble').innerText()).trim();
         // The game is 20 hours away, so later the same day: "tonight".
         const want = `Pickleball tonight, 8:00 PM. Still in? Update here: ${SITE}`;
-        assert(body === want, `check-in text was: ${body}`);
-        assert(smsOf(href).body === want, 'Messages opens with the same words');
-        assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
-        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the day-before card');
-        await main.evaluate((el) => el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault()));
-        await open.click();
-        await main.getByText('Message ready', { exact: true }).waitFor();
+        assert(smsOf(href).body === want, `Messages opens with: ${smsOf(href).body}`);
+        assert((await card.innerText()).includes('4 players'), 'who it goes to');
+        assert((await card.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
+        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
         assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
-        await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
-        // Last call at 13 hours: the same check-in text, now "tonight", to the players who are in.
-        await clock(Date.parse(first.startsAt) - 12.5 * 3600_000); // between last call (13h) and the deadline (12h)
+        await admin.screenshot({ path: path.join(SHOTS, 'admin-check-in-card.png'), fullPage: true });
+        await card.evaluate((el) => el.querySelector('a[href^="sms"]').addEventListener('click', (e) => e.preventDefault()));
+        await open.click();
+        await card.waitFor({ state: 'detached' });
+        // Later the same day, still 4 in: it stays hidden (same situation), also after a reload.
+        await clock(Date.parse(first.startsAt) - 12.5 * 3600_000);
         await admin.reload();
-        const last = admin.getByRole('article', { name: /^Last call, / });
-        await last.waitFor();
-        const lbody = (await last.locator('.bubble').innerText()).trim();
-        assert(lbody === `Pickleball tonight, 8:00 PM. Still in? Update here: ${SITE}`, `last call was: ${lbody}`);
-        assert(!/ASAP|text me/i.test(lbody), 'no "text me ASAP"');
-        const lhref = await last.getByRole('link', { name: 'Text the players who are in' }).getAttribute('href');
-        assert(smsOf(lhref).to.length === 4 && smsOf(lhref).body === lbody, 'last call opens Messages to the 4 who are in');
-        assert((await last.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the last-call card');
-        assert(!/\bsent\b/i.test(await last.innerText()), 'never say sent');
+        await admin.locator('main').waitFor();
+        assert((await admin.locator(`article[data-suggest="checkin"][data-session="${first.id}"]`).count()) === 0, 'came back with the same situation');
       } finally {
         await clock(Date.now() + BASE_OFFSET);
         await admin.reload();
@@ -2315,14 +2314,16 @@ async function main() {
         await card.locator('.rows li', { hasText: 'Frankie' }).first().waitFor();
         await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
         await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
-        const bubble = (await card.locator('.bubble').innerText()).trim();
-        // Whichever fits the game now: need players, or the check-in once it is back to 4 or 6.
-        assert(/^(Need \d+ more for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(bubble), `spot text was: ${bubble}`);
-        assert(!/ASAP|text me/i.test(bubble), 'no "text me ASAP"');
-        const spotLink = card.getByRole('link', { name: /^Text the (group|players)/ });
-        const spot = smsOf(await spotLink.getAttribute('href'));
-        assert(spot.body === bubble, 'the link opens Messages with the same words');
-        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the spot-open card');
+        // The text for the opened spot is now the suggestion card for that game (not a second copy on the late-drop card).
+        assert((await card.locator('.bubble').count()) === 0, 'the late-drop card no longer carries a text');
+        const sug = admin.locator(`article[data-suggest][data-session="${first.id}"]`);
+        await sug.waitFor();
+        // Whichever fits the game now: the spot opened for someone moved in, need players, or the check-in once it is back to 4 or 6.
+        const spot = smsOf(await sug.getByRole('link', { name: /^Text/ }).getAttribute('href'));
+        assert(/^(A spot opened and you're in for pickleball [^.]+, \d{1,2}:\d{2} PM\.|Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
+        assert(!/ASAP|text me/i.test(spot.body), 'no "text me ASAP"');
+        assert((await sug.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
+        assert(!/\bsent\b/i.test(await sug.innerText()), 'never say sent');
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
         await sc.locator('.late-tag').waitFor();
