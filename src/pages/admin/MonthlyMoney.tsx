@@ -5,6 +5,7 @@ import { formatShortDate, localParts } from '../../../shared/time';
 import { api, useDemoVersion, useLoad, usePretend } from '../../lib';
 import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import '../../credit-admin.css';
 
 const STATE_TEXT = { played: '', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
 
@@ -96,6 +97,14 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               <dd>{minus(m.courtCostCents)}</dd>
               <dt>Credits owed</dt>
               <dd>{minus(m.creditsOwedCents)}</dd>
+              {m.keptCreditCents > 0 && (
+                <>
+                  <dt className="sr-only">Note</dt>
+                  <dd className="kv-note" data-kept-credit-note>
+                    Includes {formatPrice(m.keptCreditCents)} kept from canceled games. Not taken off Left.
+                  </dd>
+                </>
+              )}
               {m.heldCents > 0 && (
                 <>
                   <dt className="held-amt">Held</dt>
@@ -123,7 +132,9 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
                     <span className="small muted">
                       {s.state === 'played'
                         ? `${formatPrice(s.collectedCents)} in · court ${formatPrice(s.courtCostCents)}${s.typicalCost ? ' (typical)' : ''}`
-                        : STATE_TEXT[s.state]}
+                        : s.state === 'canceled' && s.charged
+                          ? `Canceled, venue charged ${formatPrice(s.courtCostCents)}`
+                          : STATE_TEXT[s.state]}
                     </span>
                   </span>
                 </li>

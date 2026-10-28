@@ -1,12 +1,22 @@
 import { type FormEvent, useState } from 'react';
-import type { AdminPlayer, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
+import type { AdminPlayer, AdminRosterEntry, AdminSessionView, CreditEntryView } from '../../../shared/api';
 import { formatPhone } from '../../../shared/messages';
-import { formatPrice, venmoHandleText } from '../../../shared/money';
+import { formatPrice, venmoHandleText, venmoRefundUrl } from '../../../shared/money';
 import { formatShortDate } from '../../../shared/time';
-import { api, ApiError } from '../../lib';
+import { api, ApiError, openVenmo, storageGet, storageSet } from '../../lib';
 import { ConfirmDialog, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { balanceOf, heldCents, isPlayed } from './todo';
+import '../../credit-admin.css';
+
+const CREDIT_NOTE = 'Pickleball credit refund';
+
+const ENDED_TEXT: Record<NonNullable<CreditEntryView['endedReason']>, string> = {
+  undone: 'undone',
+  unmarked: 'unmarked',
+  dropped: 'went back, they dropped out',
+  canceled: 'went back, game canceled',
+};
 
 const DAYS = [
   { day: 2, label: 'Tue' },
@@ -24,6 +34,7 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
           const { owedCents, creditCents } = balanceOf(ctx.d, p.id);
           // You pay the venue, so there is no player balance on your own row.
           const isMe = ctx.d.me?.id === p.id;
+          const pot = ctx.d.creditLedger.find((l) => l.playerId === p.id)?.balanceCents ?? 0;
           const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
           const second = [p.phone ? formatPhone(p.phone) : 'No phone', days, p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ');
           return (
@@ -46,11 +57,13 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
                   <span className="p-bal zero">$0</span>
                 )}
                 {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held">{formatPrice(heldCents(ctx.d, p.id))} held</span>}
+                {!isMe && owedCents > 0 && pot > 0 && <span className="p-held p-pot">{formatPrice(pot)} credit</span>}
                 <span className="p-played">{p.played} played</span>
               </span>
               <button className="btn small secondary p-edit" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
                 Edit
               </button>
+              {!isMe && <CreditActions ctx={ctx} player={p} />}
             </li>
           );
         })}
@@ -65,6 +78,110 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
         {shown && <PlayerMoney ctx={ctx} player={shown} />}
       </Sheet>
     </>
+  );
+}
+
+/** The cents whose Venmo button was tapped on this phone, so "Mark refunded" is still there after a reload. */
+function readOpenedCredit(playerId: string): number | null {
+  try {
+    const v = Number(storageGet(`pb_credit_refund_opened_${playerId}`));
+    return Number.isFinite(v) && v > 0 ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pay a player's credit balance back: Refund credit balance opens Venmo (it never marks anything),
+ * then Mark refunded records it, and Undo takes the last one back. Used on the row and in the sheet.
+ */
+function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [, bump] = useState(0);
+  const ledger = ctx.d.creditLedger.find((l) => l.playerId === player.id);
+  if (!ledger || ctx.d.me?.id === player.id) return null;
+  const refundCents = ledger.refundCents;
+  const canUndo = ledger.balanceCents === 0 && ledger.entries.some((e) => e.kind === 'refunded' && !e.endedAt);
+  if (refundCents <= 0 && !canUndo) return null;
+  const pay = venmoRefundUrl(player.venmo ?? null, refundCents, CREDIT_NOTE);
+  const tapped = refundCents > 0 && readOpenedCredit(player.id) === refundCents;
+  async function mark(refunded: boolean) {
+    setBusy(true);
+    try {
+      await api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false });
+      await ctx.reload();
+      toast(refunded ? 'Credit marked refunded' : 'Credit refund undone');
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="credit-actions" data-credit-actions={player.name}>
+      {refundCents > 0 && (
+        <a
+          className="btn small secondary"
+          data-credit-refund={player.name}
+          href={pay.url}
+          data-app-href={pay.appUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label={`Refund ${player.name} ${formatPrice(refundCents)} credit balance with Venmo`}
+          onClick={(e) => {
+            openVenmo(e, pay);
+            storageSet(`pb_credit_refund_opened_${player.id}`, String(refundCents));
+            bump((n) => n + 1);
+          }}
+        >
+          Refund credit balance
+        </a>
+      )}
+      {tapped && (
+        <button className="btn small secondary" data-credit-mark={player.name} disabled={busy} onClick={() => mark(true)}>
+          Mark refunded
+        </button>
+      )}
+      {canUndo && (
+        <button className="btn small secondary" data-credit-undo={player.name} disabled={busy} onClick={() => mark(false)}>
+          Undo
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** The Credit part of a player's sheet: the balance, then the history by game, newest first. */
+function CreditSection({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
+  const tz = ctx.d.group.timezone;
+  const ledger = ctx.d.creditLedger.find((l) => l.playerId === player.id);
+  if (!ledger || ledger.entries.length === 0) return null;
+  const line = (e: CreditEntryView): string => {
+    const money = formatPrice(e.cents);
+    const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
+    if (e.kind === 'used') return `Used${day ? ` on ${day}` : ''}: -${money}`;
+    if (e.kind === 'refunded') return `Paid back by Venmo: -${money}`;
+    const game = ctx.d.sessions.find((s) => s.id === e.sessionId);
+    const why = game ? (game.state.flags.canceled ? ' (canceled)' : ' (they left)') : '';
+    return `Kept${day ? ` from ${day}` : ''}${why}: +${money}`;
+  };
+  return (
+    <section className="stack credit-section" aria-label="Credit" data-credit-section>
+      <h3 className="credit-title">Credit</h3>
+      <p className="credit-balance" data-credit-balance>
+        <strong>Balance {formatPrice(ledger.balanceCents)}</strong>
+      </p>
+      <CreditActions ctx={ctx} player={player} />
+      <ul className="credit-history" aria-label="Credit history" data-credit-history>
+        {[...ledger.entries].reverse().map((e) => (
+          <li key={e.id} className={e.endedAt ? 'ended' : undefined} data-credit-entry={e.kind} data-ended={e.endedAt ? 'true' : undefined}>
+            <span className="credit-line">{line(e)}</span>
+            {e.endedAt && e.endedReason && <span className="credit-why"> · {ENDED_TEXT[e.endedReason]}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -109,12 +226,18 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
         {creditCents > 0 && <span className="p-bal credit"> · Credit {formatPrice(creditCents)}</span>}
         <span className="muted"> · {player.played} played</span>
       </p>
+      <CreditSection ctx={ctx} player={player} />
       {rows.length === 0 ? (
         <p className="muted">No sessions yet.</p>
       ) : (
         <ul className="rows player-money" aria-label="Sessions">
           {rows.map(({ s, r }) => {
+            const withCredit = r.potCreditCents > 0 && r.paymentStatus === 'paid';
+            const allCredit = withCredit && r.potCreditCents >= (r.paymentAmountCents ?? 0);
             const amount = r.paymentStatus === 'paid' ? (r.paymentAmountCents ?? 0) : r.shareCents !== null ? r.shareCents - r.creditCents : null;
+            const paidText = allCredit ? 'Paid with credit' : `Paid ${formatPrice(amount ?? 0)}`;
+            // The older $5 credit; credit spent from the pot is worded above.
+            const oldCredit = r.creditCents - (r.paymentStatus === 'paid' ? r.potCreditCents : 0);
             return (
               <li key={s.id} data-session={s.id}>
                 <span className="who">
@@ -123,18 +246,21 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
                     {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                   </span>
                   <span className="small muted">
-                    {r.paymentStatus === 'paid' ? (
+                    {r.keptAsCreditAt ? (
+                      `Kept as credit ${formatPrice(r.keptAsCreditCents)}`
+                    ) : r.paymentStatus === 'paid' ? (
                       isPlayed(s, Date.parse(ctx.d.now)) || r.refundedAt ? (
-                        r.refundedAt ? `Paid ${formatPrice(amount ?? 0)}, refunded` : `Paid ${formatPrice(amount ?? 0)}`
+                        r.refundedAt ? `${paidText}, refunded` : paidText
                       ) : (
-                        <span className="held-amt">Paid {formatPrice(amount ?? 0)}, not played yet</span>
+                        <span className="held-amt">{paidText}, not played yet</span>
                       )
                     ) : amount !== null ? (
                       `${formatPrice(amount)} unpaid`
                     ) : (
                       'Nothing owed'
                     )}
-                    {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit` : ''}
+                    {withCredit && !allCredit ? ` · ${formatPrice(r.potCreditCents)} from credit` : ''}
+                    {oldCredit > 0 ? ` · ${formatPrice(oldCredit)} credit` : ''}
                   </span>
                 </span>
                 <span className="btn-row">

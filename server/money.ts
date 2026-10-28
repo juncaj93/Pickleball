@@ -8,7 +8,9 @@ import { localParts, zonedTimeToUtc } from '../shared/time';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { HttpError } from './http';
-import { courtCostOf, issueCredits, loadCredits, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
+import { keptRemaining } from '../shared/credit';
+import { loadLedger } from './credit';
+import { courtCostOf, issueCredits, loadCancelCharges, loadCredits, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -52,10 +54,20 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   // The organizer pays the venue themselves: their own row and credits are never money from players.
   const organizerId = await organizerIdOf(ctx.db, group);
   const credits = (await loadCredits(ctx.db, group.id)).filter((c) => c.player_id !== organizerId);
+  // Credit kept from canceled games, split by the month of the game it came from (oldest credit is spent first).
+  const ledger = (await loadLedger(ctx.db, group.id)).filter((e) => e.playerId !== organizerId);
+  const keptLeft = keptRemaining(ledger);
+  const keptOwedBySession = new Map<string, number>();
+  for (const e of ledger) {
+    if (e.kind === 'kept' && e.sessionId && !e.endedAt) keptOwedBySession.set(e.sessionId, (keptOwedBySession.get(e.sessionId) ?? 0) + (keptLeft.get(e.id) ?? 0));
+  }
+  // Canceled games the venue still charged for count their court cost.
+  const charges = await loadCancelCharges(ctx.db, group.id);
 
   let collected = 0;
   let courts = 0;
   let creditsOwed = 0;
+  let keptCredit = 0;
   let held = 0;
   const sessions: MonthlyMoney['sessions'] = [];
   for (const s of results) {
@@ -69,8 +81,11 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
       .filter((r) => r.player_id !== organizerId && r.payment_status === 'paid' && !r.refunded_at)
       .reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
     const cost = courtCostOf(s, settings);
+    const charged = state === 'canceled' ? (charges.get(s.id) ?? 0) : 0;
+    keptCredit += keptOwedBySession.get(s.id) ?? 0;
     // Money in for a game that hasn't been played (or was canceled and not paid back yet) is held, not collected.
     if (state !== 'played') held += paid;
+    courts += charged;
     if (state === 'played') {
       collected += paid;
       courts += cost;
@@ -83,18 +98,22 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
       startsAt: s.starts_at,
       endsAt: s.ends_at,
       state,
+      charged: charged > 0,
       collectedCents: state === 'played' ? paid : 0,
-      courtCostCents: state === 'played' ? cost : 0,
+      courtCostCents: state === 'played' ? cost : charged,
       typicalCost: s.court_cost_cents === null,
     });
   }
+  // Kept credit is money that was held, never collected, so it does not come off Left.
   const net = collected - courts - creditsOwed;
+  creditsOwed += keptCredit;
   return {
     month: `${year}-${String(month).padStart(2, '0')}`,
     label: `${MONTHS[month - 1]} ${year}`,
     collectedCents: collected,
     courtCostCents: courts,
     creditsOwedCents: creditsOwed,
+    keptCreditCents: keptCredit,
     heldCents: held,
     netCents: net,
     surplusCents: Math.max(0, net),
