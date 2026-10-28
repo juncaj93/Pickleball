@@ -1,7 +1,7 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
-import { api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
+import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
 import { AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
@@ -372,6 +372,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       <button
         className="btn ghost block"
         onClick={async () => {
+          setPretend(null);
           await api('POST', '/api/admin/logout', {}).catch(() => {});
           navigate('/');
         }}

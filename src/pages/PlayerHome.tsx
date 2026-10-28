@@ -1,9 +1,9 @@
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, isDemo, setGroupKey, setViewAs, storageGet, storageSet, useLoad, useRefreshOnReturn, copyText } from '../lib';
+import { api, ApiError, isDemo, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
@@ -38,8 +38,11 @@ export function PlayerHome({
   plain,
   onLinkOnly,
   onWordNeeded,
+  topBar,
 }: {
   groupKey: string | null;
+  /** "View as...": the organizer's "Pretending it's..." bar, kept with the View as bar at the top. */
+  topBar?: ReactNode;
   viewAs?: { id: string; name: string };
   onExit?: () => void;
   /** "View as...": "not you?" picked a different player to view as. Nothing is saved. */
@@ -58,7 +61,12 @@ export function PlayerHome({
     setViewAs(viewAs?.id ?? null);
     return () => setViewAs(null);
   }, [viewAs?.id]);
-  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id]);
+  const pretend = usePretend();
+  // Pretend time is for the organizer's screens; the plain player page always runs on real time.
+  useEffect(() => {
+    if (!viewAs) setPretend(null);
+  }, [viewAs]);
+  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend]);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -106,13 +114,16 @@ export function PlayerHome({
     <>
       {/* "View as...": a small bar of its own above the player's real screen. */}
       {viewAs && (
-        <div className="viewas-banner" role="region" aria-label="Viewing as a player">
-          <span>
-            Viewing as <strong>{viewAs.name}</strong>
-          </span>
-          <button className="btn small" onClick={onExit}>
-            Exit
-          </button>
+        <div className="demo-bars">
+          {topBar}
+          <div className="viewas-banner" role="region" aria-label="Viewing as a player">
+            <span>
+              Viewing as <strong>{viewAs.name}</strong>
+            </span>
+            <button className="btn small" onClick={onExit}>
+              Exit
+            </button>
+          </div>
         </div>
       )}
       <TopBar
@@ -364,25 +375,40 @@ function useSent(playerId: string | undefined, signups: { sessionId: string; sig
 }
 
 const PHONE = /iPhone|iPad|iPod|Android/i;
+/** How long the Venmo app gets to open before the website link is offered. */
+const APP_WAIT_MS = 1500;
 
 /**
- * Pay: on a phone, open the Venmo app link first, and the web link if the
- * app didn't open within a moment. Elsewhere the web link opens in a new tab.
+ * Pay. This page never leaves its tab, so coming back lands right on it with
+ * "I paid" ready. On a phone the Venmo app opens (the page stays put under
+ * it); if it hasn't after a moment, "No Venmo app? Open Venmo website"
+ * appears, which opens the website in a new tab. On a computer the website
+ * opens in a new tab straight away (the link's target="_blank").
  */
-function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: string | null; appUrl: string | null }) {
-  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
-  e.preventDefault();
-  const web = pay.url;
-  let left = false;
-  const onHide = () => {
-    if (document.hidden) left = true;
-  };
-  document.addEventListener('visibilitychange', onHide);
-  window.setTimeout(() => {
-    document.removeEventListener('visibilitychange', onHide);
-    if (!left && !document.hidden) window.location.href = web;
-  }, 1500);
-  window.location.href = pay.appUrl;
+function useVenmo(pay: { url: string | null; appUrl: string | null }) {
+  const [web, setWeb] = useState<string | null>(null);
+  function open(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+    e.preventDefault();
+    const url = pay.url;
+    let left = false;
+    const onHide = () => {
+      if (document.hidden) left = true;
+    };
+    document.addEventListener('visibilitychange', onHide);
+    window.setTimeout(() => {
+      document.removeEventListener('visibilitychange', onHide);
+      if (!left && !document.hidden) setWeb(url);
+    }, APP_WAIT_MS);
+    // A link to the app: the app opens on top and this page stays as it is.
+    window.location.href = pay.appUrl;
+  }
+  const fallback = web && (
+    <a className="link-btn venmo-web" href={web} target="_blank" rel="noopener noreferrer">
+      No Venmo app? Open Venmo website
+    </a>
+  );
+  return { open, fallback };
 }
 
 /** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */
@@ -426,6 +452,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
   const { sent, markSent } = useSent(g.me?.id, due);
   const paid = usePaid(due.map((o) => o.sessionId), onChanged);
+  const venmo = useVenmo(pay);
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
   const title =
@@ -464,11 +491,12 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
             onClick={(e) => {
               markSent();
-              openVenmo(e, pay);
+              venmo.open(e);
             }}
           >
             Pay with Venmo
           </a>
+          {venmo.fallback}
           {sent && (
             <button className="btn block secondary" disabled={paid.busy} onClick={() => paid.set(true)}>
               {paid.busy ? 'Saving…' : 'I paid'}
@@ -619,6 +647,8 @@ function RowPay({
   const btn = 'btn small pay-small';
   const { sent, markSent } = useSent(g.me?.id, [{ sessionId: s.id, signupAt: mine.signupAt }]);
   const paid = usePaid([s.id], onChanged);
+  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
+  const venmo = useVenmo(pay);
   if (mine.paymentStatus === 'paid') {
     return (
       <span className="paid-wrap">
@@ -633,7 +663,6 @@ function RowPay({
     );
   }
   if (onTop || mine.oweCents <= 0) return <span />;
-  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
   // No usable Venmo link: "I paid" is the only thing to tap.
   if (!pay.url) {
     return (
@@ -654,7 +683,7 @@ function RowPay({
         aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
         onClick={(e) => {
           markSent();
-          openVenmo(e, pay);
+          venmo.open(e);
         }}
       >
         Pay {formatPrice(mine.oweCents)}
@@ -664,6 +693,7 @@ function RowPay({
           I paid
         </button>
       )}
+      {venmo.fallback}
     </span>
   );
 }
@@ -759,7 +789,7 @@ function ScheduleRow({
                 I'm out
               </button>
             ) : (
-              <button className="btn sched-btn" disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
+              <button className={`btn sched-btn${courtWait || s.joinAs !== 'in' ? ' long' : ''}`} disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
                 {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
               </button>
             )}

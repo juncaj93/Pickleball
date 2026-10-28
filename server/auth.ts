@@ -73,7 +73,8 @@ export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
       `SELECT g.* FROM admin_sessions a JOIN groups g ON g.id = a.group_id
        WHERE a.token_hash = ? AND a.expires_at > ?`,
     )
-    .bind(await sha256(token), ctx.nowIso)
+    // Real time, even while pretending it's another time.
+    .bind(await sha256(token), ctx.realNowIso)
     .first<GroupRow>();
   if (!row) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
   return row;

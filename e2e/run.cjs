@@ -88,19 +88,33 @@ async function venmoLinkOk(link, dollars, name) {
   }
 }
 
-/** Tap Pay (on the test iPhone the app link goes nowhere, so the web page opens), then come back. */
+/** Tap Pay (the test iPhone has no Venmo app), open the website in its new tab, then come back. */
 async function payAndComeBack(page, link) {
   await toVenmo(page, link);
-  await page.goBack();
   await page.locator('.schedule article').first().waitFor();
 }
 
-/** Tap Pay and wait for the Venmo web page (the app link before it is ignored by the test browser). */
+/**
+ * Tap Pay. The pickleball page never leaves its tab: the app link goes
+ * nowhere on the test iPhone, so after a moment "No Venmo app? Open Venmo
+ * website" appears; it opens the exact same web link in a new tab. Then
+ * that tab is closed, like switching back to the pickleball tab.
+ */
 async function toVenmo(page, link) {
+  const before = page.url();
+  const href = await link.getAttribute('href');
   await link.click();
-  for (let i = 0; i < 80 && !page.url().startsWith('https://venmo.com/'); i++) await new Promise((r) => setTimeout(r, 100));
-  assert(page.url().startsWith('https://venmo.com/'), `Pay should end up on Venmo, was ${page.url()}`);
-  await page.getByText('Venmo').waitFor();
+  const web = page.getByRole('link', { name: 'No Venmo app? Open Venmo website' }).first();
+  await web.waitFor();
+  assert(page.url() === before, `Pay left the pickleball page: ${page.url()}`);
+  assert((await web.getAttribute('href')) === href && (await web.getAttribute('target')) === '_blank', 'the website link opens the same Venmo link in a new tab');
+  const [tab] = await Promise.all([page.context().waitForEvent('page'), web.click()]);
+  await tab.waitForLoadState();
+  assert(tab.url() === href, `new tab went to ${tab.url()}`);
+  await tab.getByText('Venmo').waitFor();
+  await tab.close();
+  await page.bringToFront();
+  assert(page.url() === before, 'still on the pickleball page');
 }
 
 /** "I paid" is a quiet gray button right next to Pay, never a second green one. */
@@ -1301,6 +1315,20 @@ async function main() {
       const pb = await pay.boundingBox();
       assert(pb.height < out.height && pb.width < out.width + 40, 'Pay should be smaller than I\'m out');
       await venmoLinkOk(pay, 14, 'Devon');
+      // On a computer, Pay opens the Venmo website in a new tab; this page stays.
+      {
+        const desk = await browser.newContext({ storageState: await p.context().storageState(), viewport: { width: 1280, height: 800 } });
+        await desk.route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
+        const dp = await desk.newPage();
+        await dp.goto(p.url());
+        const dpay = firstCard(dp).getByRole('link', { name: 'Pay $14 with Venmo' });
+        const href = await dpay.getAttribute('href');
+        const [tab] = await Promise.all([desk.waitForEvent('page'), dpay.click()]);
+        await tab.waitForLoadState();
+        assert(tab.url() === href, `computer: new tab went to ${tab.url()}`);
+        assert(dp.url() === p.url(), 'computer: the pickleball tab stayed');
+        await desk.close();
+      }
       // No "I paid" until they've tapped Pay.
       assert((await row.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid shows before tapping Pay');
       // Pay: the Venmo app first, then the web page; back from Venmo, Pay is still there and "I paid" joins it.
@@ -1390,7 +1418,6 @@ async function main() {
         assert((await card.getByRole('button', { name: 'I paid' }).count()) === 0, 'no I paid before tapping Pay');
         await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
         await toVenmo(p, pay);
-        await p.goBack();
         await card.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
         const paidBtn = card.getByRole('button', { name: 'I paid' });
         await paidBtn.waitFor();
@@ -1820,6 +1847,51 @@ async function main() {
       const own = players.Blair.locator('article').nth(1);
       await own.getByRole('button', { name: "I'm in" }).click();
       await own.locator('.tile-check').waitFor();
+    });
+
+    await check('"Pretend it\'s...": a preset shows the bar, the site follows that time, taps say "Demo only", Reset ends it', async () => {
+      await admin.reload();
+      await admin.getByRole('button', { name: 'View as…' }).click();
+      const sheet = admin.locator('dialog[open]');
+      await sheet.getByRole('heading', { name: "Pretend it's…" }).waitFor();
+      await sheet.getByRole('button', { name: 'After the game' }).click();
+      const bar = admin.locator('.pretend-bar');
+      await bar.waitFor();
+      const label = await bar.innerText();
+      assert(/^Pretending it's (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, 10:30 PM/.test(label), `bar says: ${label}`);
+      assert(!/UTC|GMT|EDT|EST/.test(label), 'no time zone letters in the bar');
+      // Kept in this tab only, and the server builds pages for that time.
+      const at = await admin.evaluate(() => new Date(JSON.parse(sessionStorage.getItem('pb_pretend')).atMs).toISOString());
+      const d = await admin.evaluate((iso) => fetch('/api/admin/dashboard', { headers: { 'X-Pretend-Now': iso } }).then((r) => r.json()), at);
+      assert(d.now === at, 'the dashboard follows the pretend time');
+      const real = await admin.evaluate(() => fetch('/api/admin/dashboard').then((r) => r.json()));
+      // A change answers "Demo only" and nothing changes.
+      const before = real.audit.length;
+      await tab(admin, 'Money').click();
+      const markPaid = admin.getByRole('button', { name: /^Mark .* paid$|^Mark paid$/ }).first();
+      if (await markPaid.count()) {
+        await markPaid.click();
+        await admin.locator('.pop', { hasText: 'Demo only. Nothing was saved.' }).waitFor();
+      }
+      const after = await admin.evaluate(() => fetch('/api/admin/dashboard').then((r) => r.json()));
+      assert(after.audit.length === before, 'nothing was logged');
+      // The bar stays on every tab and in View as.
+      await tab(admin, 'Home').click();
+      await bar.waitFor();
+      await admin.getByRole('button', { name: 'View as…' }).click();
+      await admin.locator('dialog[open]').getByRole('button', { name: 'Alex', exact: true }).click();
+      await admin.getByRole('region', { name: 'Viewing as a player' }).waitFor();
+      await admin.locator('.demo-bars .pretend-bar').waitFor();
+      await admin.getByRole('button', { name: 'Exit' }).click();
+      // Reset ends it.
+      await admin.locator('.pretend-bar').getByRole('button', { name: 'Reset' }).click();
+      assert((await admin.locator('.pretend-bar').count()) === 0, 'Reset hides the bar');
+      assert((await admin.evaluate(() => sessionStorage.getItem('pb_pretend'))) === null, 'nothing kept after Reset');
+      // It also ends on its own after 30 minutes.
+      await admin.evaluate(() => sessionStorage.setItem('pb_pretend', JSON.stringify({ atMs: Date.now(), untilMs: Date.now() - 1 })));
+      await admin.reload();
+      await tab(admin, 'Home').waitFor();
+      assert((await admin.locator('.pretend-bar').count()) === 0, 'an expired pretend time is gone after 30 minutes');
     });
 
     await check('coming back to the page after 30 seconds quietly shows the latest (no reload, no spinner)', async () => {

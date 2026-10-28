@@ -22,6 +22,15 @@ import {
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
 
+/**
+ * Why someone was moved in, as it reads now: "we now have 6" only while 6
+ * are still in. After a drop to 5 it's just "a spot opened up" (and the
+ * 6-person discount is gone too).
+ */
+function reasonNow(reason: RosterRow['promotion_reason'], confirmedCount: number): RosterRow['promotion_reason'] {
+  return reason === 'made_six' && confirmedCount !== 6 ? 'spot_opened' : reason;
+}
+
 /** What a player sees. No phone numbers, and payment details only for their own row. */
 export function playerSessionView(
   session: SessionRow,
@@ -69,7 +78,7 @@ export function playerSessionView(
           status: mine.status,
           waitlistPosition: mine.status === 'waitlisted' ? waitlist.findIndex((r) => r.id === mine.id) + 1 : null,
           attendanceConfirmed: !!mine.attendance_confirmed_at,
-          promotion: mine.status === 'confirmed' ? mine.promotion_reason : null,
+          promotion: mine.status === 'confirmed' ? reasonNow(mine.promotion_reason, confirmed.length) : null,
           shareCents: prices.get(mine.player_id)?.cents ?? null,
           paymentStatus: mine.payment_status,
           selfPaid: !!mine.self_paid_at,
@@ -164,7 +173,7 @@ export function adminSessionView(
       refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
       lateDropAt: r.status === 'withdrawn' ? r.late_drop_at : null,
       lateDropDoneAt: r.status === 'withdrawn' ? r.late_drop_done_at : null,
-      promotionReason: r.status === 'confirmed' ? r.promotion_reason : null,
+      promotionReason: r.status === 'confirmed' ? reasonNow(r.promotion_reason, confirmed.length) : null,
       promotionNotifiedAt: r.promotion_notified_at,
     }));
 

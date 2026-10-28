@@ -4,7 +4,7 @@
 // shows its error under the row and is never sent; a failed save keeps what
 // was typed and offers a retry.
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { api, ApiError } from '../../lib';
+import { api, ApiError, isDemo } from '../../lib';
 import type { AdminCtx } from '../Admin';
 
 export type Parsed = { value: unknown } | { error: string };
@@ -30,7 +30,7 @@ export function useAutosave(ctx: AdminCtx) {
       return true;
     } catch (err) {
       // The server said the value itself is wrong: show why, don't offer a retry.
-      if (err instanceof ApiError && err.status === 400) set(id, { status: 'invalid', message: err.message });
+      if (err instanceof ApiError && (err.status === 400 || isDemo(err))) set(id, { status: 'invalid', message: err.message });
       else set(id, { status: 'failed', retry: () => void save(id, body) });
       return false;
     }

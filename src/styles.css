@@ -542,8 +542,90 @@ a {
   box-shadow: none;
   border: 0;
 }
-.viewas-banner + .topbar {
+.viewas-banner + .topbar,
+.demo-bars + .topbar {
   padding-top: 10px;
+}
+
+/* "Pretending it's Tue Nov 3, 8:30 AM" with Reset: dark, so it can't be
+   mistaken for the real time. Sits with the View as bar when both show. */
+.demo-bars {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.demo-bars .viewas-banner {
+  position: static;
+}
+.pretend-bar {
+  position: sticky;
+  top: 0;
+  z-index: 21;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: calc(env(safe-area-inset-top) + 2px) var(--gutter) 2px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.demo-bars .pretend-bar {
+  position: static;
+}
+.pretend-bar + .viewas-banner {
+  padding-top: 2px;
+}
+.pretend-bar + .topbar {
+  padding-top: 10px;
+}
+.pretend-bar .btn.small {
+  min-height: 44px;
+  padding: 0 4px 0 14px;
+  background: transparent;
+  color: var(--bg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  box-shadow: none;
+  border: 0;
+}
+.pretend-pick {
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.pretend-pick h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+.pretend-pick p {
+  margin: 0;
+}
+.pretend-presets {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.pretend-presets .btn.small {
+  padding-inline: 6px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.pretend-custom {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 8px;
+  align-items: end;
+}
+.pretend-custom label {
+  grid-column: 1 / -1;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.pretend-custom input {
+  min-width: 0;
+  min-height: 44px;
 }
 
 /* ---------- Layout ---------- */
@@ -1870,6 +1952,12 @@ dialog.sheet::backdrop {
   padding: 8px 16px;
   font-size: 0.95rem;
   border-radius: 12px;
+}
+/* "Join standby" / "Join waitlist" are the widest labels: a little tighter,
+   so "8:00 to 10:00 PM" next to them stays on one line. */
+.btn.sched-btn.long {
+  padding-inline: 10px;
+  font-size: 0.9rem;
 }
 
 /* "You're in", "Waitlist #2": small tags by the time. */
@@ -3689,6 +3777,24 @@ dialog.sheet[open]::backdrop {
 /* Pay $14 with the quiet "I paid" beside it. */
 .pay-pair {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+/* "No Venmo app? Open Venmo website": only when the app didn't open. Its
+   own line, small, with a full-size tap area. */
+.venmo-web {
+  flex-basis: 100%;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -8px 0;
+  font-size: 0.85rem;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.pay-card .venmo-web {
+  justify-content: center;
+  margin: -4px 0;
 }

@@ -31,12 +31,92 @@ export function isDemo(err: unknown): err is ApiError {
   return err instanceof ApiError && err.code === 'demo_only';
 }
 
+// ---------- "Pretend it's..." (organizer only, look-only) ----------
+
+const PRETEND_KEY = 'pb_pretend';
+/** Pretend time switches itself off after this long. */
+export const PRETEND_FOR_MS = 30 * 60_000;
+const pretendListeners = new Set<() => void>();
+let pretendTimer: ReturnType<typeof setTimeout> | undefined;
+
+interface PretendState {
+  atMs: number;
+  /** Real time it switches off. */
+  untilMs: number;
+}
+
+function readPretend(): PretendState | null {
+  try {
+    const raw = sessionStorage.getItem(PRETEND_KEY);
+    if (!raw) return null;
+    const p = JSON.parse(raw) as PretendState;
+    if (typeof p.atMs !== 'number' || typeof p.untilMs !== 'number' || Date.now() >= p.untilMs) {
+      sessionStorage.removeItem(PRETEND_KEY);
+      return null;
+    }
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+let pretendCache = readPretend();
+
+function armPretendTimer() {
+  clearTimeout(pretendTimer);
+  if (pretendCache) pretendTimer = setTimeout(() => setPretend(null), Math.max(0, pretendCache.untilMs - Date.now()));
+}
+armPretendTimer();
+
+/**
+ * Pretend it's `atMs` (or stop with null). Kept in this tab only (closing
+ * the tab ends it) and for 30 minutes at most. Never saved anywhere else.
+ */
+export function setPretend(atMs: number | null) {
+  pretendCache = atMs === null ? null : { atMs, untilMs: Date.now() + PRETEND_FOR_MS };
+  try {
+    if (pretendCache) sessionStorage.setItem(PRETEND_KEY, JSON.stringify(pretendCache));
+    else sessionStorage.removeItem(PRETEND_KEY);
+  } catch {
+    /* private mode: it still works until the page reloads */
+  }
+  armPretendTimer();
+  pretendListeners.forEach((l) => l());
+}
+
+/** The pretend time, or null when it's off. */
+export function pretendMs(): number | null {
+  if (pretendCache && Date.now() >= pretendCache.untilMs) setPretend(null);
+  return pretendCache?.atMs ?? null;
+}
+
+export function usePretend(): number | null {
+  return useSyncExternalStore(
+    (cb) => {
+      pretendListeners.add(cb);
+      return () => pretendListeners.delete(cb);
+    },
+    () => pretendCache?.atMs ?? null,
+  );
+}
+
+/** Now, or the pretend time while it's on. */
+export function appNow(): number {
+  return pretendMs() ?? Date.now();
+}
+
 export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   // "View as..." is look-only: player taps never leave the phone.
   if (viewAsId && method !== 'GET' && path.startsWith('/api/') && !path.startsWith('/api/admin/')) {
     throw new ApiError(0, 'demo_only', DEMO_MESSAGE);
   }
+  // So is "Pretend it's...", for every change (signing out still works and ends it).
+  const pretend = pretendMs();
+  if (pretend !== null && method !== 'GET' && path !== '/api/admin/logout') {
+    throw new ApiError(0, 'demo_only', DEMO_MESSAGE);
+  }
   const headers: Record<string, string> = {};
+  if (pretend !== null && path.startsWith('/api/')) headers['X-Pretend-Now'] = new Date(pretend).toISOString();
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
@@ -201,11 +281,13 @@ export function storageSet(key: string, value: string) {
 /** Re-render every minute so "in 3 hr" countdowns stay current. */
 export function useNow(intervalMs = 60_000): number {
   const [now, setNow] = useState(Date.now());
+  const pretend = usePretend();
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), intervalMs);
     return () => clearInterval(t);
   }, [intervalMs]);
-  return now;
+  // While pretending, the clock stands still at the pretend time.
+  return pretend ?? now;
 }
 
 // ---------- Light / dark mode (per phone) ----------

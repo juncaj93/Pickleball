@@ -128,3 +128,21 @@ describe('last call wording', () => {
     expect(lastCallMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, 4)).toMatch(/^Last call: pickleball tonight, 5:00 to 7:00 PM\./);
   });
 });
+
+describe('moved in when 6 joined, then back to 5', () => {
+  it('no longer says "we now have 6", to the player or in the organizer\'s text', async () => {
+    const ctx = await setupGroup();
+    const s = await firstSession(ctx);
+    const names = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
+    for (const n of names) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    const emery = await playerPhone(ctx, 'Emery');
+    const reason = async () => (await emery.call('GET', '/api/group')).data.sessions.find((x: { id: string }) => x.id === s.id).mine.promotion;
+    expect(await reason()).toBe('made_six');
+    await (await playerPhone(ctx, 'Frankie')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    expect(await reason()).toBe('spot_opened');
+    const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const row = d.sessions.find((x: { id: string }) => x.id === s.id).roster.find((r: { name: string }) => r.name === 'Emery');
+    expect(row.promotionReason).toBe('spot_opened');
+    expect(row.discount).toBe(false);
+  });
+});

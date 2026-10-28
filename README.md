@@ -72,6 +72,22 @@ session's court (hidden when there's nothing in it):
 Ryan" banner and Exit. It's look-only: taps there say "Demo only. Nothing was
 saved." and change nothing, and nothing goes in the Activity log.
 
+**Pretend it's…** (in the View as menu) previews the site at any moment, Eastern
+time: pick a date and time or a preset (Game day 7:00 AM or 8:30 AM, Day
+before 8:00 PM, Last call, Booking opens 12:00 AM, After the game). Every card
+and line follows that time, on the organizer screens and in View as. A dark bar
+says "Pretending it's Tue Nov 3, 8:30 AM" with Reset. It's look-only like View
+as, kept only in that browser tab, and ends after 30 minutes, on Reset, on
+sign-out, or when the tab closes. Players never get it.
+
+**Pay** never takes the player away from the site: on a phone it opens the
+Venmo app with the amount and note; if the app doesn't open, "No Venmo app?
+Open Venmo website" opens the website in a new tab. On a computer the website
+opens in a new tab. Back in Safari, the pickleball page is right where it was,
+with "I paid" ready.
+
+Pictures of every screen state: `docs/state-gallery/` (made by `node e2e/gallery.cjs`).
+
 Every text is a draft with **Open in Messages** and **Copy message** buttons.
 The status says "Draft ready" or "Composer opened", never "Sent".
 
