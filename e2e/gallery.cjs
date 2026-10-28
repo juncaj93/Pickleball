@@ -332,7 +332,7 @@ async function main() {
     await ryan.ctx.close();
     for (const [name, file, title] of [
       ['Julian', '13-row-on-standby', 'On the standby list (court waitlist)'],
-      ['Armen', '14-credit-line', 'Credit line: $5 toward the next session'],
+      ['Armen', '14-credit-line', 'A $5 credit but no game yet: nothing about it shows (it appears on the game it comes off)'],
       ['Mitchel', '15-after-refund', 'After a refund (canceled game, money given back): nothing owed'],
     ]) {
       if (busy) continue;
