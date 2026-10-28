@@ -390,6 +390,8 @@ export function creditPlan(
   rosters: Map<string, RosterRow[]>,
   credits: CreditRow[],
   settings: GroupSettings,
+  /** Credit from the pot already spent on a seat (partly covered), keyed `${sessionId}:${playerId}`. */
+  spent: Map<string, number> = new Map(),
 ): Map<string, { cents: number; ids: string[] }> {
   const dues: Due[] = [];
   for (const s of sessions) {
@@ -398,7 +400,7 @@ export function creditPlan(
     for (const r of roster) {
       const price = prices.get(r.player_id);
       if (price && r.status === 'confirmed' && r.payment_status === 'unpaid') {
-        dues.push({ sessionId: s.id, playerId: r.player_id, startsAt: s.starts_at, cents: price.cents });
+        dues.push({ sessionId: s.id, playerId: r.player_id, startsAt: s.starts_at, cents: Math.max(0, price.cents - (spent.get(`${s.id}:${r.player_id}`) ?? 0)) });
       }
     }
   }
@@ -445,6 +447,32 @@ export async function audit(
     )
     .bind(newId(), groupId, sessionId, actor, action, JSON.stringify(details), nowIso)
     .run();
+}
+
+/**
+ * What the venue still charged for a game the organizer canceled close to
+ * play ("Were you charged?" answered Yes), by session id. It is kept in the
+ * Activity log entry made when the game was canceled; the latest entry wins,
+ * so canceling again after a reopen replaces it. Only amounts above $0.
+ */
+export async function loadCancelCharges(db: D1Database, groupId: string): Promise<Map<string, number>> {
+  const { results } = await db
+    .prepare("SELECT session_id, details_json FROM admin_audit_log WHERE group_id = ? AND action = 'session_canceled' AND session_id IS NOT NULL ORDER BY created_at, rowid")
+    .bind(groupId)
+    .all<{ session_id: string; details_json: string }>();
+  const out = new Map<string, number>();
+  for (const r of results) {
+    let cents = 0;
+    try {
+      const v = (JSON.parse(r.details_json) as { chargedCents?: unknown }).chargedCents;
+      if (typeof v === 'number' && Number.isInteger(v) && v > 0) cents = v;
+    } catch {
+      /* an unreadable entry charges nothing */
+    }
+    if (cents > 0) out.set(r.session_id, cents);
+    else out.delete(r.session_id);
+  }
+  return out;
 }
 
 /** Sessions before the first session date that the organizer could still show. */

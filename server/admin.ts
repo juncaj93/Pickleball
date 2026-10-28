@@ -24,22 +24,21 @@ import {
   settingsOf,
   sharesFor,
   waitlistOf,
-  creditPlan,
   issueCredits,
-  loadCredits,
+  loadCancelCharges,
   loadHiddenSessions,
-  lookbackIso,
   openCredits,
   organizerIdOf,
   syncSix,
   visibleFrom,
 } from './repo';
+import { type CreditEntryView } from '../shared/api';
+import { CHARGE_ASK_HOURS, keptBySeat, potBalance, seatKey } from '../shared/credit';
+import { moneyPicture, returnSeatCredit, returnSessionCredit, undoKeep } from './credit';
 import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
-
-const HISTORY_MS = 90 * 86_400_000;
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -59,7 +58,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   await issueCredits(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
-  const { sessions, rosters, credits, plan } = await moneyPicture(ctx, group);
+  const { sessions, rosters, credits, ledger, spent, plan } = await moneyPictureOf(ctx, group);
   const usedOn = (sessionId: string, playerId: string) =>
     credits.filter((c) => c.used_session_id === sessionId && c.player_id === playerId).reduce((sum, c) => sum + c.amount_cents, 0);
   const creditFor = (s: { id: string }, roster: { player_id: string; payment_status: string }[]) => (playerId: string) => {
@@ -67,6 +66,40 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     return row?.payment_status === 'paid' ? usedOn(s.id, playerId) : (plan.get(`${s.id}:${playerId}`)?.cents ?? 0);
   };
   const organizerId = await organizerIdOf(ctx.db, group);
+  const kept = keptBySeat(ledger);
+  const potFor = (sessionId: string) => (playerId: string) => {
+    const k = kept.get(seatKey(sessionId, playerId));
+    return { usedCents: spent.get(seatKey(sessionId, playerId)) ?? 0, keptAt: k?.createdAt ?? null, keptCents: k?.cents ?? 0 };
+  };
+  const charges = await loadCancelCharges(ctx.db, group.id);
+  const startsOf = new Map(
+    (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
+  );
+  // Older $5 credit not matched to a game they owe for: it is part of what a refund of their credit pays back.
+  const plannedFive = new Set([...plan.values()].flatMap((p) => p.ids));
+  const looseFive = new Map<string, number>();
+  for (const c of openCredits(credits)) if (!plannedFive.has(c.id)) looseFive.set(c.playerId, (looseFive.get(c.playerId) ?? 0) + c.amountCents);
+  const creditLedger = [...new Set([...ledger.map((e) => e.playerId), ...looseFive.keys()])]
+    .map((playerId) => ({
+      playerId,
+      balanceCents: potBalance(ledger, playerId),
+      refundCents: potBalance(ledger, playerId) + (looseFive.get(playerId) ?? 0),
+      entries: ledger
+        .filter((e) => e.playerId === playerId)
+        .map(
+          (e): CreditEntryView => ({
+            id: e.id,
+            kind: e.kind,
+            cents: e.cents,
+            sessionId: e.sessionId,
+            sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : null,
+            at: e.createdAt,
+            endedAt: e.endedAt,
+            endedReason: e.endedReason as CreditEntryView['endedReason'],
+          }),
+        ),
+    }))
+    .filter((p) => p.playerId !== organizerId);
   const balances = new Map<string, number>();
   // The organizer pays the venue, so any credit under their name is not a balance anyone owes.
   for (const c of openCredits(credits)) if (c.playerId !== organizerId) balances.set(c.playerId, (balances.get(c.playerId) ?? 0) + c.amountCents);
@@ -118,13 +151,25 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) => {
       const roster = rosters.get(s.id) ?? [];
-      return adminSessionView(s, roster, players, ctx.nowMs, settings, group.timezone, creditFor(s, roster), organizerId);
+      return adminSessionView(
+        s,
+        roster,
+        players,
+        ctx.nowMs,
+        settings,
+        group.timezone,
+        creditFor(s, roster),
+        organizerId,
+        potFor(s.id),
+        s.status === 'canceled' ? (charges.get(s.id) ?? null) : null,
+      );
     }),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
     credits: [...balances]
       .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
       .sort((a, b) => a.name.localeCompare(b.name)),
+    creditLedger,
     me: await organizerPlayer(ctx, group, false),
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
@@ -141,16 +186,7 @@ export function playerLinkFor(ctx: Ctx, group: GroupRow): string {
 }
 
 /** Visible sessions from the last 90 days on, their rosters, all credits, and where open credits will land. */
-async function moneyPicture(ctx: Ctx, group: GroupRow) {
-  // Credits from sessions that just ended exist before anything is paid or cleared.
-  await issueCredits(ctx.db, group, ctx.nowMs);
-  const since = await lookbackIso(ctx.db, group.id, ctx.nowMs, HISTORY_MS);
-  const from = visibleFrom(group);
-  const sessions = await loadSessions(ctx.db, group.id, since, from);
-  const rosters = await loadRosters(ctx.db, group.id, since, from);
-  const credits = await loadCredits(ctx.db, group.id);
-  return { sessions, rosters, credits, plan: creditPlan(sessions, rosters, credits, settingsOf(group)) };
-}
+const moneyPictureOf = (ctx: Ctx, group: GroupRow) => moneyPicture(ctx.db, group, ctx.nowMs);
 
 function safeParse(s: string): Record<string, unknown> {
   try {
@@ -215,12 +251,18 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
   if (decision === 'cancel') {
     if (body.confirm !== true) throw new HttpError(400, 'confirm_required', 'Confirm the cancellation first.');
     if (session.status === 'canceled') return { ok: true, changed: false };
+    // "Were you charged for this court?" is only asked within 12 hours of the start.
+    // A Yes counts as that canceled game's court cost; it is kept with the cancel in the Activity log.
+    const askedCharge = ctx.nowMs >= Date.parse(session.starts_at) - CHARGE_ASK_HOURS * 3600_000 && ctx.nowMs < Date.parse(session.starts_at);
+    const chargedCents = askedCharge ? (v.cents(body.chargedCents, 'chargedCents') ?? 0) : 0;
     await ctx.db
       .prepare("UPDATE sessions SET status = 'canceled', canceled_at = ?, canceled_by = 'organizer', updated_at = ? WHERE id = ?")
       .bind(ctx.nowIso, ctx.nowIso, session.id)
       .run();
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
-    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at }, ctx.nowIso);
+    // Credit anyone spent on this game goes back to them; what they paid in cash waits for Refund or Keep as credit.
+    const returned = await returnSessionCredit(ctx.db, session.id, ctx.nowIso);
+    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned }, ctx.nowIso);
     return { ok: true, changed: true };
   }
   if (decision === 'reopen') {
@@ -231,6 +273,16 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
         `UPDATE sessions SET status = CASE WHEN booking_status = 'booked' THEN 'booked' ELSE 'planned' END,
            canceled_at = NULL, canceled_by = NULL, admin_decision = NULL, decision_at = NULL, updated_at = ?
          WHERE id = ?`,
+      )
+      .bind(ctx.nowIso, session.id)
+      .run();
+    // A payment kept as credit is credit now, so they owe for the reopened game again (and can use that credit).
+    await ctx.db
+      .prepare(
+        `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
+           paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, refunded_at = NULL, updated_at = ?1
+         WHERE session_id = ?2 AND payment_status = 'paid' AND refunded_at IS NOT NULL
+           AND EXISTS (SELECT 1 FROM credit_ledger l WHERE l.kind = 'kept' AND l.session_id = session_players.session_id AND l.player_id = session_players.player_id AND l.ended_at IS NULL)`,
       )
       .bind(ctx.nowIso, session.id)
       .run();
@@ -303,6 +355,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
       .bind(ctx.nowIso, ctx.nowIso, session.id)
       .run();
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
+    await returnSessionCredit(ctx.db, session.id, ctx.nowIso);
   }
   await audit(ctx.db, group.id, session.id, `court_${action}`, {}, ctx.nowIso);
   return { ok: true };
@@ -414,6 +467,11 @@ export async function setRefund(ctx: Ctx, body: Record<string, unknown>) {
   const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
   if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'not_paid', 'Only someone who paid can be refunded.');
   if (!!row.refunded_at === refunded) return { ok: true, changed: false };
+  // A payment that was kept as credit is taken back through the credit (it fails once any of it is spent).
+  if (!refunded && (await undoKeep(ctx.db, session.id, playerId, ctx.nowIso))) {
+    await audit(ctx.db, group.id, session.id, 'credit_kept_undone', { player: row.display_name, playerId }, ctx.nowIso);
+    return { ok: true, changed: true };
+  }
   // A credit used on this payment goes back to the player with the refund
   // (they paid $9 plus their $5 credit; the $9 comes back by hand, the credit
   // here). Undoing the refund takes those same credits again if still unused.
@@ -495,7 +553,7 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
       return { ok: true, changed: true };
     }
     // Any credit planned for this seat is used up now.
-    const credit = (await moneyPicture(ctx, group)).plan.get(`${session.id}:${playerId}`) ?? { cents: 0, ids: [] };
+    const credit = (await moneyPictureOf(ctx, group)).plan.get(`${session.id}:${playerId}`) ?? { cents: 0, ids: [] };
     const share = price - credit.cents;
     await ctx.db.batch([
       ctx.db
@@ -534,12 +592,14 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
       // Credits used on this payment go back to the player.
       ctx.db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE used_session_id = ? AND player_id = ?').bind(session.id, playerId),
     ]);
+    // The organizer unmarking takes the credit from the pot back too. A player's own "Didn't pay?" only undoes their cash.
+    const creditBack = self ? 0 : await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked');
     await audit(
       ctx.db,
       group.id,
       session.id,
       self ? 'player_self_unpaid' : 'marked_unpaid',
-      { player: row.display_name, previousAmountCents: row.payment_amount_cents, previousPaidAt: row.paid_at },
+      { player: row.display_name, previousAmountCents: row.payment_amount_cents, previousPaidAt: row.paid_at, ...(creditBack > 0 ? { creditReturnedCents: creditBack } : {}) },
       ctx.nowIso,
       actor ?? (self ? self : 'organizer'),
     );
@@ -593,7 +653,8 @@ export async function removePlayer(ctx: Ctx) {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM session_players WHERE player_id = ?1 AND (status <> 'declined' OR payment_status = 'paid')) +
-         (SELECT COUNT(*) FROM credits WHERE player_id = ?1) AS n`,
+         (SELECT COUNT(*) FROM credits WHERE player_id = ?1) +
+         (SELECT COUNT(*) FROM credit_ledger WHERE player_id = ?1) AS n`,
     )
     .bind(id)
     .first<{ n: number }>();
@@ -857,6 +918,7 @@ export const BACKUP_TABLES = [
   'sessions',
   'session_players',
   'credits',
+  'credit_ledger',
   'session_action_tokens',
   'player_devices',
   'admin_audit_log',

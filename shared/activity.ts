@@ -1,6 +1,7 @@
 // History > Activity: each log entry as one plain sentence, like
 // "Ryan said I'm in for Tue, Nov 3" or "Robin marked Ryan paid for Tue, Nov 3".
 import type { ActivityEntry } from './api';
+import { formatPrice } from './money';
 import { formatShortDate } from './time';
 
 /** The sentence for one entry. `organizer` is the organizer's name (from Settings), or "Organizer". */
@@ -71,7 +72,7 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'session_added':
       return `${who} added a game${forDay}`;
     case 'session_canceled':
-      return `${who} canceled${day ? ` ${day}` : ' a session'}`;
+      return `${who} canceled${day ? ` ${day}` : ' a session'}${typeof d.chargedCents === 'number' && d.chargedCents > 0 ? ` (venue charged ${formatPrice(d.chargedCents)})` : ''}`;
     case 'session_reopened':
       return `${who} reopened${day ? ` ${day}` : ' a session'}`;
     case 'session_rescheduled':
@@ -102,6 +103,16 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} marked ${player} as coming${forDay}`;
     case 'credit_cleared':
       return `${who} cleared ${player}'s credit`;
+    case 'credit_kept':
+      return `${who} kept ${player}'s payment as credit${forDay}`;
+    case 'credit_kept_undone':
+      return `${who} undid keeping ${player}'s payment as credit${forDay}`;
+    case 'credit_used':
+      return typeof d.amountCents === 'number' ? `${player} used ${formatPrice(d.amountCents)} credit${forDay}` : `${player} used credit${forDay}`;
+    case 'credit_refund_marked':
+      return `${who} paid ${player}'s credit back`;
+    case 'credit_refund_undone':
+      return `${who} undid paying ${player}'s credit back`;
     case 'player_added':
       return `${who} added ${player}`;
     case 'player_updated':

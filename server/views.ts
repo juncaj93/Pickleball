@@ -42,6 +42,8 @@ const NO_MONEY = {
   creditComing: false,
   oweCents: 0,
   creditCents: 0,
+  paidWithCredit: false,
+  useCreditCents: 0,
 } as const;
 
 /** What a player sees. No phone numbers, and payment details only for their own row. */
@@ -56,6 +58,8 @@ export function playerSessionView(
   myCredit = 0,
   /** The viewer is the organizer, who pays the venue: no share, Pay, credit or "paid" shows for them. */
   isOrganizer = false,
+  /** This player's own credit pot: what is in it, and what they already used on this session. */
+  pot: { balanceCents: number; usedHere: number } = { balanceCents: 0, usedHere: 0 },
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -65,6 +69,7 @@ export function playerSessionView(
   const canceled = session.status === 'canceled';
   const six = !canceled && confirmed.length === 6;
   const othersWaiting = waitlist.filter((r) => r.player_id !== meId).length;
+  const owes = !!mine && mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id);
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
         status: mine.status,
@@ -77,11 +82,10 @@ export function playerSessionView(
         signupAt: mine.confirmed_at ?? mine.claimed_at,
         discount: prices.get(mine.player_id)?.discount ?? false,
         creditComing: prices.get(mine.player_id)?.creditComing ?? false,
-        oweCents:
-          mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id)
-            ? Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit)
-            : 0,
-        creditCents: mine.payment_status === 'unpaid' ? myCredit : 0,
+        oweCents: owes ? Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit - pot.usedHere) : 0,
+        creditCents: mine.payment_status === 'unpaid' ? myCredit + pot.usedHere : 0,
+        paidWithCredit: mine.payment_status === 'paid' && pot.usedHere > 0 && pot.usedHere >= (mine.payment_amount_cents ?? 0),
+        useCreditCents: owes && !canceled ? Math.min(pot.balanceCents, Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit - pot.usedHere)) : 0,
       }
     : null;
   return {
@@ -161,6 +165,10 @@ export function adminSessionView(
   creditFor: (playerId: string) => number,
   /** The organizer's player id: they pay the venue, so they have no share and are never counted as owing. */
   organizerId: string | null = null,
+  /** The credit pot's part of a seat: credit used on it, and a payment kept as credit. */
+  potFor: (playerId: string) => { usedCents: number; keptAt: string | null; keptCents: number } = () => ({ usedCents: 0, keptAt: null, keptCents: 0 }),
+  /** A canceled game the venue still charged for. */
+  chargedCents: number | null = null,
 ): AdminSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -186,7 +194,10 @@ export function adminSessionView(
       paymentAmountCents: r.payment_amount_cents,
       shareCents: r.player_id === organizerId ? null : (prices.get(r.player_id)?.cents ?? null),
       discount: r.player_id === organizerId ? false : (prices.get(r.player_id)?.discount ?? false),
-      creditCents: r.status === 'confirmed' && r.player_id !== organizerId ? creditFor(r.player_id) : 0,
+      creditCents: r.status === 'confirmed' && r.player_id !== organizerId ? creditFor(r.player_id) + potFor(r.player_id).usedCents : 0,
+      potCreditCents: r.player_id === organizerId ? 0 : potFor(r.player_id).usedCents,
+      keptAsCreditAt: r.player_id === organizerId ? null : potFor(r.player_id).keptAt,
+      keptAsCreditCents: r.player_id === organizerId ? 0 : potFor(r.player_id).keptCents,
       isOrganizer: r.player_id === organizerId,
       waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
       promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
@@ -236,6 +247,7 @@ export function adminSessionView(
       ? { costCents: courtCost, typicalCost: session.court_cost_cents === null, ...split, paid: myRow?.payment_status === 'paid', paidAt: myRow?.payment_status === 'paid' ? myRow.paid_at : null }
       : null,
     courtCostCents: session.court_cost_cents,
+    chargedCents,
     courtState: session.court_state,
     plannedStartsAt: session.planned_starts_at,
     moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,

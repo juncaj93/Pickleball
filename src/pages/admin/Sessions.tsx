@@ -8,6 +8,7 @@ import {
   deadlineAlertMessage,
   siteAddress,
 } from '../../../shared/messages';
+import { CHARGE_ASK_HOURS } from '../../../shared/credit';
 import { formatCents, formatPrice, parseDollars, refundNote, venmoRefundUrl } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
@@ -30,6 +31,7 @@ import { type AdminCtx, deadlineLine } from '../Admin';
 import { reach, reminderText } from './textMenu';
 import { isPlayed, lateDropsAll, refundRows } from './todo';
 import { TextButton } from './Texts';
+import '../../credit-session.css';
 
 export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'canceled' | 'moved';
 
@@ -492,9 +494,13 @@ export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionVie
   const note = refundNote(s.startsAt, tz);
   const setRefunded = (r: AdminRosterEntry, refunded: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: r.playerId, refunded }), refunded ? 'Refunded' : 'Unmarked');
+  // Keep as credit: the money stays with the group as the player's credit for any later game.
+  const setKept = (r: AdminRosterEntry, keepIt: boolean) =>
+    run(() => api('POST', `/api/admin/sessions/${s.id}/credit`, { playerId: r.playerId, keep: keepIt }), keepIt ? 'Kept as credit' : 'Credit undone');
   return (
     <section className="stack refunds" aria-label="Pay back">
       {canceled && <h3>Pay back {left > 0 ? `(${left} left)` : '(all done)'}</h3>}
+      {left > 0 && <p className="small muted refund-choice">Refund on Venmo, or keep it as their credit for any later game.</p>}
       <ul className="list refund-list">
         {paid.map((r) => {
           const amount = r.paymentAmountCents ?? 0;
@@ -515,11 +521,11 @@ export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionVie
                     </span>
                   )}
                 </div>
-                {r.refundedAt && <Chip tone="ok">Refunded</Chip>}
+                {r.refundedAt && (r.keptAsCreditAt ? <Chip tone="info">Kept as credit</Chip> : <Chip tone="ok">Refunded</Chip>)}
               </div>
               <div className="pay-btns">
                 {r.refundedAt ? (
-                  <button className="btn small secondary" disabled={busy} onClick={() => setRefunded(r, false)}>
+                  <button className="btn small secondary" disabled={busy} onClick={() => (r.keptAsCreditAt ? setKept(r, false) : setRefunded(r, false))}>
                     Undo
                   </button>
                 ) : (
@@ -543,6 +549,9 @@ export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionVie
                         Mark refunded
                       </button>
                     )}
+                    <button className="btn small secondary" disabled={busy} aria-label={`Keep ${formatPrice(amount)} as ${r.name}'s credit`} onClick={() => setKept(r, true)}>
+                      Keep as credit
+                    </button>
                   </>
                 )}
               </div>
@@ -748,7 +757,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const { busy, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
   // The organizer is not a row of their own money: they pay the venue (the court row below).
-  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
+  // A payment kept as credit is settled; it shows in the Pay back list above, not here.
+  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid') && !(r.keptAsCreditAt && r.paymentStatus === 'paid' && r.refundedAt));
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
   const price = ctx.d.group.settings.pricePerPlayerCents;
@@ -777,6 +787,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
         <>
           <Notice tone="muted" title="Session canceled">
             Nobody owes for it.
+            {s.chargedCents ? ` The venue charged you ${formatPrice(s.chargedCents)}.` : ''}
           </Notice>
           <RefundList ctx={ctx} s={s} />
         </>
@@ -819,7 +830,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                   {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
                   {r.paidAt ? (
                     <>
-                      paid <span className={played ? undefined : 'held-amt'}>{formatPrice(r.paymentAmountCents ?? 0)}</span> on {formatShortDate(r.paidAt, tz)}
+                      {r.potCreditCents > 0 && r.potCreditCents >= (r.paymentAmountCents ?? 0) ? 'paid with credit' : 'paid'}{' '}
+                      <span className={played ? undefined : 'held-amt'}>{formatPrice(r.paymentAmountCents ?? 0)}</span> on {formatShortDate(r.paidAt, tz)}
                       {played ? '' : <span className="held-amt"> · not played yet</span>}
                     </>
                   ) : (
@@ -829,7 +841,9 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                   {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit used` : ''}
                 </div>
               </div>
-              <Chip tone={r.paymentStatus === 'paid' ? (played ? 'ok' : 'info') : 'warn'}>{r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}</Chip>
+              <Chip tone={r.paymentStatus === 'paid' ? (played ? 'ok' : 'info') : 'warn'}>
+                {r.paymentStatus === 'paid' ? (r.potCreditCents > 0 && r.potCreditCents >= (r.paymentAmountCents ?? 0) ? 'Paid with credit' : 'Paid') : 'Unpaid'}
+              </Chip>
             </div>
             <div className="pay-btns">
               {r.paymentStatus === 'paid' ? (
@@ -991,6 +1005,13 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const now = useNow();
   const { busy, run } = useAction(ctx);
   const reopening = s.state.flags.canceled;
+  // "Were you charged for this court?" is only asked within 12 hours of the start. No is the default.
+  const start = Date.parse(s.startsAt);
+  const serverNow = Date.parse(ctx.d.now);
+  const askCharge = !reopening && serverNow >= start - CHARGE_ASK_HOURS * 3600_000 && serverNow < start;
+  const [charged, setCharged] = useState(false);
+  const [amount, setAmount] = useState(() => (((s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents) || 0) / 100).toFixed(2));
+  const [amountError, setAmountError] = useState<string | null>(null);
   return (
     <ConfirmDialog
       open
@@ -1011,6 +1032,36 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                   Cancel court on CourtReserve
                 </CourtReserveLink>
               )}
+              {askCharge && (
+                <fieldset className="charge-ask">
+                  <legend>Were you charged for this court?</legend>
+                  <div className="segmented" role="group" aria-label="Were you charged for this court?">
+                    <button type="button" aria-pressed={!charged} onClick={() => setCharged(false)}>
+                      No
+                    </button>
+                    <button type="button" aria-pressed={charged} onClick={() => setCharged(true)}>
+                      Yes
+                    </button>
+                  </div>
+                  {charged && (
+                    <label className="field">
+                      Amount charged
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={amount}
+                        onChange={(e) => {
+                          setAmount(e.target.value);
+                          setAmountError(null);
+                        }}
+                        aria-invalid={amountError ? true : undefined}
+                      />
+                      {amountError && <span className="field-error">{amountError}</span>}
+                    </label>
+                  )}
+                  <p className="small muted">A Yes counts as the court cost for this canceled game in Money. Only you see this.</p>
+                </fieldset>
+              )}
             </>
           )}
         </div>
@@ -1019,8 +1070,19 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
       danger={!reopening}
       busy={busy}
       onConfirm={async () => {
+        let chargedCents = 0;
+        if (askCharge && charged) {
+          const cents = parseDollars(amount);
+          if (cents === null) return setAmountError('Enter an amount like 48 or 48.50.');
+          chargedCents = cents;
+        }
         const ok = await run(
-          () => api('POST', `/api/admin/sessions/${s.id}/decision`, reopening ? { decision: 'reopen' } : { decision: 'cancel', confirm: true }),
+          () =>
+            api(
+              'POST',
+              `/api/admin/sessions/${s.id}/decision`,
+              reopening ? { decision: 'reopen' } : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}) },
+            ),
           reopening ? 'Session reopened' : 'Session canceled',
         );
         // After a cancel, go straight to the text for the group and who to pay back.

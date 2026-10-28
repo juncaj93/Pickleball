@@ -1,0 +1,72 @@
+/* Organizer credit: the buttons under a player row, the Credit part of a player's sheet,
+   and the small note under "Credits owed". Uses the tokens in styles.css only. */
+
+/* Own full-width line under the player row (the row is a grid), or under the balance in the sheet. */
+.credit-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 0 8px;
+  min-width: 0;
+}
+.credit-actions > .btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.p-held.p-pot {
+  color: var(--ok-fg);
+}
+
+.credit-section {
+  gap: 8px;
+}
+.credit-title {
+  margin: 0;
+  font-size: 1rem;
+}
+.credit-balance {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.credit-section > .credit-actions {
+  padding-bottom: 0;
+}
+.credit-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.credit-history > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.93rem;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.credit-history > li:last-child {
+  border-bottom: 0;
+}
+.credit-history > li.ended {
+  color: var(--ink-2);
+}
+.credit-history > li.ended .credit-line {
+  text-decoration: line-through;
+}
+.credit-why {
+  font-size: 0.82rem;
+  color: var(--ink-2);
+}
+
+/* "Includes $14 kept from canceled games..." under Credits owed. */
+.kv > .kv-note {
+  grid-column: 1 / -1;
+  margin: -2px 0 0;
+  font-size: 0.82rem;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}

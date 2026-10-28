@@ -52,8 +52,12 @@ export interface PlayerSessionView {
     creditComing: boolean;
     /** What they still owe for this session, after any credit (0 when paid). */
     oweCents: number;
-    /** Credit coming off this session. */
+    /** Credit coming off this session (the older $5 credit, and credit they already used on it). */
     creditCents: number;
+    /** Paid in full with credit from their pot: shows "Paid with credit". */
+    paidWithCredit: boolean;
+    /** What "Use credit" would take off this session now: the smaller of their pot and what they owe. 0 hides the button. */
+    useCreditCents: number;
   };
 }
 
@@ -83,8 +87,10 @@ export interface GroupView {
    * whose game day has reached 8:00 AM. Nothing before that.
    */
   payDue: GroupView['owed'];
-  /** Credit waiting for a future session they haven't signed up for yet. */
+  /** Their credit: the pot plus any $5 credit not yet matched to a session they owe for. Only their own. */
   creditBalanceCents: number;
+  /** Of that, the pot: what "Use credit" can spend on a game they owe for. */
+  potCents: number;
   /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
   suggestion: { sessionId: string; startsAt: string; endsAt: string; joinAs: 'in' | 'waitlist'; holiday: string | null } | null;
 }
@@ -113,8 +119,13 @@ export interface AdminRosterEntry {
   promotionNotifiedAt: string | null;
   /** Last two of six. */
   discount: boolean;
-  /** Credit coming off this seat (planned if unpaid). */
+  /** Credit coming off this seat: the older $5 credit (planned if unpaid) plus credit used from the pot. */
   creditCents: number;
+  /** Of `creditCents`, what came from the pot ("Use credit"). */
+  potCreditCents: number;
+  /** The payment for this game was kept as credit (it was canceled, or the player left). Null if not. */
+  keptAsCreditAt: string | null;
+  keptAsCreditCents: number;
   /**
    * This is the organizer. They pay the venue, not the other players, so
    * there is no share or credit here, and their paid mark means "Court paid".
@@ -170,6 +181,8 @@ export interface AdminSessionView {
   court: CourtDue | null;
   /** Organizer's private record of the court cost. Never sent to players. */
   courtCostCents: number | null;
+  /** A canceled game the venue still charged for (answered Yes to "Were you charged?"): that amount counts as its court cost. */
+  chargedCents: number | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   /** Moved from its usual time (rescheduled). */
   moved: boolean;
@@ -260,8 +273,13 @@ export interface AdminDashboard {
   audit: AuditEntry[];
   /** Upcoming sessions hidden by the first session date, which the organizer can show. */
   hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
-  /** Open credit per player (earned, not yet used or cleared). */
+  /** Open $5 credit per player (earned, not yet used or cleared). */
   credits: { playerId: string; name: string; balanceCents: number }[];
+  /**
+   * The credit pot per player who has any: `balanceCents` is the pot, `refundCents` is what "Refund credit
+   * balance" pays back (the pot plus any older $5 credit not matched to a game they owe), and every entry, oldest first.
+   */
+  creditLedger: { playerId: string; balanceCents: number; refundCents: number; entries: CreditEntryView[] }[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
   /** Settings > Alerts: the switches and whether Telegram is set up. Never the token or chat ID. */
@@ -276,6 +294,20 @@ export interface AdminDashboard {
     lastError: string | null;
   };
   now: string;
+}
+
+/** One line of a player's credit history. */
+export interface CreditEntryView {
+  id: string;
+  /** kept: paid for a game that was canceled or left. used: spent on a game. refunded: balance paid back by Venmo. */
+  kind: 'kept' | 'used' | 'refunded';
+  cents: number;
+  sessionId: string | null;
+  sessionStartsAt: string | null;
+  at: string;
+  /** Undone, or went back to the player. It no longer counts. */
+  endedAt: string | null;
+  endedReason: 'undone' | 'unmarked' | 'dropped' | 'canceled' | null;
 }
 
 export interface ActionLinkDraft {
@@ -306,7 +338,10 @@ export interface MonthlyMoney {
   collectedCents: number;
   /** The full court cost of every session played. */
   courtCostCents: number;
+  /** Credits still owed to players: the $5 credits and credit kept from canceled games. */
   creditsOwedCents: number;
+  /** Of `creditsOwedCents`, the credit kept from canceled games. That money was never in Collected, so it is not taken off Left. */
+  keptCreditCents: number;
   /** Paid by other players for games not played yet (or canceled and not refunded yet). Not in Collected until played. */
   heldCents: number;
   /** Collected minus court costs minus credits owed. */
@@ -322,8 +357,10 @@ export interface MonthlyMoney {
     id: string;
     startsAt: string;
     endsAt: string;
-    /** played: counted. canceled / upcoming / not_played: shown but not counted. */
+    /** played: counted. canceled / upcoming / not_played: shown but not counted (a canceled game the venue charged for still counts its court cost). */
     state: 'played' | 'canceled' | 'upcoming' | 'not_played';
+    /** A canceled game the venue still charged for. */
+    charged: boolean;
     collectedCents: number;
     courtCostCents: number;
     /** No cost entered on the session, so the typical cost was used. */
