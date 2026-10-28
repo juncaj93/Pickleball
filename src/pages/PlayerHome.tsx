@@ -3,7 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, isDemo, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, demoOn, useDemoVersion } from '../lib';
+import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, demoOn, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
@@ -357,30 +357,13 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
   );
 }
 
-/**
- * "I tapped Pay" for these sign-ups, remembered on this phone only. It never
- * marks anyone paid; it only brings out the quiet "I paid" button. Keyed by
- * the sign-up time, so "I'm out" then "I'm in" again starts fresh.
- */
-function useSent(playerId: string | undefined, signups: { sessionId: string; signupAt: string }[]) {
-  const keys = signups.map((x) => `pb_sent_${playerId}_${x.sessionId}_${x.signupAt}`);
-  const [, bump] = useState(0);
-  return {
-    sent: keys.length > 0 && keys.every((k) => storageGet(k) === '1'),
-    markSent: () => {
-      for (const k of keys) storageSet(k, '1');
-      bump((n) => n + 1);
-    },
-  };
-}
-
 const PHONE = /iPhone|iPad|iPod|Android/i;
 
 /**
  * Pay. This page never leaves its tab, so coming back lands right on it with
  * "I paid" ready. On a phone the Venmo app opens on top of it; on a computer
  * the Venmo website opens in a new tab (the link's target="_blank"). In the
- * organizer's demo nothing opens: "I paid" just shows, as it would.
+ * organizer's demo nothing opens.
  */
 function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: string | null; appUrl: string | null }) {
   if (demoOn()) {
@@ -431,7 +414,6 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
-  const { sent, markSent } = useSent(g.me?.id, due);
   const paid = usePaid(due.map((o) => o.sessionId), onChanged);
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
@@ -459,7 +441,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
           </p>
         )
       )}
-      {/* Pay always stays; "I paid" joins it, quiet, once they've tapped Pay. */}
+      {/* Pay, and a quiet "I paid" right with it for anyone who paid another way (Apple Cash, cash). */}
       {pay.url ? (
         <>
           <a
@@ -469,18 +451,13 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
-            onClick={(e) => {
-              markSent();
-              openVenmo(e, pay);
-            }}
+            onClick={(e) => openVenmo(e, pay)}
           >
             Pay with Venmo
           </a>
-          {sent && (
-            <button className="btn block secondary" disabled={paid.busy} onClick={() => paid.set(true)}>
-              {paid.busy ? 'Saving…' : 'I paid'}
-            </button>
-          )}
+          <button className="btn block secondary" disabled={paid.busy} onClick={() => paid.set(true)}>
+            {paid.busy ? 'Saving…' : 'I paid'}
+          </button>
         </>
       ) : (
         <button className="btn block big" disabled={paid.busy} onClick={() => paid.set(true)}>
@@ -624,7 +601,6 @@ function RowPay({
 }) {
   const mine = s.mine!;
   const btn = 'btn small pay-small';
-  const { sent, markSent } = useSent(g.me?.id, [{ sessionId: s.id, signupAt: mine.signupAt }]);
   const paid = usePaid([s.id], onChanged);
   if (mine.paymentStatus === 'paid') {
     return (
@@ -649,7 +625,7 @@ function RowPay({
       </button>
     );
   }
-  // Pay always stays while they owe; a quiet "I paid" joins it once they've tapped Pay.
+  // While they owe: Pay, and a quiet "I paid" next to it for anyone who paid another way.
   return (
     <span className="pay-pair">
       <a
@@ -659,18 +635,13 @@ function RowPay({
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
-        onClick={(e) => {
-          markSent();
-          openVenmo(e, pay);
-        }}
+        onClick={(e) => openVenmo(e, pay)}
       >
         Pay {formatPrice(mine.oweCents)}
       </a>
-      {sent && (
-        <button className="btn small secondary pay-small" disabled={paid.busy} onClick={() => paid.set(true)}>
-          I paid
-        </button>
-      )}
+      <button className="btn small secondary pay-small" disabled={paid.busy} onClick={() => paid.set(true)}>
+        I paid
+      </button>
     </span>
   );
 }

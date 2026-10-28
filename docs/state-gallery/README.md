@@ -44,7 +44,7 @@ Sheets are made from the pictures with a small image script after `node e2e/gall
 
 <img src="player/02-game-day-pay-card-390-light.jpg" width="240" alt="390px light"> <img src="player/02-game-day-pay-card-390-dark.jpg" width="240" alt="390px dark">
 
-### After tapping Pay: "I paid" appears next to it
+### "I paid" sits next to Pay the whole time they owe (Apple Cash or cash too)
 
 <img src="player/03-pay-then-i-paid-390-light.jpg" width="240" alt="390px light"> <img src="player/03-pay-then-i-paid-390-dark.jpg" width="240" alt="390px dark">
 
