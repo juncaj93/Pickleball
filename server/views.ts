@@ -123,6 +123,7 @@ export function adminPlayerView(p: PlayerRow): AdminPlayer {
     sortOrder: p.sort_order,
     usualDays: usualDaysOf(p),
     isNew: !!p.is_new,
+    venmo: p.venmo_handle,
     lateDrops: 0,
     played: 0,
   };

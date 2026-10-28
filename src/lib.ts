@@ -339,3 +339,21 @@ export function setTheme(choice: ThemeChoice) {
     document.documentElement.setAttribute('data-theme', choice);
   }
 }
+
+const PHONE = /iPhone|iPad|iPod|Android/i;
+
+/**
+ * Pay. This page never leaves its tab, so coming back lands right on it with
+ * "I paid" ready. On a phone the Venmo app opens on top of it; on a computer
+ * the Venmo website opens in a new tab (the link's target="_blank"). In the
+ * organizer's demo nothing opens.
+ */
+export function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: string | null; appUrl: string | null }) {
+  if (demoOn()) {
+    e.preventDefault();
+    return;
+  }
+  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+  e.preventDefault();
+  window.location.href = pay.appUrl;
+}

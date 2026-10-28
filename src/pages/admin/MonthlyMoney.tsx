@@ -34,7 +34,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
   });
   const pretend = usePretend();
   const demo = useDemoVersion();
-  const load = useLoad(() => api<MonthlyMoney>('GET', `/api/admin/money?month=${month}`), [month, pretend, demo]);
+  const load = useLoad(() => api<MonthlyMoney>('GET', `/api/admin/money?month=${month}`), [month, pretend, demo, ctx.d]);
   const m = load.data;
   return (
     <section className="stack" aria-labelledby="mm-title">
@@ -96,6 +96,12 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               <dd>{minus(m.courtCostCents)}</dd>
               <dt>Credits owed</dt>
               <dd>{minus(m.creditsOwedCents)}</dd>
+              {m.heldCents > 0 && (
+                <>
+                  <dt className="held-amt">Held</dt>
+                  <dd className="held-amt">{formatPrice(m.heldCents)}</dd>
+                </>
+              )}
               <dt>Membership</dt>
               <dd>{formatPrice(m.membershipCents)}</dd>
               <dt>Sessions played</dt>

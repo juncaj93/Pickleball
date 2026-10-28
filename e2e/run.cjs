@@ -2180,7 +2180,10 @@ async function main() {
       const row = back.locator('li', { hasText: payer });
       await row.getByText(/paid \$\d+/).waitFor();
       await admin.screenshot({ path: path.join(SHOTS, 'admin-canceled-text.png') });
-      await row.getByRole('checkbox', { name: 'Refunded' }).check();
+      // Refund opens Venmo (nothing is marked), then Mark refunded records it.
+      await row.getByRole('link', { name: /^Refund / }).click();
+      assert((await row.getByText('Refunded', { exact: true }).count()) === 0, 'tapping Refund must not mark anything refunded');
+      await row.getByRole('button', { name: 'Mark refunded' }).click();
       await admin.locator('.toast', { hasText: 'Refunded' }).waitFor();
       await back.getByText('(all done)', { exact: false }).waitFor();
       await admin.keyboard.press('Escape');
@@ -2344,7 +2347,8 @@ async function main() {
         await sc.locator('.late-tag').waitFor();
         await sc.locator('.late-line').getByText(/Frankie \d{1,2}:\d{2} (AM|PM)/).waitFor();
         await admin.screenshot({ path: path.join(SHOTS, 'admin-late-drop.png'), fullPage: true });
-        await card.getByRole('checkbox', { name: 'Refunded' }).check();
+        await card.getByRole('link', { name: /^Refund Frankie/ }).click();
+        await card.getByRole('button', { name: 'Mark refunded' }).click();
         await admin.locator('.toast', { hasText: 'Refunded' }).waitFor();
         await card.getByRole('button', { name: 'Done', exact: true }).click();
         await card.waitFor({ state: 'detached' });

@@ -309,7 +309,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     checkin: 'Check-in texts due',
     daybefore: `${formatShortDate(s.startsAt, tz)}: ${countSummary(s.confirmedCount)}`,
     lastcall: `Last call, ${formatShortDate(s.startsAt, tz)}: ${s.confirmedCount} in`,
-    refund: 'Pay back',
+    refund: s.state.flags.canceled ? `${formatShortDate(s.startsAt, tz)} was canceled. Refund needed:` : `${formatShortDate(s.startsAt, tz)}: a paid player left. Refund needed:`,
     latedrop: 'Late drop',
   }[item.kind];
 

@@ -1,3 +1,4 @@
+import { parseVenmoHandle } from '../shared/money';
 import { HttpError } from './http';
 
 // Every request field is checked here before it touches the database.
@@ -103,4 +104,12 @@ export function optionalDate(v: unknown, field: string): string | null {
     bad(field, 'Pick a date.');
   }
   return v;
+}
+
+/** The Venmo field on a player: left out keeps what is saved (undefined), blank clears it, else a readable link or @name. */
+export function venmoHandle(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  const r = parseVenmoHandle(v);
+  if (!r.ok) throw new HttpError(400, 'invalid_venmo', "I couldn't read that. Paste the link from the Venmo app (your profile's Share button), or type @Name.");
+  return r.handle;
 }

@@ -56,6 +56,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   let collected = 0;
   let courts = 0;
   let creditsOwed = 0;
+  let held = 0;
   const sessions: MonthlyMoney['sessions'] = [];
   for (const s of results) {
     const roster = await loadRoster(ctx.db, s.id);
@@ -68,6 +69,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
       .filter((r) => r.player_id !== organizerId && r.payment_status === 'paid' && !r.refunded_at)
       .reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
     const cost = courtCostOf(s, settings);
+    // Money in for a game that hasn't been played (or was canceled and not paid back yet) is held, not collected.
+    if (state !== 'played') held += paid;
     if (state === 'played') {
       collected += paid;
       courts += cost;
@@ -92,6 +95,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     collectedCents: collected,
     courtCostCents: courts,
     creditsOwedCents: creditsOwed,
+    heldCents: held,
     netCents: net,
     surplusCents: Math.max(0, net),
     coveredCents: Math.max(0, -net),

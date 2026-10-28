@@ -1,12 +1,12 @@
 import { type FormEvent, useState } from 'react';
 import type { AdminPlayer, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPhone } from '../../../shared/messages';
-import { formatPrice } from '../../../shared/money';
+import { formatPrice, venmoHandleText } from '../../../shared/money';
 import { formatShortDate } from '../../../shared/time';
 import { api, ApiError } from '../../lib';
 import { ConfirmDialog, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { balanceOf } from './todo';
+import { balanceOf, heldCents, isPlayed } from './todo';
 
 const DAYS = [
   { day: 2, label: 'Tue' },
@@ -45,6 +45,7 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
                 ) : (
                   <span className="p-bal zero">$0</span>
                 )}
+                {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held">{formatPrice(heldCents(ctx.d, p.id))} held</span>}
                 <span className="p-played">{p.played} played</span>
               </span>
               <button className="btn small secondary p-edit" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
@@ -122,7 +123,17 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
                     {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                   </span>
                   <span className="small muted">
-                    {r.paymentStatus === 'paid' ? `Paid ${formatPrice(amount ?? 0)}` : amount !== null ? `${formatPrice(amount)} unpaid` : 'Nothing owed'}
+                    {r.paymentStatus === 'paid' ? (
+                      isPlayed(s, Date.parse(ctx.d.now)) || r.refundedAt ? (
+                        r.refundedAt ? `Paid ${formatPrice(amount ?? 0)}, refunded` : `Paid ${formatPrice(amount ?? 0)}`
+                      ) : (
+                        <span className="held-amt">Paid {formatPrice(amount ?? 0)}, not played yet</span>
+                      )
+                    ) : amount !== null ? (
+                      `${formatPrice(amount)} unpaid`
+                    ) : (
+                      'Nothing owed'
+                    )}
                     {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit` : ''}
                   </span>
                 </span>
@@ -160,6 +171,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
   const toast = useToast();
   const [name, setName] = useState(player?.name ?? '');
   const [phone, setPhone] = useState(player?.phone ? formatPhone(player.phone) : '');
+  const [venmo, setVenmo] = useState(venmoHandleText(player?.venmo ?? null));
   const [isRegular, setRegular] = useState(player?.isRegular ?? true);
   const [days, setDays] = useState<number[]>(player?.usualDays ?? []);
   const [isActive, setActive] = useState(player?.isActive ?? true);
@@ -194,6 +206,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       isActive,
       canReceiveSubstituteInvites: player?.canReceiveSubstituteInvites ?? true,
       usualDays: days,
+      venmo,
     };
     try {
       if (player) await api('PUT', `/api/admin/players/${player.id}`, body);
@@ -218,6 +231,20 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       <label className="field">
         Phone (optional)
         <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={25} placeholder="(248) 555-1234" />
+      </label>
+      <label className="field">
+        Venmo link or @name (optional)
+        <input
+          type="text"
+          value={venmo}
+          onChange={(e) => setVenmo(e.target.value)}
+          maxLength={120}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="@Name or venmo.com/u/Name"
+        />
+        <span className="small muted">For refunds. Only you see this.</span>
       </label>
       <div className="stack" style={{ gap: 6 }}>
         <span className="small" style={{ fontWeight: 600 }}>
