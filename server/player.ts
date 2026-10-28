@@ -21,6 +21,7 @@ import {
   loadSessions,
   lookbackIso,
   openCredits,
+  organizerIdOf,
   pricesFor,
   settingsOf,
   usualDaysOf,
@@ -85,12 +86,14 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const credits = await loadCredits(ctx.db, group.id);
   const plan = creditPlan(sessions, rosters, credits, settings);
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
+  // The organizer pays the venue, so they never owe, pay or earn credit as a player.
+  const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
 
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
   let creditBalanceCents = 0;
   if (me) {
-    for (const s of sessions) {
+    for (const s of meIsOrganizer ? [] : sessions) {
       if (s.status === 'canceled') continue;
       const roster = rosters.get(s.id) ?? [];
       const mine = roster.find((r) => r.player_id === me.id && r.status === 'confirmed' && r.payment_status === 'unpaid');
@@ -112,7 +115,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Credit not yet matched to a session they've signed up for.
     const planned = new Set([...plan.values()].flatMap((p) => p.ids));
     creditBalanceCents = openCredits(credits)
-      .filter((c) => c.playerId === me.id && !planned.has(c.id))
+      .filter((c) => !meIsOrganizer && c.playerId === me.id && !planned.has(c.id))
       .reduce((sum, c) => sum + c.amountCents, 0);
     // Regulars get a nudge for the next usual day they haven't answered.
     const days = usualDaysOf(me);
@@ -152,7 +155,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
       .map((s) =>
-        playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, me ? (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) : 0),
+        playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, me && !meIsOrganizer ? (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) : 0, meIsOrganizer),
       ),
     owed,
     payDue: owed.filter((o) => {

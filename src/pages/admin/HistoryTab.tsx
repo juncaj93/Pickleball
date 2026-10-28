@@ -34,9 +34,9 @@ export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
 /** "All paid", "2 unpaid", or nothing when nobody owed anything. */
 function moneyStatus(s: AdminSessionView): { text: string; tone: 'ok' | 'warn' } | null {
   if (s.state.flags.canceled) return null;
-  const owing = s.roster.filter((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
+  const owing = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
   if (owing.length) return { text: `${owing.length} unpaid`, tone: 'warn' };
-  if (s.roster.some((r) => r.status === 'confirmed' && r.paymentStatus === 'paid')) return { text: 'All paid', tone: 'ok' };
+  if (s.roster.some((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'paid')) return { text: 'All paid', tone: 'ok' };
   return null;
 }
 

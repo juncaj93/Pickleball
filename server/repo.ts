@@ -122,6 +122,26 @@ export async function getPlayers(db: D1Database, groupId: string): Promise<Playe
   return results;
 }
 
+/**
+ * The organizer's own player record, without making one: the saved id if it
+ * still points at a player, else the player whose name matches the organizer
+ * name in Settings. Null when there is none. The organizer pays the venue
+ * themselves, so this person is never counted as a player who owes.
+ */
+export async function organizerIdOf(db: D1Database, group: Pick<GroupRow, 'id' | 'organizer_player_id' | 'organizer_name'>): Promise<string | null> {
+  if (group.organizer_player_id) {
+    const p = await db
+      .prepare('SELECT id FROM players WHERE id = ? AND group_id = ?')
+      .bind(group.organizer_player_id, group.id)
+      .first<{ id: string }>();
+    if (p) return p.id;
+  }
+  const name = (group.organizer_name ?? '').trim().toLowerCase();
+  if (!name) return null;
+  const all = await getPlayers(db, group.id);
+  return all.find((x) => x.display_name.trim().toLowerCase() === name)?.id ?? null;
+}
+
 export async function getSession(db: D1Database, groupId: string, sessionId: string): Promise<SessionRow | null> {
   return db.prepare('SELECT * FROM sessions WHERE id = ? AND group_id = ?').bind(sessionId, groupId).first<SessionRow>();
 }
@@ -244,6 +264,11 @@ export function pricesFor(session: SessionRow, roster: RosterRow[], settings: Gr
   );
 }
 
+/** What the venue charges for a session: the cost on the booking, else the typical court cost. */
+export function courtCostOf(session: Pick<SessionRow, 'court_cost_cents'>, settings: GroupSettings): number {
+  return session.court_cost_cents ?? settings.typicalCourtCostCents;
+}
+
 export function sharesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, number> {
   return new Map([...pricesFor(session, roster, settings)].map(([id, p]) => [id, p.cents]));
 }
@@ -296,11 +321,13 @@ export async function issueCredits(db: D1Database, group: GroupRow, nowMs: numbe
     .bind(group.id, nowIso, visibleFrom(group))
     .all<SessionRow>();
   let issued = 0;
+  // The organizer pays the venue, not the other players, so they earn no credit.
+  const organizerId = await organizerIdOf(db, group);
   for (const s of results) {
     const stmts = [];
     if (s.status !== 'canceled' && settings.creditCentsWhenSix > 0) {
       for (const [playerId, price] of pricesFor(s, await loadRoster(db, s.id), settings)) {
-        if (!price.creditComing) continue;
+        if (!price.creditComing || playerId === organizerId) continue;
         if (isPretend(db)) {
           const id = `pretend-${s.id}-${playerId}`;
           db.virtualCredits.set(id, {

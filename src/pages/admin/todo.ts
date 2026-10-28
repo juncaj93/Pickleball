@@ -24,7 +24,7 @@ export const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.st
 
 /** Who to pay back: everyone who paid for a canceled session, or anyone who paid and then dropped. */
 export const refundRows = (s: AdminSessionView) =>
-  s.roster.filter((r) => r.paymentStatus === 'paid' && (s.state.flags.canceled || r.status === 'withdrawn'));
+  s.roster.filter((r) => !r.isOrganizer && r.paymentStatus === 'paid' && (s.state.flags.canceled || r.status === 'withdrawn'));
 
 /**
  * The organizer's short list: things that aren't one session card's court or
@@ -65,7 +65,7 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   for (const x of s) {
     if (x.state.flags.canceled || nowMs < Date.parse(x.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
     for (const r of x.roster) {
-      if (r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) {
+      if (!r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null) {
         (isToday(x.startsAt) ? tonight : owed).push({ session: x, playerId: r.playerId, name: r.name, cents: r.shareCents - r.creditCents });
       }
     }
@@ -131,13 +131,15 @@ export const shortOfPlayers = (s: AdminSessionView) => s.confirmedCount !== 4 &&
  * $9", never again as "credit $5". Same rules as "Who owes" and the player's own screen.
  */
 export function balanceOf(d: AdminDashboard, playerId: string): { owedCents: number; creditCents: number } {
+  // The organizer pays the venue, so there is never a player balance for them.
+  if (d.me?.id === playerId) return { owedCents: 0, creditCents: 0 };
   const nowMs = Date.parse(d.now);
   let owed = 0;
   let planned = 0;
   for (const s of d.sessions) {
     if (s.state.flags.canceled) continue;
     for (const r of s.roster) {
-      if (r.playerId !== playerId || r.status !== 'confirmed' || r.paymentStatus !== 'unpaid' || r.shareCents === null) continue;
+      if (r.isOrganizer || r.playerId !== playerId || r.status !== 'confirmed' || r.paymentStatus !== 'unpaid' || r.shareCents === null) continue;
       if (nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
       planned += r.creditCents;
       owed += r.shareCents - r.creditCents;

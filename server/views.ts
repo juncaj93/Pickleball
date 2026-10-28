@@ -7,11 +7,13 @@ import type {
 } from '../shared/api';
 import { cardWindows } from '../shared/cards';
 import { holidayFor } from '../shared/holidays';
+import { courtSplit } from '../shared/pricing';
 import type { GroupSettings } from '../shared/settings';
 import { goingText, joinOutcome, openSpots } from '../shared/spots';
 import { computeSessionState } from '../shared/status';
 import {
   confirmedOf,
+  courtCostOf,
   type PlayerRow,
   type RosterRow,
   pricesFor,
@@ -31,6 +33,17 @@ function reasonNow(reason: RosterRow['promotion_reason'], confirmedCount: number
   return reason === 'made_six' && confirmedCount !== 6 ? 'spot_opened' : reason;
 }
 
+/** The organizer pays the venue, so their own player screen carries no share, Pay, credit or "paid". */
+const NO_MONEY = {
+  shareCents: null,
+  paymentStatus: 'not_applicable',
+  selfPaid: false,
+  discount: false,
+  creditComing: false,
+  oweCents: 0,
+  creditCents: 0,
+} as const;
+
 /** What a player sees. No phone numbers, and payment details only for their own row. */
 export function playerSessionView(
   session: SessionRow,
@@ -41,6 +54,8 @@ export function playerSessionView(
   tz: string,
   /** Credit coming off this player's seat in this session (unpaid seats only). */
   myCredit = 0,
+  /** The viewer is the organizer, who pays the venue: no share, Pay, credit or "paid" shows for them. */
+  isOrganizer = false,
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -50,6 +65,25 @@ export function playerSessionView(
   const canceled = session.status === 'canceled';
   const six = !canceled && confirmed.length === 6;
   const othersWaiting = waitlist.filter((r) => r.player_id !== meId).length;
+  const ownRow: PlayerSessionView['mine'] = mine
+    ? {
+        status: mine.status,
+        waitlistPosition: mine.status === 'waitlisted' ? waitlist.findIndex((r) => r.id === mine.id) + 1 : null,
+        attendanceConfirmed: !!mine.attendance_confirmed_at,
+        promotion: mine.status === 'confirmed' ? reasonNow(mine.promotion_reason, confirmed.length) : null,
+        shareCents: prices.get(mine.player_id)?.cents ?? null,
+        paymentStatus: mine.payment_status,
+        selfPaid: !!mine.self_paid_at,
+        signupAt: mine.confirmed_at ?? mine.claimed_at,
+        discount: prices.get(mine.player_id)?.discount ?? false,
+        creditComing: prices.get(mine.player_id)?.creditComing ?? false,
+        oweCents:
+          mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id)
+            ? Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit)
+            : 0,
+        creditCents: mine.payment_status === 'unpaid' ? myCredit : 0,
+      }
+    : null;
   return {
     id: session.id,
     startsAt: session.starts_at,
@@ -73,25 +107,7 @@ export function playerSessionView(
     past: nowMs >= Date.parse(session.ends_at),
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
-    mine: mine
-      ? {
-          status: mine.status,
-          waitlistPosition: mine.status === 'waitlisted' ? waitlist.findIndex((r) => r.id === mine.id) + 1 : null,
-          attendanceConfirmed: !!mine.attendance_confirmed_at,
-          promotion: mine.status === 'confirmed' ? reasonNow(mine.promotion_reason, confirmed.length) : null,
-          shareCents: prices.get(mine.player_id)?.cents ?? null,
-          paymentStatus: mine.payment_status,
-          selfPaid: !!mine.self_paid_at,
-          signupAt: mine.confirmed_at ?? mine.claimed_at,
-          discount: prices.get(mine.player_id)?.discount ?? false,
-          creditComing: prices.get(mine.player_id)?.creditComing ?? false,
-          oweCents:
-            mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id)
-              ? Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit)
-              : 0,
-          creditCents: mine.payment_status === 'unpaid' ? myCredit : 0,
-        }
-      : null,
+    mine: ownRow && isOrganizer ? { ...ownRow, ...NO_MONEY } : ownRow,
   };
 }
 
@@ -142,6 +158,8 @@ export function adminSessionView(
   tz: string,
   /** Credit on each seat: planned for unpaid seats, used for paid ones. */
   creditFor: (playerId: string) => number,
+  /** The organizer's player id: they pay the venue, so they have no share and are never counted as owing. */
+  organizerId: string | null = null,
 ): AdminSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -165,9 +183,10 @@ export function adminSessionView(
       selfPaid: !!r.self_paid_at,
       paidAt: r.paid_at,
       paymentAmountCents: r.payment_amount_cents,
-      shareCents: prices.get(r.player_id)?.cents ?? null,
-      discount: prices.get(r.player_id)?.discount ?? false,
-      creditCents: r.status === 'confirmed' ? creditFor(r.player_id) : 0,
+      shareCents: r.player_id === organizerId ? null : (prices.get(r.player_id)?.cents ?? null),
+      discount: r.player_id === organizerId ? false : (prices.get(r.player_id)?.discount ?? false),
+      creditCents: r.status === 'confirmed' && r.player_id !== organizerId ? creditFor(r.player_id) : 0,
+      isOrganizer: r.player_id === organizerId,
       waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
       promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
       refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
@@ -177,8 +196,20 @@ export function adminSessionView(
       promotionNotifiedAt: r.promotion_notified_at,
     }));
 
-  const payable = session.status !== 'canceled' ? confirmed.length : 0;
-  const paidCount = payable ? confirmed.filter((r) => r.payment_status === 'paid').length : 0;
+  // Other players only: the organizer pays the venue and is never counted as owing.
+  const others = confirmed.filter((r) => r.player_id !== organizerId);
+  const payable = session.status !== 'canceled' ? others.length : 0;
+  const paidCount = payable ? others.filter((r) => r.payment_status === 'paid').length : 0;
+
+  // The organizer's court row: the full court cost, what the other players
+  // cover under the usual rules, and whether the venue has been paid.
+  const myRow = organizerId ? roster.find((r) => r.player_id === organizerId) : undefined;
+  const hasCourt = session.status !== 'canceled' && (session.booking_status === 'booked' || confirmed.length > 0);
+  const courtCost = courtCostOf(session, settings);
+  const split = courtSplit(
+    courtCost,
+    others.map((r) => (r.payment_status === 'paid' ? (r.payment_amount_cents ?? 0) : (prices.get(r.player_id)?.cents ?? 0) - creditFor(r.player_id))),
+  );
 
   return {
     id: session.id,
@@ -200,6 +231,9 @@ export function adminSessionView(
     waitlistCount: waitlist.length,
     paidCount,
     payableCount: payable,
+    court: hasCourt
+      ? { costCents: courtCost, typicalCost: session.court_cost_cents === null, ...split, paid: myRow?.payment_status === 'paid', paidAt: myRow?.payment_status === 'paid' ? myRow.paid_at : null }
+      : null,
     courtCostCents: session.court_cost_cents,
     courtState: session.court_state,
     moved: !!session.planned_starts_at && session.planned_starts_at !== session.starts_at,

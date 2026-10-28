@@ -79,3 +79,27 @@ backup file.
 - Unit and API tests: 247 passed (`tests/audit-fixes.test.ts`, `tests/decisions.test.ts`).
 - Browser tests (`npm run test:e2e`): see the latest run in the final report.
 - Typecheck: clean.
+
+## Organizer pays the court (Oct 28, 2026)
+
+The organizer's own row on Money > Who paid said "Alex owes $14", which was
+wrong: the organizer pays the venue the full court cost and the other players'
+$14s reimburse them. Fixed on organizer screens only; nothing changed for
+other players. No database change.
+
+- Live backup before the change: Oct 28, 2026, about 9:58 AM Eastern, a full SQL
+  export of the live database (9 players, 7 games, 7 sign-ups). Cloudflare
+  restore point (Time Travel bookmark, good for 7 days):
+  `0000009b-00000000-00005112-d4c2d6ff381b3b31af95071bd100d991`.
+- Court row on every session's Who paid list: "You pay Northville Pickleball",
+  the full court cost, "Players cover $X, your share $Y". Mark paid / Unmark
+  now mean Court paid / Court due. No Payment reminder on it.
+- Counts ("1 of 3 paid", "2 owe"), Who owes you, Mark paid tonight, reminders,
+  the Players tab and the monthly summary count other players only. The
+  organizer earns no $5 credit and has no Pay button or pay card.
+- Monthly bottom line: "Surplus: $X toward the $30 membership" only when
+  players paid more than the courts cost, else "You covered $X of the court
+  costs".
+- Tests: `tests/organizer-court.test.ts` (17) and `e2e/court.cjs`, plus every
+  earlier money test re-run. Three old checks changed on purpose: the
+  "Short: $X" wording, and the organizer no longer having a $14 share.

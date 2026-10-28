@@ -73,7 +73,7 @@ describe('one-off games', () => {
 });
 
 describe('the organizer playing', () => {
-  it('signs up under their Settings name, counts toward 4, pays like anyone, and can drop out', async () => {
+  it('signs up under their Settings name, counts toward 4, has no player share (they pay the court), and can drop out', async () => {
     const ctx = await setupGroup();
     await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Robin' });
     const s = await firstSession(ctx);
@@ -83,7 +83,7 @@ describe('the organizer playing', () => {
     const d = await dash(ctx);
     expect(d.me).toMatchObject({ name: 'Robin' });
     const mine = d.sessions.find((x: any) => x.id === s.id).roster.find((r: any) => r.playerId === d.me.id);
-    expect(mine).toMatchObject({ name: 'Robin', status: 'confirmed', shareCents: 1400 });
+    expect(mine).toMatchObject({ name: 'Robin', status: 'confirmed', shareCents: null, isOrganizer: true });
     expect(d.players.some((p: any) => p.name === 'Robin')).toBe(true);
     const day = formatShortDate(s.startsAt, TZ);
     expect((await activity(ctx))[0]).toBe(`Robin said I'm in for ${day}`);

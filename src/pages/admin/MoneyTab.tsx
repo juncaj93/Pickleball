@@ -13,12 +13,15 @@ import { refundRows } from './todo';
 export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
   const tz = ctx.d.group.timezone;
-  const withMoney = ctx.d.sessions.filter((s) => !s.state.flags.canceled && s.payableCount > 0);
+  // Every session with a court to pay for: players' payments, and the organizer's court row.
+  const withMoney = ctx.d.sessions.filter((s) => !s.state.flags.canceled && s.court !== null);
   // Most recent games first: the ones people are paying for now.
   const started = withMoney.filter((s) => Date.parse(s.startsAt) <= nowMs).reverse();
   const upcoming = withMoney.filter((s) => Date.parse(s.startsAt) > nowMs);
   const payBack = ctx.d.sessions.filter((s) => refundRows(s).some((r) => !r.refundedAt));
-  const label = (s: AdminSessionView) => `${formatShortDate(s.startsAt, tz)} · ${s.paidCount} of ${s.payableCount} paid`;
+  // Counts are other players only; the organizer is never counted.
+  const label = (s: AdminSessionView) =>
+    s.payableCount > 0 ? `${formatShortDate(s.startsAt, tz)} · ${s.paidCount} of ${s.payableCount} paid` : formatShortDate(s.startsAt, tz);
   const session = (s: AdminSessionView, open: boolean) => (
     <details key={s.id} className="money-sess card" open={open || undefined} data-session={s.id}>
       <summary>
@@ -36,7 +39,7 @@ export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
           Who paid
         </h2>
         {withMoney.length === 0 && <p className="muted small">Nobody is signed up yet.</p>}
-        {started.map((s) => session(s, s.paidCount < s.payableCount))}
+        {started.map((s) => session(s, s.paidCount < s.payableCount || s.court?.paid === false))}
         {upcoming.map((s) => session(s, false))}
       </section>
       {payBack.length > 0 && (

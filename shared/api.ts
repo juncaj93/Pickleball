@@ -115,6 +115,27 @@ export interface AdminRosterEntry {
   discount: boolean;
   /** Credit coming off this seat (planned if unpaid). */
   creditCents: number;
+  /**
+   * This is the organizer. They pay the venue, not the other players, so
+   * there is no share or credit here, and their paid mark means "Court paid".
+   */
+  isOrganizer: boolean;
+}
+
+/** Organizer only: the court row on a session's Who paid list. Never sent to players. */
+export interface CourtDue {
+  /** The full court cost for the session (the booking's cost, else the typical cost). */
+  costCents: number;
+  typicalCost: boolean;
+  /** What the other players owe for this session under the usual rules. */
+  playersCoverCents: number;
+  /** Court cost minus what players cover, never below $0. */
+  yourShareCents: number;
+  /** Players cover the whole court or more. */
+  covered: boolean;
+  /** The organizer paid the venue. */
+  paid: boolean;
+  paidAt: string | null;
 }
 
 export interface EligibleSubstitute {
@@ -142,8 +163,11 @@ export interface AdminSessionView {
   roster: AdminRosterEntry[];
   confirmedCount: number;
   waitlistCount: number;
+  /** Other players only; the organizer is never counted. */
   paidCount: number;
   payableCount: number;
+  /** The organizer's court row. Null when there is no court to pay for (canceled, or nobody in and not booked). */
+  court: CourtDue | null;
   /** Organizer's private record of the court cost. Never sent to players. */
   courtCostCents: number | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
@@ -274,13 +298,19 @@ export interface MonthlyMoney {
   month: string;
   /** "November 2026" */
   label: string;
+  /** What the other players paid. The organizer's own payment to the venue is never in here. */
   collectedCents: number;
+  /** The full court cost of every session played. */
   courtCostCents: number;
   creditsOwedCents: number;
   /** Collected minus court costs minus credits owed. */
   netCents: number;
+  /** Players paid more than the courts cost: the amount toward the membership. */
+  surplusCents: number;
+  /** Players paid less than the courts cost: what the organizer covered. */
+  coveredCents: number;
   membershipCents: number;
-  /** "Surplus: $14 toward the $30 membership" or "Short: $8" */
+  /** "Surplus: $14 toward the $30 membership" or "You covered $8 of the court costs" */
   bottomLine: string;
   sessions: {
     id: string;
