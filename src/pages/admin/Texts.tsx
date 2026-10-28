@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
-import { isIOS, useNow } from '../../lib';
+import { isIOS } from '../../lib';
 import { MessageIcon, SmsDraft } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { fillTexts, sessionTexts, type TextItem } from './textMenu';
@@ -23,8 +23,7 @@ const OPEN_LABEL: Partial<Record<TextItem['id'], string>> = {
  * the card's one green button; any other is gray.
  */
 export function DayBeforeTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const now = useNow();
-  const items = fillTexts(ctx.d, s, now);
+  const items = fillTexts(ctx.d, s, Date.parse(ctx.d.now));
   return (
     <div className="stack" style={{ gap: 8 }}>
       {items.map((it, i) => (
@@ -54,10 +53,9 @@ export function SpotOpenTexts({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }
  * right people's numbers when it's for them; the gray line says who.
  */
 export function TextButton({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const now = useNow();
   const [open, setOpen] = useState(false);
   const [opened, setOpened] = useState<string | null>(null);
-  const items = sessionTexts(ctx.d, s, now);
+  const items = sessionTexts(ctx.d, s, Date.parse(ctx.d.now));
   if (items.length === 0) return null;
   return (
     <div className="text-pick">

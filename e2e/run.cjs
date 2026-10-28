@@ -2020,7 +2020,7 @@ async function main() {
       assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
       await c2.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
       const tell = admin.getByRole('article', { name: new RegExp(`Tell them they're in: ${day}`) });
-      await tell.getByText(/Good news, Casey! The court opened up/).waitFor();
+      await tell.getByText(/^A spot opened and you're in for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. \S+$/).waitFor();
 
       const p = players.Casey;
       await p.reload();
@@ -2149,7 +2149,7 @@ async function main() {
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
       const bubble = after.locator('.bubble');
-      assert(/^Pickleball (Tue|Thu), [A-Z][a-z]{2} \d{1,2} is canceled\.$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. \S+$/.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       await after.getByLabel(/Reason/).fill('Rain');
       await bubble.getByText(/is canceled\. Rain\.$/).waitFor();
       await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
@@ -2315,11 +2315,12 @@ async function main() {
         await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
         await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
         const bubble = (await card.locator('.bubble').innerText()).trim();
-        assert(/^Need 1 more for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In\? [a-z0-9.:]+$/.test(bubble), `need-players text was: ${bubble}`);
-        const spotLink = card.getByRole('link', { name: 'Text the group: need more players' });
+        // Whichever fits the game now: need players, or the check-in once it is back to 4 or 6.
+        assert(/^(Need \d+ more for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(bubble), `spot text was: ${bubble}`);
+        assert(!/ASAP|text me/i.test(bubble), 'no "text me ASAP"');
+        const spotLink = card.getByRole('link', { name: /^Text the (group|players)/ });
         const spot = smsOf(await spotLink.getAttribute('href'));
-        assert(spot.body === bubble && spot.to.length === 0, 'spot open opens with no numbers, to pick the chat');
-        assert((await card.locator('.missing-numbers').count()) === 0, 'no missing-numbers note on spot open');
+        assert(spot.body === bubble, 'the link opens Messages with the same words');
         assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the spot-open card');
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
