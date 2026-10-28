@@ -562,7 +562,7 @@ export function NamesLine({ names, me, budget }: { names: string[]; me?: string 
   const order = me && names.includes(me) ? [me, ...names.filter((n) => n !== me)] : names;
   const { shown, more } = shortNames(order, budget);
   return (
-    <>
+    <span className="names-wrap">
       <span className="names-line" title={names.join(', ')}>
         {shown.map((n, i) => (
           <span key={n + i}>
@@ -573,7 +573,7 @@ export function NamesLine({ names, me, budget }: { names: string[]; me?: string 
       </span>
       {/* "+2" never gets cut off with the names. */}
       {more > 0 && <span className="names-more">+{more}</span>}
-    </>
+    </span>
   );
 }
 

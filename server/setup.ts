@@ -14,7 +14,7 @@ export async function setupStatus(ctx: Ctx) {
   const group = await getGroup(ctx.db);
   return {
     setupComplete: !!group,
-    setupEnabled: !!ctx.env.SETUP_TOKEN && ctx.env.SETUP_TOKEN.length >= 16,
+    setupEnabled: !group && !!ctx.env.SETUP_TOKEN && ctx.env.SETUP_TOKEN.length >= 16,
     // The plain site address works for players (no private link needed).
     openAccess: !!group?.open_access,
     // A group word is set and this phone hasn't entered it yet.
@@ -50,10 +50,12 @@ export async function runSetup(ctx: Ctx, body: Record<string, unknown>) {
   if (expected.length < 16) {
     throw new HttpError(503, 'setup_disabled', 'Setup is turned off. Set the SETUP_TOKEN secret (16+ characters) first.');
   }
+  // Checked before the code, so once set up the answer is the same whatever
+  // is typed, and the setup code can't be guessed at.
+  if (await getGroup(ctx.db)) throw new HttpError(409, 'already_set_up', 'The group is already set up.');
   if (typeof body.setupToken !== 'string' || !timingSafeEqual(body.setupToken, expected)) {
     throw new HttpError(401, 'wrong_setup_token', 'The setup code is not right.');
   }
-  if (await getGroup(ctx.db)) throw new HttpError(409, 'already_set_up', 'The group is already set up.');
 
   const name = v.text(body.groupName, 'groupName', { max: 60 });
   const timezone = body.timezone === undefined ? DEFAULT_TIMEZONE : v.text(body.timezone, 'timezone', { max: 60 });

@@ -407,11 +407,46 @@ export async function setRefund(ctx: Ctx, body: Record<string, unknown>) {
   const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
   if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'not_paid', 'Only someone who paid can be refunded.');
   if (!!row.refunded_at === refunded) return { ok: true, changed: false };
-  await ctx.db
-    .prepare('UPDATE session_players SET refunded_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
-    .bind(refunded ? ctx.nowIso : null, ctx.nowIso, session.id, playerId)
-    .run();
-  await audit(ctx.db, group.id, session.id, refunded ? 'refund_marked' : 'refund_cleared', { player: row.display_name }, ctx.nowIso);
+  // A credit used on this payment goes back to the player with the refund
+  // (they paid $9 plus their $5 credit; the $9 comes back by hand, the credit
+  // here). Undoing the refund takes those same credits again if still unused.
+  let creditIds: string[] = [];
+  if (refunded) {
+    const { results } = await ctx.db
+      .prepare('SELECT id FROM credits WHERE used_session_id = ? AND player_id = ?')
+      .bind(session.id, playerId)
+      .all<{ id: string }>();
+    creditIds = results.map((c) => c.id);
+  } else {
+    const last = await ctx.db
+      .prepare(
+        `SELECT details_json FROM admin_audit_log WHERE session_id = ? AND action = 'refund_marked' ORDER BY created_at DESC`,
+      )
+      .bind(session.id)
+      .all<{ details_json: string }>();
+    const mine = last.results.map((r) => safeParse(r.details_json)).find((d) => d.playerId === playerId);
+    creditIds = Array.isArray(mine?.creditIds) ? mine.creditIds.filter((x): x is string => typeof x === 'string') : [];
+  }
+  await ctx.db.batch([
+    ctx.db
+      .prepare('UPDATE session_players SET refunded_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
+      .bind(refunded ? ctx.nowIso : null, ctx.nowIso, session.id, playerId),
+    ...creditIds.map((id) =>
+      refunded
+        ? ctx.db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE id = ? AND used_session_id = ?').bind(id, session.id)
+        : ctx.db
+            .prepare('UPDATE credits SET used_session_id = ?, used_at = ? WHERE id = ? AND player_id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
+            .bind(session.id, ctx.nowIso, id, playerId),
+    ),
+  ]);
+  await audit(
+    ctx.db,
+    group.id,
+    session.id,
+    refunded ? 'refund_marked' : 'refund_cleared',
+    refunded ? { player: row.display_name, playerId, creditIds } : { player: row.display_name },
+    ctx.nowIso,
+  );
   return { ok: true, changed: true };
 }
 
