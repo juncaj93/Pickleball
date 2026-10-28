@@ -8,6 +8,7 @@ import { enterGroupWord, runSetup, setupStatus } from './setup';
 import { actOnToken, lookupToken } from './tokens';
 import { requireAdmin } from './auth';
 import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
+import * as alerts from './alerts';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>;
 
@@ -90,9 +91,11 @@ route('POST', '/api/admin/sessions/:id/told', admin.markTold);
 route('POST', '/api/admin/sessions/:id/links', admin.prepareLinks);
 route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
+route('PUT', '/api/admin/alerts', alerts.updateAlerts);
+route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
 
-export async function handleApi(req: Request, env: Env, nowMs = Date.now()): Promise<Response> {
-  let ctx = makeCtx(req, env, nowMs);
+export async function handleApi(req: Request, env: Env, nowMs = Date.now(), waitUntil?: (work: Promise<unknown>) => void): Promise<Response> {
+  let ctx = makeCtx(req, env, nowMs, waitUntil);
   try {
     // "Pretend it's...": only for the signed-in organizer, and look-only.
     const pretend = req.headers.get(PRETEND_HEADER);
@@ -102,7 +105,7 @@ export async function handleApi(req: Request, env: Env, nowMs = Date.now()): Pro
       const at = parsePretend(pretend);
       if (at === null) throw new HttpError(400, 'invalid_pretend', 'Pick a date and time.');
       const db = readOnly(env.DB);
-      ctx = { ...makeCtx(req, { ...env, DB: db }, at), realNowIso: ctx.realNowIso };
+      ctx = { ...makeCtx(req, { ...env, DB: db }, at, waitUntil), realNowIso: ctx.realNowIso };
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       // Cross-site form posts can't reach state-changing routes.

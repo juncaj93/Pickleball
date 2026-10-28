@@ -19,11 +19,11 @@ export function useAutosave(ctx: AdminCtx) {
   const fades = useRef<Record<string, number>>({});
   const set = (id: string, st: RowState | undefined) => setRows((r) => ({ ...r, [id]: st }));
 
-  async function save(id: string, body: Record<string, unknown>): Promise<boolean> {
+  async function save(id: string, body: Record<string, unknown>, path = '/api/admin/group'): Promise<boolean> {
     window.clearTimeout(fades.current[id]);
     set(id, { status: 'saving' });
     try {
-      await api('PUT', '/api/admin/group', body);
+      await api('PUT', path, body);
       set(id, { status: 'saved' });
       fades.current[id] = window.setTimeout(() => setRows((r) => (r[id]?.status === 'saved' ? { ...r, [id]: undefined } : r)), SAVED_SHOW_MS);
       void ctx.reload();
@@ -31,7 +31,7 @@ export function useAutosave(ctx: AdminCtx) {
     } catch (err) {
       // The server said the value itself is wrong: show why, don't offer a retry.
       if (err instanceof ApiError && (err.status === 400 || isDemo(err))) set(id, { status: 'invalid', message: err.message });
-      else set(id, { status: 'failed', retry: () => void save(id, body) });
+      else set(id, { status: 'failed', retry: () => void save(id, body, path) });
       return false;
     }
   }

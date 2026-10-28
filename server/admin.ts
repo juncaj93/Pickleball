@@ -1,3 +1,4 @@
+import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
@@ -121,6 +122,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
       .sort((a, b) => a.name.localeCompare(b.name)),
     me: await organizerPlayer(ctx, group, false),
+    alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
   };
 }

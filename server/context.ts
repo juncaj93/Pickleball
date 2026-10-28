@@ -14,9 +14,14 @@ export interface Ctx {
   params: Record<string, string>;
   /** Set-Cookie headers to add to the response. */
   setCookies: string[];
+  /** Work that finishes after the response is sent (Telegram alerts). */
+  waitUntil: (work: Promise<unknown>) => void;
 }
 
-export function makeCtx(req: Request, env: Env, nowMs: number): Ctx {
+/** Without Cloudflare's waitUntil (tests, local dev), background work just runs. */
+const runLoose = (work: Promise<unknown>) => void work.catch(() => {});
+
+export function makeCtx(req: Request, env: Env, nowMs: number, waitUntil: (work: Promise<unknown>) => void = runLoose): Ctx {
   return {
     req,
     env,
@@ -28,6 +33,7 @@ export function makeCtx(req: Request, env: Env, nowMs: number): Ctx {
     cookies: parseCookies(req.headers.get('Cookie')),
     params: {},
     setCookies: [],
+    waitUntil,
   };
 }
 

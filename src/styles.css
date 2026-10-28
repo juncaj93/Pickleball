@@ -3734,3 +3734,109 @@ dialog.sheet[open]::backdrop {
   gap: 8px;
 }
 
+
+/* ---------- Settings > Alerts ---------- */
+
+.alert-status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+}
+.alert-dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--line-strong);
+  transform: translateY(-1px);
+}
+.alert-dot.on {
+  background: var(--ok-edge);
+}
+.alert-failed {
+  color: var(--danger-fg);
+  font-weight: 600;
+}
+.alert-why {
+  margin: -4px 0 0 17px;
+}
+.alert-switch {
+  cursor: pointer;
+  min-height: 48px;
+}
+.alert-switch .set-name {
+  font-weight: 600;
+}
+.alert-subs {
+  display: flex;
+  flex-direction: column;
+  margin-left: 4px;
+  padding-left: 12px;
+  border-left: 2px solid var(--line);
+}
+.alert-switch.sub {
+  min-height: 44px;
+}
+.alert-switch.sub .set-name {
+  font-weight: 400;
+  font-size: 0.92rem;
+}
+.alert-switch:has(.switch:disabled) {
+  cursor: default;
+  color: var(--ink-2);
+}
+/* An on/off switch: a pill with a knob, green when on. */
+.switch {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  position: relative;
+  width: 46px;
+  height: 28px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--line-strong);
+  cursor: pointer;
+  transition: background var(--fast) var(--ease);
+}
+.switch::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+  transition: transform var(--fast) var(--ease);
+}
+.switch:checked {
+  background: var(--primary);
+}
+.switch:checked::before {
+  transform: translateX(18px);
+}
+.switch:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.switch:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.alert-test {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+.alert-result.ok {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ok-fg);
+}

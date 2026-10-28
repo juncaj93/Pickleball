@@ -7,6 +7,7 @@ import { HttpError } from './http';
 import { audit, confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, waitlistOf } from './repo';
 import { clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
 import * as v from './validate';
+import { afterTap, watchTap } from './alerts';
 
 export type TokenScope = 'attendance' | 'claim';
 
@@ -130,12 +131,16 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .bind(ctx.nowIso, r.token.id)
       .run();
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
+    const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
     const res = await withdraw(ctx.db, r.session, r.token.player_id, ctx.nowMs);
     const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group)) : false;
     outcome = 'withdrawn';
     if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late });
+    await afterTap(ctx, watch);
   } else {
+    const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
     const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only');
+    await afterTap(ctx, watch);
     await clearLateDrop(ctx.db, r.session.id, r.token.player_id);
     if (res.result === 'spot_taken') {
       return { outcome: 'spot_taken', view: await view(ctx, r) };

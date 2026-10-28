@@ -34,6 +34,7 @@ import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop,
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
+import { afterTap, watchTap } from './alerts';
 
 const OWED_LOOKBACK_MS = 90 * 86_400_000;
 const SELF_ADDS_PER_HOUR = 3;
@@ -296,18 +297,22 @@ async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, ac
 
 export async function playerJoin(ctx: Ctx) {
   const who = await actingOn(ctx);
+  const watch = await watchTap(ctx, who.group, who.session, who.playerId);
   const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto');
   await clearLateDrop(ctx.db, who.session.id, who.playerId);
   if (res.result !== 'already_confirmed') await logAction(ctx, who, 'join', res.result);
+  await afterTap(ctx, watch);
   return res;
 }
 
 export async function playerWithdraw(ctx: Ctx) {
   const who = await actingOn(ctx);
+  const watch = await watchTap(ctx, who.group, who.session, who.playerId);
   const res = await withdraw(ctx.db, who.session, who.playerId, ctx.nowMs);
   const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group)) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late });
+  await afterTap(ctx, watch);
   return { result };
 }
 
