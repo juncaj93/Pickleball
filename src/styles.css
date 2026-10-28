@@ -3614,7 +3614,9 @@ details.advanced[open] > summary {
 .organizer-link {
   text-align: center;
   font-size: 0.88rem;
-  margin-top: 8px;
+  /* Sits 14px under the button above it: the page's 20px gap, less the
+     link's own 12px of tap-area padding above the words, plus 14. */
+  margin-top: -18px;
 }
 
 .organizer-link a {
