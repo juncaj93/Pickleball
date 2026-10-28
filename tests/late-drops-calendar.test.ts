@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { spotOpenMessage } from '../shared/messages';
+import { needPlayersMessage } from '../shared/messages';
 import { buildTodo } from '../src/pages/admin/todo';
 import { HOUR, playerPhone, setupGroup } from './harness';
 
@@ -103,10 +103,10 @@ describe('late drops', () => {
     expect(buildTodo(await dash(ctx)).map((i) => i.kind)).not.toContain('refund');
   });
 
-  it('the spot-open text', () => {
+  it('the need-players text for a spot that opened', () => {
     const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
-    const text = spotOpenMessage(s, TZ, 'https://pickleball.juncaj.net');
-    expect(text).toBe('A spot opened for pickleball Tue Nov 3, 8:00 to 10:00 PM. First to grab it gets it: pickleball.juncaj.net');
+    const text = needPlayersMessage(s, TZ, 1, 'pickleball.juncaj.net');
+    expect(text).toBe('Need 1 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
     expect(text).not.toMatch(/\bsent\b/i);
   });
 

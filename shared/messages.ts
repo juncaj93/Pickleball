@@ -22,25 +22,6 @@ export function confirmationMessage(name: string, s: SessionLike, tz: string, li
   return `Hey ${name}! Are you still in for pickleball ${w.day}, ${w.date}, ${w.time}? Confirm or drop out here: ${link}`;
 }
 
-export function paymentMessage(name: string, amountCents: number, s: SessionLike, tz: string, venmoUrl: string | null): string {
-  const w = when(s, tz);
-  const pay = venmoUrl ? `Please send it here: ${venmoUrl}` : 'Please send it when you can.';
-  return `Hey ${name}! You owe ${formatPrice(amountCents)} for pickleball on ${w.day}, ${w.date}. ${pay}`;
-}
-
-export function promotionMessage(
-  name: string,
-  s: SessionLike,
-  tz: string,
-  reason: 'made_six' | 'spot_opened' | 'court_opened',
-  oweCents?: number,
-): string {
-  const w = when(s, tz);
-  const why = reason === 'made_six' ? 'We now have 6, an even number' : reason === 'court_opened' ? 'The court opened up' : 'A spot opened up';
-  const owe = oweCents === undefined ? '' : ` You owe ${formatPrice(oweCents)}${reason === 'made_six' ? ' (6-person discount)' : ''}.`;
-  return `Good news, ${name}! ${why}, so you're in for pickleball ${w.day}, ${w.date}, ${w.time}.${owe}`;
-}
-
 /** "Tue Nov 3": the short date the texts use. */
 export function textDay(iso: string, tz: string): string {
   return formatShortDate(iso, tz).replace(',', '');
@@ -71,36 +52,6 @@ export function sessionLink(playerLink: string, sessionId: string): string {
   return `${base}${base.includes('?') ? '&' : base.match(/\/g\/[^/]+$/) ? '?' : '/?'}s=${sessionId}`;
 }
 
-/** "Share the game", worded for where the court stands. */
-export function shareGameMessage(s: SessionLike, tz: string, court: 'booked' | 'waitlist' | 'open', link: string): string {
-  const day = formatShortDate(s.startsAt, tz);
-  const at = formatTime(s.startsAt, tz);
-  if (court === 'booked') return `We booked a court for ${day} at ${at}. Tap here to reserve your spot: ${link}`;
-  if (court === 'waitlist') return `I'm on the court waitlist for ${day} at ${at}. Tap here to join the standby list: ${link}`;
-  return `Thinking of playing ${day} at ${at}. Tap here to say if you're in: ${link}`;
-}
-
-/** The day-before text to the players who are in: a heads-up and how to back out. */
-export function dayBeforePlayersMessage(s: SessionLike, tz: string, site: string): string {
-  return `Pickleball tomorrow, ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. You're in! If you need to back out, text me ASAP. ${siteAddress(site)}`;
-}
-
-/** The day-before group text when we're short of 4 or 6 ("need more players"). */
-export function dayBeforeMessage(s: SessionLike, tz: string, confirmed: number, site: string): string {
-  const head = `Pickleball tomorrow, ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`;
-  if (confirmed === 4 || confirmed === 6) return `${head} We're set with ${confirmed}. See you there.`;
-  if (confirmed === 5) return `${head} We have 5 and need 1 more or 1 fewer. ${siteAddress(site)}`;
-  const need = confirmed < 4 ? 4 - confirmed : 6 - confirmed;
-  return `${head} We have ${confirmed} in and need ${need} more. Sign up: ${siteAddress(site)}`;
-}
-
-/** The last-call text to the players who are in, the day of. */
-export function lastCallMessage(s: SessionLike, tz: string, confirmed: number): string {
-  // "tonight" for the usual 8:00 PM game; "today" for one before 5:00 PM.
-  const when = localParts(Date.parse(s.startsAt), tz).hour < 17 ? 'today' : 'tonight';
-  return `Last call: pickleball ${when}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. We have ${confirmed} in. If you can't make it, text me ASAP.`;
-}
-
 export function replacementMessage(s: SessionLike, tz: string, link: string): string {
   const w = when(s, tz);
   return `A pickleball spot just opened for ${w.day}, ${w.date}, ${w.time}. First to claim it gets the spot: ${link}`;
@@ -116,9 +67,55 @@ export function deadlineAlertMessage(s: SessionLike, tz: string, deadlineIso: st
   return `Reminder: ${w.day}, ${w.date} pickleball is not full. The court cancellation deadline is ${formatDateTime(deadlineIso, tz)}. Decide whether to keep trying to fill the spot or cancel the venue booking.`;
 }
 
-/** "A spot opened for pickleball Tue Nov 3, 8:00 to 10:00 PM. First to grab it gets it: pickleball.juncaj.net" */
-export function spotOpenMessage(s: SessionLike, tz: string, site: string): string {
-  return `A spot opened for pickleball ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. First to grab it gets it: ${siteAddress(site)}`;
+// ---------- The Text menu and payment reminders ----------
+// {link} is always the plain site address (pickleball.juncaj.net). Every game
+// time reads like "Tue Nov 3, 8:00 PM". The site only opens Messages with these
+// words; it never sends anything.
+
+/** "Tue Nov 3, 8:00 PM" */
+export function textWhen(iso: string, tz: string): string {
+  return `${textDay(iso, tz)}, ${formatTime(iso, tz)}`;
+}
+
+/** Share the game: for any upcoming game, to a group chat. */
+export function shareMessage(s: SessionLike, tz: string, link: string): string {
+  return `Pickleball ${textWhen(s.startsAt, tz)}. In or out here: ${link}`;
+}
+
+/** Fewer than 4 in. */
+export function needPlayersMessage(s: SessionLike, tz: string, need: number, link: string): string {
+  return `Need ${need} more for pickleball ${textWhen(s.startsAt, tz)}. In? ${link}`;
+}
+
+/** A game that dropped from 6 to 5. */
+export function downToFiveMessage(s: SessionLike, tz: string, link: string): string {
+  return `Down to 5 for pickleball ${textDay(s.startsAt, tz)}. Need 1 more or 1 out to make 4 or 6. ${link}`;
+}
+
+/** "tonight", "today", "tomorrow (Tue)" or "Tue Nov 3": whichever fits the time left. */
+export function whenPhrase(iso: string, tz: string, nowMs: number): string {
+  const g = localParts(Date.parse(iso), tz);
+  const n = localParts(nowMs, tz);
+  const dayNum = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / 86_400_000;
+  const gap = dayNum(g) - dayNum(n);
+  if (gap === 0) return g.hour < 17 ? 'today' : 'tonight';
+  if (gap === 1) return `tomorrow (${textDay(iso, tz).split(" ")[0]})`;
+  return textDay(iso, tz);
+}
+
+/** Exactly 4 or 6 in: are you still coming. */
+export function checkInMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
+  return `Pickleball ${whenPhrase(s.startsAt, tz, nowMs)}, ${formatTime(s.startsAt, tz)}. Still in? Update here: ${link}`;
+}
+
+/** The game reached 6 because the waitlist moved in: to the 2 extra players. */
+export function nowSixMessage(s: SessionLike, tz: string, link: string): string {
+  return `Good news, we have 6 for pickleball ${textWhen(s.startsAt, tz)}. You're both in. Can't make it? Update here: ${link}`;
+}
+
+/** A waitlisted player moved into the 4 after a drop. */
+export function promotedMessage(s: SessionLike, tz: string, link: string): string {
+  return `A spot opened and you're in for pickleball ${textWhen(s.startsAt, tz)}. ${link}`;
 }
 
 /** One optional line from the organizer, ending with a period. */
@@ -128,14 +125,27 @@ function withReason(text: string, reason?: string | null): string {
   return `${text} ${/[.!?]$/.test(r) ? r : `${r}.`}`;
 }
 
-/** "Pickleball Tue, Nov 3 is canceled." plus an optional reason. */
-export function canceledMessage(s: SessionLike, tz: string, reason?: string | null): string {
-  return withReason(`Pickleball ${formatShortDate(s.startsAt, tz)} is canceled.`, reason);
+/** "Pickleball Tue Nov 3 is canceled. pickleball.juncaj.net", with an optional reason before the link. */
+export function canceledMessage(s: SessionLike, tz: string, link: string, reason?: string | null): string {
+  return `${withReason(`Pickleball ${textDay(s.startsAt, tz)} is canceled.`, reason)} ${link}`;
 }
 
-/** "Pickleball moved to Thu, Nov 5, 8:00 to 10:00 PM." plus an optional reason. */
-export function movedMessage(s: SessionLike, tz: string, reason?: string | null): string {
-  return withReason(`Pickleball moved to ${formatShortDate(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}.`, reason);
+/** "Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. pickleball.juncaj.net". `was` is the game's original time. */
+export function movedMessage(s: SessionLike, was: string, tz: string, link: string, reason?: string | null): string {
+  return `${withReason(`Pickleball ${textDay(was, tz)} is moved to ${textWhen(s.startsAt, tz)}.`, reason)} ${link}`;
+}
+
+/** One game: names it. Several games: just the total. */
+export function paymentMessage(name: string, totalCents: number, games: SessionLike[], tz: string, link: string): string {
+  const owe = formatPrice(totalCents);
+  return games.length === 1
+    ? `Hey ${name}, you owe ${owe} for pickleball ${textDay(games[0].startsAt, tz)}. Pay here: ${link}`
+    : `Hey ${name}, you owe ${owe} for pickleball. Pay here: ${link}`;
+}
+
+/** One group text to everyone who has not paid. */
+export function remindAllMessage(link: string): string {
+  return `Hey, looks like you haven't paid for pickleball yet. Pay here: ${link}`;
 }
 
 export function normalizePhone(phone: string): string {

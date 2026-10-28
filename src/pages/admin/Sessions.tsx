@@ -6,7 +6,7 @@ import {
   movedMessage,
   confirmationMessage,
   deadlineAlertMessage,
-  paymentMessage,
+  siteAddress,
 } from '../../../shared/messages';
 import { formatCents, formatPrice, parseDollars, refundNote, venmoRefundUrl } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
@@ -27,7 +27,8 @@ import { api, ApiError, openVenmo, storageGet, storageSet, useNow } from '../../
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
-import { isPlayed, lateDropsAll, recipients, refundRows } from './todo';
+import { reach, reminderText } from './textMenu';
+import { isPlayed, lateDropsAll, refundRows } from './todo';
 import { TextButton } from './Texts';
 
 export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'canceled' | 'moved';
@@ -435,15 +436,17 @@ export function SessionSheets({
 function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; canceled: boolean }) {
   const tz = ctx.d.group.timezone;
   const [reason, setReason] = useState('');
-  const body = canceled ? canceledMessage(s, tz, reason) : movedMessage(s, tz, reason);
-  const who = recipients(ctx.d, s, canceled ? 'wereIn' : 'in');
+  const link = siteAddress(ctx.d.group.playerLink);
+  const body = canceled ? canceledMessage(s, tz, link, reason) : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, link, reason);
+  // Everyone signed up and on the waitlist; never the organizer.
+  const who = reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), ctx.d.me?.id ?? null);
   return (
     <div className="stack">
       <label className="field">
         Reason (optional)
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder={canceled ? 'Rain in the forecast' : 'Court swap'} />
       </label>
-      <SmsDraft to={canceled ? 'Players who were in' : 'Players who are in'} phone={null} phones={who.phones} missing={who.missing} openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'} body={body} />
+      <SmsDraft to="Everyone signed up and waiting" phone={null} phones={who.phones} missing={who.missing} openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'} body={body} />
       {canceled && <RefundList ctx={ctx} s={s} />}
     </div>
   );
@@ -742,7 +745,6 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
 export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
-  const venmo = ctx.d.group.venmoUrl;
   const { busy, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
   // The organizer is not a row of their own money: they pay the venue (the court row below).
@@ -856,7 +858,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               )}
             </div>
             {draftFor === r.playerId && r.shareCents !== null && (
-              <SmsDraft to={r.name} phone={r.phone} body={paymentMessage(r.name, r.shareCents - r.creditCents, s, tz, venmo)} />
+              <SmsDraft to={r.name} phone={r.phone} body={reminderText(ctx.d, r.playerId, r.name, s)} />
             )}
           </li>
         ))}
@@ -918,7 +920,7 @@ function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         <section className="stack">
           <h3>Payment reminders</h3>
           {unpaid.map((r) => (
-            <SmsDraft key={r.playerId} to={r.name} phone={r.phone} body={paymentMessage(r.name, r.shareCents!, s, tz, ctx.d.group.venmoUrl)} />
+            <SmsDraft key={r.playerId} to={r.name} phone={r.phone} body={reminderText(ctx.d, r.playerId, r.name, s)} />
           ))}
         </section>
       )}

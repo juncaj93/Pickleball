@@ -173,6 +173,8 @@ export interface AdminSessionView {
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   /** Moved from its usual time (rescheduled). */
   moved: boolean;
+  /** The usual time it was moved from, when moved. */
+  plannedStartsAt: string | null;
   /** A one-off game the organizer added, with its optional note. */
   extra: boolean;
   note: string | null;

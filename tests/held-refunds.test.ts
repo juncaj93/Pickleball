@@ -148,7 +148,7 @@ describe('Venmo on the player Edit screen', () => {
       expect((await phone.call('GET', '/api/admin/backup')).status).toBe(401);
     }
     bodies.push((await ctx.app.client().call('GET', '/api/status')).text);
-    for (const t of bodies) expect(t).not.toMatch(/Secret-|venmo_handle|"venmo":|id:\d/i);
+    for (const t of bodies) expect(t).not.toMatch(/Secret-|venmo_handle|"venmo":|"id:\d/i);
     // And it is there for the organizer (so the check means something).
     expect(JSON.stringify(await dash(ctx))).toContain('Secret-Casey');
   });

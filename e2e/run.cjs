@@ -895,13 +895,14 @@ async function main() {
     await check("organizer gets a text draft for each person moved in", async () => {
       await admin.reload();
       const card = admin.getByRole('article', { name: /Tell them they're in/ });
-      await card.getByText(/Good news, Emery! We now have 6/).waitFor();
-      await card.getByText(/Good news, Frankie! We now have 6/).waitFor();
+      const draft = (n) => card.locator('.draft', { hasText: n });
+      await draft('Emery').getByText(/^Good news, we have 6 for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. You're both in\. Can't make it\? Update here: \S+$/).waitFor();
+      await draft('Frankie').getByText(/^Good news, we have 6 for pickleball/).waitFor();
       await card.getByRole('link', { name: 'Open in Messages' }).first().waitFor();
       await card.getByRole('button', { name: 'I told Emery' }).click();
       await admin.locator('.toast', { hasText: 'Done' }).waitFor();
-      await card.getByText(/Good news, Emery!/).waitFor({ state: 'detached' });
-      await card.getByText(/Good news, Frankie!/).waitFor();
+      await draft('Emery').waitFor({ state: 'detached' });
+      await draft('Frankie').waitFor();
     });
 
     await check('6 going: the first four hear about a $5 credit; nobody is asked to pay on the row', async () => {
@@ -1148,33 +1149,16 @@ async function main() {
       await opts.waitFor({ state: 'detached' });
     });
 
-    await check('Share the game: the text matches the court, links straight to the session, and opens with no numbers (pick the chat)', async () => {
+    await check('Share the game: the same words for every game, the plain site address, and opens with no numbers (pick the chat)', async () => {
       const card = sessionCards(admin).first();
-      const id = (await card.getAttribute('id')).replace('session-', '');
       const menu = await textMenu(card);
       const href = await menu.locator('.text-row[data-text="share"] a').getAttribute('href');
       const { body, to } = smsOf(href);
       assert(to.length === 0, `share should open with no numbers, had ${to.length}`);
-      const kind = await card.getAttribute('data-court');
-      const re =
-        kind === 'booked'
-          ? /^We booked a court for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to reserve your spot: (\S+)$/
-          : kind === 'waitlist'
-            ? /^I'm on the court waitlist for .* Tap here to join the standby list: (\S+)$/
-            : /^Thinking of playing (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to say if you're in: (\S+)$/;
-      const m = body.match(re);
-      assert(m, `share text (${kind}) was: ${body}`);
-      const link = m[m.length - 1];
-      assert(link.endsWith(`s=${id}`), `share link should point at the session: ${link}`);
-      // The link opens the player screen with that session highlighted, after picking a name.
-      const p = await newPage();
-      await p.goto(BASE + new URL(link).pathname + new URL(link).search);
-      await p.getByRole('heading', { name: 'Who are you?' }).waitFor();
-      await p.getByRole('button', { name: 'Casey', exact: true }).click();
-      const row = p.locator(`#row-${id}`);
-      await row.waitFor();
-      assert((await row.getAttribute('class')).includes('highlight'), 'the shared session should be highlighted');
-      await p.close();
+      const m = body.match(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In or out here: (\S+)$/);
+      assert(m, `share text was: ${body}`);
+      assert(m[2] === SITE, `share link should be the plain site address ${SITE}: ${m[2]}`);
+      assert(!/\bsent\b|ASAP|text me/i.test(body), 'bad words');
       await closeOptions(card);
     });
 
@@ -1187,26 +1171,26 @@ async function main() {
       }
     });
 
-    await check('"Text" opens the choices (no Poll); Share and Spot open pick the chat; Day before and Last call go to the players in', async () => {
+    await check('"Text" opens only the texts that fit (no Poll, Day before, Last call or Spot open); Share and Need players pick the chat; Check-in goes to the players in', async () => {
       const card = sessionCards(admin).first();
       const menu = await textMenu(card);
       const names = (await menu.locator('.text-row .text-name').allInnerTexts()).map((x) => x.trim());
-      for (const want of ['Share the game', 'Day before', 'Last call']) assert(names.includes(want), `choices missing ${want}: ${names}`);
-      assert(!names.includes('Poll'), 'Poll is gone');
+      assert(names.includes('Share the game'), `choices missing Share the game: ${names}`);
+      for (const gone of ['Poll', 'Day before', 'Last call', 'Spot open']) assert(!names.includes(gone), `${gone} is gone: ${names}`);
       assert(!names.includes('Canceled'), 'a live session has no Canceled text');
       const inCount = await card.locator('.players-line .dot.in, .players-line .dot.me').count();
-      const spots = (await card.locator('.players-line .dot').count()) - inCount;
-      assert(names.includes('Spot open') === spots > 0, 'Spot open only when a spot is open');
+      assert(names.includes('Need players') === inCount < 4, 'Need players only when fewer than 4 are in');
+      assert(names.includes('Check-in') === (inCount === 4 || inCount === 6), 'Check-in only when exactly 4 or 6 are in');
       for (const row of await menu.locator('.text-row').all()) {
         const id = await row.getAttribute('data-text');
         const link = row.locator('a.text-choice');
         const { to } = smsOf(await link.getAttribute('href'));
         const who = (await row.locator('.text-who').innerText()).trim();
-        if (id === 'share' || id === 'spot') {
-          assert(who === 'Pick the chat' && to.length === 0, `${id}: "${who}", ${to.length} numbers`);
+        if (id === 'share' || id === 'need' || id === 'down5') {
+          assert(who === 'Group chat, you pick' && to.length === 0, `${id}: "${who}", ${to.length} numbers`);
           assert((await row.locator('.missing-numbers').count()) === 0, `${id}: no missing-numbers note`);
         }
-        if (id === 'daybefore' || id === 'lastcall') assert(who === `${inCount} who ${inCount === 1 ? 'is' : 'are'} in` && to.length === inCount, `${id} goes to the ${inCount} in: ${who}, ${to.length}`);
+        if (id === 'checkin') assert(/^Everyone signed up · \d+$/.test(who) && to.length > 0, `${id} goes to the numbers saved: ${who}, ${to.length}`);
         assert((await link.boundingBox()).height >= 44, 'choices 44px+');
       }
       // Tapping a choice opens Messages and says it's ready, never "sent".
@@ -1265,7 +1249,7 @@ async function main() {
       await blairRow.getByRole('button', { name: 'Payment reminder' }).click();
       const draft = blairRow.locator('.draft');
       assert((await draft.getByText('Message ready', { exact: true }).count()) === 0, 'not ready until Messages opens');
-      await draft.getByText(/Hey Blair! You owe \$14 for pickleball/).waitFor();
+      await draft.getByText(/^Hey Blair, you owe \$\d+ for pickleball( \w{3} \w{3} \d+)?\. Pay here: \S+$/).waitFor();
       const href = await draft.getByRole('link', { name: 'Open in Messages' }).getAttribute('href');
       assert(href.startsWith('sms:+13135550101&body='), `bad sms link ${href}`);
     });
@@ -1988,7 +1972,7 @@ async function main() {
     });
 
     console.log('Court waitlist');
-    await check('court waitlist: players go on standby; the share text says waitlist; Court opened moves them in', async () => {
+    await check('court waitlist: players go on standby; the share text is the usual one; Court opened moves them in', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
       await more(card);
@@ -2011,7 +1995,7 @@ async function main() {
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
-      assert(/^I'm on the court waitlist for (Tue|Thu), [A-Z][a-z]{2} \d{1,2} at \d{1,2}:\d{2} PM\. Tap here to join the standby list: \S+\?s=/.test(shareBody), `waitlist share text: ${shareBody}`);
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In or out here: \S+$/.test(shareBody), `waitlist share text: ${shareBody}`);
       assert((await texts.locator('.text-row[data-text="poll"]').count()) === 0, 'no Poll');
       await closeOptions(card);
 
@@ -2047,7 +2031,7 @@ async function main() {
       // The court-waitlist banner keeps its words and buttons on one row (checked before it opened).
     });
 
-    await check('day-before card: "Text the players who are in" (all their numbers, link to the session), then last call with the link; never "sent"', async () => {
+    await check('day-before card: the check-in text to the players who are in (all their numbers, the site address), then the same for tonight; never "sent"', async () => {
       const first = await admin.evaluate(async () => {
         const d = await (await fetch('/api/admin/dashboard')).json();
         // A later session whose day-before card hasn't been seen (and dismissed) yet.
@@ -2070,29 +2054,24 @@ async function main() {
         const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
         assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
         const body = (await main.locator('.bubble').innerText()).trim();
-        const dayWord = new Date(first.startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'America/Detroit' }).replace(',', '');
-        const want = `Pickleball tomorrow, ${dayWord}, 8:00 to 10:00 PM. You're in! If you need to back out, text me ASAP. ${SITE}`;
-        assert(body === want, `day-before text was: ${body}`);
+        const want = `Pickleball tomorrow (${new Date(first.startsAt).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' })}), 8:00 PM. Still in? Update here: ${SITE}`;
+        assert(body === want, `check-in text was: ${body}`);
         assert(smsOf(href).body === want, 'Messages opens with the same words');
         assert((await main.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
         assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the day-before card');
-        // The "need more players" text is a smaller second button.
-        const second = card.getByRole('button', { name: 'Text the group: need more players' });
-        assert((await second.boundingBox()).height < (await open.boundingBox()).height + 1, 'second button should be smaller or equal');
-        await second.click();
-        await card.getByRole('link', { name: 'Text the group: need more players' }).waitFor();
         await main.evaluate((el) => el.querySelector('a[href^="sms:"]').addEventListener('click', (e) => e.preventDefault()));
         await open.click();
         await main.getByText('Message ready', { exact: true }).waitFor();
         assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
         await admin.screenshot({ path: path.join(SHOTS, 'admin-day-before.png'), fullPage: true });
-        // Last call at 13 hours: to the players who are in, no link.
+        // Last call at 13 hours: the same check-in text, now "tonight", to the players who are in.
         await clock(Date.parse(first.startsAt) - 12.5 * 3600_000); // between last call (13h) and the deadline (12h)
         await admin.reload();
         const last = admin.getByRole('article', { name: /^Last call, / });
         await last.waitFor();
         const lbody = (await last.locator('.bubble').innerText()).trim();
-        assert(lbody === "Last call: pickleball tonight, 8:00 to 10:00 PM. We have 4 in. If you can't make it, text me ASAP.", `last call was: ${lbody}`);
+        assert(lbody === `Pickleball tonight, 8:00 PM. Still in? Update here: ${SITE}`, `last call was: ${lbody}`);
+        assert(!/ASAP|text me/i.test(lbody), 'no "text me ASAP"');
         const lhref = await last.getByRole('link', { name: 'Text the players who are in' }).getAttribute('href');
         assert(smsOf(lhref).to.length === 4 && smsOf(lhref).body === lbody, 'last call opens Messages to the 4 who are in');
         assert((await last.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the last-call card');
@@ -2122,9 +2101,9 @@ async function main() {
       const moved = admin.locator('dialog[open]');
       await moved.getByText(/^Moved · /).waitFor();
       const bubble = moved.locator('.bubble');
-      assert(/^Pickleball moved to (Tue|Thu), [A-Z][a-z]{2} \d{1,2}, 7:30 to 10:00 PM\.$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
+      assert(/^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is moved to (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, 7:30 PM\. \S+$/.test((await bubble.innerText()).trim()), `moved text was: ${await bubble.innerText()}`);
       await moved.getByLabel(/Reason/).fill('Court swap');
-      await bubble.getByText(/7:30 to 10:00 PM\. Court swap\.$/).waitFor();
+      await bubble.getByText(/7:30 PM\. Court swap\. \S+$/).waitFor();
       await moved.getByRole('link', { name: 'Text the players who are in' }).waitFor();
       assert((await moved.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy');
       assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
@@ -2336,8 +2315,8 @@ async function main() {
         await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
         await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
         const bubble = (await card.locator('.bubble').innerText()).trim();
-        assert(/^A spot opened for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} to 10:00 PM\. First to grab it gets it: [a-z0-9.:]+$/.test(bubble), `spot-open text was: ${bubble}`);
-        const spotLink = card.getByRole('link', { name: 'Text the group: spot open' });
+        assert(/^Need 1 more for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In\? [a-z0-9.:]+$/.test(bubble), `need-players text was: ${bubble}`);
+        const spotLink = card.getByRole('link', { name: 'Text the group: need more players' });
         const spot = smsOf(await spotLink.getAttribute('href'));
         assert(spot.body === bubble && spot.to.length === 0, 'spot open opens with no numbers, to pick the chat');
         assert((await card.locator('.missing-numbers').count()) === 0, 'no missing-numbers note on spot open');
@@ -3577,11 +3556,11 @@ async function main() {
           const link = row.locator('a.text-choice');
           assert((await link.getAttribute('href')).startsWith('sms:'), 'each choice opens Messages');
           const who = (await row.locator('.text-who').innerText()).trim();
-          assert(/^(Pick the chat|\d+ who (is|are|was|were) in)$/.test(who), `who line was "${who}"`);
+          assert(/^(Group chat, you pick|.+ · \d+)$/.test(who), `who line was "${who}"`);
           const tid = await row.getAttribute('data-text');
           const { to } = smsOf(await link.getAttribute('href'));
-          if (tid === 'share' || tid === 'spot') assert(to.length === 0 && who === 'Pick the chat' && (await row.locator('.missing-numbers').count()) === 0, `${tid}: should pick the chat`);
-          else assert(to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).split(',').filter((x) => x.trim()).length) === Number(who.match(/^\d+/)[0]), `${tid}: numbers plus missing should match "${who}"`);
+          if (tid === 'share' || tid === 'need' || tid === 'down5') assert(to.length === 0 && who === 'Group chat, you pick' && (await row.locator('.missing-numbers').count()) === 0, `${tid}: should pick the chat`);
+          else assert(to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).replace(/^Missing numbers:/, '').split(',').filter((x) => x.trim()).length) === Number(who.match(/(\d+)$/)[1]), `${tid}: numbers plus missing should match "${who}"`);
           assert(tid !== 'poll', 'no Poll');
         }
         const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
