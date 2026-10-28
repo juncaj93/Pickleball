@@ -501,8 +501,16 @@ export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionVie
             <li key={r.playerId} className="pay-row" data-refund={r.name}>
               <div className="pay-top">
                 <div className="pay-who">
-                  <strong>{r.name}</strong> <span className="refund-amt">{formatPrice(amount)}</span>
-                  <div className="small muted">{canceled ? `paid ${formatPrice(amount)}` : `paid ${formatPrice(amount)} and dropped`}</div>
+                  {canceled ? (
+                    <>
+                      <strong>{r.name}</strong> <span className="refund-amt">{formatPrice(amount)}</span>
+                      <div className="small muted">paid {formatPrice(amount)}</div>
+                    </>
+                  ) : (
+                    <span>
+                      <strong>{r.name}</strong> paid <span className="refund-amt">{formatPrice(amount)}</span> and dropped. Refund?
+                    </span>
+                  )}
                 </div>
                 {r.refundedAt && <Chip tone="ok">Refunded</Chip>}
               </div>
