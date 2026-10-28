@@ -65,7 +65,14 @@ Today there's no reset button. The fix is a one-line database change in the Clou
 
 ## Live backup
 
-I tried to export the live database before deploying, and this session's safety rules blocked it (it would copy real phone numbers out of Cloudflare). Nothing in this round changes the database layout, so no migration runs. Cloudflare keeps 7 days of database history (Time Travel), so any day in the past week can be restored. To make a copy yourself: `npx wrangler d1 export pickleball --remote --output pickleball-backup.sql`.
+The first attempt was blocked by the session's safety rules. After Alex's OK, a
+full export of the live database was made on Tue, Oct 27, 2026 at about
+10:06 PM Eastern, right before the deploy of #28, and test-loaded into a
+scratch database: 1 group, 10 players, 8 games, 12 sign-ups, 110 Activity
+lines. Cloudflare's restore point from that moment is bookmark
+`00000070-00000000-00005112-70b29b5494f2548299dae3a3537424ab` (good for 7
+days; see `docs/RESTORE.md`). From now on, use Settings > Backup > Download
+backup file.
 
 ## Tests
 
