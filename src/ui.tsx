@@ -1,7 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
-import { isIOS } from './lib';
+import { DEMO_MESSAGE, isIOS } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -82,6 +82,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [spoken, setSpoken] = useState<{ msg: string; kind: ToastKind } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const show = useCallback<ToastFn>((msg, kind = 'ok') => {
+    // "Demo only" (View as, Pretend it's...) is a plain note, never a red error.
+    if (msg === DEMO_MESSAGE) kind = 'ok';
     let anchor: Shown['anchor'] = null;
     if (lastTarget && Date.now() - lastTarget.at < 15_000) {
       const live = lastTarget.el.isConnected ? lastTarget.el.getBoundingClientRect() : null;

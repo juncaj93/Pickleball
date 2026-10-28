@@ -6,6 +6,8 @@ import { HttpError, json, readJson } from './http';
 import * as player from './player';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
 import { actOnToken, lookupToken } from './tokens';
+import { requireAdmin } from './auth';
+import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>;
 
@@ -90,8 +92,18 @@ route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
 
 export async function handleApi(req: Request, env: Env, nowMs = Date.now()): Promise<Response> {
-  const ctx = makeCtx(req, env, nowMs);
+  let ctx = makeCtx(req, env, nowMs);
   try {
+    // "Pretend it's...": only for the signed-in organizer, and look-only.
+    const pretend = req.headers.get(PRETEND_HEADER);
+    if (pretend) {
+      await requireAdmin(ctx);
+      if (req.method !== 'GET' && req.method !== 'HEAD') throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
+      const at = parsePretend(pretend);
+      if (at === null) throw new HttpError(400, 'invalid_pretend', 'Pick a date and time.');
+      const db = readOnly(env.DB);
+      ctx = { ...makeCtx(req, { ...env, DB: db }, at), realNowIso: ctx.realNowIso };
+    }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       // Cross-site form posts can't reach state-changing routes.
       const reqOrigin = req.headers.get('Origin');

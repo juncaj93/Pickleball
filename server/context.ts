@@ -8,6 +8,8 @@ export interface Ctx {
   url: URL;
   nowMs: number;
   nowIso: string;
+  /** The real time. Same as nowIso unless the organizer is pretending it's another time. */
+  realNowIso: string;
   cookies: Record<string, string>;
   params: Record<string, string>;
   /** Set-Cookie headers to add to the response. */
@@ -22,6 +24,7 @@ export function makeCtx(req: Request, env: Env, nowMs: number): Ctx {
     url: new URL(req.url),
     nowMs,
     nowIso: new Date(nowMs).toISOString(),
+    realNowIso: new Date(nowMs).toISOString(),
     cookies: parseCookies(req.headers.get('Cookie')),
     params: {},
     setCookies: [],

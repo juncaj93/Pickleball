@@ -6,6 +6,7 @@ import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } f
 import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
 import type { D1Database } from './db';
+import { isPretend } from './pretend';
 
 export interface GroupRow {
   id: string;
@@ -268,6 +269,8 @@ export async function loadCredits(db: D1Database, groupId: string): Promise<Cred
     )
     .bind(groupId)
     .all<CreditRow>();
+  // Pretending it's later: credits that would have been issued by then, in memory only.
+  if (isPretend(db)) return [...results, ...([...db.virtualCredits.values()] as unknown as CreditRow[])];
   return results;
 }
 
@@ -298,6 +301,23 @@ export async function issueCredits(db: D1Database, group: GroupRow, nowMs: numbe
     if (s.status !== 'canceled' && settings.creditCentsWhenSix > 0) {
       for (const [playerId, price] of pricesFor(s, await loadRoster(db, s.id), settings)) {
         if (!price.creditComing) continue;
+        if (isPretend(db)) {
+          const id = `pretend-${s.id}-${playerId}`;
+          db.virtualCredits.set(id, {
+            id,
+            group_id: group.id,
+            player_id: playerId,
+            earned_session_id: s.id,
+            amount_cents: settings.creditCentsWhenSix,
+            created_at: nowIso,
+            used_session_id: null,
+            used_at: null,
+            cleared_at: null,
+            earned_ends_at: s.ends_at,
+          });
+          issued++;
+          continue;
+        }
         stmts.push(
           db
             .prepare(

@@ -5,7 +5,8 @@ import { DayBeforeTexts } from './admin/Texts';
 import { recipients } from './admin/todo';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, useLoad, useNow, useRefreshOnReturn } from '../lib';
+import { api, ApiError, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { PretendBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
@@ -26,7 +27,8 @@ export interface AdminCtx {
 }
 
 export function AdminApp() {
-  const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'));
+  const pretend = usePretend();
+  const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend]);
   useRefreshOnReturn(load.refresh);
   if (load.loading && !load.data && !load.error) {
     return (
@@ -137,21 +139,25 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
   if (viewing) {
     return (
-      <PlayerHome
-        groupKey={null}
-        viewAs={viewing}
-        onViewAs={setViewing}
-        onExit={() => {
-          setViewing(null);
-          window.scrollTo(0, 0);
-          void reload();
-        }}
-      />
+      <>
+        <PlayerHome
+          topBar={<PretendBar tz={d.group.timezone} />}
+          groupKey={null}
+          viewAs={viewing}
+          onViewAs={setViewing}
+          onExit={() => {
+            setViewing(null);
+            window.scrollTo(0, 0);
+            void reload();
+          }}
+        />
+      </>
     );
   }
 
   return (
     <>
+      <PretendBar tz={d.group.timezone} />
       <TopBar
         eyebrow="Organizer"
         title={d.group.name}
@@ -210,6 +216,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
                 </button>
               ))}
           </div>
+          <PretendPicker d={d} onPicked={() => setPickViewAs(false)} />
         </div>
       </Sheet>
     </>
