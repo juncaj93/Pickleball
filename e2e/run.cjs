@@ -1701,13 +1701,17 @@ async function main() {
       await p.locator('.pop', { hasText: "You're out" }).waitFor();
     });
 
-    await check('player rows are light: count, dots and names on one line, no money', async () => {
+    await check('player rows are light: count and dots on one line, every name on the line under it, no money', async () => {
       const p = players.Alex;
       await p.reload();
       const row = firstCard(p);
       await row.locator('.names-line').waitFor();
-      const tops = await row.locator('.in-line > :not(.names-wrap), .in-line > .names-wrap > *').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2));
-      assert(Math.max(...tops) - Math.min(...tops) < 6, 'count, dots and names should sit on one line');
+      const tops = await row.locator('.in-line > *').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2));
+      assert(Math.max(...tops) - Math.min(...tops) < 6, 'count and dots should sit on one line');
+      const line = await row.locator('.in-line').boundingBox();
+      const names = await row.locator('.names-line').boundingBox();
+      assert(names.y >= line.y + line.height - 1, 'names sit on their own line under the dots');
+      assert(!/\+\d/.test(await row.locator('.names-line').innerText()), 'no "+N"');
       assert((await row.getByText(/You owe/).count()) === 0, 'no money block on the row');
     });
 

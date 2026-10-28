@@ -693,6 +693,7 @@ function ScheduleRow({
   const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
 
   const names = s.confirmed.map((p) => p.name);
+  const everyone = g.players.map((p) => p.name);
   const onTop = g.payDue.some((o) => o.sessionId === s.id);
   // Row 4 holds Pay (or Paid) and the calendar icon. With nothing to pay
   // there, the calendar icon sits at the end of the who's in row instead, so
@@ -754,15 +755,15 @@ function ScheduleRow({
           <div className="in-line">
             <span className="in-count">{countLine(s)}</span>
             <SpotDots names={names} me={g.me?.name} />
-            <NamesLine names={names} me={g.me?.name} />
             {!rowFour && calLink}
           </div>
         )}
-        {!s.canceled && (s.waitlist.length > 0 || waiting) && (
-          <p className="waitlist-line">
-            {courtWait ? 'Standby' : 'Waitlist'}: {s.waitlist.map((w) => w.name).join(', ')}
+        {/* Row 4: every name that's in, on its own line; then anyone waiting. */}
+        {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
+        {!s.canceled && (
+          <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'}>
             {waiting && <strong> · you're #{mine.waitlistPosition}</strong>}
-          </p>
+          </NamesLine>
         )}
 
         {s.note && <p className="game-note">{s.note}</p>}

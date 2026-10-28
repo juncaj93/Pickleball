@@ -1,4 +1,4 @@
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { type CourtKind, playerSlots } from '../shared/court';
 import type { Tone } from '../shared/status';
 import { DEMO_MESSAGE, isIOS } from './lib';
@@ -531,10 +531,7 @@ export function SpotPills({ names, me }: { names: string[]; me?: string | null }
   );
 }
 
-/**
- * The player card's who's in: a dot per spot (filled once taken, green for
- * you) and the names as one line of small plain text, cut to "+2" when long.
- */
+/** A dot per spot: filled once taken, green for you. */
 export function SpotDots({ names, me }: { names: string[]; me?: string | null }) {
   const slots = playerSlots(names.length);
   return (
@@ -546,73 +543,91 @@ export function SpotDots({ names, me }: { names: string[]; me?: string | null })
   );
 }
 
-/** About 20 letters of names (or `budget`), then "+N". */
-export function shortNames(names: string[], budget = 20): { shown: string[]; more: number } {
-  const shown: string[] = [];
-  let used = 0;
-  for (const n of names) {
-    if (shown.length > 0 && used + n.length > budget) break;
-    shown.push(n);
-    used += n.length + 2;
+const firstName = (name: string) => name.trim().split(/\s+/)[0];
+
+/**
+ * How a name reads on the cards: the first name ("Ryan"), or the whole name
+ * ("Ryan S.") when someone else in the group has the same first name.
+ * `everyone` is the group's names.
+ */
+export function nameLabel(everyone: string[]): (name: string) => string {
+  const count = new Map<string, number>();
+  for (const n of new Set(everyone.map((x) => x.trim()))) {
+    const k = firstName(n).toLowerCase();
+    count.set(k, (count.get(k) ?? 0) + 1);
   }
-  return { shown, more: names.length - shown.length };
+  return (name) => ((count.get(firstName(name).toLowerCase()) ?? 0) > 1 ? name.trim() : firstName(name));
 }
 
-export function NamesLine({ names, me, budget }: { names: string[]; me?: string | null; budget?: number }) {
+/**
+ * Names on their own small line, in sign-up order, every one of them (never
+ * "+2"), wrapping onto a second line when they don't fit. Yours is bold.
+ * With `label` it's the waitlist or standby line: "Waitlist: Emery, Frankie".
+ * Nothing at all when the list is empty.
+ */
+export function NamesLine({
+  names,
+  me,
+  everyone,
+  label,
+  children,
+}: {
+  names: string[];
+  me?: string | null;
+  everyone: string[];
+  label?: string;
+  children?: ReactNode;
+}) {
   if (names.length === 0) return null;
-  // Your own name first, so it never hides behind "+1".
-  const order = me && names.includes(me) ? [me, ...names.filter((n) => n !== me)] : names;
-  const { shown, more } = shortNames(order, budget);
+  const show = nameLabel([...everyone, ...names]);
   return (
-    <span className="names-wrap">
-      <span className="names-line" title={names.join(', ')}>
-        {shown.map((n, i) => (
-          <span key={n + i}>
-            {i > 0 && ', '}
-            {n === me ? <strong>{n}</strong> : n}
-          </span>
-        ))}
-      </span>
-      {/* "+2" never gets cut off with the names. */}
-      {more > 0 && <span className="names-more">+{more}</span>}
-    </span>
+    <p className={label ? 'waitlist-line' : 'names-line'} title={names.join(', ')}>
+      {label && `${label}: `}
+      {names.map((n, i) => (
+        <Fragment key={n + i}>
+          {i > 0 && ', '}
+          {n === me ? <strong>{show(n)}</strong> : show(n)}
+        </Fragment>
+      ))}
+      {children}
+    </p>
   );
 }
 
-/** "3 of 4 in", a dot per spot and the names (as on the player cards), plus any waitlist and a short note. */
+/**
+ * The organizer card's who's in: "3 of 4 in" and a dot per spot (with the
+ * organizer's own "You're in" / "Out" at the right), then every name on a
+ * line of its own, then anyone waiting.
+ */
 export function PlayersLine({
   names,
-  waiting,
-  waitingWord = 'on the waitlist',
-  extra,
+  waitlist,
+  waitLabel,
+  everyone,
   after,
 }: {
   /** Confirmed players, in sign-up order. */
   names: string[];
-  waiting: number;
-  waitingWord?: string;
-  /** A short note at the end, like "2/4 paid". */
-  extra?: string | null;
-  /** Something at the right end of the last line (the organizer's own I'm in). */
+  /** Waiting players, in order. */
+  waitlist: string[];
+  /** "Waitlist", or "Standby" while waiting on the court. */
+  waitLabel: string;
+  /** The group's names, to tell two people with the same first name apart. */
+  everyone: string[];
+  /** Something at the right end of the first line (the organizer's own I'm in). */
   after?: ReactNode;
 }) {
   return (
-    <div className={`players players-line${after ? ' has-after' : ''}`}>
-      <span className="players-count">
-        {names.length} of {playerSlots(names.length)} in
-      </span>
-      {/* Dots and names in their own column, cut short with "+2", so the button at the end stays on the line. */}
-      <span className="players-mid">
+    <div className="players players-line">
+      <div className="players-top">
+        <span className="players-count">
+          {names.length} of {playerSlots(names.length)} in
+        </span>
         <SpotDots names={names} />
-        <NamesLine names={names} budget={after ? 11 : 20} />
-        {waiting > 0 && (
-          <span className="players-wait">
-            · {waiting} {waitingWord}
-          </span>
-        )}
-        {extra && <span className="players-wait">· {extra}</span>}
-      </span>
-      {after && <span className="players-after">{after}</span>}
+        {after && <span className="players-after">{after}</span>}
+      </div>
+      <NamesLine names={names} everyone={everyone} />
+      <NamesLine names={waitlist} everyone={everyone} label={waitLabel} />
     </div>
   );
 }
