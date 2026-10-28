@@ -8,6 +8,7 @@ import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
+import '../credit-player.css';
 
 const SHOW_FIRST = 6;
 
@@ -168,6 +169,11 @@ export function PlayerHome({
           <>
             {g.payDue.length > 0 && <PayCard g={g} onChanged={load.reload} />}
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
+            {g.creditBalanceCents > 0 && (
+              <p className="credit-line" data-credit-line>
+                You have {formatPrice(g.creditBalanceCents)} credit
+              </p>
+            )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
               {sessions.map((s, i) => (
@@ -379,6 +385,44 @@ function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
 }
 
 /**
+ * "Use credit": takes the player's credit off the games they owe for, only
+ * when they tap. One call per game, earliest first; it stops when a call fails
+ * or the credit is used up.
+ */
+function useCredit(onChanged: () => Promise<void>) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function use(sessionIds: string[], owedCents: number, potCents: number) {
+    setBusy(true);
+    let used = 0;
+    let paidAll = false;
+    try {
+      let left = potCents;
+      const paidFlags: boolean[] = [];
+      for (const id of sessionIds) {
+        if (left <= 0) break;
+        const res = await api<{ ok: boolean; usedCents: number; paid: boolean }>('POST', `/api/sessions/${id}/use-credit`, {});
+        used += res.usedCents;
+        left -= res.usedCents;
+        paidFlags.push(res.paid);
+      }
+      paidAll = paidFlags.length === sessionIds.length && paidFlags.every(Boolean);
+      if (paidAll) toast('Paid with credit');
+      else if (used > 0) toast(`${formatPrice(used)} credit used. Pay the other ${formatPrice(Math.max(owedCents - used, 0))}.`);
+      else toast('No credit to use right now.');
+      await onChanged();
+    } catch (err) {
+      if (isDemo(err)) toast(err.message);
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, use };
+}
+
+/**
  * Game day's payment card, at the very top: from 8:00 AM on game day until
  * the organizer marks it paid. Several unpaid sessions combine into one total
  * with one Venmo button. The button fills in the amount and a note like
@@ -397,6 +441,29 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
   const paid = usePaid(due.map((o) => o.sessionId), onChanged);
+  const credit = useCredit(onChanged);
+  // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
+  const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
+  let potLeft = g.potCents;
+  let covered = 0;
+  for (const o of dueByDate) {
+    const take = Math.max(Math.min(potLeft, o.amountCents), 0);
+    covered += take;
+    potLeft -= take;
+  }
+  const showCredit = g.potCents > 0 && covered > 0;
+  const creditCovers = showCredit && covered >= total;
+  const busy = paid.busy || credit.busy;
+  const creditBtn = showCredit && (
+    <button
+      className={`btn block ${creditCovers ? 'big' : 'secondary'}`}
+      data-use-credit
+      disabled={busy}
+      onClick={() => credit.use(dueByDate.map((o) => o.sessionId), total, g.potCents)}
+    >
+      {credit.busy ? 'Saving…' : 'Use credit'}
+    </button>
+  );
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
   const title =
@@ -426,8 +493,9 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
       {/* Pay, and a quiet "I paid" right with it for anyone who paid another way (Apple Cash, cash). */}
       {pay.url ? (
         <>
+          {creditCovers && creditBtn}
           <a
-            className="btn block big"
+            className={`btn block ${creditCovers ? 'secondary' : 'big'}`}
             href={pay.url}
             data-app-href={pay.appUrl ?? undefined}
             target="_blank"
@@ -437,14 +505,19 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
           >
             Pay with Venmo
           </a>
-          <button className="btn block secondary" disabled={paid.busy} onClick={() => paid.set(true)}>
+          {!creditCovers && creditBtn}
+          <button className="btn block secondary" disabled={busy} onClick={() => paid.set(true)}>
             {paid.busy ? 'Saving…' : 'I paid'}
           </button>
         </>
       ) : (
-        <button className="btn block big" disabled={paid.busy} onClick={() => paid.set(true)}>
-          {paid.busy ? 'Saving…' : 'I paid'}
-        </button>
+        <>
+          {creditCovers && creditBtn}
+          <button className={`btn block ${creditCovers ? 'secondary' : 'big'}`} disabled={busy} onClick={() => paid.set(true)}>
+            {paid.busy ? 'Saving…' : 'I paid'}
+          </button>
+          {!creditCovers && creditBtn}
+        </>
       )}
       {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
@@ -582,14 +655,14 @@ function RowPay({
   onChanged: () => Promise<void>;
 }) {
   const mine = s.mine!;
-  const btn = 'btn small pay-small';
   const paid = usePaid([s.id], onChanged);
+  const credit = useCredit(onChanged);
   if (mine.paymentStatus === 'paid') {
     return (
       <span className="paid-wrap">
-        <span className="paid-tag">✓ Paid</span>
+        <span className="paid-tag">{mine.paidWithCredit ? '✓ Paid with credit' : '✓ Paid'}</span>
         {/* Only their own "I paid" can be undone here; the organizer's stays. */}
-        {mine.selfPaid && (
+        {mine.selfPaid && !mine.paidWithCredit && (
           <button className="link-btn didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
             Didn't pay?
           </button>
@@ -599,19 +672,37 @@ function RowPay({
   }
   if (onTop || mine.oweCents <= 0) return <span />;
   const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
-  // No usable Venmo link: "I paid" is the only thing to tap.
+  // Credit: the one green button when it covers everything, otherwise a quiet one beside Pay.
+  const showCredit = mine.useCreditCents > 0;
+  const creditCovers = showCredit && mine.useCreditCents >= mine.oweCents;
+  const busy = paid.busy || credit.busy;
+  const btn = 'btn small pay-small';
+  const quiet = 'btn small secondary pay-small';
+  const creditBtn = showCredit && (
+    <button className={creditCovers ? btn : quiet} data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.oweCents, mine.useCreditCents)}>
+      Use credit
+    </button>
+  );
+  const creditHint = showCredit && !creditCovers && <span className="credit-hint">Uses {formatPrice(mine.useCreditCents)} of your credit</span>;
+  // No usable Venmo link: "I paid" is the only other thing to tap.
   if (!pay.url) {
     return (
-      <button className={btn} disabled={paid.busy} onClick={() => paid.set(true)}>
-        I paid
-      </button>
+      <span className="pay-pair">
+        {creditCovers && creditBtn}
+        <button className={creditCovers ? quiet : btn} disabled={busy} onClick={() => paid.set(true)}>
+          I paid
+        </button>
+        {!creditCovers && creditBtn}
+        {creditHint}
+      </span>
     );
   }
   // While they owe: Pay, and a quiet "I paid" next to it for anyone who paid another way.
   return (
     <span className="pay-pair">
+      {creditCovers && creditBtn}
       <a
-        className={btn}
+        className={creditCovers ? quiet : btn}
         href={pay.url}
         data-app-href={pay.appUrl ?? undefined}
         target="_blank"
@@ -621,9 +712,11 @@ function RowPay({
       >
         Pay {formatPrice(mine.oweCents)}
       </a>
-      <button className="btn small secondary pay-small" disabled={paid.busy} onClick={() => paid.set(true)}>
+      {!creditCovers && creditBtn}
+      <button className={quiet} disabled={busy} onClick={() => paid.set(true)}>
         I paid
       </button>
+      {creditHint}
     </span>
   );
 }

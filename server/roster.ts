@@ -2,6 +2,7 @@ import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import type { GroupSettings } from '../shared/settings';
 import { MIN_PLAYERS } from '../shared/spots';
+import { returnSeatCredit } from './credit';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
@@ -281,6 +282,8 @@ export async function withdraw(
     .bind(nowIso, existing.id, existing.status)
     .run();
   const changed = res.meta.changes === 1;
+  // Credit they spent on this game goes back to their pot; what they paid in cash waits for Refund or Keep as credit.
+  if (changed) await returnSeatCredit(db, session.id, playerId, nowIso, 'dropped');
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
     await db

@@ -264,7 +264,7 @@ async function main() {
         await row.getByRole('link', { name: /^Refund Mitchel/ }).waitFor();
         assert(/canceled/.test(await sess(page, thu).locator('summary').innerText()), 'row should say canceled');
         const widths = await row.locator('.pay-btns > *').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
-        assert(widths.length === 1, `buttons ${widths}`);
+        assert(widths.length === 2, `buttons ${widths}`); // Refund and Keep as credit
         await openSess(page, tue);
         const tueRow = sess(page, tue).locator('li.pay-row', { hasText: 'Mitchel' });
         assert(await tueRow.locator('.chip').evaluate((el) => el.classList.contains('tone-info')), 'Tue should still be blue');

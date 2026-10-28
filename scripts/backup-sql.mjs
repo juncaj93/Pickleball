@@ -9,6 +9,7 @@ export const TABLES = [
   'sessions',
   'session_players',
   'credits',
+  'credit_ledger',
   'session_action_tokens',
   'player_devices',
   'admin_audit_log',
@@ -33,6 +34,8 @@ export function backupToSql(backup) {
     throw new Error('This is not a Pickleball Bros backup file.');
   }
   for (const t of TABLES) {
+    // Backups made before the credit pot existed have no credit_ledger; that restores as empty.
+    if (t === 'credit_ledger' && backup.tables[t] === undefined) continue;
     if (!Array.isArray(backup.tables[t])) throw new Error(`The backup is missing the ${t} table.`);
   }
   if (backup.tables.groups.length === 0) throw new Error('The backup has no group in it.');
@@ -45,7 +48,7 @@ export function backupToSql(backup) {
   // their players are in, then get canceled again.
   const canceled = backup.tables.sessions.filter((s) => s.status === 'canceled').map((s) => s.id);
   for (const t of TABLES) {
-    for (const row of backup.tables[t]) {
+    for (const row of backup.tables[t] ?? []) {
       const cols = Object.keys(row);
       for (const c of cols) if (!NAME.test(c)) throw new Error(`Bad column name in backup: ${c}`);
       const values = cols.map((c) => (t === 'sessions' && c === 'status' && row[c] === 'canceled' ? literal('planned') : literal(row[c])));

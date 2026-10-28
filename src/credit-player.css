@@ -1,0 +1,32 @@
+/* Player screen: the credit line and the "Use credit" button. */
+
+/* "You have $5 credit": one quiet line, no card, no border. */
+.credit-line {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted-fg);
+}
+
+/* Pay / Use credit / I paid: wrap cleanly on a narrow phone. */
+.row-foot .pay-pair {
+  flex: 1 1 0;
+  min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.pay-pair {
+  flex-wrap: wrap;
+  row-gap: 10px;
+}
+.pay-pair .btn.pay-small {
+  white-space: nowrap;
+}
+
+/* "Uses $5 of your credit" */
+.pay-pair .credit-hint {
+  flex-basis: 100%;
+  margin-top: -4px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  color: var(--muted-fg);
+}

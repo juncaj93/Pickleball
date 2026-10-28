@@ -10,34 +10,30 @@ import { HttpError } from './http';
 import {
   audit,
   confirmedOf,
-  creditPlan,
   ensureSessions,
   getPlayers,
   getSession,
   type GroupRow,
   issueCredits,
-  loadCredits,
-  loadRosters,
-  loadSessions,
-  lookbackIso,
   openCredits,
   organizerIdOf,
   pricesFor,
   settingsOf,
   usualDaysOf,
-  visibleFrom,
   waitlistOf,
 } from './repo';
 import { holidayFor } from '../shared/holidays';
 import { newId } from './crypto';
 import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
+import { potBalance, seatKey } from '../shared/credit';
+import { moneyPicture } from './credit';
+import { useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 
-const OWED_LOOKBACK_MS = 90 * 86_400_000;
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
 /** Suggestions only look at sessions this far ahead. */
@@ -79,12 +75,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const tz = group.timezone;
   const allPlayers = await getPlayers(ctx.db, group.id);
   const players = allPlayers.filter((p) => p.is_active);
-  const since = await lookbackIso(ctx.db, group.id, ctx.nowMs, OWED_LOOKBACK_MS);
-  const from = visibleFrom(group);
-  const sessions = await loadSessions(ctx.db, group.id, since, from);
-  const rosters = await loadRosters(ctx.db, group.id, since, from);
-  const credits = await loadCredits(ctx.db, group.id);
-  const plan = creditPlan(sessions, rosters, credits, settings);
+  const { sessions, rosters, credits, ledger, spent, plan } = await moneyPicture(ctx.db, group, ctx.nowMs);
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
@@ -92,6 +83,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
   let creditBalanceCents = 0;
+  let potCents = 0;
   if (me) {
     for (const s of meIsOrganizer ? [] : sessions) {
       if (s.status === 'canceled') continue;
@@ -99,7 +91,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       const mine = roster.find((r) => r.player_id === me.id && r.status === 'confirmed' && r.payment_status === 'unpaid');
       const price = mine ? pricesFor(s, roster, settings).get(me.id) : undefined;
       if (!price) continue;
-      const credit = plan.get(`${s.id}:${me.id}`)?.cents ?? 0;
+      const used = spent.get(seatKey(s.id, me.id)) ?? 0;
+      const credit = (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) + used;
       if (price.cents - credit <= 0) continue;
       owed.push({
         sessionId: s.id,
@@ -117,6 +110,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     creditBalanceCents = openCredits(credits)
       .filter((c) => !meIsOrganizer && c.playerId === me.id && !planned.has(c.id))
       .reduce((sum, c) => sum + c.amountCents, 0);
+    // One pot: the credit they kept or were given back, plus the older $5 credit.
+    if (!meIsOrganizer) potCents = potBalance(ledger, me.id);
+    creditBalanceCents += potCents;
     // Regulars get a nudge for the next usual day they haven't answered.
     const days = usualDaysOf(me);
     if (me.is_regular && days.length > 0) {
@@ -155,7 +151,17 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
       .map((s) =>
-        playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, me && !meIsOrganizer ? (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) : 0, meIsOrganizer),
+        playerSessionView(
+          s,
+          rosters.get(s.id) ?? [],
+          me?.id ?? null,
+          ctx.nowMs,
+          settings,
+          tz,
+          me && !meIsOrganizer ? (plan.get(`${s.id}:${me.id}`)?.cents ?? 0) : 0,
+          meIsOrganizer,
+          me && !meIsOrganizer ? { balanceCents: potBalance(ledger, me.id), usedHere: spent.get(seatKey(s.id, me.id)) ?? 0 } : undefined,
+        ),
       ),
     owed,
     payDue: owed.filter((o) => {
@@ -163,6 +169,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       return ctx.nowMs >= zonedTimeToUtc(p.year, p.month, p.day, PAY_FROM_HOUR, 0, tz);
     }),
     creditBalanceCents,
+    potCents,
     suggestion,
   };
 }
@@ -330,6 +337,13 @@ export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
   return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name);
+}
+
+/** POST /api/sessions/:id/use-credit: "Use credit" on a game they owe for. Never automatic. */
+export async function playerUseCredit(ctx: Ctx) {
+  const who = await actingOn(ctx);
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  return useCreditOn(ctx, who.group, who.session, who.playerId, p?.display_name ?? 'A player');
 }
 
 export async function playerConfirm(ctx: Ctx) {

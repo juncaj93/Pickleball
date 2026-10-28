@@ -165,5 +165,7 @@ export function balanceOf(d: AdminDashboard, playerId: string): { owedCents: num
     }
   }
   const open = d.credits.find((c) => c.playerId === playerId)?.balanceCents ?? 0;
-  return { owedCents: Math.max(0, owed), creditCents: Math.max(0, open - planned) };
+  // One pot per player: the credit they kept or were given back, plus the older $5 credit not already counted above.
+  const pot = (d.creditLedger ?? []).find((c) => c.playerId === playerId)?.balanceCents ?? 0;
+  return { owedCents: Math.max(0, owed), creditCents: Math.max(0, open - planned) + pot };
 }
