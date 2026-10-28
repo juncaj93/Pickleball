@@ -205,7 +205,7 @@ async function main() {
     await snap(page, 'player', '02-game-day-pay-card', 'Game day from 8:00 AM: "Tonight: you owe $14", unpaid', t);
     await payCard.getByRole('link', { name: /^Pay \$14 with Venmo$/ }).click();
     await payCard.getByRole('button', { name: 'I paid' }).waitFor();
-    await snap(payCard, 'player', '03-pay-then-i-paid', 'After tapping Pay: "I paid" appears next to it', t);
+    await snap(payCard, 'player', '03-pay-then-i-paid', '"I paid" sits next to Pay the whole time they owe (Apple Cash or cash too)', t);
     await ctx.close();
   }
   await paid(A, 'Ryan');

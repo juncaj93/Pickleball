@@ -1321,9 +1321,10 @@ async function main() {
         assert(dp.url() === p.url(), 'computer: the pickleball tab stayed');
         await desk.close();
       }
-      // No "I paid" until they've tapped Pay.
-      assert((await row.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid shows before tapping Pay');
-      // Pay: the Venmo app first, then the web page; back from Venmo, Pay is still there and "I paid" joins it.
+      // "I paid" is there from the start, quiet, next to Pay (for Apple Cash and the like).
+      await row.getByRole('button', { name: 'I paid' }).waitFor();
+      await quietNextToPay(row);
+      // Pay: the Venmo app opens on top; back from Venmo, Pay and "I paid" are both still there.
       await payAndComeBack(p, pay);
       await firstCard(p).getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
       const iPaid = firstCard(p).getByRole('button', { name: 'I paid' });
@@ -1406,8 +1407,8 @@ async function main() {
         const pay = card.getByRole('link', { name: 'Pay $14 with Venmo' });
         await venmoLinkOk(pay, 14, 'Blair');
         assert((await pay.boundingBox()).height >= 48, 'big Pay with Venmo button');
-        // Pay stays after coming back from Venmo; a quiet "I paid" joins it only then.
-        assert((await card.getByRole('button', { name: 'I paid' }).count()) === 0, 'no I paid before tapping Pay');
+        // A quiet "I paid" is there from the start; Pay stays after coming back from Venmo.
+        await card.getByRole('button', { name: 'I paid' }).waitFor();
         await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
         await toVenmo(p, pay);
         await card.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
@@ -3384,7 +3385,7 @@ async function main() {
     });
 
     // ---------- Design follow-up: paper-calendar tiles, gentle fade, calm cards ----------
-    await check('a fresh sign-up starts over: Pay only until Pay is tapped; I\'m out then I\'m in again shows Pay only; paid stays Paid', async () => {
+    await check('while owing: Pay and a quiet "I paid" from the start, after I\'m out then I\'m in again, and after a reload; paid stays Paid', async () => {
       const p = players.Frankie;
       await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
       await p.reload();
@@ -3409,19 +3410,18 @@ async function main() {
       const pay = row.getByRole('link', { name: 'Pay $14 with Venmo' });
       await pay.waitFor();
       await venmoLinkOk(pay, 14, 'Frankie');
-      assert((await row.getByRole('button', { name: 'I paid' }).count()) === 0, 'no I paid before Pay');
-      await payAndComeBack(p, pay);
       await row.getByRole('button', { name: 'I paid' }).waitFor();
       await quietNextToPay(row);
-      // Out, then in again: a fresh sign-up, so Pay only.
+      await payAndComeBack(p, pay);
+      await quietNextToPay(row);
+      // Out, then in again: still Pay with "I paid" next to it.
       await inAgain();
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-      assert((await row.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should not carry over to a fresh sign-up');
+      await quietNextToPay(row);
       await p.reload();
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-      assert((await row.getByRole('button', { name: 'I paid' }).count()) === 0, 'still Pay only after a reload');
-      // Pay again, then I paid: Paid with the small "Didn't pay?".
-      await payAndComeBack(p, row.getByRole('link', { name: 'Pay $14 with Venmo' }));
+      await quietNextToPay(row);
+      // "I paid" without opening Venmo at all: Paid with the small "Didn't pay?".
       await row.getByRole('button', { name: 'I paid' }).click();
       await row.locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
       await row.getByRole('button', { name: "Didn't pay?" }).waitFor();
