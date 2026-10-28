@@ -8,6 +8,9 @@ import type { AdminCtx } from '../Admin';
 
 const STATE_TEXT = { played: '', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
 
+/** "−$48", but plain "$0" when there is nothing to take off. */
+const minus = (cents: number) => (cents === 0 ? formatPrice(0) : `−${formatPrice(cents)}`);
+
 function shift(month: string, by: number): string {
   const [y, m] = month.split('-').map(Number);
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
@@ -90,9 +93,9 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               <dt>Collected</dt>
               <dd>{formatPrice(m.collectedCents)}</dd>
               <dt>Court costs</dt>
-              <dd>−{formatPrice(m.courtCostCents)}</dd>
+              <dd>{minus(m.courtCostCents)}</dd>
               <dt>Credits owed</dt>
-              <dd>−{formatPrice(m.creditsOwedCents)}</dd>
+              <dd>{minus(m.creditsOwedCents)}</dd>
               <dt>Membership</dt>
               <dd>{formatPrice(m.membershipCents)}</dd>
               <dt>Sessions played</dt>

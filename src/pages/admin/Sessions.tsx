@@ -125,13 +125,13 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           )}
           {court.kind === 'booked' && (
             <div className="court-line">
-              <div className="court-top">
+              <div className="pc-top">
                 <div className="court-status">
                   <CourtIcon kind="booked" />
                   <span>{court.text}</span>
                 </div>
               </div>
-              {!s.state.flags.past && <div className="court-sub">Cancel by {shortDeadline(s, tz, now)}</div>}
+              {!s.state.flags.past && <div className="pc-sub">Cancel by {shortDeadline(s, tz, now)}</div>}
             </div>
           )}
           {(court.kind === 'off' || later) && (
@@ -722,22 +722,22 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           <RefundList ctx={ctx} s={s} />
         </>
       )}
-      <ul className="list">
+      <ul className="list who-paid">
         {s.court && (
-          <li className="stack court-row" style={{ gap: 8 }} data-court={s.id}>
-            <div className="spread">
-              <div>
-                <strong>You pay Northville Pickleball</strong>
-                <div className="court-cost">{formatPrice(s.court.costCents)}</div>
-                <div className="small muted">
-                  {s.court.covered
-                    ? 'Players cover the court'
-                    : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}
-                </div>
-              </div>
+          <li className="court-row" data-court={s.id}>
+            <div className="pc-top">
+              <strong className="pc-name">You pay Northville Pickleball</strong>
+              <span className="court-cost">{formatPrice(s.court.costCents)}</span>
+            </div>
+            <div className="pc-sub">
+              <span className="small muted">
+                {s.court.covered
+                  ? 'Players cover the court'
+                  : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}
+              </span>
               <Chip tone={s.court.paid ? 'ok' : 'warn'}>{s.court.paid ? 'Court paid' : 'Court due'}</Chip>
             </div>
-            <div className="btn-row">
+            <div className="pay-btns">
               {myId ? (
                 <button className="btn small secondary" disabled={busy} onClick={() => setCourtPaid(!s.court!.paid)}>
                   {s.court.paid ? 'Unmark' : 'Mark paid'}
@@ -749,9 +749,9 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </li>
         )}
         {rows.map((r) => (
-          <li key={r.playerId} className="stack" style={{ gap: 8 }}>
-            <div className="spread">
-              <div>
+          <li key={r.playerId} className="pay-row">
+            <div className="pay-top">
+              <div className="pay-who">
                 <strong>{r.name}</strong>
                 {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                 <div className="small muted">
@@ -765,7 +765,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               </div>
               <Chip tone={r.paymentStatus === 'paid' ? 'ok' : 'warn'}>{r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}</Chip>
             </div>
-            <div className="btn-row">
+            <div className="pay-btns">
               {r.paymentStatus === 'paid' ? (
                 <>
                   {r.selfPaid && (

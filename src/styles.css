@@ -3167,14 +3167,62 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
   white-space: nowrap;
 }
 
-/* The organizer's own row on a session's Who paid list: the court they pay the venue. */
+/* Money > Who paid: tight rows, equal-width button pairs, and your court row as a quiet tinted box. */
+.who-paid > li {
+  padding: 8px 0;
+}
+.pay-row,
 .court-row {
-  border-left: 3px solid var(--court);
-  padding-left: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pay-top,
+.pc-top,
+.pc-sub {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+.pay-who,
+.pc-name {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.pc-sub {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+}
+.pc-sub .chip {
+  margin-left: auto;
+}
+.pay-btns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.pay-btns > .btn {
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 0.93rem;
+  white-space: nowrap;
+}
+.who-paid > li.court-row {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  /* The box reaches 10px into the card's padding, so the text and buttons line up with the player rows. */
+  padding: 9px;
+  margin: 4px -10px 8px;
 }
 .court-cost {
+  flex: none;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 /* A payment the player marked themselves, until the organizer confirms it. */
