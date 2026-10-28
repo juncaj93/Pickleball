@@ -26,6 +26,23 @@ export const lateDropsAll = (s: AdminSessionView) => s.roster.filter((r) => r.st
 export const refundRows = (s: AdminSessionView) =>
   s.roster.filter((r) => !r.isOrganizer && r.paymentStatus === 'paid' && (s.state.flags.canceled || r.status === 'withdrawn'));
 
+/** Played: not canceled, and over. Money in for a game that is not played yet is "held". */
+export const isPlayed = (s: AdminSessionView, nowMs: number) => !s.state.flags.canceled && Date.parse(s.endsAt) <= nowMs;
+
+/** What a player paid that is still held: paid, not refunded, for a game not played yet (or canceled). The organizer's court row is never held money. */
+export function heldCents(d: AdminDashboard, playerId?: string): number {
+  const nowMs = Date.parse(d.now);
+  let total = 0;
+  for (const s of d.sessions) {
+    if (isPlayed(s, nowMs)) continue;
+    for (const r of s.roster) {
+      if (r.isOrganizer || r.paymentStatus !== 'paid' || r.refundedAt || (playerId && r.playerId !== playerId)) continue;
+      total += r.paymentAmountCents ?? 0;
+    }
+  }
+  return total;
+}
+
 /**
  * The organizer's short list: things that aren't one session card's court or
  * players, most urgent first. Court actions and "short on players" live only
@@ -45,11 +62,12 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   for (const x of s) if (x.sixDropped) items.push({ kind: 'sixdrop', session: x });
   // Late drops not yet looked at, while the session is still ahead.
   for (const x of s) if (upcoming(x) && lateDrops(x).length) items.push({ kind: 'latedrop', session: x });
-  // Pay back anyone who paid and then the session was canceled or they dropped
-  // (a late drop's refund lives on its own card until that's done).
+  // Money to give back goes first: a canceled game, or a paid player who left.
+  // (A late drop's refund lives on its own card until that's done.)
+  const refunds: TodoItem[] = [];
   for (const x of s) {
     const showing = upcoming(x) && lateDrops(x).length > 0;
-    if (!showing && refundRows(x).some((r) => !r.refundedAt)) items.push({ kind: 'refund', session: x });
+    if (!showing && refundRows(x).some((r) => !r.refundedAt)) refunds.push({ kind: 'refund', session: x });
   }
   // Who owes you: from the day-before check-in on, and after play. On game
   // day, that day's unpaid players get their own "Mark paid tonight" card at
@@ -72,6 +90,7 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   }
   if (tonight.length) items.unshift({ kind: 'tonight', rows: tonight });
   if (owed.length) items.push({ kind: 'owed', rows: owed });
+  items.unshift(...refunds);
   return items;
 }
 

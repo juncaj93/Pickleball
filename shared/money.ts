@@ -74,3 +74,61 @@ export function venmoNote(startsAt: string | string[], tz: string, name?: string
 
 /** Payment is asked for from 8:00 AM on game day, in the group's time zone. */
 export const PAY_FROM_HOUR = 8;
+
+/** What a pasted Venmo link or @name turned into: a handle to store (null = blank), or unreadable. */
+export type VenmoHandle = { ok: true; handle: string | null } | { ok: false };
+
+const VENMO_NAME = /^[A-Za-z0-9_-]{2,40}$/;
+/** First path words on venmo.com that are pages, not people. */
+const VENMO_PAGES = new Set(['u', 'code', 'account', 'pay', 'charge', 'settings', 'about', 'help', 'privacy', 'legal', 'login', 'signup']);
+
+/**
+ * Reads what the organizer typed or pasted into "Venmo link or @name":
+ * `@Name`, `venmo.com/u/Name`, `https://account.venmo.com/u/Name`,
+ * `venmo.com/Name`, or a link carrying `user_id=123456`. Blank means "none".
+ * Returns only the username ("Name") or "id:123456", nothing else.
+ */
+export function parseVenmoHandle(input: unknown): VenmoHandle {
+  if (input === null || input === undefined) return { ok: true, handle: null };
+  if (typeof input !== 'string') return { ok: false };
+  const s = input.trim();
+  if (s === '') return { ok: true, handle: null };
+  if (s.startsWith('@')) return VENMO_NAME.test(s.slice(1)) ? { ok: true, handle: s.slice(1) } : { ok: false };
+  let u: URL;
+  try {
+    u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`);
+  } catch {
+    return { ok: false };
+  }
+  if (!/^(www\.|account\.)?venmo\.com$/i.test(u.hostname)) return { ok: false };
+  const parts = u.pathname.split('/').filter(Boolean);
+  let name: string | undefined;
+  if (parts[0]?.toLowerCase() === 'u') name = parts[1];
+  else if (parts.length === 1 && !VENMO_PAGES.has(parts[0].toLowerCase())) name = parts[0];
+  if (name !== undefined) return VENMO_NAME.test(name) ? { ok: true, handle: name } : { ok: false };
+  const id = u.searchParams.get('user_id');
+  if (id && /^\d{3,20}$/.test(id)) return { ok: true, handle: `id:${id}` };
+  return { ok: false };
+}
+
+/** A saved handle as the organizer reads it back: "@Name", or the id link. */
+export function venmoHandleText(handle: string | null): string {
+  if (!handle) return '';
+  return handle.startsWith('id:') ? `venmo.com/code?user_id=${handle.slice(3)}` : `@${handle}`;
+}
+
+/**
+ * Venmo links to pay a player back: the exact amount and a note, addressed to
+ * that person when their handle is saved, otherwise left for the organizer to
+ * pick the person. `appUrl` opens the Venmo app first, like the Pay button.
+ */
+export function venmoRefundUrl(handle: string | null, cents: number, note: string): { url: string; appUrl: string; addressed: boolean } {
+  const to = handle ? `recipients=${handle.startsWith('id:') ? handle.slice(3) : handle}&` : '';
+  const query = `txn=pay&${to}amount=${venmoAmount(cents)}&note=${venmoEncode(note)}`;
+  return { url: `https://venmo.com/?${query}`, appUrl: `venmo://paycharge?${query}`, addressed: !!handle };
+}
+
+/** "Pickleball Thu Oct 29 refund". */
+export function refundNote(startsAt: string, tz: string): string {
+  return `${venmoNote(startsAt, tz)} refund`;
+}

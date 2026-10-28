@@ -8,7 +8,7 @@ import {
   deadlineAlertMessage,
   paymentMessage,
 } from '../../../shared/messages';
-import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
+import { formatCents, formatPrice, parseDollars, refundNote, venmoRefundUrl } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
 import type { BookingStatus } from '../../../shared/status';
@@ -23,11 +23,11 @@ import {
   toLocalInputValue,
   weekFade,
 } from '../../../shared/time';
-import { api, ApiError, useNow } from '../../lib';
+import { api, ApiError, openVenmo, storageGet, storageSet, useNow } from '../../lib';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
-import { lateDropsAll, recipients, refundRows } from './todo';
+import { isPlayed, lateDropsAll, recipients, refundRows } from './todo';
 import { TextButton } from './Texts';
 
 export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'canceled' | 'moved';
@@ -449,50 +449,103 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
   );
 }
 
-/** Everyone who paid for a canceled session, with a Refunded checkbox. A record only; no money moves. */
+/** Refund buttons already tapped on this phone, so "Mark refunded" is still there after a reload. */
+function useOpenedRefunds(sessionId: string) {
+  const key = `pb_refund_opened_${sessionId}`;
+  const read = (): string[] => {
+    try {
+      const v = JSON.parse(storageGet(key) ?? '[]');
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+      return [];
+    }
+  };
+  const [opened, setOpened] = useState<string[]>(read);
+  return {
+    opened,
+    add: (playerId: string) =>
+      setOpened((cur) => {
+        const next = cur.includes(playerId) ? cur : [...cur, playerId];
+        storageSet(key, JSON.stringify(next));
+        return next;
+      }),
+  };
+}
+
+/**
+ * Money to give back for one session: everyone who paid for a canceled game,
+ * or paid and then dropped. Refund opens Venmo with the exact amount and note
+ * (to that person if their Venmo is saved); it never marks anything. Then
+ * "Mark refunded" records it, and Undo takes it back. Nothing moves by itself.
+ */
 export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionView; only?: string[] }) {
   const { busy, run } = useAction(ctx);
-  // Ticks show right away while saving.
-  const [pending, setPending] = useState<Record<string, boolean>>({});
+  const tz = ctx.d.group.timezone;
+  const { opened, add } = useOpenedRefunds(s.id);
   const paid = refundRows(s).filter((r) => !only || only.includes(r.playerId));
   if (paid.length === 0) return null;
-  const isRefunded = (r: AdminRosterEntry) => pending[r.playerId] ?? !!r.refundedAt;
-  const left = paid.filter((r) => !isRefunded(r)).length;
+  const left = paid.filter((r) => !r.refundedAt).length;
   const canceled = s.state.flags.canceled;
+  const note = refundNote(s.startsAt, tz);
+  const setRefunded = (r: AdminRosterEntry, refunded: boolean) =>
+    run(() => api('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: r.playerId, refunded }), refunded ? 'Refunded' : 'Unmarked');
   return (
     <section className="stack refunds" aria-label="Pay back">
       {canceled && <h3>Pay back {left > 0 ? `(${left} left)` : '(all done)'}</h3>}
-      <ul className="rows">
-        {paid.map((r) => (
-          <li key={r.playerId}>
-            <span className="who">
-              {canceled ? (
-                <>
-                  <strong>{r.name}</strong>
-                  <span className="small muted">paid {formatPrice(r.paymentAmountCents ?? 0)}</span>
-                </>
-              ) : (
-                <span>
-                  <strong>{r.name}</strong> paid {formatPrice(r.paymentAmountCents ?? 0)} and dropped. Refund?
-                </span>
-              )}
-            </span>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={isRefunded(r)}
-                disabled={busy}
-                onChange={async (e) => {
-                  const refunded = e.target.checked;
-                  setPending((p) => ({ ...p, [r.playerId]: refunded }));
-                  await run(() => api('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: r.playerId, refunded }), refunded ? 'Refunded' : 'Unmarked');
-                  setPending(({ [r.playerId]: _, ...rest }) => rest);
-                }}
-              />
-              <span>Refunded</span>
-            </label>
-          </li>
-        ))}
+      <ul className="list refund-list">
+        {paid.map((r) => {
+          const amount = r.paymentAmountCents ?? 0;
+          const venmo = ctx.d.players.find((p) => p.id === r.playerId)?.venmo ?? null;
+          const pay = venmoRefundUrl(venmo, amount, note);
+          return (
+            <li key={r.playerId} className="pay-row" data-refund={r.name}>
+              <div className="pay-top">
+                <div className="pay-who">
+                  {canceled ? (
+                    <>
+                      <strong>{r.name}</strong> <span className="refund-amt">{formatPrice(amount)}</span>
+                      <div className="small muted">paid {formatPrice(amount)}</div>
+                    </>
+                  ) : (
+                    <span>
+                      <strong>{r.name}</strong> paid <span className="refund-amt">{formatPrice(amount)}</span> and dropped. Refund?
+                    </span>
+                  )}
+                </div>
+                {r.refundedAt && <Chip tone="ok">Refunded</Chip>}
+              </div>
+              <div className="pay-btns">
+                {r.refundedAt ? (
+                  <button className="btn small secondary" disabled={busy} onClick={() => setRefunded(r, false)}>
+                    Undo
+                  </button>
+                ) : (
+                  <>
+                    <a
+                      className="btn small secondary"
+                      href={pay.url}
+                      data-app-href={pay.appUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Refund ${r.name} ${formatPrice(amount)} with Venmo`}
+                      onClick={(e) => {
+                        openVenmo(e, pay);
+                        add(r.playerId);
+                      }}
+                    >
+                      Refund
+                    </a>
+                    {opened.includes(r.playerId) && (
+                      <button className="btn small secondary" disabled={busy} onClick={() => setRefunded(r, true)}>
+                        Mark refunded
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -697,12 +750,15 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
   const price = ctx.d.group.settings.pricePerPlayerCents;
+  const nowMs = Date.parse(ctx.d.now);
+  const played = isPlayed(s, nowMs);
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   const setCourtPaid = (paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
 
   return (
     <div className="stack">
+      {!s.state.flags.canceled && (
       <div className="spread">
         <div>
           <div className="muted small">Each player pays</div>
@@ -714,6 +770,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </Chip>
         )}
       </div>
+      )}
       {s.state.flags.canceled && (
         <>
           <Notice tone="muted" title="Session canceled">
@@ -722,6 +779,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           <RefundList ctx={ctx} s={s} />
         </>
       )}
+      {!s.state.flags.canceled && <RefundList ctx={ctx} s={s} />}
+      {!s.state.flags.canceled && (
       <ul className="list who-paid">
         {s.court && (
           <li className="court-row" data-court={s.id}>
@@ -756,14 +815,19 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                 {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                 <div className="small muted">
                   {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
-                  {r.paidAt
-                    ? `paid ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}`
-                    : `owes ${formatPrice((r.shareCents ?? price) - r.creditCents)}`}
+                  {r.paidAt ? (
+                    <>
+                      paid <span className={played ? undefined : 'held-amt'}>{formatPrice(r.paymentAmountCents ?? 0)}</span> on {formatShortDate(r.paidAt, tz)}
+                      {played ? '' : <span className="held-amt"> · not played yet</span>}
+                    </>
+                  ) : (
+                    `owes ${formatPrice((r.shareCents ?? price) - r.creditCents)}`
+                  )}
                   {r.discount ? ' · 6-person discount' : ''}
                   {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit used` : ''}
                 </div>
               </div>
-              <Chip tone={r.paymentStatus === 'paid' ? 'ok' : 'warn'}>{r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}</Chip>
+              <Chip tone={r.paymentStatus === 'paid' ? (played ? 'ok' : 'info') : 'warn'}>{r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}</Chip>
             </div>
             <div className="pay-btns">
               {r.paymentStatus === 'paid' ? (
@@ -797,6 +861,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
           </li>
         ))}
       </ul>
+      )}
     </div>
   );
 }

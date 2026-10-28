@@ -42,6 +42,8 @@ export interface PlayerRow {
   is_new: number;
   calendar_token: string | null;
   calendar_off: number;
+  /** Organizer only: Venmo username (or "id:123") for refunds. Never sent to players. */
+  venmo_handle: string | null;
 }
 
 export interface SessionRow {

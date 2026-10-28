@@ -201,6 +201,8 @@ export interface AdminPlayer {
   usualDays: number[];
   /** Added their own name and the organizer hasn't reviewed them yet. */
   isNew: boolean;
+  /** Organizer only: saved Venmo username (or "id:123") for refunds. Never sent to players. */
+  venmo: string | null;
   /** Organizer only: how many times they dropped out late. */
   lateDrops: number;
   /** Organizer only: sessions they've played, ever. */
@@ -303,6 +305,8 @@ export interface MonthlyMoney {
   /** The full court cost of every session played. */
   courtCostCents: number;
   creditsOwedCents: number;
+  /** Paid by other players for games not played yet (or canceled and not refunded yet). Not in Collected until played. */
+  heldCents: number;
   /** Collected minus court costs minus credits owed. */
   netCents: number;
   /** Players paid more than the courts cost: the amount toward the membership. */

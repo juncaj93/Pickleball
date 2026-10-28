@@ -3898,3 +3898,22 @@ dialog.sheet[open]::backdrop {
   font-weight: 600;
   color: var(--ok-fg);
 }
+
+/* Money held for games not played yet: blue, always with words beside it. */
+.held-amt {
+  color: var(--info-fg);
+  font-weight: 650;
+  white-space: nowrap;
+}
+.p-held {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--info-fg);
+}
+.refund-amt {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.refund-list > li {
+  padding: 8px 0;
+}

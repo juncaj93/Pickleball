@@ -89,3 +89,5 @@ command prints a "bookmark" you can use to undo the undo.
   `restore.sql` with step 1, and loaded twice into Cloudflare's own local
   database (step 2). All rows came back, including names with apostrophes and
   emoji, and the canceled game stayed canceled.
+
+Backups made before Oct 28, 2026 (evening) have no Venmo field for players; they restore fine and leave it blank.

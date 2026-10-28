@@ -3,7 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, demoOn, useDemoVersion } from '../lib';
+import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
@@ -355,24 +355,6 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
       </button>
     </form>
   );
-}
-
-const PHONE = /iPhone|iPad|iPod|Android/i;
-
-/**
- * Pay. This page never leaves its tab, so coming back lands right on it with
- * "I paid" ready. On a phone the Venmo app opens on top of it; on a computer
- * the Venmo website opens in a new tab (the link's target="_blank"). In the
- * organizer's demo nothing opens.
- */
-function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: string | null; appUrl: string | null }) {
-  if (demoOn()) {
-    e.preventDefault();
-    return;
-  }
-  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
-  e.preventDefault();
-  window.location.href = pay.appUrl;
 }
 
 /** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */

@@ -673,6 +673,7 @@ function playerFields(body: Record<string, unknown>) {
     isActive: v.optionalBool(body.isActive, 'isActive', true),
     canReceiveSubstituteInvites: v.optionalBool(body.canReceiveSubstituteInvites, 'canReceiveSubstituteInvites', true),
     usualDays: v.usualDays(body.usualDays),
+    venmo: v.venmoHandle(body.venmo),
   };
 }
 
@@ -690,10 +691,10 @@ export async function createPlayer(ctx: Ctx, body: Record<string, unknown>) {
   try {
     await ctx.db
       .prepare(
-        `INSERT INTO players (id, group_id, display_name, phone_number, is_regular, is_active, can_receive_substitute_invites, sort_order, created_at, usual_days)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO players (id, group_id, display_name, phone_number, is_regular, is_active, can_receive_substitute_invites, sort_order, created_at, usual_days, venmo_handle)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(id, group.id, f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, count?.n ?? 0, ctx.nowIso, f.usualDays ?? '')
+      .bind(id, group.id, f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, count?.n ?? 0, ctx.nowIso, f.usualDays ?? '', f.venmo ?? null)
       .run();
   } catch (err) {
     uniqueNameError(err);
@@ -711,10 +712,11 @@ export async function updatePlayer(ctx: Ctx, body: Record<string, unknown>) {
     res = await ctx.db
       .prepare(
         `UPDATE players SET display_name = ?, phone_number = ?, is_regular = ?, is_active = ?, can_receive_substitute_invites = ?,
-           usual_days = COALESCE(?, usual_days), is_new = 0
+           usual_days = COALESCE(?, usual_days), is_new = 0,
+           venmo_handle = CASE WHEN ? = 1 THEN ? ELSE venmo_handle END
          WHERE id = ? AND group_id = ?`,
       )
-      .bind(f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, f.usualDays, id, group.id)
+      .bind(f.name, f.phone, +f.isRegular, +f.isActive, +f.canReceiveSubstituteInvites, f.usualDays, +(f.venmo !== undefined), f.venmo ?? null, id, group.id)
       .run();
   } catch (err) {
     uniqueNameError(err);

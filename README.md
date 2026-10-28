@@ -169,6 +169,28 @@ credit. A game you are not in still has the court row (marking it paid adds a
 quiet "declined" record for you on that game; it never takes a spot).
 Canceled games have no court row. Players never see any of this.
 
+## Held money and refunds (organizer only)
+
+Players can pay ahead. Money paid for a game that hasn't been played yet is
+**held**: the Paid pill and amount are blue with "not played yet" beside them,
+the monthly card gets a blue **Held** row (only when above $0), and the Players
+tab shows a small blue "$28 held" under a balance. When the game is played the
+money moves from Held to Collected, and turns green. Collected, Court costs and
+Left only ever count played games. Your own court row is never held money.
+
+When a game is canceled, or a paid player leaves, a **Refund needed** card
+sits at the top of Home (and the same buttons are on that game's row in Money >
+Who paid). **Refund** opens Venmo (the app first on a phone) with the exact
+amount and a note like "Pickleball Thu Oct 29 refund", addressed to that
+person if their Venmo is saved, otherwise you pick the person. Opening Venmo
+never marks anything. **Mark refunded** then records it (and Undo takes it
+back). Nothing is sent by the site.
+
+Players > Edit has an optional **Venmo link or @name**. Paste a profile link
+from the Venmo app (or type @Name); only the username is saved. It is organizer
+only and is never in any player screen or response. It is in the backup file
+and comes back on restore.
+
 ## Late drops
 
 A confirmed player who drops out after the cancellation deadline (12 hours
@@ -403,8 +425,8 @@ production.
 ## Tests
 
 ```bash
-npm test               # 293 server and logic tests
-npm run test:e2e       # 337 browser checks (needs Playwright + Chromium)
+npm test               # 311 server and logic tests
+npm run test:e2e       # 471 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
