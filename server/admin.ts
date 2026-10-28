@@ -2,7 +2,7 @@ import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
-import { formatDateTime, formatShortDate, formatTimeRange } from '../shared/time';
+import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
@@ -26,6 +26,7 @@ import {
   issueCredits,
   loadCredits,
   loadHiddenSessions,
+  lookbackIso,
   openCredits,
   syncSix,
   visibleFrom,
@@ -137,7 +138,7 @@ export function playerLinkFor(ctx: Ctx, group: GroupRow): string {
 async function moneyPicture(ctx: Ctx, group: GroupRow) {
   // Credits from sessions that just ended exist before anything is paid or cleared.
   await issueCredits(ctx.db, group, ctx.nowMs);
-  const since = new Date(ctx.nowMs - HISTORY_MS).toISOString();
+  const since = await lookbackIso(ctx.db, group.id, ctx.nowMs, HISTORY_MS);
   const from = visibleFrom(group);
   const sessions = await loadSessions(ctx.db, group.id, since, from);
   const rosters = await loadRosters(ctx.db, group.id, since, from);
@@ -820,6 +821,47 @@ export async function exportData(ctx: Ctx): Promise<Response> {
   });
 }
 
+/**
+ * Tables in a backup file, parents before children (the order a restore
+ * puts them back in). Sign-in records, wrong-PIN counts and spam counters
+ * are left out: they're short-lived, and a restore signs everyone out.
+ */
+export const BACKUP_TABLES = [
+  'groups',
+  'players',
+  'sessions',
+  'session_players',
+  'credits',
+  'session_action_tokens',
+  'player_devices',
+  'admin_audit_log',
+] as const;
+
+/**
+ * GET /api/admin/backup: everything needed to rebuild the site's data, as
+ * one file. Restore it with scripts/restore-backup.mjs (docs/RESTORE.md).
+ * Organizer only. It holds phone numbers and the PIN's hash, so it's private.
+ */
+export async function backupFile(ctx: Ctx): Promise<Response> {
+  const group = await requireAdmin(ctx);
+  const tables: Record<string, Record<string, unknown>[]> = {};
+  for (const t of BACKUP_TABLES) {
+    const { results } = await ctx.db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all<Record<string, unknown>>();
+    tables[t] = results;
+  }
+  const p = localParts(ctx.nowMs, group.timezone);
+  const stamp = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
+  const body = JSON.stringify({ format: 'pickleball-backup', version: 1, createdAt: ctx.nowIso, groupName: group.name, tables }, null, 1);
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': `attachment; filename="pickleball-backup-${stamp}.json"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 const ACTIVITY_PAGE = 80;
 
 /** GET /api/admin/activity?before=<iso>: History > Activity, newest first. */
@@ -942,7 +984,7 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
     return res;
   }
   const res = await withdraw(ctx.db, session, me.id, ctx.nowMs);
-  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group).checkInHours) : false;
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group)) : false;
   if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
   return { result: res.changed ? 'withdrawn' : 'not_in_session' };
 }

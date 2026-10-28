@@ -359,6 +359,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           </form>
         </Section>
         <Section id="backup" title="Backup" sections={sections}>
+          <a className="btn" href="/api/admin/backup" download>
+            Download backup file
+          </a>
+          <p className="small muted">Has phone numbers. Keep it private.</p>
           <a className="btn secondary" href="/api/admin/export" download="pickleball-export.csv">
             Download CSV
           </a>

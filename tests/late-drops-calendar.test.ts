@@ -24,15 +24,22 @@ async function out(ctx: Ctx, id: string, name: string) {
 const entry = (d: any, sid: string, name: string) => d.sessions.find((x: any) => x.id === sid).roster.find((r: any) => r.name === name);
 
 describe('late drops', () => {
-  it('only counts a confirmed player dropping once the day-before window opens (24 hours before)', async () => {
+  it('only counts a confirmed player dropping after the cancellation deadline (12 hours before by default)', async () => {
     const ctx = await setupGroup();
-    const s = await on(ctx, '2026-10-27'); // Tue 8:00 PM
+    const s = await on(ctx, '2026-10-27'); // Tue 8:00 PM, deadline 8:00 AM
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
-    ctx.app.now = Date.parse(s.startsAt) - 25 * HOUR;
+    // 20 hours before (inside the day-before window, before the deadline): not late.
+    ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
     await out(ctx, s.id, 'Devon');
     let d = await dash(ctx);
     expect(entry(d, s.id, 'Devon').lateDropAt).toBeNull();
-    // Back in, then out again inside the window.
+    // One minute before the deadline: still not late.
+    await join(ctx, s.id, ['Devon']);
+    ctx.app.now = Date.parse(s.startsAt) - 12 * HOUR - 60_000;
+    await out(ctx, s.id, 'Devon');
+    d = await dash(ctx);
+    expect(entry(d, s.id, 'Devon').lateDropAt).toBeNull();
+    // Back in, then out again after the deadline.
     await join(ctx, s.id, ['Devon']);
     ctx.app.now = Date.parse(s.startsAt) - 3 * HOUR;
     await out(ctx, s.id, 'Devon');
@@ -45,6 +52,18 @@ describe('late drops', () => {
     d = await dash(ctx);
     expect(buildTodo(d).map((i) => i.kind)).not.toContain('latedrop');
     expect(d.players.find((p: any) => p.name === 'Devon').lateDrops).toBe(1);
+  });
+
+  it("follows the booking's own cancellation deadline when it has one", async () => {
+    const ctx = await setupGroup();
+    const s = await on(ctx, '2026-10-27');
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Deadline moved to 24 hours before play (Mon 8:00 PM).
+    const deadline = new Date(Date.parse(s.startsAt) - 24 * HOUR).toISOString();
+    await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/booking`, { bookingStatus: 'booked', cancellationDeadlineAt: deadline });
+    ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
+    await out(ctx, s.id, 'Devon');
+    expect(entry(await dash(ctx), s.id, 'Devon').lateDropAt).toBe(new Date(ctx.app.now).toISOString());
   });
 
   it('organizer removals and waitlist drops are not late drops; coming back in clears it', async () => {

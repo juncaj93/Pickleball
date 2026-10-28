@@ -407,3 +407,20 @@ export async function loadHiddenSessions(db: D1Database, group: GroupRow, nowMs:
     .all<SessionRow>();
   return results;
 }
+
+/**
+ * How far back to load sessions: `defaultMs` ago, or further back if
+ * someone still owes for an older game, so unpaid amounts never drop off.
+ */
+export async function lookbackIso(db: D1Database, groupId: string, nowMs: number, defaultMs: number): Promise<string> {
+  const usual = new Date(nowMs - defaultMs).toISOString();
+  const row = await db
+    .prepare(
+      `SELECT MIN(s.ends_at) AS oldest FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE s.group_id = ? AND s.status <> 'canceled' AND sp.status = 'confirmed' AND sp.payment_status = 'unpaid' AND s.ends_at <= ?`,
+    )
+    .bind(groupId, usual)
+    .first<{ oldest: string | null }>();
+  // Sessions are loaded with ends_at > since, so step just before the oldest.
+  return row?.oldest ? new Date(Date.parse(row.oldest) - 1).toISOString() : usual;
+}

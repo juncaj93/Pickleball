@@ -1,4 +1,6 @@
 import type { RosterStatus } from '../shared/api';
+import { deadlineMs } from '../shared/cards';
+import type { GroupSettings } from '../shared/settings';
 import { MIN_PLAYERS } from '../shared/spots';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
@@ -293,13 +295,15 @@ export async function withdraw(
 }
 
 /**
- * A confirmed player dropping out once the day-before check-in window has
- * opened is a "late drop": the organizer sees it, and it counts on the
- * Players screen. Only drops the player makes count, not organizer removals.
+ * A confirmed player dropping out after the cancellation deadline (the
+ * booking's own, or the default hours before play) is a "late drop": the
+ * organizer sees it, and it counts on the Players screen. Only drops the
+ * player makes count, not organizer removals.
  */
-export async function recordLateDrop(db: D1Database, session: SessionRow, playerId: string, nowMs: number, checkInHours: number) {
+export async function recordLateDrop(db: D1Database, session: SessionRow, playerId: string, nowMs: number, settings: GroupSettings) {
   const start = Date.parse(session.starts_at);
-  if (nowMs < start - checkInHours * 3600_000 || nowMs >= start) return false;
+  const deadline = deadlineMs({ startsAt: session.starts_at, cancellationDeadlineAt: session.cancellation_deadline_at }, settings);
+  if (nowMs < deadline || nowMs >= start) return false;
   const nowIso = new Date(nowMs).toISOString();
   const res = await db
     .prepare("UPDATE session_players SET late_drop_at = ?, late_drop_done_at = NULL WHERE session_id = ? AND player_id = ? AND status = 'withdrawn'")

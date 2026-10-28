@@ -5,7 +5,7 @@ import { DayBeforeTexts } from './admin/Texts';
 import { recipients } from './admin/todo';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, useLoad, useNow } from '../lib';
+import { api, ApiError, useLoad, useNow, useRefreshOnReturn } from '../lib';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, SmsDraft, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
@@ -27,6 +27,7 @@ export interface AdminCtx {
 
 export function AdminApp() {
   const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'));
+  useRefreshOnReturn(load.refresh);
   if (load.loading && !load.data && !load.error) {
     return (
       <>
@@ -191,7 +192,7 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
       <SessionSheets ctx={ctx} sheet={sheet} onClose={() => setSheet(null)} />
       <Sheet open={pickViewAs} title="View as…" onClose={() => setPickViewAs(false)}>
         <div className="stack">
-          <p className="small muted">Taps here really happen for them.</p>
+          <p className="small muted">Demo only: taps here change nothing.</p>
           <div className="name-grid">
             {d.players
               .filter((p) => p.isActive)

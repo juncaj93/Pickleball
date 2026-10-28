@@ -3,7 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, setGroupKey, setViewAs, storageGet, storageSet, useLoad, copyText } from '../lib';
+import { api, ApiError, isDemo, setGroupKey, setViewAs, storageGet, storageSet, useLoad, useRefreshOnReturn, copyText } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
@@ -27,7 +27,8 @@ function joinedText(d: JoinResponse): string {
 
 /**
  * The player's one screen. Also used by the organizer's "View as...", where
- * every request carries the chosen player and taps really happen for them.
+ * every request carries the chosen player and it's look-only: taps say
+ * "Demo only" and nothing is saved.
  */
 export function PlayerHome({
   groupKey,
@@ -58,6 +59,7 @@ export function PlayerHome({
     return () => setViewAs(null);
   }, [viewAs?.id]);
   const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id]);
+  useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
   // A shared link like ?s=<session id> opens with that session highlighted.
@@ -394,7 +396,8 @@ function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
       toast(paid ? 'Marked paid' : 'Marked not paid');
       await onChanged();
     } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      if (isDemo(err)) toast(err.message);
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
       setBusy(false);
@@ -494,6 +497,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
 
 /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
 function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void> }) {
+  const toast = useToast();
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
@@ -510,7 +514,8 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
         await onChanged();
       }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
+      if (isDemo(err)) toast(err.message);
+      else setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
     } finally {
       setBusy(false);
     }
@@ -700,7 +705,8 @@ function ScheduleRow({
       toast(label(await api<any>('POST', `/api/sessions/${s.id}/${path}`, {})));
       await onChanged();
     } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      if (isDemo(err)) toast(err.message);
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
       setBusy(false);

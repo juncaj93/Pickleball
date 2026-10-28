@@ -69,8 +69,8 @@ session's court (hidden when there's nothing in it):
 - check-in texts that are due
 
 **View as…** in the header shows exactly what any player sees, with a "Viewing as
-Ryan" banner and Exit. Taps there really happen for that player, and the log
-records that the organizer did it.
+Ryan" banner and Exit. It's look-only: taps there say "Demo only. Nothing was
+saved." and change nothing, and nothing goes in the Activity log.
 
 Every text is a draft with **Open in Messages** and **Copy message** buttons.
 The status says "Draft ready" or "Composer opened", never "Sent".
@@ -135,8 +135,8 @@ on Home on game day.
 
 ## Late drops
 
-A confirmed player who drops out once the day-before check-in has opened (24
-hours before play by default) is a late drop: a "Late drop" card on Home with
+A confirmed player who drops out after the cancellation deadline (12 hours
+before play by default, or that booking's own deadline) is a late drop: a "Late drop" card on Home with
 the name and time, a one-tap **Text the group: spot open** text, and, if they
 had paid, "Ryan paid $14 and dropped. Refund?" with **Refunded**. The session
 card shows a "Late drop" tag, and the Players screen counts them ("Late drops:
@@ -317,7 +317,7 @@ The player link looks like `https://<your-site>.pages.dev/g/<random-key>`.
   npx wrangler d1 execute pickleball --remote --command "UPDATE groups SET admin_pin_hash = '<paste the printed hash>'"
   ```
 - **Player link leaked:** Settings → Replace link. The old link stops working.
-- **Backup:** Settings → Download CSV.
+- **Backup:** Settings → Backup → Download backup file. Restoring: see `docs/RESTORE.md`. (Download CSV is a report only.)
 - **Redeploy after a code change:** `npm run deploy`.
 - **New database changes:** add a numbered file in `migrations/`, then
   `npm run db:migrate:remote`.
