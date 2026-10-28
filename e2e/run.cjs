@@ -2314,14 +2314,16 @@ async function main() {
         await card.locator('.rows li', { hasText: 'Frankie' }).first().waitFor();
         await card.locator('.rows li', { hasText: 'Frankie' }).first().getByText(/^dropped (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} (AM|PM)$/).waitFor();
         await card.getByText(/Frankie paid \$\d+ and dropped\. Refund\?/).waitFor();
-        const bubble = (await card.locator('.bubble').innerText()).trim();
+        // The text for the opened spot is now the suggestion card for that game (not a second copy on the late-drop card).
+        assert((await card.locator('.bubble').count()) === 0, 'the late-drop card no longer carries a text');
+        const sug = admin.locator(`article[data-suggest][data-session="${first.id}"]`);
+        await sug.waitFor();
         // Whichever fits the game now: need players, or the check-in once it is back to 4 or 6.
-        assert(/^(Need \d+ more for pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2}, \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(bubble), `spot text was: ${bubble}`);
-        assert(!/ASAP|text me/i.test(bubble), 'no "text me ASAP"');
-        const spotLink = card.getByRole('link', { name: /^Text the (group|players)/ });
-        const spot = smsOf(await spotLink.getAttribute('href'));
-        assert(spot.body === bubble, 'the link opens Messages with the same words');
-        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the spot-open card');
+        const spot = smsOf(await sug.getByRole('link', { name: /^Text/ }).getAttribute('href'));
+        assert(/^(Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
+        assert(!/ASAP|text me/i.test(spot.body), 'no "text me ASAP"');
+        assert((await sug.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
+        assert(!/\bsent\b/i.test(await sug.innerText()), 'never say sent');
         assert(!/\bsent\b/i.test(await card.innerText()), 'never say sent');
         const sc = admin.locator(`#session-${first.id}`);
         await sc.locator('.late-tag').waitFor();
