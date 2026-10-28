@@ -319,6 +319,44 @@ async function main() {
     await ctx.close();
   }
 
+  // ---- 4b. Game day: the payment card at the top of the player screen.
+  {
+    const db = new DatabaseSync(dbFile);
+    const group = db.prepare('SELECT id FROM groups').get().id;
+    const put = db.prepare("INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) VALUES (?, ?, ?, 'kept', ?, ?, ?)");
+    put.run('e2e-r', group, id.Ryan, 4200, thu.id, '2026-10-26T15:00:00.000Z');
+    put.run('e2e-b', group, id.Brandon, 500, thu.id, '2026-10-26T15:00:00.000Z');
+    db.close();
+    await clock('2026-11-10T09:00:00-05:00'); // game day, after 8:00 AM
+    for (const [who, covers] of [['Ryan', true], ['Brandon', false]]) {
+      for (const scheme of ['light', 'dark']) {
+        for (const width of WIDTHS) {
+          const tag = `${width}px ${scheme}`;
+          const { ctx, page, errors } = await player(who, scheme, width);
+          await check(`${tag}: game-day card, credit ${covers ? 'covers it all: Use credit is the one green button' : 'covers part: Pay stays green, Use credit is quiet'}`, async () => {
+            const card = page.locator('section.pay-card');
+            await card.waitFor();
+            const use = card.locator('[data-use-credit]');
+            await use.waitFor();
+            assert((await greenButtons(card)) === 1, `green buttons: ${await greenButtons(card)}`);
+            assert((await use.evaluate((b) => b.classList.contains('secondary'))) === !covers, 'wrong button is green');
+            await tidy(card, 'pay card');
+            await noSideways(page);
+          });
+          await check(`${tag}: no browser errors`, async () => assert(errors.length === 0, errors.join(' | ')));
+          await ctx.close();
+        }
+      }
+    }
+    const { ctx, page } = await player('Ryan', 'light', 390);
+    await check('Use credit on the game-day card pays the game with credit', async () => {
+      await page.locator('section.pay-card [data-use-credit]').click();
+      await page.locator('section.pay-card').waitFor({ state: 'detached' });
+      await page.getByText('✓ Paid with credit').first().waitFor();
+    });
+    await ctx.close();
+  }
+
   // ---- 5. "Were you charged for this court?" only within 12 hours.
   for (const [iso, asked, label] of [
     ['2026-11-10T09:00:00-05:00', true, '11 hours before'],
