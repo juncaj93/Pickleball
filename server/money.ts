@@ -18,7 +18,7 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
  * "You covered $8 of the court costs". Never a surplus from the organizer.
  */
 export function bottomLine(netCents: number, membershipCents: number, sessionsPlayed = 1): string {
-  if (sessionsPlayed === 0) return 'No sessions played yet';
+  if (sessionsPlayed === 0) return 'Nothing played yet';
   if (netCents > 0) return `Surplus: ${formatPrice(netCents)} toward the ${formatPrice(membershipCents)} membership`;
   if (netCents < 0) return `You covered ${formatPrice(-netCents)} of the court costs`;
   return 'Players covered the court costs';
