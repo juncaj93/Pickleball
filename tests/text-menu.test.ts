@@ -68,7 +68,7 @@ describe('the Text menu shows only the texts that fit', () => {
     expect(c.phones).toEqual([phoneOf(ctx, d, 'Blair'), phoneOf(ctx, d, 'Casey')]);
     expect(c.missing).toEqual(['Devon']);
     expect(c.who).toBe('Everyone signed up · 3');
-    expect(c.body).toMatch(/^Pickleball (tomorrow \(Tue\)|Tue Nov 3), 8:00 PM\. Still in\? Update here: pickleball\.juncaj\.net$/);
+    expect(c.body).toMatch(/^Pickleball (tomorrow|Tue Nov 3), 8:00 PM\. Still in\? Update here: pickleball\.juncaj\.net$/);
     // It opens one group text to those numbers.
     expect(smsHref(c.phones, c.body, true)).toContain('sms://open?addresses=');
   });
@@ -77,7 +77,7 @@ describe('the Text menu shows only the texts that fit', () => {
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     ctx.app.now = Date.parse('2026-11-02T14:00:00Z'); // Mon 9:00 AM
-    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tomorrow (Tue), 8:00 PM. Still in? Update here: ${LINK}`);
+    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tomorrow, 8:00 PM. Still in? Update here: ${LINK}`);
     ctx.app.now = Date.parse('2026-11-03T14:00:00Z'); // Tue 9:00 AM
     expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Still in? Update here: ${LINK}`);
   });
@@ -149,7 +149,7 @@ describe('the Text menu shows only the texts that fit', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     const { d, items } = await menu(ctx, s.id);
     expect(ids(items)).toEqual(['canceled']);
-    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. ${LINK}`);
+    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it stays as your credit. Want a refund instead? Text me. ${LINK}`);
     expect(items[0].phones).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery'].map((n) => phoneOf(ctx, d, n)));
   });
   it('a moved game: Moved (to everyone signed up and waiting) plus the usual ones', async () => {

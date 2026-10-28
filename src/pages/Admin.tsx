@@ -360,8 +360,8 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 phone={r.phone}
                 body={
                   r.promotionReason === 'made_six' && s.confirmedCount === 6
-                    ? nowSixMessage(s, tz, siteAddress(ctx.d.group.playerLink))
-                    : promotedMessage(s, tz, siteAddress(ctx.d.group.playerLink))
+                    ? nowSixMessage(s, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink))
+                    : promotedMessage(s, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink))
                 }
               />
               <button

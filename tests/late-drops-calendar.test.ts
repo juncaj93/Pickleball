@@ -105,7 +105,7 @@ describe('late drops', () => {
 
   it('the need-players text for a spot that opened', () => {
     const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
-    const text = needPlayersMessage(s, TZ, 1, 'pickleball.juncaj.net');
+    const text = needPlayersMessage(s, TZ, Date.parse('2026-10-26T16:00:00Z'), 1, 'pickleball.juncaj.net');
     expect(text).toBe('Need 1 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
     expect(text).not.toMatch(/\bsent\b/i);
   });

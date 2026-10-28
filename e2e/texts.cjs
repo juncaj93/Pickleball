@@ -147,12 +147,12 @@ async function main() {
         assert(JSON.stringify(list) === JSON.stringify(['Share the game', 'Check-in']), `menu: ${list}`);
         const share = menu.locator('[data-text="share"]');
         const sh = smsOf(await share.locator('a').getAttribute('href'));
-        assert(sh.to.length === 0 && /^Pickleball Tue Oct 27, 8:00 PM\. In or out here: \S+$/.test(sh.body), `share: ${sh.body}`);
+        assert(sh.to.length === 0 && /^Pickleball (?:tonight|tomorrow|today|Tue Oct 27), 8:00 PM\. In or out here: \S+$/.test(sh.body), `share: ${sh.body}`);
         assert((await share.locator('.text-who').innerText()).trim() === 'Group chat, you pick', 'share who');
         const ci = menu.locator('[data-text="checkin"]');
         const c = smsOf(await ci.locator('a').getAttribute('href'));
         assert(JSON.stringify(c.to.sort()) === JSON.stringify([phone('Ryan'), phone('Brandon')].sort()), `check-in numbers: ${c.to}`);
-        assert(/^Pickleball (tomorrow \(Tue\)|today|tonight), 8:00 PM\. Still in\? Update here: \S+$/.test(c.body), `check-in: ${c.body}`);
+        assert(/^Pickleball (tomorrow|today|tonight), 8:00 PM\. Still in\? Update here: \S+$/.test(c.body), `check-in: ${c.body}`);
         assert(!/ASAP|text me|\bsent\b/i.test(c.body), 'bad words');
         assert((await ci.locator('.text-who').innerText()).trim() === 'Everyone signed up · 3', 'check-in who');
         await ci.getByText('Missing numbers: Nathan').waitFor();

@@ -437,7 +437,7 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
   const tz = ctx.d.group.timezone;
   const [reason, setReason] = useState('');
   const link = siteAddress(ctx.d.group.playerLink);
-  const body = canceled ? canceledMessage(s, tz, link, reason) : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, link, reason);
+  const body = canceled ? canceledMessage(s, tz, Date.parse(ctx.d.now), link, reason) : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, Date.parse(ctx.d.now), link, reason);
   // Everyone signed up and on the waitlist; never the organizer.
   const who = reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), ctx.d.me?.id ?? null);
   return (

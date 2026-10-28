@@ -44,20 +44,23 @@ describe('Venmo note', () => {
   });
 });
 
+const LONG_BEFORE = Date.parse('2026-10-26T16:00:00Z');
+
 describe('texts when a session changes', () => {
   const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
   const moved = { startsAt: '2026-11-06T01:00:00.000Z', endsAt: '2026-11-06T03:00:00.000Z' };
-  it('cancel: "Pickleball Tue Nov 3 is canceled. {link}" with an optional reason before the link', () => {
-    expect(canceledMessage(s, TZ, 'pickleball.juncaj.net')).toBe('Pickleball Tue Nov 3 is canceled. pickleball.juncaj.net');
-    expect(canceledMessage(s, TZ, 'pickleball.juncaj.net', '  rain in the forecast ')).toBe('Pickleball Tue Nov 3 is canceled. rain in the forecast. pickleball.juncaj.net');
-    expect(canceledMessage(s, TZ, 'pickleball.juncaj.net', 'Court closed!')).toBe('Pickleball Tue Nov 3 is canceled. Court closed! pickleball.juncaj.net');
+  it('cancel: "Pickleball Tue Nov 3 is canceled." then the credit line, with an optional reason after the first sentence', () => {
+    const credit = 'If you paid, it stays as your credit. Want a refund instead? Text me.';
+    expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net')).toBe(`Pickleball Tue Nov 3 is canceled. ${credit} pickleball.juncaj.net`);
+    expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net', '  rain in the forecast ')).toBe(`Pickleball Tue Nov 3 is canceled. rain in the forecast. ${credit} pickleball.juncaj.net`);
+    expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net', 'Court closed!')).toBe(`Pickleball Tue Nov 3 is canceled. Court closed! ${credit} pickleball.juncaj.net`);
   });
   it('reschedule: "Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. {link}"', () => {
-    expect(movedMessage(moved, s.startsAt, TZ, 'pickleball.juncaj.net')).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. pickleball.juncaj.net');
-    expect(movedMessage(moved, s.startsAt, TZ, 'pickleball.juncaj.net', 'Court swap')).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. Court swap. pickleball.juncaj.net');
+    expect(movedMessage(moved, s.startsAt, TZ, LONG_BEFORE, 'pickleball.juncaj.net')).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. pickleball.juncaj.net');
+    expect(movedMessage(moved, s.startsAt, TZ, LONG_BEFORE, 'pickleball.juncaj.net', 'Court swap')).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. Court swap. pickleball.juncaj.net');
   });
   it('never says a message was sent', () => {
-    for (const m of [canceledMessage(s, TZ, 'L', 'x'), movedMessage(moved, s.startsAt, TZ, 'L', 'y')]) expect(m).not.toMatch(/\bsent\b/i);
+    for (const m of [canceledMessage(s, TZ, LONG_BEFORE, 'L', 'x'), movedMessage(moved, s.startsAt, TZ, LONG_BEFORE, 'L', 'y')]) expect(m).not.toMatch(/\bsent\b/i);
   });
   it('players see Canceled or the new time', async () => {
     const ctx = await setupGroup();
@@ -213,8 +216,8 @@ describe('monthly money is private', () => {
       (await alex.call('GET', '/api/group')).text,
       (await ctx.app.client().call('GET', `/api/sessions/${s.id}/calendar.ics`)).text,
       (await ctx.app.client().call('GET', '/api/status')).text,
-      canceledMessage(s, TZ, 'L', 'x'),
-      movedMessage(s, s.startsAt, TZ, 'L', 'y'),
+      canceledMessage(s, TZ, LONG_BEFORE, 'L', 'x'),
+      movedMessage(s, s.startsAt, TZ, LONG_BEFORE, 'L', 'y'),
     ];
     for (const t of texts) {
       expect(t).not.toMatch(/(?<![A-Za-z0-9_-])(4321|2987)(?![A-Za-z0-9_-])|43\.21|29\.87|membership|typicalCourtCost|monthlyMembership|Monthly money|Surplus|You covered|Players covered/i);
