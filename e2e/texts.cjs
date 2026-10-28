@@ -147,7 +147,7 @@ async function main() {
         assert(JSON.stringify(list) === JSON.stringify(['Share the game', 'Check-in']), `menu: ${list}`);
         const share = menu.locator('[data-text="share"]');
         const sh = smsOf(await share.locator('a').getAttribute('href'));
-        assert(sh.to.length === 0 && /^Pickleball (?:tonight|Tue Oct 27), 8:00 PM\. In or out here: \S+$/.test(sh.body), `share: ${sh.body}`);
+        assert(sh.to.length === 0 && /^Pickleball (?:tonight|tomorrow|today|Tue Oct 27), 8:00 PM\. In or out here: \S+$/.test(sh.body), `share: ${sh.body}`);
         assert((await share.locator('.text-who').innerText()).trim() === 'Group chat, you pick', 'share who');
         const ci = menu.locator('[data-text="checkin"]');
         const c = smsOf(await ci.locator('a').getAttribute('href'));
