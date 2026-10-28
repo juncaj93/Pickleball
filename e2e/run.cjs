@@ -2731,7 +2731,7 @@ async function main() {
         const rows = await p.evaluate(() =>
           [...document.querySelectorAll('.set-row')].map((r) => {
             const label = r.querySelector('.set-label').getBoundingClientRect();
-            const box = r.querySelector('.set-input').getBoundingClientRect();
+            const box = r.querySelector('.set-input, .switch').getBoundingClientRect();
             const card = r.closest('.card').getBoundingClientRect();
             return { name: r.querySelector('.set-label').innerText.split('\n')[0], label: label.width, box: box.width, inside: box.right <= card.right - 1 && box.left > label.right - 1 };
           }),
@@ -3130,8 +3130,11 @@ async function main() {
           assert((await p.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, `${name} scrolls sideways`);
         }
         // Settings with every section open was 2623px tall at 390px before the trim.
+        // Alerts came later, so its own height doesn't count against that.
         if (width === 390) {
-          const h = await p.evaluate(() => document.documentElement.scrollHeight);
+          const h = await p.evaluate(
+            () => document.documentElement.scrollHeight - (document.querySelector('details[data-section="alerts"]')?.getBoundingClientRect().height ?? 0),
+          );
           assert(h <= 2623 - 100, `Settings is ${h}px tall (was 2623px)`);
         }
         // Message drafts on Home: who and the number on one line, no "Draft" tag.

@@ -386,7 +386,7 @@ production.
 
 ```bash
 npm test               # 276 server and logic tests
-npm run test:e2e       # browser checks (needs Playwright + Chromium)
+npm run test:e2e       # 316 browser checks (needs Playwright + Chromium)
 npm run typecheck
 ```
 
