@@ -1664,7 +1664,7 @@ async function main() {
       await p.reload();
       const row = firstCard(p);
       await row.locator('.names-line').waitFor();
-      const tops = await row.locator('.in-line > *').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2));
+      const tops = await row.locator('.in-line > :not(.names-wrap), .in-line > .names-wrap > *').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2));
       assert(Math.max(...tops) - Math.min(...tops) < 6, 'count, dots and names should sit on one line');
       assert((await row.getByText(/You owe/).count()) === 0, 'no money block on the row');
     });
@@ -1868,7 +1868,7 @@ async function main() {
       const first = await admin.evaluate(async () => {
         const d = await (await fetch('/api/admin/dashboard')).json();
         // A later session whose day-before card hasn't been seen (and dismissed) yet.
-        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.now() + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
+        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.parse(d.now) + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
       });
       assert(first, 'need a later session with 4 in');
       const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
@@ -2125,7 +2125,7 @@ async function main() {
     await check('late drop: tag on Home and the card, paid-and-dropped refund, spot-open text, count on Players', async () => {
       const first = await admin.evaluate(async () => {
         const d = await (await fetch('/api/admin/dashboard')).json();
-        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.now() && s.status !== 'canceled' && s.roster.some((r) => r.name === 'Frankie' && r.status === 'confirmed'));
+        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.parse(d.now) && s.status !== 'canceled' && s.roster.some((r) => r.name === 'Frankie' && r.status === 'confirmed'));
       });
       assert(first, 'need a session Frankie is in');
       const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
@@ -2953,8 +2953,8 @@ async function main() {
         }
         // Message drafts on Home: who and the number on one line, no "Draft" tag.
         await tab(p, 'Home').click();
-        const heads = await p.locator('.draft .draft-head').evaluateAll((hs) => hs.map((h) => h.getBoundingClientRect().height));
-        assert(heads.every((h) => h <= 30), `draft headers wrap: ${heads}`);
+        const heads = await p.locator('.draft .draft-head').evaluateAll((hs) => hs.map((h) => ({ h: h.getBoundingClientRect().height, t: h.textContent })));
+        assert(heads.every((x) => x.h <= 30), `draft headers wrap: ${heads.filter((x) => x.h > 30).map((x) => `"${x.t}" ${x.h}px`)}`);
         assert((await p.locator('.draft').getByText('Draft', { exact: true }).count()) === 0, 'no Draft tag');
         // The player screen too.
         const pl = await newPage(width, scheme);

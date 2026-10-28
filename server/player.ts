@@ -28,7 +28,7 @@ import {
 } from './repo';
 import { holidayFor } from '../shared/holidays';
 import { newId } from './crypto';
-import { recentCount, recordEvent } from './rate';
+import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -219,8 +219,9 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
     throw new HttpError(409, 'name_taken', `Someone already uses "${name}". Add your last initial, like "${name} S."`);
   }
   if (all.length >= 30) throw new HttpError(409, 'too_many_players', 'The list is full. Ask the organizer to add you.');
-  // Spam guard: a few new names per phone per hour.
-  if ((await recentCount(ctx, 'self_add', 3600_000)) >= SELF_ADDS_PER_HOUR) {
+  // Spam guard: a few new names per phone per hour, even when many arrive at once.
+  const slot = await claimSlot(ctx, 'self_add', 3600_000, SELF_ADDS_PER_HOUR);
+  if (!slot) {
     throw new HttpError(429, 'too_many_names', "You've added a few names already. Try again in an hour, or ask the organizer to add you.");
   }
   const id = newId();
@@ -233,12 +234,12 @@ export async function addSelf(ctx: Ctx, body: Record<string, unknown>) {
       .bind(id, group.id, name, all.length, ctx.nowIso, ctx.nowIso)
       .run();
   } catch (err) {
+    await releaseSlot(ctx, slot);
     if (err instanceof Error && /UNIQUE/i.test(err.message)) {
       throw new HttpError(409, 'name_taken', `Someone already uses "${name}". Add your last initial, like "${name} S."`);
     }
     throw err;
   }
-  await recordEvent(ctx, 'self_add');
   await rememberPlayer(ctx, group, id);
   await audit(ctx.db, group.id, null, 'player_self_added', { name }, ctx.nowIso, 'player');
   return { result: 'added', me: { id, name } };

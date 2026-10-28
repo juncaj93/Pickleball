@@ -1749,6 +1749,15 @@ dialog.sheet::backdrop {
 .week-break .btn.pill + .btn.pill {
   margin-left: -4px;
 }
+/* Under 360px both pills only fit with a little less room around them. */
+@media (max-width: 359px) {
+  .week-break {
+    gap: 6px;
+  }
+  .week-break .btn.pill {
+    padding: 0 8px;
+  }
+}
 
 /* ---------- Player screen ---------- */
 
@@ -1821,6 +1830,14 @@ dialog.sheet::backdrop {
 .sched[data-holiday] .sched-status .court-status {
   min-width: 0;
   white-space: nowrap;
+}
+/* Under 360px (iPhone SE 1st gen) one line can't hold both, so the holiday
+   goes under the court words instead of running into them. */
+@media (max-width: 359px) {
+  .sched[data-holiday] .sched-status {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
 }
 
 /* Time and its tags. */
@@ -2192,12 +2209,21 @@ dialog.sheet::backdrop {
 }
 .players-line.has-after > .players-mid {
   display: flex;
-  flex-wrap: nowrap;
+  /* With 6 in, the names go under the dots rather than under the button. */
+  flex-wrap: wrap;
   align-items: center;
   align-content: center;
   gap: 4px 6px;
   min-height: 34px;
   min-width: 0;
+}
+/* Under 360px six dots and "You're in" can't share one line, so the
+   button drops to its own line at the right. */
+@media (max-width: 359px) {
+  .players-line.has-after {
+    display: flex;
+    flex-wrap: wrap;
+  }
 }
 .players-count {
   font-weight: 700;
@@ -2210,6 +2236,18 @@ dialog.sheet::backdrop {
 }
 .players-line .names-line {
   font-size: 0.82rem;
+}
+/* Names and "+4" move as one piece: they go under the dots together when
+   there's no room beside them, and the names shrink (with "…") first. */
+.names-wrap {
+  display: contents;
+}
+.players-line.has-after .names-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .spots {

@@ -27,3 +27,27 @@ export async function recordEvent(ctx: Ctx, kind: string): Promise<void> {
   // Keep the table small: nothing older than a day matters.
   await ctx.db.prepare('DELETE FROM rate_events WHERE created_at < ?').bind(new Date(ctx.nowMs - 86_400_000).toISOString()).run();
 }
+
+/**
+ * Take one of `max` slots for `kind` in the last `windowMs`, or return null
+ * if they're used up. The event is written down before counting, so a burst
+ * of simultaneous requests all see each other and at most `max` get through.
+ * Returns the event id, so a request that fails later can give it back.
+ */
+export async function claimSlot(ctx: Ctx, kind: string, windowMs: number, max: number): Promise<string | null> {
+  const id = newId();
+  await ctx.db
+    .prepare('INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, ?, ?, ?)')
+    .bind(id, kind, clientKey(ctx), ctx.nowIso)
+    .run();
+  if ((await recentCount(ctx, kind, windowMs)) > max) {
+    await releaseSlot(ctx, id);
+    return null;
+  }
+  await ctx.db.prepare('DELETE FROM rate_events WHERE created_at < ?').bind(new Date(ctx.nowMs - 86_400_000).toISOString()).run();
+  return id;
+}
+
+export async function releaseSlot(ctx: Ctx, id: string): Promise<void> {
+  await ctx.db.prepare('DELETE FROM rate_events WHERE id = ?').bind(id).run();
+}

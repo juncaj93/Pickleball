@@ -101,7 +101,12 @@ export async function handleApi(req: Request, env: Env, nowMs = Date.now()): Pro
     const match = candidates.find((r) => r.method === req.method);
     if (!match) throw new HttpError(405, 'method_not_allowed', 'Method not allowed.');
     const m = match.pattern.exec(ctx.url.pathname) as RegExpExecArray;
-    match.keys.forEach((k, i) => (ctx.params[k] = decodeURIComponent(m[i + 1])));
+    try {
+      match.keys.forEach((k, i) => (ctx.params[k] = decodeURIComponent(m[i + 1])));
+    } catch {
+      // A broken %-escape in the address is just a bad address, not a server error.
+      throw new HttpError(404, 'not_found', 'Not found.');
+    }
     const body = req.method === 'POST' || req.method === 'PUT' ? await readJson(req) : {};
     const result = await match.handler(ctx, body);
     if (result instanceof Response) return result;

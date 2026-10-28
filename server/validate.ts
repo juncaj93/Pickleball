@@ -8,13 +8,16 @@ function bad(field: string, message: string): never {
 
 // eslint-disable-next-line no-control-regex
 const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+// Invisible marks that flip text direction or hide in a word, so a name like
+// "Ryan" could look like someone else's. Emoji joiners are still allowed.
+const HIDDEN_CHARS = /[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
 
 export function text(v: unknown, field: string, opts: { max: number; min?: number }): string {
   if (typeof v !== 'string') bad(field, `${field} is required.`);
   const s = v.trim();
   if (s.length < (opts.min ?? 1)) bad(field, `${field} is required.`);
   if (s.length > opts.max) bad(field, `${field} is too long (max ${opts.max}).`);
-  if (CONTROL_CHARS.test(s)) bad(field, `${field} has invalid characters.`);
+  if (CONTROL_CHARS.test(s) || HIDDEN_CHARS.test(s)) bad(field, `${field} has invalid characters.`);
   return s;
 }
 

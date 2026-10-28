@@ -29,6 +29,16 @@ const GUARD = {
   organizer: `${CONFIRMED} < 6`,
 } as const;
 
+/**
+ * Getting a spot back keeps a payment already made, unless it was refunded:
+ * then the money went back, so they owe again like anyone new.
+ */
+const KEEP_PAYMENT_UNLESS_REFUNDED = `payment_status = CASE WHEN payment_status = 'paid' AND refunded_at IS NULL THEN 'paid' ELSE 'unpaid' END,
+  paid_at = CASE WHEN refunded_at IS NULL THEN paid_at ELSE NULL END,
+  payment_amount_cents = CASE WHEN refunded_at IS NULL THEN payment_amount_cents ELSE NULL END,
+  self_paid_at = CASE WHEN refunded_at IS NULL THEN self_paid_at ELSE NULL END,
+  refunded_at = NULL`;
+
 export type JoinResult =
   | { result: 'confirmed'; madeSix?: boolean }
   | { result: 'standby'; position: number }
@@ -74,7 +84,7 @@ async function tryConfirm(db: D1Database, session: SessionRow, playerId: string,
                claim_seq = CASE WHEN status = 'waitlisted' THEN claim_seq ELSE ${NEXT_CLAIM_SEQ} END,
                attendance_confirmed_at = NULL,
                promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
-               payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'unpaid' END,
+               ${KEEP_PAYMENT_UNLESS_REFUNDED},
                updated_at = ?3
            WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD[guard]}`,
         )
@@ -170,7 +180,7 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
              confirm_seq = ${NEXT_CONFIRM_SEQ} + CASE WHEN id = ?5 THEN 1 ELSE 0 END,
              attendance_confirmed_at = NULL,
              promoted_at = ?2, promotion_reason = ?3, promotion_notified_at = NULL,
-             payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'unpaid' END,
+             ${KEEP_PAYMENT_UNLESS_REFUNDED},
              updated_at = ?2
          WHERE id IN (?4, ?5) AND status = 'waitlisted' AND ${guard}`,
       )
