@@ -208,7 +208,7 @@ async function main() {
       assert(/^Check-in: /.test(await card.getAttribute('aria-label')), await card.getAttribute('aria-label'));
       const { to, body } = smsOf(await card.getByRole('link', { name: /^Text/ }).getAttribute('href'));
       assert(to.length === 4, `numbers: ${to}`);
-      assert(body === 'Pickleball tomorrow, 8:00 PM. Still in? Update here: localhost:' + PORT, body);
+      assert(body === 'Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: localhost:' + PORT, body);
       assert(/4 players/.test(await card.innerText()), 'who it goes to');
     });
     await ctx.close();

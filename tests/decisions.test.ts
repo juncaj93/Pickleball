@@ -123,10 +123,10 @@ describe('check-in wording', () => {
   it('says "tonight" for the usual game and "today" for one before 5:00 PM', () => {
     const at = (start: string, end: string) => ({ startsAt: start, endsAt: end });
     const noon = (iso: string) => Date.parse(iso);
-    expect(checkInMessage(at('2026-11-04T01:00:00Z', '2026-11-04T03:00:00Z'), TZ, noon('2026-11-03T15:00:00Z'), 'L')).toBe('Pickleball tonight, 8:00 PM. Still in? Update here: L');
-    expect(checkInMessage(at('2026-11-07T15:00:00Z', '2026-11-07T17:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 10:00 AM. Still in? Update here: L');
-    expect(checkInMessage(at('2026-11-07T21:30:00Z', '2026-11-07T23:30:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 4:30 PM. Still in? Update here: L');
-    expect(checkInMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball tonight, 5:00 PM. Still in? Update here: L');
+    expect(checkInMessage(at('2026-11-04T01:00:00Z', '2026-11-04T03:00:00Z'), TZ, noon('2026-11-03T15:00:00Z'), 'L')).toBe('Pickleball tonight, 8:00 PM. Can\'t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-07T15:00:00Z', '2026-11-07T17:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 10:00 AM. Can\'t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-07T21:30:00Z', '2026-11-07T23:30:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball today, 4:30 PM. Can\'t make it? Update here: L');
+    expect(checkInMessage(at('2026-11-07T22:00:00Z', '2026-11-08T00:00:00Z'), TZ, noon('2026-11-07T11:00:00Z'), 'L')).toBe('Pickleball tonight, 5:00 PM. Can\'t make it? Update here: L');
   });
 });
 

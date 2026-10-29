@@ -1186,7 +1186,7 @@ async function main() {
       assert(!names.includes('Canceled'), 'a live session has no Canceled text');
       const inCount = await card.locator('.players-line .dot.in, .players-line .dot.me').count();
       assert(names.includes('Need players') === inCount < 4, 'Need players only when fewer than 4 are in');
-      assert(names.includes('Check-in') === (inCount === 4 || inCount === 6), 'Check-in only when exactly 4 or 6 are in');
+      assert(names.includes('Check-in') === (inCount >= 4), 'Check-in only when 4 or more are in');
       for (const row of await menu.locator('.text-row').all()) {
         const id = await row.getAttribute('data-text');
         const link = row.locator('a.text-choice');
@@ -1196,7 +1196,7 @@ async function main() {
           assert(who === 'Group chat, you pick' && to.length === 0, `${id}: "${who}", ${to.length} numbers`);
           assert((await row.locator('.missing-numbers').count()) === 0, `${id}: no missing-numbers note`);
         }
-        if (id === 'checkin') assert(/^Everyone signed up · \d+$/.test(who) && to.length > 0, `${id} goes to the numbers saved: ${who}, ${to.length}`);
+        if (id === 'checkin') assert(who === 'Everyone signed up' && to.length > 0, `${id} goes to the numbers saved: ${who}, ${to.length}`);
         assert((await link.boundingBox()).height >= 44, 'choices 44px+');
       }
       // Tapping a choice opens Messages and says it's ready, never "sent".
@@ -2063,7 +2063,7 @@ async function main() {
         const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
         assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
         // The game is 20 hours away, so later the same day: "tonight".
-        const want = `Pickleball tonight, 8:00 PM. Still in? Update here: ${SITE}`;
+        const want = `Pickleball tonight, 8:00 PM. Can't make it? Update here: ${SITE}`;
         assert(smsOf(href).body === want, `Messages opens with: ${smsOf(href).body}`);
         assert((await card.innerText()).includes('4 players'), 'who it goes to');
         assert((await card.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
@@ -2322,7 +2322,7 @@ async function main() {
         await sug.waitFor();
         // Whichever fits the game now: the spot opened for someone moved in, need players, or the check-in once it is back to 4 or 6.
         const spot = smsOf(await sug.getByRole('link', { name: /^Text/ }).getAttribute('href'));
-        assert(/^(A spot opened and you're in for pickleball [^.]+, \d{1,2}:\d{2} PM\.|Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Still in\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
+        assert(/^(A spot opened and you're in for pickleball [^.]+, \d{1,2}:\d{2} PM\.|Need \d+ more for pickleball (tonight|today|tomorrow|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. In\?|Pickleball [^.]+, \d{1,2}:\d{2} PM\. Can't make it\? Update here:) [a-z0-9.:]+$/.test(spot.body), `spot text was: ${spot.body}`);
         assert(!/ASAP|text me/i.test(spot.body), 'no "text me ASAP"');
         assert((await sug.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
         assert(!/\bsent\b/i.test(await sug.innerText()), 'never say sent');

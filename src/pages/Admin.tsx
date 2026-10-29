@@ -304,7 +304,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   const title = {
     five: '5 going, need 4 or 6',
     sixdrop: `Was 6, now ${s.confirmedCount}: discount and credits are off`,
-    checkin: 'Check-in texts due',
     refund: s.state.flags.canceled ? `${formatShortDate(s.startsAt, tz)} was canceled. Refund needed:` : `${formatShortDate(s.startsAt, tz)}: a paid player left. Refund needed:`,
     latedrop: 'Late drop',
   }[item.kind];
@@ -374,20 +373,6 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
             onClick={() => act(() => api('POST', `/api/admin/sessions/${s.id}/six-sorted`, {}), 'Marked as sorted')}
           >
             Done, I sorted it out
-          </button>
-        </>
-      )}
-      {item.kind === 'checkin' && (
-        <>
-          <p className="small muted">
-            Not checked in yet:{' '}
-            {s.roster
-              .filter((r) => r.status === 'confirmed' && !r.attendanceConfirmedAt)
-              .map((r) => r.name)
-              .join(', ')}
-          </p>
-          <button className="btn small" onClick={() => ctx.open('reminders', s.id)}>
-            Prepare check-in texts
           </button>
         </>
       )}
