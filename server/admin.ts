@@ -22,6 +22,7 @@ import {
   loadRoster,
   loadRosters,
   loadSessions,
+  type RosterRow,
   type SessionRow,
   settingsOf,
   sharesFor,
@@ -31,11 +32,11 @@ import {
   visibleFrom,
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
-import { CHARGE_ASK_HOURS, type CreditReason, potBalance, seatKey, usableCredit } from '../shared/credit';
+import { CHARGE_ASK_HOURS, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { moneyPicture, returnSeatCredit, returnSessionCredit, undoCreditBack } from './credit';
 import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
-import { adminPlayerView, adminSessionView, eligibleSubstitutes, type SeatCredit } from './views';
+import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
@@ -55,21 +56,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   await ensureSessions(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
-  const { sessions, rosters, ledger, spent, reserved } = await moneyPictureOf(ctx, group);
+  const { sessions, rosters, ledger, reserved } = await moneyPictureOf(ctx, group);
   const organizerId = await organizerIdOf(ctx.db, group);
-  // Money that came back from each seat as credit (live entries), and why.
-  const back = new Map<string, { cents: number; reason: CreditReason | null }>();
-  for (const e of ledger) {
-    if (e.kind !== 'kept' || !e.sessionId || e.endedAt) continue;
-    const k = seatKey(e.sessionId, e.playerId);
-    const cur = back.get(k);
-    back.set(k, { cents: (cur?.cents ?? 0) + e.cents, reason: e.reason ?? cur?.reason ?? null });
-  }
-  const potFor = (sessionId: string) => (playerId: string): SeatCredit => {
-    const k = seatKey(sessionId, playerId);
-    const b = back.get(k);
-    return { usedCents: spent.get(k) ?? 0, backCents: b?.cents ?? 0, backReason: b?.reason ?? null };
-  };
+  // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
+  const potFor = (sessionId: string) => (r: RosterRow) =>
+    seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
   const charges = await loadCancelCharges(ctx.db, group.id);
   const startsOf = new Map(
     (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
@@ -83,7 +74,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
         balanceCents,
         reservedCents,
         refundCents: usableCredit(balanceCents, reservedCents),
-        entries: ledger
+        entries: visibleEntries(ledger)
           .filter((e) => e.playerId === playerId)
           .map(
             (e): CreditEntryView => ({
@@ -504,8 +495,9 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
       return { ok: true, changed: true };
     }
-    // The payment is the whole price: cash plus any credit already used on this seat.
-    const used = (await moneyPictureOf(ctx, group)).spent.get(seatKey(session.id, playerId)) ?? 0;
+    // The payment is the whole price: cash now, plus credit and cash already on this seat.
+    const seat = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
+    const used = seat.usedCents + seat.cashCents;
     await ctx.db
       .prepare(
         `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = ?,

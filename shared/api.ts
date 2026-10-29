@@ -55,6 +55,8 @@ export interface PlayerSessionView {
     oweCents: number;
     /** Credit from their pot already used on this session. */
     creditCents: number;
+    /** Cash they paid toward this session before its price went up (a redo with fewer players). */
+    paidEarlierCents: number;
     /** Paid in full with credit from their pot: shows "Paid with credit". */
     paidWithCredit: boolean;
     /** What "Use credit" would take off this session now: the smaller of their usable credit and what they owe. 0 hides the button. */
@@ -163,6 +165,8 @@ export interface AdminRosterEntry {
   promotionNotifiedAt: string | null;
   /** Credit from their pot used on this seat. */
   creditCents: number;
+  /** Cash paid toward this seat before its price went up. */
+  paidEarlierCents: number;
   /** Money from this seat that went back to them as credit, and why. */
   creditBackCents: number;
   creditBackReason: CreditReason | null;

@@ -10,8 +10,13 @@ import { formatPrice } from './money';
 import { formatShortDate } from './time';
 
 export type CreditKind = 'kept' | 'used' | 'refunded';
-/** Why a 'kept' entry exists (see migrations/0013). Older entries have none. */
-export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request';
+/**
+ * Why a 'kept' entry exists (see migrations/0013). Older entries have none.
+ * 'cash' marks a matched pair (+kept, -used) that holds cash someone paid
+ * toward a seat whose price then went up (a reopen and a redo with fewer
+ * players): the pot is unchanged, the seat owes the rest. Never shown.
+ */
+export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash';
 
 /**
  * "Were you charged for this court?" is asked when canceling a game this many
@@ -74,6 +79,53 @@ export function potBalances(rows: CreditRow[]): Map<string, number> {
 }
 
 export const seatKey = (sessionId: string, playerId: string) => `${sessionId}:${playerId}`;
+
+/** The entries a person reads: the cash pairs are bookkeeping, not history. */
+export function visibleEntries<T extends Pick<CreditRow, 'reason'>>(rows: T[]): T[] {
+  return rows.filter((r) => r.reason !== 'cash');
+}
+
+/** What a seat's payment looks like right now, for `seatCredit`. */
+export interface SeatLike {
+  paymentStatus: string;
+  paidAt: string | null;
+  refundedAt: string | null;
+}
+
+/** The credit pot's part of one seat. */
+export interface SeatCredit {
+  /** Credit from the pot used on this seat. */
+  usedCents: number;
+  /** Cash paid toward this seat before its price went up (counts like credit used, but is not credit). */
+  cashCents: number;
+  /** Money that came back from this seat as credit, and why. */
+  backCents: number;
+  backReason: CreditReason | null;
+}
+
+export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, cashCents: 0, backCents: 0, backReason: null };
+
+/**
+ * One seat's live ledger rows, read the way the screens need them. Money
+ * that came back counts against the payment it came from: a seat that is
+ * paid again (after a drop and a return, or a cancel and a reopen) only
+ * counts what came back from its current payment, which can only be the
+ * part above the final price (everything else settles the seat first); a
+ * settled or unpaid seat counts them all ("Your $28 is now credit").
+ */
+export function seatCredit(rows: CreditRow[], sessionId: string, playerId: string, seat: SeatLike): SeatCredit {
+  const mine = live(rows).filter((r) => r.sessionId === sessionId && r.playerId === playerId);
+  const used = mine.filter((r) => r.kind === 'used' && r.reason !== 'cash').reduce((sum, r) => sum + r.cents, 0);
+  const cash = mine.filter((r) => r.kind === 'used' && r.reason === 'cash').reduce((sum, r) => sum + r.cents, 0);
+  const current = seat.paymentStatus === 'paid' && !seat.refundedAt;
+  const backs = mine.filter((r) => r.kind === 'kept' && r.reason !== 'cash' && (!current || r.reason === 'finalized'));
+  return {
+    usedCents: used,
+    cashCents: cash,
+    backCents: backs.reduce((sum, r) => sum + r.cents, 0),
+    backReason: backs[0]?.reason ?? null,
+  };
+}
 
 /** Credit spent on each unpaid or paid seat, keyed `${sessionId}:${playerId}`. */
 export function usedBySeat(rows: CreditRow[]): Map<string, number> {

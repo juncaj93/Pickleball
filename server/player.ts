@@ -23,10 +23,10 @@ import { holidayFor } from '../shared/holidays';
 import { newId } from './crypto';
 import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
-import { potBalance, seatKey, usableCredit } from '../shared/credit';
+import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { loadPendingRequests, moneyPicture } from './credit';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCreditOn } from './creditActions';
-import { NO_SEAT_CREDIT, playerSessionView, type SeatCredit } from './views';
+import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
@@ -71,7 +71,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const tz = group.timezone;
   const allPlayers = await getPlayers(ctx.db, group.id);
   const players = allPlayers.filter((p) => p.is_active);
-  const { sessions, rosters, ledger, spent, reserved } = await moneyPicture(ctx.db, group, ctx.nowMs);
+  const { sessions, rosters, ledger, reserved } = await moneyPicture(ctx.db, group, ctx.nowMs);
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
@@ -79,12 +79,12 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
   const credit: GroupView['credit'] = { balanceCents: 0, usableCents: 0, pending: null, history: [] };
-  // Their own seats' part of the pot: credit used on it, and money that came back from it.
+  // Their own seats' part of the pot: credit used on it, cash paid toward it earlier, and money that came back from it.
   const mySeat = (sessionId: string): SeatCredit => {
     if (!me || meIsOrganizer) return NO_SEAT_CREDIT;
-    const k = seatKey(sessionId, me.id);
-    const backs = ledger.filter((e) => e.kind === 'kept' && e.sessionId === sessionId && e.playerId === me.id && !e.endedAt);
-    return { usedCents: spent.get(k) ?? 0, backCents: backs.reduce((sum, e) => sum + e.cents, 0), backReason: backs[0]?.reason ?? null };
+    const r = (rosters.get(sessionId) ?? []).find((x) => x.player_id === me.id);
+    if (!r) return NO_SEAT_CREDIT;
+    return seatCredit(ledger, sessionId, me.id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
   };
   if (me) {
     for (const s of meIsOrganizer ? [] : sessions) {
@@ -93,14 +93,15 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       const mine = roster.find((r) => r.player_id === me.id && r.status === 'confirmed' && r.payment_status === 'unpaid');
       const price = mine ? pricesFor(s, roster, settings).get(me.id) : undefined;
       if (!price) continue;
-      const used = spent.get(seatKey(s.id, me.id)) ?? 0;
+      const seat = mySeat(s.id);
+      const used = seat.usedCents + seat.cashCents;
       if (price.cents - used <= 0) continue;
       owed.push({
         sessionId: s.id,
         startsAt: s.starts_at,
         endsAt: s.ends_at,
         amountCents: price.cents - used,
-        creditCents: used,
+        creditCents: seat.usedCents,
         finalized: !!s.finalized_at,
         reminder: ctx.nowMs >= Date.parse(s.ends_at) + DAY_MS,
         signupAt: mine!.confirmed_at ?? mine!.claimed_at,
@@ -114,7 +115,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       const startsOf = new Map(
         (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
       );
-      credit.history = ledger
+      credit.history = visibleEntries(ledger)
         .filter((e) => e.playerId === me.id && !e.endedAt)
         .map(
           (e): CreditEntryView => ({

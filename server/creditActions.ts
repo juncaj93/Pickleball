@@ -67,7 +67,7 @@ export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionR
   const row = roster.find((r) => r.player_id === playerId);
   if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
   const used = await ctx.db
-    .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+    .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL AND (reason IS NULL OR reason <> 'cash')")
     .bind(session.id, playerId)
     .first<{ c: number }>();
   const cents = used?.c ?? 0;
@@ -129,10 +129,11 @@ export async function resolveRefundRequest(ctx: Ctx, body: Record<string, unknow
   const req = await ctx.db
     .prepare('SELECT r.*, p.display_name FROM refund_requests r JOIN players p ON p.id = r.player_id WHERE r.id = ? AND r.group_id = ?')
     .bind(id, group.id)
-    .first<{ id: string; player_id: string; amount_cents: number; status: string; display_name: string }>();
+    .first<{ id: string; player_id: string; amount_cents: number; status: string; ledger_id: string | null; display_name: string }>();
   if (!req) throw new HttpError(404, 'request_not_found', 'That request is gone.');
   if (action === 'undo') {
-    const undone = await undoRefund(ctx.db, req.player_id, ctx.nowIso);
+    if (req.status !== 'refunded' || !req.ledger_id) return { ok: true, changed: false };
+    const undone = await undoRefund(ctx.db, req.player_id, ctx.nowIso, req.ledger_id);
     if (undone) await audit(ctx.db, group.id, null, 'credit_refund_undone', { player: req.display_name, playerId: req.player_id }, ctx.nowIso);
     return { ok: true, changed: undone };
   }

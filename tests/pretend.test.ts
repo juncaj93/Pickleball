@@ -5,7 +5,7 @@ import { DAY, HOUR, firstSession, playerPhone, setupGroup } from './harness';
 // Organizer only, look-only, and nothing is ever written.
 
 const P = (iso: string) => ({ 'X-Pretend-Now': iso });
-const TABLES = ['groups', 'players', 'sessions', 'session_players', 'credits', 'session_action_tokens', 'player_devices', 'admin_audit_log', 'rate_events'];
+const TABLES = ['groups', 'players', 'sessions', 'session_players', 'credit_ledger', 'refund_requests', 'session_action_tokens', 'player_devices', 'admin_audit_log', 'rate_events'];
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 function snapshot(ctx: Ctx) {
@@ -53,20 +53,26 @@ describe('pretend time: look-only', () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
     const before = snapshot(ctx);
-    // After the 6-player game and 8 weeks on: a normal load would issue credits and make new games.
+    // After the 6-player game and 8 weeks on: a normal load would make new games; the game waits to be finalized.
     const later = new Date(Date.parse(s.endsAt) + 8 * 7 * DAY).toISOString();
     const d = (await ctx.organizer.call('GET', '/api/admin/dashboard', undefined, P(later))).data;
-    expect(d.credits.map((c: any) => c.balanceCents)).toEqual([500, 500, 500, 500]); // shown, not saved
+    expect(sessionOf(d, s.id)).toMatchObject({ needsFinalize: true, finalized: null }); // shown, not saved
+    expect(d.creditLedger).toEqual([]);
     await ctx.organizer.call('GET', '/api/admin/money?month=2026-10', undefined, P(later));
     await ctx.organizer.call('GET', '/api/admin/activity', undefined, P(later));
     await ctx.organizer.call('GET', '/api/group', undefined, { ...P(later), 'X-View-As': ctx.byName.Alex });
     const changes: [string, string, unknown, Record<string, string>?][] = [
-      ['POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true }],
+      ['POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Blair, paid: true }],
       ['POST', `/api/admin/sessions/${s.id}/booked`, {}],
       ['PUT', '/api/admin/group', { name: 'Nope' }],
       ['POST', `/api/admin/sessions/${s.id}/me`, { in: true }],
       ['POST', `/api/sessions/${s.id}/withdraw`, {}, { 'X-View-As': ctx.byName.Alex }],
+      ['POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true }],
+      ['POST', `/api/admin/sessions/${s.id}/reopen`, {}],
+      ['POST', '/api/me/refund-request', { cents: 500 }, { 'X-View-As': ctx.byName.Alex }],
+      ['POST', `/api/admin/players/${ctx.byName.Alex}/credit-refund`, { refunded: true, cents: 500 }],
       ['POST', '/api/admin/pin', { currentPin: '246810', newPin: '135790' }],
     ];
     for (const [m, path, body, extra] of changes) {
@@ -77,7 +83,8 @@ describe('pretend time: look-only', () => {
     expect(snapshot(ctx)).toEqual(before);
     // Real time again: nothing happened.
     const real = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
-    expect(real.audit.some((a: any) => /paid|booked|settings/.test(a.action))).toBe(false);
+    expect(real.audit.filter((a: any) => /paid|booked|settings|finalized|refund|withdraw/.test(a.action)).map((a: any) => a.action)).toEqual(before.admin_audit_log.filter((a: any) => /paid|booked|settings|finalized|refund|withdraw/.test(a.action)).map((a: any) => a.action));
+    expect(sessionOf(real, s.id).finalized).toBeNull();
   });
 });
 

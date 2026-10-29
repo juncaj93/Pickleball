@@ -14,7 +14,7 @@ import { localParts, zonedTimeToUtc } from '../shared/time';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { HttpError } from './http';
-import { keptRemaining } from '../shared/credit';
+import { keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 
@@ -58,15 +58,14 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     .all<SessionRow>();
   // The organizer pays the venue themselves: their own row is never money from players.
   const organizerId = await organizerIdOf(ctx.db, group);
-  // Credit that came back from games, split by the month of the game it came from (the oldest credit is spent first).
+  // Credit that came back from games, split by the month of the game it came from (the oldest credit is spent
+  // first). The cash pairs (reason 'cash') net to nothing in the pot and are left out.
   const ledger = (await loadLedger(ctx.db, group.id)).filter((e) => e.playerId !== organizerId);
-  const keptLeft = keptRemaining(ledger);
+  const keptLeft = keptRemaining(ledger.filter((e) => e.reason !== 'cash'));
   const owedBySession = new Map<string, number>();
-  const backBySeat = new Map<string, number>();
   for (const e of ledger) {
-    if (e.kind !== 'kept' || !e.sessionId || e.endedAt) continue;
+    if (e.kind !== 'kept' || !e.sessionId || e.endedAt || e.reason === 'cash') continue;
     owedBySession.set(e.sessionId, (owedBySession.get(e.sessionId) ?? 0) + (keptLeft.get(e.id) ?? 0));
-    backBySeat.set(`${e.sessionId}:${e.playerId}`, (backBySeat.get(`${e.sessionId}:${e.playerId}`) ?? 0) + e.cents);
   }
   // Canceled games the venue still charged for count their court cost.
   const charges = await loadCancelCharges(ctx.db, group.id);
@@ -82,10 +81,15 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     const over = ctx.nowMs >= Date.parse(s.ends_at);
     const state: MonthlyMoney['sessions'][number]['state'] =
       s.status === 'canceled' ? 'canceled' : !over ? 'upcoming' : s.finalized_at ? 'played' : s.booking_status === 'booked' || confirmed > 0 ? 'not_finalized' : 'not_played';
-    // What other players paid and have not been given back as credit (settled seats gave it all back).
+    // What other players paid and have not been given back as credit (settled seats gave it all back), plus cash
+    // paid earlier toward a seat whose price went up.
     const kept = roster
-      .filter((r) => r.player_id !== organizerId && r.payment_status === 'paid' && !r.refunded_at)
-      .reduce((sum, r) => sum + Math.max(0, (r.payment_amount_cents ?? 0) - (backBySeat.get(`${s.id}:${r.player_id}`) ?? 0)), 0);
+      .filter((r) => r.player_id !== organizerId)
+      .reduce((sum, r) => {
+        const seat = seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
+        if (r.payment_status === 'paid' && !r.refunded_at) return sum + Math.max(0, (r.payment_amount_cents ?? 0) - seat.backCents);
+        return sum + seat.cashCents;
+      }, 0);
     const cost = courtCostOf(s, settings);
     const charged = state === 'canceled' ? (charges.get(s.id) ?? 0) : 0;
     creditsOwed += owedBySession.get(s.id) ?? 0;

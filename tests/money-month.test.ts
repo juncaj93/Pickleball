@@ -50,7 +50,7 @@ describe('texts when a session changes', () => {
   const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
   const moved = { startsAt: '2026-11-06T01:00:00.000Z', endsAt: '2026-11-06T03:00:00.000Z' };
   it('cancel: "Pickleball Tue Nov 3 is canceled." then the credit line, with an optional reason after the first sentence', () => {
-    const credit = 'If you paid, it stays as your credit. Want a refund instead? Text me.';
+    const credit = "If you paid, it's now your credit. You can request a refund on the site.";
     expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net')).toBe(`Pickleball Tue Nov 3 is canceled. ${credit} pickleball.juncaj.net`);
     expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net', '  rain in the forecast ')).toBe(`Pickleball Tue Nov 3 is canceled. rain in the forecast. ${credit} pickleball.juncaj.net`);
     expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net', 'Court closed!')).toBe(`Pickleball Tue Nov 3 is canceled. Court closed! ${credit} pickleball.juncaj.net`);
@@ -74,8 +74,8 @@ describe('texts when a session changes', () => {
   });
 });
 
-describe('pay back after a cancel', () => {
-  it('lists who paid, with Refunded, and drops off once everyone is refunded', async () => {
+describe('credit back after a cancel', () => {
+  it('everyone who paid has their money as credit, a refund request is a card, and Mark refunded or undo follow', async () => {
     const ctx = await setupGroup();
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
@@ -83,24 +83,32 @@ describe('pay back after a cancel', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     let d = await dash(ctx);
     let x = d.sessions.find((y: any) => y.id === s.id);
-    expect(x.roster.filter((r: any) => r.paymentStatus === 'paid').map((r: any) => [r.name, r.refundedAt])).toEqual([
-      ['Alex', null],
-      ['Blair', null],
+    expect(x.roster.filter((r: any) => r.paymentStatus === 'paid').map((r: any) => [r.name, r.creditBackCents, r.creditBackReason, typeof r.refundedAt])).toEqual([
+      ['Alex', 1400, 'canceled', 'string'],
+      ['Blair', 1400, 'canceled', 'string'],
     ]);
-    expect(buildTodo(d).map((i) => i.kind)).toContain('refund');
-    // Someone who never paid can't be refunded; players can't mark refunds.
-    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName.Casey, refunded: true })).status).toBe(409);
-    expect((await (await playerPhone(ctx, 'Alex')).call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName.Alex, refunded: true })).status).toBe(401);
-    for (const n of ['Alex', 'Blair']) {
-      expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName[n], refunded: true })).status).toBe(200);
-    }
+    expect(x.roster.find((r: any) => r.name === 'Casey').creditBackCents).toBe(0); // never paid: nothing comes back
+    expect(buildTodo(d).map((i) => i.kind)).not.toContain('refund_request'); // nothing to decide
+    // Someone with no credit can't ask for a refund; players can't answer requests; a made-up request is not found.
+    expect((await (await playerPhone(ctx, 'Casey')).call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(409);
+    expect((await (await playerPhone(ctx, 'Alex')).call('POST', '/api/admin/refund-requests/x', { action: 'refunded' })).status).toBe(401);
+    expect((await ctx.organizer.call('POST', '/api/admin/refund-requests/00000000-0000-4000-8000-000000000000', { action: 'refunded' })).status).toBe(404);
+    for (const n of ['Alex', 'Blair']) expect((await (await playerPhone(ctx, n)).call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
+    d = await dash(ctx);
+    expect(buildTodo(d).filter((i) => i.kind === 'refund_request')).toHaveLength(2);
+    for (const r of d.refundRequests) expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${r.id}`, { action: 'refunded' })).status).toBe(200);
     d = await dash(ctx);
     x = d.sessions.find((y: any) => y.id === s.id);
-    expect(x.roster.filter((r: any) => r.refundedAt).length).toBe(2);
-    expect(buildTodo(d).map((i) => i.kind)).not.toContain('refund');
-    // Unticking puts it back.
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName.Blair, refunded: false });
-    expect(buildTodo(await dash(ctx)).map((i) => i.kind)).toContain('refund');
+    expect(buildTodo(d).map((i) => i.kind)).not.toContain('refund_request');
+    expect(d.creditLedger.map((l: any) => l.balanceCents)).toEqual([0, 0]);
+    // Undo puts Blair's credit back, and her request waits again.
+    const blair = d.audit.find((a: any) => a.action === 'credit_refund_marked' && a.details.player === 'Blair');
+    expect(blair).toBeDefined();
+    const req = (await ctx.app.db.prepare("SELECT id FROM refund_requests WHERE player_id = ? AND status = 'refunded'").bind(ctx.byName.Blair).first<{ id: string }>())!;
+    expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${req.id}`, { action: 'undo' })).data.changed).toBe(true);
+    d = await dash(ctx);
+    expect(buildTodo(d).filter((i) => i.kind === 'refund_request').map((i: any) => i.request.name)).toEqual(['Blair']);
+    expect(d.creditLedger.find((l: any) => l.playerId === ctx.byName.Blair).balanceCents).toBe(1400);
   });
 });
 
@@ -144,22 +152,29 @@ describe('monthly money', () => {
     // C is canceled: not counted at all.
     await ctx.organizer.call('POST', `/api/admin/sessions/${c.id}/decision`, { decision: 'cancel', confirm: true });
 
-    // Before the sessions happen, nothing is counted yet.
+    // Before the sessions happen, nothing is counted yet. C's four payments came back as credit.
     let m = await money(ctx, '2026-11');
-    expect(m).toMatchObject({ collectedCents: 0, courtCostCents: 0, netCents: 0, label: 'November 2026' });
+    expect(m).toMatchObject({ collectedCents: 0, courtCostCents: 0, netCents: 0, heldCents: 8400, creditsOwedCents: 5600, label: 'November 2026' });
 
     ctx.app.now = Date.parse('2026-11-30T17:00:00.000Z');
-    // A month later the organizer signs in again.
+    // A month later the organizer signs in again. Nothing is finalized yet: still held, nothing collected.
     await ctx.organizer.call('POST', '/api/admin/login', { pin: PIN });
     m = await money(ctx, '2026-11');
-    // A: 4 x $14 in, $50 court. B: 2 x $14 in, typical $48 court. C canceled.
+    expect(m).toMatchObject({ collectedCents: 0, courtCostCents: 0, heldCents: 8400 });
+    expect(m.sessions.find((x: any) => x.id === a.id)).toMatchObject({ state: 'not_finalized', collectedCents: 0, playedCount: null });
+    expect(m.bottomLine).toBe('Nothing played yet');
+    // Finalize both: 4 played each, $14, nothing back.
+    for (const s of [a, b]) expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
+    m = await money(ctx, '2026-11');
+    // A: 4 x $14 in, $50 court. B: 2 x $14 in, typical $48 court. C canceled: its $56 is credit owed, not taken off Left.
     expect(m.collectedCents).toBe(5600 + 2800);
     expect(m.courtCostCents).toBe(5000 + 4800);
-    expect(m.creditsOwedCents).toBe(0);
+    expect(m.creditsOwedCents).toBe(5600);
+    expect(m.heldCents).toBe(0);
     expect(m.netCents).toBe(-1400);
     expect(m.bottomLine).toBe('You covered $14 of the court costs');
     expect(m).toMatchObject({ surplusCents: 0, coveredCents: 1400 });
-    expect(m.sessions.find((x: any) => x.id === b.id)).toMatchObject({ state: 'played', typicalCost: true, courtCostCents: 4800 });
+    expect(m.sessions.find((x: any) => x.id === b.id)).toMatchObject({ state: 'played', typicalCost: true, courtCostCents: 4800, playedCount: 4, priceCents: 1400, collectedCents: 2800 });
     expect(m.sessions.find((x: any) => x.id === c.id)).toMatchObject({ state: 'canceled', collectedCents: 0, courtCostCents: 0 });
     // Sessions nobody played don't count either.
     expect(m.sessions.filter((x: any) => x.state === 'not_played').every((x: any) => x.courtCostCents === 0)).toBe(true);
@@ -172,19 +187,22 @@ describe('monthly money', () => {
     expect(m.bottomLine).toBe('You covered $6 of the court costs');
   });
 
-  it('subtracts credits still owed when 6 played', async () => {
+  it('6 played at $9: collected is what was kept, and the $5 back each is credit owed, not taken off Left', async () => {
     const ctx = await setupGroup();
     const s = await on(ctx, '2026-11-12');
     await join(ctx, s.id, PLAYER_NAMES);
     await pay(ctx, s.id, PLAYER_NAMES);
     ctx.app.now = Date.parse(s.endsAt) + DAY;
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
     const m = await money(ctx, '2026-11');
-    // 4 x $14 + 2 x $9 in, typical $48 court, 4 x $5 credits owed.
-    expect(m.collectedCents).toBe(7400);
+    // 6 x $14 paid, 6 x $9 kept, typical $48 court, 6 x $5 credits owed.
+    expect(m.collectedCents).toBe(5400);
     expect(m.courtCostCents).toBe(4800);
-    expect(m.creditsOwedCents).toBe(2000);
+    expect(m.creditsOwedCents).toBe(3000);
+    expect(m.heldCents).toBe(0);
     expect(m.netCents).toBe(600);
     expect(m.bottomLine).toBe('Surplus: $6 toward the $30 membership');
+    expect(m.sessions.find((x: any) => x.id === s.id)).toMatchObject({ state: 'played', playedCount: 6, priceCents: 900, collectedCents: 5400 });
   });
 
   it('bottom line wording', () => {

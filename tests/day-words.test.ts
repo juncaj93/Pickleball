@@ -3,10 +3,9 @@ import {
   canceledMessage,
   checkInMessage,
   dayWord,
-  downToFiveMessage,
+  finalMessage,
   movedMessage,
   needPlayersMessage,
-  nowSixMessage,
   paymentMessage,
   promotedMessage,
   shareMessage,
@@ -75,22 +74,10 @@ describe('every text that names a game date uses the day word', () => {
     expect(needPlayersMessage(TUE, TZ, tonightNow, 1, L)).toBe(`Need 1 more for pickleball tonight, 8:00 PM. In? ${L}`);
     expect(needPlayersMessage(TUE, TZ, farNow, 3, L)).toBe(`Need 3 more for pickleball Tue Nov 3, 8:00 PM. In? ${L}`);
   });
-  it('Down to 5', () => {
-    const rest = 'Need 1 more or 1 out to make 4 or 6.';
-    expect(downToFiveMessage(TUE, TZ, tomorrowNow, L)).toBe(`Down to 5 for pickleball tomorrow. ${rest} ${L}`);
-    expect(downToFiveMessage(TUE, TZ, tonightNow, L)).toBe(`Down to 5 for pickleball tonight. ${rest} ${L}`);
-    expect(downToFiveMessage(TUE, TZ, farNow, L)).toBe(`Down to 5 for pickleball Tue Nov 3. ${rest} ${L}`);
-  });
   it('Check-in', () => {
     expect(checkInMessage(TUE, TZ, tomorrowNow, L)).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${L}`);
     expect(checkInMessage(TUE, TZ, tonightNow, L)).toBe(`Pickleball tonight, 8:00 PM. Can\'t make it? Update here: ${L}`);
     expect(checkInMessage(TUE, TZ, farNow, L)).toBe(`Pickleball Tue Nov 3, 8:00 PM. Can\'t make it? Update here: ${L}`);
-  });
-  it('Now 6', () => {
-    const tail = `You're both in. Can\'t make it? Update here: ${L}`;
-    expect(nowSixMessage(TUE, TZ, tomorrowNow, L)).toBe(`Good news, we have 6 for pickleball tomorrow, 8:00 PM. ${tail}`);
-    expect(nowSixMessage(TUE, TZ, tonightNow, L)).toBe(`Good news, we have 6 for pickleball tonight, 8:00 PM. ${tail}`);
-    expect(nowSixMessage(TUE, TZ, farNow, L)).toBe(`Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. ${tail}`);
   });
   it('Spot opened', () => {
     expect(promotedMessage(TUE, TZ, tomorrowNow, L)).toBe(`A spot opened and you're in for pickleball tomorrow, 8:00 PM. ${L}`);
@@ -98,7 +85,7 @@ describe('every text that names a game date uses the day word', () => {
     expect(promotedMessage(TUE, TZ, farNow, L)).toBe(`A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. ${L}`);
   });
   it('Canceled, with the credit wording', () => {
-    const credit = 'If you paid, it stays as your credit. Want a refund instead? Text me.';
+    const credit = "If you paid, it's now your credit. You can request a refund on the site.";
     expect(canceledMessage(TUE, TZ, tonightNow, L)).toBe(`Pickleball tonight is canceled. ${credit} ${L}`);
     expect(canceledMessage(TUE, TZ, tomorrowNow, L)).toBe(`Pickleball tomorrow is canceled. ${credit} ${L}`);
     expect(canceledMessage(TUE, TZ, farNow, L)).toBe(`Pickleball Tue Nov 3 is canceled. ${credit} ${L}`);
@@ -110,12 +97,13 @@ describe('every text that names a game date uses the day word', () => {
     expect(movedMessage(game('2026-11-06T01:00:00.000Z'), was, TZ, farNow, L)).toBe(`Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. ${L}`);
     expect(movedMessage(TUE, THU.startsAt, TZ, tonightNow, L)).toBe(`Pickleball Thu Oct 29 is moved to tonight, 8:00 PM. ${L}`);
   });
-  it('payment reminders still name the (past) game date', () => {
+  it('payment reminders and the Final price note still name the (past) game date', () => {
     expect(paymentMessage('Ryan', 1400, [THU], TZ, L)).toBe(`Hey Ryan, you owe $14 for pickleball Thu Oct 29. Pay here: ${L}`);
+    expect(finalMessage(THU, TZ, 6, 900, 1400, L)).toBe(`Pickleball Thu, Oct 29 is final: 6 played, $9 each. If you paid $14, the extra $5 is now credit on your account. ${L}`);
   });
   it('never shows UTC or a 24-hour clock', () => {
     for (const now of [tomorrowNow, tonightNow, farNow]) {
-      const all = [shareMessage(TUE, TZ, now, L), needPlayersMessage(TUE, TZ, now, 2, L), checkInMessage(TUE, TZ, now, L), nowSixMessage(TUE, TZ, now, L), promotedMessage(TUE, TZ, now, L)];
+      const all = [shareMessage(TUE, TZ, now, L), needPlayersMessage(TUE, TZ, now, 2, L), checkInMessage(TUE, TZ, now, L), canceledMessage(TUE, TZ, now, L), promotedMessage(TUE, TZ, now, L), finalMessage(TUE, TZ, 5, 1100, 1400, L)];
       for (const m of all) expect(m).not.toMatch(/UTC|GMT|\b2[0-3]:\d\d\b|T\d\d:\d\d/);
     }
   });

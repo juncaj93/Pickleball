@@ -8,7 +8,7 @@
 import { creditBack as creditBackCents, finalPrice } from '../shared/pricing';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
-import { creditBack, repriceCreditSeats, undoCreditBack } from './credit';
+import { creditBack, holdCashAgainstSeat, repriceCreditSeats, undoCreditBack } from './credit';
 import { HttpError } from './http';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
@@ -70,7 +70,10 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       // Credit used on an unpaid seat above the final price comes back too; the rest is settled by repricing below.
       const used = paid > 0 ? 0 : await usedOn(ctx, session.id, r.player_id);
       const back = paid > 0 ? paid - price : used - price;
-      if (back > 0) {
+      if (paid > 0 && paid < price) {
+        // Paid the earlier (lower) price, or the flat price went up: the cash stays against the seat, the rest is owed.
+        await holdCashAgainstSeat(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: paid, nowIso: ctx.nowIso });
+      } else if (back > 0) {
         if (paid === 0) {
           // Mark it paid with the credit (what they put in), then the overflow comes back.
           await ctx.db

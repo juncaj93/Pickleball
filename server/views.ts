@@ -6,7 +6,7 @@ import type {
   PlayerSessionView,
 } from '../shared/api';
 import { cardWindows } from '../shared/cards';
-import type { CreditReason } from '../shared/credit';
+import { NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
 import { holidayFor } from '../shared/holidays';
 import { courtSplit } from '../shared/pricing';
 import type { GroupSettings } from '../shared/settings';
@@ -32,19 +32,13 @@ const NO_MONEY = {
   selfPaid: false,
   oweCents: 0,
   creditCents: 0,
+  paidEarlierCents: 0,
   paidWithCredit: false,
   useCreditCents: 0,
   creditBackCents: 0,
 } as const;
 
-/** The credit pot's part of one seat: credit used on it, and money that came back from it. */
-export interface SeatCredit {
-  usedCents: number;
-  backCents: number;
-  backReason: CreditReason | null;
-}
-
-export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, backCents: 0, backReason: null };
+export { NO_SEAT_CREDIT, type SeatCredit };
 
 /** What a player sees. No phone numbers, and payment details only for their own row. */
 export function playerSessionView(
@@ -67,7 +61,7 @@ export function playerSessionView(
   const canceled = session.status === 'canceled';
   const owes = !!mine && mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id);
   const price = mine ? (prices.get(mine.player_id)?.cents ?? 0) : 0;
-  const owe = owes ? Math.max(0, price - pot.seat.usedCents) : 0;
+  const owe = owes ? Math.max(0, price - pot.seat.usedCents - pot.seat.cashCents) : 0;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
         status: mine.status,
@@ -80,6 +74,7 @@ export function playerSessionView(
         signupAt: mine.confirmed_at ?? mine.claimed_at,
         oweCents: owe,
         creditCents: mine.payment_status === 'unpaid' ? pot.seat.usedCents : 0,
+        paidEarlierCents: mine.payment_status === 'unpaid' ? pot.seat.cashCents : 0,
         paidWithCredit: mine.payment_status === 'paid' && pot.seat.usedCents > 0 && pot.seat.usedCents >= (mine.payment_amount_cents ?? 0),
         useCreditCents: owes && !canceled ? Math.min(pot.usableCents, owe) : 0,
         creditBackCents: pot.seat.backCents,
@@ -161,7 +156,7 @@ export function adminSessionView(
   /** The organizer's player id: they pay the venue, so they have no share and are never counted as owing. */
   organizerId: string | null = null,
   /** The credit pot's part of a seat: credit used on it, and money that came back from it. */
-  potFor: (playerId: string) => SeatCredit = () => NO_SEAT_CREDIT,
+  potFor: (row: RosterRow) => SeatCredit = () => NO_SEAT_CREDIT,
   /** A canceled game the venue still charged for. */
   chargedCents: number | null = null,
   /** Who blocks a reopen (credit from this game already used or refunded). */
@@ -180,9 +175,9 @@ export function adminSessionView(
     .sort((a, b) => (order.get(a.id) ?? 1000) - (order.get(b.id) ?? 1000) || a.claim_seq - b.claim_seq)
     .map((r) => {
       const me = r.player_id === organizerId;
-      const seat = me ? NO_SEAT_CREDIT : potFor(r.player_id);
+      const seat = me ? NO_SEAT_CREDIT : potFor(r);
       const share = me ? null : (prices.get(r.player_id)?.cents ?? null);
-      const owes = !me && r.status === 'confirmed' && r.payment_status === 'unpaid' && share !== null ? Math.max(0, share - seat.usedCents) : 0;
+      const owes = !me && r.status === 'confirmed' && r.payment_status === 'unpaid' && share !== null ? Math.max(0, share - seat.usedCents - seat.cashCents) : 0;
       return {
         playerId: r.player_id,
         name: r.display_name,
@@ -198,6 +193,7 @@ export function adminSessionView(
         shareCents: share,
         owesCents: owes,
         creditCents: seat.usedCents,
+        paidEarlierCents: r.payment_status === 'unpaid' ? seat.cashCents : 0,
         creditBackCents: seat.backCents,
         creditBackReason: seat.backReason,
         played: r.played === null || r.played === undefined ? null : r.played === 1,
@@ -228,8 +224,9 @@ export function adminSessionView(
     roster
       .filter((r) => r.player_id !== organizerId)
       .map((r) => {
-        const seat = potFor(r.player_id);
+        const seat = potFor(r);
         if (r.payment_status === 'paid' && !r.refunded_at) return (r.payment_amount_cents ?? 0) - seat.backCents;
+        // An unpaid seat: what they still owe, plus any cash already held against it.
         if (r.status === 'confirmed' && r.payment_status === 'unpaid') return (prices.get(r.player_id)?.cents ?? 0) - seat.usedCents;
         return 0;
       }),
@@ -239,7 +236,7 @@ export function adminSessionView(
         at: session.finalized_at,
         playedCount: session.final_played_count ?? 0,
         priceCents: session.final_price_cents ?? settings.pricePerPlayerCents,
-        creditBackCents: roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + potFor(r.player_id).backCents, 0),
+        creditBackCents: roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + potFor(r).backCents, 0),
       }
     : null;
 

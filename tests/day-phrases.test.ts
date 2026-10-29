@@ -68,16 +68,23 @@ describe('the "Want in?" titles', () => {
 });
 
 describe('the second line, by how many are in', () => {
-  it('0 in nothing; 1, 2, 3 in: spots left; 4, 5, 6 in: where they would be', () => {
-    expect([0, 1, 2, 3, 4, 5, 6].map(wantInSubline)).toEqual([
+  it('0 in nothing; 1, 2, 3 in: needs more to play; 4 up to the max: you would make it one more', () => {
+    expect([0, 1, 2, 3, 4, 5, 6, 9].map((n) => wantInSubline(n, 10))).toEqual([
       '',
-      '3 spots left',
-      '2 spots left',
-      '1 spot left',
-      "4 are in. You'd be on the waitlist until a 6th joins.",
-      "5 are in. You'd make it 6 and everyone plays.",
-      "6 are in. You'd be on the waitlist.",
+      'Needs 3 more to play',
+      'Needs 2 more to play',
+      'Needs 1 more to play',
+      "4 are in. You'd make it 5.",
+      "5 are in. You'd make it 6.",
+      "6 are in. You'd make it 7.",
+      "9 are in. You'd make it 10.",
     ]);
+  });
+  it('at the max: the waitlist, whatever the max is', () => {
+    expect(wantInSubline(10, 10)).toBe("10 are in. You'd be on the waitlist.");
+    expect(wantInSubline(6, 6)).toBe("6 are in. You'd be on the waitlist.");
+    expect(wantInSubline(4, 4)).toBe("4 are in. You'd be on the waitlist.");
+    expect(wantInSubline(3, 4)).toBe('Needs 1 more to play');
   });
 });
 
