@@ -28,7 +28,7 @@ import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { potBalance, seatKey } from '../shared/credit';
 import { moneyPicture } from './credit';
-import { useCreditOn } from './creditActions';
+import { undoCreditUse, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
@@ -346,6 +346,13 @@ export async function playerUseCredit(ctx: Ctx) {
   const who = await actingOn(ctx);
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   return useCreditOn(ctx, who.group, who.session, who.playerId, p?.display_name ?? 'A player');
+}
+
+/** POST /api/sessions/:id/undo-credit: takes back "Use credit" on a game paid with credit. */
+export async function playerUndoCredit(ctx: Ctx) {
+  const who = await actingOn(ctx);
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  return undoCreditUse(ctx, who.group, who.session, who.playerId, p?.display_name ?? 'A player');
 }
 
 export async function playerConfirm(ctx: Ctx) {

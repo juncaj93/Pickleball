@@ -248,6 +248,8 @@ async function main() {
         await foot.locator('[data-use-credit]').waitFor();
         assert((await greenButtons(foot)) === 1, `green buttons: ${await greenButtons(foot)}`);
         assert((await foot.locator('[data-use-credit]').evaluate((b) => !b.classList.contains('secondary'))), 'Use credit should be the green one');
+        assert((await foot.getByRole('link', { name: /^Pay \$14/ }).count()) === 1, 'Pay $14 should show');
+        assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should wait until Pay is tapped');
         await tidy(foot, 'pay row');
         await noSideways(page);
       });
@@ -277,6 +279,19 @@ async function main() {
       assert((await page.locator('[data-use-credit]').count()) === 0, 'Use credit still shows');
       await page.screenshot({ path: path.join(SHOTS, 'credit-player-paid.png'), fullPage: true });
     });
+    await check('Undo under "Paid with credit" puts the credit back; Use credit works again', async () => {
+      const undo = page.locator('[data-undo-credit]').first();
+      await undo.waitFor();
+      assert((await page.getByRole('button', { name: 'I paid' }).count()) === 0 && (await page.getByText("Didn't pay?").count()) === 0, 'only Undo under the paid tag');
+      await undo.click();
+      await page.locator('[data-credit-line]').waitFor();
+      assert(/You have \$14 credit/.test(await page.locator('[data-credit-line]').innerText()), 'credit is back');
+      assert((await page.getByText('✓ Paid with credit').count()) === 0, 'still paid with credit');
+      const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
+      await row.locator('[data-use-credit]').click();
+      await page.locator('[data-credit-line]').waitFor({ state: 'detached' });
+      await page.getByText('✓ Paid with credit').first().waitFor();
+    });
     await ctx.close();
   }
 
@@ -299,6 +314,21 @@ async function main() {
           assert(await foot.locator('[data-use-credit]').evaluate((b) => b.classList.contains('secondary')), 'Use credit should be quiet');
           assert(/Uses your \$5 credit\. \$9 left to pay/.test(await foot.innerText()), await foot.innerText());
           assert(/Pay \$14/.test(await foot.innerText()), await foot.innerText());
+          assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should wait until Pay is tapped');
+          await tidy(foot, 'pay row');
+          await noSideways(page);
+        });
+        await check(`${tag}: after Pay is tapped, I paid joins the row and nothing is left hanging alone`, async () => {
+          const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
+          const foot = row.locator('.row-foot');
+          await foot.getByRole('link', { name: /^Pay \$14/ }).click();
+          await page.waitForTimeout(1500);
+          await foot.getByRole('button', { name: 'I paid' }).waitFor();
+          const tops = await foot.evaluate((el) => [...el.querySelectorAll('a.btn, button.btn')].map((b) => ({ t: b.textContent.trim(), y: Math.round(b.getBoundingClientRect().top) })));
+          console.log('   rows', width, JSON.stringify(tops), await foot.evaluate((el) => Math.round(el.querySelector('.pay-pair').getBoundingClientRect().width) + '/' + Math.round(el.getBoundingClientRect().width)));
+          const lines = new Set(tops.map((x) => x.y));
+          const last = tops[tops.length - 1];
+          assert(lines.size === 1 || tops.filter((x) => x.y === last.y).length >= 2, `a lone button hangs on its own line: ${JSON.stringify(tops)}`);
           await tidy(foot, 'pay row');
           await noSideways(page);
         });
@@ -314,6 +344,7 @@ async function main() {
       const foot = page.locator('article.sched .row-foot', { hasText: 'Pay $9' }).first();
       await foot.waitFor();
       assert((await foot.locator('[data-use-credit]').count()) === 0, 'Use credit still shows');
+      assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 1, 'Pay and I paid after the credit is used');
       assert(/\$9 left to pay\. \$5 credit used\./.test(await page.locator('article.sched', { hasText: 'Pay $9' }).first().innerText()), 'after-credit note');
     });
     await ctx.close();
@@ -340,6 +371,7 @@ async function main() {
             await use.waitFor();
             assert((await greenButtons(card)) === 1, `green buttons: ${await greenButtons(card)}`);
             assert((await use.evaluate((b) => b.classList.contains('secondary'))) === !covers, 'wrong button is green');
+            assert((await card.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should wait until Pay is tapped');
             await tidy(card, 'pay card');
             await noSideways(page);
           });
@@ -349,6 +381,13 @@ async function main() {
       }
     }
     const { ctx, page } = await player('Ryan', 'light', 390);
+    await check('after tapping Pay, I paid appears (and stays after a reload)', async () => {
+      await page.locator('section.pay-card').getByRole('link', { name: /^Pay \$\d+.* with Venmo/ }).click();
+      await page.waitForTimeout(1500);
+      await page.locator('section.pay-card').getByRole('button', { name: 'I paid' }).waitFor();
+      await page.reload();
+      await page.locator('section.pay-card').getByRole('button', { name: 'I paid' }).waitFor();
+    });
     await check('Use credit on the game-day card pays the game with credit', async () => {
       await page.locator('section.pay-card [data-use-credit]').click();
       await page.locator('section.pay-card').waitFor({ state: 'detached' });

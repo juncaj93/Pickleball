@@ -109,6 +109,8 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} undid keeping ${player}'s payment as credit${forDay}`;
     case 'credit_used':
       return typeof d.amountCents === 'number' ? `${player} used ${formatPrice(d.amountCents)} credit${forDay}` : `${player} used credit${forDay}`;
+    case 'credit_undone':
+      return `${player} took back the credit they used${forDay}`;
     case 'credit_refund_marked':
       return `${who} paid ${player}'s credit back`;
     case 'credit_refund_undone':
