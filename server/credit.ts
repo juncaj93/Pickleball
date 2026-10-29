@@ -103,7 +103,7 @@ export async function returnSeatCredit(
   sessionId: string,
   playerId: string,
   nowIso: string,
-  reason: 'dropped' | 'canceled' | 'unmarked',
+  reason: 'dropped' | 'canceled' | 'unmarked' | 'undone',
 ): Promise<number> {
   const { results } = await db
     .prepare("SELECT amount_cents FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL")

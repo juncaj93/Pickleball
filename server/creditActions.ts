@@ -5,7 +5,7 @@
 import { potBalance, seatKey } from '../shared/credit';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
-import { keepAsCredit, moneyPicture, refundPot, spendCredit, undoKeep, undoRefundPot } from './credit';
+import { keepAsCredit, moneyPicture, refundPot, returnSeatCredit, spendCredit, undoKeep, undoRefundPot } from './credit';
 import { HttpError } from './http';
 import { audit, getSession, type GroupRow, loadRoster, openCredits, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
@@ -51,6 +51,25 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
 }
 
 /** POST /api/admin/sessions/:id/credit { playerId, keep }: Keep as credit (true), or take it back (false). */
+/**
+ * "Undo" under "Paid with credit": the credit goes back to the player's balance and the
+ * game is owed again. Only for a game paid entirely with credit; no cash moves.
+ */
+export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string) {
+  const roster = await loadRoster(ctx.db, session.id);
+  const row = roster.find((r) => r.player_id === playerId);
+  if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
+  const used = await ctx.db
+    .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+    .bind(session.id, playerId)
+    .first<{ c: number }>();
+  const cents = used?.c ?? 0;
+  if (cents <= 0 || cents < (row.payment_amount_cents ?? 0)) throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
+  const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'undone');
+  await audit(ctx.db, group.id, session.id, 'credit_undone', { player: name, amountCents: back }, ctx.nowIso, name);
+  return { ok: true, returnedCents: back };
+}
+
 export async function keepCredit(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const session = await getSession(ctx.db, group.id, v.id(ctx.params.id, 'session'));

@@ -386,6 +386,32 @@ function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
 }
 
 /**
+ * Players with credit don't see "I paid" until they tap Pay (Venmo opened).
+ * Remembered on this phone, per game.
+ */
+function usePayTapped(key: string) {
+  const storeKey = `pb_pay_tapped_${key}`;
+  const read = () => {
+    try {
+      return localStorage.getItem(storeKey) === '1';
+    } catch {
+      return false;
+    }
+  };
+  const [tapped, setTapped] = useState(read);
+  useEffect(() => setTapped(read()), [storeKey]);
+  function mark() {
+    setTapped(true);
+    try {
+      localStorage.setItem(storeKey, '1');
+    } catch {
+      /* the button simply shows for this visit */
+    }
+  }
+  return { tapped, mark };
+}
+
+/**
  * "Use credit": takes the player's credit off the games they owe for, only
  * when they tap. One call per game, earliest first; it stops when a call fails
  * or the credit is used up.
@@ -421,7 +447,22 @@ function useCredit(onChanged: () => Promise<void>) {
       setBusy(false);
     }
   }
-  return { busy, use };
+  /** "Undo" under "Paid with credit": the credit goes back, the game is owed again. */
+  async function undo(sessionId: string) {
+    setBusy(true);
+    try {
+      await api('POST', `/api/sessions/${sessionId}/undo-credit`, {});
+      toast('Credit put back');
+      await onChanged();
+    } catch (err) {
+      if (isDemo(err)) toast(err.message);
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      await onChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return { busy, use, undo };
 }
 
 /**
@@ -444,6 +485,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
   const paid = usePaid(due.map((o) => o.sessionId), onChanged);
   const credit = useCredit(onChanged);
+  const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   let potLeft = g.potCents;
@@ -504,14 +546,19 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
             target="_blank"
             rel="noopener noreferrer"
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
-            onClick={(e) => openVenmo(e, pay)}
+            onClick={(e) => {
+              payTap.mark();
+              openVenmo(e, pay);
+            }}
           >
             Pay with Venmo
           </a>
           {!creditCovers && creditBtn}
-          <button className="btn block secondary" disabled={busy} onClick={() => paid.set(true)}>
-            {paid.busy ? 'Saving…' : 'I paid'}
-          </button>
+          {(!showCredit || payTap.tapped) && (
+            <button className="btn block secondary" disabled={busy} onClick={() => paid.set(true)}>
+              {paid.busy ? 'Saving…' : 'I paid'}
+            </button>
+          )}
         </>
       ) : (
         <>
@@ -667,11 +714,17 @@ function RowPay({
   const mine = s.mine!;
   const paid = usePaid([s.id], onChanged);
   const credit = useCredit(onChanged);
+  const payTap = usePayTapped(s.id);
   if (mine.paymentStatus === 'paid') {
     return (
       <span className="paid-wrap">
         <span className="paid-tag">{mine.paidWithCredit ? '✓ Paid with credit' : '✓ Paid'}</span>
-        {/* Only their own "I paid" can be undone here; the organizer's stays. */}
+        {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
+        {mine.paidWithCredit && (
+          <button className="link-btn didnt-pay" data-undo-credit disabled={credit.busy} onClick={() => credit.undo(s.id)}>
+            Undo
+          </button>
+        )}
         {mine.selfPaid && !mine.paidWithCredit && (
           <button className="link-btn didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
             Didn't pay?
@@ -718,14 +771,19 @@ function RowPay({
         target="_blank"
         rel="noopener noreferrer"
         aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
-        onClick={(e) => openVenmo(e, pay)}
+        onClick={(e) => {
+          payTap.mark();
+          openVenmo(e, pay);
+        }}
       >
         Pay {formatPrice(mine.oweCents)}
       </a>
       {!creditCovers && creditBtn}
-      <button className={quiet} disabled={busy} onClick={() => paid.set(true)}>
-        I paid
-      </button>
+      {(!showCredit || payTap.tapped) && (
+        <button className={quiet} disabled={busy} onClick={() => paid.set(true)}>
+          I paid
+        </button>
+      )}
       {creditHint}
     </span>
   );

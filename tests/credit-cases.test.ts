@@ -242,3 +242,35 @@ describe('wording', () => {
     for (const l of lines) expect(l).not.toMatch(/insufficient|funds|sent/i);
   });
 });
+
+describe('Undo under "Paid with credit"', () => {
+  it('puts the full credit back and the game is owed again; no cash moves', async () => {
+    const ctx = await setupGroup();
+    await givePot(ctx, 'Casey', 1400);
+    const g = await on(ctx, '2026-11-03');
+    await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await use(ctx, 'Casey', g.id);
+    expect(await pot(ctx, 'Casey')).toBe(0);
+    const res = await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/undo-credit`, {});
+    expect(res.data).toMatchObject({ ok: true, returnedCents: 1400 });
+    expect(await mine(ctx, 'Casey', g.id)).toMatchObject({ paymentStatus: 'unpaid', paidWithCredit: false, oweCents: 1400, useCreditCents: 1400 });
+    expect(await pot(ctx, 'Casey')).toBe(1400);
+    await agree(ctx);
+  });
+  it('is refused when nothing was paid with credit', async () => {
+    const ctx = await setupGroup();
+    const g = await on(ctx, '2026-11-03');
+    await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    const res = await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/undo-credit`, {});
+    expect(res.status).toBe(409);
+  });
+  it('is refused when the player paid with "I paid" instead', async () => {
+    const ctx = await setupGroup();
+    await givePot(ctx, 'Casey', 500);
+    const g = await on(ctx, '2026-11-03');
+    await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/paid`, { paid: true });
+    const res = await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/undo-credit`, {});
+    expect(res.status).toBe(409);
+  });
+});

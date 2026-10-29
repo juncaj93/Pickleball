@@ -30,3 +30,20 @@
   line-height: 1.2;
   color: var(--muted-fg);
 }
+
+/* Three buttons (Use credit, Pay, I paid) share one row down to 360px. */
+.pay-pair {
+  gap: 6px;
+}
+.pay-pair .btn.pay-small {
+  padding-inline: 9px;
+  font-size: 0.82rem;
+}
+@media (max-width: 380px) {
+  .pay-pair {
+    gap: 5px;
+  }
+  .pay-pair .btn.pay-small {
+    padding-inline: 7px;
+  }
+}
