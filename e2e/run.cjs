@@ -221,7 +221,7 @@ function layoutReport({ roots, items }) {
         if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
         const w = Math.min(a.b.right, b.b.right) - Math.max(a.b.left, b.b.left);
         const h = Math.min(a.b.bottom, b.b.bottom) - Math.max(a.b.top, b.b.top);
-        if (w > 1 && h > 1) problems.push(`"${a.label}" overlaps "${b.label}"`);
+        if (w > 1 && h > 1) problems.push(`"${a.label}" overlaps "${b.label}" [${a.e.className}:${Math.round(a.b.left)}-${Math.round(a.b.right)}x${Math.round(a.b.top)}-${Math.round(a.b.bottom)} vs ${b.e.className}:${Math.round(b.b.left)}-${Math.round(b.b.right)}x${Math.round(b.b.top)}-${Math.round(b.b.bottom)}]`);
       }
   }
   return { problems, checked };
