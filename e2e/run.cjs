@@ -1212,14 +1212,15 @@ async function main() {
       if (Date.now() + BASE_OFFSET > Date.parse('2026-11-04T03:00:00Z')) return; // only while Nov 3, 2026 is still upcoming
       await players.Alex.reload();
       const card = players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' });
-      const hol = card.locator('.sched-status .holiday-text', { hasText: 'Election Day' });
+      const hol = card.locator('.sched-status .holiday', { hasText: 'Election Day' });
       await hol.waitFor();
       const color = await hol.evaluate((el) => getComputedStyle(el).color);
       const ok = await players.Alex.evaluate(() => getComputedStyle(document.querySelector('.tone-ok') || document.body).color);
       assert(color !== ok, 'holiday should not use a status color');
-      // Small words on the court line, never a pill or its own row.
-      const look = await hol.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, border: getComputedStyle(el).borderTopWidth }));
-      assert(look.bg === 'rgba(0, 0, 0, 0)' && look.border === '0px', `holiday should be plain text, not a pill: ${JSON.stringify(look)}`);
+      // One small pill, only as wide as its text, no check mark, on the court line.
+      const look = await hol.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, border: getComputedStyle(el).borderTopWidth, w: el.getBoundingClientRect().width, textW: (() => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width; })(), size: getComputedStyle(el).fontSize }));
+      assert(look.bg !== 'rgba(0, 0, 0, 0)' && look.border !== '0px', `holiday should be a pill: ${JSON.stringify(look)}`);
+      assert(look.w <= look.textW + 24, `pill should hug its text: ${JSON.stringify(look)}`);
       const hb = await hol.boundingBox();
       const cb = await card.locator('.sched-status .court-status').boundingBox();
       assert(Math.abs(hb.y + hb.height / 2 - (cb.y + cb.height / 2)) < 4, 'holiday sits on the court line');
@@ -1227,10 +1228,11 @@ async function main() {
       const hcard = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
       await hcard.locator('.holiday', { hasText: 'Election Day · check hours' }).waitFor();
       await hcard.getByRole('button', { name: 'Venue is open normal hours' }).click();
-      await hcard.locator('.holiday', { hasText: /^✓ Election Day$/ }).waitFor();
+      await hcard.locator('.holiday', { hasText: /^Election Day$/ }).waitFor();
       await admin.reload();
       const after = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
-      await after.locator('.holiday', { hasText: /^✓ Election Day$/ }).waitFor();
+      await after.locator('.holiday', { hasText: /^Election Day$/ }).waitFor();
+      assert(!/✓/.test(await after.locator('.holiday-actions').innerText()), 'no check mark on the pill');
       assert((await after.getByText('check hours').count()) === 0, 'check venue hours should be gone after confirming');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-holiday-confirmed.png'), fullPage: true });
       await after.getByRole('button', { name: 'Undo' }).click();
@@ -1472,7 +1474,7 @@ async function main() {
     await check('a regular gets "Want in on ...? Yes / No"; Yes shows "You\'re in" with no payment', async () => {
       const p = players.Devon;
       await p.reload();
-      const card = p.getByRole('region', { name: /Want in on (Tuesday|Thursday)\?/ });
+      const card = p.getByRole('region', { name: /^Want in (tonight|tomorrow|this (Tuesday|Thursday)|next (Tuesday|Thursday)|on (the )?[A-Za-z0-9, ']+)\?/ });
       await card.waitFor();
       await p.screenshot({ path: path.join(SHOTS, 'player-suggestion.png'), fullPage: true });
       await card.getByRole('button', { name: 'Yes' }).click();
@@ -1486,12 +1488,12 @@ async function main() {
 
     await check('tapping No hides the suggestion', async () => {
       const p = players.Devon;
-      const card = p.getByRole('region', { name: /Want in on/ });
+      const card = p.getByRole('region', { name: /^Want in / });
       if ((await card.count()) === 0) return; // nothing else unanswered within 8 days
       const before = await card.innerText();
       await card.getByRole('button', { name: 'No' }).click();
       await p.waitForFunction((b) => {
-        const el = [...document.querySelectorAll('section')].find((x) => x.textContent.startsWith('Want in on'));
+        const el = [...document.querySelectorAll('section')].find((x) => x.textContent.startsWith('Want in '));
         return !el || el.innerText !== b;
       }, before);
     });
@@ -1499,7 +1501,7 @@ async function main() {
     await check('occasional people get no suggestions', async () => {
       const p = await openAs('Ryan');
       await p.locator('article').first().waitFor();
-      assert((await p.getByRole('region', { name: /Want in on/ }).count()) === 0, 'occasional player got a suggestion');
+      assert((await p.getByRole('region', { name: /^Want in / }).count()) === 0, 'occasional player got a suggestion');
     });
 
     console.log('Open address');

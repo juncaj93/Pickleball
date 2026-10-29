@@ -1991,9 +1991,6 @@ dialog.sheet::backdrop {
   color: var(--ink-2);
 }
 
-.sched-status .holiday {
-  margin-top: 0;
-}
 
 /* Holiday or "Extra game" on the court line: small colored words, no pill. */
 .holiday-text {
@@ -2221,18 +2218,38 @@ dialog.sheet::backdrop {
   color: var(--ink);
 }
 
-/* Holiday pill: its own color so it never reads as a status. */
+/* Holiday pill: its own color so it never reads as a status. One style for the
+   popup, player cards and organizer cards, only as wide as its text. */
 .holiday {
   display: inline-block;
-  margin-top: 6px;
-  padding: 2px 9px;
+  width: fit-content;
+  max-width: 100%;
+  align-self: flex-start;
+  justify-self: start;
+  flex: none;
+  margin: 0;
+  padding: 1px 8px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--holiday-fg) 40%, transparent);
   color: var(--holiday-fg);
   background: var(--holiday-bg);
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 650;
+  line-height: 1.5;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* "Want in?" popup: date and time with the holiday pill on the same line. */
+.suggest-when {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.suggest-sub {
+  margin: 0;
 }
 
 .holiday-actions {
@@ -2630,15 +2647,8 @@ dialog.sheet::backdrop {
 .scard .holiday-actions {
   margin-top: 0;
   gap: 2px 6px;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   min-width: 0;
-}
-.scard .holiday-actions .holiday {
-  font-size: 0.72rem;
-  padding: 1px 8px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 .scard .holiday-actions .link-btn {
   flex: none;

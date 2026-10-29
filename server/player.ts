@@ -128,6 +128,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
           endsAt: s.ends_at,
           joinAs: joinOutcome(confirmedOf(roster).length, waitlistOf(roster).length),
           holiday: holidayFor(s.starts_at, tz),
+          confirmedCount: confirmedOf(roster).length,
+          courtState: s.court_state,
         };
         break;
       }
