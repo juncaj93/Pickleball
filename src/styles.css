@@ -1917,9 +1917,9 @@ dialog.sheet::backdrop {
   min-width: 0;
   white-space: nowrap;
 }
-/* Under 360px (iPhone SE 1st gen) one line can't hold both, so the holiday
-   goes under the court words instead of running into them. */
-@media (max-width: 359px) {
+/* On narrow phones one line can't hold the court words and the pill, so the
+   pill goes under them instead of running into them. */
+@media (max-width: 399px) {
   .sched[data-holiday] .sched-status {
     flex-wrap: wrap;
     row-gap: 2px;
@@ -1991,11 +1991,6 @@ dialog.sheet::backdrop {
   color: var(--ink-2);
 }
 
-
-/* Items never squeeze each other: the pill drops to its own line when the row is full. */
-.sched-status > * {
-  flex-shrink: 0;
-}
 
 /* Holiday or "Extra game" on the court line: small colored words, no pill. */
 .holiday-text {
