@@ -2,7 +2,7 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
-import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
+import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
 import { creditHintText, creditOweText, creditUsedMessage } from '../../shared/credit';
 import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
@@ -545,6 +545,10 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joined, setJoined] = useState<JoinResponse | null>(null);
+  // Exactly 4 or 6 or more in: they would wait. 5 in: they make it 6. On the venue's court waitlist everyone goes on standby, so no count.
+  const standby = s.courtState === 'waitlist';
+  const waitlistForm = !standby && (s.confirmedCount === 4 || s.confirmedCount >= 6);
+  const subline = standby ? '' : wantInSubline(s.confirmedCount);
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -579,12 +583,15 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
 
   return (
     <section className="card stack suggest" aria-labelledby="suggest-title">
-      <h2 id="suggest-title">Want in on {formatWeekday(s.startsAt, tz)}?</h2>
-      {s.holiday && <HolidayPill name={s.holiday} />}
-      <p className="muted small">
-        {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
-        {s.joinAs === 'waitlist' ? ' · full, you would join the waitlist' : ''}
-      </p>
+      <h2 id="suggest-title">{wantInTitle(s.startsAt, tz, Date.parse(g.now), waitlistForm)}</h2>
+      {/* Line 1: date, time and the holiday pill, together. Line 2: spots left, or where they would be. */}
+      <div className="suggest-when">
+        <span className="muted small">
+          {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
+        </span>
+        {s.holiday && <HolidayPill name={s.holiday} />}
+      </div>
+      {subline && <p className="muted small suggest-sub">{subline}</p>}
       {error && <Notice tone="danger">{error}</Notice>}
       <div className="btn-row">
         <button className="btn" disabled={busy} onClick={() => answer(true)}>
@@ -598,10 +605,10 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   );
 }
 
+/** The one holiday pill, used on the popup, player cards and organizer cards. Only as wide as its text, no check mark. */
 export function HolidayPill({ name, venueNote, confirmed }: { name: string; venueNote?: boolean; confirmed?: boolean }) {
   return (
     <span className="holiday">
-      {confirmed && <span aria-label="venue hours confirmed">✓ </span>}
       {name}
       {venueNote && !confirmed ? ' · check hours' : ''}
     </span>
@@ -825,7 +832,7 @@ function ScheduleRow({
             <CourtIcon kind={court.kind} />
             <span>{court.playerText}</span>
           </span>
-          {s.holiday && <span className="holiday-text">{s.holiday}</span>}
+          {s.holiday && <HolidayPill name={s.holiday} />}
           {s.extra && <span className="holiday-text extra-text">Extra game</span>}
         </div>
         {/* Row 3: "2 of 4 in", a dot per spot, and the names in plain text. */}
@@ -876,7 +883,7 @@ function ScheduleRow({
 
       <ConfirmDialog
         open={askOut}
-        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${formatShortDate(s.startsAt, tz)}?`}
+        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${playerDay(s.startsAt, tz, Date.parse(g.now)).word}?`}
         body={waiting ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
         confirmLabel="I'm out"
         danger

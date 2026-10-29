@@ -1,0 +1,202 @@
+/* The "Want in?" popup and the holiday pill, on a phone: the title by day,
+ * the second line by how many are in, the pill on the same line as the date
+ * and only as wide as its text, and the same pill on the player and organizer
+ * cards. Fake group; the clock is Mon Nov 2, 9:00 AM Eastern.
+ *
+ *   node e2e/popup.cjs      (also run by npm run test:e2e)
+ */
+const { spawn } = require('node:child_process');
+const { rmSync, mkdirSync } = require('node:fs');
+const path = require('node:path');
+const { chromium } = require('playwright');
+
+const ROOT = path.join(__dirname, '..');
+const PORT = 5198;
+const BASE = `http://localhost:${PORT}`;
+const SETUP_TOKEN = 'popup-setup-token-0123456789';
+const PIN = '482913';
+const SHOTS = path.join(__dirname, 'screenshots');
+const PEOPLE = ['Alex', 'Ryan', 'Mitchel', 'Brandon', 'Julian', 'Nathan', 'Frankie'];
+const WIDTHS = [360, 375, 390, 430];
+
+let passed = 0;
+let failed = 0;
+async function check(name, fn) {
+  try {
+    await fn();
+    passed++;
+    console.log(`  ✓ ${name}`);
+  } catch (err) {
+    failed++;
+    console.log(`  ✗ ${name}\n      ${String(err && err.message ? err.message : err).replace(/\s*\n\s*/g, ' ⏎ ').slice(0, 700)}`);
+  }
+}
+function assert(cond, msg) {
+  if (!cond) throw new Error(msg);
+}
+const squash = (t) => t.replace(/\s+/g, ' ').trim();
+
+async function main() {
+  const dbFile = path.join(ROOT, '.data', 'popup.sqlite');
+  mkdirSync(path.join(ROOT, '.data'), { recursive: true });
+  mkdirSync(SHOTS, { recursive: true });
+  rmSync(dbFile, { force: true });
+  const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
+    cwd: ROOT,
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN, DEV_CLOCK: '1' },
+    stdio: 'ignore',
+    detached: true,
+  });
+  process.on('exit', () => {
+    try {
+      process.kill(-server.pid, 'SIGTERM');
+    } catch {}
+  });
+  for (let i = 0; i < 80; i++) {
+    try {
+      if ((await fetch(`${BASE}/api/status`)).ok) break;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse('2026-11-02T09:00:00-05:00') }) });
+
+  const browser = await chromium.launch();
+  const api = await browser.newContext();
+  const call = async (req, method, url, data) => {
+    const res = await req.fetch(BASE + url, { method, data, headers: { Origin: BASE } });
+    if (!res.ok()) throw new Error(`${method} ${url}: ${res.status()} ${await res.text()}`);
+    return res.json().catch(() => ({}));
+  };
+  await call(api.request, 'POST', '/api/setup', {
+    setupToken: SETUP_TOKEN, groupName: 'Pickleball Bros', pin: PIN, venmoUrl: 'https://venmo.com/u/organizer',
+    players: PEOPLE.map((name, i) => ({ name, phone: `248555010${i}` })),
+  });
+  await call(api.request, 'PUT', '/api/admin/group', { organizerName: 'Alex' });
+  const d0 = await call(api.request, 'GET', '/api/admin/dashboard');
+  const id = Object.fromEntries(d0.players.map((p) => [p.name, p.id]));
+  await call(api.request, 'PUT', `/api/admin/players/${id.Frankie}`, { name: 'Frankie', isRegular: true, isActive: true, canReceiveSubstituteInvites: true, usualDays: [2] });
+  const tue = d0.sessions.find((s) => new Date(s.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }) === '2026-11-03'); // Election Day
+  const OTHERS = ['Ryan', 'Mitchel', 'Brandon', 'Julian', 'Nathan', 'Alex'];
+  const setIn = async (n) => {
+    // Make exactly n people in, through the organizer's roster control.
+    for (const [i, name] of OTHERS.entries()) await call(api.request, 'POST', `/api/admin/sessions/${tue.id}/roster`, { playerId: id[name], action: i < n ? 'confirm' : 'withdraw' });
+  };
+  const player = async (scheme, width) => {
+    const ctx = await browser.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true, colorScheme: scheme });
+    await call(ctx.request, 'POST', '/api/me', { playerId: id.Frankie });
+    const page = await ctx.newPage();
+    const errors = [];
+    page.on('pageerror', (e) => errors.push(String(e)));
+    await page.goto(BASE + '/');
+    await page.locator('.schedule article').first().waitFor();
+    return { ctx, page, errors };
+  };
+  const pillInfo = (loc) =>
+    loc.evaluate((el) => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      const cs = getComputedStyle(el);
+      return { w: el.getBoundingClientRect().width, textW: r.getBoundingClientRect().width, size: cs.fontSize, weight: cs.fontWeight, color: cs.color, bg: cs.backgroundColor, text: el.textContent.trim() };
+    });
+
+  // ---- Every count: the title and the second line, exactly.
+  const WANT = [
+    [0, 'Want in tomorrow?', ''],
+    [1, 'Want in tomorrow?', '3 spots left'],
+    [2, 'Want in tomorrow?', '2 spots left'],
+    [3, 'Want in tomorrow?', '1 spot left'],
+    [4, "Want in on tomorrow's waitlist?", "4 are in. You'd be on the waitlist until a 6th joins."],
+    [5, 'Want in tomorrow?', "5 are in. You'd make it 6 and everyone plays."],
+    [6, "Want in on tomorrow's waitlist?", "6 are in. You'd be on the waitlist."],
+  ];
+  for (const [n, title, sub] of WANT) {
+    await setIn(n);
+    const { ctx, page } = await player('light', 390);
+    await check(`${n} in: "${title}" and ${sub ? `"${sub}"` : 'no second line'}; date, time and Election Day pill on one line`, async () => {
+      const card = page.locator('section.suggest').first();
+      await card.waitFor();
+      assert((await card.locator('h2').innerText()).trim() === title, `title: ${await card.locator('h2').innerText()}`);
+      const subEl = card.locator('.suggest-sub');
+      if (sub) assert(squash(await subEl.innerText()) === sub, `second line: ${await subEl.innerText()}`);
+      else assert((await subEl.count()) === 0, 'there should be no second line');
+      const when = card.locator('.suggest-when');
+      assert(squash(await when.innerText()) === 'Tue, Nov 3 · 8:00 to 10:00 PM Election Day', `line 1: ${await when.innerText()}`);
+      const ys = await when.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().top)));
+      assert(ys.length === 2 && Math.abs(ys[0] - ys[1]) <= 6, `date and pill are not on one line: ${ys}`);
+      assert((await card.getByRole('button', { name: 'Yes' }).count()) === 1 && (await card.getByRole('button', { name: 'No' }).count()) === 1, 'Yes and No');
+      // Only the popup shows spots left, never the session cards.
+      assert(!/spots? left/.test(await page.locator('.schedule').innerText()), 'spots left on a session card');
+    });
+    await ctx.close();
+  }
+
+  // ---- The pill: same small pill everywhere, hugging its text, at every width.
+  await setIn(4);
+  for (const scheme of ['light', 'dark']) {
+    for (const width of WIDTHS) {
+      const tag = `${width}px ${scheme}`;
+      const { ctx, page, errors } = await player(scheme, width);
+      await check(`${tag}: popup and player card show the same small pill, only as wide as its text, no check mark, nothing cut off`, async () => {
+        const a = await pillInfo(page.locator('section.suggest .holiday'));
+        const b = await pillInfo(page.locator('.schedule article .sched-status .holiday').first());
+        for (const p of [a, b]) {
+          assert(p.w <= p.textW + 24, `pill is wider than its text: ${JSON.stringify(p)}`);
+          assert(p.text === 'Election Day' && !/✓/.test(p.text), `pill text: ${p.text}`);
+          assert(p.bg !== 'rgba(0, 0, 0, 0)', 'pill has no background');
+        }
+        assert(a.size === b.size && a.weight === b.weight && a.color === b.color && a.bg === b.bg, `pills differ: ${JSON.stringify([a, b])}`);
+        const cut = await page.evaluate(() => [...document.querySelectorAll('.holiday, section.suggest *, .sched-status *')].filter((x) => x.children.length === 0 && x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).overflow !== 'visible').length);
+        assert(cut === 0, 'cut-off text');
+        assert((await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scroll');
+        const card = page.locator('section.suggest');
+        const box = await card.boundingBox();
+        const pb = await page.locator('section.suggest .holiday').boundingBox();
+        assert(pb.x >= box.x && pb.x + pb.width <= box.x + box.width, 'pill sticks out of the popup');
+      });
+      await check(`${tag}: no browser errors`, async () => assert(errors.length === 0, errors.join(' | ')));
+      if (width === 390) await page.screenshot({ path: path.join(SHOTS, `popup-${scheme}.png`) });
+      await ctx.close();
+
+      const octx = await browser.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true, colorScheme: scheme });
+      await octx.request.post(BASE + '/api/admin/login', { headers: { Origin: BASE }, data: { pin: PIN } });
+      const op = await octx.newPage();
+      await op.goto(BASE + '/admin');
+      const card = op.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Election Day' }).first();
+      await card.waitFor();
+      await check(`${tag}: organizer card has the same pill with "Hours OK" next to it, no overlap, nothing cut off; confirmed shows the pill and Undo, no check mark`, async () => {
+        const pill = card.locator('.holiday');
+        const a = await pillInfo(pill);
+        assert(/^Election Day · check hours$/.test(a.text), a.text);
+        assert(a.w <= a.textW + 24, `pill is wider than its text: ${JSON.stringify(a)}`);
+        const row = card.locator('.holiday-actions');
+        const fit = await row.evaluate((el) => {
+          const box = el.getBoundingClientRect();
+          const kids = [...el.children].map((c) => c.getBoundingClientRect());
+          const over = kids.some((k, i) => kids.some((m, j) => j > i && k.left < m.right - 1 && m.left < k.right - 1 && k.top < m.bottom - 1 && m.top < k.bottom - 1));
+          const out = kids.some((k) => k.right > box.right + 1);
+          const cut = [...el.querySelectorAll('*')].some((x) => x.children.length === 0 && x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).overflow !== 'visible');
+          return { over, out, cut };
+        });
+        assert(!fit.over && !fit.out && !fit.cut, `layout ${JSON.stringify(fit)}`);
+        await card.getByRole('button', { name: 'Venue is open normal hours' }).click();
+        await card.locator('.holiday', { hasText: /^Election Day$/ }).waitFor();
+        assert(!/✓/.test(await row.innerText()), 'a check mark is still there');
+        await card.getByRole('button', { name: 'Undo' }).waitFor();
+        const b = await pillInfo(card.locator('.holiday'));
+        assert(b.size === a.size && b.bg === a.bg && b.color === a.color, 'the pill changed look when confirmed');
+        await card.getByRole('button', { name: 'Undo' }).click();
+        await card.locator('.holiday', { hasText: 'check hours' }).waitFor();
+      });
+      await octx.close();
+    }
+  }
+
+  await browser.close();
+  console.log(`\n${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

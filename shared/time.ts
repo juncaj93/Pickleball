@@ -209,3 +209,48 @@ export function bookingOpensMs(startsAt: string, leadDays: number, tz: string, h
   const d = new Date(Date.UTC(p.year, p.month - 1, p.day - leadDays));
   return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), hour, 0, tz);
 }
+
+export interface PlayerDay {
+  /** "tonight", "tomorrow", "this Thursday", "next Tuesday", or "Thu, Nov 12". */
+  word: string;
+  /** What goes before a waitlist: "tonight's", "tomorrow's", "this Thursday's", "next Tuesday's", or "the Nov 12". */
+  waitlistOf: string;
+  /** A date (not a day word): reads "on Thu, Nov 12". */
+  isDate: boolean;
+}
+
+/**
+ * How a player-facing sentence names an upcoming game, by calendar days in the
+ * group's zone and the same Monday to Sunday weeks as "This week" and "Next
+ * week": today "tonight", the next day "tomorrow", later this week "this
+ * Thursday", next week "next Tuesday", after that the date.
+ */
+export function playerDay(iso: string, tz: string, nowMs: number): PlayerDay {
+  const g = localParts(Date.parse(iso), tz);
+  const n = localParts(nowMs, tz);
+  const num = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / DAY_MS;
+  const gap = num(g) - num(n);
+  if (gap === 0) return { word: 'tonight', waitlistOf: "tonight's", isDate: false };
+  if (gap === 1) return { word: 'tomorrow', waitlistOf: "tomorrow's", isDate: false };
+  const weeks = gap > 1 ? (weekStart(iso, tz) - weekStart(nowMs, tz)) / 7 : NaN;
+  const weekday = formatWeekday(iso, tz);
+  if (weeks === 0) return { word: `this ${weekday}`, waitlistOf: `this ${weekday}'s`, isDate: false };
+  if (weeks === 1) return { word: `next ${weekday}`, waitlistOf: `next ${weekday}'s`, isDate: false };
+  return { word: formatShortDate(iso, tz), waitlistOf: `the ${formatMonthDay(iso, tz)}`, isDate: true };
+}
+
+/** "Want in tonight?", "Want in on Thu, Nov 12?", "Want in on next Tuesday's waitlist?", "Want in on the Nov 12 waitlist?" */
+export function wantInTitle(iso: string, tz: string, nowMs: number, waitlist: boolean): string {
+  const d = playerDay(iso, tz, nowMs);
+  if (waitlist) return `Want in on ${d.waitlistOf} waitlist?`;
+  return `Want in ${d.isDate ? 'on ' : ''}${d.word}?`;
+}
+
+/** The second line of the "Want in?" popup, by how many are in. Empty for 0 in. */
+export function wantInSubline(confirmedCount: number): string {
+  if (confirmedCount <= 0) return '';
+  if (confirmedCount <= 3) return `${4 - confirmedCount} spot${confirmedCount === 3 ? '' : 's'} left`;
+  if (confirmedCount === 4) return "4 are in. You'd be on the waitlist until a 6th joins.";
+  if (confirmedCount === 5) return "5 are in. You'd make it 6 and everyone plays.";
+  return `${confirmedCount} are in. You'd be on the waitlist.`;
+}

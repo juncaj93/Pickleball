@@ -94,7 +94,17 @@ export interface GroupView {
   /** Of that, the pot: what "Use credit" can spend on a game they owe for. */
   potCents: number;
   /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
-  suggestion: { sessionId: string; startsAt: string; endsAt: string; joinAs: 'in' | 'waitlist'; holiday: string | null } | null;
+  suggestion: {
+    sessionId: string;
+    startsAt: string;
+    endsAt: string;
+    joinAs: 'in' | 'waitlist';
+    holiday: string | null;
+    /** How many are in now (for "3 spots left"). */
+    confirmedCount: number;
+    /** The venue's court waitlist: players go on standby. */
+    courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+  } | null;
 }
 
 export interface AdminRosterEntry {
