@@ -9,8 +9,9 @@ import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
-import { RefundList, type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
+import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
+import { FinalizeCard, RefundRequestCard } from './admin/HomeCards';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
@@ -235,7 +236,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
             Needs attention
           </h2>
           {items.map((item) => (
-            <TodoCard key={item.kind + ('session' in item ? item.session.id : '')} ctx={ctx} item={item} />
+            <TodoCard key={item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : '')} ctx={ctx} item={item} />
           ))}
         </section>
       )}
@@ -253,7 +254,6 @@ function when(s: AdminSessionView, tz: string) {
 
 function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   const tz = ctx.d.group.timezone;
-  const settings = ctx.d.group.settings;
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   async function act(fn: () => Promise<unknown>, msg: string) {
@@ -300,173 +300,45 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     );
   }
 
-  const s = item.session;
-  const title = {
-    five: '5 going, need 4 or 6',
-    sixdrop: `Was 6, now ${s.confirmedCount}: discount and credits are off`,
-    refund: s.state.flags.canceled ? `${formatShortDate(s.startsAt, tz)} was canceled. Refund needed:` : `${formatShortDate(s.startsAt, tz)}: a paid player left. Refund needed:`,
-    latedrop: 'Late drop',
-  }[item.kind];
+  if (item.kind === 'refund_request') return <RefundRequestCard ctx={ctx} r={item.request} />;
+  if (item.kind === 'finalize') return <FinalizeCard ctx={ctx} s={item.session} />;
 
+  const s = item.session;
+  const title = 'Late drop';
   return (
     <article className="card stack" aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`}>
       <div>
         <h3>{title}</h3>
         <div className="small muted">{when(s, tz)}</div>
       </div>
-      {item.kind === 'five' && <FivePanel ctx={ctx} s={s} />}
-      {item.kind === 'refund' && <RefundList ctx={ctx} s={s} />}
-      {item.kind === 'latedrop' && (
-        <>
-          <ul className="rows">
-            {lateDrops(s).map((r) => (
-              <li key={r.playerId}>
-                <span className="who">
-                  <span>
-                    <span className="late-tag">Late drop</span> <strong>{r.name}</strong>
-                  </span>
-                  <span className="small muted">dropped {formatDateTime(r.lateDropAt!, tz)}</span>
-                </span>
-              </li>
-            ))}
-          </ul>
-          <RefundList ctx={ctx} s={s} only={lateDrops(s).map((r) => r.playerId)} />
-          <button
-            className="btn small ghost"
-            disabled={busy}
-            onClick={() =>
-              act(async () => {
-                for (const r of lateDrops(s)) await api('POST', `/api/admin/sessions/${s.id}/late-drop-done`, { playerId: r.playerId });
-              }, 'Done')
-            }
-          >
-            Done
-          </button>
-        </>
-      )}
-      {item.kind === 'sixdrop' && (
-        <>
-          <p className="small">
-            Everyone is back to {formatPrice(settings.pricePerPlayerCents)}. Sort these out by hand:
-          </p>
-          <ul className="rows">
-            {s.roster
-              .filter((r) => !r.isOrganizer && (r.paymentStatus === 'paid' || r.promotedAt))
-              .map((r) => (
-                <li key={r.playerId}>
-                  <span className="who">
-                    <strong>{r.name}</strong>
-                    <span className="small muted">
-                      {r.status !== 'confirmed'
-                        ? `dropped out${r.paymentStatus === 'paid' ? `, paid ${formatPrice(r.paymentAmountCents ?? 0)}` : ''}`
-                        : r.paymentStatus === 'paid'
-                          ? `paid ${formatPrice(r.paymentAmountCents ?? 0)}, now owes ${formatPrice(r.shareCents ?? 0)}`
-                          : `now owes ${formatPrice((r.shareCents ?? 0) - r.creditCents)}`}
-                    </span>
-                  </span>
-                </li>
-              ))}
-          </ul>
-          <button
-            className="btn small secondary"
-            disabled={busy}
-            onClick={() => act(() => api('POST', `/api/admin/sessions/${s.id}/six-sorted`, {}), 'Marked as sorted')}
-          >
-            Done, I sorted it out
-          </button>
-        </>
-      )}
-    </article>
-  );
-}
-
-/** Each person's open credit, with "Clear credit" for when the organizer paid them back by hand. */
-export function CreditsCard({ ctx }: { ctx: AdminCtx }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  if (ctx.d.credits.length === 0) return null;
-  return (
-    <section className="card stack" aria-labelledby="credits-title">
-      <h2 id="credits-title">Credits</h2>
       <ul className="rows">
-        {ctx.d.credits.map((c) => (
-          <li key={c.playerId}>
+        {lateDrops(s).map((r) => (
+          <li key={r.playerId}>
             <span className="who">
-              <strong>{c.name}</strong>
-              <span className="small muted">{formatPrice(c.balanceCents)} credit</span>
+              <span>
+                <span className="late-tag">Late drop</span> <strong>{r.name}</strong>
+              </span>
+              <span className="small muted">
+                dropped {formatDateTime(r.lateDropAt!, tz)}
+                {r.creditBackCents > 0 ? ` · ${formatPrice(r.creditBackCents)} is their credit now` : ''}
+              </span>
             </span>
-            <button
-              className="btn small secondary"
-              disabled={busy}
-              aria-label={`Clear ${c.name}'s credit`}
-              onClick={async () => {
-                setBusy(true);
-                try {
-                  await api('POST', `/api/admin/credits/${c.playerId}/clear`, {});
-                  await ctx.reload();
-                  toast(`${c.name}'s credit cleared`);
-                } catch (err) {
-                  toast(err instanceof ApiError ? err.message : "Couldn't clear it.", 'error');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              Clear credit
-            </button>
           </li>
         ))}
       </ul>
-    </section>
+      <button
+        className="btn small ghost"
+        disabled={busy}
+        onClick={() =>
+          act(async () => {
+            for (const r of lateDrops(s)) await api('POST', `/api/admin/sessions/${s.id}/late-drop-done`, { playerId: r.playerId });
+          }, 'Done')
+        }
+      >
+        Done
+      </button>
+    </article>
   );
-}
-
-/** 5 confirmed: never changed automatically. The organizer picks how to get to 4 or 6. */
-function FivePanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  const firstWaiting = s.roster.find((r) => r.status === 'waitlisted' && r.waitlistPosition === 1);
-  const confirmed = s.roster.filter((r) => r.status === 'confirmed');
-  const lastIn = [...confirmed].sort((a, b) => Date.parse(b.confirmedAt ?? '') - Date.parse(a.confirmedAt ?? ''))[0];
-  async function roster(playerId: string, action: 'confirm' | 'waitlist', msg: string) {
-    setBusy(true);
-    try {
-      await api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action });
-      toast(msg);
-      await ctx.reload();
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work.', 'error');
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="stack">
-      <div className="stack" style={{ gap: 8 }}>
-        {firstWaiting && (
-          <button className="btn small" disabled={busy} onClick={() => roster(firstWaiting.playerId, 'confirm', `${firstWaiting.name} is in. 6 going.`)}>
-            Move {firstWaiting.name} in (makes 6)
-          </button>
-        )}
-        {lastIn && (
-          <button className="btn small secondary" disabled={busy} onClick={() => roster(lastIn.playerId, 'waitlist', `${lastIn.name} moved to the waitlist. 4 going.`)}>
-            Back to 4: move {lastIn.name} to the waitlist
-          </button>
-        )}
-        <button className="btn small danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
-          Cancel session
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** "4 in, need 2 more for 6", "3 in, need 1 more for 4", "6 in, all set" */
-export function countSummary(n: number): string {
-  if (n < 4) return `${n} in, need ${4 - n} more for 4`;
-  if (n === 4) return '4 in, need 2 more for 6';
-  if (n === 5) return '5 in, need one more or one fewer';
-  return `${n} in, all set`;
 }
 
 /** Sessions before the first session date, with "Show this session". */

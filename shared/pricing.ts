@@ -1,77 +1,61 @@
-import type { GroupSettings } from './settings';
+import { MIN_PLAYERS } from './spots';
 
 // What each player owes for a session.
 //
-// Everyone confirmed pays the flat price. When exactly 6 are confirmed, the
-// last two to get a spot (the ones the 6th brought in) pay the price minus
-// the credit ("6-person discount"), and the first four will each earn that
-// credit once the session has been played with 6. If the count drops below
-// 6, everyone is back to the flat price.
+// Before the game is finalized, everyone who is in owes the flat price (the
+// "$14 each" setting). After the organizer finalizes who played, the final
+// price is 4 x price divided by the number who played, rounded down to whole
+// dollars, never more than the flat price. Whatever someone paid above that
+// comes back as credit (server/finalize.ts). Someone who did not play owes
+// nothing, and what they paid comes back in full.
+
+/**
+ * The final price per player once N played: floor(4 x price / N) to whole
+ * dollars, never above the flat price. Fewer than 4 (should not happen, but
+ * "Finalize anyway" allows it) means the flat price.
+ */
+export function finalPrice(priceCents: number, played: number): number {
+  if (played < MIN_PLAYERS) return priceCents;
+  const raw = Math.floor((4 * priceCents) / played);
+  const wholeDollars = Math.floor(raw / 100) * 100;
+  return Math.min(priceCents, wholeDollars);
+}
+
+/** The credit back per player who paid the flat price: flat price minus the final price. */
+export function creditBack(priceCents: number, played: number): number {
+  return Math.max(0, priceCents - finalPrice(priceCents, played));
+}
+
+/** "6 played · $9 each · $5 credit back each" (the preview on the Finalize card). */
+export function finalPreview(priceCents: number, played: number, fmt: (cents: number) => string): string {
+  const p = finalPrice(priceCents, played);
+  const back = creditBack(priceCents, played);
+  return `${played} played · ${fmt(p)} each${back > 0 ? ` · ${fmt(back)} credit back each` : ''}`;
+}
 
 export interface Seat {
   playerId: string;
-  /** Order in which they got their spot. */
-  seq: number;
+  /** Set once finalized: 1 played, 0 did not. */
+  played: number | null;
 }
 
 export interface SeatPrice {
   cents: number;
-  /** Last two of six: paying the discounted price. */
-  discount: boolean;
-  /** First four of six: will earn a credit if 6 play. */
-  creditComing: boolean;
-}
-
-export function seatPrices(confirmed: Seat[], settings: GroupSettings, canceled: boolean): Map<string, SeatPrice> {
-  const out = new Map<string, SeatPrice>();
-  if (canceled) return out;
-  const ordered = [...confirmed].sort((a, b) => a.seq - b.seq);
-  const six = ordered.length === 6 && settings.creditCentsWhenSix > 0;
-  ordered.forEach((s, i) => {
-    if (six && i >= 4) {
-      out.set(s.playerId, { cents: Math.max(0, settings.pricePerPlayerCents - settings.creditCentsWhenSix), discount: true, creditComing: false });
-    } else {
-      out.set(s.playerId, { cents: settings.pricePerPlayerCents, discount: false, creditComing: six });
-    }
-  });
-  return out;
-}
-
-export interface OpenCredit {
-  id: string;
-  playerId: string;
-  amountCents: number;
-  /** When the session that earned it ended; it only applies to later sessions. */
-  earnedAfter: string;
-}
-
-export interface Due {
-  sessionId: string;
-  playerId: string;
-  startsAt: string;
-  cents: number;
 }
 
 /**
- * Put each open credit on the player's earliest unpaid session that starts
- * after the credit was earned. A credit is used whole, never split, and a
- * session can take more than one if the amount allows.
- * Returns credit per `${sessionId}:${playerId}`.
+ * The price on each confirmed seat: the flat price until finalized, then the
+ * final price for those who played (and nothing for those who did not).
+ * Nobody owes for a canceled game.
  */
-export function allocateCredits(credits: OpenCredit[], dues: Due[]): Map<string, { cents: number; ids: string[] }> {
-  const out = new Map<string, { cents: number; ids: string[] }>();
-  const byPlayer = new Map<string, Due[]>();
-  for (const d of dues) byPlayer.set(d.playerId, [...(byPlayer.get(d.playerId) ?? []), d]);
-  for (const list of byPlayer.values()) list.sort((a, b) => a.startsAt.localeCompare(b.startsAt));
-  const left = new Map(dues.map((d) => [`${d.sessionId}:${d.playerId}`, d.cents]));
-  for (const c of [...credits].sort((a, b) => a.earnedAfter.localeCompare(b.earnedAfter) || a.id.localeCompare(b.id))) {
-    for (const d of byPlayer.get(c.playerId) ?? []) {
-      const key = `${d.sessionId}:${d.playerId}`;
-      if (d.startsAt < c.earnedAfter || (left.get(key) ?? 0) < c.amountCents) continue;
-      left.set(key, (left.get(key) ?? 0) - c.amountCents);
-      const cur = out.get(key) ?? { cents: 0, ids: [] };
-      out.set(key, { cents: cur.cents + c.amountCents, ids: [...cur.ids, c.id] });
-      break;
+export function seatPrices(confirmed: Seat[], priceCents: number, canceled: boolean, final: { priceCents: number } | null): Map<string, SeatPrice> {
+  const out = new Map<string, SeatPrice>();
+  if (canceled) return out;
+  for (const s of confirmed) {
+    if (final) {
+      if (s.played === 1) out.set(s.playerId, { cents: final.priceCents });
+    } else {
+      out.set(s.playerId, { cents: priceCents });
     }
   }
   return out;

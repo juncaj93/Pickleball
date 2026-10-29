@@ -247,10 +247,9 @@ export function wantInTitle(iso: string, tz: string, nowMs: number, waitlist: bo
 }
 
 /** The second line of the "Want in?" popup, by how many are in. Empty for 0 in. */
-export function wantInSubline(confirmedCount: number): string {
+export function wantInSubline(confirmedCount: number, maxPlayers: number): string {
   if (confirmedCount <= 0) return '';
-  if (confirmedCount <= 3) return `${4 - confirmedCount} spot${confirmedCount === 3 ? '' : 's'} left`;
-  if (confirmedCount === 4) return "4 are in. You'd be on the waitlist until a 6th joins.";
-  if (confirmedCount === 5) return "5 are in. You'd make it 6 and everyone plays.";
-  return `${confirmedCount} are in. You'd be on the waitlist.`;
+  if (confirmedCount < 4) return `Needs ${4 - confirmedCount} more to play`;
+  if (confirmedCount >= maxPlayers) return `${confirmedCount} are in. You'd be on the waitlist.`;
+  return `${confirmedCount} are in. You'd make it ${confirmedCount + 1}.`;
 }

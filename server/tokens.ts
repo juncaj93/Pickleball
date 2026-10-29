@@ -4,7 +4,7 @@ import type { Ctx } from './context';
 import { newId, randomToken, sha256 } from './crypto';
 import type { D1Database } from './db';
 import { HttpError } from './http';
-import { audit, confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, waitlistOf } from './repo';
+import { audit, confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf } from './repo';
 import { clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
@@ -83,7 +83,7 @@ async function view(ctx: Ctx, r: Resolved): Promise<ActionTokenView> {
       endsAt: r.session.ends_at,
       canceled: r.session.status === 'canceled',
       venueName: r.session.venue_name,
-      openSpots: openSpots(confirmedOf(roster).length, waitlistOf(roster).filter((w) => w.player_id !== r.token.player_id).length),
+      openSpots: openSpots(confirmedOf(roster).length, settingsOf(r.group).maxPlayers),
     },
     myStatus: mine?.status ?? null,
     attendanceConfirmed: !!mine?.attendance_confirmed_at,
@@ -132,14 +132,14 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .run();
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
-    const res = await withdraw(ctx.db, r.session, r.token.player_id, ctx.nowMs);
+    const res = await withdraw(ctx.db, r.group, r.session, r.token.player_id, ctx.nowMs);
     const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group)) : false;
     outcome = 'withdrawn';
     if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late });
     await afterTap(ctx, watch);
   } else {
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
-    const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only');
+    const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only', settingsOf(r.group).maxPlayers);
     await afterTap(ctx, watch);
     await clearLateDrop(ctx.db, r.session.id, r.token.player_id);
     if (res.result === 'spot_taken') {

@@ -2016,28 +2016,40 @@ dialog.sheet::backdrop {
 }
 
 .dots {
-  flex: none;
+  flex: 0 1 auto;
+  min-width: 0;
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 3px;
 }
+/* A spot still needed to play: a plain outlined circle. */
 .dot {
-  width: 10px;
-  height: 10px;
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
   border: 1.75px solid var(--ink-2);
+  flex: none;
 }
-.dot.in,
-.dot.me {
-  border-color: var(--ink);
-  background: var(--ink);
-  /* A filled spot springs in: the "I'm in" celebration. */
+/* A person who's in: a pickleball. It springs in when someone joins. */
+.ball {
+  width: 13px;
+  height: 13px;
+  flex: none;
   animation: spot-pop 0.42s var(--spring);
 }
-.dot.me {
-  border-color: var(--primary);
-  background: var(--primary);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 28%, transparent);
+.ball .ball-skin {
+  fill: var(--ball);
+  stroke: color-mix(in srgb, var(--ball-ink) 40%, var(--ball));
+  stroke-width: 1.2;
+}
+.ball .ball-holes {
+  fill: color-mix(in srgb, var(--ball-ink) 55%, var(--ball));
+}
+/* Your own ball: a green ring. */
+.ball.me .ball-skin {
+  stroke: var(--primary);
+  stroke-width: 2;
 }
 
 /* Every name that's in (and the waitlist or standby line under it): small

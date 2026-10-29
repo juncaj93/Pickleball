@@ -28,6 +28,7 @@ export function TopBar({
   action,
   titleExtra,
   tools,
+  chip,
 }: {
   eyebrow: string;
   title: string;
@@ -35,8 +36,10 @@ export function TopBar({
   action?: ReactNode;
   /** Small text right after the title, on the same line (like "not you?"). */
   titleExtra?: ReactNode;
-  /** Small round buttons just left of the date square (more can be added later). */
+  /** Small round buttons left of the chip and the date square (more can be added later). */
   tools?: ReactNode;
+  /** The player's credit chip: right before the date square, the same height. */
+  chip?: ReactNode;
 }) {
   useEffect(() => {
     document.title = title === SITE_NAME ? SITE_NAME : `${title} · ${SITE_NAME}`;
@@ -59,6 +62,7 @@ export function TopBar({
         </div>
         {action}
         {tools && <div className="topbar-tools">{tools}</div>}
+        {chip}
         <TodaySquare />
       </div>
     </header>

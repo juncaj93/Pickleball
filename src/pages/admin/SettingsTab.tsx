@@ -1,13 +1,14 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
+import { finalPrice } from '../../../shared/pricing';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
 import { formatDateTime, formatTime, localParts } from '../../../shared/time';
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
 
-type MoneyKey = 'pricePerPlayerCents' | 'creditCentsWhenSix' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
+type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
 type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
@@ -252,11 +253,15 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           })}
           {text('venueName', 'Venue name', g.venueName ?? '', { maxLength: 80, placeholder: DEFAULT_VENUE_NAME })}
           {text('venueAddress', 'Venue street address', g.venueAddress ?? '', { maxLength: 160, autoComplete: 'street-address' })}
+          {whole('maxPlayers', 'Max players per game', `${SETTING_LIMITS.maxPlayers[0]} to ${SETTING_LIMITS.maxPlayers[1]}. Beyond it, people wait`)}
         </Section>
 
         <Section id="money" title="Money" note={`$${dollars(g.settings.pricePerPlayerCents)} each`} sections={sections}>
           {money('pricePerPlayerCents', 'Price per player')}
-          {money('creditCentsWhenSix', 'Credit per person when 6 play')}
+          <p className="set-hint final-rule" data-final-rule>
+            Final price = 4 x ${dollars(g.settings.pricePerPlayerCents)} divided by players who played, rounded down. With 5: ${dollars(finalPrice(g.settings.pricePerPlayerCents, 5))}, with 6: $
+            {dollars(finalPrice(g.settings.pricePerPlayerCents, 6))}, with 8: ${dollars(finalPrice(g.settings.pricePerPlayerCents, 8))}. The rest comes back as credit.
+          </p>
           {money('typicalCourtCostCents', 'Typical court cost', 'Only you see this')}
           {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
         </Section>
@@ -408,11 +413,13 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedSix';
+type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedMin' | 'refundRequests' | 'finalizeReminder';
 const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'drop36', label: 'Someone drops within 36 hours' },
-  { key: 'belowMin', label: 'Under 4, or 6 down to 5' },
-  { key: 'reachedSix', label: 'A game reaches 6' },
+  { key: 'belowMin', label: 'A game falls below 4' },
+  { key: 'reachedMin', label: "A game reaches 4 (it's on)" },
+  { key: 'refundRequests', label: 'Refund requests' },
+  { key: 'finalizeReminder', label: 'Finalize reminder (9:00 AM the next day)' },
 ];
 
 /**
@@ -422,7 +429,14 @@ const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
 function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   const a = ctx.d.alerts;
   const tz = ctx.d.group.timezone;
-  const [on, setOn] = useState<Record<AlertKey, boolean>>({ enabled: a.enabled, drop36: a.drop36, belowMin: a.belowMin, reachedSix: a.reachedSix });
+  const [on, setOn] = useState<Record<AlertKey, boolean>>({
+    enabled: a.enabled,
+    drop36: a.drop36,
+    belowMin: a.belowMin,
+    reachedMin: a.reachedMin,
+    refundRequests: a.refundRequests,
+    finalizeReminder: a.finalizeReminder,
+  });
   const [test, setTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
 
   function flip(key: AlertKey, value: boolean) {
@@ -489,7 +503,7 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         )}
       </div>
       {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
-      <p className="set-hint">Only you get these. Player names and game times only.</p>
+      <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount).</p>
     </>
   );
 }

@@ -36,6 +36,8 @@ export interface Env {
   TELEGRAM_CHAT_ID?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
+  /** Shared secret the scheduled Worker (cron/) sends to /api/cron/finalize-reminder. */
+  CRON_SECRET?: string;
 }
 
 /** True when a write was rejected by one of the schema's RAISE(ABORT, ...) triggers. */

@@ -4,7 +4,7 @@
 // so a slow or broken Telegram can't slow down or break anyone's tap. The
 // bot token and chat ID are Cloudflare secrets: they never reach a browser
 // and the bot only ever messages that one chat.
-import { type AlertPerson, type AlertPrefs, alertMessage, DEFAULT_ALERT_PREFS } from '../shared/alerts';
+import { type AlertPerson, type AlertPrefs, alertMessage, DEFAULT_ALERT_PREFS, finalizeReminderMessage, refundRequestMessage } from '../shared/alerts';
 import type { AdminDashboard } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { requireAdmin } from './auth';
@@ -13,7 +13,8 @@ import { newId } from './crypto';
 import type { D1Database, Env } from './db';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
-import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { confirmedOf, getGroup, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { localParts, zonedTimeToUtc } from '../shared/time';
 import * as v from './validate';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
@@ -25,7 +26,9 @@ interface AlertRow {
   enabled: number;
   drop_36h: number;
   below_min: number;
-  reached_six: number;
+  reached_min: number;
+  refund_requests: number;
+  finalize_reminder: number;
   last_at: string | null;
   last_ok: number | null;
   last_error: string | null;
@@ -37,7 +40,14 @@ async function alertRow(db: D1Database, groupId: string): Promise<AlertRow | nul
 
 function prefsOf(row: AlertRow | null): AlertPrefs {
   if (!row) return { ...DEFAULT_ALERT_PREFS };
-  return { enabled: !!row.enabled, drop36: !!row.drop_36h, belowMin: !!row.below_min, reachedSix: !!row.reached_six };
+  return {
+    enabled: !!row.enabled,
+    drop36: !!row.drop_36h,
+    belowMin: !!row.below_min,
+    reachedMin: !!row.reached_min,
+    refundRequests: !!row.refund_requests,
+    finalizeReminder: !!row.finalize_reminder,
+  };
 }
 
 export function connected(env: Env): boolean {
@@ -56,18 +66,26 @@ export async function alertsView(ctx: Ctx, groupId: string): Promise<AdminDashbo
   };
 }
 
-/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedSix? }: one switch at a time is fine. */
+/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedMin?, refundRequests?, finalizeReminder? }: one switch at a time is fine. */
 export async function updateAlerts(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const cur = prefsOf(await alertRow(ctx.db, group.id));
   const pick = (key: keyof AlertPrefs) => (body[key] === undefined ? cur[key] : v.bool(body[key], key));
-  const next: AlertPrefs = { enabled: pick('enabled'), drop36: pick('drop36'), belowMin: pick('belowMin'), reachedSix: pick('reachedSix') };
+  const next: AlertPrefs = {
+    enabled: pick('enabled'),
+    drop36: pick('drop36'),
+    belowMin: pick('belowMin'),
+    reachedMin: pick('reachedMin'),
+    refundRequests: pick('refundRequests'),
+    finalizeReminder: pick('finalizeReminder'),
+  };
+  const bit = (b: boolean) => (b ? 1 : 0);
   await ctx.db
     .prepare(
-      `INSERT INTO organizer_alerts (group_id, enabled, drop_36h, below_min, reached_six) VALUES (?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT (group_id) DO UPDATE SET enabled = ?2, drop_36h = ?3, below_min = ?4, reached_six = ?5`,
+      `INSERT INTO organizer_alerts (group_id, enabled, drop_36h, below_min, reached_min, refund_requests, finalize_reminder) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+       ON CONFLICT (group_id) DO UPDATE SET enabled = ?2, drop_36h = ?3, below_min = ?4, reached_min = ?5, refund_requests = ?6, finalize_reminder = ?7`,
     )
-    .bind(group.id, next.enabled ? 1 : 0, next.drop36 ? 1 : 0, next.belowMin ? 1 : 0, next.reachedSix ? 1 : 0)
+    .bind(group.id, bit(next.enabled), bit(next.drop36), bit(next.belowMin), bit(next.reachedMin), bit(next.refundRequests), bit(next.finalizeReminder))
     .run();
   return { ok: true, alerts: await alertsView(ctx, group.id) };
 }
@@ -193,11 +211,70 @@ async function watchInner(ctx: Ctx, group: GroupRow, session: SessionRow, player
   if (session.status === 'canceled' || ctx.nowMs >= Date.parse(session.starts_at)) return null;
   if (session.starts_at < visibleFrom(group) && !session.shown_early) return null; // hidden before the first session date
   const prefs = prefsOf(await alertRow(ctx.db, group.id));
-  if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin || prefs.reachedSix)) return null;
+  if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin || prefs.reachedMin)) return null;
   const roster = await loadRoster(ctx.db, session.id);
   const me = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>();
   return { group, session, prefs, actor: { playerId, name: me?.display_name ?? 'Someone' }, before: people(roster) };
 }
+
+/**
+ * A player asked for a refund of their credit: one message with the name and
+ * the amount (never their Venmo or phone). Sent in the background, never
+ * from the demo or Pretend, and never worth failing the request over.
+ */
+export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, name: string, cents: number): Promise<void> {
+  try {
+    if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
+    const prefs = prefsOf(await alertRow(ctx.db, group.id));
+    if (!prefs.enabled || !prefs.refundRequests) return;
+    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents)));
+  } catch {
+    // Never worth failing the request over.
+  }
+}
+
+/**
+ * GET or POST /api/cron/finalize-reminder, called by the scheduled Worker
+ * (cron/) with the shared secret. From 9:00 AM Eastern, every game that
+ * ended before today and is still not finalized gets one Telegram nudge,
+ * once. Returns what it did; never throws for a Telegram problem.
+ */
+export async function finalizeReminder(ctx: Ctx): Promise<{ sent: number; skipped: string }> {
+  const secret = ctx.env.CRON_SECRET;
+  const given = ctx.req.headers.get('X-Cron-Key') ?? ctx.url.searchParams.get('key') ?? '';
+  if (!secret || given.length === 0 || given !== secret) throw new HttpError(401, 'cron_key', 'Not allowed.');
+  const group = await getGroup(ctx.db);
+  if (!group) return { sent: 0, skipped: 'no group' };
+  if (!connected(ctx.env)) return { sent: 0, skipped: 'not connected' };
+  const prefs = prefsOf(await alertRow(ctx.db, group.id));
+  if (!prefs.enabled || !prefs.finalizeReminder) return { sent: 0, skipped: 'switched off' };
+  const local = localParts(ctx.nowMs, group.timezone);
+  if (local.hour < NUDGE_HOUR) return { sent: 0, skipped: `before ${NUDGE_HOUR}:00 AM` };
+  // Games that ended before today (local), not canceled, not finalized, not nudged, with someone in.
+  const todayStart = new Date(zonedTimeToUtc(local.year, local.month, local.day, 0, 0, group.timezone)).toISOString();
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT s.*, (SELECT COUNT(*) FROM session_players sp WHERE sp.session_id = s.id AND sp.status = 'confirmed') AS in_count
+       FROM sessions s WHERE s.group_id = ? AND s.status <> 'canceled' AND s.finalized_at IS NULL AND s.finalize_nudged_at IS NULL
+         AND s.ends_at <= ? AND s.ends_at > ? AND (s.starts_at >= ? OR s.shown_early = 1) ORDER BY s.starts_at`,
+    )
+    .bind(group.id, todayStart, new Date(ctx.nowMs - 7 * 86_400_000).toISOString(), visibleFrom(group))
+    .all<SessionRow & { in_count: number }>();
+  let sent = 0;
+  for (const s of results) {
+    if (Number(s.in_count) === 0) continue;
+    // Mark first, so two runs at once can't send two.
+    const res = await ctx.db.prepare('UPDATE sessions SET finalize_nudged_at = ? WHERE id = ? AND finalize_nudged_at IS NULL').bind(ctx.nowIso, s.id).run();
+    if (res.meta.changes !== 1) continue;
+    const out = await deliver(ctx, group.id, finalizeReminderMessage(s.starts_at, group.timezone, Number(s.in_count)));
+    if (out.ok) sent++;
+    else await ctx.db.prepare('UPDATE sessions SET finalize_nudged_at = NULL WHERE id = ? AND finalize_nudged_at = ?').bind(s.id, ctx.nowIso).run();
+  }
+  return { sent, skipped: '' };
+}
+
+/** The nudge goes out from this hour (local) the morning after. */
+export const NUDGE_HOUR = 9;
 
 /** Call right after the tap. Sends at most one message, in the background. */
 export async function afterTap(ctx: Ctx, watch: AlertWatch | null): Promise<void> {

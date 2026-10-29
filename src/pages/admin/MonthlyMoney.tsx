@@ -7,7 +7,7 @@ import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import '../../credit-admin.css';
 
-const STATE_TEXT = { played: '', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
+const STATE_TEXT = { played: '', not_finalized: 'Not finalized yet, money held', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
 
 /** "−$48", but plain "$0" when there is nothing to take off. */
 const minus = (cents: number) => (cents === 0 ? formatPrice(0) : `−${formatPrice(cents)}`);
@@ -96,12 +96,12 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               <dt>Court costs</dt>
               <dd>{minus(m.courtCostCents)}</dd>
               <dt>Credits owed</dt>
-              <dd>{minus(m.creditsOwedCents)}</dd>
-              {m.keptCreditCents > 0 && (
+              <dd data-credits-owed>{formatPrice(m.creditsOwedCents)}</dd>
+              {m.creditsOwedCents > 0 && (
                 <>
                   <dt className="sr-only">Note</dt>
-                  <dd className="kv-note" data-kept-credit-note>
-                    Includes {formatPrice(m.keptCreditCents)} kept from canceled games. Not taken off Left.
+                  <dd className="kv-note" data-credits-owed-note>
+                    Money that came back to players as credit. Not taken off Left.
                   </dd>
                 </>
               )}
@@ -131,7 +131,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
                     <strong>{formatShortDate(s.startsAt, tz)}</strong>
                     <span className="small muted">
                       {s.state === 'played'
-                        ? `${formatPrice(s.collectedCents)} in · court ${formatPrice(s.courtCostCents)}${s.typicalCost ? ' (typical)' : ''}`
+                        ? `${s.playedCount} played · ${formatPrice(s.priceCents ?? 0)} each · ${formatPrice(s.collectedCents)} in · court ${formatPrice(s.courtCostCents)}${s.typicalCost ? ' (typical)' : ''}`
                         : s.state === 'canceled' && s.charged
                           ? `Canceled, venue charged ${formatPrice(s.courtCostCents)}`
                           : STATE_TEXT[s.state]}

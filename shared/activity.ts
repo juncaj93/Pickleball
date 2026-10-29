@@ -89,8 +89,18 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} kept${day ? ` ${day}` : ' a session'} as is`;
     case 'decision_try_fill':
       return `${who} chose to fill${day ? ` ${day}` : ' a session'}`;
-    case 'six_drop_sorted':
-      return `${who} sorted out the drop below 6${forDay}`;
+    case 'session_finalized':
+      return `${who} finalized${day ? ` ${day}` : ' a game'}${typeof d.played === 'number' ? `: ${d.played} played` : ''}${typeof d.priceCents === 'number' ? `, ${formatPrice(d.priceCents)} each` : ''}`;
+    case 'finalize_reopened':
+      return `${who} reopened the finalize${forDay}`;
+    case 'credit_back':
+      return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? ' (canceled)' : d.reason === 'not_played' ? ' (did not play)' : ''}`;
+    case 'refund_requested':
+      return `${player} asked for ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'a'} refund of their credit`;
+    case 'refund_request_canceled':
+      return `${player} took back their refund request`;
+    case 'refund_request_declined':
+      return `${who} put off ${player}'s refund request`;
     case 'late_drop_done':
       return `${who} handled a late drop${forDay}`;
     case 'roster_confirm':

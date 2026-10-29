@@ -5,10 +5,9 @@ import type { AdminDashboard, AdminRosterEntry, AdminSessionView } from '../../.
 import {
   canceledMessage,
   checkInMessage,
-  downToFiveMessage,
+  finalMessage,
   movedMessage,
   needPlayersMessage,
-  nowSixMessage,
   paymentMessage,
   promotedMessage,
   remindAllMessage,
@@ -17,7 +16,7 @@ import {
 } from '../../../shared/messages';
 
 export interface TextItem {
-  id: 'share' | 'need' | 'down5' | 'checkin' | 'now6' | 'promoted' | 'canceled' | 'moved';
+  id: 'share' | 'need' | 'checkin' | 'promoted' | 'canceled' | 'moved' | 'final';
   /** Menu name. */
   label: string;
   body: string;
@@ -50,8 +49,14 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   const link = siteAddress(d.group.playerLink);
   const me = d.me?.id ?? null;
   const items: TextItem[] = [];
-  if (Date.parse(s.startsAt) <= nowMs) return items;
   const signed = s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted');
+  // After the game: once finalized, the one post-game note for the group chat.
+  if (Date.parse(s.startsAt) <= nowMs) {
+    if (s.finalized && !s.state.flags.canceled) {
+      items.push({ id: 'final', label: 'Final price', body: finalMessage(s, tz, s.finalized.playedCount, s.finalized.priceCents, d.group.settings.pricePerPlayerCents, link), ...GROUP });
+    }
+    return items;
+  }
 
   if (s.state.flags.canceled) {
     items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
@@ -65,27 +70,19 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   }
   items.push({ id: 'share', label: 'Share the game', body: shareMessage(s, tz, nowMs, link), ...GROUP });
   if (n < 4) items.push({ id: 'need', label: 'Need players', body: needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
-  if (n === 5 && s.sixDropped) items.push({ id: 'down5', label: 'Down to 5', body: downToFiveMessage(s, tz, nowMs, link), ...GROUP });
   // 4 or more in: the Check-in goes to everyone signed up, the waitlist too.
   if (n >= 4) items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
-  if (n === 6) {
-    const extras = confirmed.filter((r) => r.promotionReason === 'made_six');
-    const toTell = extras.filter((r) => !r.promotionNotifiedAt);
-    if (extras.length === 2 && reach(toTell, me).count > 0) {
-      items.push({ id: 'now6', label: 'Now 6', body: nowSixMessage(s, tz, nowMs, link), ...toNumbers('The 2 extra players', toTell, me) });
-    }
-  }
-  // A waitlisted player who moved into the 4 after a drop (not the extras at 6, and not a game that fell from 6 to 5).
-  for (const r of n <= 4 ? confirmed.filter((x) => x.promotionReason === 'spot_opened' && x.promotedAt && !x.promotionNotifiedAt && x.playerId !== me) : []) {
+  // A waitlisted player who moved in after a drop (above the max, someone left).
+  for (const r of confirmed.filter((x) => x.promotionReason === 'spot_opened' && x.promotedAt && !x.promotionNotifiedAt && x.playerId !== me)) {
     items.push({ id: 'promoted', label: `Spot opened: ${r.name}`, body: promotedMessage(s, tz, nowMs, link), ...toNumbers(r.name, [r], me) });
   }
   return items;
 }
 
-/** The text for the card that asks you to fill a game: whichever of Down to 5, Need players, Check-in, or just Share fits. */
+/** The text for the card that asks you to fill a game: whichever of Need players, Check-in, or just Share fits. */
 export function fillTexts(d: AdminDashboard, s: AdminSessionView, nowMs: number): TextItem[] {
   const all = sessionTexts(d, s, nowMs);
-  const lead = all.filter((i) => i.id === 'down5' || i.id === 'need' || i.id === 'checkin');
+  const lead = all.filter((i) => i.id === 'need' || i.id === 'checkin');
   return lead.length ? lead : all.filter((i) => i.id === 'share');
 }
 
@@ -98,9 +95,9 @@ export function owedGames(d: AdminDashboard, playerId: string, extra?: AdminSess
   for (const s of d.sessions) {
     if (s.state.flags.canceled) continue;
     const r = s.roster.find((x) => x.playerId === playerId);
-    if (!r || r.isOrganizer || r.status !== 'confirmed' || r.paymentStatus !== 'unpaid' || r.shareCents === null) continue;
+    if (!r || r.isOrganizer || r.status !== 'confirmed' || r.paymentStatus !== 'unpaid' || r.shareCents === null || r.owesCents <= 0) continue;
     if (s.id !== extra?.id && nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
-    games.push({ s, cents: r.shareCents - r.creditCents });
+    games.push({ s, cents: r.owesCents });
   }
   return games;
 }

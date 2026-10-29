@@ -1,0 +1,40 @@
+/* The organizer's Home cards after a game: Finalize, and refund requests. */
+
+.finalize-card h3,
+.refund-request h3 {
+  margin: 0;
+}
+.finalize-btns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+.finalize-btns .btn {
+  flex: 1 1 auto;
+}
+.finalize-btns .link-btn.not-now {
+  flex: none;
+  margin-left: auto;
+  padding: 0 4px;
+  min-height: 44px;
+}
+.finalize-live {
+  margin: 0;
+  font-weight: 600;
+}
+.who-played {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.who-played > li {
+  border-bottom: 1px solid var(--line);
+}
+.who-played > li:last-child {
+  border-bottom: 0;
+}
+.who-played .played-row {
+  min-height: 48px;
+  cursor: pointer;
+}

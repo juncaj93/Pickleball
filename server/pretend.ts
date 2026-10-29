@@ -2,8 +2,7 @@ import type { D1Database, D1PreparedStatement, D1Result } from './db';
 
 // "Pretend it's...": the organizer previews the site at another moment.
 // Pages are built for that time from a database that can't be written to:
-// any write (adding future games, issuing credits, logging) quietly does
-// nothing, and credits a page would have issued are kept in memory only.
+// any write (adding future games, logging) quietly does nothing.
 
 export const PRETEND_HEADER = 'X-Pretend-Now';
 
@@ -40,16 +39,13 @@ class ReadOnlyStatement implements D1PreparedStatement {
   }
 }
 
-/** Credit rows a pretend page would have issued, keyed by id, never saved. */
 export interface PretendDb extends D1Database {
   readonly pretend: true;
-  virtualCredits: Map<string, Record<string, unknown>>;
 }
 
 export function readOnly(db: D1Database): PretendDb {
   return {
     pretend: true,
-    virtualCredits: new Map(),
     prepare: (sql: string) => new ReadOnlyStatement(db.prepare(sql), WRITE.test(sql)),
     batch: async (statements: D1PreparedStatement[]) => statements.map(() => NOTHING),
   };

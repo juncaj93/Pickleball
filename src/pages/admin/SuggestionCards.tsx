@@ -7,11 +7,10 @@ import { pruneTapped, readTapped, type Suggestion, suggestions, type SuggestionK
 import '../../suggestions.css';
 
 const KIND_LABEL: Record<SuggestionKind, string> = {
-  now6: 'Now 6',
   promoted: 'Spot opened',
-  down5: 'Down to 5',
   need: 'Need players',
   checkin: 'Check-in',
+  final: 'Final price',
   pay: 'Payment reminder',
 };
 

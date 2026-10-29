@@ -10,6 +10,7 @@ export const TABLES = [
   'session_players',
   'credits',
   'credit_ledger',
+  'refund_requests',
   'session_action_tokens',
   'player_devices',
   'admin_audit_log',
@@ -34,8 +35,8 @@ export function backupToSql(backup) {
     throw new Error('This is not a Pickleball Bros backup file.');
   }
   for (const t of TABLES) {
-    // Backups made before the credit pot existed have no credit_ledger; that restores as empty.
-    if (t === 'credit_ledger' && backup.tables[t] === undefined) continue;
+    // Backups made before the credit pot or refund requests existed lack those tables; they restore as empty.
+    if ((t === 'credit_ledger' || t === 'refund_requests') && backup.tables[t] === undefined) continue;
     if (!Array.isArray(backup.tables[t])) throw new Error(`The backup is missing the ${t} table.`);
   }
   if (backup.tables.groups.length === 0) throw new Error('The backup has no group in it.');

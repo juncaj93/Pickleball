@@ -3,45 +3,30 @@
 // never deleted: undone entries just stop counting (`ended_at`).
 //
 // Rules live in shared/credit.ts (pure) and in the callers (admin.ts,
-// creditActions.ts); this file only reads and writes.
+// creditActions.ts, finalize.ts); this file only reads and writes.
 
-import { type CreditKind, type CreditRow, usedBySeat } from '../shared/credit';
+import { type CreditKind, type CreditReason, type CreditRow, usedBySeat } from '../shared/credit';
 import { newId } from './crypto';
 import type { D1Database } from './db';
 import { HttpError } from './http';
-import {
-  creditPlan,
-  type GroupRow,
-  issueCredits,
-  loadCredits,
-  loadRoster,
-  loadRosters,
-  loadSessions,
-  lookbackIso,
-  pricesFor,
-  type SessionRow,
-  settingsOf,
-  visibleFrom,
-} from './repo';
+import { type GroupRow, loadRoster, loadRosters, loadSessions, lookbackIso, pricesFor, type SessionRow, settingsOf, visibleFrom } from './repo';
 
 const HISTORY_MS = 90 * 86_400_000;
 
 /**
  * Visible sessions from the last 90 days on (further back while someone still
- * owes), their rosters, every $5 credit, the credit pot, and where open
- * credit will land on unpaid seats.
+ * owes), their rosters, the credit pot, credit spent per seat, and credit that
+ * came back per seat.
  */
 export async function moneyPicture(db: D1Database, group: GroupRow, nowMs: number) {
-  // Credits from sessions that just ended exist before anything is paid or cleared.
-  await issueCredits(db, group, nowMs);
   const since = await lookbackIso(db, group.id, nowMs, HISTORY_MS);
   const from = visibleFrom(group);
   const sessions = await loadSessions(db, group.id, since, from);
   const rosters = await loadRosters(db, group.id, since, from);
-  const credits = await loadCredits(db, group.id);
   const ledger = await loadLedger(db, group.id);
   const spent = usedBySeat(ledger);
-  return { sessions, rosters, credits, ledger, spent, plan: creditPlan(sessions, rosters, credits, settingsOf(group), spent) };
+  const reserved = await loadReserved(db, group.id);
+  return { sessions, rosters, ledger, spent, reserved };
 }
 
 interface RawRow {
@@ -54,19 +39,11 @@ interface RawRow {
   created_at: string;
   ended_at: string | null;
   ended_reason: string | null;
-  five_credit_ids: string | null;
+  reason: string | null;
+  played_count: number | null;
 }
 
-export type LedgerRow = CreditRow & { endedReason: string | null; fiveCreditIds: string[] };
-
-function ids(json: string | null): string[] {
-  try {
-    const v = JSON.parse(json ?? '[]');
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-  } catch {
-    return [];
-  }
-}
+export type LedgerRow = CreditRow & { endedReason: string | null };
 
 export async function loadLedger(db: D1Database, groupId: string): Promise<LedgerRow[]> {
   const { results } = await db
@@ -83,14 +60,44 @@ export async function loadLedger(db: D1Database, groupId: string): Promise<Ledge
     createdAt: r.created_at,
     endedAt: r.ended_at,
     endedReason: r.ended_reason,
-    fiveCreditIds: ids(r.five_credit_ids),
+    reason: (r.reason as CreditReason | null) ?? null,
+    playedCount: r.played_count,
   }));
+}
+
+export interface RefundRequestRow {
+  id: string;
+  group_id: string;
+  player_id: string;
+  amount_cents: number;
+  status: 'pending' | 'refunded' | 'canceled' | 'declined';
+  created_at: string;
+  resolved_at: string | null;
+  ledger_id: string | null;
+}
+
+/** Pending refund requests, oldest first. */
+export async function loadPendingRequests(db: D1Database, groupId: string): Promise<RefundRequestRow[]> {
+  const { results } = await db
+    .prepare("SELECT * FROM refund_requests WHERE group_id = ? AND status = 'pending' ORDER BY created_at, rowid")
+    .bind(groupId)
+    .all<RefundRequestRow>();
+  return results;
+}
+
+/** Credit reserved by a pending refund request, per player. */
+export async function loadReserved(db: D1Database, groupId: string): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  for (const r of await loadPendingRequests(db, groupId)) out.set(r.player_id, (out.get(r.player_id) ?? 0) + r.amount_cents);
+  return out;
 }
 
 /** SQL for a player's pot right now (`player` is a bound parameter like "?3"). */
 const POT = (player: string) =>
   `(SELECT COALESCE(SUM(CASE kind WHEN 'kept' THEN amount_cents WHEN 'used' THEN -amount_cents ELSE -(amount_cents - five_cents) END), 0)
     FROM credit_ledger WHERE player_id = ${player} AND ended_at IS NULL)`;
+/** SQL for what a pending refund request holds back. */
+const RESERVED = (player: string) => `(SELECT COALESCE(SUM(amount_cents), 0) FROM refund_requests WHERE player_id = ${player} AND status = 'pending')`;
 
 /**
  * Credit used on a game goes back to the player: they dropped out of it, it
@@ -135,11 +142,10 @@ export async function returnSeatCredit(
 }
 
 /**
- * The price of a game can change after someone paid it with credit (6 playing
- * is $9 for the last two; if one leaves, everyone is back to $14). A seat paid
- * with credit that is now short is put back to unpaid, keeping the credit
- * already used on it, so the player sees exactly what is left to pay. If the
- * price drops back to what the credit already covers, it is paid again.
+ * The price of a seat can change when the game is finalized (or reopened). A
+ * seat paid with credit that is now short is put back to unpaid, keeping the
+ * credit already used on it, so the player sees exactly what is left to pay.
+ * An unpaid seat whose used credit now covers the price is paid.
  */
 export async function repriceCreditSeats(db: D1Database, sessionId: string, nowIso: string): Promise<void> {
   const session = await db.prepare('SELECT * FROM sessions WHERE id = ?').bind(sessionId).first<SessionRow>();
@@ -158,28 +164,21 @@ export async function repriceCreditSeats(db: D1Database, sessionId: string, nowI
     const price = prices.get(u.player_id)?.cents;
     if (!row || row.status !== 'confirmed' || price === undefined) continue;
     if (row.payment_status === 'paid') {
-      const five = await db
-        .prepare('SELECT COALESCE(SUM(amount_cents), 0) AS cents FROM credits WHERE used_session_id = ? AND player_id = ?')
-        .bind(sessionId, u.player_id)
-        .first<{ cents: number }>();
-      if ((row.payment_amount_cents ?? 0) >= price - (five?.cents ?? 0)) continue;
-      await db.batch([
-        db
-          .prepare(
-            `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL,
-               payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ? AND payment_status = 'paid'`,
-          )
-          .bind(nowIso, nowIso, sessionId, u.player_id),
-        // The older $5 credit used on it is planned again from scratch.
-        db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE used_session_id = ? AND player_id = ?').bind(sessionId, u.player_id),
-      ]);
-    } else if (row.payment_status === 'unpaid' && u.cents === price) {
+      if ((row.payment_amount_cents ?? 0) >= price) continue;
+      await db
+        .prepare(
+          `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL,
+             payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ? AND payment_status = 'paid'`,
+        )
+        .bind(nowIso, nowIso, sessionId, u.player_id)
+        .run();
+    } else if (row.payment_status === 'unpaid' && u.cents >= price) {
       await db
         .prepare(
           `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = NULL,
              payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ? AND payment_status = 'unpaid'`,
         )
-        .bind(nowIso, price, nowIso, nowIso, sessionId, u.player_id)
+        .bind(nowIso, u.cents, nowIso, nowIso, sessionId, u.player_id)
         .run();
     }
   }
@@ -197,91 +196,86 @@ export async function returnSessionCredit(db: D1Database, sessionId: string, now
 }
 
 /**
- * "Keep as credit": the payment for a canceled game (or one the player left)
- * becomes credit instead of being paid back. The row is settled like a refund
- * (`refunded_at`), so Held drops and a later sign-up owes again. Any older $5
- * credit used on that payment goes back to the player, like a refund.
+ * Money from a seat comes back to the player as credit: a 'kept' entry with
+ * its reason. With `settle`, the seat's payment is marked settled
+ * (`refunded_at`), so it is no longer held and a later sign-up owes again;
+ * that is for money coming back in full (dropped, canceled, did not play).
+ * Without it, only the part above the final price comes back and the payment
+ * stays as what they paid. Returns false when nothing was there to keep.
  */
-export async function keepAsCredit(
+export async function creditBack(
   db: D1Database,
-  groupId: string,
-  sessionId: string,
-  playerId: string,
-  nowIso: string,
-): Promise<{ cents: number; fiveCreditIds: string[] }> {
-  const row = (await loadRoster(db, sessionId)).find((r) => r.player_id === playerId);
-  if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'not_paid', 'Only someone who paid can have credit kept.');
-  if (row.refunded_at) throw new HttpError(409, 'already_settled', 'That payment was already paid back or kept as credit.');
-  const cents = row.payment_amount_cents ?? 0;
-  if (cents <= 0) throw new HttpError(409, 'nothing_to_keep', 'There is no money to keep for that game.');
-  const { results } = await db
-    .prepare('SELECT id FROM credits WHERE used_session_id = ? AND player_id = ?')
-    .bind(sessionId, playerId)
-    .all<{ id: string }>();
-  const fiveCreditIds = results.map((c) => c.id);
+  args: { groupId: string; sessionId: string; playerId: string; cents: number; reason: CreditReason; playedCount?: number | null; nowIso: string; settle: boolean },
+): Promise<boolean> {
+  const { groupId, sessionId, playerId, cents, reason, playedCount, nowIso, settle } = args;
+  if (cents <= 0) return false;
   const entry = newId();
   const there = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?1 AND ended_at IS NULL)';
+  // The seat must still carry a live payment, and this reason must not already have an entry.
+  const seatOk = settle
+    ? "EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL)"
+    : "EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND payment_status = 'paid')";
   const out = await db.batch([
     db
       .prepare(
-        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, five_credit_ids)
-         SELECT ?1, ?2, ?3, 'kept', ?4, ?5, ?6, ?7
-         WHERE EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL)`,
+        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason, played_count)
+         SELECT ?1, ?2, ?3, 'kept', ?4, ?5, ?6, ?7, ?8
+         WHERE ${seatOk}
+           AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND kind = 'kept' AND reason = ?7 AND ended_at IS NULL)`,
       )
-      .bind(entry, groupId, playerId, cents, sessionId, nowIso, JSON.stringify(fiveCreditIds)),
-    db
-      .prepare(`UPDATE session_players SET refunded_at = ?2, updated_at = ?2 WHERE session_id = ?3 AND player_id = ?4 AND refunded_at IS NULL AND ${there}`)
-      .bind(entry, nowIso, sessionId, playerId),
-    db
-      .prepare(`UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE used_session_id = ?2 AND player_id = ?3 AND ${there}`)
-      .bind(entry, sessionId, playerId),
+      .bind(entry, groupId, playerId, cents, sessionId, nowIso, reason, playedCount ?? null),
+    ...(settle
+      ? [
+          db
+            .prepare(`UPDATE session_players SET refunded_at = ?2, updated_at = ?2 WHERE session_id = ?3 AND player_id = ?4 AND refunded_at IS NULL AND ${there}`)
+            .bind(entry, nowIso, sessionId, playerId),
+        ]
+      : []),
   ]);
-  if (out[0].meta.changes !== 1) throw new HttpError(409, 'already_settled', 'That payment was already paid back or kept as credit.');
-  return { cents, fiveCreditIds };
+  return out[0].meta.changes === 1;
 }
 
 /**
- * Take back "Keep as credit". Only while that credit is still all there: if
- * some of it was already spent or paid back, it can't be undone.
+ * Take back credit that came from a seat (reopening a finalized game, or
+ * unmarking a payment that had credit back). Only while that credit is still
+ * all there: if some was spent or paid back, it can't be undone. Settled
+ * seats become unsettled again.
  */
-export async function undoKeep(db: D1Database, sessionId: string, playerId: string, nowIso: string): Promise<boolean> {
-  const kept = await db
-    .prepare("SELECT id, amount_cents, five_credit_ids FROM credit_ledger WHERE kind = 'kept' AND session_id = ? AND player_id = ? AND ended_at IS NULL ORDER BY created_at DESC, rowid DESC")
-    .bind(sessionId, playerId)
-    .first<{ id: string; amount_cents: number; five_credit_ids: string | null }>();
-  if (!kept) return false;
-  const restore = ids(kept.five_credit_ids);
-  const ended = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?2 AND ended_at = ?1)';
+export async function undoCreditBack(db: D1Database, sessionId: string, playerId: string, reasons: CreditReason[], nowIso: string): Promise<{ undone: number; blocked: boolean }> {
+  const { results } = await db
+    .prepare(
+      `SELECT id, amount_cents, reason FROM credit_ledger WHERE kind = 'kept' AND session_id = ? AND player_id = ? AND ended_at IS NULL AND reason IN (${reasons.map(() => '?').join(', ')})`,
+    )
+    .bind(sessionId, playerId, ...reasons)
+    .all<{ id: string; amount_cents: number; reason: CreditReason }>();
+  if (results.length === 0) return { undone: 0, blocked: false };
+  const total = results.reduce((sum, r) => sum + r.amount_cents, 0);
+  const ids = results.map((r) => r.id);
+  // Numbered placeholders only: the ids take ?4 onward.
+  const idList = ids.map((_, i) => `?${i + 4}`).join(', ');
+  const ended = `(SELECT COUNT(*) FROM credit_ledger WHERE id IN (${idList}) AND ended_at = ?1) = ${ids.length}`;
   const out = await db.batch([
+    // All or nothing: every entry ends only if the pot still holds the whole amount.
     db
       .prepare(
         `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone'
-         WHERE id = ?2 AND ended_at IS NULL AND ${POT('?3')} - ?4 >= 0`,
+         WHERE id IN (${idList}) AND ended_at IS NULL AND ${POT('?2')} - ?3 >= 0`,
       )
-      .bind(nowIso, kept.id, playerId, kept.amount_cents),
+      .bind(nowIso, playerId, total, ...ids),
     db
-      .prepare(`UPDATE session_players SET refunded_at = NULL, updated_at = ?1 WHERE session_id = ?3 AND player_id = ?4 AND ${ended}`)
-      .bind(nowIso, kept.id, sessionId, playerId),
-    ...restore.map((id) =>
-      db
-        .prepare(
-          `UPDATE credits SET used_session_id = ?3, used_at = ?1
-           WHERE id = ?5 AND player_id = ?4 AND used_session_id IS NULL AND cleared_at IS NULL AND ${ended}`,
-        )
-        .bind(nowIso, kept.id, sessionId, playerId, id),
-    ),
+      .prepare(`UPDATE session_players SET refunded_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3 AND refunded_at IS NOT NULL AND ${ended}`)
+      .bind(nowIso, sessionId, playerId, ...ids),
   ]);
-  if (out[0].meta.changes !== 1) throw new HttpError(409, 'credit_spent', 'Some of that credit was already used or paid back, so it can not be undone.');
-  return true;
+  if (out[0].meta.changes !== results.length) return { undone: 0, blocked: true };
+  return { undone: total, blocked: false };
 }
 
 /**
  * "Use credit" on a game the player owes for. The credit entry goes in only
- * while the pot still covers it and the seat still owes exactly what was
- * worked out (`alreadyUsed`), so a double tap spends nothing twice. When the
- * credit covers the whole amount the seat is marked paid in the same step,
- * with `paidCents` as its payment (everything above the older $5 credit,
- * which counts as collected for that game).
+ * while the usable pot (minus any pending refund request) still covers it and
+ * the seat still owes exactly what was worked out (`alreadyUsed`), so a
+ * double tap spends nothing twice. When the credit covers the whole amount
+ * the seat is marked paid in the same step, with `paidCents` as its payment.
  */
 export async function spendCredit(
   db: D1Database,
@@ -291,8 +285,8 @@ export async function spendCredit(
     playerId: string;
     cents: number;
     alreadyUsed: number;
-    /** Set when this use pays the seat in full: the seat's payment, and the $5 credits it uses up. */
-    payInFull: { paidCents: number; fiveCreditIds: string[] } | null;
+    /** Set when this use pays the seat in full: the seat's payment. */
+    payInFull: { paidCents: number } | null;
     nowIso: string;
   },
 ): Promise<boolean> {
@@ -304,7 +298,7 @@ export async function spendCredit(
       .prepare(
         `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at)
          SELECT ?1, ?2, ?3, 'used', ?4, ?5, ?6
-         WHERE ${POT('?3')} >= ?4
+         WHERE ${POT('?3')} - ${RESERVED('?3')} >= ?4
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?5 AND player_id = ?3 AND ended_at IS NULL) = ?7
            AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'unpaid')
            AND (SELECT status FROM sessions WHERE id = ?5) <> 'canceled'`,
@@ -319,14 +313,6 @@ export async function spendCredit(
                WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'unpaid' AND ${there}`,
             )
             .bind(entry, nowIso, sessionId, playerId, payInFull.paidCents),
-          ...payInFull.fiveCreditIds.map((id) =>
-            db
-              .prepare(
-                `UPDATE credits SET used_session_id = ?3, used_at = ?2
-                 WHERE id = ?4 AND used_session_id IS NULL AND cleared_at IS NULL AND ${there}`,
-              )
-              .bind(entry, nowIso, sessionId, id),
-          ),
         ]
       : []),
   ]);
@@ -334,49 +320,66 @@ export async function spendCredit(
 }
 
 /**
- * "Refund credit balance" marked done: the pot (and any older $5 credits that
- * were part of the balance shown) is paid back, so it drops to $0. One entry
- * holds both, so one undo restores both.
+ * Credit paid back by hand on Venmo: a 'refunded' entry for exactly `cents`.
+ * For a player's request, the request is closed in the same step and the
+ * amount must still be in the pot. For the organizer's own "Refund credit
+ * balance", `cents` must be the whole usable balance (pot minus any pending
+ * request). Opening Venmo never does this; only "Mark refunded" does.
  */
-export async function refundPot(
+export async function refundCredit(
   db: D1Database,
-  args: { groupId: string; playerId: string; potCents: number; fiveCents: number; fiveCreditIds: string[]; nowIso: string },
+  args: { groupId: string; playerId: string; cents: number; requestId: string | null; nowIso: string },
 ): Promise<boolean> {
-  const { groupId, playerId, potCents, fiveCents, fiveCreditIds, nowIso } = args;
+  const { groupId, playerId, cents, requestId, nowIso } = args;
   const entry = newId();
   const there = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?1 AND ended_at IS NULL)';
+  const guard = requestId
+    ? `${POT('?3')} >= ?4 AND EXISTS (SELECT 1 FROM refund_requests WHERE id = ?7 AND player_id = ?3 AND status = 'pending' AND amount_cents = ?4)`
+    : `${POT('?3')} - ${RESERVED('?3')} = ?4`;
   const out = await db.batch([
     db
       .prepare(
-        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, created_at, five_credit_ids)
-         SELECT ?1, ?2, ?3, 'refunded', ?4, ?5, ?6, ?7
-         WHERE ${POT('?3')} = ?8`,
+        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, created_at, reason)
+         SELECT ?1, ?2, ?3, 'refunded', ?4, 0, ?5, ?6 WHERE ${guard}`,
       )
-      .bind(entry, groupId, playerId, potCents + fiveCents, fiveCents, nowIso, JSON.stringify(fiveCreditIds), potCents),
-    ...fiveCreditIds.map((id) =>
-      db
-        .prepare(`UPDATE credits SET cleared_at = ?2 WHERE id = ?3 AND player_id = ?4 AND used_session_id IS NULL AND cleared_at IS NULL AND ${there}`)
-        .bind(entry, nowIso, id, playerId),
-    ),
+      .bind(entry, groupId, playerId, cents, nowIso, requestId ? 'request' : null, requestId ?? ''),
+    ...(requestId
+      ? [
+          db
+            .prepare(`UPDATE refund_requests SET status = 'refunded', resolved_at = ?2, ledger_id = ?1 WHERE id = ?3 AND status = 'pending' AND ${there}`)
+            .bind(entry, nowIso, requestId),
+        ]
+      : []),
   ]);
   return out[0].meta.changes === 1;
 }
 
-/** Take back "Mark refunded" on the pot. The balance comes back, and so do the $5 credits cleared with it. */
-export async function undoRefundPot(db: D1Database, playerId: string, nowIso: string): Promise<boolean> {
+/**
+ * Take back "Mark refunded": the last refund entry stops counting and the
+ * balance comes back. A refund that answered a request puts the request back
+ * to pending (its amount is reserved again).
+ */
+export async function undoRefund(db: D1Database, playerId: string, nowIso: string): Promise<boolean> {
   const last = await db
-    .prepare("SELECT id, five_credit_ids FROM credit_ledger WHERE kind = 'refunded' AND player_id = ? AND ended_at IS NULL ORDER BY created_at DESC, rowid DESC")
+    .prepare("SELECT id FROM credit_ledger WHERE kind = 'refunded' AND player_id = ? AND ended_at IS NULL ORDER BY created_at DESC, rowid DESC")
     .bind(playerId)
-    .first<{ id: string; five_credit_ids: string | null }>();
+    .first<{ id: string }>();
   if (!last) return false;
   const ended = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?1 AND ended_at = ?2)';
   const out = await db.batch([
     db.prepare("UPDATE credit_ledger SET ended_at = ?2, ended_reason = 'undone' WHERE id = ?1 AND ended_at IS NULL").bind(last.id, nowIso),
-    ...ids(last.five_credit_ids).map((id) =>
-      db
-        .prepare(`UPDATE credits SET cleared_at = NULL WHERE id = ?3 AND player_id = ?4 AND used_session_id IS NULL AND ${ended}`)
-        .bind(last.id, nowIso, id, playerId),
-    ),
+    db
+      .prepare(
+        `UPDATE refund_requests SET status = 'pending', resolved_at = NULL, ledger_id = NULL
+         WHERE ledger_id = ?1 AND status = 'refunded' AND ${ended}
+           AND NOT EXISTS (SELECT 1 FROM refund_requests r2 WHERE r2.player_id = refund_requests.player_id AND r2.status = 'pending')`,
+      )
+      .bind(last.id, nowIso),
   ]);
   return out[0].meta.changes === 1;
+}
+
+/** The pot is never negative: a guard for callers that need to refuse early with a clear message. */
+export function assertCents(cents: number, what: string): void {
+  if (!Number.isInteger(cents) || cents <= 0) throw new HttpError(400, 'invalid_cents', `${what} must be a whole-dollar amount above $0.`);
 }

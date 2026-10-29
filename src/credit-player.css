@@ -47,3 +47,87 @@
     padding-inline: 7px;
   }
 }
+
+/* ---------- The credit chip in the header and the credit sheet ---------- */
+
+/* "CREDIT / $14": the same height as the date tile, right before it. */
+.credit-chip {
+  flex: none;
+  height: 44px;
+  min-width: 44px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1.5px solid var(--tile-line);
+  color: var(--ink);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  font-family: var(--display);
+  cursor: pointer;
+}
+.credit-chip .cc-label {
+  font-family: var(--body);
+  font-size: 0.58rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  color: var(--primary);
+}
+.credit-chip.pending .cc-label {
+  color: var(--warn-fg, #9a6700);
+}
+.credit-chip .cc-amount {
+  font-size: 1.05rem;
+  font-weight: 720;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+.credit-chip:active {
+  transform: scale(0.97);
+}
+
+.credit-sheet .credit-big {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.6rem;
+}
+.credit-pending {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  font-size: 0.92rem;
+}
+.credit-sheet .credit-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.88rem;
+}
+.credit-sheet .credit-history > li {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.credit-sheet .credit-history > li:last-child {
+  border-bottom: 0;
+}
+
+/* "Your $14 is now credit. Request refund" under a game they left. */
+.credit-back-line {
+  margin: 0;
+}
+.credit-back-line .link-btn {
+  font-size: inherit;
+}
+
+/* "You get credit back if 5 or more play." under the Pay buttons. */
+.pay-note {
+  margin: 0;
+}
+.pay-pair .pay-note {
+  flex-basis: 100%;
+}

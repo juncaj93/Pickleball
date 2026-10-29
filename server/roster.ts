@@ -1,36 +1,26 @@
 import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import type { GroupSettings } from '../shared/settings';
-import { MIN_PLAYERS } from '../shared/spots';
-import { repriceCreditSeats, returnSeatCredit } from './credit';
+import { creditBack, returnSeatCredit } from './credit';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
-import { type SessionRow, waitlistOf, loadRoster, confirmedOf, syncSix } from './repo';
+import { type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf } from './repo';
 
-// One court, exactly 4 or 6 players (see shared/spots.ts for the rules).
+// One court, any number from 4 up to the organizer's max (see shared/spots.ts).
 //
 // Every write that hands out a spot carries its own guard in SQL, so two
-// phones tapping at the same moment can't push a session past 4, or to 5.
-// The database trigger (max 6 confirmed) is the backstop under all of it.
+// phones tapping at the same moment can't push a session past the max.
+// The database trigger (12 confirmed, the widest max) is the backstop.
 
 // Next position in this session's join / spot order. Timestamps can tie
 // to the millisecond; these counters can't. ?1 is always the session id.
 const NEXT_CLAIM_SEQ = '(SELECT COALESCE(MAX(x.claim_seq), 0) + 1 FROM session_players x WHERE x.session_id = ?1)';
 const NEXT_CONFIRM_SEQ = '(SELECT COALESCE(MAX(x.confirm_seq), 0) + 1 FROM session_players x WHERE x.session_id = ?1)';
 const CONFIRMED = "(SELECT COUNT(*) FROM session_players x WHERE x.session_id = ?1 AND x.status = 'confirmed')";
-/** Waiting players other than ?2. */
-const OTHERS_WAITING = "(SELECT COUNT(*) FROM session_players x WHERE x.session_id = ?1 AND x.status = 'waitlisted' AND x.player_id <> ?2)";
 
-/**
- * When someone not yet in may take a spot directly:
- * - normal: under 4, or the one spot that turns 5 into 6 (if nobody is waiting)
- * - organizer: anything under 6
- */
-const GUARD = {
-  normal: `(${CONFIRMED} < ${MIN_PLAYERS} OR (${CONFIRMED} = 5 AND ${OTHERS_WAITING} = 0))`,
-  organizer: `${CONFIRMED} < 6`,
-} as const;
+/** Someone not yet in may take a spot while fewer than the max (?5) are in. */
+const GUARD = `${CONFIRMED} < ?5`;
 
 /**
  * Getting a spot back keeps a payment already made, unless it was refunded:
@@ -43,7 +33,7 @@ const KEEP_PAYMENT_UNLESS_REFUNDED = `payment_status = CASE WHEN payment_status 
   refunded_at = NULL`;
 
 export type JoinResult =
-  | { result: 'confirmed'; madeSix?: boolean }
+  | { result: 'confirmed' }
   | { result: 'standby'; position: number }
   | { result: 'already_confirmed' }
   | { result: 'waitlisted'; position: number }
@@ -51,7 +41,7 @@ export type JoinResult =
 
 export interface Promotion {
   playerId: string;
-  reason: 'made_six' | 'spot_opened';
+  reason: 'spot_opened';
 }
 
 interface ExistingRow {
@@ -72,7 +62,7 @@ async function existingRow(db: D1Database, sessionId: string, playerId: string) 
 }
 
 /** Give the player a confirmed spot if the guard allows it. Returns false if it didn't. */
-async function tryConfirm(db: D1Database, session: SessionRow, playerId: string, nowIso: string, guard: keyof typeof GUARD) {
+async function tryConfirm(db: D1Database, session: SessionRow, playerId: string, nowIso: string, maxPlayers: number) {
   try {
     const existing = await existingRow(db, session.id, playerId);
     if (existing?.status === 'confirmed') return true;
@@ -89,9 +79,9 @@ async function tryConfirm(db: D1Database, session: SessionRow, playerId: string,
                promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
                ${KEEP_PAYMENT_UNLESS_REFUNDED},
                updated_at = ?3
-           WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD[guard]}`,
+           WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD}`,
         )
-        .bind(session.id, playerId, nowIso, existing.id)
+        .bind(session.id, playerId, nowIso, existing.id, maxPlayers)
         .run();
       return res.meta.changes === 1;
     }
@@ -100,9 +90,9 @@ async function tryConfirm(db: D1Database, session: SessionRow, playerId: string,
         `INSERT INTO session_players
            (id, session_id, player_id, status, claimed_at, claim_seq, confirmed_at, confirm_seq, payment_status, updated_at)
          SELECT ?4, ?1, ?2, 'confirmed', ?3, ${NEXT_CLAIM_SEQ}, ?3, ${NEXT_CONFIRM_SEQ}, 'unpaid', ?3
-         WHERE ${GUARD[guard]}`,
+         WHERE ${GUARD}`,
       )
-      .bind(session.id, playerId, nowIso, newId())
+      .bind(session.id, playerId, nowIso, newId(), maxPlayers)
       .run();
     return res.meta.changes === 1;
   } catch (err) {
@@ -148,54 +138,38 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
 }
 
 /**
- * Apply the automatic moves after anyone joins or leaves:
- * - fewer than 4 and someone waiting: the first waiting player moves in
- * - exactly 4 and two or more waiting: the first two move in together (6)
- * - 5: nothing moves; the organizer decides
- * Each move is one guarded statement, so it either fully happens or not at all.
+ * Apply the automatic moves after anyone joins or leaves: while fewer than
+ * the max are in and someone is waiting, the first waiting player moves in
+ * ("Spot opened"). Each move is one guarded statement, so it either fully
+ * happens or not at all.
  */
-export async function settle(db: D1Database, session: SessionRow, nowIso: string): Promise<Promotion[]> {
+export async function settle(db: D1Database, session: SessionRow, nowIso: string, maxPlayers: number): Promise<Promotion[]> {
   const promoted: Promotion[] = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 16; i++) {
     const roster = await loadRoster(db, session.id);
     const confirmed = confirmedOf(roster).length;
     const waiting = waitlistOf(roster);
-    let ids: string[];
-    let reason: Promotion['reason'];
-    let guard: string;
-    if (confirmed < MIN_PLAYERS && waiting.length > 0) {
-      ids = [waiting[0].id];
-      reason = 'spot_opened';
-      guard = `${CONFIRMED} < ${MIN_PLAYERS}`;
-    } else if (confirmed === MIN_PLAYERS && waiting.length >= 2) {
-      ids = [waiting[0].id, waiting[1].id];
-      reason = 'made_six';
-      // Both rows must still be waiting and the count still 4. SQLite checks
-      // the WHERE for every row before changing any, so it's both or neither.
-      guard = `${CONFIRMED} = ${MIN_PLAYERS} AND (SELECT COUNT(*) FROM session_players y WHERE y.id IN (?4, ?5) AND y.status = 'waitlisted') = 2`;
-    } else {
-      break;
-    }
+    if (confirmed >= maxPlayers || waiting.length === 0) break;
+    const row = waiting[0];
     const res = await db
       .prepare(
         `UPDATE session_players
          SET status = 'confirmed', confirmed_at = ?2,
-             confirm_seq = ${NEXT_CONFIRM_SEQ} + CASE WHEN id = ?5 THEN 1 ELSE 0 END,
+             confirm_seq = ${NEXT_CONFIRM_SEQ},
              attendance_confirmed_at = NULL,
-             promoted_at = ?2, promotion_reason = ?3, promotion_notified_at = NULL,
+             promoted_at = ?2, promotion_reason = 'spot_opened', promotion_notified_at = NULL,
              ${KEEP_PAYMENT_UNLESS_REFUNDED},
              updated_at = ?2
-         WHERE id IN (?4, ?5) AND status = 'waitlisted' AND ${guard}`,
+         WHERE id = ?3 AND status = 'waitlisted' AND ${CONFIRMED} < ?4`,
       )
-      .bind(session.id, nowIso, reason, ids[0], ids[1] ?? ids[0])
+      .bind(session.id, nowIso, row.id, maxPlayers)
       .run()
       .catch((err) => {
         if (isTriggerError(err, 'session_full')) return { meta: { changes: 0 } };
         throw err;
       });
     if (res.meta.changes === 0) break;
-    const byId = new Map(waiting.map((w) => [w.id, w.player_id]));
-    for (const id of ids) promoted.push({ playerId: byId.get(id)!, reason });
+    promoted.push({ playerId: row.player_id, reason: 'spot_opened' });
   }
   return promoted;
 }
@@ -206,10 +180,9 @@ async function waitlistPosition(db: D1Database, sessionId: string, playerId: str
 }
 
 /**
- * `auto`: in if a spot is open, otherwise the waitlist (player Home). Joining
- *   as the 6th person confirms both waiting players at once.
+ * `auto`: in if a spot is open, otherwise the waitlist (player Home).
  * `claim_only`: in or nothing (substitute invitation links).
- * `organizer`: the organizer giving someone a spot; allowed up to 6.
+ * `organizer`: the organizer giving someone a spot; the same max applies.
  * Repeating the call never creates duplicates.
  */
 export async function joinSession(
@@ -218,19 +191,7 @@ export async function joinSession(
   playerId: string,
   nowMs: number,
   mode: 'auto' | 'claim_only' | 'organizer',
-): Promise<JoinResult> {
-  const res = await joinInner(db, session, playerId, nowMs, mode);
-  await syncSix(db, session.id, new Date(nowMs).toISOString());
-  await repriceCreditSeats(db, session.id, new Date(nowMs).toISOString());
-  return res;
-}
-
-async function joinInner(
-  db: D1Database,
-  session: SessionRow,
-  playerId: string,
-  nowMs: number,
-  mode: 'auto' | 'claim_only' | 'organizer',
+  maxPlayers: number,
 ): Promise<JoinResult> {
   assertOpen(session, nowMs);
   const nowIso = new Date(nowMs).toISOString();
@@ -238,38 +199,44 @@ async function joinInner(
   if (existing?.status === 'confirmed') return { result: 'already_confirmed' };
 
   // Waiting on the venue for a court: players can only go on standby, in
-  // order, owing nothing. "Court opened" confirms them by the 4-or-6 rules.
+  // order, owing nothing. "Court opened" confirms them up to the max.
   if (session.court_state === 'waitlist' && mode !== 'organizer') {
     if (mode === 'claim_only') return { result: 'spot_taken' };
     await addToWaitlist(db, session, playerId, nowIso);
     return { result: 'standby', position: await waitlistPosition(db, session.id, playerId) };
   }
 
-  if (await tryConfirm(db, session, playerId, nowIso, mode === 'organizer' ? 'organizer' : 'normal')) {
+  if (await tryConfirm(db, session, playerId, nowIso, maxPlayers)) {
     return { result: 'confirmed' };
   }
   if (mode !== 'auto') return { result: 'spot_taken' };
 
   await addToWaitlist(db, session, playerId, nowIso);
-  const promoted = await settle(db, session, nowIso);
+  const promoted = await settle(db, session, nowIso, maxPlayers);
   const mine = promoted.find((p) => p.playerId === playerId);
-  if (mine) return { result: 'confirmed', madeSix: mine.reason === 'made_six' };
+  if (mine) return { result: 'confirmed' };
   const row = await existingRow(db, session.id, playerId);
   if (row?.status === 'confirmed') return { result: 'already_confirmed' };
   return { result: 'waitlisted', position: await waitlistPosition(db, session.id, playerId) };
 }
 
-/** Leave the session (confirmed or waitlisted), then apply the automatic moves. */
+/**
+ * Leave the session (confirmed or waitlisted), then apply the automatic
+ * moves. Money comes back as credit right away: credit they used on this
+ * game goes back to their pot, and what they paid in cash becomes a new
+ * credit entry (the organizer's own court payment never does).
+ */
 export async function withdraw(
   db: D1Database,
+  group: GroupRow,
   session: SessionRow,
   playerId: string,
   nowMs: number,
-): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[] }> {
+): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
   if (!existing || (existing.status !== 'confirmed' && existing.status !== 'waitlisted')) {
-    return { freedSpot: false, changed: false, promoted: [] };
+    return { freedSpot: false, changed: false, promoted: [], creditBackCents: 0 };
   }
   const nowIso = new Date(nowMs).toISOString();
   const res = await db
@@ -283,8 +250,11 @@ export async function withdraw(
     .bind(nowIso, existing.id, existing.status)
     .run();
   const changed = res.meta.changes === 1;
-  // Credit they spent on this game goes back to their pot; what they paid in cash waits for Refund or Keep as credit.
-  if (changed) await returnSeatCredit(db, session.id, playerId, nowIso, 'dropped');
+  let creditBackCents = 0;
+  if (changed) {
+    await returnSeatCredit(db, session.id, playerId, nowIso, 'dropped');
+    if (playerId !== (await organizerIdOf(db, group))) creditBackCents = await keepPaymentAsCredit(db, group.id, session.id, playerId, 'dropped', nowIso);
+  }
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
     await db
@@ -293,10 +263,23 @@ export async function withdraw(
       .run();
   }
   // While waiting on a court nobody moves in; that happens on "Court opened".
-  const promoted = changed && session.court_state !== 'waitlist' ? await settle(db, session, nowIso) : [];
-  await syncSix(db, session.id, nowIso);
-  await repriceCreditSeats(db, session.id, nowIso);
-  return { freedSpot: changed && existing.status === 'confirmed', changed, promoted };
+  const promoted = changed && session.court_state !== 'waitlist' ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
+  return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents };
+}
+
+/**
+ * What a seat still holds in cash (paid, not settled) becomes credit with the
+ * given reason. Returns the cents, or 0 when there was nothing.
+ */
+export async function keepPaymentAsCredit(db: D1Database, groupId: string, sessionId: string, playerId: string, reason: 'dropped' | 'canceled', nowIso: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT payment_amount_cents FROM session_players WHERE session_id = ? AND player_id = ? AND payment_status = 'paid' AND refunded_at IS NULL")
+    .bind(sessionId, playerId)
+    .first<{ payment_amount_cents: number | null }>();
+  const cents = row?.payment_amount_cents ?? 0;
+  if (cents <= 0) return 0;
+  const ok = await creditBack(db, { groupId, sessionId, playerId, cents, reason, nowIso, settle: true });
+  return ok ? cents : 0;
 }
 
 /**
@@ -405,13 +388,10 @@ export async function confirmAttendance(db: D1Database, session: SessionRow, pla
 }
 
 /**
- * Organizer correction: put a player at the back of the waitlist. Used for
- * "back to 4" when 5 are going. Doesn't trigger automatic moves, or the
- * player would bounce straight back in.
+ * Organizer correction: put a player at the back of the waitlist. Doesn't
+ * trigger automatic moves, or the player would bounce straight back in.
  */
 export async function moveToWaitlist(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
   await addToWaitlist(db, session, playerId, new Date(nowMs).toISOString());
-  await syncSix(db, session.id, new Date(nowMs).toISOString());
-  await repriceCreditSeats(db, session.id, new Date(nowMs).toISOString());
 }

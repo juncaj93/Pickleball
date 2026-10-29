@@ -1,13 +1,17 @@
-// The credit pot: money a player paid for a game that was canceled (or that
-// they dropped out of), kept as credit for any later game. One pot per player.
-// The older $5 credits (shared/pricing.ts) are a separate list and keep their
-// own rules; the pot only adds to what a player has.
+// The credit pot: money that came back to a player (they paid more than the
+// final price, dropped out, the game was canceled, they did not play), kept as
+// credit for any later game or paid back on request. One pot per player, whole
+// dollars, no expiry.
 //
 // Pure functions over the ledger rows, so the server and the tests share them.
 
+import type { CreditEntryView } from './api';
 import { formatPrice } from './money';
+import { formatShortDate } from './time';
 
 export type CreditKind = 'kept' | 'used' | 'refunded';
+/** Why a 'kept' entry exists (see migrations/0013). Older entries have none. */
+export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request';
 
 /**
  * "Were you charged for this court?" is asked when canceling a game this many
@@ -20,13 +24,15 @@ export interface CreditRow {
   playerId: string;
   kind: CreditKind;
   cents: number;
-  /** For a refund: how much of `cents` came from the older $5 credits, not this pot. */
+  /** Always 0 now (an older model kept a separate $5 credit); still counted so old rows read the same. */
   fiveCents: number;
   /** The game it came from (kept) or went to (used). */
   sessionId: string | null;
   createdAt: string;
   /** Undone, or went back to the player. An ended row no longer counts. */
   endedAt: string | null;
+  reason?: CreditReason | null;
+  playedCount?: number | null;
 }
 
 // Rows arrive in the order they were made (created_at, then insertion order), and sorts keep that order for ties.
@@ -47,6 +53,14 @@ export function potBalance(rows: CreditRow[], playerId: string): number {
       .filter((r) => r.playerId === playerId)
       .reduce((sum, r) => sum + potEffect(r), 0),
   );
+}
+
+/**
+ * What a player can spend or be refunded right now: the pot minus any refund
+ * request still waiting on the organizer (that amount is reserved).
+ */
+export function usableCredit(potCents: number, reservedCents: number): number {
+  return Math.max(0, potCents - Math.max(0, reservedCents));
 }
 
 /** Everyone's pot, players with $0 left out. */
@@ -120,8 +134,30 @@ export function creditHintText(useCents: number, potCents: number, oweCents: num
 }
 
 /** The line under a game they still owe for after some credit came off it. */
-export function creditOweText(oweCents: number, creditCents: number, usedFromPotCents: number): string {
-  return usedFromPotCents > 0
-    ? `${formatPrice(oweCents)} left to pay. ${formatPrice(creditCents)} credit used.`
-    : `${formatPrice(oweCents)}, after your ${formatPrice(creditCents)} credit`;
+export function creditOweText(oweCents: number, creditCents: number): string {
+  return `${formatPrice(oweCents)} left to pay. ${formatPrice(creditCents)} credit used.`;
+}
+
+/**
+ * One line of credit history, the same for the player's sheet and the
+ * organizer: "+$5 Thu, Oct 29 (6 played)", "-$14 used for Tue, Nov 3",
+ * "+$14 canceled Thu, Nov 5", "-$14 refunded".
+ */
+export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'sessionStartsAt' | 'reason' | 'playedCount'>, tz: string): string {
+  const money = formatPrice(e.cents);
+  const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
+  if (e.kind === 'used') return `-${money} used${day ? ` for ${day}` : ''}`;
+  if (e.kind === 'refunded') return `-${money} refunded`;
+  switch (e.reason) {
+    case 'finalized':
+      return `+${money}${day ? ` ${day}` : ''}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;
+    case 'not_played':
+      return `+${money}${day ? ` ${day}` : ''} (did not play)`;
+    case 'dropped':
+      return `+${money} dropped out${day ? ` of ${day}` : ''}`;
+    case 'canceled':
+      return `+${money} canceled${day ? ` ${day}` : ''}`;
+    default:
+      return `+${money} kept${day ? ` from ${day}` : ''}`;
+  }
 }

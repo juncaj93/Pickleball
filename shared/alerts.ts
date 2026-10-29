@@ -1,7 +1,7 @@
 // Telegram alerts to the organizer: which roster changes are worth a
 // message, and the message itself. Names and the game time only: never a
-// phone number or money.
-import { MAX_PLAYERS, MIN_PLAYERS } from './spots';
+// phone number, a Venmo name, or money (except the amount of a refund request).
+import { MIN_PLAYERS } from './spots';
 import { formatTime } from './time';
 
 /** The organizer's switches. All on unless turned off in Settings > Alerts. */
@@ -9,13 +9,17 @@ export interface AlertPrefs {
   enabled: boolean;
   /** Anyone dropping out within 36 hours of the start. */
   drop36: boolean;
-  /** Falling below 4 (4 to 3), or 6 down to 5. */
+  /** A game falls below 4. */
   belowMin: boolean;
-  /** Reaching 6, so the organizer can text the two who moved in. */
-  reachedSix: boolean;
+  /** A game reaches 4 (it's on). */
+  reachedMin: boolean;
+  /** A player asks for a refund of their credit. */
+  refundRequests: boolean;
+  /** 9:00 AM the morning after a game that is still not finalized. */
+  finalizeReminder: boolean;
 }
 
-export const DEFAULT_ALERT_PREFS: AlertPrefs = { enabled: true, drop36: true, belowMin: true, reachedSix: true };
+export const DEFAULT_ALERT_PREFS: AlertPrefs = { enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true, finalizeReminder: true };
 
 export const DROP_WINDOW_MS = 36 * 3600_000;
 
@@ -40,9 +44,14 @@ export interface AlertInput {
 
 /** "Thu Nov 5, 8:00 PM" */
 export function alertWhen(iso: string, tz: string): string {
+  return `${alertDay(iso, tz)}, ${formatTime(iso, tz)}`;
+}
+
+/** "Thu Nov 5" */
+export function alertDay(iso: string, tz: string): string {
   const day = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short', month: 'short', day: 'numeric' }).formatToParts(new Date(iso));
   const part = (t: string) => day.find((p) => p.type === t)?.value ?? '';
-  return `${part('weekday')} ${part('month')} ${part('day')}, ${formatTime(iso, tz)}`;
+  return `${part('weekday')} ${part('month')} ${part('day')}`;
 }
 
 /** "45 min", "1 hr", "9 hrs", "3 days" */
@@ -75,9 +84,9 @@ export function alertMessage(a: AlertInput): string | null {
   const n = a.after.length;
 
   const dropSoon = a.prefs.drop36 && dropped && left <= DROP_WINDOW_MS;
-  const short = a.prefs.belowMin && ((b >= MIN_PLAYERS && n < MIN_PLAYERS) || (b === MAX_PLAYERS && n === MAX_PLAYERS - 1));
-  const six = a.prefs.reachedSix && b < MAX_PLAYERS && n === MAX_PLAYERS;
-  if (!dropSoon && !short && !six) return null;
+  const short = a.prefs.belowMin && b >= MIN_PLAYERS && n < MIN_PLAYERS;
+  const on = a.prefs.reachedMin && b < MIN_PLAYERS && n >= MIN_PLAYERS;
+  if (!dropSoon && !short && !on) return null;
 
   const when = alertWhen(a.startsAt, a.timezone);
   const newlyIn = a.after.filter((p) => !was.has(p.playerId));
@@ -86,8 +95,18 @@ export function alertMessage(a: AlertInput): string | null {
     const late = a.nowMs >= a.deadlineMs ? 'Late drop: ' : '';
     lines.push(`${late}${a.actor.name} dropped out of ${when} (${alertLead(left)} before).`);
     if (newlyIn.length) lines.push(`${names(newlyIn)} moved up from the waitlist.`);
-    lines.push(n === MIN_PLAYERS || n === MAX_PLAYERS ? `${n} in now.` : `${n} in now, need 4 or 6.`);
+    lines.push(n < MIN_PLAYERS ? `${n} in now, under ${MIN_PLAYERS}.` : `${n} in now.`);
   }
-  if (six) lines.push(`${when} has 6 now. Text ${names(newlyIn)}, they're in.`);
+  if (on) lines.push(`${when} has ${n} now, it's on.`);
   return lines.length ? lines.join(' ') : null;
+}
+
+/** "Refund requested: Mitchel wants $14 back." (the only alert that names an amount) */
+export function refundRequestMessage(name: string, cents: number): string {
+  return `Refund requested: ${name} wants $${Math.floor(cents / 100)} back.`;
+}
+
+/** "Finalize last night's game: Thu Oct 29, 6 in." */
+export function finalizeReminderMessage(startsAt: string, tz: string, inCount: number): string {
+  return `Finalize last night's game: ${alertDay(startsAt, tz)}, ${inCount} in.`;
 }
