@@ -116,17 +116,22 @@
   border-bottom: 0;
 }
 
-/* "Your $14 is now credit. Request refund" under a game they left: one line, the link inline with a 44px tap area. */
+/* "Your $14 is now credit. Request refund" under a game they left: one line (wrapping only when it must),
+   the link right after the words with a 44px tap area. */
 .credit-back-line {
   margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
 }
 .credit-back-line .link-btn {
-  display: inline;
+  flex: none;
+  display: inline-block;
   font-size: inherit;
   min-height: 0;
   padding: 0;
   margin: 0;
-  vertical-align: baseline;
   position: relative;
 }
 .credit-back-line .link-btn::after {
