@@ -1992,6 +1992,11 @@ dialog.sheet::backdrop {
 }
 
 
+/* Items never squeeze each other: the pill drops to its own line when the row is full. */
+.sched-status > * {
+  flex-shrink: 0;
+}
+
 /* Holiday or "Extra game" on the court line: small colored words, no pill. */
 .holiday-text {
   color: var(--holiday-fg);
