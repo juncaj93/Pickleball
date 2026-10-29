@@ -56,6 +56,8 @@ export interface PlayerSessionView {
     creditCents: number;
     /** Paid in full with credit from their pot: shows "Paid with credit". */
     paidWithCredit: boolean;
+    /** Of `creditCents`, what they already used from their credit on this unpaid game. */
+    potUsedCents: number;
     /** What "Use credit" would take off this session now: the smaller of their pot and what they owe. 0 hides the button. */
     useCreditCents: number;
   };

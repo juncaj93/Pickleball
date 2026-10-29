@@ -18,6 +18,8 @@ import {
   loadRosters,
   loadSessions,
   lookbackIso,
+  pricesFor,
+  type SessionRow,
   settingsOf,
   visibleFrom,
 } from './repo';
@@ -130,6 +132,57 @@ export async function returnSeatCredit(
       .bind(total, nowIso, sessionId, playerId),
   ]);
   return total;
+}
+
+/**
+ * The price of a game can change after someone paid it with credit (6 playing
+ * is $9 for the last two; if one leaves, everyone is back to $14). A seat paid
+ * with credit that is now short is put back to unpaid, keeping the credit
+ * already used on it, so the player sees exactly what is left to pay. If the
+ * price drops back to what the credit already covers, it is paid again.
+ */
+export async function repriceCreditSeats(db: D1Database, sessionId: string, nowIso: string): Promise<void> {
+  const session = await db.prepare('SELECT * FROM sessions WHERE id = ?').bind(sessionId).first<SessionRow>();
+  if (!session || session.status === 'canceled') return;
+  const group = await db.prepare('SELECT * FROM groups WHERE id = ?').bind(session.group_id).first<GroupRow>();
+  if (!group) return;
+  const { results: used } = await db
+    .prepare("SELECT player_id, SUM(amount_cents) AS cents FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND ended_at IS NULL GROUP BY player_id")
+    .bind(sessionId)
+    .all<{ player_id: string; cents: number }>();
+  if (used.length === 0) return;
+  const roster = await loadRoster(db, sessionId);
+  const prices = pricesFor(session, roster, settingsOf(group));
+  for (const u of used) {
+    const row = roster.find((r) => r.player_id === u.player_id);
+    const price = prices.get(u.player_id)?.cents;
+    if (!row || row.status !== 'confirmed' || price === undefined) continue;
+    if (row.payment_status === 'paid') {
+      const five = await db
+        .prepare('SELECT COALESCE(SUM(amount_cents), 0) AS cents FROM credits WHERE used_session_id = ? AND player_id = ?')
+        .bind(sessionId, u.player_id)
+        .first<{ cents: number }>();
+      if ((row.payment_amount_cents ?? 0) >= price - (five?.cents ?? 0)) continue;
+      await db.batch([
+        db
+          .prepare(
+            `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL,
+               payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ? AND payment_status = 'paid'`,
+          )
+          .bind(nowIso, nowIso, sessionId, u.player_id),
+        // The older $5 credit used on it is planned again from scratch.
+        db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE used_session_id = ? AND player_id = ?').bind(sessionId, u.player_id),
+      ]);
+    } else if (row.payment_status === 'unpaid' && u.cents === price) {
+      await db
+        .prepare(
+          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = NULL,
+             payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ? AND payment_status = 'unpaid'`,
+        )
+        .bind(nowIso, price, nowIso, nowIso, sessionId, u.player_id)
+        .run();
+    }
+  }
 }
 
 /** Everyone in a session whose credit should go back (the session was canceled). */

@@ -34,7 +34,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, keptBySeat, potBalance, seatKey } from '../shared/credit';
-import { moneyPicture, returnSeatCredit, returnSessionCredit, undoKeep } from './credit';
+import { moneyPicture, repriceCreditSeats, returnSeatCredit, returnSessionCredit, undoKeep } from './credit';
 import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -328,6 +328,7 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   if (wasWaiting && ctx.nowMs < Date.parse(session.starts_at)) {
     promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso);
     await syncSix(ctx.db, session.id, ctx.nowIso);
+    await repriceCreditSeats(ctx.db, session.id, ctx.nowIso);
   }
   await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: promoted.length }, ctx.nowIso);
   return { ok: true, promoted: promoted.length };

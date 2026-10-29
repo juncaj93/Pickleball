@@ -46,7 +46,8 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again and tap Use credit.');
   await audit(ctx.db, group.id, session.id, 'credit_used', { player: name, amountCents: cents, paidInFull: full }, ctx.nowIso, name);
-  return { ok: true, usedCents: cents, paid: full };
+  // What the player reads next: how much of their credit this took, what is left of it, what is left to pay.
+  return { ok: true, usedCents: cents, paid: full, potBeforeCents: balance, owedBeforeCents: owed };
 }
 
 /** POST /api/admin/sessions/:id/credit { playerId, keep }: Keep as credit (true), or take it back (false). */

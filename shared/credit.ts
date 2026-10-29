@@ -5,6 +5,8 @@
 //
 // Pure functions over the ledger rows, so the server and the tests share them.
 
+import { formatPrice } from './money';
+
 export type CreditKind = 'kept' | 'used' | 'refunded';
 
 /**
@@ -96,4 +98,30 @@ export function keptRemaining(rows: CreditRow[]): Map<string, number> {
     }
   }
   return out;
+}
+
+// ---------- What a player reads about their credit ----------
+// Short and exact. "left" always means credit left; "left to pay" is what they still owe.
+
+/** The pop-up after a player taps Use credit. */
+export function creditUsedMessage(usedCents: number, potBeforeCents: number, owedBeforeCents: number): string {
+  const leftCredit = potBeforeCents - usedCents;
+  const leftToPay = owedBeforeCents - usedCents;
+  if (leftToPay > 0) return `Used ${formatPrice(usedCents)} credit. ${formatPrice(leftToPay)} left to pay.`;
+  return leftCredit > 0
+    ? `Used ${formatPrice(usedCents)} of your ${formatPrice(potBeforeCents)} credit. ${formatPrice(leftCredit)} left.`
+    : 'Paid with credit. No credit left.';
+}
+
+/** The small gray line beside the Use credit button, before they tap it. */
+export function creditHintText(useCents: number, potCents: number, oweCents: number): string {
+  if (useCents >= oweCents) return useCents === potCents ? `Uses your ${formatPrice(potCents)} credit` : `Uses ${formatPrice(useCents)} of your ${formatPrice(potCents)} credit`;
+  return `Uses your ${formatPrice(useCents)} credit. ${formatPrice(oweCents - useCents)} left to pay`;
+}
+
+/** The line under a game they still owe for after some credit came off it. */
+export function creditOweText(oweCents: number, creditCents: number, usedFromPotCents: number): string {
+  return usedFromPotCents > 0
+    ? `${formatPrice(oweCents)} left to pay. ${formatPrice(creditCents)} credit used.`
+    : `${formatPrice(oweCents)}, after your ${formatPrice(creditCents)} credit`;
 }

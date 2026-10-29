@@ -3,6 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
+import { creditHintText, creditOweText, creditUsedMessage } from '../../shared/credit';
 import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
@@ -395,20 +396,21 @@ function useCredit(onChanged: () => Promise<void>) {
   async function use(sessionIds: string[], owedCents: number, potCents: number) {
     setBusy(true);
     let used = 0;
-    let paidAll = false;
     try {
       let left = potCents;
-      const paidFlags: boolean[] = [];
+      let potBefore = 0;
+      let owedBefore = 0;
       for (const id of sessionIds) {
         if (left <= 0) break;
-        const res = await api<{ ok: boolean; usedCents: number; paid: boolean }>('POST', `/api/sessions/${id}/use-credit`, {});
+        const res = await api<{ ok: boolean; usedCents: number; paid: boolean; potBeforeCents: number; owedBeforeCents: number }>('POST', `/api/sessions/${id}/use-credit`, {});
+        if (potBefore === 0) potBefore = res.potBeforeCents;
+        owedBefore += res.owedBeforeCents;
         used += res.usedCents;
         left -= res.usedCents;
-        paidFlags.push(res.paid);
       }
-      paidAll = paidFlags.length === sessionIds.length && paidFlags.every(Boolean);
-      if (paidAll) toast('Paid with credit');
-      else if (used > 0) toast(`${formatPrice(used)} credit used. Pay the other ${formatPrice(Math.max(owedCents - used, 0))}.`);
+      // Games the credit never reached still count as owed.
+      owedBefore = Math.max(owedBefore, owedCents);
+      if (used > 0) toast(creditUsedMessage(used, potBefore, owedBefore));
       else toast('No credit to use right now.');
       await onChanged();
     } catch (err) {
@@ -470,6 +472,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     due.length > 1 ? `You owe ${formatPrice(total)} total` : tonight ? `Tonight: you owe ${formatPrice(total)}` : `You owe ${formatPrice(total)} for ${formatShortDate(due[0].startsAt, tz)}`;
   const detail = (o: (typeof due)[number]) =>
     [o.discount ? '6-person discount' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
+  // (On this card the amounts are already after any credit; each game's own line says what is left.)
   const who = g.group.organizerName ?? 'The organizer';
   return (
     <section className="card pay-card" aria-label="Payment">
@@ -683,7 +686,7 @@ function RowPay({
       Use credit
     </button>
   );
-  const creditHint = showCredit && !creditCovers && <span className="credit-hint">Uses {formatPrice(mine.useCreditCents)} of your credit</span>;
+  const creditHint = showCredit && <span className="credit-hint">{creditHintText(mine.useCreditCents, g.potCents, mine.oweCents)}</span>;
   // No usable Venmo link: "I paid" is the only other thing to tap.
   if (!pay.url) {
     return (
@@ -849,9 +852,7 @@ function ScheduleRow({
 
         {/* A credit shows only on the game it comes off, and only while that game is unpaid (the pay card says it on game day). */}
         {inSession && !onTop && mine.oweCents > 0 && mine.creditCents > 0 && (
-          <p className="small">
-            {formatPrice(mine.oweCents)}, after your {formatPrice(mine.creditCents)} credit
-          </p>
+          <p className="small">{creditOweText(mine.oweCents, mine.creditCents, mine.potUsedCents)}</p>
         )}
 
         {/* The day-before check-in, only while it's asked: a quiet button, so Pay stays the one green one. */}

@@ -297,7 +297,7 @@ async function main() {
           await foot.locator('[data-use-credit]').waitFor();
           assert((await greenButtons(foot)) === 1, `green buttons: ${await greenButtons(foot)}`);
           assert(await foot.locator('[data-use-credit]').evaluate((b) => b.classList.contains('secondary')), 'Use credit should be quiet');
-          assert(/Uses \$5 of your credit/.test(await foot.innerText()), await foot.innerText());
+          assert(/Uses your \$5 credit\. \$9 left to pay/.test(await foot.innerText()), await foot.innerText());
           assert(/Pay \$14/.test(await foot.innerText()), await foot.innerText());
           await tidy(foot, 'pay row');
           await noSideways(page);
@@ -314,7 +314,7 @@ async function main() {
       const foot = page.locator('article.sched .row-foot', { hasText: 'Pay $9' }).first();
       await foot.waitFor();
       assert((await foot.locator('[data-use-credit]').count()) === 0, 'Use credit still shows');
-      assert(/after your \$5 credit/.test(await page.locator('article.sched', { hasText: 'Pay $9' }).first().innerText()), 'after-credit note');
+      assert(/\$9 left to pay\. \$5 credit used\./.test(await page.locator('article.sched', { hasText: 'Pay $9' }).first().innerText()), 'after-credit note');
     });
     await ctx.close();
   }

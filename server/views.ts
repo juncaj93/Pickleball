@@ -43,6 +43,7 @@ const NO_MONEY = {
   oweCents: 0,
   creditCents: 0,
   paidWithCredit: false,
+  potUsedCents: 0,
   useCreditCents: 0,
 } as const;
 
@@ -84,6 +85,7 @@ export function playerSessionView(
         creditComing: prices.get(mine.player_id)?.creditComing ?? false,
         oweCents: owes ? Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit - pot.usedHere) : 0,
         creditCents: mine.payment_status === 'unpaid' ? myCredit + pot.usedHere : 0,
+        potUsedCents: owes ? pot.usedHere : 0,
         paidWithCredit: mine.payment_status === 'paid' && pot.usedHere > 0 && pot.usedHere >= (mine.payment_amount_cents ?? 0),
         useCreditCents: owes && !canceled ? Math.min(pot.balanceCents, Math.max(0, (prices.get(mine.player_id)?.cents ?? 0) - myCredit - pot.usedHere)) : 0,
       }

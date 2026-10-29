@@ -2,7 +2,7 @@ import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import type { GroupSettings } from '../shared/settings';
 import { MIN_PLAYERS } from '../shared/spots';
-import { returnSeatCredit } from './credit';
+import { repriceCreditSeats, returnSeatCredit } from './credit';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
@@ -221,6 +221,7 @@ export async function joinSession(
 ): Promise<JoinResult> {
   const res = await joinInner(db, session, playerId, nowMs, mode);
   await syncSix(db, session.id, new Date(nowMs).toISOString());
+  await repriceCreditSeats(db, session.id, new Date(nowMs).toISOString());
   return res;
 }
 
@@ -294,6 +295,7 @@ export async function withdraw(
   // While waiting on a court nobody moves in; that happens on "Court opened".
   const promoted = changed && session.court_state !== 'waitlist' ? await settle(db, session, nowIso) : [];
   await syncSix(db, session.id, nowIso);
+  await repriceCreditSeats(db, session.id, nowIso);
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted };
 }
 
@@ -411,4 +413,5 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
   assertOpen(session, nowMs);
   await addToWaitlist(db, session, playerId, new Date(nowMs).toISOString());
   await syncSix(db, session.id, new Date(nowMs).toISOString());
+  await repriceCreditSeats(db, session.id, new Date(nowMs).toISOString());
 }
