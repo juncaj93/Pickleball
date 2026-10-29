@@ -48,7 +48,10 @@ When the organizer finalizes:
 
 - Everyone who played and paid $14 gets the difference as **credit**.
 - Someone who played but paid less (used some credit, or nothing) owes the
-  rest of the final price. Pay opens Venmo for exactly that amount.
+  rest of the final price. Pay opens Venmo for exactly that amount. The same
+  holds when a price goes up on them (a reopen and a redo with fewer players,
+  or the $14 setting raised after they paid): what they paid stays against the
+  seat and the difference is owed.
 - Someone who did not play gets back everything they paid, as credit.
 - Money > Who paid shows "6 played · $9 each", and each row shows what they
   paid and what came back as credit.
