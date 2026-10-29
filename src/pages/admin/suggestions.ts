@@ -101,7 +101,7 @@ export function suggestions(d: AdminDashboard, nowMs: number): Suggestion[] {
       const need = one('need');
       if (need && start - nowMs <= NEED_WITHIN_HOURS * 3600_000) here.push(from(s, tz, 'need', need, String(n)));
       const checkin = one('checkin');
-      if (checkin && nowMs >= checkInOpensMs(s.startsAt, tz)) here.push(from(s, tz, 'checkin', checkin, String(n)));
+      if (checkin && nowMs >= checkInOpensMs(s.startsAt, tz)) here.push(from(s, tz, 'checkin', checkin, `${n}+${s.waitlistCount}`));
       here.sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
       upcoming.push(...here);
     } else if (!canceled && Date.parse(s.endsAt) <= nowMs && daysSince(s.startsAt, nowMs, tz) >= PAY_AFTER_DAYS) {

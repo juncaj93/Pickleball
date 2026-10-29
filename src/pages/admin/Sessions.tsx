@@ -1,10 +1,8 @@
 import { type FormEvent, useState } from 'react';
-import type { ActionLinkDraft, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
+import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
-  bookingMessage,
   canceledMessage,
   movedMessage,
-  confirmationMessage,
   deadlineAlertMessage,
   siteAddress,
 } from '../../../shared/messages';
@@ -16,7 +14,6 @@ import type { BookingStatus } from '../../../shared/status';
 import {
   formatDateTime,
   formatMonthDay,
-  formatRelative,
   formatTime,
   formatShortDate,
   formatTimeRange,
@@ -33,7 +30,7 @@ import { isPlayed, lateDropsAll, refundRows } from './todo';
 import { TextButton } from './Texts';
 import '../../credit-session.css';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'reminders' | 'cancel' | 'canceled' | 'moved';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -403,7 +400,6 @@ export function SessionSheets({
     booking: `Booking · ${title}`,
     roster: `Players · ${title}`,
     payments: `Money · ${title}`,
-    reminders: `Reminders · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
   };
@@ -422,7 +418,6 @@ export function SessionSheets({
       )}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
-      {s && kind === 'reminders' && <Reminders ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
     </Sheet>
   );
@@ -678,18 +673,12 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
                 <strong>{r.name}</strong>
                 <div className="small muted">
                   {r.status === 'waitlisted' ? `#${r.waitlistPosition} on waitlist` : ROSTER_LABEL[r.status]}
-                  {r.attendanceConfirmedAt ? ' · confirmed attendance' : ''}
                 </div>
               </div>
               <Chip tone={r.status === 'confirmed' ? 'ok' : r.status === 'waitlisted' ? 'info' : 'muted'}>{ROSTER_LABEL[r.status]}</Chip>
             </div>
             {live && (
               <div className="btn-row">
-                {r.status === 'confirmed' && !r.attendanceConfirmedAt && (
-                  <button className="btn small secondary" disabled={busy} onClick={() => act(r.playerId, 'confirm_attendance', `${r.name} marked as coming`)}>
-                    Mark coming
-                  </button>
-                )}
                 {r.status === 'confirmed' && (
                   <button className="btn small secondary" disabled={busy} onClick={() => act(r.playerId, 'waitlist', `${r.name} moved to waitlist`)}>
                     To waitlist
@@ -878,71 +867,6 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
         ))}
       </ul>
       )}
-    </div>
-  );
-}
-
-// ---------- Reminders ----------
-
-function Reminders({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const tz = ctx.d.group.timezone;
-  const now = useNow();
-  const [drafts, setDrafts] = useState<ActionLinkDraft[] | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const unconfirmed = s.roster.filter((r) => r.status === 'confirmed' && !r.attendanceConfirmedAt);
-  const dueAt = new Date(Date.parse(s.startsAt) - ctx.d.group.settings.checkInHours * 3600_000).toISOString();
-  const unpaid = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
-
-  async function prepare() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await api<{ drafts: ActionLinkDraft[] }>('POST', `/api/admin/sessions/${s.id}/links`, { kind: 'attendance' });
-      setDrafts(res.drafts);
-    } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Could not prepare links.');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="stack-lg">
-      <section className="stack">
-        <h3>Day-before check-in</h3>
-        <p className="small muted">
-          {s.state.flags.checkInsDue
-            ? `Due now. ${unconfirmed.length} player${unconfirmed.length === 1 ? '' : 's'} haven't checked in.`
-            : Date.parse(dueAt) > now
-              ? `Due ${formatDateTime(dueAt, tz)} (${formatRelative(dueAt, now)}).`
-              : 'Everyone checked in.'}
-        </p>
-        {error && <Notice tone="danger">{error}</Notice>}
-        {unconfirmed.length > 0 && !drafts && (
-          <button className="btn" disabled={busy} onClick={prepare}>
-            {busy ? 'Preparing…' : `Prepare ${unconfirmed.length} check-in text${unconfirmed.length === 1 ? '' : 's'}`}
-          </button>
-        )}
-        {drafts?.map((d) => (
-          <SmsDraft key={d.playerId} to={d.name} phone={d.phone} body={confirmationMessage(d.name, s, tz, d.url)} />
-        ))}
-        {drafts && drafts.length === 0 && <p className="muted">Nobody left to remind.</p>}
-      </section>
-
-      {unpaid.length > 0 && (
-        <section className="stack">
-          <h3>Payment reminders</h3>
-          {unpaid.map((r) => (
-            <SmsDraft key={r.playerId} to={r.name} phone={r.phone} body={reminderText(ctx.d, r.playerId, r.name, s)} />
-          ))}
-        </section>
-      )}
-
-      <section className="stack">
-        <h3>Group text about booking</h3>
-        <SmsDraft to="Group chat" phone={null} body={bookingMessage(s, tz)} />
-      </section>
     </div>
   );
 }

@@ -82,12 +82,12 @@ describe('every text that names a game date uses the day word', () => {
     expect(downToFiveMessage(TUE, TZ, farNow, L)).toBe(`Down to 5 for pickleball Tue Nov 3. ${rest} ${L}`);
   });
   it('Check-in', () => {
-    expect(checkInMessage(TUE, TZ, tomorrowNow, L)).toBe(`Pickleball tomorrow, 8:00 PM. Still in? Update here: ${L}`);
-    expect(checkInMessage(TUE, TZ, tonightNow, L)).toBe(`Pickleball tonight, 8:00 PM. Still in? Update here: ${L}`);
-    expect(checkInMessage(TUE, TZ, farNow, L)).toBe(`Pickleball Tue Nov 3, 8:00 PM. Still in? Update here: ${L}`);
+    expect(checkInMessage(TUE, TZ, tomorrowNow, L)).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${L}`);
+    expect(checkInMessage(TUE, TZ, tonightNow, L)).toBe(`Pickleball tonight, 8:00 PM. Can\'t make it? Update here: ${L}`);
+    expect(checkInMessage(TUE, TZ, farNow, L)).toBe(`Pickleball Tue Nov 3, 8:00 PM. Can\'t make it? Update here: ${L}`);
   });
   it('Now 6', () => {
-    const tail = `You're both in. Can't make it? Update here: ${L}`;
+    const tail = `You're both in. Can\'t make it? Update here: ${L}`;
     expect(nowSixMessage(TUE, TZ, tomorrowNow, L)).toBe(`Good news, we have 6 for pickleball tomorrow, 8:00 PM. ${tail}`);
     expect(nowSixMessage(TUE, TZ, tonightNow, L)).toBe(`Good news, we have 6 for pickleball tonight, 8:00 PM. ${tail}`);
     expect(nowSixMessage(TUE, TZ, farNow, L)).toBe(`Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. ${tail}`);

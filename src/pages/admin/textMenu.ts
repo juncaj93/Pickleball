@@ -66,7 +66,8 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   items.push({ id: 'share', label: 'Share the game', body: shareMessage(s, tz, nowMs, link), ...GROUP });
   if (n < 4) items.push({ id: 'need', label: 'Need players', body: needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
   if (n === 5 && s.sixDropped) items.push({ id: 'down5', label: 'Down to 5', body: downToFiveMessage(s, tz, nowMs, link), ...GROUP });
-  if (n === 4 || n === 6) items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', confirmed, me) });
+  // 4 or more in: the Check-in goes to everyone signed up, the waitlist too.
+  if (n >= 4) items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
   if (n === 6) {
     const extras = confirmed.filter((r) => r.promotionReason === 'made_six');
     const toTell = extras.filter((r) => !r.promotionNotifiedAt);

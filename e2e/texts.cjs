@@ -152,9 +152,9 @@ async function main() {
         const ci = menu.locator('[data-text="checkin"]');
         const c = smsOf(await ci.locator('a').getAttribute('href'));
         assert(JSON.stringify(c.to.sort()) === JSON.stringify([phone('Ryan'), phone('Brandon')].sort()), `check-in numbers: ${c.to}`);
-        assert(/^Pickleball (tomorrow|today|tonight), 8:00 PM\. Still in\? Update here: \S+$/.test(c.body), `check-in: ${c.body}`);
+        assert(/^Pickleball (tomorrow|today|tonight), 8:00 PM\. Can't make it\? Update here: \S+$/.test(c.body), `check-in: ${c.body}`);
         assert(!/ASAP|text me|\bsent\b/i.test(c.body), 'bad words');
-        assert((await ci.locator('.text-who').innerText()).trim() === 'Everyone signed up · 3', 'check-in who');
+        assert((await ci.locator('.text-who').innerText()).trim() === 'Everyone signed up', 'check-in who');
         await ci.getByText('Missing numbers: Nathan').waitFor();
         const f = await fits(menu);
         assert(f.tall && f.cut === 0 && f.out === 0 && !f.overlap && f.sideways <= 0, `layout ${JSON.stringify(f)}`);

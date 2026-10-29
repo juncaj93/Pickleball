@@ -757,7 +757,6 @@ function ScheduleRow({
   const waiting = mine?.status === 'waitlisted';
   const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
-  const askCheckIn = open && inSession && s.confirmationOpen && !mine.attendanceConfirmed;
 
   async function run(path: string, label: (data: any) => string) {
     setBusy(true);
@@ -860,16 +859,6 @@ function ScheduleRow({
         {/* A credit shows only on the game it comes off, and only while that game is unpaid (the pay card says it on game day). */}
         {inSession && !onTop && mine.oweCents > 0 && mine.creditCents > 0 && (
           <p className="small">{creditOweText(mine.oweCents, mine.creditCents, mine.potUsedCents)}</p>
-        )}
-
-        {/* The day-before check-in, only while it's asked: a quiet button, so Pay stays the one green one. */}
-        {askCheckIn && (
-          <div className="confirm-row">
-            <span className="small">Still coming?</span>
-            <button className="btn small secondary pay-small" disabled={busy} onClick={() => run('confirm', () => 'See you there')}>
-              Yes, I'm coming
-            </button>
-          </div>
         )}
 
         {/* Row 4, only when needed: Pay (the card's one green button) and the calendar icon. */}

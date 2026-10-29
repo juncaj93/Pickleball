@@ -67,8 +67,8 @@ describe('the Text menu shows only the texts that fit', () => {
     expect(c.chat).toBe(false);
     expect(c.phones).toEqual([phoneOf(ctx, d, 'Blair'), phoneOf(ctx, d, 'Casey')]);
     expect(c.missing).toEqual(['Devon']);
-    expect(c.who).toBe('Everyone signed up · 3');
-    expect(c.body).toMatch(/^Pickleball (tomorrow|Tue Nov 3), 8:00 PM\. Still in\? Update here: pickleball\.juncaj\.net$/);
+    expect(c.who).toBe('Everyone signed up');
+    expect(c.body).toMatch(/^Pickleball (tomorrow|Tue Nov 3), 8:00 PM\. Can\'t make it\? Update here: pickleball\.juncaj\.net$/);
     // It opens one group text to those numbers.
     expect(smsHref(c.phones, c.body, true)).toContain('sms://open?addresses=');
   });
@@ -77,18 +77,35 @@ describe('the Text menu shows only the texts that fit', () => {
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     ctx.app.now = Date.parse('2026-11-02T14:00:00Z'); // Mon 9:00 AM
-    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tomorrow, 8:00 PM. Still in? Update here: ${LINK}`);
+    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
     ctx.app.now = Date.parse('2026-11-03T14:00:00Z'); // Tue 9:00 AM
-    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Still in? Update here: ${LINK}`);
+    expect((await menu(ctx, s.id)).items.find((i) => i.id === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
   });
-  it('5 in (not from 6): only Share the game', async () => {
+  it('Check-in goes to everyone signed up, the waitlist too, with the new words', async () => {
+    const ctx = await group();
+    const s = await on(ctx, '2026-11-03');
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits
+    ctx.app.now = Date.parse('2026-11-02T14:00:00Z'); // Mon 9:00 AM
+    const { d, items } = await menu(ctx, s.id);
+    const c = items.find((i) => i.id === 'checkin')!;
+    expect(c.who).toBe('Everyone signed up');
+    expect(c.phones.sort()).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery'].map((n) => phoneOf(ctx, d, n)).sort());
+    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
+  });
+  it('under 4 in: no Check-in, Need players instead', async () => {
+    const ctx = await group();
+    const s = await on(ctx, '2026-11-03');
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey']);
+    expect(ids((await menu(ctx, s.id)).items)).toEqual(['share', 'need']);
+  });
+  it('5 in (not from 6): Share the game and the Check-in (4 or more in)', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName.Emery, action: 'confirm' });
     const { s: x, items } = await menu(ctx, s.id);
     expect(x.confirmedCount).toBe(5);
-    expect(ids(items)).toEqual(['share']);
+    expect(ids(items)).toEqual(['share', 'checkin']);
   });
   it('exactly 6 in by sign-ups: Check-in only (nobody was moved up from the waitlist)', async () => {
     const ctx = await group();
@@ -106,7 +123,7 @@ describe('the Text menu shows only the texts that fit', () => {
     let { d, items } = await menu(ctx, s.id);
     expect(ids(items)).toEqual(['share', 'checkin', 'now6']);
     const six = items[2];
-    expect(six.body).toBe(`Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can't make it? Update here: ${LINK}`);
+    expect(six.body).toBe(`Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can\'t make it? Update here: ${LINK}`);
     expect(six.phones).toEqual([phoneOf(ctx, d, 'Emery'), phoneOf(ctx, d, 'Frankie')]);
     expect(six.who).toBe('The 2 extra players · 2');
     expect(items[1].phones).toHaveLength(6);
@@ -115,14 +132,14 @@ describe('the Text menu shows only the texts that fit', () => {
     ({ items } = await menu(ctx, s.id));
     expect(ids(items)).toEqual(['share', 'checkin']);
   });
-  it('6 dropped to 5: Down to 5 (no Check-in, no Now 6)', async () => {
+  it('6 dropped to 5: Down to 5 and the Check-in (no Now 6)', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, PLAYER_NAMES);
     await out(ctx, s.id, 'Frankie');
     const { s: x, items } = await menu(ctx, s.id);
     expect(x.confirmedCount).toBe(5);
-    expect(ids(items)).toEqual(['share', 'down5']);
+    expect(ids(items)).toEqual(['share', 'down5', 'checkin']);
     expect(items[1].body).toBe(`Down to 5 for pickleball Tue Nov 3. Need 1 more or 1 out to make 4 or 6. ${LINK}`);
     expect(items[1].chat).toBe(true);
   });

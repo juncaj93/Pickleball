@@ -114,9 +114,9 @@ export function downToFiveMessage(s: SessionLike, tz: string, nowMs: number, lin
   return `Down to 5 for pickleball ${dayWord(s.startsAt, tz, nowMs)}. Need 1 more or 1 out to make 4 or 6. ${link}`;
 }
 
-/** Exactly 4 or 6 in: are you still coming. */
+/** 4 or more signed up: everyone who is signed up can update here if they can't make it. */
 export function checkInMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
-  return `Pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. Still in? Update here: ${link}`;
+  return `Pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. Can't make it? Update here: ${link}`;
 }
 
 /** The game reached 6 because the waitlist moved in: to the 2 extra players. */

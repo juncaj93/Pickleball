@@ -104,7 +104,7 @@ describe('Check-in: exactly 4 or 6 in, from 6:00 PM the day before', () => {
     const { d, all } = await now(ctx);
     const c = all.find((x) => x.kind === 'checkin')!;
     expect(c).toBeDefined();
-    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Still in? Update here: ${LINK}`);
+    expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
     // To the players who are in (numbers), not the waitlist.
     expect(c.chat).toBe(false);
     expect(c.who).toBe('4 players');
@@ -112,7 +112,7 @@ describe('Check-in: exactly 4 or 6 in, from 6:00 PM the day before', () => {
     expect(c.missing).toEqual([]);
     // Still there on game day (words change to tonight), until the game starts.
     at(ctx, '2026-11-03T20:00:00Z');
-    expect((await now(ctx)).all.find((x) => x.kind === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Still in? Update here: ${LINK}`);
+    expect((await now(ctx)).all.find((x) => x.kind === 'checkin')!.body).toBe(`Pickleball tonight, 8:00 PM. Can\'t make it? Update here: ${LINK}`);
     at(ctx, '2026-11-04T01:00:00Z');
     expect(kinds((await now(ctx)).all)).not.toContain('checkin');
   });
@@ -125,15 +125,19 @@ describe('Check-in: exactly 4 or 6 in, from 6:00 PM the day before', () => {
     expect(new Date(checkInOpensMs('2026-11-02T01:00:00.000Z', TZ)).toISOString()).toBe('2026-10-31T22:00:00.000Z');
   });
 
-  it('is for exactly 4 or exactly 6 (not 3 or 5), and says who is missing a number', async () => {
+  it('is for 4 or more in (not under 4), and says who is missing a number', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName.Emery, action: 'confirm' }); // 5 in
     at(ctx, '2026-11-03T14:00:00Z');
-    expect(kinds((await now(ctx)).all)).not.toContain('checkin');
+    expect(kinds((await now(ctx)).all)).toContain('checkin'); // 5 in
     await out(ctx, s.id, 'Emery'); // 4
     expect(kinds((await now(ctx)).all)).toContain('checkin');
+    await out(ctx, s.id, 'Devon'); // 3: Need players, no Check-in
+    expect(kinds((await now(ctx)).all)).not.toContain('checkin');
+    expect(kinds((await now(ctx)).all)).toContain('need');
+    await join(ctx, s.id, ['Devon']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName.Emery, action: 'confirm' });
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName.Frankie, action: 'confirm' }); // 6
     const c = (await now(ctx)).all.find((x) => x.kind === 'checkin')!;
@@ -173,7 +177,7 @@ describe('Down to 5, Now 6, Spot opened: right when it happens, while it lasts',
     expect(c).toBeDefined();
     expect(c.who).toBe('2 players');
     expect(c.phones.sort()).toEqual([phoneOf(d, 'Emery'), phoneOf(d, 'Frankie')].sort());
-    expect(c.body).toBe(`Good news, we have 6 for pickleball Thu Nov 5, 8:00 PM. You're both in. Can't make it? Update here: ${LINK}`);
+    expect(c.body).toBe(`Good news, we have 6 for pickleball Thu Nov 5, 8:00 PM. You're both in. Can\'t make it? Update here: ${LINK}`);
     // Spot opened: a 4-game where the waitlist moves someone in after a drop.
     const t = await on(ctx, '2026-11-10');
     await join(ctx, t.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits

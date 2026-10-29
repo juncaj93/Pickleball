@@ -37,17 +37,17 @@ describe('the Text menu wording', () => {
     expect(shareMessage(s, TZ, LONG_BEFORE, link)).toBe('Pickleball Tue Nov 3, 8:00 PM. In or out here: pickleball.juncaj.net');
     expect(needPlayersMessage(s, TZ, LONG_BEFORE, 2, link)).toBe('Need 2 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
     expect(downToFiveMessage(s, TZ, LONG_BEFORE, link)).toBe('Down to 5 for pickleball Tue Nov 3. Need 1 more or 1 out to make 4 or 6. pickleball.juncaj.net');
-    expect(nowSixMessage(s, TZ, LONG_BEFORE, link)).toBe("Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can't make it? Update here: pickleball.juncaj.net");
+    expect(nowSixMessage(s, TZ, LONG_BEFORE, link)).toBe("Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can\'t make it? Update here: pickleball.juncaj.net");
     expect(promotedMessage(s, TZ, LONG_BEFORE, link)).toBe("A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. pickleball.juncaj.net");
-    expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow, 8:00 PM. Still in? Update here: pickleball.juncaj.net');
+    expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net');
   });
   it('Check-in says tonight, today, tomorrow or the date, whichever fits the time left', () => {
     const at = (iso: string) => checkInMessage(s, TZ, Date.parse(iso), link);
-    expect(at('2026-11-03T15:00:00Z')).toBe('Pickleball tonight, 8:00 PM. Still in? Update here: pickleball.juncaj.net'); // Tue 10:00 AM Eastern
-    expect(at('2026-11-02T05:00:00Z')).toBe('Pickleball tomorrow, 8:00 PM. Still in? Update here: pickleball.juncaj.net'); // Mon 12:00 AM
-    expect(at('2026-10-30T16:00:00Z')).toBe('Pickleball Tue Nov 3, 8:00 PM. Still in? Update here: pickleball.juncaj.net');
+    expect(at('2026-11-03T15:00:00Z')).toBe('Pickleball tonight, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net'); // Tue 10:00 AM Eastern
+    expect(at('2026-11-02T05:00:00Z')).toBe('Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net'); // Mon 12:00 AM
+    expect(at('2026-10-30T16:00:00Z')).toBe('Pickleball Tue Nov 3, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net');
     const morning = { startsAt: '2026-11-07T15:00:00.000Z', endsAt: '2026-11-07T17:00:00.000Z' };
-    expect(checkInMessage(morning, TZ, Date.parse('2026-11-07T11:00:00Z'), link)).toBe('Pickleball today, 10:00 AM. Still in? Update here: pickleball.juncaj.net');
+    expect(checkInMessage(morning, TZ, Date.parse('2026-11-07T11:00:00Z'), link)).toBe('Pickleball today, 10:00 AM. Can\'t make it? Update here: pickleball.juncaj.net');
   });
   it('payment reminders: one game names it, several games give the total', () => {
     expect(paymentMessage('Ryan', 1400, [s], TZ, link)).toBe('Hey Ryan, you owe $14 for pickleball Tue Nov 3. Pay here: pickleball.juncaj.net');
