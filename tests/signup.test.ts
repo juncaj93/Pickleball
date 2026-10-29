@@ -62,6 +62,7 @@ describe('claiming spots and the waitlist', () => {
 
   it('lets exactly one of two simultaneous claims win the last spot', async () => {
     const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey']) {
       await (await playerPhone(ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {});

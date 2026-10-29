@@ -68,8 +68,9 @@ describe('late drops', () => {
 
   it('organizer removals and waitlist drops are not late drops; coming back in clears it', async () => {
     const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await on(ctx, '2026-10-27');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits (the max is 4)
     ctx.app.now = Date.parse(s.startsAt) - 2 * HOUR;
     // Emery leaves the waitlist first (not a late drop), then the organizer removes Alex.
     await out(ctx, s.id, 'Emery');
@@ -84,23 +85,39 @@ describe('late drops', () => {
     expect(buildTodo(d).map((i) => i.kind)).not.toContain('latedrop');
   });
 
-  it('paid and dropped: the refund question shows, and clears once refunded', async () => {
+  it('paid and dropped: the $14 is credit right away, and the player can ask for it back', async () => {
     const ctx = await setupGroup();
     const s = await on(ctx, '2026-10-27');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Casey, paid: true });
     ctx.app.now = Date.parse(s.startsAt) - 5 * HOUR;
-    await out(ctx, s.id, 'Casey');
+    expect((await out(ctx, s.id, 'Casey')).data).toMatchObject({ result: 'withdrawn', creditBackCents: 1400 });
     let d = await dash(ctx);
     const casey = entry(d, s.id, 'Casey');
-    expect(casey).toMatchObject({ status: 'withdrawn', paymentStatus: 'paid', paymentAmountCents: 1400, refundedAt: null });
+    expect(casey).toMatchObject({ status: 'withdrawn', paymentStatus: 'paid', paymentAmountCents: 1400, creditBackCents: 1400, creditBackReason: 'dropped' });
     expect(casey.lateDropAt).not.toBeNull();
-    // After Done on the late-drop card, the refund still waits as Pay back.
+    expect(d.creditLedger.find((l: any) => l.playerId === ctx.byName.Casey).balanceCents).toBe(1400);
+    // The late-drop card shows; there is no refund question for the organizer.
+    let kinds = buildTodo(d).map((i) => i.kind);
+    expect(kinds).toContain('latedrop');
+    expect(kinds.some((k) => /refund/.test(k))).toBe(false);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/late-drop-done`, { playerId: ctx.byName.Casey });
+    expect(buildTodo(await dash(ctx)).map((i) => i.kind)).not.toContain('latedrop');
+    // Casey sees the credit and asks for it back: a card for the organizer until it is refunded.
+    const phoneC = await phone(ctx, 'Casey');
+    const g = (await phoneC.call('GET', '/api/group')).data;
+    expect(g.sessions.find((x: any) => x.id === s.id).mine).toMatchObject({ status: 'withdrawn', creditBackCents: 1400 });
+    expect(g.credit).toMatchObject({ balanceCents: 1400, usableCents: 1400 });
+    expect((await phoneC.call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
     d = await dash(ctx);
-    expect(buildTodo(d).map((i) => i.kind)).toContain('refund');
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName.Casey, refunded: true });
-    expect(buildTodo(await dash(ctx)).map((i) => i.kind)).not.toContain('refund');
+    kinds = buildTodo(d).map((i) => i.kind);
+    expect(kinds[0]).toBe('refund_request'); // first on Home
+    expect(d.refundRequests).toEqual([expect.objectContaining({ playerId: ctx.byName.Casey, name: 'Casey', cents: 1400 })]);
+    expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${d.refundRequests[0].id}`, { action: 'refunded' })).status).toBe(200);
+    d = await dash(ctx);
+    expect(buildTodo(d).map((i) => i.kind)).not.toContain('refund_request');
+    expect(d.creditLedger.find((l: any) => l.playerId === ctx.byName.Casey).balanceCents).toBe(0);
+    expect((await phoneC.call('GET', '/api/group')).data.credit).toMatchObject({ balanceCents: 0, pending: null });
   });
 
   it('the need-players text for a spot that opened', () => {

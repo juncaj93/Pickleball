@@ -342,7 +342,8 @@ export async function refundCredit(
         `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, created_at, reason)
          SELECT ?1, ?2, ?3, 'refunded', ?4, 0, ?5, ?6 WHERE ${guard}`,
       )
-      .bind(entry, groupId, playerId, cents, nowIso, requestId ? 'request' : null, requestId ?? ''),
+      // Only the request path has a ?7; SQLite refuses a value with no placeholder.
+      .bind(entry, groupId, playerId, cents, nowIso, requestId ? 'request' : null, ...(requestId ? [requestId] : [])),
     ...(requestId
       ? [
           db

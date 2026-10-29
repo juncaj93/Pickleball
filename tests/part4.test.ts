@@ -100,8 +100,9 @@ describe('court waitlist', () => {
     expect((await adminSession(ctx, s.id)).confirmedCount).toBe(0);
   });
 
-  it('"Court opened" confirms standby players in order by the 4-or-6 rules, with texts to send and money owed', async () => {
+  it('"Court opened" confirms standby players in order up to the max, with texts to send and $14 owed each', async () => {
     const ctx = await withGale(await setupGroup());
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 6 } });
     const s = await waiting(ctx);
     for (const n of [...NAMES, 'Gale']) await join(ctx, n, s.id);
     const res = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
@@ -113,19 +114,31 @@ describe('court waitlist', () => {
     // Every one of them has a text waiting for the organizer.
     expect(x.roster.filter((r: any) => r.promotedAt && !r.promotionNotifiedAt)).toHaveLength(6);
     expect((await dash(ctx)).audit[0]).toMatchObject({ action: 'court_opened', details: { promoted: 6 } });
+    // Everyone in owes the flat $14, the 5th and 6th included.
     const alex = await asPlayer(ctx, 'Alex');
-    expect(alex.owed.find((o: any) => o.sessionId === s.id)).toMatchObject({ amountCents: 1400 });
-    expect((await asPlayer(ctx, 'Frankie')).owed.find((o: any) => o.sessionId === s.id)).toMatchObject({ amountCents: 900, discount: true });
+    expect(alex.owed.find((o: any) => o.sessionId === s.id)).toMatchObject({ amountCents: 1400, finalized: false });
+    expect((await asPlayer(ctx, 'Frankie')).owed.find((o: any) => o.sessionId === s.id)).toMatchObject({ amountCents: 1400, finalized: false });
+    expect(x.roster.filter((r: any) => r.status === 'confirmed').every((r: any) => r.shareCents === 1400)).toBe(true);
     // New joiners now follow the normal rules again.
     expect(await join(ctx, 'Gale', s.id)).toMatchObject({ result: 'waitlisted' });
   });
 
-  it('with 5 on standby, the first 4 get in and the 5th waits', async () => {
+  it('with 5 on standby, all 5 get in; with the max at 4, the 5th waits', async () => {
     const ctx = await setupGroup();
     const s = await waiting(ctx);
     for (const n of NAMES.slice(0, 5)) await join(ctx, n, s.id);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
-    const x = await adminSession(ctx, s.id);
+    let x = await adminSession(ctx, s.id);
+    expect(x.confirmedCount).toBe(5);
+    expect(x.waitlistCount).toBe(0);
+    expect((await asPlayer(ctx, 'Emery')).sessions.find((v: any) => v.id === s.id).countText).toBe('5 in');
+
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
+    const t = (await dash(ctx)).sessions.find((v: any) => v.id !== s.id && Date.parse(v.startsAt) > ctx.app.now);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/court`, { action: 'waitlist' })).status).toBe(200);
+    for (const n of NAMES.slice(0, 5)) await join(ctx, n, t.id);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/booked`, {});
+    x = await adminSession(ctx, t.id);
     expect(x.confirmedCount).toBe(4);
     expect(x.roster.find((r: any) => r.status === 'waitlisted').name).toBe('Emery');
   });
@@ -175,6 +188,7 @@ describe('court waitlist', () => {
 describe('player schedule data', () => {
   it('lists only people who are in (and waiting separately), never everyone', async () => {
     const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await firstSession(ctx);
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']) await join(ctx, n, s.id);
     const row = (await asPlayer(ctx, 'Frankie')).sessions.find((v: any) => v.id === s.id);
@@ -193,10 +207,15 @@ describe('player schedule data', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
     alex = await asPlayer(ctx, 'Alex');
     expect(alex.sessions.find((v: any) => v.id === s.id).mine).toMatchObject({ oweCents: 0, paymentStatus: 'paid' });
-    // After 6 played, the credit shows on the next session's row.
+    // After 6 played and the organizer finalized ($9 each), the $5 back is credit Alex can use on the next session.
     ctx.app.now = Date.parse(s.endsAt) + HOUR;
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
     alex = await asPlayer(ctx, 'Alex');
-    expect(alex.sessions.find((v: any) => v.id === next.id).mine).toMatchObject({ oweCents: 900, creditCents: 500 });
+    expect(alex.credit.balanceCents).toBe(500);
+    expect(alex.sessions.find((v: any) => v.id === next.id).mine).toMatchObject({ oweCents: 1400, creditCents: 0, useCreditCents: 500 });
+    expect((await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${next.id}/use-credit`, {})).status).toBe(200);
+    alex = await asPlayer(ctx, 'Alex');
+    expect(alex.sessions.find((v: any) => v.id === next.id).mine).toMatchObject({ oweCents: 900, creditCents: 500, useCreditCents: 0 });
   });
 
   it('a played session leaves the list; what is still owed moves to the payment card', async () => {

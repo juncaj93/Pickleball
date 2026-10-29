@@ -278,7 +278,7 @@ describe('credit after the game', () => {
   });
 
   it('uses "$14 each" from Settings for every seat and the final price; the old credit setting is ignored', async () => {
-    const normalized = normalizeSettings({ creditCentsWhenSix: 600, refundCentsWhenSix: 400 } as Record<string, unknown>) as Record<string, unknown>;
+    const normalized: Record<string, unknown> = { ...normalizeSettings({ creditCentsWhenSix: 600, refundCentsWhenSix: 400 }) };
     expect(normalized.creditCentsWhenSix).toBeUndefined();
     expect(normalized.refundCentsWhenSix).toBeUndefined();
     expect(normalized.maxPlayers).toBe(10);

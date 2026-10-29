@@ -64,14 +64,15 @@ describe('Players tab numbers', () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
-    // Six played: after it ends, the first four each have a $5 credit coming.
-    ctx.app.now = Date.parse(s.endsAt) + HOUR;
+    // Blair paid $14. Six played and the organizer finalized ($9 each): Blair has $5 credit, Alex owes $9.
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
+    ctx.app.now = Date.parse(s.endsAt) + HOUR;
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
     const d = await dash(ctx);
     const by = (n: string) => d.players.find((p: any) => p.name === n);
     expect(by('Alex').played).toBe(1);
     const alex = balanceOf(d, ctx.byName.Alex);
-    expect(alex.owedCents).toBeGreaterThan(0);
+    expect(alex).toEqual({ owedCents: 900, creditCents: 0 });
     const blair = balanceOf(d, ctx.byName.Blair);
     expect(blair.owedCents).toBe(0);
     expect(blair.creditCents).toBe(500);

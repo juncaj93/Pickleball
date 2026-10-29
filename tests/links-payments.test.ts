@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { firstSession, playerPhone, setupGroup } from './harness';
 
-async function fullSession() {
+/** Four in. With the max set to 4 the game is full; at the default max of 10 it is simply on. */
+async function fullSession(maxPlayers = 10) {
   const ctx = await setupGroup();
+  if (maxPlayers !== 10) await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers } });
   const s = await firstSession(ctx);
   for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) {
     await (await playerPhone(ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {});
@@ -39,7 +41,7 @@ describe('confirmation links', () => {
     const s = dash.data.sessions.find((x: any) => x.id === ctx.s.id);
     expect(s.roster.find((r: any) => r.name === 'Blair').status).toBe('withdrawn');
     expect(s.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.name)).toEqual(['Alex', 'Casey', 'Devon']);
-    expect(s.state.flags.openSpots).toBe(1);
+    expect(s.state.flags.openSpots).toBe(7); // 10 max, 3 in
 
     // Used links stop working.
     expect((await anon.call('POST', '/api/link/act', { token: blair, action: 'withdraw' })).status).toBe(410);
@@ -86,14 +88,17 @@ describe('substitute invitations', () => {
     expect(res.data.drafts.map((d: any) => d.name)).toEqual(['Blair', 'Frankie', 'Devon']);
   });
 
-  it('refuses to prepare invitations for a full session', async () => {
-    const ctx = await fullSession();
+  it('refuses to prepare invitations for a full session, and prepares them while spots are open', async () => {
+    const ctx = await fullSession(4);
     const res = await ctx.organizer.call('POST', `/api/admin/sessions/${ctx.s.id}/links`, { kind: 'claim' });
     expect(res.status).toBe(409);
+    // The same 4 in at the default max of 10: 6 spots open, so invitations go out.
+    const open = await fullSession();
+    expect((await open.organizer.call('POST', `/api/admin/sessions/${open.s.id}/links`, { kind: 'claim' })).status).toBe(200);
   });
 
   it('tells later claimers the spot is gone', async () => {
-    const ctx = await fullSession();
+    const ctx = await fullSession(4);
     await (await playerPhone(ctx, 'Devon')).call('POST', `/api/sessions/${ctx.s.id}/withdraw`, {});
     const links = await ctx.organizer.call('POST', `/api/admin/sessions/${ctx.s.id}/links`, { kind: 'claim' });
     const emery = tokenOf(links.data.drafts.find((d: any) => d.name === 'Emery').url);

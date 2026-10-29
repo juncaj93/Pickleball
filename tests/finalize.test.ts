@@ -4,7 +4,7 @@
 // on Money, Players and each game.
 import { describe, expect, it } from 'vitest';
 import { creditBack, finalPrice } from '../shared/pricing';
-import { DAY, HOUR, PLAYER_NAMES, playerPhone, setupGroup } from './harness';
+import { HOUR, PLAYER_NAMES, playerPhone, setupGroup } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 
