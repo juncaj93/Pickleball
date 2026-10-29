@@ -3561,7 +3561,7 @@ async function main() {
           const link = row.locator('a.text-choice');
           assert((await link.getAttribute('href')).startsWith('sms:'), 'each choice opens Messages');
           const who = (await row.locator('.text-who').innerText()).trim();
-          assert(/^(Group chat, you pick|.+ · \d+)$/.test(who), `who line was "${who}"`);
+          assert(/^(Group chat, you pick|Everyone signed up|.+ · \d+)$/.test(who), `who line was "${who}"`);
           const tid = await row.getAttribute('data-text');
           const { to } = smsOf(await link.getAttribute('href'));
           if (tid === 'share' || tid === 'need' || tid === 'down5') assert(to.length === 0 && who === 'Group chat, you pick' && (await row.locator('.missing-numbers').count()) === 0, `${tid}: should pick the chat`);
