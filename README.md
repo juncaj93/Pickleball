@@ -1,9 +1,10 @@
 # Pickleball Bros
 
 A private, phone-friendly website for a group that plays every **Tuesday and
-Thursday, 8:00–10:00 PM Eastern** on one court. It handles sign-ups (exactly
-4 or 6 players), the waitlist, court booking notes, cancellation deadlines,
-substitutes, payments, and credits. It drafts text messages for the organizer,
+Thursday, 8:00–10:00 PM Eastern** on one court. It handles sign-ups (any
+number from 4 up to the max, 10 by default), the waitlist, court booking
+notes, cancellation deadlines, substitutes, payments, the final price after
+each game, and credits. The money rules in plain English: `docs/NEW_MODEL.md`. It drafts text messages for the organizer,
 but **it never sends a text by itself**.
 
 ## What each person sees
@@ -55,14 +56,14 @@ under More details in Edit booking.
 Home starts with a short "Needs attention" list for things that aren't one
 session's court (hidden when there's nothing in it):
 
-- "5 going, need 4 or 6" with the choices
-- "Was 6, now 5: discount and credits are off" when a session drops below 6
-  after the discount was shown, listing anything to sort out by hand
-- each person's credit balance, with **Clear credit**
+- **refund requests** from players ("Mitchel requested a refund of $14":
+  Refund opens Venmo, then Mark refunded; or Not now)
+- a **Finalize** card for every game that has ended and is not finalized yet
+  ("Tue, Nov 3 · 6 in", "6 played · $9 each · $5 credit back each",
+  Everyone played / Change who played)
+- late drops
 - who owes you, with one-tap **Mark paid**; on game day that day's unpaid
   players move to a **Mark paid tonight** card at the top
-- **Pay back** after a cancel: who already paid, with a **Refunded** checkbox
-- check-in texts that are due
 
 **View as…** in the header shows exactly what any player sees, with a "Viewing as
 Ryan" banner and Exit.
@@ -93,18 +94,19 @@ Pictures of every screen state: `docs/state-gallery/` (made by `node e2e/gallery
 Every text is a draft with **Open in Messages** and **Copy message** buttons.
 The status says "Draft ready" or "Composer opened", never "Sent".
 
-## How spots work (one court: 4 or 6, never 5)
+## How spots work (one court: any number from 4 to the max)
 
-- The first 4 to sign up are in. The 5th joins the waitlist as #1.
-- When a 6th person joins, both waiting people are confirmed at once and see
-  "Good news, we now have 6, an even number, so you're in."
-- If someone drops out of 4 and someone is waiting, the first waiting person
-  moves in.
-- If someone drops out of 6, nothing moves by itself. The organizer sees
-  "5 going, need 4 or 6" and picks: move the next waiting person in, invite
-  someone, move one person back to the waitlist, or cancel.
-- The database refuses a 7th confirmed player, and every spot change is a
-  single guarded step, so people tapping at the same second can't land on 5.
+- Anyone who taps I'm in while fewer than the max are in is in. The max is
+  Settings > Group > "Max players per game" (10 by default, 4 to 12). The 5th,
+  7th, 9th person are all simply in.
+- Past the max you join the waitlist. When someone drops, the first waiting
+  person moves in automatically ("Good news, a spot opened up, so you're in."
+  and a "Spot opened" text for the organizer).
+- Fewer than 4 means no game: the organizer cancels, as before.
+- Cards show "3 of 4 in" with 4 circles that fill with pickleballs, then
+  "5 in", "6 in" ... with a ball per extra person, and "10 in, full".
+- The database refuses a 13th confirmed player, and every spot change is a
+  single guarded step, so people tapping at the same second can't pass the max.
 
 ## Court waitlist
 
@@ -144,10 +146,10 @@ players who are in with their saved numbers ("Missing numbers: ..." for anyone w
 
 ## Money tab
 
-The month's summary at the top (collected, court costs, credits owed, and a
-bottom line), then each session's payments with Mark paid, the Pay back list
-with Refunded, and credits with Clear credit. "Mark paid tonight" stays on
-Home on game day.
+The month's summary at the top (collected, court costs, credits owed, held,
+and a bottom line), then each session's payments with Mark paid, the final
+price once finalized ("5 played · $11 each", what each person paid and what
+came back as credit) and Reopen. "Mark paid tonight" stays on Home on game day.
 
 **You are the one who pays the venue.** In every session's Who paid list, your
 own row is a court row: "You pay Northville Pickleball", the full court cost
@@ -187,18 +189,16 @@ and comes back on restore.
 
 ## Credit (organizer and players)
 
-When a game is canceled, or a paid player leaves it, the **Refund needed** card on Home
-and that game's row in Money > Who paid now offer two choices for each payment:
+Money that comes back to a player for any reason becomes credit automatically: they
+tapped I'm out after paying (the "Late drop" tag stays), the game was canceled, they did
+not play, or they paid $14 and the final price was lower. There is nothing to decide and no
+refund card. Players ask for cash back themselves: **Request refund** in their credit sheet
+reserves the amount, sends you a Telegram message and puts a card on Home with a ready
+Venmo link (**Refund**, then **Mark refunded**; or **Not now**).
 
-- **Refund** opens Venmo with the exact amount, as before. **Mark refunded** records it.
-- **Keep as credit** turns the payment into that player's credit. Until you choose, the
-  money stays held. A game canceled before credit existed can still be kept as credit
-  later. **Undo** takes it back, as long as none of that credit has been spent yet.
-  Late drops work the same way and keep their "Late drop" tag.
-
-Credit is **one pot per player**, with no expiry, usable on any later game. It adds to the
-older $5 credit (that rule and its wording are unchanged). On their own screen a player sees
-a small "You have $14 credit" line, and on a game they owe for a **Use credit** button. It
+Credit is **one pot per player**, with no expiry, usable on any later game. On their own
+screen a player sees a small **CREDIT $14** chip in the header (tap it for the balance, the
+history and Request refund), and on a game they owe for a **Use credit** button. It
 takes the smaller of their credit and what they owe, and only when they tap it. If it covers
 everything the game shows "Paid with credit"; otherwise they pay the rest with the normal
 Pay button for the remaining amount. At most one green button per card: Use credit is the
@@ -233,9 +233,11 @@ players"), and one green **Text** button that opens Messages with the words and 
 ready. The site never sends anything and never says it did.
 
 - **Need players**: fewer than 4 in and the game is within 48 hours (group chat).
-- **Check-in**: exactly 4 or exactly 6 in, from 6:00 PM the day before until the game
-  (to the players who are in).
-- **Down to 5**, **Now 6**, **Spot opened**: right when it happens, while it lasts.
+- **Check-in**: 4 or more in, from 6:00 PM the day before until the game
+  (to everyone signed up, the waitlist too).
+- **Spot opened**: right when it happens, while it lasts.
+- **Final price**: right after you finalize a game ("Pickleball Tue, Nov 3 is final:
+  6 played, $9 each. If you paid $14, the extra $5 is now credit on your account.").
 - **Payment reminder**: a played game, 7 or more calendar days ago, someone still unpaid. One
   unpaid player gets a one-person text; two or more get "Remind all unpaid".
 - Canceled or moved, and Share the game, are not cards (they stay in the gear menu).
@@ -254,11 +256,11 @@ the plain site address, and every game time reads like "Tue Nov 3, 8:00 PM".
 The site only opens Messages with the words ready; it never sends anything.
 
 - Group chat (you pick the chat): **Share the game** (any upcoming game),
-  **Need players** (fewer than 4 in), **Down to 5** (a game that fell from 6 to 5).
+  **Need players** (fewer than 4 in), **Final price** (after finalizing).
 - Saved numbers (one group text, with a "Missing numbers" note): **Check-in**
-  (exactly 4 or 6 in, to everyone signed up), **Now 6** (the 2 players the
-  waitlist moved up), **Spot opened** (one waitlisted player who moved in),
-  **Canceled** or **Moved** (everyone signed up and on the waitlist).
+  (4 or more in, to everyone signed up and on the waitlist), **Spot opened**
+  (one waitlisted player who moved in), **Canceled** or **Moved** (everyone
+  signed up and on the waitlist).
 - Money tab: each unpaid player has a **Payment reminder** (the total if they
   owe for several games), and with 2 or more unpaid, **Remind all unpaid**.
 
@@ -280,14 +282,17 @@ card shows a "Late drop" tag, and the Players screen counts them ("Late drops:
 The site sends the organizer a short Telegram message when:
 
 - someone drops out of a game within 36 hours of its start
-- a game falls below 4 (4 to 3) or goes from 6 to 5
-- a game reaches 6 (so you can text the two who moved up)
+- a game falls below 4
+- a game reaches 4 (it's on)
+- a player requests a refund of their credit ("Refund requested: Mitchel wants $14 back.")
+- a game from last night is still not finalized at 9:00 AM (needs the scheduled
+  Worker in `cron/`, see its README)
 
 A drop after the game's cancellation deadline starts with "Late drop:". One tap
 that causes more than one of these sends one message, like "Late drop: Ryan
-dropped out of Thu Nov 5, 8:00 PM (9 hrs before). 3 in now, need 4 or 6.",
+dropped out of Thu Nov 5, 8:00 PM (9 hrs before). 3 in now, under 4.",
 with an **Open site** button to `/admin`. Names and game times only: no phone
-numbers, no money.
+numbers, no Venmo names, and no money except a refund request's amount.
 
 Only player taps (on the site or a texted link) send alerts. Never your own
 taps, View as, Pretend it's..., canceled, hidden or past games, or anything
@@ -327,17 +332,14 @@ Everyone confirmed pays a flat **$14** per session, except the organizer, who
 pays the venue the full court cost and is reimbursed by the others' $14s.
 Waitlisted people owe nothing until they're confirmed.
 
-When exactly 6 are confirmed:
-
-- the two who moved in when the 6th joined owe **$9** ("6-person discount")
-- the first four see "6 are playing. You'll get a $5 credit toward your next
-  session."
-- after the session ends with 6, each of the first four gets a **$5 credit**,
-  and their next session shows "You owe $9 (includes your $5 credit)"
-
-If the count drops below 6, everyone is back to $14 and no credits are
-issued; the organizer gets a card to sort out anything already paid by hand.
-Settings has "Price per player" and "Credit per person when 6 play" ($5).
+After the game the organizer finalizes who played. The final price is
+**4 x $14 divided by the number who played, rounded down** (5: $11, 6: $9,
+7: $8, 8: $7, 9: $6, 10: $5), never more than $14. Whatever anyone paid above
+it comes back as credit; someone who paid less owes the rest; someone who did
+not play gets it all back as credit. Settings > Money has "Price per player"
+and the rule in one sentence. Money > Who paid shows "6 played · $9 each" and
+a **Reopen** button (allowed while none of that game's credit was used or
+refunded). Under the Pay button, until paid: "You get credit back if 5 or more play." 
 The organizer's **court cost** is a private record on the booking form: it is
 never on a player screen, in a text, or in the export. A player only sees a
 soft "may not have marked this paid yet" note once the session ended more
@@ -506,10 +508,11 @@ npm run typecheck
 ```
 
 The tests cover Tue/Thu generation across both daylight-saving changes,
-duplicate prevention, the 4-then-waitlist-then-6 flow (including promotion
-when someone drops from 4, the "5 going" warning, and everyone tapping at
-once), the 7-player database cap, the flat $14, the $9 discount and $5
-credits when 6 play (including drops below 6), the first session date,
+duplicate prevention, sign-ups up to the max with the waitlist beyond it
+(including promotion when someone drops, and everyone tapping at once), the
+13-player database cap, the flat $14, the final price for every N from 4 to
+10 with the credit back, no-shows, partial credit, reopen, refund requests,
+automatic credit on drops and cancels, the first session date,
 holidays (Thanksgiving and Election Day 2026), the group poll text, the court
 cost never reaching players, add-your-name with the duplicate check, delete
 vs hide, I booked it, the court waitlist (standby, court opened, didn't

@@ -14,84 +14,121 @@ async function adminSession(ctx: Ctx, id: string) {
 const confirmedNames = (s: any) => s.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.name);
 const waitingNames = (s: any) => s.roster.filter((r: any) => r.status === 'waitlisted').map((r: any) => r.name);
 
-async function withSeventh(ctx: Ctx) {
-  const res = await ctx.organizer.call('POST', '/api/admin/players', { name: 'Gale' });
-  ctx.byName.Gale = res.data.id;
+/** Extra names so a game can pass the default max of 10 (and the database cap of 12). */
+const MORE = ['Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Lee', 'Morgan'];
+
+async function withMore(ctx: Ctx, count = MORE.length) {
+  for (const name of MORE.slice(0, count)) {
+    const res = await ctx.organizer.call('POST', '/api/admin/players', { name });
+    ctx.byName[name] = res.data.id;
+  }
   return ctx;
 }
 
-describe('one court: exactly 4 or 6', () => {
-  it('confirms 4, waitlists the 5th, and confirms both when a 6th joins', async () => {
-    const ctx = await withSeventh(await setupGroup());
+const setMax = (ctx: Ctx, maxPlayers: number) => ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers } });
+
+describe('one court: any number from 4 to the max', () => {
+  it('the 5th, 6th and 7th are simply in; the 11th waits at the default max of 10', async () => {
+    const ctx = await withMore(await setupGroup());
     const s = await firstSession(ctx);
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon']) expect(await join(ctx, name, s.id)).toEqual({ result: 'confirmed' });
-    expect(await join(ctx, 'Emery', s.id)).toEqual({ result: 'waitlisted', position: 1 });
-    expect((await adminSession(ctx, s.id)).confirmedCount).toBe(4);
+    const ten = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules'];
+    for (const name of ten) expect(await join(ctx, name, s.id), name).toEqual({ result: 'confirmed' });
+    expect((await adminSession(ctx, s.id)).confirmedCount).toBe(10);
 
-    // The 6th person: both of them are in.
-    expect(await join(ctx, 'Frankie', s.id)).toEqual({ result: 'confirmed', madeSix: true });
-    const six = await adminSession(ctx, s.id);
-    expect(confirmedNames(six)).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
-    expect(six.roster.filter((r: any) => r.promotionReason === 'made_six').map((r: any) => r.name)).toEqual(['Emery', 'Frankie']);
+    // Nobody was "moved in": they were all simply in.
+    const full = await adminSession(ctx, s.id);
+    expect(confirmedNames(full)).toEqual(ten);
+    expect(full.roster.some((r: any) => r.promotionReason)).toBe(false);
+    expect(full.state.flags).toMatchObject({ full: true, openSpots: 0, playersNeeded: 0 });
 
-    // Both see the good news.
+    // The 5th sees a plain count, no good-news line.
     const emery = (await (await playerPhone(ctx, 'Emery')).call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id);
-    expect(emery.mine).toMatchObject({ status: 'confirmed', promotion: 'made_six' });
-    expect(emery.goingText).toBe('6 going');
+    expect(emery.mine).toMatchObject({ status: 'confirmed', promotion: null, shareCents: 1400 });
+    expect(emery.countText).toBe('10 in, full');
+    expect(emery.full).toBe(true);
 
-    // A 7th waits.
-    expect(await join(ctx, 'Gale', s.id)).toEqual({ result: 'waitlisted', position: 1 });
+    // An 11th waits.
+    expect(await join(ctx, 'Kit', s.id)).toEqual({ result: 'waitlisted', position: 1 });
+    expect(waitingNames(await adminSession(ctx, s.id))).toEqual(['Kit']);
   });
 
-  it('prepares a message for each person moved in, until the organizer marks it sent', async () => {
+  it('counts read "3 of 4 in", then "5 in", then "10 in, full"', async () => {
+    const ctx = await withMore(await setupGroup());
+    const s = await firstSession(ctx);
+    const text = async () => (await (await playerPhone(ctx, 'Morgan')).call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id).countText;
+    for (const name of ['Alex', 'Blair', 'Casey']) await join(ctx, name, s.id);
+    expect(await text()).toBe('3 of 4 in');
+    for (const name of ['Devon', 'Emery']) await join(ctx, name, s.id);
+    expect(await text()).toBe('5 in');
+    for (const name of ['Frankie', 'Gale', 'Harper', 'Indy', 'Jules']) await join(ctx, name, s.id);
+    expect(await text()).toBe('10 in, full');
+  });
+
+  it('prepares a message for each person moved in from the waitlist, until the organizer marks it sent', async () => {
     const ctx = await setupGroup();
+    await setMax(ctx, 4);
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await join(ctx, name, s.id);
-    let six = await adminSession(ctx, s.id);
-    expect(six.roster.filter((r: any) => r.promotedAt && !r.promotionNotifiedAt).map((r: any) => r.name)).toEqual(['Emery', 'Frankie']);
+    expect(waitingNames(await adminSession(ctx, s.id))).toEqual(['Emery', 'Frankie']);
+    for (const name of ['Alex', 'Blair']) await (await playerPhone(ctx, name)).call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    let after = await adminSession(ctx, s.id);
+    expect(confirmedNames(after)).toEqual(['Casey', 'Devon', 'Emery', 'Frankie']);
+    expect(after.roster.filter((r: any) => r.promotedAt && !r.promotionNotifiedAt).map((r: any) => r.name)).toEqual(['Emery', 'Frankie']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/told`, { playerId: ctx.byName.Emery });
-    six = await adminSession(ctx, s.id);
-    expect(six.roster.filter((r: any) => r.promotedAt && !r.promotionNotifiedAt).map((r: any) => r.name)).toEqual(['Frankie']);
+    after = await adminSession(ctx, s.id);
+    expect(after.roster.filter((r: any) => r.promotedAt && !r.promotionNotifiedAt).map((r: any) => r.name)).toEqual(['Frankie']);
   });
 
-  it('moves the first waiting player in when someone drops out of 4', async () => {
+  it('moves the first waiting player in when someone drops out of a full game', async () => {
     const ctx = await setupGroup();
+    await setMax(ctx, 4);
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']) await join(ctx, name, s.id);
+    expect(waitingNames(await adminSession(ctx, s.id))).toEqual(['Emery']);
     await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
     const after = await adminSession(ctx, s.id);
     expect(confirmedNames(after)).toEqual(['Alex', 'Casey', 'Devon', 'Emery']);
     expect(after.roster.find((r: any) => r.name === 'Emery')).toMatchObject({ promotionReason: 'spot_opened', promotionNotifiedAt: null });
     expect(waitingNames(after)).toEqual([]);
+    // Now in, they owe $14 like everyone else.
+    const emery = (await (await playerPhone(ctx, 'Emery')).call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id);
+    expect(emery.mine).toMatchObject({ status: 'confirmed', promotion: 'spot_opened', oweCents: 1400 });
   });
 
-  it('shows "5 going" when someone drops out of 6, and changes nothing by itself', async () => {
-    const ctx = await withSeventh(await setupGroup());
+  it('a drop out of 6 leaves 5 in: nothing special happens, and the organizer can still move people by hand', async () => {
+    const ctx = await withMore(await setupGroup(), 1);
+    await setMax(ctx, 6);
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale']) await join(ctx, name, s.id);
+    expect(waitingNames(await adminSession(ctx, s.id))).toEqual(['Gale']);
+    // At the max, a drop moves the waiting player in by itself.
     await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    let six = await adminSession(ctx, s.id);
+    expect(six.confirmedCount).toBe(6);
+    expect(waitingNames(six)).toEqual([]);
+    expect(six.state.flags).toMatchObject({ full: true, openSpots: 0 });
+
+    // Nobody waiting: a drop simply leaves 5 in. No "5 going" state, no flag.
+    await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
     const five = await adminSession(ctx, s.id);
     expect(five.confirmedCount).toBe(5);
-    expect(waitingNames(five)).toEqual(['Gale']); // not moved in automatically
-    expect(five.state).toMatchObject({ label: 'five_going', text: '5 going' });
-    expect(five.state.flags.fiveGoing).toBe(true);
+    expect(five.state.label).not.toMatch(/five|going/);
+    expect(five.state.text).not.toMatch(/5 going|need 4 or 6/);
+    expect(five.state.flags).toMatchObject({ full: false, openSpots: 1, playersNeeded: 0, underfilled: false });
+    expect('fiveGoing' in five.state.flags).toBe(false);
 
-    // Choice 1: move the waiting player in (6).
+    // The organizer can move someone to the waitlist; they stay there until confirmed again.
     const path = `/api/admin/sessions/${s.id}/roster`;
-    expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName.Gale, action: 'confirm' })).data.result).toBe('confirmed');
-    expect((await adminSession(ctx, s.id)).confirmedCount).toBe(6);
-
-    // Choice 2 (after another drop): back to 4 by moving someone to the waitlist. They stay there.
-    await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
     await ctx.organizer.call('POST', path, { playerId: ctx.byName.Gale, action: 'waitlist' });
     const four = await adminSession(ctx, s.id);
     expect(four.confirmedCount).toBe(4);
     expect(waitingNames(four)).toEqual(['Gale']);
-    expect(four.state.flags.fiveGoing).toBe(false);
+    expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName.Gale, action: 'confirm' })).data.result).toBe('confirmed');
+    expect((await adminSession(ctx, s.id)).confirmedCount).toBe(5);
   });
 
   it('lets a new person turn 5 into 6 when nobody is waiting', async () => {
-    const ctx = await withSeventh(await setupGroup());
+    const ctx = await withMore(await setupGroup(), 1);
     const s = await firstSession(ctx);
     for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await join(ctx, name, s.id);
     await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
@@ -102,36 +139,48 @@ describe('one court: exactly 4 or 6', () => {
     expect((await adminSession(ctx, s.id)).confirmedCount).toBe(6);
   });
 
-  it('never lands on 5 or 7, even when everyone taps at once', async () => {
+  it('never goes above the max, even when everyone taps at once', async () => {
+    const eleven = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit'];
     for (let round = 0; round < 5; round++) {
-      const ctx = await withSeventh(await setupGroup());
+      const ctx = await withMore(await setupGroup(), 5);
       const s = await firstSession(ctx);
-      const phones = await Promise.all(['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale'].map((n) => playerPhone(ctx, n)));
+      const phones = await Promise.all(eleven.map((n) => playerPhone(ctx, n)));
       await Promise.all(phones.map((p) => p.call('POST', `/api/sessions/${s.id}/join`, {})));
       const after = await adminSession(ctx, s.id);
-      expect(after.confirmedCount).toBe(6);
+      expect(after.confirmedCount).toBe(10);
       expect(after.waitlistCount).toBe(1);
     }
   });
 
-  it('blocks a 7th confirmed player at the database level', async () => {
-    const ctx = await withSeventh(await setupGroup());
+  it('blocks a 13th confirmed player at the database level (the widest max is 12)', async () => {
+    const ctx = await withMore(await setupGroup());
     const s = await firstSession(ctx);
     const insert = ctx.app.db.raw.prepare(
       "INSERT INTO session_players (id, session_id, player_id, status, claimed_at, updated_at) VALUES (?, ?, ?, 'confirmed', '2026-01-01', '2026-01-01')",
     );
-    ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'].forEach((n, i) => insert.run(`row-${i}`, s.id, ctx.byName[n]));
-    expect(() => insert.run('row-7', s.id, ctx.byName.Gale)).toThrow(/session_full/);
+    const twelve = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Lee'];
+    twelve.forEach((n, i) => insert.run(`row-${i}`, s.id, ctx.byName[n]));
+    expect(() => insert.run('row-13', s.id, ctx.byName.Morgan)).toThrow(/session_full/);
   });
 
-  it('lets the organizer give spots up to 6, never more', async () => {
-    const ctx = await withSeventh(await setupGroup());
+  it('lets the organizer give spots up to the max, never more', async () => {
+    const ctx = await withMore(await setupGroup(), 5);
     const s = await firstSession(ctx);
     const path = `/api/admin/sessions/${s.id}/roster`;
-    for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) {
-      expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName[name], action: 'confirm' })).status).toBe(200);
+    for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper', 'Indy', 'Jules']) {
+      expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName[name], action: 'confirm' })).status, name).toBe(200);
     }
-    expect((await ctx.organizer.call('POST', path, { playerId: ctx.byName.Gale, action: 'confirm' })).status).toBe(409);
+    const eleventh = await ctx.organizer.call('POST', path, { playerId: ctx.byName.Kit, action: 'confirm' });
+    expect(eleventh.status).toBe(409);
+    expect(eleventh.data.message).toBe('The game is full (10 in).');
+    // A lower max from Settings is the limit too.
+    await setMax(ctx, 6);
+    const t = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((x: any) => x.id !== s.id && Date.parse(x.startsAt) > ctx.app.now);
+    const path2 = `/api/admin/sessions/${t.id}/roster`;
+    for (const name of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) {
+      expect((await ctx.organizer.call('POST', path2, { playerId: ctx.byName[name], action: 'confirm' })).status, name).toBe(200);
+    }
+    expect((await ctx.organizer.call('POST', path2, { playerId: ctx.byName.Gale, action: 'confirm' })).status).toBe(409);
   });
 });
 

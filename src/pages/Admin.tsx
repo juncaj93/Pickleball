@@ -227,16 +227,27 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
 function HomeTab({ ctx }: { ctx: AdminCtx }) {
   const items = buildTodo(ctx.d);
+  // Order: refund requests, then games to finalize, then the text cards, then the rest.
+  const first = items.filter((i) => i.kind === 'refund_request' || i.kind === 'finalize');
+  const rest = items.filter((i) => !first.includes(i));
+  const key = (item: TodoItem) => item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : '');
   return (
     <>
+      {first.length > 0 && (
+        <section className="stack" aria-label="After the game">
+          {first.map((item) => (
+            <TodoCard key={key(item)} ctx={ctx} item={item} />
+          ))}
+        </section>
+      )}
       <SuggestionCards ctx={ctx} />
-      {items.length > 0 && (
+      {rest.length > 0 && (
         <section className="stack" aria-labelledby="todo-title">
           <h2 id="todo-title" className="section-title">
             Needs attention
           </h2>
-          {items.map((item) => (
-            <TodoCard key={item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : '')} ctx={ctx} item={item} />
+          {rest.map((item) => (
+            <TodoCard key={key(item)} ctx={ctx} item={item} />
           ))}
         </section>
       )}
