@@ -78,8 +78,6 @@ export interface SessionRow {
   finalized_at: string | null;
   final_price_cents: number | null;
   final_played_count: number | null;
-  /** The morning-after "Finalize" Telegram nudge went out. */
-  finalize_nudged_at: string | null;
   updated_at: string;
 }
 

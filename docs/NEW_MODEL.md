@@ -58,9 +58,8 @@ When the organizer finalizes:
 If fewer than 4 were in when the game ended, the card offers **Cancel
 session** (everyone who paid gets credit) or **Finalize anyway** ($14 each).
 
-The morning after a game that is still not finalized, at 9:00 AM, the
-organizer gets one Telegram nudge ("Finalize last night's game: Thu Oct 29,
-6 in."). That needs the small scheduled Worker in `cron/` (see its README).
+The Finalize card stays on Home until it is done, even days later. That card
+is the reminder; there is no scheduled job or Telegram nudge for it.
 
 ## Credit
 
@@ -111,4 +110,4 @@ The old "exactly 4 or 6" rule, the "5 going, need 4 or 6" card, the $9 price
 for the 5th and 6th, the $5 credit for the first four, the Down to 5 and Now 6
 texts, the organizer's Refund / Keep as credit card, and the Telegram alerts
 "6 down to 5" and "reaches 6". The alerts are now "A game falls below 4" and
-"A game reaches 4 (it's on)", plus "Refund requests" and "Finalize reminder".
+"A game reaches 4 (it's on)", plus the one new alert, "Refund requests".

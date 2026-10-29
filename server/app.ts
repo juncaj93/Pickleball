@@ -100,8 +100,6 @@ route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
 route('PUT', '/api/admin/alerts', alerts.updateAlerts);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
-// The scheduled Worker's morning check (needs the shared secret).
-route('POST', '/api/cron/finalize-reminder', (ctx) => alerts.finalizeReminder(ctx));
 
 export async function handleApi(req: Request, env: Env, nowMs = Date.now(), waitUntil?: (work: Promise<unknown>) => void): Promise<Response> {
   let ctx = makeCtx(req, env, nowMs, waitUntil);

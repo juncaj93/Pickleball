@@ -285,8 +285,6 @@ The site sends the organizer a short Telegram message when:
 - a game falls below 4
 - a game reaches 4 (it's on)
 - a player requests a refund of their credit ("Refund requested: Mitchel wants $14 back.")
-- a game from last night is still not finalized at 9:00 AM (needs the scheduled
-  Worker in `cron/`, see its README)
 
 A drop after the game's cancellation deadline starts with "Late drop:". One tap
 that causes more than one of these sends one message, like "Late drop: Ryan

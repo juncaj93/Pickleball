@@ -346,7 +346,6 @@ export interface AdminDashboard {
     belowMin: boolean;
     reachedMin: boolean;
     refundRequests: boolean;
-    finalizeReminder: boolean;
     connected: boolean;
     lastAt: string | null;
     lastOk: boolean | null;

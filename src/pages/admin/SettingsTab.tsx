@@ -413,13 +413,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedMin' | 'refundRequests' | 'finalizeReminder';
+type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedMin' | 'refundRequests';
 const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'drop36', label: 'Someone drops within 36 hours' },
   { key: 'belowMin', label: 'A game falls below 4' },
   { key: 'reachedMin', label: "A game reaches 4 (it's on)" },
   { key: 'refundRequests', label: 'Refund requests' },
-  { key: 'finalizeReminder', label: 'Finalize reminder (9:00 AM the next day)' },
 ];
 
 /**
@@ -435,7 +434,6 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
     belowMin: a.belowMin,
     reachedMin: a.reachedMin,
     refundRequests: a.refundRequests,
-    finalizeReminder: a.finalizeReminder,
   });
   const [test, setTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
 

@@ -12,8 +12,6 @@
 ALTER TABLE sessions ADD COLUMN finalized_at TEXT;
 ALTER TABLE sessions ADD COLUMN final_price_cents INTEGER CHECK (final_price_cents IS NULL OR final_price_cents >= 0);
 ALTER TABLE sessions ADD COLUMN final_played_count INTEGER CHECK (final_played_count IS NULL OR final_played_count >= 0);
--- The 9:00 AM "Finalize last night's game" Telegram nudge was sent.
-ALTER TABLE sessions ADD COLUMN finalize_nudged_at TEXT;
 
 -- Set when the game is finalized: 1 played, 0 did not. NULL until then.
 ALTER TABLE session_players ADD COLUMN played INTEGER CHECK (played IS NULL OR played IN (0, 1));
@@ -29,11 +27,10 @@ ALTER TABLE credit_ledger ADD COLUMN reason TEXT;
 -- For 'finalized' entries: how many played, for the "+$5 Thu, Oct 29 (6 played)" line.
 ALTER TABLE credit_ledger ADD COLUMN played_count INTEGER;
 
--- Settings > Alerts: "A game reaches 4 (it's on)", "Refund requests", "Finalize reminder".
+-- Settings > Alerts: "A game reaches 4 (it's on)" and "Refund requests".
 -- (reached_six is no longer read.)
 ALTER TABLE organizer_alerts ADD COLUMN reached_min INTEGER NOT NULL DEFAULT 1 CHECK (reached_min IN (0, 1));
 ALTER TABLE organizer_alerts ADD COLUMN refund_requests INTEGER NOT NULL DEFAULT 1 CHECK (refund_requests IN (0, 1));
-ALTER TABLE organizer_alerts ADD COLUMN finalize_reminder INTEGER NOT NULL DEFAULT 1 CHECK (finalize_reminder IN (0, 1));
 
 -- A player asking for cash back from their credit. While pending the amount is
 -- reserved (it can't be spent on a game). One open request per player.

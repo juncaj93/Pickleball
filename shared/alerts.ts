@@ -15,11 +15,9 @@ export interface AlertPrefs {
   reachedMin: boolean;
   /** A player asks for a refund of their credit. */
   refundRequests: boolean;
-  /** 9:00 AM the morning after a game that is still not finalized. */
-  finalizeReminder: boolean;
 }
 
-export const DEFAULT_ALERT_PREFS: AlertPrefs = { enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true, finalizeReminder: true };
+export const DEFAULT_ALERT_PREFS: AlertPrefs = { enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true };
 
 export const DROP_WINDOW_MS = 36 * 3600_000;
 
@@ -104,9 +102,4 @@ export function alertMessage(a: AlertInput): string | null {
 /** "Refund requested: Mitchel wants $14 back." (the only alert that names an amount) */
 export function refundRequestMessage(name: string, cents: number): string {
   return `Refund requested: ${name} wants $${Math.floor(cents / 100)} back.`;
-}
-
-/** "Finalize last night's game: Thu Oct 29, 6 in." */
-export function finalizeReminderMessage(startsAt: string, tz: string, inCount: number): string {
-  return `Finalize last night's game: ${alertDay(startsAt, tz)}, ${inCount} in.`;
 }
