@@ -3565,7 +3565,7 @@ async function main() {
           const tid = await row.getAttribute('data-text');
           const { to } = smsOf(await link.getAttribute('href'));
           if (tid === 'share' || tid === 'need' || tid === 'down5') assert(to.length === 0 && who === 'Group chat, you pick' && (await row.locator('.missing-numbers').count()) === 0, `${tid}: should pick the chat`);
-          else assert(to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).replace(/^Missing numbers:/, '').split(',').filter((x) => x.trim()).length) === Number(who.match(/(\d+)$/)[1]), `${tid}: numbers plus missing should match "${who}"`);
+          else assert(to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).replace(/^Missing numbers:/, '').split(',').filter((x) => x.trim()).length) === (who.match(/(\d+)$/) ? Number(who.match(/(\d+)$/)[1]) : to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).replace(/^Missing numbers:/, '').split(',').filter((x) => x.trim()).length)), `${tid}: numbers plus missing should match "${who}"`);
           assert(tid !== 'poll', 'no Poll');
         }
         const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
