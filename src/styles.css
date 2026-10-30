@@ -2301,19 +2301,25 @@ dialog.sheet::backdrop {
   gap: 1px;
   font-size: 0.88rem;
 }
-/* "3 of 4 in", the dots, and the organizer's own "You're in" / "Out" at the
-   right. On a very narrow phone with 6 in, "You're in" drops under, still
-   at the right, instead of covering the dots. */
+/* "3 of 4 in", the balls, and the organizer's own "I'm in" / "Out" at the
+   right, always on one line. With many in on a narrow phone the balls wrap
+   onto a second row beside the button, so the card never grows a line. */
 .players-top {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 6px;
+  flex-wrap: nowrap;
+  gap: 6px;
+}
+.players-top .dots {
+  flex: 1 1 auto;
 }
 .players-top .players-after {
+  flex: none;
   margin-left: auto;
 }
 .players-count {
+  flex: none;
+  white-space: nowrap;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
