@@ -232,7 +232,7 @@ async function main() {
     const { ctx, page } = await phone('Ryan');
     await page.locator('.schedule article').first().waitFor({ timeout: 8000 });
     const t = squash(await page.locator('body').innerText());
-    assert(/Pay \$14/.test(t) && /I paid/.test(t), `Ryan lost his Pay buttons: ${t.slice(0, 300)}`);
+    assert(/you owe \$14/.test(t) && /Pay with Venmo/.test(t) && /I paid/.test(t), `Ryan lost his Pay buttons: ${t.slice(0, 300)}`);
     assert(!COURT_WORDS.test(t.replace(/Northville Pickleball Club/g, '')), `court words on a player screen: ${t.slice(0, 300)}`);
     await ctx.close();
   });

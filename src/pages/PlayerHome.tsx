@@ -498,7 +498,8 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     potLeft -= take;
   }
   const showCredit = g.credit.usableCents > 0 && covered > 0;
-  const creditCovers = showCredit && covered >= total;
+  // Whenever there is credit to use, "Use credit" is the filled button and Pay is its outline twin (same as on the cards).
+  const creditCovers = showCredit;
   const busy = paid.busy || credit.busy;
   const creditBtn = showCredit && (
     <button
@@ -786,7 +787,8 @@ function RowPay({
   const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
   // Credit: the one filled button when it covers everything, otherwise an outline button beside Pay.
   const showCredit = mine.useCreditCents > 0;
-  const creditCovers = showCredit && mine.useCreditCents >= mine.oweCents;
+  // With credit to use, "Use credit" is the filled button and Pay is its outline twin (covers all or part).
+  const creditCovers = showCredit;
   const filled = 'btn pay-btn';
   const outline = 'btn pay-btn outline';
   const creditBtn = showCredit && (
@@ -811,7 +813,7 @@ function RowPay({
         openVenmo(e, pay);
       }}
     >
-      {left || creditCovers ? payLabel : 'Pay'}
+      {left ? payLabel : 'Pay'}
     </a>
   ) : (
     <button className={creditCovers ? outline : filled} disabled={busy} onClick={() => paid.set(true)}>
@@ -924,7 +926,7 @@ function ScheduleRow({
   // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled.
   const courtWord = <span>{court.playerText}</span>;
   let status: ReactNode;
-  if (s.canceled) status = <span className="st-canceled">Canceled</span>;
+  if (s.canceled) status = <span className="st-canceled">{court.playerText}</span>;
   else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn)
     status = (
@@ -1000,6 +1002,7 @@ function ScheduleRow({
       id={`row-${s.id}`}
       className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
       data-tier={tier}
+      data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
       aria-labelledby={`s-${s.id}`}
     >

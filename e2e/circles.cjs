@@ -57,7 +57,8 @@ const rowsOf = (page, rowSel, countSel) =>
           afterOnLine: !a || (a.top < r.top + 4 && a.bottom > r.bottom - 4),
           afterClear: !a || a.left >= dots.right - 0.5,
           dotBorder: dot ? getComputedStyle(dot).borderTopColor : null,
-          cardBg: card.backgroundColor,
+          // Flat LATER rows and canceled cards have no background of their own: use what is behind them.
+          cardBg: (() => { for (let e = row; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c !== 'rgba(0, 0, 0, 0)' && c !== 'transparent') return c; } return getComputedStyle(document.body).backgroundColor; })(),
         };
       }),
     [rowSel, countSel],

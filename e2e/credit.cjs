@@ -25,8 +25,8 @@ const PIN = '482913';
 const SHOTS = path.join(__dirname, 'screenshots');
 const PEOPLE = ['Alex', 'Ryan', 'Mitchel', 'Brandon', 'Julian'];
 const WIDTHS = [360, 375, 390, 430];
-/** The one line about credit that every unpaid player sees under Pay. */
-const PAY_NOTE = 'You get credit back if 5 or more play.';
+/** Joined players no longer see a credit-back note under Pay (it sits under "I'm in" for people who have not joined). */
+const NO_NOTE = '[data-pay-note], [data-credit-note]';
 
 let passed = 0;
 let failed = 0;
@@ -57,7 +57,7 @@ async function tidy(locator, what) {
     });
     const out = outEls.length;
     const outInfo = outEls.slice(0, 3).map((x) => `${x.tagName}.${x.className} ${Math.round(x.getBoundingClientRect().left)}-${Math.round(x.getBoundingClientRect().right)} in ${Math.round(box.left)}-${Math.round(box.right)}`).join('; ');
-    const cut = [...el.querySelectorAll('*')].filter((x) => x.children.length === 0 && x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).overflow !== 'visible').length;
+    const cut = [...el.querySelectorAll('*')].filter((x) => !x.classList.contains('sr-only') && x.children.length === 0 && x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).overflow !== 'visible').length;
     const btns = [...el.querySelectorAll('a.btn, button.btn, button.link-btn')].filter((b) => b.getBoundingClientRect().width > 0);
     let overlap = 0;
     for (let i = 0; i < btns.length; i++)
@@ -76,7 +76,7 @@ const noSideways = async (page) => assert((await page.evaluate(() => document.do
 const greenButtons = (loc) =>
   loc.evaluate((el) =>
     [...el.querySelectorAll('a.btn, button.btn')].filter(
-      (b) => b.getBoundingClientRect().width > 0 && !['secondary', 'ghost', 'danger', 'text-btn'].some((c) => b.classList.contains(c)),
+      (b) => b.getBoundingClientRect().width > 0 && !['secondary', 'outline', 'ghost', 'danger', 'text-btn'].some((c) => b.classList.contains(c)),
     ).length,
   );
 
@@ -281,15 +281,15 @@ async function main() {
         assert((await chipText(page)) === 'CREDIT $14', `chip was "${await chipText(page)}"`);
         assert((await chip(page).getAttribute('aria-label')) === '$14 credit. Open your credit', `chip label ${await chip(page).getAttribute('aria-label')}`);
         await chipPlaced(page, tag);
-        assert((await page.locator('[data-credit-line]').count()) === 0 && (await page.getByText(/You have \$\d+ credit/).count()) === 0, 'the old credit line is gone');
+        assert((await page.locator('[data-credit-line]').count()) === 0 && (await page.locator('header').getByText(/You have \$\d+ credit/).count()) === 0, 'the old credit line under the header is gone (the card keeps its own small "You have $14 credit" line)');
         const row = page.locator('article.sched', { hasText: 'Nov' }).filter({ has: page.locator('[data-use-credit]') }).first();
-        const foot = row.locator('.row-foot');
+        const foot = row.locator('.sched-body');
         await foot.locator('[data-use-credit]').waitFor();
         assert((await greenButtons(foot)) === 1, `green buttons: ${await greenButtons(foot)}`);
         assert((await foot.locator('[data-use-credit]').evaluate((b) => !b.classList.contains('secondary'))), 'Use credit should be the green one');
         assert((await foot.getByRole('link', { name: /^Pay \$14/ }).count()) === 1, 'Pay $14 should show');
         assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should wait until Pay is tapped');
-        assert((await row.locator('[data-pay-note]').innerText()).trim() === PAY_NOTE, 'the credit-back note under Pay');
+        assert((await row.locator(NO_NOTE).count()) === 0, 'joined people see no credit-back note');
         await tidy(foot, 'pay row');
         await noSideways(page);
       });
@@ -318,7 +318,7 @@ async function main() {
       assert((await page.locator('[data-credit-line], [data-credit-sheet]').count()) === 0, 'credit line or sheet');
       assert((await page.locator('[data-use-credit]').count()) === 0, 'use credit');
       const t = squash(await page.locator('body').innerText());
-      assert(!/credit/i.test(t.split(PAY_NOTE).join('')), t.slice(0, 300));
+      assert(!/credit/i.test(t.replace(/If \d+ play, you get \$\d+ back as credit\./g, '').replace(/If you paid, it's now your credit\./g, '')), t.slice(0, 300));
       const raw = await (await ctx.request.get(BASE + '/api/group')).text();
       assert(!/creditLedger|keptAsCredit|potCredit|refundRequests|Mitchel-K/.test(raw), 'API leaks it');
       assert(/"balanceCents":0/.test(raw), "own credit should be $0");
@@ -347,9 +347,9 @@ async function main() {
       await closeSheet(page);
       assert((await chipText(page)) === 'REFUND $14', `chip was "${await chipText(page)}"`);
       // The reserved $5 cannot be spent: $9 covers part of the $14 game.
-      const foot = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first().locator('.row-foot');
+      const foot = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first().locator('.sched-body');
       await foot.getByText(/Uses your \$9 credit\. \$5 left to pay/).waitFor();
-      assert(await foot.locator('[data-use-credit]').evaluate((b) => b.classList.contains('secondary')), 'Use credit should be quiet when it covers part');
+      assert(await foot.locator('[data-use-credit]').evaluate((b) => !b.classList.contains('outline')), 'Use credit is the filled button even when it covers part');
     });
     await check('Cancel request puts the $5 back: the chip says CREDIT again and Use credit covers the whole game', async () => {
       const sheet = await openSheet(page);
@@ -358,8 +358,8 @@ async function main() {
       await sheet.locator('[data-request-refund]').waitFor();
       await closeSheet(page);
       assert((await chipText(page)) === 'CREDIT $14', `chip was "${await chipText(page)}"`);
-      const foot = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first().locator('.row-foot');
-      assert(await foot.locator('[data-use-credit]').evaluate((b) => !b.classList.contains('secondary')), 'Use credit should be green again');
+      const foot = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first().locator('.sched-body');
+      assert(await foot.locator('[data-use-credit]').evaluate((b) => !b.classList.contains('outline')), 'Use credit should be filled again');
     });
     await check('a request for the full $14 blocks spending it: no Use credit, Pay $14 stays', async () => {
       const sheet = await openSheet(page);
@@ -482,7 +482,7 @@ async function main() {
       const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
       await row.locator('[data-use-credit]').click();
       await chip(page).waitFor({ state: 'detached' });
-      await page.getByText('✓ Paid with credit').first().waitFor();
+      await page.getByText('Paid with credit').first().waitFor();
       assert((await page.locator('[data-use-credit]').count()) === 0, 'Use credit still shows');
       assert((await page.locator('[data-pay-note]').count()) === 0 || !(await row.locator('[data-pay-note]').count()), 'no note once paid');
       await page.screenshot({ path: path.join(SHOTS, 'credit-player-paid.png'), fullPage: true });
@@ -494,11 +494,11 @@ async function main() {
       await undo.click();
       await chip(page).waitFor();
       assert((await chipText(page)) === 'CREDIT $14', 'credit is back');
-      assert((await page.getByText('✓ Paid with credit').count()) === 0, 'still paid with credit');
+      assert((await page.getByText('Paid with credit').count()) === 0, 'still paid with credit');
       const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
       await row.locator('[data-use-credit]').click();
       await chip(page).waitFor({ state: 'detached' });
-      await page.getByText('✓ Paid with credit').first().waitFor();
+      await page.getByText('Paid with credit').first().waitFor();
       const m = await call(api.request, 'GET', '/api/admin/dashboard');
       const ledger = m.creditLedger.find((l) => l.playerId === id.Mitchel);
       assert(ledger && ledger.balanceCents === 0 && ledger.entries.some((e) => e.kind === 'used' && !e.endedAt && e.cents === 1400), 'the ledger shows the $14 used');
@@ -517,22 +517,23 @@ async function main() {
       for (const width of WIDTHS) {
         const tag = `${width}px ${scheme}`;
         const { ctx, page, errors } = await player('Julian', scheme, width);
-        await check(`${tag}: credit covers part: Pay stays the green button, Use credit is quiet, the hint says how much; the chip reads CREDIT $5`, async () => {
+        await check(`${tag}: credit covers part: Use credit is the filled button, Pay is the outline one, the hint says how much; the chip reads CREDIT $5`, async () => {
           assert((await chipText(page)) === 'CREDIT $5', `chip was "${await chipText(page)}"`);
           const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
-          const foot = row.locator('.row-foot');
+          const foot = row.locator('.sched-body');
           await foot.locator('[data-use-credit]').waitFor();
           assert((await greenButtons(foot)) === 1, `green buttons: ${await greenButtons(foot)}`);
-          assert(await foot.locator('[data-use-credit]').evaluate((b) => b.classList.contains('secondary')), 'Use credit should be quiet');
+          assert(await foot.locator('[data-use-credit]').evaluate((b) => !b.classList.contains('outline')), 'Use credit is the filled button');
+          assert(await foot.getByRole('link', { name: /^Pay \$14/ }).evaluate((b) => b.classList.contains('outline')), 'Pay is the outline button next to it');
           assert(/Uses your \$5 credit\. \$9 left to pay/.test(await foot.innerText()), await foot.innerText());
-          assert(/Pay \$14/.test(await foot.innerText()), await foot.innerText());
+          assert((await foot.getByRole('link', { name: /^Pay \$14/ }).count()) === 1, 'Pay $14 shows');
           assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should wait until Pay is tapped');
           await tidy(foot, 'pay row');
           await noSideways(page);
         });
         await check(`${tag}: after Pay is tapped, I paid joins the row and nothing is left hanging alone`, async () => {
           const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
-          const foot = row.locator('.row-foot');
+          const foot = row.locator('.sched-body');
           await foot.getByRole('link', { name: /^Pay \$14/ }).click();
           await page.waitForTimeout(1500);
           await foot.getByRole('button', { name: 'I paid' }).waitFor();
@@ -552,11 +553,12 @@ async function main() {
       const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
       await row.locator('[data-use-credit]').click();
       await chip(page).waitFor({ state: 'detached' });
-      const foot = page.locator('article.sched .row-foot', { hasText: 'Pay $9' }).first();
+      const foot = page.locator('article.sched .sched-body', { hasText: 'Pay $9' }).first();
       await foot.waitFor();
       assert((await foot.locator('[data-use-credit]').count()) === 0, 'Use credit still shows');
       assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 1, 'Pay and I paid after the credit is used');
-      assert(/\$9 left to pay\. \$5 credit used\./.test(await page.locator('article.sched', { hasText: 'Pay $9' }).first().innerText()), 'after-credit note');
+      const after = await page.locator('article.sched', { hasText: 'Pay $9' }).first().innerText();
+      assert(/\$9 left to pay/.test(after) && /\$5 credit used/.test(after), 'after-credit chip and line');
     });
     await ctx.close();
   }
@@ -575,15 +577,15 @@ async function main() {
         for (const width of WIDTHS) {
           const tag = `${width}px ${scheme}`;
           const { ctx, page, errors } = await player(who, scheme, width);
-          await check(`${tag}: game-day card, credit ${covers ? 'covers it all: Use credit is the one green button' : 'covers part: Pay stays green, Use credit is quiet'}; the credit-back note is there`, async () => {
+          await check(`${tag}: game-day card, credit ${covers ? 'covers it all: Use credit is the one green button' : 'covers part: Use credit is still the filled one, Pay is outline'}; no credit-back note for joined people`, async () => {
             const card = page.locator('section.pay-card');
             await card.waitFor();
             const use = card.locator('[data-use-credit]');
             await use.waitFor();
             assert((await greenButtons(card)) === 1, `green buttons: ${await greenButtons(card)}`);
-            assert((await use.evaluate((b) => b.classList.contains('secondary'))) === !covers, 'wrong button is green');
+            assert(!(await use.evaluate((b) => b.classList.contains('secondary'))), 'Use credit is the one filled button, covering all or part');
             assert((await card.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid should wait until Pay is tapped');
-            assert((await card.locator('[data-pay-note]').innerText()).trim() === PAY_NOTE, 'the credit-back note on the card');
+            assert((await card.locator(NO_NOTE).count()) === 0, 'no credit-back note on the game-day card');
             await chipPlaced(page, tag);
             await tidy(card, 'pay card');
             await noSideways(page);
@@ -604,7 +606,7 @@ async function main() {
     await check('Use credit on the game-day card pays all three owed games ($42) with credit; the chip goes; the ledger lists each game', async () => {
       await page.locator('section.pay-card [data-use-credit]').click();
       await page.locator('section.pay-card').waitFor({ state: 'detached' });
-      await page.getByText('✓ Paid with credit').first().waitFor();
+      await page.getByText('Paid with credit').first().waitFor();
       assert((await chip(page).count()) === 0, 'no credit left, so no chip');
       const d = await dash();
       const ledger = d.creditLedger.find((l) => l.playerId === id.Ryan);

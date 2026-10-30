@@ -120,7 +120,7 @@ async function main() {
     }
     await setIn(n);
     const { ctx, page } = await player('light', 390);
-    await check(`${n} in (max ${max}): "${title}" and ${sub ? `"${sub}"` : 'no second line'}; date, time and Election Day pill on one line`, async () => {
+    await check(`${n} in (max ${max}): "${title}" and ${sub ? `"${sub}"` : 'no second line'}; date and time on one line, no holiday pill`, async () => {
       const card = page.locator('section.suggest').first();
       await card.waitFor();
       assert((await card.locator('h2').innerText()).trim() === title, `title: ${await card.locator('h2').innerText()}`);
@@ -128,9 +128,10 @@ async function main() {
       if (sub) assert(squash(await subEl.innerText()) === sub, `second line: ${await subEl.innerText()}`);
       else assert((await subEl.count()) === 0, 'there should be no second line');
       const when = card.locator('.suggest-when');
-      assert(squash(await when.innerText()) === 'Tue, Nov 3 · 8:00 to 10:00 PM Election Day', `line 1: ${await when.innerText()}`);
-      const ys = await when.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().top)));
-      assert(ys.length === 2 && Math.abs(ys[0] - ys[1]) <= 6, `date and pill are not on one line: ${ys}`);
+      assert(squash(await when.innerText()) === 'Tue, Nov 3 · 8:00 to 10:00 PM', `line 1: ${await when.innerText()}`);
+      assert((await when.locator('.holiday').count()) === 0 && !/Election Day/.test(await card.innerText()), 'the popup has no holiday pill any more');
+      const ys = await when.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().height)));
+      assert(ys.length === 1 && ys[0] <= 24, `date and time are not on one line: ${ys}`);
       assert((await card.getByRole('button', { name: 'Yes' }).count()) === 1 && (await card.getByRole('button', { name: 'No' }).count()) === 1, 'Yes and No');
       // The old "spots left" / "until a 6th joins" lines are gone everywhere; the session cards keep their own count.
       assert(!/spots? left|until a 6th|everyone plays|make it \d/.test(await page.locator('.schedule').innerText()), 'popup wording on a session card');
@@ -148,22 +149,14 @@ async function main() {
     for (const width of WIDTHS) {
       const tag = `${width}px ${scheme}`;
       const { ctx, page, errors } = await player(scheme, width);
-      await check(`${tag}: popup and player card show the same small pill, only as wide as its text, no check mark, nothing cut off`, async () => {
-        const a = await pillInfo(page.locator('section.suggest .holiday'));
-        const b = await pillInfo(page.locator('.schedule article .sched-status .holiday').first());
-        for (const p of [a, b]) {
-          assert(p.w <= p.textW + 24, `pill is wider than its text: ${JSON.stringify(p)}`);
-          assert(p.text === 'Election Day' && !/✓/.test(p.text), `pill text: ${p.text}`);
-          assert(p.bg !== 'rgba(0, 0, 0, 0)', 'pill has no background');
-        }
-        assert(a.size === b.size && a.weight === b.weight && a.color === b.color && a.bg === b.bg, `pills differ: ${JSON.stringify([a, b])}`);
+      await check(`${tag}: no holiday pill on the popup or the player cards; nothing cut off, no sideways scroll`, async () => {
+        assert((await page.locator('section.suggest .holiday, .schedule .holiday, .schedule .holiday-text').count()) === 0, 'a holiday pill is still on a player screen');
+        assert(!/Election Day/.test(await page.locator('main').innerText()), 'the holiday name is still on a player screen');
         const cut = await page.evaluate(() => [...document.querySelectorAll('.holiday, section.suggest *, .sched-status *')].filter((x) => x.children.length === 0 && x.scrollWidth > x.clientWidth + 1 && getComputedStyle(x).overflow !== 'visible').length);
         assert(cut === 0, 'cut-off text');
         assert((await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'sideways scroll');
-        const card = page.locator('section.suggest');
-        const box = await card.boundingBox();
-        const pb = await page.locator('section.suggest .holiday').boundingBox();
-        assert(pb.x >= box.x && pb.x + pb.width <= box.x + box.width, 'pill sticks out of the popup');
+        const popBox = await page.locator('section.suggest').boundingBox();
+        assert(popBox.x >= 0 && popBox.x + popBox.width <= width + 1, 'the popup fits the screen');
       });
       await check(`${tag}: no browser errors`, async () => assert(errors.length === 0, errors.join(' | ')));
       if (width === 390) await page.screenshot({ path: path.join(SHOTS, `popup-${scheme}.png`) });

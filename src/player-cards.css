@@ -78,7 +78,8 @@
   font-size: 1.05rem;
 }
 .schedule .btn.outline,
-.pay-card .btn.outline {
+.pay-card .btn.outline,
+.pay-card .btn.secondary {
   background: transparent;
   color: var(--pc-green);
   border-color: var(--pc-green-line);

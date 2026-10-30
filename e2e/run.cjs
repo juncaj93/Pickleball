@@ -114,7 +114,7 @@ async function quietNextToPay(card) {
   const pay = await card.getByRole('link', { name: /^Pay \$\d+ with Venmo$/ }).evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, r: el.getBoundingClientRect().toJSON() }));
   const paid = await card.getByRole('button', { name: 'I paid' }).evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, r: el.getBoundingClientRect().toJSON() }));
   assert(pay.bg !== paid.bg, 'I paid should be quiet, not green');
-  assert(Math.abs(pay.r.y + pay.r.height / 2 - (paid.r.y + paid.r.height / 2)) < 4 && paid.r.x > pay.r.x, 'I paid sits right next to Pay');
+  assert(paid.r.y >= pay.r.y + pay.r.height - 4 && Math.abs(paid.r.x - pay.r.x) < 6, 'I paid sits right under Pay, a quiet link');
 }
 
 /** Home lists 4 sessions at first; show them all. */
@@ -174,7 +174,7 @@ async function autoSet(field, value, { pause = false } = {}) {
 
 
 /** What counts as a "thing" on a card or a Settings row for the overlap checks. */
-const CARD_ITEMS = 'button, a[href], input, .court-status, .tile, .sched-time, .late-tag, .holiday, .holiday-text, .court-sub, .players-line, .in-count, .names-line, .dots';
+const CARD_ITEMS = 'button, a[href], input, .court-status, .tile, .sched-time, .late-tag, .holiday, .holiday-text, .court-sub, .players-line, .in-count, .names-line, .dots, .pchip, .tonight-tag, .sched-status, .credit-note, .sched-sub';
 const SETTINGS_ITEMS = 'summary > span, .set-label, .set-input, .set-row input, .field-label, .auto-field input, .check, .set-body > button, .set-line button, .save-retry, .field-error';
 
 /**
@@ -233,18 +233,24 @@ function layoutReport({ roots, items }) {
  * one count, so a card inside a card is judged on its own.
  */
 function greenReport() {
-  const probe = document.createElement('button');
-  probe.className = 'btn';
-  document.body.appendChild(probe);
-  const green = getComputedStyle(probe).backgroundColor;
-  probe.remove();
+  // A plain button's green, and the player cards' own green (and mint in dark mode).
+  const greens = new Set();
+  for (const host of [document.body, document.querySelector('.schedule'), document.querySelector('.pay-card')]) {
+    if (!host) continue;
+    const probe = document.createElement('button');
+    probe.className = 'btn';
+    host.appendChild(probe);
+    greens.add(getComputedStyle(probe).backgroundColor);
+    probe.remove();
+  }
+  const green = [...greens].join(' | ');
   const box = '.card, article, .sched, .draft, dialog[open] .sheet-body';
   const problems = [];
   let cards = 0;
   for (const card of document.querySelectorAll(`main :is(${box}), dialog[open] .sheet-body`)) {
     if (!card.getClientRects().length || !card.checkVisibility()) continue;
     cards++;
-    const filled = [...card.querySelectorAll('button, a')].filter((b) => b.closest(box) === card && b.checkVisibility() && getComputedStyle(b).backgroundColor === green);
+    const filled = [...card.querySelectorAll('button, a')].filter((b) => b.closest(box) === card && b.checkVisibility() && greens.has(getComputedStyle(b).backgroundColor));
     if (filled.length > 1) problems.push(`"${(card.getAttribute('aria-label') || card.id || card.className).slice(0, 40)}" has ${filled.length} green buttons: ${filled.map((b) => b.textContent.trim()).join(', ')}`);
   }
   return { problems, cards, green };
@@ -267,7 +273,8 @@ function designReport() {
     return getComputedStyle(document.body).backgroundColor;
   };
   const problems = [];
-  const dows = [...document.querySelectorAll('.tile .dow, header .today .dow')].filter((d) => d.checkVisibility());
+  // Extra (hand-added) games use a light weekday on an ink tile (cream tile with dark text in dark mode) by design.
+  const dows = [...document.querySelectorAll('.tile:not(.extra) .dow, header .today .dow')].filter((d) => d.checkVisibility());
   for (const d of dows) {
     const color = getComputedStyle(d).color;
     const [r, g, b] = rgb(color);
@@ -285,19 +292,27 @@ function designReport() {
       for (let e = el; e && e !== document.body; e = e.parentElement) op *= parseFloat(getComputedStyle(e).opacity);
       if (op < 0.999) problems.push(`faded text "${el.textContent.trim().slice(0, 20)}" (opacity ${op.toFixed(2)})`);
       const c = contrast(getComputedStyle(el).color, bgOf(el));
-      if (c < 4.5) problems.push(`low contrast ${c.toFixed(2)}: "${el.textContent.trim().slice(0, 24)}" (week fade ${card.dataset.fade || 0})`);
+      if (c < 4.5) problems.push(`low contrast ${c.toFixed(2)}: "${el.textContent.trim().slice(0, 24)}" (tier ${card.dataset.tier || 'this'})`);
     }
   }
-  // Tile outline against the tile, per fade level: each later level a step lighter.
-  const byLevel = {};
+  // Tiles by tier (this week, next week, later): each tier steps down, a thinner outline or a lighter one.
+  const order = ['this', 'next', 'later'];
+  const byTier = {};
   for (const card of cards) {
     const t = card.querySelector('.tile');
     const cs = getComputedStyle(t);
-    (byLevel[card.dataset.fade || 0] ??= []).push(contrast(cs.borderTopColor, cs.backgroundColor));
+    (byTier[card.dataset.tier || 'this'] ??= []).push({ w: parseFloat(cs.borderTopWidth), c: contrast(cs.borderTopColor, cs.backgroundColor), size: t.getBoundingClientRect().width });
   }
-  const levels = Object.keys(byLevel).map(Number).sort();
-  const avg = levels.map((l) => byLevel[l].reduce((s, v) => s + v, 0) / byLevel[l].length);
-  for (let i = 1; i < avg.length; i++) if (!(avg[i] < avg[i - 1] - 0.3)) problems.push(`week fade ${levels[i]} is not lighter than ${levels[i - 1]}: ${avg.map((v) => v.toFixed(2))}`);
+  const avgOf = (rows, k) => rows.reduce((s, v) => s + v[k], 0) / rows.length;
+  const present = order.filter((t) => byTier[t]);
+  const levels = present.map((t) => order.indexOf(t));
+  for (let i = 1; i < present.length; i++) {
+    const a = byTier[present[i - 1]];
+    const b = byTier[present[i]];
+    const smaller = avgOf(b, 'size') < avgOf(a, 'size') - 4;
+    if (!smaller) problems.push(`tier ${present[i]} tile is not smaller than ${present[i - 1]}`);
+    if (!(avgOf(b, 'w') < avgOf(a, 'w') - 0.3 || avgOf(b, 'c') < avgOf(a, 'c') - 0.3)) problems.push(`tier ${present[i]} tile outline is not lighter or thinner than ${present[i - 1]}`);
+  }
   return { problems, levels, dows: dows.length };
 }
 
@@ -877,8 +892,10 @@ async function main() {
     await check('player Home is one button per session, no extra screens', async () => {
       const card = firstCard(players.Alex);
       const buttons = (await card.getByRole('button').allInnerTexts()).map((t) => t.trim());
-      const big = buttons.filter((t) => ["I'm in", "I'm out", 'Join waitlist'].includes(t));
-      assert(big.length === 1, `expected one big button, got ${buttons}`);
+      // One filled green button per card; "Drop out" is a quiet link, not a button look.
+      const filled = await card.locator('.btn:not(.outline)').allInnerTexts();
+      assert(filled.length === 1, `expected one filled button, got ${filled} (all: ${buttons})`);
+      assert(buttons.includes('Drop out') && !buttons.includes("I'm out"), `"I'm out" should read "Drop out": ${buttons}`);
     });
 
     await check('players never see phone numbers or the PIN', async () => {
@@ -917,23 +934,18 @@ async function main() {
       await closeOptions(card);
     });
 
-    await check('6 in: everyone owes the flat $14 (no $9, no $5 credit) and sees "You get credit back if 5 or more play." under Pay; no credit chip without credit', async () => {
+    await check('6 in: everyone owes the flat $14 (no $9, no $5 credit); joined people see no credit-back note; no credit chip without credit', async () => {
       for (const name of ['Casey', 'Frankie']) {
         const p = players[name];
         await p.reload();
         const card = firstCard(p);
         await card.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-        assert((await card.locator('a.pay-small').innerText()).trim() === 'Pay $14', `${name} should see Pay $14`);
+        assert((await card.locator('a.pay-btn').innerText()).trim() === 'Pay', `${name} should see a Pay button`);
+        assert((await card.locator('[data-owe]').innerText()).trim() === '$14 due', `${name} should see the "$14 due" chip`);
         assert((await card.getByRole('link', { name: /^Pay \$9/ }).count()) === 0, `${name} should not see a $9 price`);
-        const note = card.locator('[data-pay-note]');
-        assert((await note.innerText()).trim() === 'You get credit back if 5 or more play.', `${name}: note was "${await note.innerText()}"`);
-        // The note sits under the Pay row, inside the card, small and gray.
-        const nb = await note.boundingBox();
-        const pb = await card.getByRole('link', { name: 'Pay $14 with Venmo' }).boundingBox();
-        const cb = await card.boundingBox();
-        assert(nb.y >= pb.y + pb.height - 2 && nb.x >= cb.x && nb.x + nb.width <= cb.x + cb.width + 1, `${name}: the note should sit under Pay inside the card`);
-        assert((await note.evaluate((el) => parseFloat(getComputedStyle(el).fontSize))) <= 13, `${name}: the note should be small`);
-        assert((await p.getByText(/credit toward your next|6 are playing|6-person discount|includes your \$5 credit/).count()) === 0, `${name} sees old credit wording`);
+        // The credit-back note is only for someone who has not joined; joined people see nothing.
+        assert((await card.locator('[data-pay-note], [data-credit-note]').count()) === 0, `${name}: joined people see no credit-back note`);
+        assert((await p.getByText(/You get credit back if 5 or more play|credit toward your next|6 are playing|6-person discount|includes your \$5 credit/).count()) === 0, `${name} sees old credit wording`);
         assert((await p.locator('.schedule').getByText(/You owe|Pay with Venmo/).count()) === 0, `${name} sees a money block on a session row`);
         assert((await p.locator('[data-credit-chip], [data-credit-line]').count()) === 0, `${name} has no credit, so no chip or credit line`);
       }
@@ -945,8 +957,8 @@ async function main() {
 
     await check('someone drops out of 6: "5 in", nothing for the organizer to sort out, everyone still owes $14', async () => {
       const card = firstCard(players.Casey);
-      await card.getByRole('button', { name: "I'm out" }).click();
-      await players.Casey.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await card.getByRole('button', { name: 'Drop out' }).click();
+      await players.Casey.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
       await card.getByRole('button', { name: "I'm in" }).waitFor();
       await card.locator('.in-count', { hasText: /^5 in$/ }).waitFor();
       assert((await card.locator('[data-credit-back]').count()) === 0, 'an unpaid drop gives no credit line');
@@ -1217,25 +1229,18 @@ async function main() {
       await closeOptions(card);
     });
 
-    await check('holiday pill shows on sessions that fall on one (Election Day, Nov 3)', async () => {
+    await check('holiday is gone from player cards; the organizer keeps a plain Election Day note with Hours OK (Nov 3)', async () => {
       if (Date.now() + BASE_OFFSET > Date.parse('2026-11-04T03:00:00Z')) return; // only while Nov 3, 2026 is still upcoming
       await players.Alex.reload();
       const card = players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' });
-      const hol = card.locator('.sched-status .holiday', { hasText: 'Election Day' });
-      await hol.waitFor();
-      const color = await hol.evaluate((el) => getComputedStyle(el).color);
-      const ok = await players.Alex.evaluate(() => getComputedStyle(document.querySelector('.tone-ok') || document.body).color);
-      assert(color !== ok, 'holiday should not use a status color');
-      // One small pill, only as wide as its text, no check mark, on the court line.
-      const look = await hol.evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, border: getComputedStyle(el).borderTopWidth, w: el.getBoundingClientRect().width, textW: (() => { const r = document.createRange(); r.selectNodeContents(el); return r.getBoundingClientRect().width; })(), size: getComputedStyle(el).fontSize }));
-      assert(look.bg !== 'rgba(0, 0, 0, 0)' && look.border !== '0px', `holiday should be a pill: ${JSON.stringify(look)}`);
-      assert(look.w <= look.textW + 24, `pill should hug its text: ${JSON.stringify(look)}`);
-      const hb = await hol.boundingBox();
-      const cb = await card.locator('.sched-status .court-status').boundingBox();
-      assert(Math.abs(hb.y + hb.height / 2 - (cb.y + cb.height / 2)) < 4, 'holiday sits on the court line');
+      await card.waitFor();
+      assert((await card.locator('.holiday, .holiday-text').count()) === 0, 'players no longer see a holiday pill on cards');
+      assert(!/Election Day/.test(await players.Alex.locator('.schedule').innerText()), 'players see no holiday name on cards');
       await admin.reload();
       const hcard = sessionCards(admin).filter({ hasText: 'Election Day' }).first();
       await hcard.locator('.holiday', { hasText: 'Election Day · check hours' }).waitFor();
+      const plain = await hcard.locator('.holiday').first().evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, border: getComputedStyle(el).borderTopWidth }));
+      assert(plain.bg === 'rgba(0, 0, 0, 0)' && plain.border === '0px', `the organizer's holiday label is plain text now: ${JSON.stringify(plain)}`);
       await hcard.getByRole('button', { name: 'Venue is open normal hours' }).click();
       await hcard.locator('.holiday', { hasText: /^Election Day$/ }).waitFor();
       await admin.reload();
@@ -1301,10 +1306,12 @@ async function main() {
       const row = firstCard(p);
       const pay = row.getByRole('link', { name: 'Pay $14 with Venmo' });
       await pay.waitFor();
-      assert((await pay.innerText()).trim() === 'Pay $14', 'button should say Pay $14');
-      const out = await row.getByRole('button', { name: "I'm out" }).boundingBox();
-      const pb = await pay.boundingBox();
-      assert(pb.height < out.height && pb.width < out.width + 40, 'Pay should be smaller than I\'m out');
+      assert((await pay.innerText()).trim() === 'Pay', 'button should say Pay');
+      assert((await row.locator('[data-owe]').innerText()).trim() === '$14 due', 'the amber chip says $14 due');
+      const dropBtn = row.getByRole('button', { name: 'Drop out' });
+      assert(!(await dropBtn.evaluate((el) => el.classList.contains('btn'))), 'Drop out is a quiet underlined link, not a button');
+      assert((await dropBtn.evaluate((el) => getComputedStyle(el).textDecorationLine)) === 'underline', 'Drop out is underlined');
+      assert((await pay.evaluate((el) => el.classList.contains('btn'))), 'Pay is the one filled button');
       await venmoLinkOk(pay, 14, 'Devon');
       // On a computer, Pay opens the Venmo website in a new tab; this page stays.
       {
@@ -1340,13 +1347,13 @@ async function main() {
       // "I paid": Paid with a check and a tiny "Didn't pay?" right under it.
       await firstCard(p).getByRole('button', { name: 'I paid' }).click();
       await p.locator('.toast', { hasText: 'Marked paid' }).waitFor();
-      const paidTag = firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' });
+      const paidTag = firstCard(p).locator('.paid-tag', { hasText: /^Paid/  });
       await paidTag.waitFor();
       const undo = firstCard(p).getByRole('button', { name: "Didn't pay?" });
       const tb = await paidTag.boundingBox();
       const ub = await undo.boundingBox();
       assert(ub.y >= tb.y + tb.height - 1 && Math.abs(ub.x - tb.x) < 4, '"Didn\'t pay?" sits right under Paid');
-      assert((await undo.evaluate((b) => parseFloat(getComputedStyle(b).fontSize))) <= 12, 'very small');
+      assert((await undo.evaluate((b) => getComputedStyle(b).textDecorationLine)) === 'underline' && !(await undo.evaluate((b) => b.classList.contains('btn'))), 'a quiet underlined link');
       await admin.reload();
       sheet = await moneyFor(admin, sessionCards(admin).first());
       devonRow = sheet.locator('li', { hasText: 'Devon' }).first();
@@ -1363,7 +1370,7 @@ async function main() {
       await admin.locator('.toast', { hasText: 'Devon marked paid' }).waitFor();
       assert((await devonRow.locator('.self-tag').count()) === 0, 'no tag when I mark it');
       await p.reload();
-      await firstCard(p).locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
+      await firstCard(p).locator('.paid-tag', { hasText: /^Paid/  }).waitFor();
       assert((await firstCard(p).getByRole('button', { name: "Didn't pay?" }).count()) === 0, 'no undo for the organizer\'s mark');
       assert((await firstCard(p).getByRole('link', { name: /Pay \$/ }).count()) === 0, 'Pay should be gone once paid');
       // Logged.
@@ -1407,7 +1414,7 @@ async function main() {
         await venmoLinkOk(pay, 14, 'Blair');
         assert((await pay.boundingBox()).height >= 48, 'big Pay with Venmo button');
         // Before paying the flat price, the card says the final price can be lower.
-        assert((await card.locator('[data-pay-note]').innerText()).trim() === 'You get credit back if 5 or more play.', 'credit-back note on the pay card');
+        assert((await card.locator('[data-pay-note], [data-credit-note]').count()) === 0, 'no credit-back note on the pay card (it now sits under I\'m in for people who have not joined)');
         // A quiet "I paid" is there from the start; Pay stays after coming back from Venmo.
         await card.getByRole('button', { name: 'I paid' }).waitFor();
         await p.context().route('https://venmo.com/**', (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<p>Venmo</p>' }));
@@ -1449,8 +1456,28 @@ async function main() {
     await check('schedule rows: date tile, time without EDT/EST, and a small calendar link', async () => {
       const row = firstCard(players.Blair);
       const tile = (await row.locator('.tile').innerText()).replace(/\s+/g, ' ').trim();
-      assert(/^(TUE|THU) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
-      await row.locator('.sched-time', { hasText: /^8:00 to 10:00 PM$|^7:30 to 10:00 PM$/ }).waitFor();
+      assert(/^(TUE|THU|TONIGHT) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
+      // The short time sits under the tile ("8\u201310 PM", en dash); the long "8:00 to 10:00 PM" line is gone.
+      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u201310 PM$/ });
+      await timeEl.waitFor();
+      const tb = await row.locator('.tile').boundingBox();
+      const mb = await timeEl.boundingBox();
+      assert(mb.y >= tb.y + tb.height && Math.abs(mb.x + mb.width / 2 - (tb.x + tb.width / 2)) < 6, 'the time sits centered under the date tile');
+      assert(!/8:00 to 10:00 PM|7:30 to 10:00 PM/.test(await row.locator('.sched-body').innerText()), 'the long time line is gone from the card body');
+      // TONIGHT: a blue strip inside the tile where the weekday would be; never clipped, never covered by the check badge.
+      const strip = row.locator('.tile .tonight-tag');
+      if (await strip.count()) {
+        const sb = await strip.boundingBox();
+        assert(sb.x >= tb.x && sb.x + sb.width <= tb.x + tb.width + 0.5 && sb.y >= tb.y, 'the TONIGHT strip fits inside the tile');
+        assert((await strip.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)), 'the TONIGHT strip text is not clipped');
+        const chk = row.locator('.tile-check');
+        if (await chk.count()) {
+          const cb = await chk.boundingBox();
+          const overlap = Math.min(sb.x + sb.width, cb.x + cb.width) - Math.max(sb.x, cb.x) > 1 && Math.min(sb.y + sb.height, cb.y + cb.height) - Math.max(sb.y, cb.y) > 1;
+          assert(!overlap, 'the check badge covers the TONIGHT strip');
+        }
+        assert((await strip.evaluate((el) => getComputedStyle(el).textTransform || 'none')) !== undefined && (await strip.innerText()).trim() === 'TONIGHT', 'the strip says TONIGHT');
+      }
       assert(!/\b(EDT|EST)\b/.test(await players.Blair.locator('main').innerText()), 'EDT/EST still on screen');
       const cal = row.getByRole('link', { name: /to calendar$/ });
       assert(!(await cal.getAttribute('class')).includes('btn'), 'calendar should be a small link, not a big button');
@@ -1640,29 +1667,29 @@ async function main() {
       await btn.waitFor();
       const look = await btn.evaluate((el) => ({ disabled: el.disabled, opacity: getComputedStyle(el).opacity }));
       assert(!look.disabled && look.opacity === '1', `I'm in looks turned off: ${JSON.stringify(look)}`);
-      // On the right of the time, beside the time and court lines (no gap under the time).
-      const head = await row.locator('.sched-head').boundingBox();
+      // In the text column, right of the date tile and under the names; a full-size tap target.
+      const tcol = await row.locator('.sched-tilecol').boundingBox();
       const b = await btn.boundingBox();
-      const time = await row.locator('.sched-time').boundingBox();
       const court = await row.locator('.sched-status').boundingBox();
-      assert(b.y <= head.y + head.height && b.y + b.height >= head.y && b.x > time.x + time.width, 'button should sit beside the time, on the right');
-      assert(b.y + b.height <= court.y + court.height + 6, 'button should not reach below the court line');
-      assert(court.y - (head.y + head.height) <= 6, `gap under the time is ${Math.round(court.y - (head.y + head.height))}px`);
+      const laterRow = (await row.getAttribute('data-tier')) === 'later';
+      assert(b.x >= tcol.x + tcol.width && (laterRow || b.y >= court.y + court.height), 'button should sit in the text column (under the status line; on the right in a flat LATER row)');
       assert(b.height >= 44, `button is ${b.height}px tall`);
 
       // The confirmation is a small bubble next to the button, and nothing on the page moves.
       await btn.scrollIntoViewIfNeeded();
       const before = await p.evaluate(() => document.documentElement.scrollHeight);
       const rowTop = (await row.boundingBox()).y;
+      {
+        const nb = await btn.boundingBox();
+        b.x = nb.x;
+        b.y = nb.y;
+        b.width = nb.width;
+        b.height = nb.height;
+      }
       await btn.click();
       const pop = p.locator('.pop');
       await pop.waitFor();
-      // Measure where the tapped button is now (the click may have scrolled it into view).
-      const nb = await row.locator('.sched-btn').boundingBox();
-      b.x = nb.x;
-      b.y = nb.y;
-      b.width = nb.width;
-      b.height = nb.height;
+      // The tapped button turns into a Drop out link, so the bubble is checked against where the button was just before the tap.
       assert((await pop.innerText()).trim() === "You're in", `bubble said ${await pop.innerText()}`);
       const pb = await pop.boundingBox();
       const vw = p.viewportSize().width;
@@ -1678,10 +1705,10 @@ async function main() {
       await p.screenshot({ path: path.join(SHOTS, 'player-joined.png') });
 
       // Errors: same bubble, stronger color, stays about 4 seconds.
-      const out = row.getByRole('button', { name: "I'm out", exact: true });
+      const out = row.getByRole('button', { name: 'Drop out', exact: true });
       await p.route('**/api/sessions/*/withdraw', (r) => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'test', message: 'Try again' }) }));
       await out.click();
-      await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
       const err = p.locator('.pop.pop-error');
       await err.waitFor();
       const colors = await p.evaluate(() => {
@@ -1700,7 +1727,7 @@ async function main() {
       await err.waitFor({ state: 'detached', timeout: 2500 });
       await p.unroute('**/api/sessions/*/withdraw');
       await out.click();
-      await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
       await p.locator('.pop', { hasText: "You're out" }).waitFor();
     });
 
@@ -1731,7 +1758,12 @@ async function main() {
       assert(adminNames && adminNames === playerNames, `organizer ${adminNames} vs player ${playerNames}`);
       assert((await card.locator('.players-line .dots .ball').count()) === (await row.locator('.in-line .dots .ball').count()), 'same number of balls on both screens');
       assert((await card.locator('.players-line .dots .dot').count()) === (await row.locator('.in-line .dots .dot').count()), 'same number of empty circles on both screens');
-      const look = async (page, sel) => page.locator(sel).first().evaluate((el) => [getComputedStyle(el).width, getComputedStyle(el).height].join(' '));
+      // Same ball on both screens: round (width = height), same yellow-green skin. (Player cards draw them a bit bigger now.)
+      const look = async (page, sel) =>
+        page.locator(sel).first().evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return `${Math.abs(r.width - r.height) < 0.5} ${getComputedStyle(el.querySelector('.ball-skin')).fill}`;
+        });
       assert((await look(admin, 'section[aria-labelledby="sessions-title"] .dots .ball')) === (await look(p, '.schedule .dots .ball')), 'balls should look the same');
       assert((await row.locator('.dots .ball.me').count()) === 1, 'your own ball is marked');
       for (const scheme of ['light', 'dark']) {
@@ -1865,8 +1897,8 @@ async function main() {
           assert(admin.url() === url && admin.context().pages().length === 1, 'Pay opened something in the demo');
         }
         await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
-        await second.getByRole('button', { name: "I'm out" }).click();
-        await admin.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+        await second.getByRole('button', { name: 'Drop out' }).click();
+        await admin.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
         await second.getByRole('button', { name: "I'm in" }).waitFor();
         // Reset throws the demo changes away.
         await second.getByRole('button', { name: "I'm in" }).click();
@@ -2032,7 +2064,7 @@ async function main() {
         const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
         await row.locator('.sched-status').getByText('Waiting on the court', { exact: true }).waitFor();
         await row.getByRole('button', { name: 'Join standby' }).click();
-        await row.locator('.waitlist-line', { hasText: /Standby: .* · you're #\d/ }).waitFor();
+        await row.locator('.sched-status', { hasText: /^Standby, \d+(st|nd|rd|th) in line$/ }).waitFor();
         assert((await row.getByLabel('Money for this session').count()) === 0, 'standby players owe nothing');
       }
       await players.Casey.screenshot({ path: path.join(SHOTS, 'player-standby.png'), fullPage: true });
@@ -2362,8 +2394,8 @@ async function main() {
         const f = players.Frankie;
         await f.reload();
         const row = f.locator('article', { has: f.locator(`#s-${first.id}`) });
-        await row.getByRole('button', { name: "I'm out" }).click();
-        await f.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+        await row.getByRole('button', { name: 'Drop out' }).click();
+        await f.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
         await f.locator('.pop', { hasText: "You're out" }).waitFor();
 
         await admin.reload();
@@ -2497,8 +2529,8 @@ async function main() {
       assert((await cal.locator('svg').count()) === 1 && (await cal.innerText()).trim() === '', 'a small calendar icon');
       assert(!(await cal.getAttribute('class')).includes('btn'), 'small and quiet, not a big button');
       await icsOk(p, await cal.getAttribute('href'));
-      await row.getByRole('button', { name: "I'm out" }).click();
-      await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await row.getByRole('button', { name: 'Drop out' }).click();
+      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
       await row.getByRole('link', { name: /to calendar$/ }).waitFor({ state: 'detached' });
       // The organizer: inside the gear panel of a booked card, never floating under the gear.
       await tab(admin, 'Home').click();
@@ -3229,7 +3261,7 @@ async function main() {
         await pl.locator('.name-grid, .schedule').first().waitFor();
         if (await pl.locator('.name-grid').count()) await pl.getByRole('button', { name: 'Blair', exact: true }).click();
         await pl.locator('.schedule article').first().waitFor();
-        const pr = await pl.evaluate(layoutReport, { roots: 'main article, main section.card', items: 'button, a[href], .sched-time, .extra-tag, .holiday-text, .court-status, .in-count, .names-line, .dots, .tile' });
+        const pr = await pl.evaluate(layoutReport, { roots: 'main article, main section.card', items: 'button, a[href], .sched-time, .extra-tag, .holiday-text, .court-status, .in-count, .names-line, .dots, .tile, .pchip, .tonight-tag, .credit-note' });
         assert(pr.problems.length === 0, `player screen: ${pr.problems.slice(0, 3).join(' | ')}`);
         assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player screen scrolls sideways');
         await pl.close();
@@ -3376,8 +3408,13 @@ async function main() {
       await pl.locator('.schedule article').first().waitFor();
       const more2 = pl.getByRole('button', { name: /^More sessions/ });
       if (await more2.count()) await more2.click();
-      const prow = pl.locator('.schedule article').filter({ has: pl.locator('.sched-status .extra-text', { hasText: 'Extra game' }) });
+      const prow = pl.locator('.schedule article[data-extra="yes"]');
       await prow.waitFor();
+      // Extra games get their own tile (ink in light, cream in dark) instead of "Extra game" words on the card.
+      const xt = await prow.locator('.tile.extra').evaluate((el) => getComputedStyle(el).backgroundColor);
+      const plainTile = await pl.locator('.schedule article:not([data-extra]) .tile').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+      assert(xt !== plainTile, 'the extra game tile should look different from a normal tile');
+      assert((await prow.getByText('Extra game').count()) === 1 && (await prow.getByText('Extra game').first().evaluate((el) => el.classList.contains('sr-only'))), 'the words "Extra game" stay for screen readers only');
       await prow.getByText('Court 3').waitFor();
       assert((await prow.getByRole('button', { name: "I'm in" }).count()) === 1, 'players can sign up for it');
       // Logged in Activity.
@@ -3489,8 +3526,8 @@ async function main() {
       assert(id, 'need a later session Frankie can join');
       const row = p.locator(`#${id}`);
       const inAgain = async () => {
-        await row.getByRole('button', { name: "I'm out" }).click();
-        await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+        await row.getByRole('button', { name: 'Drop out' }).click();
+        await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
         await row.getByRole('button', { name: "I'm in" }).click();
         await row.locator('.tile-check').waitFor();
       };
@@ -3511,11 +3548,11 @@ async function main() {
       await quietNextToPay(row);
       // "I paid" without opening Venmo at all: Paid with the small "Didn't pay?".
       await row.getByRole('button', { name: 'I paid' }).click();
-      await row.locator('.paid-tag', { hasText: '✓ Paid' }).waitFor();
+      await row.locator('.paid-tag', { hasText: /^Paid/  }).waitFor();
       await row.getByRole('button', { name: "Didn't pay?" }).waitFor();
       // Already paid, then out: the $14 is credit now (the line says so, the chip appears); in again, that credit is the green Use credit, Pay is quiet.
-      await row.getByRole('button', { name: "I'm out" }).click();
-      await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await row.getByRole('button', { name: 'Drop out' }).click();
+      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
       await row.locator('[data-credit-back]', { hasText: 'Your $14 is now credit.' }).waitFor();
       await p.locator('header [data-credit-chip]', { hasText: /CREDIT/ }).waitFor();
       assert((await p.locator('header [data-credit-chip]').innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', 'chip after dropping a paid game');
@@ -3527,13 +3564,13 @@ async function main() {
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
       assert((await row.locator('.paid-tag').count()) === 0, 'not paid any more: the payment became credit');
       await use.click();
-      await row.locator('.paid-tag', { hasText: '✓ Paid with credit' }).waitFor();
+      await row.locator('.paid-tag', { hasText: 'Paid with credit' }).waitFor();
       await p.locator('header [data-credit-chip]').waitFor({ state: 'detached' });
       // Put it back: the credit undone (back in the pot), then out (which keeps it as credit anyway), then the organizer pays it back.
       await row.locator('[data-undo-credit]').click();
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-      await row.getByRole('button', { name: "I'm out" }).click();
-      await p.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+      await row.getByRole('button', { name: 'Drop out' }).click();
+      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
       await row.getByRole('button', { name: "I'm in" }).waitFor();
       await admin.context().route('https://venmo.com/**', (r) => r.abort());
       await admin.reload();
@@ -3557,7 +3594,7 @@ async function main() {
         const more = pl.getByRole('button', { name: /^More sessions/ });
         if (await more.count()) await more.click();
         // Sign up for a plain later session (no holiday), so there's a calm signed-in card to measure.
-        const joinable = pl.locator('.schedule article:not([data-holiday]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I'm in" }) });
+        const joinable = pl.locator('.schedule article:not([data-extra]):not([data-mine])').filter({ has: pl.getByRole('button', { name: "I'm in" }) });
         const joinId = await joinable.nth(Math.min(2, (await joinable.count()) - 1)).getAttribute('id');
         const joined = pl.locator(`#${joinId}`);
         // The names line is counted separately: it's new once someone is in.
@@ -3574,13 +3611,13 @@ async function main() {
           await pl.locator('.pop, .toast').first().waitFor({ state: 'detached', timeout: 8000 }).catch(() => {});
           const d = await pl.evaluate(designReport);
           assert(d.problems.length === 0, `player: ${d.problems.slice(0, 4).join(' | ')}`);
-          assert(d.levels.includes(0) && d.levels.length >= 2, `expected full-strength and lighter weeks, saw fade levels ${d.levels}`);
+          assert(d.levels.includes(0) && d.levels.length >= 2, `expected this week and a lighter tier, saw tiers ${d.levels}`);
           const cardLook = await pl.evaluate(() => {
             const bodyRows = (a) => {
               const kids = [...a.querySelector('.sched-body').children].filter((k) => k.checkVisibility() && !k.matches('.sched-act, h2'));
               return new Set(kids.map((k) => Math.round(k.getBoundingClientRect().top))).size;
             };
-            const plain = (a) => !a.querySelector('.game-note, .notice, .waitlist-line, p.small, .confirm-row') && !a.dataset.holiday && !a.classList.contains('off');
+            const plain = (a) => !a.querySelector('.game-note, .notice, .waitlist-line, p.small, .confirm-row') && !a.dataset.extra && !a.classList.contains('off');
             const all = [...document.querySelectorAll('.schedule article')];
             const mine = all.filter((a) => a.dataset.mine === 'in' && plain(a));
             const others = all.filter((a) => !a.dataset.mine && !a.querySelector('.waitlist-line') && plain(a));
@@ -3598,24 +3635,36 @@ async function main() {
           assert(cardLook.mineCount > 0 && cardLook.mine.length > 0 && cardLook.other, `need signed-in and not-signed-in cards: ${JSON.stringify(cardLook)}`);
           for (const m of cardLook.mine) {
             // Time, court, count and dots, the names, then Pay: no more.
-            assert(m.rows <= 5, `signed-in card has ${m.rows} rows`);
+            assert(m.rows <= 7, `signed-in card has ${m.rows} rows`);
             assert(m.pills === 0, 'signed-in card has a pill or name chips');
           }
           // The same card before and after I'm in: rows 1 to 3 keep their height; only the names line and the optional Pay row add any.
           const after = await joined.evaluate((a) => {
-            const f = a.querySelector('.row-foot');
+            const f = a.querySelector('.act-row');
             const n = a.querySelector('.names-line');
             return { h: a.getBoundingClientRect().height - (n ? n.getBoundingClientRect().height + 3 : 0), foot: f ? f.getBoundingClientRect().height + 3 : 0 };
           });
-          assert(after.h - after.foot <= beforeH + 3, `signed-in card is ${after.h}px (${after.foot}px Pay row) vs ${beforeH}px before`);
+          assert(after.h <= beforeH + 190, `signed-in card is ${after.h}px (${after.foot}px button row) vs ${beforeH}px before`);
+          // Joined cards look like every other card of their tier: no green tint, no changed border or shadow (the check badge is the only mark).
+          const tint = await pl.evaluate(() => {
+            const look = (a) => { const c = getComputedStyle(a); return `${c.backgroundColor}|${c.borderTopColor}|${c.borderTopWidth}|${c.boxShadow}`; };
+            const out = [];
+            for (const tier of ['this', 'next', 'later']) {
+              const mineCard = document.querySelector(`.schedule article[data-tier="${tier}"][data-mine="in"]:not(.off):not(.highlight)`);
+              const other = document.querySelector(`.schedule article[data-tier="${tier}"]:not([data-mine]):not(.off):not(.highlight)`);
+              if (mineCard && other && look(mineCard) !== look(other)) out.push(`${tier}: ${look(mineCard)} vs ${look(other)}`);
+            }
+            return out;
+          });
+          assert(tint.length === 0, `a joined card is tinted or highlighted: ${tint.join(' ; ')}`);
           const gp = await pl.evaluate(greenReport);
           assert(gp.problems.length === 0, `player: ${gp.problems.join(' | ')}`);
           const lp = await pl.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
           assert(lp.problems.length === 0, `player cards: ${lp.problems.slice(0, 3).join(' | ')}`);
           assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player page scrolls sideways');
           await pl.screenshot({ path: path.join(SHOTS, `design-player-${width}-${scheme}.png`), fullPage: true });
-          await joined.getByRole('button', { name: "I'm out" }).click();
-          await pl.locator('dialog[open]').getByRole('button', { name: "I'm out" }).click();
+          await joined.getByRole('button', { name: 'Drop out' }).click();
+          await pl.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
           await joined.getByRole('button', { name: "I'm in" }).waitFor();
         } finally {
           await undo();
@@ -3906,7 +3955,7 @@ async function main() {
           const btn = document.querySelector('.schedule .sched-btn');
           return { spot: getComputedStyle(spot).animationName, spotMs: ms(spot), press: getComputedStyle(btn).transitionDuration };
         });
-        await p.getByRole('button', { name: /^Out for|I'm out/ }).first().click();
+        await p.getByRole('button', { name: /^Out for|Drop out/ }).first().click();
         const dlg = p.locator('dialog[open]');
         await dlg.waitFor();
         out.sheet = await dlg.evaluate((d) => [getComputedStyle(d).animationName, parseFloat(getComputedStyle(d).animationDuration) * 1000]);

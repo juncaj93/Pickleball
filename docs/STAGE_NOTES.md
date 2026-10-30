@@ -104,7 +104,9 @@ Presentation only. No money rule, money math, schema or server change.
 - Holiday pills removed from player cards and the "Want in?" popup. The
   organizer's holiday label is now plain text with the "Hours OK" button.
 - Payment states: amber "$14 due" / "$5 left to pay" chip, green "Paid $14" /
-  "Paid with credit" pill, "Use credit" or "Pay" as the one filled button.
+  "Paid with credit" pill. With credit to use, "Use credit" is the one filled
+  button and "Pay" is its outline twin (covering all or part, as in the mockups);
+  otherwise "Pay" is filled. Same on the game-day Pay card.
   Waitlist ("Waitlist, 2nd in line") and canceled cards use the same layout.
 - Credit-back note under "I'm in": "If 6 play, you get $5 back as credit."
   Only when the person has not joined, would be 5th or later, there is room
