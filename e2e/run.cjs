@@ -4403,7 +4403,8 @@ async function main() {
         const chip = pl.locator('header [data-credit-chip]');
         await chip.waitFor();
         const h = await pl.evaluate(headerReport);
-        if (!h.oneLine || h.overlap || !h.allVisible) issues.push(`header: ${JSON.stringify({ oneLine: h.oneLine, overlap: h.overlap, allVisible: h.allVisible })}`);
+        // With the chip, "not you?" may move under the name (Alex, Oct 30): the name must be whole, nothing overlapping.
+        if (!h.nameFits || h.overlap || !h.allVisible) issues.push(`header: ${JSON.stringify({ nameFits: h.nameFits, overlap: h.overlap, allVisible: h.allVisible })}`);
         const cb = await chip.boundingBox();
         const sq = await pl.locator('header .today').boundingBox();
         const nm = await pl.locator('header h1').evaluate((el) => { const r = document.createRange(); r.selectNodeContents(el); const b = r.getBoundingClientRect(); return { x: b.left, width: Math.min(b.width, el.getBoundingClientRect().width) }; });
