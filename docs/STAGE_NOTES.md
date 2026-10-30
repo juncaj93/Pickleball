@@ -230,6 +230,70 @@ back up, apply migration 0014, then deploy the code (the new code names the new 
   Thursday, Sunday Nov 1 across the clock change, and the Eastern-vs-UTC edge).
 - Tests: 565 unit, 833 browser, all green.
 
+### Finalize dry run (Fri Oct 30, 2026, before the first real game Tue Nov 3)
+Done on a local copy with fake data only. Nothing on the live site was changed.
+
+What was walked: every player count 4 to 10 (organizer playing, one unpaid, one paid
+with credit, one "I paid", the rest Venmo + Mark paid), drops before and after the
+cutoff (cash, credit, unpaid), a no-show, the waitlist moving in, partial credit,
+someone owing nothing, a canceled game after payment, Reopen and redo, Undo of
+"Paid with credit", a cash-out request pending during finalize, double taps, the
+Nov 1 clock change (Sat Oct 31, Sun Nov 1 including the repeated 1 AM hour, Tue Nov 3
+around 8 and 10 PM), cancel with a reason, and every screen at 390 px light and dark.
+After each step the books are checked: cash players sent = collected + held + credit
+in pots + cashed out (`tests/dryrun-money.test.ts`).
+
+Fixed (not money):
+- Players tab "N played" counted games a player was marked "did not play" for.
+- A quick second tap on Use credit, Everyone played / Confirm, Reopen, Request cash
+  out (and the other buttons that share those handlers) sent two requests and flashed
+  a red error. A lock now ignores the second tap. Test: `e2e/double-tap.cjs` (fails on
+  the old code).
+- The player error for a second cash-out request said "refund"; it now reads "You
+  already asked for a cash out. Cancel it to make a new one."
+
+Alex's answers to the money questions (display only, no balance, price or credit change):
+- A: credit put on a seat that still owes the rest (for example $3 credit on a $9
+  seat, $6 unpaid) now counts as Held on Money and Players right away, finalized or
+  not, until the seat is paid; then the whole payment is Collected. Players cover
+  counts that seat's whole price ($54, not $51, at 6 played). The dry-run books check
+  (cash in = kept + held + credit + cashed out) holds at every step, and Players
+  held = Money held. `tests/audit-money.test.ts` was updated to this rule.
+- B: an unconfirmed "I paid" still counts as paid at finalize. The Finalize card and
+  the Who played sheet now warn first: "Ryan tapped I paid, not confirmed yet. Confirm
+  or finalize anyway." (names listed).
+- C: Reopen with a late payer stays as is.
+- Header: when the CREDIT chip leaves no room, "not you?" moves under the name, and a
+  long name wraps to two lines (was "Brand..."). Test: `e2e/dryrun-screens.cjs`
+  (360, 375, 390, 430 px, light and dark).
+
+Tests: `tests/dryrun-money.test.ts` (18), `tests/dryrun-clock.test.ts` (31),
+`e2e/double-tap.cjs` (4).
+
+Earlier game times (7:00 to 9:00 PM, 7:30 to 9:30 PM), checked with games moved through
+the existing per-game time change, on both sides of Nov 1: cancellation deadline (12
+hours before the real start), late drop, the 36-hour drop alert, day-before and last
+call cards, "started", Finalize at the real end (9:00 / 9:30 PM), the post-game note,
+the .ics file, day words and week labels, and every text all follow the game's own
+time. Tests: `tests/dryrun-times.test.ts` (23) and the 7 PM / 7:30 PM cases in
+`tests/dryrun-money.test.ts`.
+Hardcoded 8 to 10 PM (for the team changing the regular time): `shared/settings.ts:67-68`
+(`SESSION_START` / `SESSION_END`, used by `shared/schedule.ts` for every newly made
+Tue/Thu game), `src/pages/Setup.tsx:92` (setup text), `src/pages/Admin.tsx:481-482`
+(+ Add game form starts at 8 to 10). Many e2e files assume generated games are at 8 PM.
+Moving every game one by one gives each a "Moved" tag and Moved text.
+
+
+Deploy (Fri Oct 30, 2026, about 1:20 PM Eastern): deployment `e7074075`, commit 0b21eb1,
+branch main, no database change. Time Travel bookmark right before:
+`0000013a-00000000-00005114-f6fdc0f2b454288716c5732243f9a2f8` (an earlier one at the
+backup: `00000138-00000000-00005114-91a3bb2d82c626aa912c08fdb364a4d5`). Full SQL export
+before deploy (144 rows, has phone numbers, not committed):
+`live-before-dryrun-fixes-2026-10-30.sql` in that session's scratch folder. Code rollback:
+deployment `f8b0971e`. Tests: 645 unit, 843 browser (run 229, names 24, gates 32,
+alerts 52, court 84, held 81, credit 153, suggest 35, popup 33, texts 52, circles 18,
+audit-stage3 3, cancel-reason 8, round2 25, want-in 4, double-tap 4, dryrun-screens 6),
+all green. After deploy, read-only: the backup address returned 200 with the new bundle.
 ## "Do this now" card, smart Telegram alerts, game times and courts (Oct 30, 2026)
 
 Status: built and tested; deploy details below.

@@ -38,3 +38,15 @@
   min-height: 48px;
   cursor: pointer;
 }
+/* "Mitchel tapped I paid, not confirmed yet." Shown before the final tap. */
+.finalize-warn {
+  margin: 0;
+  padding: 8px 12px;
+  border-left: 4px solid var(--warn-edge);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.35;
+}

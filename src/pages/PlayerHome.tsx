@@ -442,7 +442,11 @@ function usePayTapped(key: string) {
 function useCredit(onChanged: () => Promise<void>) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
+  const working = useRef(false);
   async function use(sessionIds: string[], owedCents: number, potCents: number) {
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     let used = 0;
     try {
@@ -467,11 +471,14 @@ function useCredit(onChanged: () => Promise<void>) {
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }
   /** "Undo" under "Paid with credit": the credit goes back, the game is owed again. */
   async function undo(sessionId: string) {
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     try {
       await api('POST', `/api/sessions/${sessionId}/undo-credit`, {});
@@ -482,6 +489,7 @@ function useCredit(onChanged: () => Promise<void>) {
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }
@@ -884,6 +892,8 @@ function ScheduleRow({
   const tz = g.group.timezone;
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
+  const working = useRef(false);
   const [askOut, setAskOut] = useState(false);
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
@@ -893,6 +903,8 @@ function ScheduleRow({
   const nowMs = Date.parse(g.now);
 
   async function run(path: string, label: (data: any) => string) {
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     try {
       toast(label(await api<any>('POST', `/api/sessions/${s.id}/${path}`, {})));
@@ -902,6 +914,7 @@ function ScheduleRow({
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
+      working.current = false;
       setBusy(false);
       setAskOut(false);
     }

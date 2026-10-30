@@ -89,7 +89,7 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
   if (cents === null || cents <= 0 || cents % 100 !== 0) throw new HttpError(400, 'invalid_cents', 'Enter a whole-dollar amount.');
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You have no credit to refund.');
   const { usableCents, reservedCents } = await usableFor(ctx, group, playerId);
-  if (reservedCents > 0) throw new HttpError(409, 'request_open', 'You already have a refund request waiting. Cancel it to make a new one.');
+  if (reservedCents > 0) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
   if (cents > usableCents) throw new HttpError(409, 'not_enough_credit', `You have ${Math.floor(usableCents / 100)} dollars of credit.`);
   const id = newId();
   try {
@@ -98,7 +98,7 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
       .bind(id, group.id, playerId, cents, ctx.nowIso)
       .run();
   } catch (err) {
-    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'request_open', 'You already have a refund request waiting. Cancel it to make a new one.');
+    if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
     throw err;
   }
   await audit(ctx.db, group.id, null, 'refund_requested', { player: name, playerId, amountCents: cents }, ctx.nowIso, name);

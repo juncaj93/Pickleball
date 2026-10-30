@@ -89,6 +89,8 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
   const [asking, setAsking] = useState(false);
   const [amount, setAmount] = useState('');
   const [busy, setBusy] = useState(false);
+  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
+  const working = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   useEffect(() => {
@@ -101,6 +103,8 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
   const history = more ? credit.history : credit.history.slice(0, SHOW_HISTORY);
 
   async function run(fn: () => Promise<unknown>, done: string) {
+    if (working.current) return;
+    working.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -112,6 +116,7 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
       if (isDemo(err)) toast(err.message);
       else setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { AdminSessionView, RefundRequestView } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
+import { unconfirmedPaidWarning } from '../../../shared/credit';
 import { finalPreview } from '../../../shared/pricing';
 import { formatShortDate } from '../../../shared/time';
 import { api, ApiError, openVenmo, storageGet, storageSet } from '../../lib';
@@ -13,7 +14,11 @@ const CREDIT_NOTE = 'Pickleball credit refund';
 function useRun(ctx: AdminCtx) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
+  const working = useRef(false);
   async function run(fn: () => Promise<unknown>, msg: string) {
+    if (working.current) return false;
+    working.current = true;
     setBusy(true);
     try {
       await fn();
@@ -24,6 +29,7 @@ function useRun(ctx: AdminCtx) {
       toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       return false;
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }
@@ -43,6 +49,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const n = inNow.length;
   const under = n < 4;
+  const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   const day = formatShortDate(s.startsAt, tz);
   const finalize = (played: string[]) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played }), `${day} is final`);
@@ -56,6 +63,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           {under ? `Only ${n} in. Cancel it (everyone paid gets credit) or finalize anyway at ${formatPrice(price)} each.` : finalPreview(price, n, formatPrice)}
         </div>
       </div>
+      {unconfirmed && <UnconfirmedWarning text={unconfirmed} />}
       <div className="finalize-btns">
         {under ? (
           <>
@@ -84,11 +92,25 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   );
 }
 
+/** Players (not the organizer) who tapped "I paid" that the organizer has not confirmed. */
+function selfPaidNames(s: AdminSessionView): string[] {
+  return s.roster.filter((r) => r.status === 'confirmed' && !r.isOrganizer && r.paymentStatus === 'paid' && r.selfPaid).map((r) => r.name);
+}
+
+function UnconfirmedWarning({ text }: { text: string }) {
+  return (
+    <p className="finalize-warn" role="note" data-unconfirmed-paid>
+      {text}
+    </p>
+  );
+}
+
 /** The sheet: everyone who was in, a switch each, the preview updating live, and Confirm. */
 function WhoPlayed({ s, price, busy, onConfirm }: { s: AdminSessionView; price: number; busy: boolean; onConfirm: (ids: string[]) => void }) {
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
   const n = played.size;
+  const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   return (
     <div className="stack" data-who-played>
       <p className="finalize-live" data-finalize-live>
@@ -124,6 +146,7 @@ function WhoPlayed({ s, price, busy, onConfirm }: { s: AdminSessionView; price: 
           </li>
         ))}
       </ul>
+      {unconfirmed && <UnconfirmedWarning text={unconfirmed} />}
       <button className="btn block" disabled={busy} data-confirm-played onClick={() => onConfirm([...played])}>
         {busy ? 'Saving…' : 'Confirm'}
       </button>

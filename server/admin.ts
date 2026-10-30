@@ -117,11 +117,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .bind(group.id)
     .all<{ id: string; n: number }>();
   const lateDrops = new Map(lateRows.results.map((r) => [r.id, Number(r.n)]));
-  // Sessions each person has played, ever: in, not canceled, and over.
+  // Sessions each person has played, ever: in, not canceled, over, and not marked "did not play" at finalize.
   const playedRows = await ctx.db
     .prepare(
       `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
-       WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? GROUP BY sp.player_id`,
+       WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? AND (sp.played IS NULL OR sp.played = 1) GROUP BY sp.player_id`,
     )
     .bind(group.id, ctx.nowIso)
     .all<{ id: string; n: number }>();

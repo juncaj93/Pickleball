@@ -228,8 +228,8 @@ export function adminSessionView(
       .map((r) => {
         const seat = potFor(r);
         if (r.payment_status === 'paid' && !r.refunded_at) return (r.payment_amount_cents ?? 0) - seat.backCents;
-        // An unpaid seat: what they still owe, plus any cash already held against it.
-        if (r.status === 'confirmed' && r.payment_status === 'unpaid') return (prices.get(r.player_id)?.cents ?? 0) - seat.usedCents;
+        // An unpaid seat: its whole price (what they still owe, plus credit and cash already put on it).
+        if (r.status === 'confirmed' && r.payment_status === 'unpaid') return prices.get(r.player_id)?.cents ?? 0;
         return 0;
       }),
   );

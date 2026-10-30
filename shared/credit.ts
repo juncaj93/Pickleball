@@ -224,6 +224,17 @@ export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'ses
   }
 }
 
+/**
+ * The Finalize card's warning when someone tapped "I paid" and the organizer
+ * has not confirmed it: finalizing counts it as paid (credit back included).
+ * "Mitchel tapped I paid, not confirmed yet. Confirm or finalize anyway."
+ */
+export function unconfirmedPaidWarning(names: string[]): string | null {
+  if (names.length === 0) return null;
+  const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${who} tapped I paid, not confirmed yet. Confirm or finalize anyway.`;
+}
+
 /** Why Reopen waits: a pending refund request is holding credit this game gave back. */
 export const reopenRequestedReason = (names: string[]) =>
   `Can't reopen: ${names.join(' and ')} asked for this credit back. Answer the refund request on Home first.`;
