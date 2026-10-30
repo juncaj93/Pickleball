@@ -129,7 +129,7 @@ due in the last hour.
 | Limit (Free plan) | Real number | Our use |
 | --- | --- | --- |
 | Workers + Pages Functions requests | 100,000 a day per account (one shared pool) | 288 cron runs + 288 tick requests = 576 a day (0.6%) |
-| Cron Triggers | 5 per account | 1 (the account had no Workers before) |
+| Cron Triggers | 5 per account | 1. The account's other Worker, fantasy-analyst, uses 4, so the account is at 5 of 5 (checked Oct 30) |
 | CPU per invocation | 10 ms | Worker: one fetch, well under 1 ms of CPU. Tick: a few small queries and string work |
 | Subrequests per invocation | 50 | Worker: 1. Tick: at most 5 Telegram calls |
 | D1 rows read | 5,000,000 a day | About 200 rows a tick (detail below), so about 58,000 a day (1.2%) |
