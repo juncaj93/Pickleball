@@ -2046,7 +2046,7 @@ async function main() {
     });
 
     console.log('Court waitlist');
-    await check('court waitlist: players go on standby; the share text is the usual one; Court opened moves them in', async () => {
+    await check('court waitlist: players tap I'm in and read it as a normal game (the organizer sees standby); the share text is the usual one; Court opened moves them in', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
       await more(card);
@@ -2077,10 +2077,12 @@ async function main() {
         const p = players[name];
         await p.reload();
         const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
-        await row.locator('.sched-status').getByText('Waiting on the court', { exact: true }).waitFor();
-        await row.getByRole('button', { name: 'Join standby' }).click();
-        await row.locator('.sched-status', { hasText: /^Standby, \d+(st|nd|rd|th) in line$/ }).waitFor();
-        assert((await row.getByLabel('Money for this session').count()) === 0, 'standby players owe nothing');
+        // With no court booked the game reads like a normal one: Court not booked, I'm in, You're in. Never waiting or standby words.
+        await row.locator('.sched-status').getByText('Court not booked', { exact: true }).waitFor();
+        await row.getByRole('button', { name: "I'm in" }).click();
+        await row.locator('.sched-status').getByText("You're in", { exact: true }).waitFor();
+        assert(!/waitlist|waiting|standby/i.test(await row.innerText()), `no waiting words on a game without a court: ${await row.innerText()}`);
+        assert((await row.getByLabel('Money for this session').count()) === 0, 'players owe nothing before a court is booked');
       }
       await players.Casey.screenshot({ path: path.join(SHOTS, 'player-standby.png'), fullPage: true });
 

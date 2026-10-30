@@ -12,6 +12,7 @@ import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
+import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
@@ -80,7 +81,9 @@ const GOOD_NEWS = {
   court_opened: "Good news, the court opened, so you're in.",
 };
 
-function joinedText(d: JoinResponse): string {
+/** What the banner says after I'm in. With no court booked everyone who taps I'm in is simply in. */
+export function joinedText(d: JoinResponse, noCourt = false): string {
+  if (noCourt) return "You're in";
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
   if (d.result === 'standby') return `You're on standby, #${d.position}`;
   return "You're in";
@@ -160,7 +163,8 @@ export function PlayerHome({
       return { ...o, [id]: kind };
     });
   }, []);
-  const view = useMemo(() => (g ? applyOverlay(g, overlay) : null), [g, overlay]);
+  // Games with no court booked are drawn like normal games (src/courtDisplay.ts), after the taps still waiting on the server.
+  const view = useMemo(() => (g ? courtDisplay(applyOverlay(g, overlay)) : null), [g, overlay]);
 
   // All games / My games, remembered on this phone (not in the organizer's "View as...").
   const [filter, setFilterState] = useState<GameFilter>(() => (!viewAs && storageGet(FILTER_KEY) === 'mine' ? 'mine' : 'all'));
@@ -200,13 +204,13 @@ export function PlayerHome({
   }, [g, switching, viewAs, toast]);
   /** My own tap on I'm in / Yes: "Game on!" when it completed the 4th player, else "You're in". */
   const joinToast = useCallback(
-    (sessionId: string, before: number, res: JoinResponse) => {
+    (sessionId: string, before: number, res: JoinResponse, noCourt = false) => {
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
         if (before + 1 === MIN_PLAYERS) return toast('Game on!', 'ok', { ball: true });
       }
-      toast(joinedText(res));
+      toast(joinedText(res, noCourt));
     },
     [toast, markCelebrated],
   );
@@ -828,16 +832,17 @@ function SuggestionCard({
   g: GroupView;
   onChanged: () => Promise<void>;
   onJoined: (a: { sessionId: string; text: string; startsAt: string; endsAt: string }) => void;
-  joinToast: (sessionId: string, before: number, res: JoinResponse) => void;
+  joinToast: (sessionId: string, before: number, res: JoinResponse, noCourt?: boolean) => void;
 }) {
   const toast = useToast();
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
+  // With no court booked the game reads like a normal one and never says waitlist.
   const standby = s.courtState === 'waitlist';
-  const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
-  const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
+  const waitlistForm = !standby && !s.noCourt && s.confirmedCount >= g.group.maxPlayers;
+  const subline = standby || (s.noCourt && s.confirmedCount >= g.group.maxPlayers) ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -846,8 +851,8 @@ function SuggestionCard({
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
-        joinToast(s.sessionId, s.confirmedCount, res);
-        onJoined({ sessionId: s.sessionId, text: joinedText(res), startsAt: s.startsAt, endsAt: s.endsAt });
+        joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
+        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
       } else {
         await api('POST', `/api/sessions/${s.sessionId}/decline`, {});
@@ -1086,7 +1091,7 @@ function RowPay({
  * and a check when you're in; the short time sits under it. No green tint for
  * joined. The calendar icon sits at the right end of the status line.
  */
-function ScheduleRow({
+export function ScheduleRow({
   s,
   g,
   tier,
@@ -1105,7 +1110,7 @@ function ScheduleRow({
   highlight?: boolean;
   /** Draw a tap at once (I'm in, a held Drop out) until the server answers, or take it back off. */
   setOverlay: (id: string, kind: 'join' | 'drop' | null) => void;
-  joinToast: (sessionId: string, before: number, res: JoinResponse) => void;
+  joinToast: (sessionId: string, before: number, res: JoinResponse, noCourt?: boolean) => void;
   /** The pickleballs ripple once: this game just reached 4 and this device had not seen it. */
   celebrating?: boolean;
   /** Fading out of the list. */
@@ -1164,7 +1169,7 @@ function ScheduleRow({
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
     try {
-      joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}));
+      joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
       await onChanged();
     } catch (err) {
       setOverlay(s.id, null);
