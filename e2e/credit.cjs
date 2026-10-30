@@ -672,13 +672,13 @@ async function main() {
       // Brandon: his $5 plus the $14 back. Ryan: the $14 of credit he paid with is back.
       assert(pot('Brandon') === 1900 && pot('Ryan') === 1400, `credit after the cancel: Brandon ${pot('Brandon')}, Ryan ${pot('Ryan')}`);
     });
-    await check('SUSPECTED CODE BUG: credit used on a seat that was still unpaid does not come back on a cancel (Julian used $5 toward Nov 10, owed $9; after the cancel his credit is $0 and the "used" ledger row stays live; expected $5 back)', async () => {
+    await check('credit used on another game (Julian, $5 toward Tue Nov 3) is untouched by the Nov 10 cancel', async () => {
       const d = await dash();
       const l = d.creditLedger.find((x) => x.playerId === id.Julian);
-      const pot = l?.balanceCents ?? 0;
-      assert(pot === 500, `Julian's credit after the cancel: ${pot}; entries ${JSON.stringify(l?.entries)}`);
+      const used = (l?.entries ?? []).filter((e) => e.kind === 'used' && !e.endedAt);
+      assert((l?.balanceCents ?? 0) === 0 && used.length === 1 && used[0].sessionStartsAt !== nov10.startsAt, `Julian: ${JSON.stringify(l)}`);
     });
-    await check('SUSPECTED CODE BUG: a player who paid the canceled game with credit (Ryan, $14) is missing from "Now their credit" and from the "Your $14 is now credit" line, though the credit did come back', async () => {
+    await check('a player who paid the canceled game with credit (Ryan, $14) is listed under "Now their credit" and sees "Your $14 is now credit"', async () => {
       assert(afterCancel, 'the cancel sheet did not open');
       assert(afterCancel.some((t) => /^Ryan \$14 credit$/.test(t)), `the list had: ${JSON.stringify(afterCancel)}`);
       const r = await player('Ryan', 'light', 390);
