@@ -1470,8 +1470,8 @@ async function main() {
       const row = firstCard(players.Blair);
       const tile = (await row.locator('.tile').innerText()).replace(/\s+/g, ' ').trim();
       assert(/^(TUE|THU|TONIGHT) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
-      // The short time sits under the tile ("8\u201310 PM", en dash); the long "8:00 to 10:00 PM" line is gone.
-      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u20139:30 PM$|^7:30\u201310 PM$/ });
+      // Only the start time sits under the tile ("8 PM"); the end is left off for a usual-length game (see e2e/card-times.cjs).
+      const timeEl = row.locator('.sched-time', { hasText: /^8 PM$|^7:30 PM$/ });
       await timeEl.waitFor();
       const tb = await row.locator('.tile').boundingBox();
       const mb = await timeEl.boundingBox();

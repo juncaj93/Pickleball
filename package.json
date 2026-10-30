@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "test:e2e": "node e2e/run.cjs && node e2e/names.cjs && node e2e/gates.cjs && node e2e/alerts.cjs && node e2e/court.cjs && node e2e/held.cjs && node e2e/credit.cjs && node e2e/suggest.cjs && node e2e/popup.cjs && node e2e/texts.cjs && node e2e/circles.cjs && node e2e/audit-stage3.cjs && node e2e/cancel-reason.cjs && node e2e/round2.cjs && node e2e/want-in.cjs && node e2e/double-tap.cjs && node e2e/dryrun-screens.cjs && node e2e/do-now.cjs && node e2e/live.cjs && node e2e/banner.cjs",
+    "test:e2e": "node e2e/run.cjs && node e2e/names.cjs && node e2e/gates.cjs && node e2e/alerts.cjs && node e2e/court.cjs && node e2e/held.cjs && node e2e/credit.cjs && node e2e/suggest.cjs && node e2e/popup.cjs && node e2e/texts.cjs && node e2e/circles.cjs && node e2e/audit-stage3.cjs && node e2e/cancel-reason.cjs && node e2e/round2.cjs && node e2e/want-in.cjs && node e2e/double-tap.cjs && node e2e/dryrun-screens.cjs && node e2e/do-now.cjs && node e2e/live.cjs && node e2e/banner.cjs && node e2e/card-times.cjs",
     "db:migrate:remote": "wrangler d1 migrations apply pickleball --remote",
     "deploy": "npm run build && wrangler pages deploy dist --project-name pickleball-club"
   },

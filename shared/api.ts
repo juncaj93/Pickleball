@@ -99,7 +99,7 @@ export interface CreditView {
 }
 
 export interface GroupView {
-  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; maxPlayers: number };
+  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; maxPlayers: number; usualMinutes: number };
   players: { id: string; name: string }[];
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */

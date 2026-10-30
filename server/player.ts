@@ -175,6 +175,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       organizerName: group.organizer_name,
       priceCents: settings.pricePerPlayerCents,
       maxPlayers: settings.maxPlayers,
+      // The usual game length (Settings > Schedule): a card shows only the start time unless a game runs a different length.
+      usualMinutes: settings.defaultEndMinutes - settings.defaultStartMinutes,
     },
     players: players.map((p) => ({ id: p.id, name: p.display_name })),
     me: me ? { id: me.id, name: me.display_name } : null,

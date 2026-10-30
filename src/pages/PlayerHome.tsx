@@ -3,7 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { creditBackNote } from '../../shared/pricing';
-import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatTimeShort, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
+import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CreditChip, CreditSheet } from './CreditSheet';
@@ -338,7 +338,7 @@ export function PlayerHome({
               <section className="card stack suggest" aria-label="Your answer">
                 <h2>{answered.text}</h2>
                 <p className="muted small">
-                  {formatShortDate(answered.startsAt, tz)} · {formatTimeShort(answered.startsAt, answered.endsAt, tz)}
+                  {formatShortDate(answered.startsAt, tz)} · {cardTimeText(answered.startsAt, answered.endsAt, tz, g.group.usualMinutes)}
                 </p>
                 <button className="btn secondary block" onClick={() => setAnswered(null)}>
                   Done
@@ -868,7 +868,7 @@ function SuggestionCard({
       {/* Line 1: date and time. Line 2: spots left, or where they would be. */}
       <div className="suggest-when">
         <span className="muted small">
-          {formatShortDate(s.startsAt, tz)} · {formatTimeShort(s.startsAt, s.endsAt, tz)}
+          {formatShortDate(s.startsAt, tz)} · {cardTimeText(s.startsAt, s.endsAt, tz, g.group.usualMinutes)}
         </span>
       </div>
       {subline && <p className="muted small suggest-sub">{subline}</p>}
@@ -1299,11 +1299,13 @@ function ScheduleRow({
       <div className="sched-tilecol">
         <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} />
         {(() => {
-          const short = formatTimeShort(s.startsAt, s.endsAt, tz);
-          // Half-hour games ("7:30–9:30 PM") are wider: a touch smaller so they stay under the tile.
+          // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
+          // where it ends, on a second short line, so nobody is misled.
+          const t = cardTime(s.startsAt, s.endsAt, tz, g.group.usualMinutes);
           return (
-            <div className={`sched-time${short.length > 10 ? ' long' : ''}`}>
-              <span aria-hidden="true">{short}</span>
+            <div className={`sched-time${t.end ? ' range' : ''}`} data-sched-time>
+              <span aria-hidden="true">{t.start}</span>
+              {t.end && <span aria-hidden="true">{'\u2013'}{t.end}</span>}
             </div>
           );
         })()}
