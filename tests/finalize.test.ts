@@ -533,7 +533,8 @@ describe('the numbers agree and nothing private leaks', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { played });
     const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
     const view = dash.data.sessions.find((x: any) => x.id === s.id);
-    expect(view.finalized).toMatchObject({ playedCount: 4, priceCents: 1400, creditBackCents: 1400 });
+    expect(view.finalized).toMatchObject({ playedCount: 4, priceCents: 1400, creditBackCents: 0 });
+    expect(row(view, 'Emery')).toMatchObject({ creditBackCents: 1400, creditBackReason: 'dropped' });
     const m = await month(ctx, s);
     expect(m.collectedCents).toBe(4 * 1400);
     expect(m.heldCents).toBe(0);

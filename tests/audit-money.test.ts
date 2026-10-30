@@ -163,7 +163,8 @@ async function agree(ctx: Ctx) {
       expect(row.collectedCents, `collected for ${s.startsAt}`).toBe(kept);
       expect(row.playedCount).toBe(s.finalized.playedCount);
       expect(row.priceCents).toBe(s.finalized.priceCents);
-      expect(s.finalized.creditBackCents).toBe(others.reduce((sum: number, r: any) => sum + r.creditBackCents, 0));
+      // The finalized total is what finalizing gave back; credit from drops before the game is on the rows, not in it.
+      expect(s.finalized.creditBackCents).toBe(others.reduce((sum: number, r: any) => sum + (r.creditBackReason === 'finalized' || r.creditBackReason === 'not_played' ? r.creditBackCents : 0), 0));
       collected += kept;
     } else {
       if (row) expect(row.collectedCents).toBe(0);
@@ -704,7 +705,7 @@ describe('the waitlist at the max', () => {
     expect((await finalize(ctx, s.id)).status).toBe(200);
     const fin = await adminSession(ctx, s.id);
     // The game's credit-back total also counts Alex's $14 from the drop (it is this game's seat).
-    expect(fin.finalized).toMatchObject({ playedCount: 10, priceCents: 500, creditBackCents: 10 * 900 + 1400 });
+    expect(fin.finalized).toMatchObject({ playedCount: 10, priceCents: 500, creditBackCents: 10 * 900 });
     expect(row(fin, 'Alex')).toMatchObject({ status: 'withdrawn', played: null, creditBackCents: 1400, creditBackReason: 'dropped' });
     expect(row(fin, 'Lee')).toMatchObject({ status: 'waitlisted', played: null, creditBackCents: 0, owesCents: 0 });
     expect((await monthFor(ctx, s)).collectedCents).toBe(10 * 500);
@@ -1361,8 +1362,8 @@ describe('Money, Players and per-session numbers agree across months', () => {
     expect((await finalize(ctx, oct.id, { played })).status).toBe(200);
     // 6 played (5 others + the organizer): $9 each. Blair..Emery get $5 back, Frankie $14, Gale owes $9.
     let view = await adminSession(ctx, oct.id);
-    // The game's credit-back total also counts Alex's $14 from the drop (it came from this game's seat).
-    expect(view.finalized).toMatchObject({ playedCount: 6, priceCents: 900, creditBackCents: 4 * 500 + 1400 + 1400 });
+    // The game's credit-back total is what finalizing gave back (Alex's $14 from the drop is on his row, not in it).
+    expect(view.finalized).toMatchObject({ playedCount: 6, priceCents: 900, creditBackCents: 4 * 500 + 1400 });
     expect(row(view, 'Gale').owesCents).toBe(900);
     a = await agree(ctx);
     expect(a.months[0]).toMatchObject({ collectedCents: 4 * 900, heldCents: 0, creditsOwedCents: 4 * 500 + 1400 + 1400 });

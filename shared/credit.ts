@@ -103,9 +103,11 @@ export interface SeatCredit {
   /** Money that came back from this seat as credit, and why. */
   backCents: number;
   backReason: CreditReason | null;
+  /** Of `backCents`, what finalizing gave back (paid above the final price, or did not play). */
+  finalizedBackCents: number;
 }
 
-export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, cashCents: 0, backCents: 0, backReason: null };
+export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, cashCents: 0, backCents: 0, backReason: null, finalizedBackCents: 0 };
 
 /**
  * One seat's live ledger rows, read the way the screens need them. Money
@@ -130,6 +132,7 @@ export function seatCredit(rows: CreditRow[], sessionId: string, playerId: strin
     cashCents: cash,
     backCents: backs.reduce((sum, r) => sum + r.cents, 0) + returned.reduce((sum, r) => sum + r.cents, 0),
     backReason,
+    finalizedBackCents: backs.filter((r) => r.reason === 'finalized' || r.reason === 'not_played').reduce((sum, r) => sum + r.cents, 0),
   };
 }
 

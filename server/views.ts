@@ -236,7 +236,7 @@ export function adminSessionView(
         at: session.finalized_at,
         playedCount: session.final_played_count ?? 0,
         priceCents: session.final_price_cents ?? settings.pricePerPlayerCents,
-        creditBackCents: roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + potFor(r).backCents, 0),
+        creditBackCents: roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + potFor(r).finalizedBackCents, 0),
       }
     : null;
 

@@ -245,7 +245,7 @@ export interface AdminSessionView {
   holidayHoursOk: boolean;
   /** Day-before and last-call cards are inside their windows (and not marked Done). */
   cards: { dayBefore: boolean; lastCall: boolean };
-  /** The organizer finalized who played. */
+  /** The organizer finalized who played. `creditBackCents` is what finalizing gave back (not credit from drops before the game). */
   finalized: { at: string; playedCount: number; priceCents: number; creditBackCents: number } | null;
   /** Over, not canceled, not finalized, and someone was in: shows the Finalize card. */
   needsFinalize: boolean;
