@@ -907,7 +907,9 @@ async function main() {
     const courtGame = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.find((x) => !x.state.flags.past).id;
     assert((await admin.request.post(`${BASE}/api/admin/sessions/${courtGame}/booked`, { data: {}, headers: { Origin: BASE } })).ok(), 'could not book the first game');
     await check('player Home is one button per session, no extra screens', async () => {
+      await players.Alex.reload(); // the court was just booked: draw the card as it is now
       const card = firstCard(players.Alex);
+      await card.locator('.btn:not(.outline)').first().waitFor();
       const buttons = (await card.getByRole('button').allInnerTexts()).map((t) => t.trim());
       // One filled green button per card; "Drop out" is a quiet link, not a button look.
       const filled = await card.locator('.btn:not(.outline)').allInnerTexts();
