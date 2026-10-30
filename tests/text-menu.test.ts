@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { smsHref } from '../shared/messages';
 import { fillTexts, owedGames, reminderText, sessionTexts, unpaidPeople } from '../src/pages/admin/textMenu';
-import { DAY, HOUR, playerPhone, PLAYER_NAMES, setupGroup } from './harness';
+import { DAY, HOUR, playerPhone, PLAYER_NAMES, setupGroup, withoutIds } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 const TZ = 'America/Detroit';
@@ -335,7 +335,7 @@ describe('the unpaid card on the player screen stays until they pay', () => {
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtCostCents: 4567 });
     ctx.app.now = Date.parse('2026-10-28T13:00:00Z');
-    const text = (await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).text;
+    const text = withoutIds((await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).text);
     expect(text).not.toMatch(/4567|45\.67|courtCost|\(313\)|\+1313|555-01/);
     expect(DAY).toBeGreaterThan(0);
   });

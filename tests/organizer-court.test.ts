@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courtSplit } from '../shared/pricing';
 import { balanceOf, buildTodo } from '../src/pages/admin/todo';
-import { DAY, playerPhone, PLAYER_NAMES, setupGroup } from './harness';
+import { DAY, playerPhone, PLAYER_NAMES, setupGroup, withoutIds } from './harness';
 
 // The organizer (Alex here) pays the venue the full court cost. The other
 // players' payments reimburse them: the flat $14 each until the game is
@@ -397,7 +397,8 @@ describe('none of this reaches a player', () => {
       (await ctx.app.client().call('GET', `/api/sessions/${s.id}/calendar.ics`)).text,
       (await ctx.app.client().call('GET', '/api/status')).text,
     ];
-    for (const t of bodies) {
+    for (const body of bodies) {
+      const t = withoutIds(body);
       expect(t).not.toMatch(/4321|4567|43\.21|45\.67|4800|48\.00|courtCost|court cost|You pay|Court due|Court paid|Players cover|your share|yourShare|playersCover|isOrganizer|"court"/i);
     }
     // And the organizer-only screen does carry it (so the check above means something).

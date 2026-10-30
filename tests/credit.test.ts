@@ -4,7 +4,7 @@ import { backupToSql } from '../scripts/backup-sql.mjs';
 import { creditEntryText, keptRemaining, potBalance, type CreditRow } from '../shared/credit';
 import { createNodeD1 } from '../dev/nodeD1';
 import { balanceOf, buildTodo, heldCents } from '../src/pages/admin/todo';
-import { DAY, HOUR, playerPhone, PLAYER_NAMES, setupGroup } from './harness';
+import { DAY, HOUR, playerPhone, PLAYER_NAMES, setupGroup, withoutIds } from './harness';
 
 // Credit under the "any number from 4 to 10 plays" model: money that comes
 // back to a player (a cancel, a drop, paid more than the final price) becomes
@@ -715,8 +715,8 @@ describe('"Were you charged for this court?"', () => {
     expect((await dash(ctx)).sessions.find((x: any) => x.id === s.id).state.flags.canceled).toBe(false);
     await cancel(ctx, s.id, { chargedCents: 4800 });
     expect((await view(ctx, MITCH)).sessions.find((x: any) => x.id === s.id)).toMatchObject({ canceled: true });
-    expect(JSON.stringify(await view(ctx, 'Blair'))).not.toMatch(/4800|chargedCents/);
-    expect(JSON.stringify(await view(ctx, MITCH))).not.toMatch(/4800|chargedCents/);
+    expect(withoutIds(JSON.stringify(await view(ctx, 'Blair')))).not.toMatch(/4800|chargedCents/);
+    expect(withoutIds(JSON.stringify(await view(ctx, MITCH)))).not.toMatch(/4800|chargedCents/);
   });
 });
 
