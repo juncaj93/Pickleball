@@ -12,37 +12,52 @@ free plan and costs $0.
 - **One brain.** `nextTasks()` in `shared/tasks.ts` makes the list for both the
   card and Telegram, so they can't disagree.
 
+**Courts gate the alerts.** CourtReserve opens each date 14 days ahead at
+7:00 AM, and courts also free up later when people cancel. A game only
+counts as having a court once it is marked "court booked" (I booked it).
+Until then it gets no last call, no cancel warning or follow-up, no game-day
+cancel check, and no cancel-court steps on the card. Those start after the
+tap, and only for alert times still ahead. If you book after a time has
+passed, that alert is skipped, never sent late.
+
 Every time comes from the game's own start time, end time and cancellation
-deadline. The deadline defaults to 12 hours before play and can be changed
-per booking. Nothing assumes 8:00 PM. Each rule is one named constant at the
-top of `shared/tasks.ts`. "Before" is counted on the wall clock, so the Sun
-Nov 1 clock change doesn't shift anything.
+deadline (default 12 hours before play, editable per booking). Nothing
+assumes 8:00 PM. Each rule is one named constant at the top of
+`shared/tasks.ts`. "Before" is counted on the wall clock, so the Sun Nov 1
+clock change doesn't shift anything.
 
 | Rule (constant) | 7:00 PM game | 7:30 PM game | 8:00 PM game |
 | --- | --- | --- | --- |
-| Night-before last call: 25 hours before the start (`NIGHT_LAST_CALL_BEFORE_START_MIN`) | 6:00 PM day before | 6:30 PM | 7:00 PM |
-| Cancel warning, under 4: 10 hours before the deadline (`CANCEL_WARNING_BEFORE_DEADLINE_MIN`) | 9:00 PM night before | 9:30 PM | 10:00 PM |
-| Cancel follow-up: 30 minutes later (`CANCEL_FOLLOWUP_AFTER_WARNING_MIN`) | 9:30 PM | 10:00 PM | 10:30 PM |
-| Game-day check: 45 minutes before the deadline (`GAMEDAY_CHECK_BEFORE_DEADLINE_MIN`) | 6:15 AM | 6:45 AM | 7:15 AM |
-| Finalize: 5 minutes after the end (`FINALIZE_AFTER_END_MIN`) | 9:05 PM | 9:35 PM | 10:05 PM |
-| Booking day, 14 days before (`BOOKING_ALERT_TIME`, `BOOKING_FOLLOWUP_TIME`) | 8:30 AM and 10:30 AM | same | same |
+| Night-before last call, booked only: 25 h before the start (`NIGHT_LAST_CALL_BEFORE_START_MIN`) | 6:00 PM day before | 6:30 PM | 7:00 PM |
+| Cancel warning, booked and under 4: 10 h before the deadline (`CANCEL_WARNING_BEFORE_DEADLINE_MIN`) | 9:00 PM night before | 9:30 PM | 10:00 PM |
+| Cancel follow-up: 30 min later (`CANCEL_FOLLOWUP_AFTER_WARNING_MIN`) | 9:30 PM | 10:00 PM | 10:30 PM |
+| Game-day check, booked: 45 min before the deadline (`GAMEDAY_CHECK_BEFORE_DEADLINE_MIN`) | 6:15 AM | 6:45 AM | 7:15 AM |
+| Morning-of no-court check, 4+ in: deadline + 15 min (`NO_COURT_CHECK_AFTER_DEADLINE_MIN`) | 7:15 AM | 7:45 AM | 8:15 AM |
+| Finalize: 5 min after the end (`FINALIZE_AFTER_END_MIN`) | 9:05 PM | 9:35 PM | 10:05 PM |
+| Booking heads-up and follow-up, 14 days before (`COURT_OPENS_TIME` 7:00 AM, `BOOKING_HEADS_UP_BEFORE_OPEN_MIN` 15, `BOOKING_FOLLOWUP_AFTER_OPEN_MIN` 30) | 6:45 AM and 7:30 AM | same | same |
 
-What each task shows and sends:
+What each task shows and sends, most urgent first:
 
 | Task | Card | Telegram |
 | --- | --- | --- |
-| Night before, from the last call until the start | Under 4: "Tuesday: 3 players in, need a 4th." + **Text the group** (Need players text, no recipients). At 4 or more: "Tuesday: 5 players in." + **Text the group to confirm** (Check-in text, no recipients) | At the last call, unless the text button was already tapped |
-| From the cancel warning, under 4 | Checklist, in three steps:<br>1. Cancel the court (CourtReserve) + **Court canceled**<br>2. Cancel the session (the cancel prompt with the reason field)<br>3. Text everyone it's canceled (Canceled text to the signed-up numbers) | "Tuesday: only 3 players in. Cancel court: ...". The follow-up goes only if the game is still not canceled on the site |
-| Game day | Same checklist. The words name the game's own deadline: "Tonight: only 3 players in. Cancel court before 7:00 AM." | At the game-day check, only if all of these hold:<br>• still under 4<br>• not canceled<br>• the deadline hasn't passed<br>• Court canceled wasn't tapped |
-| Booking day | "Tue Nov 17 opened." (+ holiday name), with **Book on CourtReserve** and **I booked it** | 8:30 AM, and one follow-up at 10:30 AM, only while not marked booked |
-| After the game | **Finalize who played** (opens the existing Finalize card). After finalizing, the existing "Final price" card offers the post-game note | At the finalize time, only if all of these hold:<br>• 4 or more played<br>• not canceled<br>• not finalized |
+| Cancel checklist (booked, under 4, from the cancel warning) | 1. Cancel the court + **Court canceled**<br>2. Cancel the session<br>3. Text everyone it's canceled<br>On game day the words name the deadline: "Tonight: only 3 players in. Cancel court before 7:00 AM." | Cancel warning ("Tuesday: only 3 players in. Cancel court: ...").<br>Follow-up only while the game is not canceled on the site.<br>Game-day check only before the deadline, if Court canceled wasn't tapped |
+| Court opens today (the game exactly 14 days out, not booked) | "Thu Nov 26 opens at 7:00 AM (Thanksgiving)." (after 7:00, "opened"), with **Book on CourtReserve** and **I booked it** | 6:45 AM: "Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ..." with the I booked it link. 7:30 AM: one reminder if still not booked |
+| No court, 4 or more in, starts within 24 h | "Tonight: 5 in, no court yet. Check CourtReserve for an opening." with Book and I booked it | At the deadline + 15 min, silent once booked |
+| Night before (booked) | "Tuesday: 3 players in, need a 4th." + **Text the group**, or "Tuesday: 5 players in." + **Text the group to confirm**. Either way, Messages opens with no recipients | At the last call, unless the text button was already tapped |
+| Booked after the last call | One time: "Court booked for tonight. Text the group the game is on." + Check-in text, no recipients | None |
+| After the game | **Finalize who played**. After that, the existing "Final price" card has the post-game note | At the finalize time, if 4 or more played and it isn't finalized yet |
+| Other games with no court (next 2 only) | "Thu Nov 12 has no court yet." + **I booked it** | None |
 
-**Changing a game's time.** Do it from the game's menu (**Change time**) or
-from Edit booking > Change time or date. Every alert time is worked out again
-from the new time, on every tick:
+**Changing a game's time.** Gear > Edit booking > Change time or date. The
+end moves with the start (same length). Saving opens the existing Moved text
+for the signed-up players and asks "Is the court booked for the new time?
+Yes / No". The answer sets the court status. Every alert time is worked out
+again from the new time:
 
-- alerts not sent yet move to the new time
-- alerts already sent are never sent again
+- on the same day, alerts not sent yet move to the new time, and alerts
+  already sent are never sent again
+- moved to another day, it counts as a new game: its alerts and card taps
+  start over
 - the card always shows the current situation.
 
 **Usual time for new games.** Set it in Settings > Schedule (Usual start time
