@@ -21,6 +21,15 @@ const PIN = '482913';
 const NAMES = ['Alex', 'Nathan', 'Ryan', 'Mitchel', 'Brandon', 'Julian'];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const SHOTS = process.env.SHOTS_DIR;
+const CRON_SECRET = 'donow-cron-secret-0123456789abcdef0123456789';
+const crypto = require('node:crypto');
+/** The same signed link the site puts in a night-before alert (server/go.ts). */
+function goToken(sessionId, expiresMs) {
+  const b64 = (buf) => Buffer.from(buf).toString('base64url');
+  const payload = b64(JSON.stringify({ s: sessionId, e: expiresMs }));
+  const sig = crypto.createHmac('sha256', `go-night-text-v1:${CRON_SECRET}`).update(`go-night-text-v1.${payload}`).digest();
+  return `${payload}.${b64(sig)}`;
+}
 
 let passed = 0;
 let failed = 0;
@@ -45,7 +54,7 @@ async function main() {
   rmSync(dbFile, { force: true });
   const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN, DEV_CLOCK: '1' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN, DEV_CLOCK: '1', CRON_SECRET, GO_LINKS: 'on' },
     stdio: 'ignore',
     detached: true,
   });
@@ -187,6 +196,27 @@ async function main() {
     await page.getByText(/Smart alerts/).first().waitFor();
     assert(await page.locator('[data-smart-test]').isVisible(), 'TEST button');
     assert(/TEST/.test(await page.locator('[data-smart-test]').innerText()), 'labeled TEST');
+    await ctx.close();
+  });
+
+  await check('the direct text link page: the Need players words and one big "Open Messages" with no recipients; an expired link says so', async () => {
+    const ctx = await browser.newContext(phone(390, 'light'));
+    const page = await ctx.newPage();
+    // Messages can't open in a test browser: keep the page where it is.
+    await page.route(/^sms:/, (r) => r.abort());
+    await page.goto(`${BASE}/go/${goToken(tue.id, Date.parse('2026-11-03T04:00:00Z'))}`);
+    const open = page.locator('[data-go-open]');
+    await open.waitFor();
+    const href = await open.getAttribute('href');
+    assert(href.startsWith('sms:&body='), `no recipients: ${href}`);
+    assert(!/2485550/.test(href), 'a phone number is in the link');
+    assert(/^Need 1 more for pickleball tomorrow, 8:00 PM\. In\? localhost/.test(squash(await page.locator('[data-go-body]').innerText())), await page.locator('[data-go-body]').innerText());
+    const box = await open.boundingBox();
+    assert(box.height >= 44 && box.width >= 300, `button ${box.width}x${box.height}`);
+    if (SHOTS) await page.screenshot({ path: path.join(SHOTS, 'go-page-390-light.png') });
+    await page.goto(`${BASE}/go/${goToken(tue.id, Date.parse('2026-11-02T12:00:00Z'))}`);
+    await page.getByText(/This link expired/).waitFor();
+    await page.getByRole('link', { name: 'Open the organizer page' }).waitFor();
     await ctx.close();
   });
 

@@ -47,6 +47,7 @@ async function group() {
     TELEGRAM_BOT_TOKEN: '123456:FAKE-test-token-never-real',
     TELEGRAM_CHAT_ID: '9988776655',
     CRON_SECRET: SECRET,
+    GO_LINKS: 'on',
     TELEGRAM_FETCH: (async (_u: string, init: RequestInit) => {
       sent.push(JSON.parse(String(init.body)).text);
       return new Response('{"ok":true}', { status: 200 });
@@ -82,6 +83,15 @@ describe('the /api/go endpoint', () => {
     expect((await g.dash()).taskMarks).toContain(`${g.tue.id}:night_text`);
   });
 
+  it('with the direct link switched off, the night alert uses the admin link', async () => {
+    const g = await group();
+    g.app.env = { ...g.app.env, GO_LINKS: 'off' };
+    g.app.now = at('2026-11-03T00:00:00Z');
+    await g.ctx.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': SECRET });
+    await g.app.settle();
+    expect(g.sent).toEqual(['Tuesday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/admin']);
+  });
+
   it('4 or more: the Check-in text', async () => {
     const g = await group();
     await (await playerPhone(g.ctx, 'Emery')).call('POST', `/api/sessions/${g.tue.id}/join`, {});
@@ -101,6 +111,10 @@ describe('the /api/go endpoint', () => {
     expect((await g.dash()).taskMarks).toEqual([]);
     await g.ctx.organizer.call('POST', `/api/admin/sessions/${g.tue.id}/decision`, { decision: 'cancel', confirm: true });
     expect((await g.open(t)).status).toBe(410);
+    // Switched off (GO_LINKS not "on"), no link works and alerts use the admin link.
+    g.app.env = { ...g.app.env, GO_LINKS: 'off' };
+    expect((await g.open(await makeGoToken(SECRET, g.tue.id, g.tue.startsAt, g.app.now))).status).toBe(404);
+    g.app.env = { ...g.app.env, GO_LINKS: 'on' };
     // Without the secret on the site, no link works at all.
     g.app.env = { ...g.app.env, CRON_SECRET: undefined };
     expect((await g.open(t)).status).toBe(404);

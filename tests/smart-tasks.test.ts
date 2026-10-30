@@ -434,6 +434,7 @@ async function smartGroup(failFirst = 0) {
     TELEGRAM_BOT_TOKEN: TOKEN,
     TELEGRAM_CHAT_ID: CHAT,
     CRON_SECRET: SECRET,
+    GO_LINKS: 'on',
     TELEGRAM_FETCH: (async (_url: string, init: RequestInit) => {
       if (fails > 0) {
         fails--;

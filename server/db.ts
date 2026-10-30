@@ -36,6 +36,8 @@ export interface Env {
   TELEGRAM_CHAT_ID?: string;
   /** Shared with the cron Worker (worker/cron.ts): only a caller that knows it can run the 5-minute alert tick. */
   CRON_SECRET?: string;
+  /** "on": night-before alerts link to the direct text page (/go/...). Anything else: the admin link. A wrangler.toml var. */
+  GO_LINKS?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

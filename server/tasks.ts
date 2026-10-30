@@ -274,7 +274,7 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
  */
 async function goLinks(ctx: Ctx, o: TaskOptions, sessions: SessionRow[]): Promise<TaskOptions> {
   const secret = ctx.env.CRON_SECRET;
-  if (!secret) return o;
+  if (!secret || ctx.env.GO_LINKS !== 'on') return o;
   const urls = new Map<string, string>();
   for (const s of sessions) {
     const start = Date.parse(s.starts_at);

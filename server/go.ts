@@ -72,7 +72,7 @@ export async function readGoToken(secret: string, token: string, nowMs: number):
 export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   const secret = ctx.env.CRON_SECRET ?? '';
   const token = v.text(body.token, 'token', { max: 300 });
-  if (!secret) throw new HttpError(404, 'not_found', 'This link does not work.');
+  if (!secret || ctx.env.GO_LINKS !== 'on') throw new HttpError(404, 'not_found', 'This link does not work.');
   const read = await readGoToken(secret, token, ctx.nowMs);
   if ('error' in read) {
     if (read.error === 'expired') throw new HttpError(410, 'link_expired', 'This link expired. Open the organizer page instead.');
