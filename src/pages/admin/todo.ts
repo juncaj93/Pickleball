@@ -33,10 +33,12 @@ export const isPlayed = (s: AdminSessionView) => !s.state.flags.canceled && !!s.
 export function heldCents(d: AdminDashboard, playerId?: string): number {
   let total = 0;
   for (const s of d.sessions) {
-    if (isPlayed(s) || s.state.flags.canceled) continue;
+    if (s.state.flags.canceled) continue;
     for (const r of s.roster) {
-      if (r.isOrganizer || r.paymentStatus !== 'paid' || r.refundedAt || (playerId && r.playerId !== playerId)) continue;
-      total += r.paymentAmountCents ?? 0;
+      if (r.isOrganizer || (playerId && r.playerId !== playerId)) continue;
+      // Credit put on a seat that still owes the rest is held until it is paid, finalized or not (as on Money).
+      if (r.status === 'confirmed' && r.paymentStatus === 'unpaid') total += r.creditCents;
+      else if (!isPlayed(s) && r.paymentStatus === 'paid' && !r.refundedAt) total += r.paymentAmountCents ?? 0;
     }
   }
   return total;

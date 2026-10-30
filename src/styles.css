@@ -470,18 +470,18 @@ a {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 8%);
 }
 
-/* "Ryan  not you?": the name, then small gray underlined text on the same line. */
+/* "Ryan  not you?": the name, then small gray underlined text on the same line.
+ * When both don't fit (the CREDIT chip takes room on a phone), "not you?" moves
+ * under the name, and a long name wraps to two lines instead of being cut. */
 .title-line {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  column-gap: 8px;
+  row-gap: 0;
   min-width: 0;
 }
 .title-line h1 {
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   min-width: 0;
   flex: 0 1 auto;
 }

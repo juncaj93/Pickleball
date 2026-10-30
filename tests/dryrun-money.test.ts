@@ -5,6 +5,7 @@
 // + credit paid back out. Nothing lost, nothing created.
 import { describe, expect, it } from 'vitest';
 import { finalMessage } from '../shared/messages';
+import { heldCents } from '../src/pages/admin/todo';
 import { creditBack, finalPrice } from '../shared/pricing';
 import { HOUR, PLAYER_NAMES, playerPhone, setupGroup } from './harness';
 
@@ -78,7 +79,10 @@ async function balanced(d: Dry, label: string) {
     collected += r.collectedCents;
     held += r.heldCents;
   }
-  const ledger = (await dash(d)).creditLedger as any[];
+  const board = await dash(d);
+  // The Players tab's "held" adds up to the same as Money's Held.
+  expect(heldCents(board), `${label}: Players tab held`).toBe(held);
+  const ledger = board.creditLedger as any[];
   const pots = ledger.reduce((s, l) => s + l.balanceCents, 0);
   expect({ label, sum: collected + held + pots + d.book.cashedOut }).toEqual({ label, sum: d.book.cashIn });
   for (const l of ledger) {
@@ -424,7 +428,7 @@ describe('dry run: edge cases', () => {
     await balanced(d, 'end');
   });
 
-  it('KNOWN MONEY QUESTION: credit used on a seat that still owes is in no Money row until the rest is paid', async () => {
+  it('credit used on a seat that still owes the rest is Held right away, and Players cover counts it ($54, not $51)', async () => {
     const d = await dry();
     const [g1, g2] = await games(d);
     await join(d, g1.id, ['Alex']);
@@ -436,21 +440,23 @@ describe('dry run: edge cases', () => {
     d.book.cashedOut += 1100;
     await join(d, g2.id, PLAYER_NAMES);
     expect(await useCredit(d, 'Alex', g2.id)).toMatchObject({ usedCents: 300 });
+    expect((await balanced(d, 'credit on an unpaid seat, before the game')).held).toBe(300);
     for (const x of PLAYER_NAMES.slice(1)) await venmoAndMark(d, x, g2.id);
     endOf(d, g2);
     await finalize(d, g2.id, { everyone: true });
     const v = await view(d, g2.id);
     expect(row(v, 'Alex').owesCents).toBe(600);
-    // Today: the $3 is missing from collected + held + pots (books short by $3) and the court row leaves it out too.
-    let collected = 0, held = 0;
-    for (const m of ['2026-10', '2026-11']) { const r = (await d.ctx.organizer.call('GET', `/api/admin/money?month=${m}`)).data; collected += r.collectedCents; held += r.heldCents; }
-    const pots = ((await dash(d)).creditLedger as any[]).reduce((s, l) => s + l.balanceCents, 0);
-    expect(d.book.cashIn - (collected + held + pots + d.book.cashedOut)).toBe(300);
-    // Court row: 5 x $9 paid + Alex's $6 still owed = $51; with his $3 credit it would be $54.
-    expect(v.court.playersCoverCents).toBe(5100);
+    // Before finalizing too (checked above by balanced at every step); now: the $3 is Held, nothing missing.
+    const b = await balanced(d, 'Alex owes $6 with $3 credit on the seat');
+    expect(b.held).toBe(300);
+    expect(b.collected).toBe(5 * 900);
+    // Court row: 5 x $9 paid + Alex's whole $9 ($3 credit + $6 still owed).
+    expect(v.court.playersCoverCents).toBe(5400);
+    expect(v.court.yourShareCents).toBe(0);
     // Once Alex pays the $6 rest, everything balances again.
-    await venmoAndMark(d, 'Alex', g2.id);
-    await balanced(d, 'Alex paid the rest');
+    expect(await venmoAndMark(d, 'Alex', g2.id)).toBe(600);
+    const after = await balanced(d, 'Alex paid the rest');
+    expect(after).toMatchObject({ held: 0, collected: 6 * 900 });
   });
 
   it('Players tab "played" leaves out a game someone was marked "did not play" for', async () => {

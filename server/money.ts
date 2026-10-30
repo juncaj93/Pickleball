@@ -95,6 +95,12 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     creditsOwed += owedBySession.get(s.id) ?? 0;
     // Money in for a game that isn't finalized is held, not collected.
     if (state !== 'played' && state !== 'canceled') held += kept;
+    // Credit put on a seat that still owes the rest is the organizer's money already, so it is held (finalized
+    // or not) until the seat is paid; then the whole payment is counted above.
+    if (state !== 'canceled')
+      held += roster
+        .filter((r) => r.player_id !== organizerId && r.status === 'confirmed' && r.payment_status === 'unpaid')
+        .reduce((sum, r) => sum + seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at }).usedCents, 0);
     courts += charged;
     if (state === 'played') {
       collected += kept;

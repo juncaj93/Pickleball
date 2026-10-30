@@ -131,7 +131,7 @@ async function giveCredit(ctx: Ctx, name: string, skip: string[] = []) {
 /**
  * The one-story check: the sum of every pot equals Credits owed summed over
  * every month; Held summed over months equals what paid, unsettled seats hold
- * on games not finalized; each finalized game's Collected equals what its
+ * on games not finalized plus credit put on seats that still owe the rest; each finalized game's Collected equals what its
  * roster paid minus what came back; the court row matches.
  */
 async function agree(ctx: Ctx) {
@@ -152,11 +152,14 @@ async function agree(ctx: Ctx) {
       0,
     );
     const unpaidOwes = others.reduce((sum: number, r: any) => sum + r.owesCents, 0);
+    // Credit put on a seat that still owes the rest: held until the seat is paid (finalized or not), and part of the court row.
+    const creditOnUnpaid = others.reduce((sum: number, r: any) => sum + (r.status === 'confirmed' && r.paymentStatus === 'unpaid' ? r.creditCents : 0), 0);
     const row = ms.flatMap((m) => m.sessions).find((x: any) => x.id === s.id);
     if (s.status === 'canceled') {
       expect(row?.collectedCents ?? 0).toBe(0);
       continue;
     }
+    held += creditOnUnpaid;
     if (s.finalized) {
       expect(row, `money row for ${s.startsAt}`).toBeDefined();
       expect(row.state).toBe('played');
@@ -172,8 +175,8 @@ async function agree(ctx: Ctx) {
       held += kept;
     }
     if (s.court) {
-      expect(s.court.playersCoverCents, `court row for ${s.startsAt}`).toBe(kept + unpaidOwes);
-      expect(s.court.yourShareCents).toBe(Math.max(0, s.court.costCents - kept - unpaidOwes));
+      expect(s.court.playersCoverCents, `court row for ${s.startsAt}`).toBe(kept + unpaidOwes + creditOnUnpaid);
+      expect(s.court.yourShareCents).toBe(Math.max(0, s.court.costCents - kept - unpaidOwes - creditOnUnpaid));
     }
   }
   expect(ms.reduce((sum, m) => sum + m.heldCents, 0), 'held across months').toBe(held);
