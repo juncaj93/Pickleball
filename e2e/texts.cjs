@@ -89,7 +89,10 @@ async function main() {
     players: PEOPLE.map((name, i) => ({ name, phone: name === 'Nathan' ? undefined : `248555010${i}` })),
   });
   await call(api.request, 'PUT', '/api/admin/group', { organizerName: 'Alex' });
+  // Pay prompts and Use credit only show once a court is booked (a game with no court reads like a normal game; see e2e/no-court.cjs),
+  // so the games in this fixture have a court.
   const d0 = await call(api.request, 'GET', '/api/admin/dashboard');
+  for (const s of d0.sessions.filter((x) => !x.state.flags.past)) await call(api.request, 'POST', `/api/admin/sessions/${s.id}/booked`, {});
   const id = Object.fromEntries(d0.players.map((p) => [p.name, p.id]));
   const [tue, thu] = d0.sessions; // Tue Oct 27, Thu Oct 29
   console.log('sessions', d0.sessions.slice(0, 3).map((s) => s.startsAt));
