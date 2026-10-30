@@ -2046,7 +2046,7 @@ async function main() {
     });
 
     console.log('Court waitlist');
-    await check('court waitlist: players tap I'm in and read it as a normal game (the organizer sees standby); the share text is the usual one; Court opened moves them in', async () => {
+    await check('court waitlist: players tap the join button and read it as a normal game (the organizer sees standby); the share text is the usual one; Court opened moves them in', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
       await more(card);
