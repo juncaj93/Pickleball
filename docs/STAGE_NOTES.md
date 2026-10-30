@@ -147,8 +147,8 @@ Presentation only. No money rule, money math, schema or server change.
 
 ## Round 2: feedback on the live redesign, plus Cancel with a reason (Oct 30, 2026)
 
-Status: built and tested, NOT deployed yet. Deploy order matters: back up, apply
-migration 0014, then deploy the code (the new code names the new column).
+Status: LIVE (deployed Fri Oct 30, 2026, about 10:03 AM Eastern). Deploy order mattered:
+back up, apply migration 0014, then deploy the code (the new code names the new column).
 
 ### What changed
 - Credit sheet: "Request refund" is now "Request cash out from Alex" (the organizer's
@@ -188,3 +188,25 @@ migration 0014, then deploy the code (the new code names the new column).
   Old checks were updated for the new wording and layout; none were deleted.
 - A fresh reviewer who wrote none of the code checked privacy, money, HTML
   injection and the migration: all passed.
+
+### Deploy and restore points (Fri Oct 30, 2026)
+- Deployment `92335f98`, commit `02b84fa`, branch main, about 10:03 AM Eastern.
+  Migration `0014_cancel_reason.sql` applied to the live database at about 10:02 AM
+  (additive: one nullable column; 8 live games, none has a reason).
+- Time Travel bookmark taken right before the migration:
+  `00000121-00000000-00005114-bbb179023ed225ace8239da2c3e1f687`
+  (restore with `npx wrangler d1 time-travel restore pickleball --bookmark=...`).
+- Full SQL export of the live database before the migration (136 rows, has phone
+  numbers, not committed): `live-before-round2-2026-10-30.sql` in that session's
+  scratch folder.
+- Code rollback: Pages deployment `8ba53598` (commit ae1811c). Code that ignores
+  `cancel_reason` keeps working, so rolling the code back needs no database change.
+- Spelling: one spelling everywhere, "Canceled" (the player card too).
+- Final test totals: 558 unit; browser run 229, names 24, gates 32, alerts 52, court 84,
+  held 81, credit 153, suggest 35, popup 33, texts 52, circles 18, audit-stage3 3,
+  cancel-reason 8, round2 17 (821 in all), all green.
+- After deploy: read-only checks only. The backup address returned 200 with the new
+  bundle; pickleball.juncaj.net could not be reached from the build sandbox (proxy 403),
+  and it serves the same Pages project.
+- SETUP_TOKEN is only used for first-time setup of an empty database; once a group
+  exists, setup is refused. Safe to delete; if missing, setup returns "Setup is turned off".
