@@ -244,7 +244,7 @@ describe('7. drops out of a game he paid for with credit', () => {
     expect((await view(ctx, 'Casey')).credit.balanceCents).toBe(1400);
     expect(await pot(ctx, 'Casey')).toBe(1400);
     const { d, months } = await agree(ctx);
-    expect(seat(d, g.id, 'Casey')).toMatchObject({ status: 'withdrawn', paymentStatus: 'not_applicable', paymentAmountCents: null, creditBackCents: 0 });
+    expect(seat(d, g.id, 'Casey')).toMatchObject({ status: 'withdrawn', paymentStatus: 'not_applicable', paymentAmountCents: null, creditBackCents: 1400, creditBackReason: 'dropped' });
     expect(months[1].heldCents).toBe(0);
     expect(months[0].creditsOwedCents).toBe(1400);
     expect(balanceOf(d, ctx.byName.Casey).creditCents).toBe(1400);

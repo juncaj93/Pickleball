@@ -452,7 +452,8 @@ describe('credit goes back to the player', () => {
     expect(res.data.creditBackCents).toBe(0);
     expect(await pot(ctx, MITCH)).toBe(1400);
     const d = await dash(ctx);
-    expect(seat(d, b.id, MITCH)).toMatchObject({ status: 'withdrawn', paymentStatus: 'not_applicable', paymentAmountCents: null, creditBackCents: 0 });
+    // The $14 of credit he paid with went back to him: the card says so ("Your $14 is now credit").
+    expect(seat(d, b.id, MITCH)).toMatchObject({ status: 'withdrawn', paymentStatus: 'not_applicable', paymentAmountCents: null, creditBackCents: 1400, creditBackReason: 'dropped' });
     expect(buildTodo(d).some((i) => i.kind === 'refund_request')).toBe(false);
     expect(heldCents(d, ctx.byName[MITCH])).toBe(0);
     const used = (await ledgerOf(ctx, MITCH)).entries.find((e: any) => e.kind === 'used');
@@ -475,7 +476,8 @@ describe('credit goes back to the player', () => {
     expect((await out(ctx, b.id, MITCH)).data.creditBackCents).toBe(900); // the cash part; the $5 credit simply goes back
     const d = await dash(ctx);
     expect(await pot(ctx, MITCH)).toBe(1400);
-    expect(seat(d, b.id, MITCH)).toMatchObject({ status: 'withdrawn', paymentStatus: 'paid', paymentAmountCents: 900, refundedAt: expect.any(String), creditBackCents: 900, creditBackReason: 'dropped' });
+    // $9 of cash became a credit entry and the $5 of credit went back: $14 came back from the seat.
+    expect(seat(d, b.id, MITCH)).toMatchObject({ status: 'withdrawn', paymentStatus: 'paid', paymentAmountCents: 900, refundedAt: expect.any(String), creditBackCents: 1400, creditBackReason: 'dropped' });
     expect(heldCents(d, ctx.byName[MITCH])).toBe(0);
   });
 
@@ -489,7 +491,7 @@ describe('credit goes back to the player', () => {
     await cancel(ctx, b.id);
     expect(await pot(ctx, MITCH)).toBe(1400);
     const d = await dash(ctx);
-    expect(seat(d, b.id, MITCH)).toMatchObject({ paymentStatus: 'unpaid', creditBackCents: 0 }); // nothing was paid in cash
+    expect(seat(d, b.id, MITCH)).toMatchObject({ paymentStatus: 'unpaid', creditBackCents: 1400, creditBackReason: 'canceled' }); // the credit he used came back
     expect(heldCents(d, ctx.byName[MITCH])).toBe(0);
     // The player's history keeps only live entries; the organizer's ledger shows the use ended by the cancel.
     expect((await view(ctx, MITCH)).credit.history.map((e: any) => e.kind)).toEqual(['kept']);

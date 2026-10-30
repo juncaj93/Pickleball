@@ -36,6 +36,8 @@ export interface CreditRow {
   createdAt: string;
   /** Undone, or went back to the player. An ended row no longer counts. */
   endedAt: string | null;
+  /** Why it ended: 'dropped' or 'canceled' mean credit used on a seat went back to the player. */
+  endedReason?: string | null;
   reason?: CreditReason | null;
   playedCount?: number | null;
 }
@@ -114,16 +116,20 @@ export const NO_SEAT_CREDIT: SeatCredit = { usedCents: 0, cashCents: 0, backCent
  * settled or unpaid seat counts them all ("Your $28 is now credit").
  */
 export function seatCredit(rows: CreditRow[], sessionId: string, playerId: string, seat: SeatLike): SeatCredit {
-  const mine = live(rows).filter((r) => r.sessionId === sessionId && r.playerId === playerId);
+  const all = rows.filter((r) => r.sessionId === sessionId && r.playerId === playerId);
+  const mine = all.filter((r) => !r.endedAt);
   const used = mine.filter((r) => r.kind === 'used' && r.reason !== 'cash').reduce((sum, r) => sum + r.cents, 0);
   const cash = mine.filter((r) => r.kind === 'used' && r.reason === 'cash').reduce((sum, r) => sum + r.cents, 0);
   const current = seat.paymentStatus === 'paid' && !seat.refundedAt;
   const backs = mine.filter((r) => r.kind === 'kept' && r.reason !== 'cash' && (!current || r.reason === 'finalized'));
+  // Credit used on the seat that went back to the player (they dropped out, or the game was canceled) came back too.
+  const returned = current ? [] : all.filter((r) => r.kind === 'used' && r.reason !== 'cash' && (r.endedReason === 'dropped' || r.endedReason === 'canceled'));
+  const backReason = backs[0]?.reason ?? (returned[0]?.endedReason as CreditReason | undefined) ?? null;
   return {
     usedCents: used,
     cashCents: cash,
-    backCents: backs.reduce((sum, r) => sum + r.cents, 0),
-    backReason: backs[0]?.reason ?? null,
+    backCents: backs.reduce((sum, r) => sum + r.cents, 0) + returned.reduce((sum, r) => sum + r.cents, 0),
+    backReason,
   };
 }
 

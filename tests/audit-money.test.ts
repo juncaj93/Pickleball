@@ -515,7 +515,8 @@ describe('drops before the game', () => {
     const view = await adminSession(ctx, s.id);
     expect(row(view, 'Blair').lateDropAt).not.toBeNull();
     expect(row(view, 'Blair')).toMatchObject({ creditBackCents: 1400, creditBackReason: 'dropped' });
-    expect(row(view, 'Casey')).toMatchObject({ paymentStatus: 'not_applicable', creditCents: 0, creditBackCents: 0 });
+    // Casey paid with credit: that credit went back, and the card says "Your $14 is now credit".
+    expect(row(view, 'Casey')).toMatchObject({ paymentStatus: 'not_applicable', creditCents: 0, creditBackCents: 1400, creditBackReason: 'dropped' });
     expect(row(view, 'Devon')).toMatchObject({ paymentStatus: 'not_applicable', creditBackCents: 0 });
     expect(await creditOf(ctx, 'Blair')).toBe(1400);
     expect(await creditOf(ctx, 'Casey')).toBe(1400);
@@ -593,8 +594,8 @@ describe('organizer cancels', () => {
     expect(view.chargedCents).toBeNull(); // not asked at 13 hours
     expect(row(view, 'Alex')).toMatchObject({ creditBackCents: 1400, creditBackReason: 'canceled', owesCents: 0, shareCents: null });
     expect(row(view, 'Blair').creditBackCents).toBe(1400);
-    expect(row(view, 'Casey')).toMatchObject({ creditBackCents: 0, creditCents: 0, paymentStatus: 'unpaid' });
-    expect(row(view, 'Devon')).toMatchObject({ creditBackCents: 900, creditCents: 0 });
+    expect(row(view, 'Casey')).toMatchObject({ creditBackCents: 1400, creditBackReason: 'canceled', creditCents: 0, paymentStatus: 'unpaid' });
+    expect(row(view, 'Devon')).toMatchObject({ creditBackCents: 1400, creditCents: 0 });
     expect(row(view, 'Emery').creditBackCents).toBe(0);
     expect(await creditOf(ctx, 'Alex')).toBe(1400);
     expect(await creditOf(ctx, 'Blair')).toBe(1400);

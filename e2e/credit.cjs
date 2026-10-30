@@ -674,8 +674,9 @@ async function main() {
     });
     await check('SUSPECTED CODE BUG: credit used on a seat that was still unpaid does not come back on a cancel (Julian used $5 toward Nov 10, owed $9; after the cancel his credit is $0 and the "used" ledger row stays live; expected $5 back)', async () => {
       const d = await dash();
-      const pot = d.creditLedger.find((l) => l.playerId === id.Julian)?.balanceCents ?? 0;
-      assert(pot === 500, `Julian's credit after the cancel: ${pot}`);
+      const l = d.creditLedger.find((x) => x.playerId === id.Julian);
+      const pot = l?.balanceCents ?? 0;
+      assert(pot === 500, `Julian's credit after the cancel: ${pot}; entries ${JSON.stringify(l?.entries)}`);
     });
     await check('SUSPECTED CODE BUG: a player who paid the canceled game with credit (Ryan, $14) is missing from "Now their credit" and from the "Your $14 is now credit" line, though the credit did come back', async () => {
       assert(afterCancel, 'the cancel sheet did not open');
