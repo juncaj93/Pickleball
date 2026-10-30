@@ -86,6 +86,57 @@ held money on canceled games found nothing to convert (checked read-only first).
   pass), fresh `docs/screenshots` (`node e2e/shots.cjs`), and the out-of-date
   state gallery.
 
+## Stage 3: polish and check (Thu Oct 29, 2026, about 11:30 PM Eastern)
+
+Merged into main as #47 (main was behind: Stage 1 went live from a branch that
+had never been merged). See `STAGE3_POLISH.md` for the plain-words list.
+
+### What changed
+- Circles: checked at 0 to 10 in plus a waitlist on both screens at 360, 375,
+  390 and 430 px, light and dark. One fix: with 10 in on a narrow phone the
+  organizer's own I'm in dropped to a line of its own; the balls now wrap
+  beside it. Spacing, alignment, size, dark-mode contrast and Reduce Motion
+  were already right.
+- Header: the credit chip lost its extra right margin. No wrap at 360 px,
+  even with "Bartholomew" and $1,000; very long names truncate.
+- Every screen looked at in light and dark at the four widths (shots in the
+  session scratch folder). The thin line at the bottom of the player page is
+  deliberate (asked for in #26) and stays.
+- Fresh audit (a helper that did not write the code) found 7 problems, all
+  fixed: reopen and unmark taking credit a refund request holds; the
+  post-game note following a later price change; the stale "Request refund"
+  line; no Undo after a partial Mark refunded; one player flooding Telegram
+  (now one "Refund requested" per player an hour); half-dollar prices
+  (price per player is whole dollars now).
+- Left alone: "You get credit back if 5 or more play."
+
+### Database
+No changes.
+
+### Restore points
+- Full SQL export right before the deploy:
+  `live-before-stage3-2026-10-29.sql` (136 rows, in this session's scratch folder
+  `/tmp/claude-0/-home-user-Pickleball/c4be037e-e40c-591f-8ffa-20f607c0aa7b/scratchpad/`;
+  it has phone numbers, so it was not committed). Thu Oct 29, 11:20 PM Eastern.
+- Cloudflare Time Travel bookmark, same time:
+  `0000010b-00000000-00005114-39f03bad2029b1d6f30a1e1ed380a22c`.
+- Code to go back to: deployment 687b32a0 (commit 8ba0465). Rolling the
+  code back is enough; Stage 3 changed no data.
+
+### Tests
+- Unit and API: 543 passed in 36 files, four runs in a row. Three privacy
+  tests used to fail about once in 50 runs when a random id happened to hold
+  "4800" or "555-01"; they now blank ids out first (`withoutIds` in
+  `tests/harness.ts`).
+- Browser: 796 checks, 0 failed (run 229, credit 153, court 84, held 81,
+  alerts 52, texts 52, suggest 35, popup 33, gates 32, names 24, circles 18,
+  audit 3).
+
+### Deploy
+Live Thu Oct 29, 2026, 11:29 PM Eastern: production deployment `de7bb199`
+(commit e687781, the merge of #47). Read-only live checks passed (the one
+"setup code is configured" line is expected once a group exists).
+
 ## Player screen cleanup and redesign (Oct 30, 2026)
 
 Presentation only. No money rule, money math, schema or server change.
