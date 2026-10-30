@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { CATCH_UP_MS, countLine, dayAt, dueAlerts, markKey, nextTasks, type Task, type TaskOptions, type TaskSession, taskTimes } from '../shared/tasks';
-import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { HOUR, playerPhone, sentText, setupGroup, TestApp } from './harness';
 
 // "Do this now" and smart Telegram alerts. A fake clock throughout; Telegram
 // is always a stand-in, so no test ever sends a real message.
@@ -441,7 +441,7 @@ async function smartGroup(failFirst = 0) {
         return new Response(JSON.stringify({ ok: false, description: 'Too Many Requests' }), { status: 429 });
       }
       // Each direct text link has its own signed token; tests compare the words around it.
-      sent.push(String(JSON.parse(String(init.body)).text).replace(/\/go\/[A-Za-z0-9_.-]+/, '/go/TOKEN'));
+      sent.push(sentText(JSON.parse(String(init.body))).replace(/\/go\/[A-Za-z0-9_.-]+/, '/go/TOKEN'));
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }) as typeof fetch,
   };

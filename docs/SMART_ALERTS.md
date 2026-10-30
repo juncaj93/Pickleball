@@ -109,6 +109,12 @@ Cloudflare cron (every 5 min)
 - **Kill switch.** Settings > Alerts > Smart alerts. The main "Telegram
   alerts to me" switch also silences them. "Send TEST smart alert" sends one
   message that starts with "TEST".
+- **Tappable words.** Telegram shows no raw addresses. Right before
+  sending, each "words: https://..." becomes those words as a tappable link
+  to the same address ("Text the group", "Cancel court", "Book", "Then tap I
+  booked it"). Only the ": " and the address leave the text; the words, send
+  times and links are the same (`server/telegram-links.ts`). The "Open site"
+  button stays under every message.
 - **Direct text link.** The night-before alert links to `/go/<token>`. That
   page opens Messages with the text filled in and no recipients. If the phone
   blocks the automatic open, it shows a big **Open Messages** button.

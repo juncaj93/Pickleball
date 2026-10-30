@@ -105,3 +105,17 @@ export async function firstSession(ctx: Awaited<ReturnType<typeof setupGroup>>) 
   const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
   return dash.data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now);
 }
+
+/**
+ * A sent Telegram message read back as plain text: each tappable link put
+ * back as "words: address", the exact text the alert was built with.
+ */
+export function sentText(body: { text: string; entities?: { type: string; offset: number; length: number; url: string }[] }): string {
+  let text = body.text;
+  for (const e of [...(body.entities ?? [])].reverse()) {
+    if (e.type !== 'text_link') continue;
+    const end = e.offset + e.length;
+    text = `${text.slice(0, end)}: ${e.url}${text.slice(end)}`;
+  }
+  return text;
+}

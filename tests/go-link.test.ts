@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { GO_LINK_HOURS, makeGoToken, readGoToken } from '../server/go';
-import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { HOUR, playerPhone, sentText, setupGroup, TestApp } from './harness';
 
 // The direct text link (/go/<token>) in night-before Telegram alerts.
 const SECRET = 'test-cron-secret-0123456789abcdef0123456789';
@@ -49,7 +49,7 @@ async function group() {
     CRON_SECRET: SECRET,
     GO_LINKS: 'on',
     TELEGRAM_FETCH: (async (_u: string, init: RequestInit) => {
-      sent.push(JSON.parse(String(init.body)).text);
+      sent.push(sentText(JSON.parse(String(init.body))));
       return new Response('{"ok":true}', { status: 200 });
     }) as typeof fetch,
   };
