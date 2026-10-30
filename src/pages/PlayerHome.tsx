@@ -786,15 +786,12 @@ function RowPay({
   const left = mine.creditCents > 0;
   // With credit to use, "Use credit" is the filled button and Pay is its outline twin (covers all or part).
   const showCredit = mine.useCreditCents > 0;
-  const chipText = left
-    ? `${formatPrice(mine.oweCents)} left to pay`
-    : showCredit
-      ? `${formatPrice(mine.oweCents)} due · ${formatPrice(g.credit.usableCents)} credit`
-      : `${formatPrice(mine.oweCents)} due`;
+  const chipText = left ? `${formatPrice(mine.oweCents)} left to pay` : `${formatPrice(mine.oweCents)} due`;
   const chip = (
     <span className="pchip chip-warn" data-owe>
       {chipText}
       {left && <span className="sr-only">, {formatPrice(mine.creditCents)} credit used</span>}
+      {showCredit && !left && <span className="chip-credit"> · {formatPrice(g.credit.usableCents)} credit</span>}
     </span>
   );
   if (onTop) {
@@ -944,7 +941,10 @@ function ScheduleRow({
           <strong className="st-in">You're in</strong>
           <span className="st-sep">·</span>
         </span>
-        <span className="court-status">{courtWord}</span>
+        <span className="st-tail">
+          <span className="court-status">{courtWord}</span>
+          {calLink}
+        </span>
       </>
     );
   else
@@ -965,12 +965,6 @@ function ScheduleRow({
       {courtWait ? 'Leave standby' : 'Leave waitlist'}
     </button>
   );
-  // In a LATER row the right column holds one short control. Anything wider (two buttons, a long button or pill)
-  // drops under the middle block instead of squeezing the names.
-  const wide =
-    !!(joinBtn && (courtWait || s.joinAs !== 'in')) ||
-    !!leaveBtn ||
-    (payShows && !!mine && !onTop && (mine.useCreditCents > 0 || mine.creditCents > 0 || (mine.paymentStatus === 'paid' && !!mine.paidWithCredit)));
   const noteEl = note && (
     <p className="credit-note" data-credit-note>
       {note}
@@ -980,7 +974,7 @@ function ScheduleRow({
   return (
     <article
       id={`row-${s.id}`}
-      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${wide ? ' wide-money' : ''}`}
+      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
       data-tier={tier}
       data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
@@ -1001,7 +995,6 @@ function ScheduleRow({
           <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
             {status}
           </div>
-          {calLink}
         </div>
         <div className="sched-main">
           {showCount && (

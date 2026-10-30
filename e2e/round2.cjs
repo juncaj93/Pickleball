@@ -19,7 +19,8 @@ const PORT = 5232;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'round2-setup-token-0123456789';
 const PIN = '482913';
-const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon', 'Sam', 'Blair', 'Emery'];
+const FILLERS = ['Fa', 'Fb', 'Fc', 'Fd', 'Fe', 'Ff', 'Fg'];
+const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon', 'Sam', 'Blair', 'Emery', 'Wren', 'Zed', 'Pia', ...FILLERS];
 const WIDTHS = [360, 375, 390, 430];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
@@ -94,6 +95,24 @@ async function main() {
   // Ryan: owing on 0 (this week), 2 (next week), 4 (later); paid himself on 3 (next week) and 6 (later).
   for (const i of [0, 2, 4, 3, 6]) await join('Ryan', i);
   for (const i of [3, 6]) await post(who.Ryan, `/api/sessions/${games[i].id}/paid`, { paid: true });
+  // More states for the "right column is centered" check (later rows):
+  //   Wren: $14 credit unused, owing on game 4 (Use credit + Pay)
+  //   Zed: part credit on game 5 ("$5 left to pay" + Pay $5)
+  //   game 7 is full (10 in): Pia is on its waitlist (Leave waitlist), everyone else sees Join waitlist
+  //   game 8 is canceled
+  for (const n of ['Wren', 'Zed']) {
+    await join(n, 1);
+    await post(who[n], `/api/sessions/${games[1].id}/paid`, { paid: true });
+    await post(who[n], `/api/sessions/${games[1].id}/withdraw`, {});
+  }
+  await join('Wren', 4);
+  await post(who.Zed, '/api/me/refund-request', { cents: 500 });
+  await join('Zed', 5);
+  await post(who.Zed, `/api/sessions/${games[5].id}/use-credit`, {});
+  await post(who.Zed, '/api/me/refund-request/cancel', {});
+  for (const n of [...FILLERS, 'Nathan', 'Mitchel', 'Brandon']) await join(n, 7);
+  await join('Pia', 7);
+  await post(areq, `/api/admin/sessions/${games[8].id}/decision`, { decision: 'cancel', confirm: true });
 
   const phone = (width, colorScheme, extra = {}) => ({ viewport: { width, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme, userAgent: UA, ...extra });
   async function open(name, width, scheme, extra) {
@@ -133,6 +152,7 @@ async function main() {
         const status = a.querySelector('.sched-status');
         return {
           tier: a.dataset.tier,
+          full: /full/.test((a.querySelector('.in-count') || { textContent: '' }).textContent),
           mine: !!a.dataset.mine,
           h: box.height,
           box: rect(a),
@@ -144,6 +164,16 @@ async function main() {
           head: head ? rect(head) : null,
           status: status ? rect(status) : null,
           money: (a.querySelector('.sched-money') || { innerText: '' }).innerText.replace(/\s+/g, ' ').trim(),
+          right: (() => {
+            const el = a.querySelector('.sched-money:not(.stacked)') || a.querySelector('.sched-money.stacked > .pchip');
+            return el ? rect(el) : null;
+          })(),
+          chipBtn: (() => {
+            const chip = a.querySelector('.sched-money .pchip');
+            const btn = a.querySelector('.sched-money .btn');
+            return chip && btn ? [rect(chip), rect(btn)] : null;
+          })(),
+          label: (a.querySelector('.sched-status') || { textContent: '' }).textContent.trim(),
           overflowX: a.scrollWidth > a.clientWidth + 1,
         };
       }),
@@ -154,6 +184,7 @@ async function main() {
       await check(`${width}px ${scheme}: compact cards in every tier, nothing overlaps or leaks, taps are 44px, one filled button per card`, async () => {
         const { ctx, page } = await open('Ryan', width, scheme);
         const facts = await cardFacts(page);
+        await page.screenshot({ path: path.join(__dirname, 'screenshots', `round2-${width}-${scheme}.png`), fullPage: true });
         assert(facts.length >= 8, `only ${facts.length} cards`);
         assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'the page scrolls sideways');
         for (const c of facts) {
@@ -172,14 +203,14 @@ async function main() {
           assert(c.small.length === 0, `${where}: small taps ${JSON.stringify(c.small)}`);
         }
         // Heights at the targets (a little room for a wrapped names line).
-        const tall = (tier, joined, text) => facts.filter((c) => c.tier === tier && c.mine === joined && (!text || text.test(c.money)));
+        const tall = (tier, joined, text) => facts.filter((c) => !c.full && c.tier === tier && c.mine === joined && (!text || text.test(c.money)));
         const max = (list) => Math.max(...list.map((c) => c.h));
         const limits = [
           ['this', true, /due/, 250, 'THIS WEEK joined and owing'],
           ['next', true, /Paid/, 205, 'NEXT WEEK joined and paid'],
           ['next', true, /due/, 215, 'NEXT WEEK joined and owing'],
           ['later', true, /due/, 145, 'LATER joined and owing'],
-          ['later', true, /Paid/, 140, 'LATER joined and paid'],
+          ['later', true, /Paid/, 150, 'LATER joined and paid'],
           ['later', false, null, 120, 'LATER not joined'],
         ];
         for (const [tier, joined, text, limit, label] of limits) {
@@ -192,8 +223,9 @@ async function main() {
           if (!c.mine) assert(!c.cal, `${c.tier}: a not-joined card shows the calendar icon`);
           else {
             assert(c.cal && !c.calInLinks, `${c.tier}: joined card needs the calendar icon at the end of the status line`);
-            assert(c.cal.l >= c.status.r - 2 && c.cal.r <= c.box.r + 1, `${c.tier}: calendar icon is not right of the status text`);
-            assert(Math.abs((c.cal.t + c.cal.b) / 2 - (c.status.t + c.status.b) / 2) <= 14, `${c.tier}: calendar icon is not on the status line`);
+            // Inside the status line, after the last word ("Court booked"), never on a line of its own.
+            assert(c.cal.r <= c.status.r + 1 && c.cal.l >= c.status.l, `${c.tier}: calendar icon is not inside the status line`);
+            assert(Math.abs((c.cal.t + c.cal.b) / 2 - (c.status.b - 12)) <= 20, `${c.tier}: calendar icon is not on the last line of the status text (icon ${JSON.stringify(c.cal)}, status ${JSON.stringify(c.status)})`);
           }
         }
         // Chip and button share a line wherever both are on the right or in the card body.
@@ -202,8 +234,40 @@ async function main() {
           const pay = c.parts.find((p) => /^btn/.test(p.name));
           assert(chip && pay && Math.abs((chip.t + chip.b) / 2 - (pay.t + pay.b) / 2) < 24 || c.tier === 'later', `${c.tier}: the amber chip and the button are not side by side`);
         }
-        await page.screenshot({ path: path.join(__dirname, 'screenshots', `round2-${width}-${scheme}.png`), fullPage: true });
         await ctx.close();
+      });
+    }
+  }
+
+  // The right column is the exact vertical middle of the whole LATER row, in every state.
+  for (const width of WIDTHS) {
+    for (const scheme of ['light', 'dark']) {
+      await check(`${width}px ${scheme}: LATER right column centered on the row (I'm in, due chip + Pay, part credit, Use credit, Paid, Leave waitlist, Join waitlist); canceled has none`, async () => {
+        const seen = new Set();
+        for (const name of ['Ryan', 'Wren', 'Zed', 'Pia', 'Sam']) {
+          const { ctx, page } = await open(name, width, scheme);
+          const facts = await cardFacts(page);
+          for (const c of facts) {
+            if (c.tier !== 'later') {
+              // THIS / NEXT WEEK: the chip and its button share one line (centers within 2px).
+              if (c.chipBtn) assert(Math.abs((c.chipBtn[0].t + c.chipBtn[0].b) / 2 - (c.chipBtn[1].t + c.chipBtn[1].b) / 2) <= 2, `${name} ${c.tier}: chip and button are not on one line`);
+              continue;
+            }
+            if (!c.right) continue;
+            const row = (c.box.t + c.box.b) / 2;
+            const col = (c.right.t + c.right.b) / 2;
+            assert(Math.abs(col - row) <= 2, `${name} later row "${c.money}" (${c.label.slice(0, 30)}): right column center is ${col.toFixed(1)}, row center ${row.toFixed(1)}`);
+            const kind = /left to pay/.test(c.money) ? 'part credit' : /Use credit/.test(c.money) ? 'use credit' : /due/.test(c.money) ? 'due + Pay' : /^Paid/.test(c.money) ? 'paid' : /Leave/.test(c.money) ? 'leave waitlist' : /Join/.test(c.money) ? 'join waitlist' : /I'm in/.test(c.money) ? "I'm in" : c.money;
+            seen.add(kind);
+          }
+          if (name === 'Sam') {
+            const canceled = await page.locator('.schedule article.off').count();
+            assert(canceled >= 1, 'no canceled row to check');
+            assert((await page.locator('.schedule article.off .sched-money').count()) === 0, 'a canceled row has controls');
+          }
+          await ctx.close();
+        }
+        for (const k of ['due + Pay', 'paid', "I'm in", 'part credit', 'use credit', 'leave waitlist', 'join waitlist']) assert(seen.has(k), `state "${k}" was not on screen (saw ${[...seen]})`);
       });
     }
   }
