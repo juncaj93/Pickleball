@@ -3,9 +3,11 @@
 // order, the Text menu and Home suggestion cards, Settings, privacy of every
 // player-facing answer, and the Nov 1 2026 clock change.
 //
-// Tests named "BUG:" fail on purpose against the current code: the rules in
-// NEW_RULES.md say one thing and the code does another. Everything else is a
-// check that held up.
+// Written by an auditor that did not write the code. Its first run found
+// seven bugs (reopen or unmark taking credit a refund request holds, the
+// post-game note following a later price change, a stale "Request refund"
+// line, a refund-request alert flood, half-dollar credit); each test below
+// now checks the fix. Everything else is a check that held up.
 //
 // Telegram is always a fake (TELEGRAM_FETCH); nothing leaves this process.
 import { describe, expect, it } from 'vitest';
@@ -58,7 +60,7 @@ async function group(opts: { fetch?: (url: string, init: RequestInit) => Promise
   };
   return Object.assign(ctx, { sent, texts, clear });
 }
-type G = Awaited<ReturnType<typeof group>>;
+// type G = Awaited<ReturnType<typeof group>>;
 
 const dashboard = async (ctx: Ctx) => (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
 async function refresh(ctx: Ctx) {
@@ -216,7 +218,7 @@ describe('Request refund: the amount box', () => {
 // 2. Reserved amounts against everything that can take credit back
 
 describe('a pending request stays covered by the pot', () => {
-  it('BUG: Reopen on the Money tab while a player has a pending request for the credit that game gave them leaves the request bigger than their pot, and Mark refunded then fails', async () => {
+  it('Reopen on the Money tab waits while a pending request holds credit that game gave back (the request always stays covered)', async () => {
     const ctx = await group();
     const { s, phones } = await sixPlayed(ctx);
     expect((await ledgerOf(ctx, 'Alex')).balanceCents).toBe(500);
@@ -235,7 +237,7 @@ describe('a pending request stays covered by the pot', () => {
     }
   });
 
-  it('BUG: the organizer unmarking a paid seat after finalize takes back credit a pending request has reserved', async () => {
+  it('the organizer unmarking a paid seat after finalize never takes back credit a pending request has reserved', async () => {
     const ctx = await group();
     const { s, phones } = await sixPlayed(ctx);
     expect((await requestRefund(phones.Blair, 500)).status).toBe(200);
@@ -359,21 +361,29 @@ describe('Telegram: Refund requested', () => {
     expect((await dashboard(ctx)).refundRequests).toEqual([]);
   });
 
-  it('the hourly limit: at most 20 Telegram messages in an hour, refund requests included', async () => {
+  it('one "Refund requested" message per player an hour: asking again and again sends one; another player still gets theirs; an hour later it sends again', async () => {
     const ctx = await group();
-    const { phone: alex } = await giveCredit(ctx, 'Alex'); // a drop within 36 hours: one alert already
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
+    const { phone: blair } = await giveCredit(ctx, 'Blair');
+    await ctx.clear();
     for (let i = 0; i < 25; i++) {
       expect((await requestRefund(alex, 100)).status).toBe(200);
       await ctx.app.settle();
       expect((await cancelRequest(alex)).status).toBe(200);
     }
-    const all = await ctx.texts();
-    expect(all.length).toBe(20);
-    expect(all.filter((t) => t.startsWith('Refund requested')).length).toBe(19);
-    expect((await dashboard(ctx)).alerts.lastError).toMatch(/Paused/);
+    expect(await ctx.texts()).toEqual(['Refund requested: Alex wants $1 back.']);
+    await ctx.clear();
+    expect((await requestRefund(blair, 700)).status).toBe(200);
+    expect(await ctx.texts()).toEqual(['Refund requested: Blair wants $7 back.']);
+    await ctx.clear();
+    ctx.app.now += 61 * 60_000;
+    expect((await requestRefund(alex, 200)).status).toBe(200);
+    expect(await ctx.texts()).toEqual(['Refund requested: Alex wants $2 back.']);
+    // The Home card always shows the latest request, sent or not.
+    expect((await dashboard(ctx)).refundRequests.map((r: any) => [r.name, r.cents])).toEqual(expect.arrayContaining([['Alex', 200], ['Blair', 700]]));
   });
 
-  it('BUG: one player tapping Request refund / Cancel request over and over floods the organizer and then silences the late-drop alert for an hour', async () => {
+  it('one player tapping Request refund / Cancel request over and over does not use up the hour\'s alerts: a late drop still reaches the organizer', async () => {
     const ctx = await group();
     const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
     const s = await nextSession(ctx, [s0.id]);
@@ -550,7 +560,7 @@ describe('the Text menu and Home suggestion cards', () => {
     }
   });
 
-  it('BUG: raising "$14 each" after a game was finalized rewrites that game\'s post-game note ("If you paid $16, the extra $7")', async () => {
+  it('raising "$14 each" after a game was finalized does not rewrite that game\'s post-game note ("If you paid $16, the extra $7")', async () => {
     const ctx = await group();
     const s = await nextSession(ctx);
     await joinAll(ctx, s.id, ALL.slice(0, 6));
@@ -566,7 +576,7 @@ describe('the Text menu and Home suggestion cards', () => {
     expect(body).toContain('If you paid $14, the extra $5 is now credit');
   });
 
-  it('BUG: at 4 played the note has no credit sentence, even after the flat price is raised later', async () => {
+  it('at 4 played the note has no credit sentence, even after the flat price is raised later', async () => {
     const ctx = await group();
     const s = await nextSession(ctx);
     await joinAll(ctx, s.id, ALL.slice(0, 4));
@@ -628,7 +638,7 @@ describe('Settings', () => {
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { refundRequests: 'no' })).status).toBe(400);
   });
 
-  it('BUG: a "$14.50 each" price makes 50-cent credit that can never be asked back (the credit sheet offers Request refund for $0)', async () => {
+  it('a "$14.50 each" price is kept to whole dollars, so no credit is ever a part-dollar that cannot be asked back', async () => {
     const ctx = await group();
     expect((await ctx.organizer.call('PUT', '/api/admin/group', { settings: { pricePerPlayerCents: 1450 } })).status).toBe(200);
     const s = await nextSession(ctx);
@@ -727,7 +737,7 @@ describe('privacy of every player-facing answer', () => {
 // 8. The player's "Your $14 is now credit. Request refund" line
 
 describe('the "now credit" line on a game card', () => {
-  it('BUG: after the credit was spent, the dropped game still says "Your $14 is now credit. Request refund" and Request refund opens nothing (the sheet only opens with credit)', async () => {
+  it('after the credit was spent, the dropped game no longer says "Your $14 is now credit. Request refund" and Request refund opens nothing (the sheet only opens with credit)', async () => {
     const ctx = await group();
     const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
     const s = await nextSession(ctx, [s0.id]);

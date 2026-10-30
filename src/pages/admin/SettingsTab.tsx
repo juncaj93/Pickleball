@@ -169,7 +169,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       initial={dollars(g.settings[key])}
       parse={(t) => {
         const cents = parseDollars(t);
-        return cents === null || cents > SETTING_LIMITS[key][1] ? { error: 'Enter an amount like 14 or 14.50.' } : { value: cents };
+        if (cents === null || cents > SETTING_LIMITS[key][1]) return { error: 'Enter an amount like 14 or 14.50.' };
+        // The price players pay is whole dollars, so the final price and every credit stay whole dollars too.
+        if (key === 'pricePerPlayerCents' && cents % 100 !== 0) return { error: 'Enter a whole-dollar amount, like 14.' };
+        return { value: cents };
       }}
       body={(value) => ({ settings: { [key]: value } })}
       saveOnPause={false}

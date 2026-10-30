@@ -104,7 +104,8 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
   if (!ledger || ctx.d.me?.id === player.id) return null;
   // The usable balance: the pot minus a pending request (that one is answered from its Home card).
   const refundCents = ledger.refundCents;
-  const canUndo = ledger.refundCents === 0 && ledger.reservedCents === 0 && ledger.entries.some((e) => e.kind === 'refunded' && !e.endedAt);
+  // Undo the last Mark refunded, also when some credit is left (a refund request for part of it). Not while a request waits.
+  const canUndo = ledger.reservedCents === 0 && ledger.entries.some((e) => e.kind === 'refunded' && !e.endedAt);
   if (refundCents <= 0 && !canUndo) return null;
   const pay = venmoRefundUrl(player.venmo ?? null, refundCents, CREDIT_NOTE);
   const tapped = refundCents > 0 && readOpenedCredit(player.id) === refundCents;

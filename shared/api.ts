@@ -61,7 +61,7 @@ export interface PlayerSessionView {
     paidWithCredit: boolean;
     /** What "Use credit" would take off this session now: the smaller of their usable credit and what they owe. 0 hides the button. */
     useCreditCents: number;
-    /** Money from this session that came back to them as credit (they dropped out, it was canceled, they did not play, or they paid more than the final price). */
+    /** Money from this session that came back to them as credit (they dropped out, it was canceled, they did not play, or they paid more than the final price). 0 once they have no credit left. */
     creditBackCents: number;
   };
 }
@@ -246,11 +246,13 @@ export interface AdminSessionView {
   /** Day-before and last-call cards are inside their windows (and not marked Done). */
   cards: { dayBefore: boolean; lastCall: boolean };
   /** The organizer finalized who played. `creditBackCents` is what finalizing gave back (not credit from drops before the game). */
-  finalized: { at: string; playedCount: number; priceCents: number; creditBackCents: number } | null;
+  finalized: { at: string; playedCount: number; priceCents: number; creditBackCents: number; flatCents: number } | null;
   /** Over, not canceled, not finalized, and someone was in: shows the Finalize card. */
   needsFinalize: boolean;
   /** Reopen is blocked because some credit from this game was already used or refunded: who. */
   reopenBlockedBy: string[];
+  /** Reopen waits because a pending refund request is holding credit from this game: who. */
+  reopenRequestedBy: string[];
   eligibleSubstitutes: EligibleSubstitute[];
 }
 

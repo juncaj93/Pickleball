@@ -172,7 +172,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
-      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, seat: mySeat(s.id) })),
+      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) })),
     owed,
     payDue: owed.filter((o) => {
       const p = localParts(Date.parse(o.startsAt), tz);

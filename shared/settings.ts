@@ -51,6 +51,8 @@ export function normalizeSettings(input: unknown): GroupSettings {
       out[key] = Math.min(max, Math.max(min, Math.round(v)));
     }
   }
+  // Players pay whole dollars (credit and the final price follow from it).
+  out.pricePerPlayerCents = Math.round(out.pricePerPlayerCents / 100) * 100;
   return out;
 }
 

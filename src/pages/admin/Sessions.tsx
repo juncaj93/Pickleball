@@ -6,7 +6,7 @@ import {
   deadlineAlertMessage,
   siteAddress,
 } from '../../../shared/messages';
-import { CHARGE_ASK_HOURS } from '../../../shared/credit';
+import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit';
 import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
@@ -800,12 +800,17 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
       )}
       {fin && !s.state.flags.canceled && (
         <div className="stack" style={{ gap: 6 }}>
-          <button className="btn small secondary" disabled={busy || s.reopenBlockedBy.length > 0} data-reopen onClick={reopen}>
+          <button className="btn small secondary" disabled={busy || s.reopenBlockedBy.length > 0 || s.reopenRequestedBy.length > 0} data-reopen onClick={reopen}>
             Reopen
           </button>
           {s.reopenBlockedBy.length > 0 && (
             <p className="small muted" data-reopen-blocked>
               Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+            </p>
+          )}
+          {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (
+            <p className="small muted" data-reopen-blocked>
+              {reopenRequestedReason(s.reopenRequestedBy)}
             </p>
           )}
         </div>

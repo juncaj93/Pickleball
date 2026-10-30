@@ -102,7 +102,7 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
     throw err;
   }
   await audit(ctx.db, group.id, null, 'refund_requested', { player: name, playerId, amountCents: cents }, ctx.nowIso, name);
-  await notifyRefundRequest(ctx, group, name, cents);
+  await notifyRefundRequest(ctx, group, playerId, name, cents);
   return { ok: true, request: { id, cents, at: ctx.nowIso } };
 }
 

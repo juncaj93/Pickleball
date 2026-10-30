@@ -222,3 +222,7 @@ export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'ses
       return `+${money} kept${day ? ` from ${day}` : ''}`;
   }
 }
+
+/** Why Reopen waits: a pending refund request is holding credit this game gave back. */
+export const reopenRequestedReason = (names: string[]) =>
+  `Can't reopen: ${names.join(' and ')} asked for this credit back. Answer the refund request on Home first.`;

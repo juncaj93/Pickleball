@@ -8,7 +8,7 @@ import type {
 import { cardWindows } from '../shared/cards';
 import { NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
 import { holidayFor } from '../shared/holidays';
-import { courtSplit } from '../shared/pricing';
+import { courtSplit, flatAtFinalize } from '../shared/pricing';
 import type { GroupSettings } from '../shared/settings';
 import { countText, joinOutcome, openSpots } from '../shared/spots';
 import { computeSessionState } from '../shared/status';
@@ -50,8 +50,8 @@ export function playerSessionView(
   tz: string,
   /** The viewer is the organizer, who pays the venue: no share, Pay, credit or "paid" shows for them. */
   isOrganizer = false,
-  /** This player's own credit: what they can spend now, and this seat's part of their pot. */
-  pot: { usableCents: number; seat: SeatCredit } = { usableCents: 0, seat: NO_SEAT_CREDIT },
+  /** This player's own credit: what they can spend now, whether any is left (or a refund request is open), and this seat's part of their pot. */
+  pot: { usableCents: number; hasCredit?: boolean; seat: SeatCredit } = { usableCents: 0, seat: NO_SEAT_CREDIT },
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -77,7 +77,8 @@ export function playerSessionView(
         paidEarlierCents: mine.payment_status === 'unpaid' ? pot.seat.cashCents : 0,
         paidWithCredit: mine.payment_status === 'paid' && pot.seat.usedCents > 0 && pot.seat.usedCents >= (mine.payment_amount_cents ?? 0),
         useCreditCents: owes && !canceled ? Math.min(pot.usableCents, owe) : 0,
-        creditBackCents: pot.seat.backCents,
+        // Once that credit is all spent the "Your $14 is now credit. Request refund" line would point at nothing, so it goes.
+        creditBackCents: pot.hasCredit === false ? 0 : pot.seat.backCents,
       }
     : null;
   return {
@@ -159,8 +160,8 @@ export function adminSessionView(
   potFor: (row: RosterRow) => SeatCredit = () => NO_SEAT_CREDIT,
   /** A canceled game the venue still charged for. */
   chargedCents: number | null = null,
-  /** Who blocks a reopen (credit from this game already used or refunded). */
-  reopenBlockedBy: string[] = [],
+  /** Who blocks a reopen: credit from this game already used or refunded, or held by a pending refund request. */
+  reopen: { spent: string[]; requested: string[] } = { spent: [], requested: [] },
 ): AdminSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -237,6 +238,12 @@ export function adminSessionView(
         playedCount: session.final_played_count ?? 0,
         priceCents: session.final_price_cents ?? settings.pricePerPlayerCents,
         creditBackCents: roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + potFor(r).finalizedBackCents, 0),
+        flatCents: flatAtFinalize(
+          roster.filter((r) => r.player_id !== organizerId && r.played === 1 && r.payment_status === 'paid' && !r.refunded_at).map((r) => r.payment_amount_cents ?? 0),
+          settings.pricePerPlayerCents,
+          session.final_played_count ?? 0,
+          session.final_price_cents ?? settings.pricePerPlayerCents,
+        ),
       }
     : null;
 
@@ -287,7 +294,8 @@ export function adminSessionView(
     ),
     finalized,
     needsFinalize: session.status !== 'canceled' && !session.finalized_at && over && roster.some((r) => r.status === 'confirmed' || (r.payment_status === 'paid' && !r.refunded_at && r.player_id !== organizerId)),
-    reopenBlockedBy,
+    reopenBlockedBy: reopen.spent,
+    reopenRequestedBy: reopen.requested,
     eligibleSubstitutes: state.flags.openSpots > 0 ? eligibleSubstitutes(roster, players) : [],
   };
 }

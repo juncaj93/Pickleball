@@ -5,6 +5,7 @@
 // Every money move is a guarded ledger entry (credit.ts); this file decides
 // what each seat gets.
 
+import { reopenRequestedReason } from '../shared/credit';
 import { creditBack as creditBackCents, finalPrice } from '../shared/pricing';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
@@ -108,22 +109,28 @@ async function usedOn(ctx: Ctx, sessionId: string, playerId: string): Promise<nu
 }
 
 /**
- * Who stops a reopen: players whose credit from this game is no longer all
- * in their pot (some was used or refunded). Empty means Reopen is allowed.
+ * Who stops a reopen. `spent`: players whose credit from this game is no
+ * longer all in their pot (some was used or refunded). `requested`: players
+ * who still have it, but a pending refund request is holding part of it.
+ * Both empty means Reopen is allowed.
  */
-export async function reopenBlockers(ctx: Ctx, sessionId: string): Promise<string[]> {
+export async function reopenBlockers(ctx: Ctx, sessionId: string): Promise<{ spent: string[]; requested: string[] }> {
   const { results } = await ctx.db
     .prepare(
       `SELECT p.display_name AS name, SUM(l.amount_cents) AS back,
          (SELECT COALESCE(SUM(CASE kind WHEN 'kept' THEN amount_cents WHEN 'used' THEN -amount_cents ELSE -(amount_cents - five_cents) END), 0)
-            FROM credit_ledger x WHERE x.player_id = l.player_id AND x.ended_at IS NULL) AS pot
+            FROM credit_ledger x WHERE x.player_id = l.player_id AND x.ended_at IS NULL) AS pot,
+         (SELECT COALESCE(SUM(amount_cents), 0) FROM refund_requests r WHERE r.player_id = l.player_id AND r.status = 'pending') AS reserved
        FROM credit_ledger l JOIN players p ON p.id = l.player_id
        WHERE l.kind = 'kept' AND l.session_id = ? AND l.ended_at IS NULL AND l.reason IN ('finalized', 'not_played')
        GROUP BY l.player_id ORDER BY p.display_name`,
     )
     .bind(sessionId)
-    .all<{ name: string; back: number; pot: number }>();
-  return results.filter((r) => r.pot < r.back).map((r) => r.name);
+    .all<{ name: string; back: number; pot: number; reserved: number }>();
+  return {
+    spent: results.filter((r) => r.pot < r.back).map((r) => r.name),
+    requested: results.filter((r) => r.pot >= r.back && r.pot - r.reserved < r.back).map((r) => r.name),
+  };
 }
 
 /**
@@ -136,9 +143,10 @@ export async function reopenFinalize(ctx: Ctx) {
   if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
   if (!session.finalized_at) throw new HttpError(409, 'not_finalized', 'This game is not finalized.');
   const blockers = await reopenBlockers(ctx, session.id);
-  if (blockers.length) {
-    throw new HttpError(409, 'credit_spent', `Can't reopen: ${blockers.join(' and ')} already used or got back credit from this game.`);
+  if (blockers.spent.length) {
+    throw new HttpError(409, 'credit_spent', `Can't reopen: ${blockers.spent.join(' and ')} already used or got back credit from this game.`);
   }
+  if (blockers.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(blockers.requested));
   const roster = await loadRoster(ctx.db, session.id);
   for (const r of roster) {
     const res = await undoCreditBack(ctx.db, session.id, r.player_id, ['finalized', 'not_played'], ctx.nowIso);

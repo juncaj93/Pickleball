@@ -26,6 +26,22 @@ export function creditBack(priceCents: number, played: number): number {
   return Math.max(0, priceCents - finalPrice(priceCents, played));
 }
 
+/**
+ * The flat price a finalized game was played at, for the post-game note
+ * ("If you paid $14, the extra $5 ..."). The setting can change after the
+ * game, so it comes from what the players who played actually paid (the most
+ * common amount). With no payments to go on, the current setting when it still
+ * gives this final price, else the lowest whole-dollar price that does.
+ */
+export function flatAtFinalize(paidCents: number[], currentCents: number, played: number, finalCents: number): number {
+  const counts = new Map<number, number>();
+  for (const c of paidCents) if (c > 0) counts.set(c, (counts.get(c) ?? 0) + 1);
+  if (counts.size) return [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+  if (finalPrice(currentCents, played) === finalCents) return currentCents;
+  for (let c = finalCents; c <= finalCents + 100_00; c += 100) if (finalPrice(c, played) === finalCents) return c;
+  return currentCents;
+}
+
 /** "6 played · $9 each · $5 credit back each" (the preview on the Finalize card). */
 export function finalPreview(priceCents: number, played: number, fmt: (cents: number) => string): string {
   const p = finalPrice(priceCents, played);

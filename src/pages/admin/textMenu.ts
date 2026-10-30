@@ -53,7 +53,7 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   // After the game: once finalized, the one post-game note for the group chat.
   if (Date.parse(s.startsAt) <= nowMs) {
     if (s.finalized && !s.state.flags.canceled) {
-      items.push({ id: 'final', label: 'Final price', body: finalMessage(s, tz, s.finalized.playedCount, s.finalized.priceCents, d.group.settings.pricePerPlayerCents, link), ...GROUP });
+      items.push({ id: 'final', label: 'Final price', body: finalMessage(s, tz, s.finalized.playedCount, s.finalized.priceCents, s.finalized.flatCents, link), ...GROUP });
     }
     return items;
   }

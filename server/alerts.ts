@@ -216,13 +216,24 @@ async function watchInner(ctx: Ctx, group: GroupRow, session: SessionRow, player
 /**
  * A player asked for a refund of their credit: one message with the name and
  * the amount (never their Venmo or phone). Sent in the background, never
- * from the demo or Pretend, and never worth failing the request over.
+ * from the demo or Pretend, and never worth failing the request over. At
+ * most one per player an hour, so asking, canceling and asking again can't
+ * use up the hour's alerts (the Home card still shows the latest request).
  */
-export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, name: string, cents: number): Promise<void> {
+export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: string, name: string, cents: number): Promise<void> {
   try {
     if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
     const prefs = prefsOf(await alertRow(ctx.db, group.id));
     if (!prefs.enabled || !prefs.refundRequests) return;
+    const recent = await ctx.db
+      .prepare("SELECT 1 FROM rate_events WHERE kind = 'refund_alert' AND client_key = ? AND created_at > ? LIMIT 1")
+      .bind(playerId, new Date(ctx.nowMs - HOUR_MS).toISOString())
+      .first();
+    if (recent) return;
+    await ctx.db
+      .prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'refund_alert', ?, ?)")
+      .bind(newId(), playerId, new Date(ctx.nowMs).toISOString())
+      .run();
     ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents)));
   } catch {
     // Never worth failing the request over.

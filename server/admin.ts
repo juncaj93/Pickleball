@@ -33,7 +33,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { moneyPicture, returnSeatCredit, returnSessionCredit, undoCreditBack } from './credit';
+import { hasPendingRequest, moneyPicture, returnSeatCredit, returnSessionCredit, undoCreditBack } from './credit';
 import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -93,7 +93,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       };
     })
     .filter((p) => p.playerId !== organizerId);
-  const blockers = new Map<string, string[]>();
+  const blockers = new Map<string, { spent: string[]; requested: string[] }>();
   for (const s of sessions) if (s.finalized_at) blockers.set(s.id, await reopenBlockers(ctx, s.id));
   const { results: auditRows } = await ctx.db
     .prepare('SELECT * FROM admin_audit_log WHERE group_id = ? ORDER BY created_at DESC LIMIT 60')
@@ -142,7 +142,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) =>
-      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? []),
+      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }),
     ),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
@@ -521,7 +521,11 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
     if (row.refunded_at) throw new HttpError(409, 'already_settled', 'That payment already came back to them as credit.');
     // Credit that came back from this payment (paid above the final price) is taken back first; if they already spent it, say so.
     const undo = await undoCreditBack(ctx.db, session.id, playerId, ['finalized'], ctx.nowIso);
-    if (undo.blocked) throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can't be unmarked.`);
+    if (undo.blocked) {
+      if (await hasPendingRequest(ctx.db, playerId))
+        throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the refund request on Home first.`);
+      throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can't be unmarked.`);
+    }
     await ctx.db
       .prepare(
         `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,

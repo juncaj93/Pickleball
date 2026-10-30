@@ -4,7 +4,8 @@
  *
  * Starts its own Vite dev server on a fresh fake database. Venmo is never
  * opened (requests to venmo.com are aborted), Telegram is not configured.
- * Checks named "BUG:" fail on purpose against the current code.
+ * Written by an independent auditor; its first run found the two problems the
+ * last two checks now guard against.
  */
 const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
@@ -138,7 +139,7 @@ async function main() {
       const after = (await dash()).creditLedger.find((l) => l.playerId === id.Mitchel);
       assert(after.balanceCents === 900 && after.reservedCents === 0, `after: ${JSON.stringify(after)}`);
     });
-    await check('BUG: "Mark refunded" on a request for less than the balance has no Undo anywhere (Home, Players row, player sheet)', async () => {
+    await check('"Mark refunded" on a request for less than the balance can be undone (Players row or sheet)', async () => {
       const homeUndo = await page.getByRole('button', { name: /^Undo/ }).count();
       await nav(page, 'Players').click();
       const row = page.locator('li.player-row[data-player="Mitchel"]');
@@ -161,7 +162,7 @@ async function main() {
     const page = await ctx.newPage();
     await page.goto(BASE + '/');
     await page.locator('.schedule article').first().waitFor();
-    await check('BUG: Ryan spent his $14 credit, yet his Tue Nov 3 card still says "Your $14 is now credit. Request refund", and tapping Request refund does nothing', async () => {
+    await check('Ryan spent his $14 credit: his Tue Nov 3 card no longer offers "Request refund" for credit that is gone', async () => {
       const line = page.locator('[data-credit-back]');
       const shown = await line.count();
       if (shown === 0) return; // fixed: no stale line

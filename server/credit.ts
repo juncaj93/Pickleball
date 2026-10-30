@@ -92,6 +92,11 @@ export async function loadReserved(db: D1Database, groupId: string): Promise<Map
   return out;
 }
 
+/** Whether the player has a refund request waiting on the organizer. */
+export async function hasPendingRequest(db: D1Database, playerId: string): Promise<boolean> {
+  return !!(await db.prepare("SELECT 1 FROM refund_requests WHERE player_id = ? AND status = 'pending' LIMIT 1").bind(playerId).first());
+}
+
 /** SQL for a player's pot right now (`player` is a bound parameter like "?3"). */
 const POT = (player: string) =>
   `(SELECT COALESCE(SUM(CASE kind WHEN 'kept' THEN amount_cents WHEN 'used' THEN -amount_cents ELSE -(amount_cents - five_cents) END), 0)
@@ -279,11 +284,12 @@ export async function undoCreditBack(db: D1Database, sessionId: string, playerId
   const idList = ids.map((_, i) => `?${i + 4}`).join(', ');
   const ended = `(SELECT COUNT(*) FROM credit_ledger WHERE id IN (${idList}) AND ended_at = ?1) = ${ids.length}`;
   const out = await db.batch([
-    // All or nothing: every entry ends only if the pot still holds the whole amount.
+    // All or nothing: every entry ends only if the pot still holds the whole
+    // amount on top of what a pending refund request is holding back.
     db
       .prepare(
         `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone'
-         WHERE id IN (${idList}) AND ended_at IS NULL AND ${POT('?2')} - ?3 >= 0`,
+         WHERE id IN (${idList}) AND ended_at IS NULL AND ${POT('?2')} - ${RESERVED('?2')} - ?3 >= 0`,
       )
       .bind(nowIso, playerId, total, ...ids),
     db
