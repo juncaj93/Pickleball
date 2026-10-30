@@ -1704,13 +1704,14 @@ async function main() {
       await pop.waitFor();
       // The tapped button turns into a Drop out link, so the bubble is checked against where the button was just before the tap.
       assert((await pop.innerText()).trim() === "You're in", `banner said ${await pop.innerText()}`);
-      // The new banner: bottom center of the screen, clear of the Safari bar, never next to the tapped button.
+      // The banner: bottom center of the screen, just above the bottom edge, never next to the tapped button.
+      await pop.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})))); // it slides up the last 8px while fading in
       const pb = await pop.boundingBox();
       const vw = p.viewportSize().width;
       const vh = p.viewportSize().height;
       assert(pb.x >= 0 && pb.x + pb.width <= vw && pb.y >= 0 && pb.width <= 342, `banner must stay on screen and at most about 340px wide: ${JSON.stringify(pb)}`);
       assert(Math.abs(pb.x + pb.width / 2 - vw / 2) < 3, 'banner is centered');
-      assert(vh - (pb.y + pb.height) >= 85 && vh - (pb.y + pb.height) <= 125, `banner sits about 96px above the bottom, it is ${vh - (pb.y + pb.height)}px`);
+      assert(vh - (pb.y + pb.height) >= 16 && vh - (pb.y + pb.height) <= 24, `banner sits 16 to 24px above the bottom, it is ${vh - (pb.y + pb.height)}px (see e2e/banner.cjs)`);
       const style = await pop.evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), hidden: el.getAttribute('aria-hidden'), pos: getComputedStyle(el).position, icon: !!el.querySelector('.toast-icon') }));
       assert(style.size >= 13 && style.hidden === 'true' && style.pos === 'fixed' && style.icon, `banner style: ${JSON.stringify(style)}`);
       await p.locator('[aria-live="polite"]', { hasText: "You're in" }).waitFor({ state: 'attached' });

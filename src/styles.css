@@ -10,6 +10,8 @@
 /* ---------- Tokens ---------- */
 
 :root {
+  /* The iPhone home-indicator space at the bottom (0 elsewhere). The pop-up banner reads it once, here. */
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* Surfaces */
   --bg: #f2f2ee;
   --surface: #ffffff;
@@ -1589,14 +1591,17 @@ dialog.sheet::backdrop {
 
 /* ---------- Pop-up banner: one place for every message (see ToastProvider) ---------- */
 
-/* Bottom center, clear of the floating Safari bar (about 96px up from the bottom). */
+/* Bottom center, just above the bottom edge (16 to 24px above the iPhone safe area, so just above
+   Safari's toolbar). The safe area is counted once, through --safe-bottom. On the organizer screen
+   the floating tab pill (about 66px tall) is there, so the banner stands above it instead. */
 .pop {
   --b-in: 200ms;
   --b-out: 250ms;
+  --pop-gap: 20px;
   position: fixed;
   inset: auto;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
+  bottom: calc(var(--safe-bottom) + var(--pop-gap));
   margin: 0;
   z-index: 60;
   width: max-content;
@@ -1619,6 +1624,9 @@ dialog.sheet::backdrop {
   overflow: hidden;
   transform: translateX(-50%);
   animation: banner-in var(--b-in) ease-out both;
+}
+body:has(.tabbar) .pop {
+  --pop-gap: 78px;
 }
 .pop .toast-icon {
   flex: none;
@@ -1682,6 +1690,12 @@ dialog.sheet::backdrop {
   --pop-bg: var(--pop-err-bg);
   --pop-fg: var(--pop-err-fg);
   --pop-line: var(--pop-err-line);
+}
+/* A banner on its way out no longer catches taps: whatever is under it is tappable at once. */
+.pop.leaving-down,
+.pop.leaving-left,
+.pop.leaving-right {
+  pointer-events: none;
 }
 .pop.leaving-down {
   animation: banner-out-down var(--b-out) ease-in forwards;
