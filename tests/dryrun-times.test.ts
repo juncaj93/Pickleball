@@ -10,14 +10,12 @@ import { checkInMessage, confirmationMessage, dayWord, deadlineAlertMessage, nee
 import { formatTime, formatTimeRange, formatTimeShort, localParts, playerDay, suggestDay, weekLabel, weekTier } from '../shared/time';
 import { suggestions } from '../src/pages/admin/suggestions';
 import { buildTodo } from '../src/pages/admin/todo';
-import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { playerPhone, setupGroup, TestApp } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 const TZ = 'America/Detroit';
 const at = (s: string) => Date.parse(s);
-const iso = (ms: number) => new Date(ms).toISOString();
 const plain = (s: string) => s.replace(/[  ]/g, ' ');
-const MIN = 60_000;
 
 // The moved games (UTC).
 const OCT29 = { date: '2026-10-29', startsAt: '2026-10-29T23:00:00.000Z', endsAt: '2026-10-30T01:00:00.000Z' }; // 7:00 to 9:00 PM EDT
