@@ -213,3 +213,19 @@ back up, apply migration 0014, then deploy the code (the new code names the new 
 - Follow-up deploy Fri Oct 30, about 10:25 AM Eastern: player status says "Court not booked" (was "Court not booked yet"). Deployment `e53802a0`, commit 65c2dab, no database change. Time Travel bookmark right before: `00000125-00000000-00005114-ec3c66bcdd519fc3d20a609605c3006b`. Code rollback: deployment `92335f98`. Tests unchanged in count, all green.
 - Follow-up deploy (LATER right column always centered on the row, calendar icon stays with the last words of the status line). Time Travel bookmark right before: `00000129-00000000-00005114-d63caa88185e43b756a23bad4cf27195`. Code rollback: deployment `e53802a0`. New browser file round2 grew to 25 checks (829 browser checks in all, 558 unit), all green.
   Deployed Fri Oct 30, 2026, about 11:01 AM Eastern, deployment `6fcad249`, commit 9205c20, no database change.
+
+### Want in card fixes (Fri Oct 30, 2026, about 11:30 AM Eastern)
+- Deployment `f8b0971e`, commit 643a342, no database change. Time Travel bookmark right
+  before: `0000012d-00000000-00005114-a79d5d4834c90924c133d27c849a865c`. Code rollback:
+  deployment `6fcad249`.
+- Real bug, not just the demo: tapping Yes on the "Want in ...?" card joined the player
+  on the server but the game cards only refreshed when Done was tapped (the "You're in"
+  answer lived inside the card). Now Yes does what "I'm in" does: same call, same banner,
+  and the cards, count, circles and names refresh at once. Works in real mode and in the
+  organizer's demo ("View as..."). Test: `e2e/want-in.cjs` (fails on the old code).
+- The prompt and its "You're in" answer use the short time, "8–10 PM".
+- Title rule (`suggestDay` in `shared/time.ts`, Eastern calendar days): tonight, tomorrow,
+  2 to 6 days: the weekday alone ("Want in Thursday?"), 7 to 13 days: "next Thursday",
+  after that the date. Tests in `tests/day-phrases.test.ts` (Friday, Monday, Tuesday,
+  Thursday, Sunday Nov 1 across the clock change, and the Eastern-vs-UTC edge).
+- Tests: 565 unit, 833 browser, all green.
