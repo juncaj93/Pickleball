@@ -9,6 +9,9 @@ export const ORIGIN = 'https://club.example';
 // Monday, Oct 26 2026, 12:00 PM Eastern (EDT). DST ends Sunday Nov 1.
 export const MONDAY_NOON = Date.parse('2026-10-26T16:00:00.000Z');
 
+/** Text with every random id (UUID) blanked out: an id can hold "4800" or "555" by chance, so privacy checks look only at real text. */
+export const withoutIds = (text: string) => text.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>');
+
 export const PLAYER_NAMES = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
 
 /** One phone or browser: keeps its own cookies. */

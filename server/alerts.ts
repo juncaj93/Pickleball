@@ -4,7 +4,7 @@
 // so a slow or broken Telegram can't slow down or break anyone's tap. The
 // bot token and chat ID are Cloudflare secrets: they never reach a browser
 // and the bot only ever messages that one chat.
-import { type AlertPerson, type AlertPrefs, alertMessage, DEFAULT_ALERT_PREFS } from '../shared/alerts';
+import { type AlertPerson, type AlertPrefs, alertMessage, DEFAULT_ALERT_PREFS, refundRequestMessage } from '../shared/alerts';
 import type { AdminDashboard } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { requireAdmin } from './auth';
@@ -25,7 +25,8 @@ interface AlertRow {
   enabled: number;
   drop_36h: number;
   below_min: number;
-  reached_six: number;
+  reached_min: number;
+  refund_requests: number;
   last_at: string | null;
   last_ok: number | null;
   last_error: string | null;
@@ -37,7 +38,13 @@ async function alertRow(db: D1Database, groupId: string): Promise<AlertRow | nul
 
 function prefsOf(row: AlertRow | null): AlertPrefs {
   if (!row) return { ...DEFAULT_ALERT_PREFS };
-  return { enabled: !!row.enabled, drop36: !!row.drop_36h, belowMin: !!row.below_min, reachedSix: !!row.reached_six };
+  return {
+    enabled: !!row.enabled,
+    drop36: !!row.drop_36h,
+    belowMin: !!row.below_min,
+    reachedMin: !!row.reached_min,
+    refundRequests: !!row.refund_requests,
+  };
 }
 
 export function connected(env: Env): boolean {
@@ -56,18 +63,25 @@ export async function alertsView(ctx: Ctx, groupId: string): Promise<AdminDashbo
   };
 }
 
-/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedSix? }: one switch at a time is fine. */
+/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedMin?, refundRequests? }: one switch at a time is fine. */
 export async function updateAlerts(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const cur = prefsOf(await alertRow(ctx.db, group.id));
   const pick = (key: keyof AlertPrefs) => (body[key] === undefined ? cur[key] : v.bool(body[key], key));
-  const next: AlertPrefs = { enabled: pick('enabled'), drop36: pick('drop36'), belowMin: pick('belowMin'), reachedSix: pick('reachedSix') };
+  const next: AlertPrefs = {
+    enabled: pick('enabled'),
+    drop36: pick('drop36'),
+    belowMin: pick('belowMin'),
+    reachedMin: pick('reachedMin'),
+    refundRequests: pick('refundRequests'),
+  };
+  const bit = (b: boolean) => (b ? 1 : 0);
   await ctx.db
     .prepare(
-      `INSERT INTO organizer_alerts (group_id, enabled, drop_36h, below_min, reached_six) VALUES (?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT (group_id) DO UPDATE SET enabled = ?2, drop_36h = ?3, below_min = ?4, reached_six = ?5`,
+      `INSERT INTO organizer_alerts (group_id, enabled, drop_36h, below_min, reached_min, refund_requests) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+       ON CONFLICT (group_id) DO UPDATE SET enabled = ?2, drop_36h = ?3, below_min = ?4, reached_min = ?5, refund_requests = ?6`,
     )
-    .bind(group.id, next.enabled ? 1 : 0, next.drop36 ? 1 : 0, next.belowMin ? 1 : 0, next.reachedSix ? 1 : 0)
+    .bind(group.id, bit(next.enabled), bit(next.drop36), bit(next.belowMin), bit(next.reachedMin), bit(next.refundRequests))
     .run();
   return { ok: true, alerts: await alertsView(ctx, group.id) };
 }
@@ -193,10 +207,37 @@ async function watchInner(ctx: Ctx, group: GroupRow, session: SessionRow, player
   if (session.status === 'canceled' || ctx.nowMs >= Date.parse(session.starts_at)) return null;
   if (session.starts_at < visibleFrom(group) && !session.shown_early) return null; // hidden before the first session date
   const prefs = prefsOf(await alertRow(ctx.db, group.id));
-  if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin || prefs.reachedSix)) return null;
+  if (!prefs.enabled || !(prefs.drop36 || prefs.belowMin || prefs.reachedMin)) return null;
   const roster = await loadRoster(ctx.db, session.id);
   const me = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>();
   return { group, session, prefs, actor: { playerId, name: me?.display_name ?? 'Someone' }, before: people(roster) };
+}
+
+/**
+ * A player asked for a refund of their credit: one message with the name and
+ * the amount (never their Venmo or phone). Sent in the background, never
+ * from the demo or Pretend, and never worth failing the request over. At
+ * most one per player an hour, so asking, canceling and asking again can't
+ * use up the hour's alerts (the Home card still shows the latest request).
+ */
+export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: string, name: string, cents: number): Promise<void> {
+  try {
+    if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
+    const prefs = prefsOf(await alertRow(ctx.db, group.id));
+    if (!prefs.enabled || !prefs.refundRequests) return;
+    const recent = await ctx.db
+      .prepare("SELECT 1 FROM rate_events WHERE kind = 'refund_alert' AND client_key = ? AND created_at > ? LIMIT 1")
+      .bind(playerId, new Date(ctx.nowMs - HOUR_MS).toISOString())
+      .first();
+    if (recent) return;
+    await ctx.db
+      .prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'refund_alert', ?, ?)")
+      .bind(newId(), playerId, new Date(ctx.nowMs).toISOString())
+      .run();
+    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents)));
+  } catch {
+    // Never worth failing the request over.
+  }
 }
 
 /** Call right after the tap. Sends at most one message, in the background. */

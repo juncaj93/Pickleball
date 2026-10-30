@@ -47,8 +47,3 @@ export function courtStatus(s: CourtInput, tz = 'America/Detroit'): CourtStatus 
 function off(reason: string): CourtStatus {
   return { kind: 'off', text: reason, playerText: reason };
 }
-
-/** "0 of 4 in": counts toward 4, or toward 6 once more than 4 are in. */
-export function playerSlots(confirmed: number): number {
-  return confirmed > 4 ? 6 : 4;
-}

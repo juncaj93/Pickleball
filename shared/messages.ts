@@ -109,20 +109,12 @@ export function needPlayersMessage(s: SessionLike, tz: string, nowMs: number, ne
   return `Need ${need} more for pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. In? ${link}`;
 }
 
-/** A game that dropped from 6 to 5. */
-export function downToFiveMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
-  return `Down to 5 for pickleball ${dayWord(s.startsAt, tz, nowMs)}. Need 1 more or 1 out to make 4 or 6. ${link}`;
-}
 
 /** 4 or more signed up: everyone who is signed up can update here if they can't make it. */
 export function checkInMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
   return `Pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. Can't make it? Update here: ${link}`;
 }
 
-/** The game reached 6 because the waitlist moved in: to the 2 extra players. */
-export function nowSixMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
-  return `Good news, we have 6 for pickleball ${textWhenAt(s.startsAt, tz, nowMs)}. You're both in. Can't make it? Update here: ${link}`;
-}
 
 /** A waitlisted player moved into the 4 after a drop. */
 export function promotedMessage(s: SessionLike, tz: string, nowMs: number, link: string): string {
@@ -137,12 +129,23 @@ function withReason(text: string, reason?: string | null): string {
 }
 
 /**
- * "Pickleball Tue Nov 3 is canceled. If you paid, it stays as your credit.
- * Want a refund instead? Text me. pickleball.juncaj.net", with an optional
+ * "Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You
+ * can request a refund on the site. pickleball.juncaj.net", with an optional
  * reason right after the first sentence.
  */
 export function canceledMessage(s: SessionLike, tz: string, nowMs: number, link: string, reason?: string | null): string {
-  return `${withReason(`Pickleball ${dayWord(s.startsAt, tz, nowMs)} is canceled.`, reason)} If you paid, it stays as your credit. Want a refund instead? Text me. ${link}`;
+  return `${withReason(`Pickleball ${dayWord(s.startsAt, tz, nowMs)} is canceled.`, reason)} If you paid, it's now your credit. You can request a refund on the site. ${link}`;
+}
+
+/**
+ * After finalizing: "Pickleball Thu, Oct 29 is final: 6 played, $9 each. If
+ * you paid $14, the extra $5 is now credit on your account. {link}". With no
+ * credit back (4 played): "Pickleball Thu, Oct 29 is final: 4 played, $14 each. {link}".
+ */
+export function finalMessage(s: SessionLike, tz: string, played: number, priceCents: number, flatCents: number, link: string): string {
+  const back = flatCents - priceCents;
+  const extra = back > 0 ? ` If you paid ${formatPrice(flatCents)}, the extra ${formatPrice(back)} is now credit on your account.` : '';
+  return `Pickleball ${formatShortDate(s.startsAt, tz)} is final: ${played} played, ${formatPrice(priceCents)} each.${extra} ${link}`;
 }
 
 /** "Pickleball Tue Nov 3 is moved to Thu Nov 5, 8:00 PM. pickleball.juncaj.net". `was` is the game's original time. */

@@ -6,8 +6,8 @@ import {
   deadlineAlertMessage,
   siteAddress,
 } from '../../../shared/messages';
-import { CHARGE_ASK_HOURS } from '../../../shared/credit';
-import { formatCents, formatPrice, parseDollars, refundNote, venmoRefundUrl } from '../../../shared/money';
+import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit';
+import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
 import type { BookingStatus } from '../../../shared/status';
@@ -21,12 +21,12 @@ import {
   toLocalInputValue,
   weekFade,
 } from '../../../shared/time';
-import { api, ApiError, openVenmo, storageGet, storageSet, useNow } from '../../lib';
+import { api, ApiError, useNow } from '../../lib';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 import { reach, reminderText } from './textMenu';
-import { isPlayed, lateDropsAll, refundRows } from './todo';
+import { isPlayed, lateDropsAll } from './todo';
 import { TextButton } from './Texts';
 import '../../credit-session.css';
 
@@ -148,6 +148,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               waitlist={s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name)}
               waitLabel={courtWait ? 'Standby' : 'Waitlist'}
               everyone={ctx.d.players.map((p) => p.name)}
+              maxPlayers={ctx.d.group.settings.maxPlayers}
               after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}
             />
           )}
@@ -338,11 +339,10 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   const passed = s.state.flags.deadlinePassed;
   const booked = s.bookingStatus === 'booked';
-  const open = s.state.flags.openSpots;
   return (
     <div className="stack">
       <p className="small">
-        <strong>{s.confirmedCount} going.</strong> {open} more needed.{' '}
+        <strong>{s.confirmedCount} going.</strong> {s.state.flags.playersNeeded} more needed.{' '}
         {s.cancellationDeadlineAt &&
           (passed
             ? booked
@@ -427,8 +427,8 @@ export function SessionSheets({
 
 /**
  * The text to send the group after canceling or moving a session, with an
- * optional one-line reason. After a cancel, also who to pay back.
- * Opening Messages never counts as sending.
+ * optional one-line reason. After a cancel, everyone who paid already has
+ * their money as credit. Opening Messages never counts as sending.
  */
 function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; canceled: boolean }) {
   const tz = ctx.d.group.timezone;
@@ -444,115 +444,27 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder={canceled ? 'Rain in the forecast' : 'Court swap'} />
       </label>
       <SmsDraft to="Everyone signed up and waiting" phone={null} phones={who.phones} missing={who.missing} openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'} body={body} />
-      {canceled && <RefundList ctx={ctx} s={s} />}
+      {canceled && <CreditBackList s={s} />}
     </div>
   );
 }
 
-/** Refund buttons already tapped on this phone, so "Mark refunded" is still there after a reload. */
-function useOpenedRefunds(sessionId: string) {
-  const key = `pb_refund_opened_${sessionId}`;
-  const read = (): string[] => {
-    try {
-      const v = JSON.parse(storageGet(key) ?? '[]');
-      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
-    } catch {
-      return [];
-    }
-  };
-  const [opened, setOpened] = useState<string[]>(read);
-  return {
-    opened,
-    add: (playerId: string) =>
-      setOpened((cur) => {
-        const next = cur.includes(playerId) ? cur : [...cur, playerId];
-        storageSet(key, JSON.stringify(next));
-        return next;
-      }),
-  };
-}
-
-/**
- * Money to give back for one session: everyone who paid for a canceled game,
- * or paid and then dropped. Refund opens Venmo with the exact amount and note
- * (to that person if their Venmo is saved); it never marks anything. Then
- * "Mark refunded" records it, and Undo takes it back. Nothing moves by itself.
- */
-export function RefundList({ ctx, s, only }: { ctx: AdminCtx; s: AdminSessionView; only?: string[] }) {
-  const { busy, run } = useAction(ctx);
-  const tz = ctx.d.group.timezone;
-  const { opened, add } = useOpenedRefunds(s.id);
-  const paid = refundRows(s).filter((r) => !only || only.includes(r.playerId));
-  if (paid.length === 0) return null;
-  const left = paid.filter((r) => !r.refundedAt).length;
-  const canceled = s.state.flags.canceled;
-  const note = refundNote(s.startsAt, tz);
-  const setRefunded = (r: AdminRosterEntry, refunded: boolean) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: r.playerId, refunded }), refunded ? 'Refunded' : 'Unmarked');
-  // Keep as credit: the money stays with the group as the player's credit for any later game.
-  const setKept = (r: AdminRosterEntry, keepIt: boolean) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/credit`, { playerId: r.playerId, keep: keepIt }), keepIt ? 'Kept as credit' : 'Credit undone');
+/** After a cancel: who got their payment back as credit (automatic; nothing to tap). */
+function CreditBackList({ s }: { s: AdminSessionView }) {
+  const rows = s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
+  if (rows.length === 0) return null;
   return (
-    <section className="stack refunds" aria-label="Pay back">
-      {canceled && <h3>Pay back {left > 0 ? `(${left} left)` : '(all done)'}</h3>}
-      {left > 0 && <p className="small muted refund-choice">Refund on Venmo, or keep it as their credit for any later game.</p>}
-      <ul className="list refund-list">
-        {paid.map((r) => {
-          const amount = r.paymentAmountCents ?? 0;
-          const venmo = ctx.d.players.find((p) => p.id === r.playerId)?.venmo ?? null;
-          const pay = venmoRefundUrl(venmo, amount, note);
-          return (
-            <li key={r.playerId} className="pay-row" data-refund={r.name}>
-              <div className="pay-top">
-                <div className="pay-who">
-                  {canceled ? (
-                    <>
-                      <strong>{r.name}</strong> <span className="refund-amt">{formatPrice(amount)}</span>
-                      <div className="small muted">paid {formatPrice(amount)}</div>
-                    </>
-                  ) : (
-                    <span>
-                      <strong>{r.name}</strong> paid <span className="refund-amt">{formatPrice(amount)}</span> and dropped. Refund?
-                    </span>
-                  )}
-                </div>
-                {r.refundedAt && (r.keptAsCreditAt ? <Chip tone="info">Kept as credit</Chip> : <Chip tone="ok">Refunded</Chip>)}
-              </div>
-              <div className="pay-btns">
-                {r.refundedAt ? (
-                  <button className="btn small secondary" disabled={busy} onClick={() => (r.keptAsCreditAt ? setKept(r, false) : setRefunded(r, false))}>
-                    Undo
-                  </button>
-                ) : (
-                  <>
-                    <a
-                      className="btn small secondary"
-                      href={pay.url}
-                      data-app-href={pay.appUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Refund ${r.name} ${formatPrice(amount)} with Venmo`}
-                      onClick={(e) => {
-                        openVenmo(e, pay);
-                        add(r.playerId);
-                      }}
-                    >
-                      Refund
-                    </a>
-                    {opened.includes(r.playerId) && (
-                      <button className="btn small secondary" disabled={busy} onClick={() => setRefunded(r, true)}>
-                        Mark refunded
-                      </button>
-                    )}
-                    <button className="btn small secondary" disabled={busy} aria-label={`Keep ${formatPrice(amount)} as ${r.name}'s credit`} onClick={() => setKept(r, true)}>
-                      Keep as credit
-                    </button>
-                  </>
-                )}
-              </div>
-            </li>
-          );
-        })}
+    <section className="stack" aria-label="Credit given back" data-credit-back-list>
+      <h3>Now their credit</h3>
+      <ul className="rows">
+        {rows.map((r) => (
+          <li key={r.playerId}>
+            <span className="who">
+              <strong>{r.name}</strong>
+              <span className="small muted">{formatPrice(r.creditBackCents)} credit</span>
+            </span>
+          </li>
+        ))}
       </ul>
     </section>
   );
@@ -660,7 +572,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);
   const inRoster = new Set(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => r.playerId));
   const others = ctx.d.players.filter((p) => p.isActive && !inRoster.has(p.id));
-  const full = s.confirmedCount >= 6;
+  const full = s.confirmedCount >= ctx.d.group.settings.maxPlayers;
 
   return (
     <div className="stack">
@@ -746,126 +658,162 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const { busy, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
   // The organizer is not a row of their own money: they pay the venue (the court row below).
-  // A payment kept as credit is settled; it shows in the Pay back list above, not here.
-  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid') && !(r.keptAsCreditAt && r.paymentStatus === 'paid' && r.refundedAt));
+  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
   const price = ctx.d.group.settings.pricePerPlayerCents;
-  const nowMs = Date.parse(ctx.d.now);
-  const played = isPlayed(s, nowMs);
+  const played = isPlayed(s);
+  const fin = s.finalized;
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   const setCourtPaid = (paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
+  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.');
+
+  /** One row's money line: what they paid, what came back as credit, or what they owe. */
+  const moneyLine = (r: AdminRosterEntry) => {
+    const paidWithCredit = r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0);
+    const parts: string[] = [];
+    if (r.status !== 'confirmed') parts.push(r.status === 'withdrawn' ? 'dropped out' : r.status === 'waitlisted' ? 'on the waitlist' : 'not playing');
+    else if (fin && r.played === false) parts.push('did not play');
+    if (r.paidAt && r.paymentStatus === 'paid') {
+      parts.push(`${paidWithCredit ? 'paid with credit' : 'paid'} ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}`);
+      if (!paidWithCredit && r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} of it credit`);
+      if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
+      else if (!played && !r.refundedAt) parts.push('not finalized yet');
+    } else if (r.status === 'confirmed' && r.shareCents !== null) {
+      parts.push(`owes ${formatPrice(r.owesCents)}`);
+      if (r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} credit used`);
+    } else if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
+    return parts.join(' · ');
+  };
 
   return (
     <div className="stack">
       {!s.state.flags.canceled && (
-      <div className="spread">
-        <div>
-          <div className="muted small">Each player pays</div>
-          <div className="big-amount">{formatPrice(price)}</div>
+        <div className="spread">
+          <div>
+            <div className="muted small">{fin ? 'Final price each' : 'Each player pays'}</div>
+            <div className="big-amount" data-price-each>
+              {formatPrice(fin ? fin.priceCents : price)}
+            </div>
+            {fin && (
+              <div className="small muted" data-finalized-line>
+                {fin.playedCount} played · {formatPrice(fin.priceCents)} each
+                {fin.creditBackCents > 0 ? ` · ${formatPrice(fin.creditBackCents)} back as credit` : ''}
+              </div>
+            )}
+            {!fin && played === false && Date.parse(s.endsAt) <= Date.parse(ctx.d.now) && <div className="small muted">Not finalized yet. Finalize it from Home.</div>}
+          </div>
+          {s.payableCount > 0 && (
+            <Chip tone={s.paidCount === s.payableCount ? 'ok' : 'warn'}>
+              {s.paidCount}/{s.payableCount} paid
+            </Chip>
+          )}
         </div>
-        {s.payableCount > 0 && (
-          <Chip tone={s.paidCount === s.payableCount ? 'ok' : 'warn'}>
-            {s.paidCount}/{s.payableCount} paid
-          </Chip>
-        )}
-      </div>
       )}
       {s.state.flags.canceled && (
         <>
           <Notice tone="muted" title="Session canceled">
-            Nobody owes for it.
+            Nobody owes for it. Anyone who paid has it as credit.
             {s.chargedCents ? ` The venue charged you ${formatPrice(s.chargedCents)}.` : ''}
           </Notice>
-          <RefundList ctx={ctx} s={s} />
+          <CreditBackList s={s} />
         </>
       )}
-      {!s.state.flags.canceled && <RefundList ctx={ctx} s={s} />}
       {!s.state.flags.canceled && (
-      <ul className="list who-paid">
-        {s.court && (
-          <li className="court-row" data-court={s.id}>
-            <div className="pc-top">
-              <strong className="pc-name">You pay Northville Pickleball</strong>
-              <span className="court-cost">{formatPrice(s.court.costCents)}</span>
-            </div>
-            <div className="pc-sub">
-              <span className="small muted">
-                {s.court.covered
-                  ? 'Players cover the court'
-                  : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}
-              </span>
-              <Chip tone={s.court.paid ? 'ok' : 'warn'}>{s.court.paid ? 'Court paid' : 'Court due'}</Chip>
-            </div>
-            <div className="pay-btns">
-              {myId ? (
-                <button className="btn small secondary" disabled={busy} onClick={() => setCourtPaid(!s.court!.paid)}>
-                  {s.court.paid ? 'Unmark' : 'Mark paid'}
-                </button>
-              ) : (
-                <span className="small muted">Add your name in Settings (Group &gt; Your name) to mark this paid.</span>
-              )}
-            </div>
-          </li>
-        )}
-        {rows.map((r) => (
-          <li key={r.playerId} className="pay-row">
-            <div className="pay-top">
-              <div className="pay-who">
-                <strong>{r.name}</strong>
-                {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
-                <div className="small muted">
-                  {r.status !== 'confirmed' ? 'No longer playing · ' : ''}
-                  {r.paidAt ? (
-                    <>
-                      {r.potCreditCents > 0 && r.potCreditCents >= (r.paymentAmountCents ?? 0) ? 'paid with credit' : 'paid'}{' '}
-                      <span className={played ? undefined : 'held-amt'}>{formatPrice(r.paymentAmountCents ?? 0)}</span> on {formatShortDate(r.paidAt, tz)}
-                      {played ? '' : <span className="held-amt"> · not played yet</span>}
-                    </>
-                  ) : (
-                    `owes ${formatPrice((r.shareCents ?? price) - r.creditCents)}`
-                  )}
-                  {r.discount ? ' · 6-person discount' : ''}
-                  {r.creditCents > 0 ? ` · ${formatPrice(r.creditCents)} credit used` : ''}
-                </div>
+        <ul className="list who-paid">
+          {s.court && (
+            <li className="court-row" data-court={s.id}>
+              <div className="pc-top">
+                <strong className="pc-name">You pay Northville Pickleball</strong>
+                <span className="court-cost">{formatPrice(s.court.costCents)}</span>
               </div>
-              <Chip tone={r.paymentStatus === 'paid' ? (played ? 'ok' : 'info') : 'warn'}>
-                {r.paymentStatus === 'paid' ? (r.potCreditCents > 0 && r.potCreditCents >= (r.paymentAmountCents ?? 0) ? 'Paid with credit' : 'Paid') : 'Unpaid'}
-              </Chip>
-            </div>
-            <div className="pay-btns">
-              {r.paymentStatus === 'paid' ? (
-                <>
-                  {r.selfPaid && (
+              <div className="pc-sub">
+                <span className="small muted">
+                  {s.court.covered
+                    ? 'Players cover the court'
+                    : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}
+                </span>
+                <Chip tone={s.court.paid ? 'ok' : 'warn'}>{s.court.paid ? 'Court paid' : 'Court due'}</Chip>
+              </div>
+              <div className="pay-btns">
+                {myId ? (
+                  <button className="btn small secondary" disabled={busy} onClick={() => setCourtPaid(!s.court!.paid)}>
+                    {s.court.paid ? 'Unmark' : 'Mark paid'}
+                  </button>
+                ) : (
+                  <span className="small muted">Add your name in Settings (Group &gt; Your name) to mark this paid.</span>
+                )}
+              </div>
+            </li>
+          )}
+          {rows.map((r) => (
+            <li key={r.playerId} className="pay-row" data-pay-row={r.name}>
+              <div className="pay-top">
+                <div className="pay-who">
+                  <strong>{r.name}</strong>
+                  {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
+                  <div className="small muted">{moneyLine(r)}</div>
+                </div>
+                <Chip tone={r.paymentStatus === 'paid' ? (played || r.refundedAt ? 'ok' : 'info') : r.owesCents > 0 ? 'warn' : 'muted'}>
+                  {r.paymentStatus === 'paid'
+                    ? r.refundedAt
+                      ? 'Credit'
+                      : r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0)
+                        ? 'Paid with credit'
+                        : 'Paid'
+                    : r.owesCents > 0
+                      ? 'Unpaid'
+                      : 'Nothing owed'}
+                </Chip>
+              </div>
+              <div className="pay-btns">
+                {r.paymentStatus === 'paid' && !r.refundedAt ? (
+                  <>
+                    {r.selfPaid && (
+                      <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
+                        Mark paid
+                      </button>
+                    )}
+                    <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
+                      Unmark
+                    </button>
+                  </>
+                ) : (
+                  r.status === 'confirmed' &&
+                  r.owesCents > 0 && (
                     <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
                       Mark paid
                     </button>
-                  )}
-                  <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
-                    Unmark
+                  )
+                )}
+                {r.paymentStatus === 'unpaid' && r.owesCents > 0 && (
+                  <button className="btn small secondary" onClick={() => setDraftFor(draftFor === r.playerId ? null : r.playerId)}>
+                    {draftFor === r.playerId ? 'Hide reminder' : 'Payment reminder'}
                   </button>
-                </>
-              ) : (
-                r.status === 'confirmed' &&
-                !s.state.flags.canceled && (
-                  <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
-                    Mark paid
-                  </button>
-                )
-              )}
-              {r.paymentStatus === 'unpaid' && r.shareCents !== null && !s.state.flags.canceled && (
-                <button className="btn small secondary" onClick={() => setDraftFor(draftFor === r.playerId ? null : r.playerId)}>
-                  {draftFor === r.playerId ? 'Hide reminder' : 'Payment reminder'}
-                </button>
-              )}
-            </div>
-            {draftFor === r.playerId && r.shareCents !== null && (
-              <SmsDraft to={r.name} phone={r.phone} body={reminderText(ctx.d, r.playerId, r.name, s)} />
-            )}
-          </li>
-        ))}
-      </ul>
+                )}
+              </div>
+              {draftFor === r.playerId && r.owesCents > 0 && <SmsDraft to={r.name} phone={r.phone} body={reminderText(ctx.d, r.playerId, r.name, s)} />}
+            </li>
+          ))}
+        </ul>
+      )}
+      {fin && !s.state.flags.canceled && (
+        <div className="stack" style={{ gap: 6 }}>
+          <button className="btn small secondary" disabled={busy || s.reopenBlockedBy.length > 0 || s.reopenRequestedBy.length > 0} data-reopen onClick={reopen}>
+            Reopen
+          </button>
+          {s.reopenBlockedBy.length > 0 && (
+            <p className="small muted" data-reopen-blocked>
+              Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+            </p>
+          )}
+          {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (
+            <p className="small muted" data-reopen-blocked>
+              {reopenRequestedReason(s.reopenRequestedBy)}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

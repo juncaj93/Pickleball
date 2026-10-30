@@ -4,6 +4,7 @@ import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
 import { creditHintText, creditOweText, creditUsedMessage } from '../../shared/credit';
+import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
 import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
@@ -13,10 +14,9 @@ import '../credit-player.css';
 
 const SHOW_FIRST = 6;
 
-type JoinResponse = { result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby'; position?: number; madeSix?: boolean };
+type JoinResponse = { result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby'; position?: number };
 
 const GOOD_NEWS = {
-  made_six: "Good news, we now have 6, an even number, so you're in.",
   spot_opened: "Good news, a spot opened up, so you're in.",
   court_opened: "Good news, the court opened, so you're in.",
 };
@@ -24,7 +24,7 @@ const GOOD_NEWS = {
 function joinedText(d: JoinResponse): string {
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
   if (d.result === 'standby') return `You're on standby, #${d.position}`;
-  return d.madeSix ? GOOD_NEWS.made_six : "You're in";
+  return "You're in";
 }
 
 /**
@@ -73,6 +73,7 @@ export function PlayerHome({
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [creditOpen, setCreditOpen] = useState(false);
   // A shared link like ?s=<session id> opens with that session highlighted.
   const [focusId] = useState(() => new URLSearchParams(window.location.search).get('s'));
   const scrolled = useRef(false);
@@ -111,6 +112,7 @@ export function PlayerHome({
 
   const pickName = !!g && (switching || (!viewAs && !g.me));
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
+  const showChip = !!g && !pickName && (g.credit.balanceCents > 0 || !!g.credit.pending);
   const sessions = g ? (showAll || focusIndex >= SHOW_FIRST ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
 
   return (
@@ -140,6 +142,7 @@ export function PlayerHome({
           ) : undefined
         }
         tools={<ModeButton preview={!!viewAs} />}
+        chip={showChip ? <CreditChip credit={g.credit} onOpen={() => setCreditOpen(true)} /> : undefined}
       />
       <main className="page stack-lg">
         {load.loading && !g && <Spinner />}
@@ -170,11 +173,6 @@ export function PlayerHome({
           <>
             {g.payDue.length > 0 && <PayCard g={g} onChanged={load.reload} />}
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
-            {g.creditBalanceCents > 0 && (
-              <p className="credit-line" data-credit-line>
-                You have {formatPrice(g.creditBalanceCents)} credit
-              </p>
-            )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
               {sessions.map((s, i) => (
@@ -187,6 +185,7 @@ export function PlayerHome({
                     g={g}
                     highlight={s.id === focusId}
                     onChanged={load.reload}
+                    onRequestRefund={() => setCreditOpen(true)}
                   />
                 </Fragment>
               ))}
@@ -203,6 +202,7 @@ export function PlayerHome({
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
+      {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </>
   );
 }
@@ -488,14 +488,14 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
-  let potLeft = g.potCents;
+  let potLeft = g.credit.usableCents;
   let covered = 0;
   for (const o of dueByDate) {
     const take = Math.max(Math.min(potLeft, o.amountCents), 0);
     covered += take;
     potLeft -= take;
   }
-  const showCredit = g.potCents > 0 && covered > 0;
+  const showCredit = g.credit.usableCents > 0 && covered > 0;
   const creditCovers = showCredit && covered >= total;
   const busy = paid.busy || credit.busy;
   const creditBtn = showCredit && (
@@ -503,7 +503,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
       className={`btn block ${creditCovers ? 'big' : 'secondary'}`}
       data-use-credit
       disabled={busy}
-      onClick={() => credit.use(dueByDate.map((o) => o.sessionId), total, g.potCents)}
+      onClick={() => credit.use(dueByDate.map((o) => o.sessionId), total, g.credit.usableCents)}
     >
       {credit.busy ? 'Saving…' : 'Use credit'}
     </button>
@@ -513,7 +513,9 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   const title =
     due.length > 1 ? `You owe ${formatPrice(total)} total` : tonight ? `Tonight: you owe ${formatPrice(total)}` : `You owe ${formatPrice(total)} for ${formatShortDate(due[0].startsAt, tz)}`;
   const detail = (o: (typeof due)[number]) =>
-    [o.discount ? '6-person discount' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
+    [o.finalized ? 'final price' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
+  // Before paying the flat price: a reminder that the final price can be lower.
+  const creditNote = due.every((o) => !o.finalized) && <p className="small muted pay-note" data-pay-note>You get credit back if 5 or more play.</p>;
   // (On this card the amounts are already after any credit; each game's own line says what is left.)
   const who = g.group.organizerName ?? 'The organizer';
   return (
@@ -569,6 +571,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
           {!creditCovers && creditBtn}
         </>
       )}
+      {creditNote}
       {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
         <div className="venmo-note">
@@ -592,10 +595,10 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [joined, setJoined] = useState<JoinResponse | null>(null);
-  // Exactly 4 or 6 or more in: they would wait. 5 in: they make it 6. On the venue's court waitlist everyone goes on standby, so no count.
+  // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
   const standby = s.courtState === 'waitlist';
-  const waitlistForm = !standby && (s.confirmedCount === 4 || s.confirmedCount >= 6);
-  const subline = standby ? '' : wantInSubline(s.confirmedCount);
+  const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
+  const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -689,10 +692,8 @@ export function DateTile({ iso, tz, mine }: { iso: string; tz: string; mine?: bo
 }
 
 function countLine(s: PlayerSessionView): string {
-  const n = s.confirmed.length;
   if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
-  if (n === 5) return '5 in · need 4 or 6';
-  return n > 4 ? `${n} of 6 in` : `${n} of 4 in`;
+  return s.countText;
 }
 
 /**
@@ -746,7 +747,9 @@ function RowPay({
       Use credit
     </button>
   );
-  const creditHint = showCredit && <span className="credit-hint">{creditHintText(mine.useCreditCents, g.potCents, mine.oweCents)}</span>;
+  const creditHint = showCredit && <span className="credit-hint">{creditHintText(mine.useCreditCents, g.credit.usableCents, mine.oweCents)}</span>;
+  // Before paying the flat price: a reminder that the final price can be lower.
+  const payNote = !s.finalized && <span className="credit-hint pay-note" data-pay-note>You get credit back if 5 or more play.</span>;
   // No usable Venmo link: "I paid" is the only other thing to tap.
   if (!pay.url) {
     return (
@@ -757,6 +760,7 @@ function RowPay({
         </button>
         {!creditCovers && creditBtn}
         {creditHint}
+        {payNote}
       </span>
     );
   }
@@ -785,6 +789,7 @@ function RowPay({
         </button>
       )}
       {creditHint}
+      {payNote}
     </span>
   );
 }
@@ -799,12 +804,15 @@ function ScheduleRow({
   g,
   onChanged,
   highlight,
+  onRequestRefund,
 }: {
   s: PlayerSessionView;
   g: GroupView;
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
+  /** "Request refund" on the "Your $14 is now credit" line opens the credit sheet. */
+  onRequestRefund: () => void;
 }) {
   const tz = g.group.timezone;
   const toast = useToast();
@@ -910,14 +918,18 @@ function ScheduleRow({
 
         {s.note && <p className="game-note">{s.note}</p>}
         {goodNews && <Notice tone="ok">{goodNews}</Notice>}
-        {inSession && mine.creditComing && (
-          <p className="small">6 are playing. You'll get a {formatPrice(g.group.creditCents)} credit toward your next session.</p>
+        {/* Money that came back from this game (they dropped out, or it was canceled) is credit now. */}
+        {mine && mine.creditBackCents > 0 && (mine.status === 'withdrawn' || s.canceled) && (
+          <p className="small credit-back-line" data-credit-back>
+            Your {formatPrice(mine.creditBackCents)} is now credit.{' '}
+            <button className="link-btn" onClick={onRequestRefund}>
+              Request refund
+            </button>
+          </p>
         )}
 
-        {/* A credit shows only on the game it comes off, and only while that game is unpaid (the pay card says it on game day). */}
-        {inSession && !onTop && mine.oweCents > 0 && mine.creditCents > 0 && (
-          <p className="small">{creditOweText(mine.oweCents, mine.creditCents, mine.potUsedCents)}</p>
-        )}
+        {/* Credit used shows only on the game it comes off, and only while that game is unpaid (the pay card says it on game day). */}
+        {inSession && !onTop && mine.oweCents > 0 && mine.creditCents > 0 && <p className="small">{creditOweText(mine.oweCents, mine.creditCents)}</p>}
 
         {/* Row 4, only when needed: Pay (the card's one green button) and the calendar icon. */}
         {rowFour && (

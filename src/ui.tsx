@@ -1,5 +1,6 @@
 import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { type CourtKind, playerSlots } from '../shared/court';
+import { type CourtKind } from '../shared/court';
+import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
 import { DEMO_MESSAGE, isIOS } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
@@ -508,37 +509,36 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
   );
 }
 
-/**
- * One mark per spot: 4, or 6 once more than 4 are in. Names fill in sign-up
- * order as small pills; open spots are small empty circles.
- */
-export function SpotPills({ names, me }: { names: string[]; me?: string | null }) {
-  const slots = playerSlots(names.length);
+/** One pickleball: a yellow-green ball with the hole pattern. Inline SVG, no image files. */
+function Pickleball({ me }: { me?: boolean }) {
   return (
-    <ul className="in-pills spots" aria-label="Who's in">
-      {Array.from({ length: slots }, (_, i) =>
-        i < names.length ? (
-          <li key={i} className={names[i] === me ? 'me' : undefined} title={names[i]}>
-            {names[i]}
-          </li>
-        ) : (
-          <li key={i} className="open">
-            <span className="sr-only">Open spot</span>
-          </li>
-        ),
-      )}
-    </ul>
+    <svg className={`ball${me ? ' me' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+      <circle cx="10" cy="10" r="9" className="ball-skin" />
+      <g className="ball-holes">
+        <circle cx="10" cy="5.2" r="1.3" />
+        <circle cx="5.6" cy="8" r="1.3" />
+        <circle cx="14.4" cy="8" r="1.3" />
+        <circle cx="7.2" cy="13.2" r="1.3" />
+        <circle cx="12.8" cy="13.2" r="1.3" />
+        <circle cx="10" cy="9.6" r="1.1" />
+      </g>
+    </svg>
   );
 }
 
-/** A dot per spot: filled once taken, green for you. */
+/**
+ * Who's in, as pickleballs: always 4 circles (a ball for each person in,
+ * an outlined circle for each spot still needed to play), then one more ball
+ * for every extra person beyond 4, up to the max. Never empty circles past
+ * the first 4. The count text beside it carries the number for screen readers.
+ */
 export function SpotDots({ names, me }: { names: string[]; me?: string | null }) {
-  const slots = playerSlots(names.length);
+  const slots = Math.max(MIN_PLAYERS, names.length);
   return (
-    <span className="dots" role="img" aria-label={`${names.length} of ${slots} spots taken`}>
-      {Array.from({ length: slots }, (_, i) => (
-        <span key={i} className={`dot${i < names.length ? (names[i] === me ? ' me' : ' in') : ''}`} />
-      ))}
+    <span className="dots" role="img" aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}>
+      {Array.from({ length: slots }, (_, i) =>
+        i < names.length ? <Pickleball key={i} me={names[i] === me} /> : <span key={i} className="dot" />,
+      )}
     </span>
   );
 }
@@ -595,9 +595,9 @@ export function NamesLine({
 }
 
 /**
- * The organizer card's who's in: "3 of 4 in" and a dot per spot (with the
- * organizer's own "You're in" / "Out" at the right), then every name on a
- * line of its own, then anyone waiting.
+ * The organizer card's who's in: "3 of 4 in" or "5 in" and a ball per
+ * person (with the organizer's own "You're in" / "Out" at the right), then
+ * every name on a line of its own, then anyone waiting.
  */
 export function PlayersLine({
   names,
@@ -605,9 +605,12 @@ export function PlayersLine({
   waitLabel,
   everyone,
   after,
+  maxPlayers,
 }: {
   /** Confirmed players, in sign-up order. */
   names: string[];
+  /** The most who can be in ("10 in, full"). */
+  maxPlayers: number;
   /** Waiting players, in order. */
   waitlist: string[];
   /** "Waitlist", or "Standby" while waiting on the court. */
@@ -620,9 +623,7 @@ export function PlayersLine({
   return (
     <div className="players players-line">
       <div className="players-top">
-        <span className="players-count">
-          {names.length} of {playerSlots(names.length)} in
-        </span>
+        <span className="players-count">{countText(names.length, maxPlayers)}</span>
         <SpotDots names={names} />
         {after && <span className="players-after">{after}</span>}
       </div>

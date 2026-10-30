@@ -262,6 +262,53 @@ async function main() {
     await ctx.close();
   }
 
+  // ---- After the game: the one-tap Final price text, once the organizer finalized; a redo brings it back.
+  {
+    await roster(thu, 'Nathan'); // 5 in: Ryan, Mitchel, Brandon, Julian, Nathan
+    await clock('2026-11-03T22:30:00-05:00'); // Tue Nov 3, 10:30 PM: the game is over
+    const { ctx, page } = await open('light', 390);
+    await check('a game that is over but not finalized has no Final price card (the Finalize card is on Home instead)', async () => {
+      await page.locator(`[data-finalize="${thu.id}"]`).waitFor();
+      assert((await page.locator('article[data-suggest="final"]').count()) === 0, 'final card before finalizing');
+    });
+    await check('once finalized (5 played, $11 each): a Final price card for the group chat with the credit sentence; the tap hides it', async () => {
+      const res = await api.request.post(`${BASE}/api/admin/sessions/${thu.id}/finalize`, { data: { everyone: true }, headers: { Origin: BASE } });
+      assert(res.ok(), `finalize: ${res.status()} ${await res.text()}`);
+      await page.reload();
+      if (await page.locator('.sg-more').count()) await page.locator('.sg-more').click();
+      const card = page.locator(`article[data-suggest="final"][data-session="${thu.id}"]`);
+      await card.waitFor();
+      assert(/^Final price: Tue, Nov 3 · 8:00 to 10:00 PM$/.test(await card.getAttribute('aria-label')), await card.getAttribute('aria-label'));
+      const { to, body } = smsOf(await card.getByRole('link', { name: /^Text/ }).getAttribute('href'));
+      assert(to.length === 0, 'a group chat has no numbers');
+      assert(body === 'Pickleball Tue, Nov 3 is final: 5 played, $11 each. If you paid $14, the extra $3 is now credit on your account. localhost:' + PORT, `body: ${body}`);
+      assert(/Group chat/.test(await card.innerText()) && !/\bsent\b/i.test(await card.innerText()), 'who it goes to, never sent');
+      assert((await page.locator(`[data-finalize="${thu.id}"]`).count()) === 0, 'the Finalize card is done');
+      await card.evaluate((el) => el.querySelector('a.btn').addEventListener('click', (e) => e.preventDefault()));
+      await card.getByRole('link', { name: /^Text/ }).click();
+      await card.waitFor({ state: 'detached' });
+      await page.reload();
+      await page.locator('section[aria-labelledby="sessions-title"] article, [data-finalize], article[data-suggest]').first().waitFor();
+      assert((await page.locator(`article[data-suggest="final"][data-session="${thu.id}"]`).count()) === 0, 'came back after reload');
+    });
+    await check('Reopen takes the card away; finalizing again (4 played) brings a fresh one with no credit sentence', async () => {
+      assert((await api.request.post(`${BASE}/api/admin/sessions/${thu.id}/reopen`, { data: {}, headers: { Origin: BASE } })).ok(), 'reopen');
+      await page.reload();
+      await page.locator(`[data-finalize="${thu.id}"]`).waitFor();
+      assert((await page.locator('article[data-suggest="final"]').count()) === 0, 'final card while reopened');
+      const d = await dash();
+      const played = d.sessions.find((s) => s.id === thu.id).roster.filter((r) => r.status === 'confirmed' && r.name !== 'Nathan').map((r) => r.playerId);
+      assert((await api.request.post(`${BASE}/api/admin/sessions/${thu.id}/finalize`, { data: { played }, headers: { Origin: BASE } })).ok(), 'finalize again');
+      await page.reload();
+      if (await page.locator('.sg-more').count()) await page.locator('.sg-more').click();
+      const card = page.locator(`article[data-suggest="final"][data-session="${thu.id}"]`);
+      await card.waitFor();
+      const { body } = smsOf(await card.getByRole('link', { name: /^Text/ }).getAttribute('href'));
+      assert(body === 'Pickleball Tue, Nov 3 is final: 4 played, $14 each. localhost:' + PORT, `body: ${body}`);
+    });
+    await ctx.close();
+  }
+
   async function localStorageClear() {
     /* each test context starts with empty storage; nothing to clear */
   }

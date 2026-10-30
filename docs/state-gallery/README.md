@@ -1,5 +1,7 @@
 # State gallery
 
+**Out of date since Oct 29, 2026:** these pictures show the old "4 or 6" rules ($9, $5 credits, Refund / Keep as credit cards). The screens and the money rules changed; see `docs/NEW_MODEL.md`. Fresh pictures of the new screens: `docs/screenshots/` (made by `node e2e/shots.cjs`).
+
 Every card, notice and screen state, from a fake group with a fixed clock (Eastern time).
 Made by `node e2e/gallery.cjs`. 390px wide in light and dark; the busiest screens also at 360px.
 

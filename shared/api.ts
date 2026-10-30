@@ -1,4 +1,5 @@
 // Shapes of the JSON the API returns. Shared by server and browser.
+import type { CreditReason } from './credit';
 import type { GroupSettings } from './settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, SessionState } from './status';
 
@@ -15,12 +16,14 @@ export interface PlayerSessionView {
   venueName: string | null;
   confirmed: { name: string; attendanceConfirmed: boolean }[];
   waitlist: { name: string }[];
+  /** Spots left before the game is full. */
   openSpots: number;
-  /** "3 going · 1 more needed", "5 going · need 4 or 6", "6 going" */
-  goingText: string;
+  /** "3 of 4 in", "5 in", "10 in, full" */
+  countText: string;
+  /** At the max: anyone else waits. */
+  full: boolean;
   /** What the big button does for someone not in yet. */
   joinAs: 'in' | 'waitlist';
-  sixPlaying: boolean;
   /** US holiday on this date, e.g. "Thanksgiving". */
   holiday: string | null;
   courtState: 'waitlist' | 'opened' | 'not_opened' | null;
@@ -32,39 +35,67 @@ export interface PlayerSessionView {
   bookingOpensAt: string;
   /** Already played; only listed because this player still owes for it. */
   past: boolean;
+  /** The organizer finalized who played: the final price each. */
+  finalized: { playedCount: number; priceCents: number } | null;
   confirmationOpen: boolean;
   mine: null | {
     status: RosterStatus;
     waitlistPosition: number | null;
     attendanceConfirmed: boolean;
     /** Moved in from the waitlist: show the "Good news" line. */
-    promotion: 'made_six' | 'spot_opened' | null;
-    /** Price for this session before any credit ($14, or $9 with the 6-person discount). */
+    promotion: 'spot_opened' | null;
+    /** Their price for this session ($14 until finalized, then the final price; null when nothing is owed). */
     shareCents: number | null;
     paymentStatus: PaymentStatus;
     /** They tapped "I paid" themselves. */
     selfPaid: boolean;
     /** When this sign-up started. A fresh "I'm in" after "I'm out" gets a new one. */
     signupAt: string;
-    /** One of the last two of six, paying the discounted price. */
-    discount: boolean;
-    /** One of the first four of six: earns a credit if 6 play. */
-    creditComing: boolean;
-    /** What they still owe for this session, after any credit (0 when paid). */
+    /** What they still owe for this session, after credit used on it (0 when paid). */
     oweCents: number;
-    /** Credit coming off this session (the older $5 credit, and credit they already used on it). */
+    /** Credit from their pot already used on this session. */
     creditCents: number;
+    /** Cash they paid toward this session before its price went up (a redo with fewer players). */
+    paidEarlierCents: number;
     /** Paid in full with credit from their pot: shows "Paid with credit". */
     paidWithCredit: boolean;
-    /** Of `creditCents`, what they already used from their credit on this unpaid game. */
-    potUsedCents: number;
-    /** What "Use credit" would take off this session now: the smaller of their pot and what they owe. 0 hides the button. */
+    /** What "Use credit" would take off this session now: the smaller of their usable credit and what they owe. 0 hides the button. */
     useCreditCents: number;
+    /** Money from this session that came back to them as credit (they dropped out, it was canceled, they did not play, or they paid more than the final price). 0 once they have no credit left. */
+    creditBackCents: number;
   };
 }
 
+/** One line of a player's credit history. */
+export interface CreditEntryView {
+  id: string;
+  /** kept: money came back as credit. used: spent on a game. refunded: paid back by Venmo. */
+  kind: 'kept' | 'used' | 'refunded';
+  cents: number;
+  sessionId: string | null;
+  sessionStartsAt: string | null;
+  at: string;
+  /** Undone, or went back to the player. It no longer counts. */
+  endedAt: string | null;
+  endedReason: 'undone' | 'unmarked' | 'dropped' | 'canceled' | null;
+  reason: CreditReason | null;
+  playedCount: number | null;
+}
+
+/** A player's own credit (never anyone else's). */
+export interface CreditView {
+  /** The pot. */
+  balanceCents: number;
+  /** The pot minus a pending refund request: what "Use credit" can spend. */
+  usableCents: number;
+  /** A refund request waiting on the organizer. */
+  pending: { id: string; cents: number; at: string } | null;
+  /** Live entries, newest first. */
+  history: CreditEntryView[];
+}
+
 export interface GroupView {
-  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; creditCents: number };
+  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; maxPlayers: number };
   players: { id: string; name: string }[];
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */
@@ -76,10 +107,11 @@ export interface GroupView {
     sessionId: string;
     startsAt: string;
     endsAt: string;
-    /** What they actually owe, after any credit. */
+    /** What they actually owe, after credit used on it. */
     amountCents: number;
     creditCents: number;
-    discount: boolean;
+    /** The session was finalized at this price (owes the remainder, not the flat price). */
+    finalized: boolean;
     reminder: boolean;
     /** When this sign-up started (see `mine.signupAt`). */
     signupAt: string;
@@ -89,10 +121,8 @@ export interface GroupView {
    * whose game day has reached 8:00 AM. Nothing before that.
    */
   payDue: GroupView['owed'];
-  /** Their credit: the pot plus any $5 credit not yet matched to a session they owe for. Only their own. */
-  creditBalanceCents: number;
-  /** Of that, the pot: what "Use credit" can spend on a game they owe for. */
-  potCents: number;
+  /** Their credit. Only their own. */
+  credit: CreditView;
   /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
   suggestion: {
     sessionId: string;
@@ -100,7 +130,7 @@ export interface GroupView {
     endsAt: string;
     joinAs: 'in' | 'waitlist';
     holiday: string | null;
-    /** How many are in now (for "3 spots left"). */
+    /** How many are in now. */
     confirmedCount: number;
     /** The venue's court waitlist: players go on standby. */
     courtState: 'waitlist' | 'opened' | 'not_opened' | null;
@@ -119,25 +149,29 @@ export interface AdminRosterEntry {
   /** The player marked it paid themselves; the organizer sees a "self-marked" tag. */
   selfPaid: boolean;
   paidAt: string | null;
+  /** What they paid (cash plus credit used), as recorded when marked paid. */
   paymentAmountCents: number | null;
+  /** Their price now: $14 until finalized, the final price if they played, null when nothing is owed. */
   shareCents: number | null;
+  /** What they still owe right now (0 when paid or nothing owed). */
+  owesCents: number;
   waitlistPosition: number | null;
   promotedAt: string | null;
   refundedAt: string | null;
   /** Dropped out after the day-before check-in opened. */
   lateDropAt: string | null;
   lateDropDoneAt: string | null;
-  promotionReason: 'made_six' | 'spot_opened' | null;
+  promotionReason: 'spot_opened' | null;
   promotionNotifiedAt: string | null;
-  /** Last two of six. */
-  discount: boolean;
-  /** Credit coming off this seat: the older $5 credit (planned if unpaid) plus credit used from the pot. */
+  /** Credit from their pot used on this seat. */
   creditCents: number;
-  /** Of `creditCents`, what came from the pot ("Use credit"). */
-  potCreditCents: number;
-  /** The payment for this game was kept as credit (it was canceled, or the player left). Null if not. */
-  keptAsCreditAt: string | null;
-  keptAsCreditCents: number;
+  /** Cash paid toward this seat before its price went up. */
+  paidEarlierCents: number;
+  /** Money from this seat that went back to them as credit, and why. */
+  creditBackCents: number;
+  creditBackReason: CreditReason | null;
+  /** Set once the game is finalized: did they play. */
+  played: boolean | null;
   /**
    * This is the organizer. They pay the venue, not the other players, so
    * there is no share or credit here, and their paid mark means "Court paid".
@@ -150,7 +184,7 @@ export interface CourtDue {
   /** The full court cost for the session (the booking's cost, else the typical cost). */
   costCents: number;
   typicalCost: boolean;
-  /** What the other players owe for this session under the usual rules. */
+  /** What the other players owe (or paid) for this session under the usual rules. */
   playersCoverCents: number;
   /** Court cost minus what players cover, never below $0. */
   yourShareCents: number;
@@ -211,8 +245,14 @@ export interface AdminSessionView {
   holidayHoursOk: boolean;
   /** Day-before and last-call cards are inside their windows (and not marked Done). */
   cards: { dayBefore: boolean; lastCall: boolean };
-  /** Had 6 (discount shown), now fewer: the organizer should sort out payments by hand. */
-  sixDropped: boolean;
+  /** The organizer finalized who played. `creditBackCents` is what finalizing gave back (not credit from drops before the game). */
+  finalized: { at: string; playedCount: number; priceCents: number; creditBackCents: number; flatCents: number } | null;
+  /** Over, not canceled, not finalized, and someone was in: shows the Finalize card. */
+  needsFinalize: boolean;
+  /** Reopen is blocked because some credit from this game was already used or refunded: who. */
+  reopenBlockedBy: string[];
+  /** Reopen waits because a pending refund request is holding credit from this game: who. */
+  reopenRequestedBy: string[];
   eligibleSubstitutes: EligibleSubstitute[];
 }
 
@@ -263,6 +303,17 @@ export interface AuditEntry {
   createdAt: string;
 }
 
+/** A player's refund request, for the organizer's Home card. */
+export interface RefundRequestView {
+  id: string;
+  playerId: string;
+  name: string;
+  cents: number;
+  createdAt: string;
+  /** Organizer only: the player's saved Venmo, so the Refund button is addressed. */
+  venmo: string | null;
+}
+
 export interface AdminDashboard {
   group: {
     name: string;
@@ -285,13 +336,13 @@ export interface AdminDashboard {
   audit: AuditEntry[];
   /** Upcoming sessions hidden by the first session date, which the organizer can show. */
   hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
-  /** Open $5 credit per player (earned, not yet used or cleared). */
-  credits: { playerId: string; name: string; balanceCents: number }[];
   /**
-   * The credit pot per player who has any: `balanceCents` is the pot, `refundCents` is what "Refund credit
-   * balance" pays back (the pot plus any older $5 credit not matched to a game they owe), and every entry, oldest first.
+   * The credit pot per player who has any history: `balanceCents` is the pot, `reservedCents` is held
+   * for a pending refund request, `refundCents` is what "Refund credit balance" pays back now, and every entry, oldest first.
    */
-  creditLedger: { playerId: string; balanceCents: number; refundCents: number; entries: CreditEntryView[] }[];
+  creditLedger: { playerId: string; balanceCents: number; reservedCents: number; refundCents: number; entries: CreditEntryView[] }[];
+  /** Refund requests waiting on the organizer, oldest first. */
+  refundRequests: RefundRequestView[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
   /** Settings > Alerts: the switches and whether Telegram is set up. Never the token or chat ID. */
@@ -299,27 +350,14 @@ export interface AdminDashboard {
     enabled: boolean;
     drop36: boolean;
     belowMin: boolean;
-    reachedSix: boolean;
+    reachedMin: boolean;
+    refundRequests: boolean;
     connected: boolean;
     lastAt: string | null;
     lastOk: boolean | null;
     lastError: string | null;
   };
   now: string;
-}
-
-/** One line of a player's credit history. */
-export interface CreditEntryView {
-  id: string;
-  /** kept: paid for a game that was canceled or left. used: spent on a game. refunded: balance paid back by Venmo. */
-  kind: 'kept' | 'used' | 'refunded';
-  cents: number;
-  sessionId: string | null;
-  sessionStartsAt: string | null;
-  at: string;
-  /** Undone, or went back to the player. It no longer counts. */
-  endedAt: string | null;
-  endedReason: 'undone' | 'unmarked' | 'dropped' | 'canceled' | null;
 }
 
 export interface ActionLinkDraft {
@@ -346,17 +384,15 @@ export interface MonthlyMoney {
   month: string;
   /** "November 2026" */
   label: string;
-  /** What the other players paid. The organizer's own payment to the venue is never in here. */
+  /** What the other players paid and the group kept, for finalized games this month. The organizer's own payment to the venue is never in here. */
   collectedCents: number;
   /** The full court cost of every session played. */
   courtCostCents: number;
-  /** Credits still owed to players: the $5 credits and credit kept from canceled games. */
+  /** Credit still owed to players from this month's games (money that came back as credit and is not yet used or refunded). */
   creditsOwedCents: number;
-  /** Of `creditsOwedCents`, the credit kept from canceled games. That money was never in Collected, so it is not taken off Left. */
-  keptCreditCents: number;
-  /** Paid by other players for games not played yet (or canceled and not refunded yet). Not in Collected until played. */
+  /** Paid by other players for games not finalized yet. Not in Collected until finalized. */
   heldCents: number;
-  /** Collected minus court costs minus credits owed. */
+  /** Collected minus court costs. Credit owed is money that was never collected, so it is not taken off. */
   netCents: number;
   /** Players paid more than the courts cost: the amount toward the membership. */
   surplusCents: number;
@@ -369,13 +405,19 @@ export interface MonthlyMoney {
     id: string;
     startsAt: string;
     endsAt: string;
-    /** played: counted. canceled / upcoming / not_played: shown but not counted (a canceled game the venue charged for still counts its court cost). */
-    state: 'played' | 'canceled' | 'upcoming' | 'not_played';
+    /**
+     * played: finalized and counted. not_finalized: over, money still held. canceled / upcoming / not_played:
+     * shown but not counted (a canceled game the venue charged for still counts its court cost).
+     */
+    state: 'played' | 'not_finalized' | 'canceled' | 'upcoming' | 'not_played';
     /** A canceled game the venue still charged for. */
     charged: boolean;
     collectedCents: number;
     courtCostCents: number;
     /** No cost entered on the session, so the typical cost was used. */
     typicalCost: boolean;
+    /** Once finalized: how many played and the final price each. */
+    playedCount: number | null;
+    priceCents: number | null;
   }[];
 }

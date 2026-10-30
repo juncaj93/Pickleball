@@ -94,6 +94,10 @@ async function main() {
   await joinAs('Brandon', [nov[0].id]);
   await joinAs('Julian', [nov[0].id, nov[1].id]);
   await joinAs('Nathan', [nov[1].id]);
+  // After-the-game screens: the first November game with 5 in, Ryan paid ahead.
+  await joinAs('Mitchel', [nov[0].id]);
+  await joinAs('Nathan', [nov[0].id]);
+  await post(areq, `/api/admin/sessions/${nov[0].id}/payment`, { playerId: d.players.find((x) => x.name === 'Ryan').id, paid: true });
   await adminCtx.close();
 
   // ---- Screens ----
@@ -166,6 +170,42 @@ async function main() {
       await page.locator('.name-grid').waitFor();
       await snap('14-who-are-you');
       await ctx.close();
+
+      // After the game: the Finalize card, Money once finalized, the player's credit chip and sheet.
+      const after = await browser.newContext(phone(width, scheme));
+      await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse(nov[0].endsAt) + 30 * 60_000 }) });
+      await post(after.request, '/api/admin/login', { pin: PIN });
+      const ap = await after.newPage();
+      await ap.goto(`${BASE}/admin`);
+      await ap.locator(`[data-finalize="${nov[0].id}"]`).waitFor();
+      await ap.screenshot({ path: path.join(OUT, `15-finalize-card-${width}-${scheme}.png`) });
+      await ap.locator(`[data-finalize="${nov[0].id}"] [data-change-played]`).click();
+      await ap.locator('[data-who-played]').waitFor();
+      await ap.screenshot({ path: path.join(OUT, `16-who-played-${width}-${scheme}.png`) });
+      await ap.locator('[data-confirm-played]').click();
+      await ap.locator(`[data-finalize="${nov[0].id}"]`).waitFor({ state: 'detached' });
+      await ap.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: /^Money/ }).click();
+      const sess = ap.locator(`details.money-sess[data-session="${nov[0].id}"]`);
+      await sess.waitFor();
+      await sess.evaluate((el) => (el.open = true));
+      await sess.scrollIntoViewIfNeeded();
+      await ap.screenshot({ path: path.join(OUT, `17-money-finalized-${width}-${scheme}.png`) });
+      const pc = await browser.newContext(phone(width, scheme));
+      await post(pc.request, '/api/me', { playerId: d.players.find((x) => x.name === 'Ryan').id });
+      const pp = await pc.newPage();
+      await pp.goto(BASE);
+      await pp.locator('header [data-credit-chip]').waitFor();
+      await pp.screenshot({ path: path.join(OUT, `18-player-credit-chip-${width}-${scheme}.png`) });
+      await pp.locator('header [data-credit-chip]').click();
+      await pp.locator('[data-credit-sheet]').waitFor();
+      await pp.waitForTimeout(300);
+      await pp.screenshot({ path: path.join(OUT, `19-player-credit-sheet-${width}-${scheme}.png`) });
+      for (const n of ['15-finalize-card', '16-who-played', '17-money-finalized', '18-player-credit-chip', '19-player-credit-sheet']) shots.push(path.join(OUT, `${n}-${width}-${scheme}.png`));
+      await pc.close();
+      // Back before the game for the next width.
+      await post(after.request, `/api/admin/sessions/${nov[0].id}/reopen`, {});
+      await after.close();
+      await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse('2026-10-27T14:14:00-04:00') }) });
     }
   }
   await browser.close();

@@ -3,6 +3,8 @@ import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
+import { reopenBlockers } from './finalize';
+import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
@@ -20,22 +22,19 @@ import {
   loadRoster,
   loadRosters,
   loadSessions,
+  type RosterRow,
   type SessionRow,
   settingsOf,
   sharesFor,
-  waitlistOf,
-  issueCredits,
   loadCancelCharges,
   loadHiddenSessions,
-  openCredits,
   organizerIdOf,
-  syncSix,
   visibleFrom,
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
-import { CHARGE_ASK_HOURS, keptBySeat, potBalance, seatKey } from '../shared/credit';
-import { moneyPicture, repriceCreditSeats, returnSeatCredit, returnSessionCredit, undoKeep } from './credit';
-import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
+import { CHARGE_ASK_HOURS, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
+import { hasPendingRequest, moneyPicture, returnSeatCredit, returnSessionCredit, undoCreditBack } from './credit';
+import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -55,54 +54,47 @@ export async function logout(ctx: Ctx) {
 export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const group = await requireAdmin(ctx);
   await ensureSessions(ctx.db, group, ctx.nowMs);
-  await issueCredits(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
-  const { sessions, rosters, credits, ledger, spent, plan } = await moneyPictureOf(ctx, group);
-  const usedOn = (sessionId: string, playerId: string) =>
-    credits.filter((c) => c.used_session_id === sessionId && c.player_id === playerId).reduce((sum, c) => sum + c.amount_cents, 0);
-  const creditFor = (s: { id: string }, roster: { player_id: string; payment_status: string }[]) => (playerId: string) => {
-    const row = roster.find((r) => r.player_id === playerId);
-    return row?.payment_status === 'paid' ? usedOn(s.id, playerId) : (plan.get(`${s.id}:${playerId}`)?.cents ?? 0);
-  };
+  const { sessions, rosters, ledger, reserved } = await moneyPictureOf(ctx, group);
   const organizerId = await organizerIdOf(ctx.db, group);
-  const kept = keptBySeat(ledger);
-  const potFor = (sessionId: string) => (playerId: string) => {
-    const k = kept.get(seatKey(sessionId, playerId));
-    return { usedCents: spent.get(seatKey(sessionId, playerId)) ?? 0, keptAt: k?.createdAt ?? null, keptCents: k?.cents ?? 0 };
-  };
+  // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
+  const potFor = (sessionId: string) => (r: RosterRow) =>
+    seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
   const charges = await loadCancelCharges(ctx.db, group.id);
   const startsOf = new Map(
     (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
   );
-  // Older $5 credit not matched to a game they owe for: it is part of what a refund of their credit pays back.
-  const plannedFive = new Set([...plan.values()].flatMap((p) => p.ids));
-  const looseFive = new Map<string, number>();
-  for (const c of openCredits(credits)) if (!plannedFive.has(c.id)) looseFive.set(c.playerId, (looseFive.get(c.playerId) ?? 0) + c.amountCents);
-  const creditLedger = [...new Set([...ledger.map((e) => e.playerId), ...looseFive.keys()])]
-    .map((playerId) => ({
-      playerId,
-      balanceCents: potBalance(ledger, playerId),
-      refundCents: potBalance(ledger, playerId) + (looseFive.get(playerId) ?? 0),
-      entries: ledger
-        .filter((e) => e.playerId === playerId)
-        .map(
-          (e): CreditEntryView => ({
-            id: e.id,
-            kind: e.kind,
-            cents: e.cents,
-            sessionId: e.sessionId,
-            sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : null,
-            at: e.createdAt,
-            endedAt: e.endedAt,
-            endedReason: e.endedReason as CreditEntryView['endedReason'],
-          }),
-        ),
-    }))
+  const creditLedger = [...new Set(ledger.map((e) => e.playerId))]
+    .map((playerId) => {
+      const balanceCents = potBalance(ledger, playerId);
+      const reservedCents = reserved.get(playerId) ?? 0;
+      return {
+        playerId,
+        balanceCents,
+        reservedCents,
+        refundCents: usableCredit(balanceCents, reservedCents),
+        entries: visibleEntries(ledger)
+          .filter((e) => e.playerId === playerId)
+          .map(
+            (e): CreditEntryView => ({
+              id: e.id,
+              kind: e.kind,
+              cents: e.cents,
+              sessionId: e.sessionId,
+              sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : null,
+              at: e.createdAt,
+              endedAt: e.endedAt,
+              endedReason: e.endedReason as CreditEntryView['endedReason'],
+              reason: e.reason ?? null,
+              playedCount: e.playedCount ?? null,
+            }),
+          ),
+      };
+    })
     .filter((p) => p.playerId !== organizerId);
-  const balances = new Map<string, number>();
-  // The organizer pays the venue, so any credit under their name is not a balance anyone owes.
-  for (const c of openCredits(credits)) if (c.playerId !== organizerId) balances.set(c.playerId, (balances.get(c.playerId) ?? 0) + c.amountCents);
+  const blockers = new Map<string, { spent: string[]; requested: string[] }>();
+  for (const s of sessions) if (s.finalized_at) blockers.set(s.id, await reopenBlockers(ctx, s.id));
   const { results: auditRows } = await ctx.db
     .prepare('SELECT * FROM admin_audit_log WHERE group_id = ? ORDER BY created_at DESC LIMIT 60')
     .bind(group.id)
@@ -149,27 +141,13 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       hasGroupWord: !!group.group_word_hash,
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
-    sessions: sessions.map((s) => {
-      const roster = rosters.get(s.id) ?? [];
-      return adminSessionView(
-        s,
-        roster,
-        players,
-        ctx.nowMs,
-        settings,
-        group.timezone,
-        creditFor(s, roster),
-        organizerId,
-        potFor(s.id),
-        s.status === 'canceled' ? (charges.get(s.id) ?? null) : null,
-      );
-    }),
+    sessions: sessions.map((s) =>
+      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }),
+    ),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
-    credits: [...balances]
-      .map(([playerId, balanceCents]) => ({ playerId, name: players.find((p) => p.id === playerId)?.display_name ?? '?', balanceCents }))
-      .sort((a, b) => a.name.localeCompare(b.name)),
     creditLedger,
+    refundRequests: await pendingRequestViews(ctx, group),
     me: await organizerPlayer(ctx, group, false),
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
@@ -185,7 +163,7 @@ export function playerLinkFor(ctx: Ctx, group: GroupRow): string {
   return (ctx.env.SITE_URL || ctx.url.origin).replace(/\/$/, '');
 }
 
-/** Visible sessions from the last 90 days on, their rosters, all credits, and where open credits will land. */
+/** Visible sessions from the last 90 days on, their rosters, and the credit pot. */
 const moneyPictureOf = (ctx: Ctx, group: GroupRow) => moneyPicture(ctx.db, group, ctx.nowMs);
 
 function safeParse(s: string): Record<string, unknown> {
@@ -251,6 +229,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
   if (decision === 'cancel') {
     if (body.confirm !== true) throw new HttpError(400, 'confirm_required', 'Confirm the cancellation first.');
     if (session.status === 'canceled') return { ok: true, changed: false };
+    if (session.finalized_at) throw new HttpError(409, 'finalized', 'This game is finalized. Reopen it on the Money tab first.');
     // "Were you charged for this court?" is only asked within 12 hours of the start.
     // A Yes counts as that canceled game's court cost; it is kept with the cancel in the Activity log.
     const askedCharge = ctx.nowMs >= Date.parse(session.starts_at) - CHARGE_ASK_HOURS * 3600_000 && ctx.nowMs < Date.parse(session.starts_at);
@@ -260,9 +239,9 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       .bind(ctx.nowIso, ctx.nowIso, session.id)
       .run();
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
-    // Credit anyone spent on this game goes back to them; what they paid in cash waits for Refund or Keep as credit.
     const returned = await returnSessionCredit(ctx.db, session.id, ctx.nowIso);
-    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned }, ctx.nowIso);
+    const back = await creditEveryone(ctx, group, session, 'canceled');
+    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back }, ctx.nowIso);
     return { ok: true, changed: true };
   }
   if (decision === 'reopen') {
@@ -276,7 +255,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       )
       .bind(ctx.nowIso, session.id)
       .run();
-    // A payment kept as credit is credit now, so they owe for the reopened game again (and can use that credit).
+    // A payment that became credit is credit now, so they owe for the reopened game again (and can use that credit).
     await ctx.db
       .prepare(
         `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
@@ -299,11 +278,30 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
 }
 
 /**
+ * Everyone's money comes back as credit when a game is canceled (or the
+ * court never opened): credit they used goes back first (the caller), then
+ * what each other player paid in cash becomes a new credit entry.
+ */
+async function creditEveryone(ctx: Ctx, group: GroupRow, session: SessionRow, reason: 'canceled'): Promise<number> {
+  const organizerId = await organizerIdOf(ctx.db, group);
+  let total = 0;
+  for (const r of await loadRoster(ctx.db, session.id)) {
+    if (r.player_id === organizerId || r.payment_status !== 'paid' || r.refunded_at) continue;
+    const cents = await keepPaymentAsCredit(ctx.db, group.id, session.id, r.player_id, reason, ctx.nowIso);
+    if (cents > 0) {
+      total += cents;
+      await audit(ctx.db, group.id, session.id, 'credit_back', { player: r.display_name, playerId: r.player_id, amountCents: cents, reason }, ctx.nowIso);
+    }
+  }
+  return total;
+}
+
+/**
  * "I booked it" (or "Court opened" when on the venue's waitlist): one tap
  * that marks the session booked. Venue defaults to the club, the deadline to
  * the default hours before play; reservation number and court cost are
- * optional and kept when left out. Standby players then move in by the
- * 4-or-6 rules. Court numbers are no longer used; any saved ones are left
+ * optional and kept when left out. Standby players then move in, up to the
+ * max. Court numbers are no longer used; any saved ones are left
  * alone in the database and never shown.
  */
 export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
@@ -326,9 +324,7 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
     .run();
   let promoted: { playerId: string }[] = [];
   if (wasWaiting && ctx.nowMs < Date.parse(session.starts_at)) {
-    promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso);
-    await syncSix(ctx.db, session.id, ctx.nowIso);
-    await repriceCreditSeats(ctx.db, session.id, ctx.nowIso);
+    promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso, settingsOf(group).maxPlayers);
   }
   await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: promoted.length }, ctx.nowIso);
   return { ok: true, promoted: promoted.length };
@@ -357,6 +353,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
       .run();
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
     await returnSessionCredit(ctx.db, session.id, ctx.nowIso);
+    await creditEveryone(ctx, group, { ...session, status: 'canceled' }, 'canceled');
   }
   await audit(ctx.db, group.id, session.id, `court_${action}`, {}, ctx.nowIso);
   return { ok: true };
@@ -419,7 +416,7 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true, changed: true };
 }
 
-/** Organizer fixes to the roster. Still goes through the same four-spot rules. */
+/** Organizer fixes to the roster. Still goes through the same max-players rules. */
 export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
@@ -431,15 +428,16 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'Player not found.');
   let result: string;
   if (action === 'confirm') {
-    const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer');
-    if (r.result === 'spot_taken') throw new HttpError(409, 'session_full', 'All six spots are taken.');
+    const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer', settingsOf(group).maxPlayers);
+    if (r.result === 'spot_taken') throw new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
     result = r.result;
   } else if (action === 'waitlist') {
     await moveToWaitlist(ctx.db, session, playerId, ctx.nowMs);
     result = 'waitlisted';
   } else if (action === 'withdraw') {
-    const r = await withdraw(ctx.db, session, playerId, ctx.nowMs);
+    const r = await withdraw(ctx.db, group, session, playerId, ctx.nowMs);
     result = r.changed ? 'withdrawn' : 'not_in_session';
+    if (r.creditBackCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: player.display_name, playerId, amountCents: r.creditBackCents, reason: 'dropped' }, ctx.nowIso);
   } else {
     await confirmAttendance(ctx.db, session, playerId, ctx.nowMs);
     result = 'confirmed_attendance';
@@ -458,62 +456,6 @@ export async function lateDropDone(ctx: Ctx, body: Record<string, unknown>) {
     .run();
   await audit(ctx.db, group.id, session.id, 'late_drop_done', {}, ctx.nowIso);
   return { ok: true };
-}
-
-/** "Refunded" for someone who paid for a session that was then canceled. Only a record; no money moves. */
-export async function setRefund(ctx: Ctx, body: Record<string, unknown>) {
-  const { group, session } = await adminSession(ctx);
-  const playerId = v.id(body.playerId, 'playerId');
-  const refunded = v.bool(body.refunded, 'refunded');
-  const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
-  if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'not_paid', 'Only someone who paid can be refunded.');
-  if (!!row.refunded_at === refunded) return { ok: true, changed: false };
-  // A payment that was kept as credit is taken back through the credit (it fails once any of it is spent).
-  if (!refunded && (await undoKeep(ctx.db, session.id, playerId, ctx.nowIso))) {
-    await audit(ctx.db, group.id, session.id, 'credit_kept_undone', { player: row.display_name, playerId }, ctx.nowIso);
-    return { ok: true, changed: true };
-  }
-  // A credit used on this payment goes back to the player with the refund
-  // (they paid $9 plus their $5 credit; the $9 comes back by hand, the credit
-  // here). Undoing the refund takes those same credits again if still unused.
-  let creditIds: string[] = [];
-  if (refunded) {
-    const { results } = await ctx.db
-      .prepare('SELECT id FROM credits WHERE used_session_id = ? AND player_id = ?')
-      .bind(session.id, playerId)
-      .all<{ id: string }>();
-    creditIds = results.map((c) => c.id);
-  } else {
-    const last = await ctx.db
-      .prepare(
-        `SELECT details_json FROM admin_audit_log WHERE session_id = ? AND action = 'refund_marked' ORDER BY created_at DESC`,
-      )
-      .bind(session.id)
-      .all<{ details_json: string }>();
-    const mine = last.results.map((r) => safeParse(r.details_json)).find((d) => d.playerId === playerId);
-    creditIds = Array.isArray(mine?.creditIds) ? mine.creditIds.filter((x): x is string => typeof x === 'string') : [];
-  }
-  await ctx.db.batch([
-    ctx.db
-      .prepare('UPDATE session_players SET refunded_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
-      .bind(refunded ? ctx.nowIso : null, ctx.nowIso, session.id, playerId),
-    ...creditIds.map((id) =>
-      refunded
-        ? ctx.db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE id = ? AND used_session_id = ?').bind(id, session.id)
-        : ctx.db
-            .prepare('UPDATE credits SET used_session_id = ?, used_at = ? WHERE id = ? AND player_id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
-            .bind(session.id, ctx.nowIso, id, playerId),
-    ),
-  ]);
-  await audit(
-    ctx.db,
-    group.id,
-    session.id,
-    refunded ? 'refund_marked' : 'refund_cleared',
-    refunded ? { player: row.display_name, playerId, creditIds } : { player: row.display_name },
-    ctx.nowIso,
-  );
-  return { ok: true, changed: true };
 }
 
 export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
@@ -553,46 +495,45 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
       return { ok: true, changed: true };
     }
-    // Any credit planned for this seat is used up now.
-    const credit = (await moneyPictureOf(ctx, group)).plan.get(`${session.id}:${playerId}`) ?? { cents: 0, ids: [] };
-    const share = price - credit.cents;
-    await ctx.db.batch([
-      ctx.db
-        .prepare(
-          `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = ?,
-             payment_updated_at = ?, updated_at = ?
-           WHERE session_id = ? AND player_id = ?`,
-        )
-        .bind(ctx.nowIso, share, self ? ctx.nowIso : null, ctx.nowIso, ctx.nowIso, session.id, playerId),
-      ...credit.ids.map((id) =>
-        ctx.db
-          .prepare('UPDATE credits SET used_session_id = ?, used_at = ? WHERE id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
-          .bind(session.id, ctx.nowIso, id),
-      ),
-    ]);
+    // The payment is the whole price: cash now, plus credit and cash already on this seat.
+    const seat = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
+    const used = seat.usedCents + seat.cashCents;
+    await ctx.db
+      .prepare(
+        `UPDATE session_players SET payment_status = 'paid', paid_at = ?, payment_amount_cents = ?, self_paid_at = ?,
+           payment_updated_at = ?, updated_at = ?
+         WHERE session_id = ? AND player_id = ?`,
+      )
+      .bind(ctx.nowIso, price, self ? ctx.nowIso : null, ctx.nowIso, ctx.nowIso, session.id, playerId)
+      .run();
     await audit(
       ctx.db,
       group.id,
       session.id,
       self ? 'player_self_paid' : 'marked_paid',
-      { player: row.display_name, amountCents: share, creditCents: credit.cents },
+      { player: row.display_name, amountCents: price, cashCents: price - used, creditCents: used },
       ctx.nowIso,
       actor ?? (self ? self : 'organizer'),
     );
   } else {
     if (row.payment_status !== 'paid') return { ok: true, changed: false };
     if (self && !row.self_paid_at) throw new HttpError(409, 'organizer_marked', 'The organizer marked this paid. Ask them to change it.');
-    await ctx.db.batch([
-      ctx.db
-        .prepare(
-          `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
-             paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?, updated_at = ?
-           WHERE session_id = ? AND player_id = ?`,
-        )
-        .bind(ctx.nowIso, ctx.nowIso, session.id, playerId),
-      // Credits used on this payment go back to the player.
-      ctx.db.prepare('UPDATE credits SET used_session_id = NULL, used_at = NULL WHERE used_session_id = ? AND player_id = ?').bind(session.id, playerId),
-    ]);
+    if (row.refunded_at) throw new HttpError(409, 'already_settled', 'That payment already came back to them as credit.');
+    // Credit that came back from this payment (paid above the final price) is taken back first; if they already spent it, say so.
+    const undo = await undoCreditBack(ctx.db, session.id, playerId, ['finalized'], ctx.nowIso);
+    if (undo.blocked) {
+      if (await hasPendingRequest(ctx.db, playerId))
+        throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the refund request on Home first.`);
+      throw new HttpError(409, 'credit_spent', `${row.display_name} already used the credit from this game, so this payment can't be unmarked.`);
+    }
+    await ctx.db
+      .prepare(
+        `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
+           paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?, updated_at = ?
+         WHERE session_id = ? AND player_id = ?`,
+      )
+      .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
+      .run();
     // The organizer unmarking takes the credit from the pot back too. A player's own "Didn't pay?" only undoes their cash.
     const creditBack = self ? 0 : await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked');
     await audit(
@@ -617,29 +558,6 @@ async function applyCourtPayment(ctx: Ctx, group: GroupRow, session: SessionRow,
   return { ok: true, changed };
 }
 
-/** Dismiss the "had 6, now fewer" card once payments are sorted out by hand. */
-export async function sixSorted(ctx: Ctx) {
-  const { group, session } = await adminSession(ctx);
-  await ctx.db.prepare('UPDATE sessions SET six_drop_resolved_at = ?, updated_at = ? WHERE id = ?').bind(ctx.nowIso, ctx.nowIso, session.id).run();
-  await audit(ctx.db, group.id, session.id, 'six_drop_sorted', {}, ctx.nowIso);
-  return { ok: true };
-}
-
-/** "Clear credit": the organizer paid this player back by hand. Clears all of their open credit. */
-export async function clearCredit(ctx: Ctx) {
-  const group = await requireAdmin(ctx);
-  const playerId = v.id(ctx.params.id, 'player');
-  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>();
-  if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
-  await issueCredits(ctx.db, group, ctx.nowMs);
-  const res = await ctx.db
-    .prepare('UPDATE credits SET cleared_at = ? WHERE player_id = ? AND group_id = ? AND used_session_id IS NULL AND cleared_at IS NULL')
-    .bind(ctx.nowIso, playerId, group.id)
-    .run();
-  await audit(ctx.db, group.id, null, 'credit_cleared', { player: p.display_name, count: res.meta.changes }, ctx.nowIso);
-  return { ok: true, cleared: res.meta.changes };
-}
-
 /**
  * Remove a name. Someone with no history (never signed up, never paid) is
  * deleted completely. Anyone with history is hidden instead, so old
@@ -654,8 +572,8 @@ export async function removePlayer(ctx: Ctx) {
     .prepare(
       `SELECT
          (SELECT COUNT(*) FROM session_players WHERE player_id = ?1 AND (status <> 'declined' OR payment_status = 'paid')) +
-         (SELECT COUNT(*) FROM credits WHERE player_id = ?1) +
-         (SELECT COUNT(*) FROM credit_ledger WHERE player_id = ?1) AS n`,
+         (SELECT COUNT(*) FROM credit_ledger WHERE player_id = ?1) +
+         (SELECT COUNT(*) FROM refund_requests WHERE player_id = ?1) AS n`,
     )
     .bind(id)
     .first<{ n: number }>();
@@ -706,7 +624,7 @@ export async function prepareLinks(ctx: Ctx, body: Record<string, unknown>): Pro
       .filter((r) => !r.attendance_confirmed_at)
       .map((r) => ({ playerId: r.player_id, name: r.display_name, phone: r.phone_number }));
   } else {
-    if (openSpots(confirmedOf(roster).length, waitlistOf(roster).length) === 0) {
+    if (openSpots(confirmedOf(roster).length, settingsOf(group).maxPlayers) === 0) {
       throw new HttpError(409, 'session_full', 'No spots are open right now.');
     }
     recipients = eligibleSubstitutes(roster, await getPlayers(ctx.db, group.id));
@@ -920,6 +838,7 @@ export const BACKUP_TABLES = [
   'session_players',
   'credits',
   'credit_ledger',
+  'refund_requests',
   'session_action_tokens',
   'player_devices',
   'admin_audit_log',
@@ -1066,12 +985,12 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
   const me = await organizerPlayer(ctx, group, true);
   if (!me) throw new HttpError(400, 'name_needed', 'Add your name in Settings first (Group > Your name).');
   if (goingIn) {
-    const res = await joinSession(ctx.db, session, me.id, ctx.nowMs, 'auto');
+    const res = await joinSession(ctx.db, session, me.id, ctx.nowMs, 'auto', settingsOf(group).maxPlayers);
     await clearLateDrop(ctx.db, session.id, me.id);
     if (res.result !== 'already_confirmed') await audit(ctx.db, group.id, session.id, 'player_join', { player: me.name, result: res.result, organizer: true }, ctx.nowIso, me.name);
     return res;
   }
-  const res = await withdraw(ctx.db, session, me.id, ctx.nowMs);
+  const res = await withdraw(ctx.db, group, session, me.id, ctx.nowMs);
   const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group)) : false;
   if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
   return { result: res.changed ? 'withdrawn' : 'not_in_session' };

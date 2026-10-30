@@ -50,7 +50,7 @@ describe('one-off games', () => {
     expect((await alex.call('POST', '/api/admin/sessions', { startsAt: at(2026, 11, 14, 20), endsAt: at(2026, 11, 14, 22) })).status).toBe(401);
   });
 
-  it('works like any session: 4 or 6, waitlist, $14, deadline, and the same 14-day booking rule', async () => {
+  it('works like any session: 4 to the max, waitlist, $14, deadline, and the same 14-day booking rule', async () => {
     const ctx = await setupGroup();
     // Sat Nov 14 is 19 days out: not bookable yet; opens Sat Oct 31 at 12:00 AM.
     const { id } = (await ctx.organizer.call('POST', '/api/admin/sessions', { startsAt: at(2026, 11, 14, 20), endsAt: at(2026, 11, 14, 22) })).data;
@@ -61,9 +61,14 @@ describe('one-off games', () => {
     expect(s.cancellationDeadlineAt).toBe(new Date(Date.parse(s.startsAt) - 12 * HOUR).toISOString());
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${id}/join`, {});
     s = (await dash(ctx)).sessions.find((x: any) => x.id === id);
-    expect(s.confirmedCount).toBe(4);
-    expect(s.waitlistCount).toBe(1);
+    expect(s.confirmedCount).toBe(5);
+    expect(s.waitlistCount).toBe(0);
     expect(s.roster.filter((r: any) => r.status === 'confirmed').every((r: any) => r.shareCents === 1400)).toBe(true);
+    // The max from Settings applies here too: at 5, the 6th waits.
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 5 } });
+    expect((await (await playerPhone(ctx, 'Frankie')).call('POST', `/api/sessions/${id}/join`, {})).data).toEqual({ result: 'waitlisted', position: 1 });
+    s = (await dash(ctx)).sessions.find((x: any) => x.id === id);
+    expect([s.confirmedCount, s.waitlistCount]).toEqual([5, 1]);
     ctx.app.now = Date.parse('2026-10-31T04:00:00.000Z'); // Sat Oct 31, 12:00 AM
     s = (await dash(ctx)).sessions.find((x: any) => x.id === id);
     expect(s.state.flags.needsBooking).toBe(true);

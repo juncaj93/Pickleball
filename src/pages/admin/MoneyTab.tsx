@@ -1,25 +1,27 @@
 import type { AdminSessionView } from '../../../shared/api';
 import { formatShortDate } from '../../../shared/time';
 import { useNow } from '../../lib';
-import { type AdminCtx, CreditsCard } from '../Admin';
+import type { AdminCtx } from '../Admin';
 import { MonthlyMoneyPage } from './MonthlyMoney';
 import { PaymentsManager } from './Sessions';
 import { unpaidPeople } from './textMenu';
 import { SmsDraft } from '../../ui';
-import { refundRows } from './todo';
+
+/** A canceled game where someone's payment became credit. */
+const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
 
 /**
  * Everything about money in one place: the month at the top, then each
- * session's payments (Mark paid, and Refund on a canceled game or a player who left), and credits.
+ * session's payments (Mark paid, who played and the final price, Reopen).
  */
 export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
   const unpaid = unpaidPeople(ctx.d);
   const tz = ctx.d.group.timezone;
   // Every session with a court to pay for: players' payments, and the organizer's court row.
-  // A canceled game stays here while it has money to give back (or was given back), so Refund sits on its row.
-  const canceledWithRefunds = ctx.d.sessions.filter((s) => s.state.flags.canceled && refundRows(s).length > 0);
-  const withMoney = ctx.d.sessions.filter((s) => (!s.state.flags.canceled && s.court !== null) || canceledWithRefunds.includes(s));
+  // A canceled game stays here when payments became credit, so the organizer can see who got what back.
+  const canceledWithCredit = ctx.d.sessions.filter((s) => s.state.flags.canceled && creditBackRows(s).length > 0);
+  const withMoney = ctx.d.sessions.filter((s) => (!s.state.flags.canceled && s.court !== null) || canceledWithCredit.includes(s));
   // Most recent games first: the ones people are paying for now.
   const started = withMoney.filter((s) => Date.parse(s.startsAt) <= nowMs).reverse();
   const upcoming = withMoney.filter((s) => Date.parse(s.startsAt) > nowMs);
@@ -27,14 +29,17 @@ export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
   const label = (s: AdminSessionView) =>
     s.state.flags.canceled
       ? `${formatShortDate(s.startsAt, tz)} · canceled`
-      : s.payableCount > 0 ? `${formatShortDate(s.startsAt, tz)} · ${s.paidCount} of ${s.payableCount} paid` : formatShortDate(s.startsAt, tz);
+      : s.finalized
+        ? `${formatShortDate(s.startsAt, tz)} · ${s.finalized.playedCount} played · $${s.finalized.priceCents / 100} each`
+        : s.payableCount > 0
+          ? `${formatShortDate(s.startsAt, tz)} · ${s.paidCount} of ${s.payableCount} paid`
+          : formatShortDate(s.startsAt, tz);
   const session = (s: AdminSessionView, open: boolean) => (
     <details key={s.id} className="money-sess card" open={open || undefined} data-session={s.id}>
       <summary>
         <span>{label(s)}</span>
-        {s.state.flags.canceled
-          ? refundRows(s).some((r) => !r.refundedAt) && <span className="owes-tag">pay back</span>
-          : s.paidCount < s.payableCount && <span className="owes-tag">{s.payableCount - s.paidCount} owe</span>}
+        {!s.state.flags.canceled && s.needsFinalize && <span className="owes-tag">finalize</span>}
+        {!s.state.flags.canceled && s.paidCount < s.payableCount && <span className="owes-tag">{s.payableCount - s.paidCount} owe</span>}
       </summary>
       <PaymentsManager ctx={ctx} s={s} />
     </details>
@@ -50,10 +55,9 @@ export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
         {unpaid.count >= 2 && (
           <SmsDraft to="Everyone who owes" phone={null} phones={unpaid.phones} missing={unpaid.missing} openLabel="Remind all unpaid" body={unpaid.body} quiet />
         )}
-        {started.map((s) => session(s, s.paidCount < s.payableCount || s.court?.paid === false || refundRows(s).some((r) => !r.refundedAt)))}
-        {upcoming.map((s) => session(s, s.state.flags.canceled && refundRows(s).some((r) => !r.refundedAt)))}
+        {started.map((s) => session(s, s.paidCount < s.payableCount || s.court?.paid === false || s.needsFinalize))}
+        {upcoming.map((s) => session(s, false))}
       </section>
-      <CreditsCard ctx={ctx} />
     </>
   );
 }

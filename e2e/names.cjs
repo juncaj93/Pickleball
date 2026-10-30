@@ -3,8 +3,9 @@
  *   node e2e/names.cjs      (also run by npm run test:e2e)
  *
  * Starts its own dev server with a fresh fake group: a very long first name,
- * two players called Ryan, a full game of 6 with the organizer in it, a
- * waitlist, a court-standby game, and a game with nobody in. Then, at 360,
+ * two players called Ryan, a game of 6 with the organizer in it, a waitlist
+ * (the max is set to 4 for that), a court-standby game, and a game with
+ * nobody in. Then, at 360,
  * 375, 390 and 430px in light and dark, on a player's screen and the
  * organizer's, checks that every name shows in full, long names wrap, the
  * two Ryans are told apart, waitlist and standby lines show only when
@@ -92,7 +93,8 @@ async function main() {
   await call(api.request, 'POST', `/api/admin/sessions/${six.id}/me`, { in: true }); // Alex, the organizer
   await add(six, [LONG, 'Ryan S.', 'Casey', 'Devon', 'Emery']);
   await add(waitG, ['Casey', 'Devon', 'Emery', 'Frankie']);
-  // Gus joins 5th, so he waits.
+  // Below the max a 5th person is simply in, so the max goes to 4: Gus joins 5th and waits.
+  await call(api.request, 'PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
   {
     const ctx = await browser.newContext();
     await call(ctx.request, 'POST', '/api/me', { playerId: id.Gus });

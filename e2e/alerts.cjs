@@ -89,12 +89,15 @@ async function main() {
       });
 
       await sect.locator('summary').click();
-      await check(`${tag}: status line, four switches all on, a test button, no token or chat ID`, async () => {
+      await check(`${tag}: status line, the main switch and four alert switches all on (drops within 36 hours, falls below 4, reaches 4, refund requests), a test button, no token or chat ID`, async () => {
         const status = await page.getByTestId('alert-status').innerText();
         assert(/Not connected/.test(status) && /No alerts yet/.test(status), status);
         const switches = sect.getByRole('switch');
-        assert((await switches.count()) === 4, `found ${await switches.count()} switches`);
-        for (let i = 0; i < 4; i++) assert(await switches.nth(i).isChecked(), `switch ${i} off`);
+        assert((await switches.count()) === 5, `found ${await switches.count()} switches`);
+        for (let i = 0; i < 5; i++) assert(await switches.nth(i).isChecked(), `switch ${i} off`);
+        const labels = (await sect.locator('.alert-subs .set-name').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
+        assert(JSON.stringify(labels) === JSON.stringify(['Someone drops within 36 hours', 'A game falls below 4', "A game reaches 4 (it's on)", 'Refund requests']), `switches were ${JSON.stringify(labels)}`);
+        assert(!/6 down to 5|reaches 6|Under 4, or|Finalize reminder/.test(await sect.innerText()), 'old alert wording');
         await sect.getByRole('button', { name: 'Send test alert' }).waitFor();
         const text = await sect.innerText();
         assert(!/token|chat id|\d{8,}/i.test(text), 'shows a secret-looking value');
@@ -130,11 +133,11 @@ async function main() {
           await s2.getByRole('switch', { name: /drops within 36 hours/ }).click();
           await s2.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
         });
-        await check(`${tag}: main switch off greys out the other three`, async () => {
+        await check(`${tag}: main switch off greys out the other four`, async () => {
           const main = sect.getByRole('switch', { name: /Telegram alerts to me/ });
           await main.click();
           await sect.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
-          assert(await sect.getByRole('switch', { name: /reaches 6/ }).isDisabled(), 'not disabled');
+          for (const name of [/drops within 36 hours/, /falls below 4/, /reaches 4/, /Refund requests/]) assert(await sect.getByRole('switch', { name }).isDisabled(), `${name} not disabled`);
           await main.click();
           await sect.getByText('✓ Saved').first().waitFor({ timeout: 4000 });
         });

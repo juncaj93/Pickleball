@@ -92,7 +92,7 @@ describe('Need players: fewer than 4 in, game within 48 hours', () => {
   });
 });
 
-describe('Check-in: exactly 4 or 6 in, from 6:00 PM the day before', () => {
+describe('Check-in: 4 or more in, from 6:00 PM the day before', () => {
   it('opens at 6:00 PM the day before, not at 5:59 PM, in Eastern time', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03'); // Tue 8:00 PM EST
@@ -152,42 +152,76 @@ describe('Check-in: exactly 4 or 6 in, from 6:00 PM the day before', () => {
   });
 });
 
-describe('Down to 5, Now 6, Spot opened: right when it happens, while it lasts', () => {
-  it('Down to 5 shows after 6 drops to 5, to the group chat, and goes when it is 4 or 6 again', async () => {
+describe('Spot opened: right when it happens, while it lasts; the 5th and 6th need no text', () => {
+  it('6 in far out: no card; 6 dropping to 5, or 5 to 4, suggests nothing', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-05');
     await join(ctx, s.id, PLAYER_NAMES);
     ctx.app.now = Date.parse(s.startsAt) - 100 * HOUR; // far out: no need or check-in
-    expect(kinds((await now(ctx)).all)).toEqual(['now6']); // the two who moved in to make 6 are still to be told
+    expect((await now(ctx)).all).toEqual([]);
     await out(ctx, s.id, 'Frankie');
-    const c = (await now(ctx)).all.find((x) => x.kind === 'down5')!;
-    expect(c.chat).toBe(true);
-    expect(c.body).toBe(`Down to 5 for pickleball Thu Nov 5. Need 1 more or 1 out to make 4 or 6. ${LINK}`);
+    expect((await now(ctx)).all).toEqual([]);
     await out(ctx, s.id, 'Emery');
-    expect(kinds((await now(ctx)).all)).not.toContain('down5');
+    expect((await now(ctx)).all).toEqual([]);
+    // Once the check-in opens, that is the only card for it.
+    ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
+    expect(kinds((await now(ctx)).all.filter((c) => c.sessionId === s.id))).toEqual(['checkin']);
   });
 
-  it('Now 6 goes to the 2 extra players; Spot opened goes to the one who moved in', async () => {
+  it('Spot opened goes to the one who moved in from the waitlist, until they are told', async () => {
     const ctx = await group();
-    const s = await on(ctx, '2026-11-05');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']); // Emery and Frankie wait, then move in together
-    ctx.app.now = Date.parse(s.startsAt) - 100 * HOUR;
-    const d = await dash(ctx);
-    const c = suggestions(d, Date.parse(d.now)).find((x) => x.kind === 'now6')!;
-    expect(c).toBeDefined();
-    expect(c.who).toBe('2 players');
-    expect(c.phones.sort()).toEqual([phoneOf(d, 'Emery'), phoneOf(d, 'Frankie')].sort());
-    expect(c.body).toBe(`Good news, we have 6 for pickleball Thu Nov 5, 8:00 PM. You're both in. Can\'t make it? Update here: ${LINK}`);
-    // Spot opened: a 4-game where the waitlist moves someone in after a drop.
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const t = await on(ctx, '2026-11-10');
     await join(ctx, t.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits
+    ctx.app.now = Date.parse(t.startsAt) - 100 * HOUR;
+    expect((await now(ctx)).all).toEqual([]);
     await out(ctx, t.id, 'Devon'); // Emery moves in
     const d2 = await dash(ctx);
     const p = suggestions(d2, Date.parse(d2.now)).find((x) => x.kind === 'promoted' && x.sessionId === t.id)!;
     expect(p).toBeDefined();
     expect(p.who).toBe('1 player (Emery)');
+    expect(p.chat).toBe(false);
     expect(p.phones).toEqual([phoneOf(d2, 'Emery')]);
     expect(p.body).toBe(`A spot opened and you're in for pickleball Tue Nov 10, 8:00 PM. ${LINK}`);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/told`, { playerId: ctx.byName.Emery });
+    expect((await now(ctx)).all).toEqual([]);
+  });
+});
+
+describe('Final price: after finalizing, for a week', () => {
+  it('one group-chat card with the final price; hidden after the tap; a reopen and redo brings it back; gone after a week', async () => {
+    const ctx = await group();
+    const s = await on(ctx, '2026-11-03');
+    await join(ctx, s.id, PLAYER_NAMES);
+    for (const n of PLAYER_NAMES) await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName[n], paid: true });
+    ctx.app.now = Date.parse(s.endsAt) + 5 * 60_000;
+    expect(kinds((await now(ctx)).all)).not.toContain('final'); // over, not finalized yet
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
+    let { all } = await now(ctx);
+    const c = all.find((x) => x.kind === 'final')!;
+    expect(c).toBeDefined();
+    expect(c.sessionId).toBe(s.id);
+    expect(c.chat).toBe(true);
+    expect(c.phones).toEqual([]);
+    expect(c.who).toBe('Group chat');
+    expect(c.when).toBe('Tue, Nov 3 · 8:00 to 10:00 PM');
+    expect(c.body).toBe(`Pickleball Tue, Nov 3 is final: 6 played, $9 each. If you paid $14, the extra $5 is now credit on your account. ${LINK}`);
+    expect(visibleSuggestions(all, {})).toContainEqual(c);
+    const mine = (list: Suggestion[]) => list.filter((x) => x.sessionId === s.id);
+    expect(mine(visibleSuggestions(all, { [c.key]: c.token }))).toEqual([]);
+    // Reopen and finalize again with a no-show: the card is new (a different situation), so it shows again.
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/reopen`, {});
+    expect(kinds((await now(ctx)).all)).not.toContain('final');
+    ctx.app.now += 60_000;
+    const played = PLAYER_NAMES.filter((n) => n !== 'Frankie').map((n) => ctx.byName[n]);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { played });
+    ({ all } = await now(ctx));
+    const again = all.find((x) => x.kind === 'final')!;
+    expect(again.body).toBe(`Pickleball Tue, Nov 3 is final: 5 played, $11 each. If you paid $14, the extra $3 is now credit on your account. ${LINK}`);
+    expect(mine(visibleSuggestions(all, { [c.key]: c.token }))).toHaveLength(1);
+    // A week on it is gone (everyone paid, so no payment reminder either).
+    at(ctx, '2026-11-10T05:00:00Z'); // Tue Nov 10, 12:00 AM EST
+    expect(mine((await now(ctx)).all)).toEqual([]);
   });
 });
 
@@ -250,9 +284,9 @@ describe('what stays off the cards', () => {
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
     ctx.app.now = Date.parse(s.startsAt) - 100 * HOUR;
-    expect(kinds((await now(ctx)).all)).toEqual(['now6']); // 6 in, far out: only the two who moved in
+    expect((await now(ctx)).all).toEqual([]); // 6 in, far out: nothing to say
     await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: new Date(Date.parse(s.startsAt) + 2 * DAY).toISOString(), endsAt: new Date(Date.parse(s.endsAt) + 2 * DAY).toISOString() });
-    expect((await now(ctx)).all.filter((c) => c.sessionId === s.id && !['checkin', 'now6'].includes(c.kind))).toEqual([]);
+    expect((await now(ctx)).all.filter((c) => c.sessionId === s.id && c.kind !== 'checkin')).toEqual([]);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     expect((await now(ctx)).all.filter((c) => c.sessionId === s.id)).toEqual([]);
   });

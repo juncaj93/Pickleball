@@ -1,33 +1,38 @@
-// One court, exactly 4 or exactly 6 players, never 5.
-//
-// The first 4 to sign up are in. The 5th waits as #1 on the waitlist. When a
-// 6th joins, both waiting players are confirmed at once. If a confirmed
-// player leaves a group of 4, the first waiting player moves in. If someone
-// leaves a group of 6, nothing moves automatically: the organizer sees a
-// "5 going" warning and decides.
+// One court, any number from 4 up to the organizer's "Max players per game"
+// (default 10). Fewer than 4 means the game does not happen. Everyone who
+// taps I'm in while fewer than the max are in is simply in; beyond the max
+// they wait, and the first waiting player moves in when someone drops.
 
 export const MIN_PLAYERS = 4;
-export const MAX_PLAYERS = 6;
+export const DEFAULT_MAX_PLAYERS = 10;
+/** The widest max the organizer can pick (the database cap matches). */
+export const MAX_PLAYERS_LIMIT = 12;
 
 /** What tapping "I'm in" does for someone who isn't in the session yet. */
-export function joinOutcome(confirmed: number, waitlisted: number): 'in' | 'waitlist' {
-  if (confirmed < MIN_PLAYERS) return 'in';
-  if (confirmed === MIN_PLAYERS && waitlisted === 1) return 'in'; // they make 6
-  if (confirmed === 5 && waitlisted === 0) return 'in'; // they make 6
-  return 'waitlist';
+export function joinOutcome(confirmed: number, maxPlayers: number): 'in' | 'waitlist' {
+  return confirmed < maxPlayers ? 'in' : 'waitlist';
 }
 
-/** Spots someone could still take: up to 4, or the one that turns 5 into 6. */
-export function openSpots(confirmed: number, waitlisted: number): number {
-  if (confirmed < MIN_PLAYERS) return MIN_PLAYERS - confirmed;
-  if (confirmed === 5 && waitlisted === 0) return 1;
-  return 0;
+/** Spots someone could still take before the game is full. */
+export function openSpots(confirmed: number, maxPlayers: number): number {
+  return Math.max(0, maxPlayers - confirmed);
 }
 
-/** "3 going · 1 more needed", "5 going · need 4 or 6", "6 going" */
-export function goingText(confirmed: number, waitlisted: number): string {
+/** How many more are needed to reach 4. */
+export function playersNeeded(confirmed: number): number {
+  return Math.max(0, MIN_PLAYERS - confirmed);
+}
+
+/** "3 going · 1 more needed", "5 going", "10 going · full" */
+export function goingText(confirmed: number, maxPlayers: number): string {
   if (confirmed < MIN_PLAYERS) return `${confirmed} going · ${MIN_PLAYERS - confirmed} more needed`;
-  if (confirmed === MIN_PLAYERS) return waitlisted === 1 ? '4 going · 1 more makes 6' : '4 going';
-  if (confirmed === 5) return '5 going · need 4 or 6';
+  if (confirmed >= maxPlayers) return `${confirmed} going · full`;
   return `${confirmed} going`;
+}
+
+/** The count on a session card: "3 of 4 in", "5 in", "10 in, full". */
+export function countText(confirmed: number, maxPlayers: number): string {
+  if (confirmed < MIN_PLAYERS) return `${confirmed} of ${MIN_PLAYERS} in`;
+  if (confirmed >= maxPlayers) return `${confirmed} in, full`;
+  return `${confirmed} in`;
 }

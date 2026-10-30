@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { alertMessage, DEFAULT_ALERT_PREFS } from '../shared/alerts';
+import { alertMessage, DEFAULT_ALERT_PREFS, refundRequestMessage } from '../shared/alerts';
 import { MAX_ALERTS_PER_HOUR } from '../server/alerts';
 import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
 
@@ -41,7 +41,13 @@ async function connectedGroup(fake?: (url: string, init: RequestInit) => Promise
       return r;
     };
   }
-  return { ctx, sent, seen, texts: async () => (await app.settle(), sent.map((s) => s.body.text)) };
+  const texts = async () => (await app.settle(), sent.map((s) => s.body.text));
+  /** Forget what was sent so far (the "it's on" message a 4th sign-up sends, for one). */
+  const clear = async () => {
+    await texts();
+    sent.length = 0;
+  };
+  return { ctx, sent, seen, texts, clear };
 }
 
 async function dash(ctx: Ctx) {
@@ -61,6 +67,7 @@ async function join(ctx: Ctx, id: string, names: string[]) {
 async function out(ctx: Ctx, id: string, name: string) {
   return (await playerPhone(ctx, name)).call('POST', `/api/sessions/${id}/withdraw`, {});
 }
+const pay = (ctx: Ctx, id: string, name: string) => ctx.organizer.call('POST', `/api/admin/sessions/${id}/payment`, { playerId: ctx.byName[name], paid: true });
 
 describe('alert wording', () => {
   const base = {
@@ -72,17 +79,38 @@ describe('alert wording', () => {
   };
   const p = (...n: string[]) => n.map((name) => ({ playerId: name.toLowerCase(), name }));
 
-  it('matches the example: Late drop, game time in Eastern with AM/PM, count and need', () => {
+  it('matches the example: Late drop, game time in Eastern with AM/PM, the count and "under 4"', () => {
     const text = alertMessage({ ...base, before: [...p('A', 'B', 'C'), base.actor], after: p('A', 'B', 'C'), nowMs: Date.parse('2026-11-05T16:00:00.000Z') });
-    expect(text).toBe('Late drop: Ryan dropped out of Thu Nov 5, 8:00 PM (9 hrs before). 3 in now, need 4 or 6.');
+    expect(text).toBe('Late drop: Ryan dropped out of Thu Nov 5, 8:00 PM (9 hrs before). 3 in now, under 4.');
+  });
+
+  it('a drop that leaves 4 or more says the count and nothing about 4 or 6', () => {
+    const text = alertMessage({ ...base, before: [...p('A', 'B', 'C', 'D', 'E'), base.actor], after: p('A', 'B', 'C', 'D', 'E'), nowMs: Date.parse('2026-11-05T16:00:00.000Z') });
+    expect(text).toBe('Late drop: Ryan dropped out of Thu Nov 5, 8:00 PM (9 hrs before). 5 in now.');
+    expect(text).not.toMatch(/need|4 or 6/);
+  });
+
+  it('reaching 4 says it is on; the 5th and 6th say nothing', () => {
+    const on = alertMessage({ ...base, before: p('A', 'B', 'C'), after: [...p('A', 'B', 'C'), base.actor], nowMs: Date.parse('2026-11-01T16:00:00.000Z') });
+    expect(on).toBe('Thu Nov 5, 8:00 PM has 4 now, it\'s on.');
+    expect(alertMessage({ ...base, before: p('A', 'B', 'C', 'D'), after: [...p('A', 'B', 'C', 'D'), base.actor], nowMs: Date.parse('2026-11-01T16:00:00.000Z') })).toBeNull();
+    expect(alertMessage({ ...base, before: p('A', 'B', 'C', 'D', 'E'), after: [...p('A', 'B', 'C', 'D', 'E'), base.actor], nowMs: Date.parse('2026-11-01T16:00:00.000Z') })).toBeNull();
+  });
+
+  it('the refund request: a name and whole dollars, nothing else', () => {
+    expect(refundRequestMessage('Mitchel', 1400)).toBe('Refund requested: Mitchel wants $14 back.');
+    expect(refundRequestMessage('Mitchel', 500)).toBe('Refund requested: Mitchel wants $5 back.');
   });
 });
 
 describe('Telegram alerts', () => {
   it('drop alert: 35:59 before the start sends, 36:01 does not', async () => {
-    const { ctx, texts } = await connectedGroup();
+    const { ctx, texts, clear } = await connectedGroup();
+    // A max of 4 so the 5th waits and the waitlist line can show.
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await on(ctx, '2026-10-29'); // Thu 8:00 PM
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // 4 in, Emery waiting
+    await clear();
     ctx.app.now = Date.parse(s.startsAt) - 36 * HOUR - 60_000;
     await out(ctx, s.id, 'Devon'); // Emery moves up, still 4: nothing to say this early
     expect(await texts()).toEqual([]);
@@ -92,58 +120,66 @@ describe('Telegram alerts', () => {
     expect(await texts()).toEqual(['Alex dropped out of Thu Oct 29, 8:00 PM (35 hrs before). Devon moved up from the waitlist. 4 in now.']);
   });
 
-  it('4 to 3 alerts even days ahead; 4 to 5 and 5 to 4 do not', async () => {
-    const { ctx, texts, sent } = await connectedGroup();
+  it('4 to 3 alerts even days ahead; 4 to 5, 5 to 4, 6 to 5 do not', async () => {
+    const { ctx, texts, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-29');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // "4 to 5": the 5th waits
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await clear();
+    await join(ctx, s.id, ['Emery']); // 4 to 5: simply in
     expect(await texts()).toEqual([]);
-    await out(ctx, s.id, 'Emery');
-    await out(ctx, s.id, 'Devon'); // 80 hours ahead
-    expect(await texts()).toEqual(['Devon dropped out of Thu Oct 29, 8:00 PM (3 days before). 3 in now, need 4 or 6.']);
-    sent.length = 0;
-    // 5 to 4: get to 6, drop to 5 (alerts), then 5 to 4 says nothing.
-    await join(ctx, s.id, ['Devon', 'Emery', 'Frankie']);
-    await out(ctx, s.id, 'Frankie');
-    sent.length = 0;
-    await out(ctx, s.id, 'Emery');
+    await out(ctx, s.id, 'Emery'); // 5 to 4
+    expect(await texts()).toEqual([]);
+    await out(ctx, s.id, 'Devon'); // 4 to 3, 80 hours ahead
+    expect(await texts()).toEqual(['Devon dropped out of Thu Oct 29, 8:00 PM (3 days before). 3 in now, under 4.']);
+    await clear();
+    await join(ctx, s.id, ['Devon']); // 3 to 4: it's on
+    await clear();
+    await join(ctx, s.id, ['Emery', 'Frankie']); // 6
+    await out(ctx, s.id, 'Frankie'); // 6 to 5
+    await out(ctx, s.id, 'Emery'); // 5 to 4
     expect(await texts()).toEqual([]);
   });
 
-  it('6 to 5 alerts, and 5 to 6 or 4 to 6 alerts with who to text', async () => {
-    const { ctx, texts, sent } = await connectedGroup();
+  it('reaching 4 alerts "it\'s on", again after a drop and a rejoin; the 5th and 6th say nothing', async () => {
+    const { ctx, texts, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-29');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']);
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey']);
     expect(await texts()).toEqual([]);
-    await join(ctx, s.id, ['Frankie']); // 4 to 6: Emery and Frankie move in together
-    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 6 now. Text Emery and Frankie, they\'re in.']);
-    sent.length = 0;
-    await out(ctx, s.id, 'Blair');
-    expect(await texts()).toEqual(['Blair dropped out of Thu Oct 29, 8:00 PM (3 days before). 5 in now, need 4 or 6.']);
-    sent.length = 0;
-    await join(ctx, s.id, ['Blair']); // 5 to 6
-    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 6 now. Text Blair, they\'re in.']);
+    await join(ctx, s.id, ['Devon']); // 3 to 4
+    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 4 now, it\'s on.']);
+    await clear();
+    await join(ctx, s.id, ['Emery', 'Frankie']); // 4 to 6: nothing special
+    expect(await texts()).toEqual([]);
+    for (const n of ['Frankie', 'Emery', 'Devon']) await out(ctx, s.id, n); // 6 to 3: only the last drop speaks
+    expect(await texts()).toEqual(['Devon dropped out of Thu Oct 29, 8:00 PM (3 days before). 3 in now, under 4.']);
+    await clear();
+    await join(ctx, s.id, ['Devon']); // back to 4
+    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 4 now, it\'s on.']);
   });
 
   it('"Late drop:" only after the cancellation deadline, in one combined message', async () => {
-    const { ctx, texts, sent } = await connectedGroup();
+    const { ctx, texts, sent, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-27'); // Tue 8:00 PM, deadline 8:00 AM
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await clear();
     ctx.app.now = Date.parse(s.startsAt) - 13 * HOUR; // before the deadline
     await out(ctx, s.id, 'Devon');
-    expect(await texts()).toEqual(['Devon dropped out of Tue Oct 27, 8:00 PM (13 hrs before). 3 in now, need 4 or 6.']);
-    sent.length = 0;
-    await join(ctx, s.id, ['Devon']);
+    expect(await texts()).toEqual(['Devon dropped out of Tue Oct 27, 8:00 PM (13 hrs before). 3 in now, under 4.']);
+    await clear();
+    await join(ctx, s.id, ['Devon']); // back to 4: it's on
+    await clear();
     ctx.app.now = Date.parse(s.startsAt) - 9 * HOUR; // after it
     await out(ctx, s.id, 'Devon'); // a drop inside 36 hours AND 4 to 3: one message
-    expect(await texts()).toEqual(['Late drop: Devon dropped out of Tue Oct 27, 8:00 PM (9 hrs before). 3 in now, need 4 or 6.']);
+    expect(await texts()).toEqual(['Late drop: Devon dropped out of Tue Oct 27, 8:00 PM (9 hrs before). 3 in now, under 4.']);
     expect(sent[0].body.chat_id).toBe(CHAT);
     expect(sent[0].body.reply_markup.inline_keyboard[0][0]).toEqual({ text: 'Open site', url: 'https://pickleball.juncaj.net/admin' });
   });
 
   it('a texted back-out link alerts like a tap, using the booking\'s own deadline', async () => {
-    const { ctx, texts } = await connectedGroup();
+    const { ctx, texts, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-27');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await clear();
     // A 30-hour deadline on this booking: a drop 20 hours out is already late.
     const booked = await ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/booking`, {
       bookingStatus: 'booked',
@@ -156,7 +192,7 @@ describe('Telegram alerts', () => {
     ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
     const r = await ctx.app.client().call('POST', '/api/link/act', { token, action: 'withdraw' });
     expect(r.status).toBe(200);
-    expect(await texts()).toEqual(['Late drop: Casey dropped out of Tue Oct 27, 8:00 PM (20 hrs before). 3 in now, need 4 or 6.']);
+    expect(await texts()).toEqual(['Late drop: Casey dropped out of Tue Oct 27, 8:00 PM (20 hrs before). 3 in now, under 4.']);
   });
 
   it("never alerts on the organizer's own taps", async () => {
@@ -180,9 +216,10 @@ describe('Telegram alerts', () => {
   });
 
   it('View as, the demo copy and Pretend it\'s... never send', async () => {
-    const { ctx, texts } = await connectedGroup();
+    const { ctx, texts, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-27');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await clear();
     ctx.app.now = Date.parse(s.startsAt) - 9 * HOUR;
     const asDevon = { 'X-View-As': ctx.byName.Devon };
     expect((await ctx.organizer.call('POST', `/api/sessions/${s.id}/withdraw`, {}, asDevon)).status).toBe(403);
@@ -190,6 +227,7 @@ describe('Telegram alerts', () => {
     expect((await (await playerPhone(ctx, 'Devon')).call('POST', `/api/sessions/${s.id}/withdraw`, {}, pretend)).status).toBe(401);
     expect((await ctx.organizer.call('POST', `/api/sessions/${s.id}/withdraw`, {}, { ...asDevon, ...pretend })).status).toBe(403);
     expect((await ctx.organizer.call('POST', '/api/admin/alerts/test', {}, pretend)).status).toBe(403);
+    expect((await ctx.organizer.call('POST', '/api/me/refund-request', { cents: 500 }, { ...asDevon, ...pretend })).status).toBe(403);
     // The in-browser demo runs the same code with SANDBOX set: taps work there, alerts don't.
     ctx.app.env = { ...ctx.app.env, SANDBOX: true };
     expect((await ctx.organizer.call('POST', `/api/sessions/${s.id}/withdraw`, {}, asDevon)).status).toBe(200);
@@ -199,11 +237,12 @@ describe('Telegram alerts', () => {
   });
 
   it('canceled, past and hidden games never send', async () => {
-    const { ctx, texts } = await connectedGroup();
+    const { ctx, texts, clear } = await connectedGroup();
     const tue = await on(ctx, '2026-10-27');
     const thu = await on(ctx, '2026-10-29');
     await join(ctx, tue.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await join(ctx, thu.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await clear();
     await ctx.organizer.call('POST', `/api/admin/sessions/${thu.id}/decision`, { decision: 'cancel', confirm: true });
     expect((await out(ctx, thu.id, 'Devon')).status).toBe(409);
     // Hidden: the first session date moved past Tuesday.
@@ -218,26 +257,92 @@ describe('Telegram alerts', () => {
   });
 
   it('follows the switches in Settings', async () => {
-    const { ctx, texts, sent } = await connectedGroup();
+    const { ctx, texts, sent, clear } = await connectedGroup();
     const s = await on(ctx, '2026-10-29');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { reachedMin: false })).status).toBe(200);
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // 3 to 4: that switch is off
+    expect(await texts()).toEqual([]);
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { belowMin: false })).status).toBe(200);
     await out(ctx, s.id, 'Devon'); // 4 to 3, days out: that switch is off
     expect(await texts()).toEqual([]);
+    await ctx.organizer.call('PUT', '/api/admin/alerts', { reachedMin: true });
     await join(ctx, s.id, ['Devon']);
+    expect(await texts()).toEqual(['Thu Oct 29, 8:00 PM has 4 now, it\'s on.']);
+    await clear();
     await ctx.organizer.call('PUT', '/api/admin/alerts', { belowMin: true, enabled: false });
     await out(ctx, s.id, 'Devon');
-    expect(await texts()).toEqual([]);
     await join(ctx, s.id, ['Devon']);
+    expect(await texts()).toEqual([]);
     await ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: true });
     await out(ctx, s.id, 'Devon');
     expect(await texts()).toHaveLength(1);
     const a = (await dash(ctx)).alerts;
-    expect(a).toMatchObject({ enabled: true, drop36: true, belowMin: true, reachedSix: true, connected: true, lastOk: true });
+    expect(a).toMatchObject({ enabled: true, drop36: true, belowMin: true, reachedMin: true, refundRequests: true, connected: true, lastOk: true });
+    expect(a).not.toHaveProperty('reachedSix');
     expect(sent).toHaveLength(1);
     expect((await ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: 'yes' })).status).toBe(400);
     expect((await ctx.app.client().call('PUT', '/api/admin/alerts', { enabled: false })).status).toBe(401);
     expect((await ctx.app.client().call('POST', '/api/admin/alerts/test', {})).status).toBe(401);
+  });
+
+  it('a refund request alerts with the name and whole dollars only; off with its switch; never from the demo', async () => {
+    const { ctx, texts, sent, clear } = await connectedGroup();
+    const s = await on(ctx, '2026-10-29');
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await pay(ctx, s.id, 'Alex');
+    const alex = await playerPhone(ctx, 'Alex');
+    expect((await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data.creditBackCents).toBe(1400); // $14 is credit now
+    await clear();
+    expect((await alex.call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
+    expect(await texts()).toEqual(['Refund requested: Alex wants $14 back.']);
+    expect(sent[0].body.reply_markup.inline_keyboard[0][0]).toEqual({ text: 'Open site', url: 'https://pickleball.juncaj.net/admin' });
+    expect(sent[0].body.text).not.toMatch(/555|venmo|organizer/i);
+    await clear();
+    // Not now: the request closes; a smaller one with the switch off is quiet.
+    const req = (await dash(ctx)).refundRequests;
+    expect(req).toHaveLength(1);
+    expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${req[0].id}`, { action: 'not_now' })).status).toBe(200);
+    await ctx.organizer.call('PUT', '/api/admin/alerts', { refundRequests: false });
+    expect((await alex.call('POST', '/api/me/refund-request', { cents: 500 })).status).toBe(200);
+    expect(await texts()).toEqual([]);
+    expect((await alex.call('POST', '/api/me/refund-request/cancel', {})).status).toBe(200);
+    // The demo copy: the request works, nothing is sent.
+    await ctx.organizer.call('PUT', '/api/admin/alerts', { refundRequests: true });
+    ctx.app.env = { ...ctx.app.env, SANDBOX: true };
+    expect((await alex.call('POST', '/api/me/refund-request', { cents: 500 })).status).toBe(200);
+    expect(await texts()).toEqual([]);
+  });
+
+  it('finalizing a game and the organizer\'s money taps never send anything', async () => {
+    const { ctx, texts, clear } = await connectedGroup();
+    const s = await on(ctx, '2026-10-29');
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    for (const n of ['Alex', 'Blair', 'Emery']) await pay(ctx, s.id, n);
+    await clear();
+    ctx.app.now = Date.parse(s.endsAt) + 5 * 60_000;
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/reopen`, {})).status).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { played: [ctx.byName.Alex, ctx.byName.Blair, ctx.byName.Casey, ctx.byName.Devon] })).status).toBe(200);
+    // Emery did not play: the $14 is credit. The request is the one thing that alerts; Mark refunded and undo are quiet.
+    const emery = await playerPhone(ctx, 'Emery');
+    expect((await emery.call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
+    expect(await texts()).toEqual(['Refund requested: Emery wants $14 back.']);
+    await clear();
+    const req = (await dash(ctx)).refundRequests[0];
+    expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${req.id}`, { action: 'refunded' })).status).toBe(200);
+    expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${req.id}`, { action: 'undo' })).status).toBe(200);
+    expect(await texts()).toEqual([]);
+  });
+
+  it('the Players-tab "Refund credit balance" never sends anything', async () => {
+    const { ctx, texts, clear } = await connectedGroup();
+    const s = await on(ctx, '2026-10-29');
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await pay(ctx, s.id, 'Alex');
+    await out(ctx, s.id, 'Alex');
+    await clear();
+    expect((await ctx.organizer.call('POST', `/api/admin/players/${ctx.byName.Alex}/credit-refund`, { refunded: true, cents: 1400 })).status).toBe(200);
+    expect(await texts()).toEqual([]);
   });
 
   it(`stops at ${MAX_ALERTS_PER_HOUR} alerts an hour`, async () => {
@@ -265,7 +370,7 @@ describe('Telegram alerts', () => {
       return new Promise<Response>(() => {}); // never answers
     });
     const s = await on(ctx, '2026-10-29');
-    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']); // the 4th join sends "it's on"
     expect((await out(ctx, s.id, 'Devon')).status).toBe(200);
     await ctx.app.settle();
     expect((await dash(ctx)).alerts).toMatchObject({ lastOk: false, lastError: "Couldn't reach Telegram." });
@@ -282,7 +387,8 @@ describe('Telegram alerts', () => {
     await join(ctx, s.id, ['Devon']);
     const res = await Promise.race([out(ctx, s.id, 'Devon'), new Promise((r) => setTimeout(() => r('held up'), 2000))]);
     expect((res as { status: number }).status).toBe(200);
-    expect(sent.length).toBe(3 + 1);
+    // Two sends per round (it's on, then the drop) plus the test button.
+    expect(sent.length).toBe(2 + 2 + 1 + 2);
   });
 
   it('not connected: nothing sent, Settings says so, the test button explains', async () => {
@@ -299,6 +405,13 @@ describe('Telegram alerts', () => {
     const test = await ctx.organizer.call('POST', '/api/admin/alerts/test', {});
     expect(test.status).toBe(409);
     expect(test.data.message).toMatch(/^Not connected/);
+    // A refund request is quiet too when nothing is connected.
+    const alex = await playerPhone(ctx, 'Alex');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
+    await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    expect((await alex.call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
+    await app.settle();
+    expect(calls).toBe(0);
   });
 
   it('no token or chat ID in any browser answer, and no phone numbers or money in any message', async () => {

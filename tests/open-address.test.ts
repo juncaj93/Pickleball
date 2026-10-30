@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { firstSession, HOUR, PIN, playerPhone, setupGroup } from './harness';
+import { firstSession, HOUR, PIN, playerPhone, setupGroup, withoutIds } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 
@@ -162,7 +162,7 @@ describe('privacy on the open address', () => {
     const phone = plainPhone(ctx);
     await phone.call('POST', '/api/me', { playerId: ctx.byName.Casey });
     const res = await phone.call('GET', '/api/group');
-    const text = res.text;
+    const text = withoutIds(res.text);
     expect(text).not.toMatch(/555-01|\(313\)|3135550/); // phone numbers
     expect(text).not.toMatch(/(?<![A-Za-z0-9_-])4837(?![A-Za-z0-9_-])|48\.37|courtCost/i); // court cost
     expect(text).not.toMatch(/"paid"|paymentStatus":"paid/); // other people's money

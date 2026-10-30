@@ -1,10 +1,12 @@
+import { DEFAULT_MAX_PLAYERS, MAX_PLAYERS_LIMIT, MIN_PLAYERS } from './spots';
+
 export interface GroupSettings {
   horizonWeeks: number; // how far ahead sessions are generated
   bookingLeadDays: number; // booking checklist becomes actionable this many days ahead
   checkInHours: number; // day-before check-in: texts and "short on players" start this long before play
   defaultDeadlineHours: number; // each session's cancellation deadline starts this many hours before play
-  pricePerPlayerCents: number; // flat price each confirmed player pays, whether 4 or 6 play
-  creditCentsWhenSix: number; // credit each of the first four earns when 6 play; the last two pay price minus this
+  pricePerPlayerCents: number; // the flat price everyone pays up front ("$14 each"); the final price after the game comes from it
+  maxPlayers: number; // the most who can be in one game (4 to 12); beyond that people wait
   lastCallHours: number; // the last-call card starts this many hours before play
   typicalCourtCostCents: number; // organizer only: court cost used when a session has none entered
   monthlyMembershipCents: number; // organizer only: the club membership the surplus goes toward
@@ -16,7 +18,7 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   checkInHours: 24,
   defaultDeadlineHours: 12,
   pricePerPlayerCents: 1400,
-  creditCentsWhenSix: 500,
+  maxPlayers: DEFAULT_MAX_PLAYERS,
   lastCallHours: 13,
   typicalCourtCostCents: 4800,
   monthlyMembershipCents: 3000,
@@ -28,7 +30,7 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   checkInHours: [1, 72],
   defaultDeadlineHours: [0, 72],
   pricePerPlayerCents: [0, 100_00],
-  creditCentsWhenSix: [0, 100_00],
+  maxPlayers: [MIN_PLAYERS, MAX_PLAYERS_LIMIT],
   lastCallHours: [1, 48],
   typicalCourtCostCents: [0, 500_00],
   monthlyMembershipCents: [0, 1000_00],
@@ -36,13 +38,11 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
 
 export const SETTING_LIMITS = LIMITS;
 
-/** Merge stored or submitted settings over defaults, clamping each value. */
+/** Merge stored or submitted settings over defaults, clamping each value. Keys from older models (like the $5 credit) are ignored. */
 export function normalizeSettings(input: unknown): GroupSettings {
   const src = { ...((input && typeof input === 'object' ? input : {}) as Record<string, unknown>) };
   // Older saves called the check-in window "confirmationLeadHours".
   if (src.checkInHours === undefined && typeof src.confirmationLeadHours === 'number') src.checkInHours = src.confirmationLeadHours;
-  // Part 2 called the credit a refund.
-  if (src.creditCentsWhenSix === undefined && typeof src.refundCentsWhenSix === 'number') src.creditCentsWhenSix = src.refundCentsWhenSix;
   const out = { ...DEFAULT_SETTINGS };
   for (const key of Object.keys(LIMITS) as (keyof GroupSettings)[]) {
     const v = src[key];
@@ -51,6 +51,8 @@ export function normalizeSettings(input: unknown): GroupSettings {
       out[key] = Math.min(max, Math.max(min, Math.round(v)));
     }
   }
+  // Players pay whole dollars (credit and the final price follow from it).
+  out.pricePerPlayerCents = Math.round(out.pricePerPlayerCents / 100) * 100;
   return out;
 }
 

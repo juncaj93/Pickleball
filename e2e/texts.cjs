@@ -181,6 +181,24 @@ async function main() {
     }
   }
 
+  // ---- 5 in, then 6 in: still just Share the game and Check-in (Down to 5 and Now 6 are gone).
+  for (const [add, n] of [[["Julian"], 5], [["Mitchel"], 6]]) {
+    for (const name of add) await confirm(tue, name);
+    const { ctx, page } = await open('light', 390);
+    await check(`${n} in: the menu is still Share the game and Check-in; the Check-in goes to everyone signed up; no Down to 5 or Now 6`, async () => {
+      await page.locator(`#session-${tue.id} .players-count`, { hasText: new RegExp(`^${n} in$`) }).waitFor();
+      const menu = await menuOf(page, tue);
+      const list = await names(menu);
+      assert(JSON.stringify(list) === JSON.stringify(['Share the game', 'Check-in']), `menu: ${list}`);
+      assert((await menu.locator('[data-text="down5"], [data-text="now6"]').count()) === 0, 'old rows');
+      const c = smsOf(await menu.locator('[data-text="checkin"] a').getAttribute('href'));
+      assert(c.to.length === n - 2, `check-in numbers with ${n} in (Nathan has none, Alex is me): ${c.to}`);
+      assert(!/Good news|even number|6 for pickleball/.test(await menu.innerText()), 'old wording');
+    });
+    await ctx.close();
+  }
+  for (const name of ['Julian', 'Mitchel']) await call(api.request, 'POST', `/api/admin/sessions/${tue.id}/roster`, { playerId: id[name], action: 'withdraw' });
+
   // ---- Payment reminders on the Money tab (game day: Tue Oct 27, 10:00 AM).
   await clock('2026-10-27T10:00:00-04:00');
   await call(api.request, 'POST', `/api/admin/sessions/${thu.id}/roster`, { playerId: id.Brandon, action: 'confirm' });

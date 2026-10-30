@@ -60,7 +60,7 @@ describe('Venmo link', () => {
 });
 
 describe('a fresh sign-up starts the Pay steps over', () => {
-  it("I'm out then I'm in again gets a new sign-up time; someone already paid stays paid", async () => {
+  it("I'm out then I'm in again gets a new sign-up time; someone who paid gets the $14 as credit and can use it", async () => {
     const { playerPhone, setupGroup } = await import('./harness');
     const ctx = await setupGroup();
     const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
@@ -79,15 +79,18 @@ describe('a fresh sign-up starts the Pay steps over', () => {
     const again = await mine();
     expect(again.signupAt).not.toBe(first.signupAt);
     expect(again.oweCents).toBe(1400);
-    // Paid, then out and in again: still paid.
+    // Paid, then out: the $14 is credit right away. In again: a fresh sign-up that owes $14, with the credit ready to use.
     await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: true });
     ctx.app.now += 60_000;
-    await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    expect((await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data).toMatchObject({ result: 'withdrawn', creditBackCents: 1400 });
     ctx.app.now += 60_000;
     await alex.call('POST', `/api/sessions/${s.id}/join`, {});
+    const back = await mine();
+    expect(back.signupAt).not.toBe(again.signupAt);
+    expect(back).toMatchObject({ paymentStatus: 'unpaid', selfPaid: false, oweCents: 1400, useCreditCents: 1400, creditBackCents: 1400 });
+    expect((await alex.call('POST', `/api/sessions/${s.id}/use-credit`, {})).data).toMatchObject({ paid: true, usedCents: 1400 });
     const paid = await mine();
-    expect(paid.paymentStatus).toBe('paid');
-    expect(paid.selfPaid).toBe(true);
-    expect(paid.oweCents).toBe(0);
+    expect(paid).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, oweCents: 0, creditCents: 0 });
+    expect((await alex.call('GET', '/api/group')).data.credit.balanceCents).toBe(0);
   });
 });

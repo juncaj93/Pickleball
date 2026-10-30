@@ -10,7 +10,7 @@ import { remindAllMessage, siteAddress } from '../../../shared/messages';
 import { formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../../../shared/time';
 import { owedGames, reminderText, sessionTexts, type TextItem } from './textMenu';
 
-export type SuggestionKind = 'now6' | 'promoted' | 'down5' | 'need' | 'checkin' | 'pay';
+export type SuggestionKind = 'promoted' | 'need' | 'checkin' | 'final' | 'pay';
 
 export interface Suggestion {
   /** Names this card: the kind, the game, and for one person's text, who. */
@@ -70,12 +70,13 @@ function from(s: AdminSessionView, tz: string, kind: SuggestionKind, item: Pick<
   };
 }
 
-const PRIORITY: SuggestionKind[] = ['now6', 'promoted', 'down5', 'need', 'checkin'];
+const PRIORITY: SuggestionKind[] = ['promoted', 'need', 'checkin'];
 
 /**
  * Every text worth suggesting right now, whether or not it was already
  * tapped. Upcoming games first (soonest first, and within a game the most
- * pressing text first), then payment reminders for games played a week ago or more.
+ * pressing text first), then the post-game note for games just finalized,
+ * then payment reminders for games played a week ago or more.
  */
 export function suggestions(d: AdminDashboard, nowMs: number): Suggestion[] {
   const tz = d.group.timezone;
@@ -89,21 +90,21 @@ export function suggestions(d: AdminDashboard, nowMs: number): Suggestion[] {
       const items = sessionTexts(d, s, nowMs);
       const one = (id: TextItem['id']) => items.find((i) => i.id === id);
       const here: Suggestion[] = [];
-      const now6 = one('now6');
-      if (now6) here.push(from(s, tz, 'now6', now6, now6.phones.concat(now6.missing).join(',')));
       for (const p of items.filter((i) => i.id === 'promoted')) {
         const card = from(s, tz, 'promoted', p, p.who, `:${p.label}`);
         card.who = `1 player (${p.label.replace(/^Spot opened: /, '')})`;
         here.push(card);
       }
-      const down5 = one('down5');
-      if (down5) here.push(from(s, tz, 'down5', down5, String(n)));
       const need = one('need');
       if (need && start - nowMs <= NEED_WITHIN_HOURS * 3600_000) here.push(from(s, tz, 'need', need, String(n)));
       const checkin = one('checkin');
       if (checkin && nowMs >= checkInOpensMs(s.startsAt, tz)) here.push(from(s, tz, 'checkin', checkin, `${n}+${s.waitlistCount}`));
       here.sort((a, b) => PRIORITY.indexOf(a.kind) - PRIORITY.indexOf(b.kind));
       upcoming.push(...here);
+    } else if (!canceled && s.finalized && daysSince(s.startsAt, nowMs, tz) < PAY_AFTER_DAYS) {
+      // Just finalized: the one-tap group note with the final price. Hidden after the tap; a redo (reopen) brings it back.
+      const fin = sessionTexts(d, s, nowMs).find((i) => i.id === 'final');
+      if (fin) pay.unshift(from(s, tz, 'final', fin, s.finalized.at));
     } else if (!canceled && Date.parse(s.endsAt) <= nowMs && daysSince(s.startsAt, nowMs, tz) >= PAY_AFTER_DAYS) {
       const owing = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null && owedGames(d, r.playerId).length > 0);
       if (owing.length === 0) continue;

@@ -16,7 +16,7 @@ function snapshot(db: ReturnType<typeof createNodeD1>) {
   return out;
 }
 
-/** A group with a bit of everything: 6 in, payments, credits, a canceled game with people in it, texts, activity. */
+/** A group with a bit of everything: 6 in, payments, a finalized game with credit back, a canceled game with people in it, a refund request, texts, activity. */
 async function busyGroup() {
   const ctx = await setupGroup();
   const s = await firstSession(ctx);
@@ -31,7 +31,12 @@ async function busyGroup() {
   await ctx.organizer.call('POST', `/api/admin/sessions/${later.id}/decision`, { decision: 'cancel', confirm: true });
   await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Robin', venueAddress: "O'Brien's Courts, Northville" });
   await ctx.organizer.call('POST', '/api/admin/players', { name: 'Zoë O’Neil 🏓', phone: '(248) 555-0199' });
-  ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR); // the 6-player game ends: credits
+  ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR); // the 6-player game ends
+  // Finalized at 6 played: Alex paid $14 and gets $5 back as credit. Blair's canceled $14 is credit too, and asks for it back.
+  const fin = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true });
+  if (fin.status !== 200) throw new Error(fin.text);
+  const req = await (await playerPhone(ctx, 'Blair')).call('POST', '/api/me/refund-request', { cents: 1400 });
+  if (req.status !== 200) throw new Error(req.text);
   await ctx.organizer.call('GET', '/api/admin/dashboard');
   return { ctx, s, later };
 }
@@ -51,7 +56,10 @@ describe('backup file', () => {
     expect(res.data.format).toBe('pickleball-backup');
     expect([...BACKUP_TABLES]).toEqual(TABLES);
     for (const t of TABLES) expect(Array.isArray(res.data.tables[t]), t).toBe(true);
-    expect(res.data.tables.credits.length).toBe(4);
+    // Alex's $5 from the finalized game and Blair's $14 from the canceled one; Blair's open request.
+    expect(res.data.tables.credit_ledger.map((e: { kind: string; amount_cents: number }) => [e.kind, e.amount_cents]).sort((a: [string, number], b: [string, number]) => a[1] - b[1])).toEqual([['kept', 500], ['kept', 1400]]);
+    expect(res.data.tables.refund_requests).toHaveLength(1);
+    expect(res.data.tables.sessions.filter((x: { finalized_at: string | null }) => x.finalized_at)).toHaveLength(1);
     expect(res.data.tables.players.some((p: { phone_number: string }) => p.phone_number === '(248) 555-0199')).toBe(true);
   });
 
@@ -77,8 +85,10 @@ describe('backup file', () => {
     expect((await ctx.organizer.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200);
     const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     expect(d.group.name).toBe('Tuesday Thursday Dinks');
-    expect(d.credits.length).toBe(4);
+    expect(d.creditLedger.map((l: { playerId: string; balanceCents: number }) => [l.playerId, l.balanceCents]).sort()).toEqual([[ctx.byName.Alex, 500], [ctx.byName.Blair, 1400]].sort());
+    expect(d.refundRequests).toMatchObject([{ name: 'Blair', cents: 1400 }]);
     expect(d.sessions.find((x: { id: string }) => x.id === later.id).status).toBe('canceled');
+    expect(d.players.some((p: { name: string }) => p.name === 'Frankie')).toBe(true);
   });
 
   it('refuses a file that is not a backup', () => {
@@ -130,52 +140,71 @@ describe('check-in wording', () => {
   });
 });
 
-describe('moved in when 6 joined, then back to 5', () => {
-  it('no longer says "we now have 6", to the player or in the organizer\'s text', async () => {
+describe('the 5th and 6th simply join, and a drop from 6 moves nobody', () => {
+  it('no promotion, no "we now have 6", to the player or on the organizer\'s roster; the count reads "6 in" then "5 in"', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const names = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
-    for (const n of names) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    for (const n of names) expect((await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed' });
     const emery = await playerPhone(ctx, 'Emery');
-    const reason = async () => (await emery.call('GET', '/api/group')).data.sessions.find((x: { id: string }) => x.id === s.id).mine.promotion;
-    expect(await reason()).toBe('made_six');
+    const view = async () => (await emery.call('GET', '/api/group')).data.sessions.find((x: { id: string }) => x.id === s.id);
+    let v = await view();
+    expect(v.mine.promotion).toBeNull();
+    expect(v.mine.shareCents).toBe(1400);
+    expect(v.countText).toBe('6 in');
     await (await playerPhone(ctx, 'Frankie')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
-    expect(await reason()).toBe('spot_opened');
+    v = await view();
+    expect(v.mine.promotion).toBeNull();
+    expect(v.countText).toBe('5 in');
+    expect(v.confirmed).toHaveLength(5);
     const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
-    const row = d.sessions.find((x: { id: string }) => x.id === s.id).roster.find((r: { name: string }) => r.name === 'Emery');
-    expect(row.promotionReason).toBe('spot_opened');
-    expect(row.discount).toBe(false);
+    const x = d.sessions.find((x: { id: string }) => x.id === s.id);
+    expect(x.confirmedCount).toBe(5);
+    expect(x.roster.filter((r: { status: string }) => r.status === 'confirmed').every((r: { promotionReason: string | null; promotedAt: string | null }) => r.promotionReason === null && r.promotedAt === null)).toBe(true);
+    expect(x.roster.find((r: { name: string }) => r.name === 'Emery')).not.toHaveProperty('discount');
   });
 });
 
 describe('credit shows once, where it applies', () => {
-  it('player screen: only on the game it comes off; Players tab: "credit $5" until that game is owed, then "owes $9", never both', async () => {
+  it('player screen: in the pot until used, then on the game it comes off; Players tab: "credit $5" until it is used, then "owes $9", never both', async () => {
     const { balanceOf } = await import('../src/pages/admin/todo');
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const names = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
     for (const n of names) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
-    ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR); // Alex earns $5
+    ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR);
+    // Finalized at 6 played ($9 each): Alex paid $14 and gets $5 back as credit.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
     const alex = await playerPhone(ctx, 'Alex');
     let g = (await alex.call('GET', '/api/group')).data;
-    // Not in any game: nothing about the credit on any card.
+    expect(g.credit).toMatchObject({ balanceCents: 500, usableCents: 500, pending: null });
+    expect(g.credit.history).toMatchObject([{ kind: 'kept', cents: 500, reason: 'finalized', playedCount: 6, sessionId: s.id }]);
+    // Not in any upcoming game: no credit used on any card.
     expect(g.sessions.every((x: any) => !x.mine || x.mine.creditCents === 0)).toBe(true);
     let d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     expect(balanceOf(d, ctx.byName.Alex)).toEqual({ owedCents: 0, creditCents: 500 });
-    // He joins a game: the credit sits on that game only.
-    const next = g.sessions.find((x: any) => !x.mine);
+    // He joins a game: he owes $14 and Use credit offers the $5; nothing moves by itself.
+    const next = g.sessions.find((x: any) => !x.mine && !x.past);
     await alex.call('POST', `/api/sessions/${next.id}/join`, {});
     g = (await alex.call('GET', '/api/group')).data;
+    expect(g.sessions.find((x: any) => x.id === next.id).mine).toMatchObject({ oweCents: 1400, creditCents: 0, useCreditCents: 500, shareCents: 1400 });
+    expect(g.sessions.filter((x: any) => x.mine?.creditCents > 0)).toEqual([]);
+    // Use credit: the $5 sits on that game only, $9 left to pay.
+    expect((await alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).data).toMatchObject({ paid: false, usedCents: 500 });
+    g = (await alex.call('GET', '/api/group')).data;
+    expect(g.credit.balanceCents).toBe(0);
     expect(g.sessions.filter((x: any) => x.mine?.creditCents > 0).map((x: any) => [x.id, x.mine.oweCents, x.mine.creditCents])).toEqual([[next.id, 900, 500]]);
     // From the day before: Players tab says owes $9, and no extra credit.
     ctx.app.now = Date.parse(next.startsAt) - 20 * HOUR;
     await ctx.organizer.call('POST', '/api/admin/login', { pin: '246810' });
     d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     expect(balanceOf(d, ctx.byName.Alex)).toEqual({ owedCents: 900, creditCents: 0 });
+    const row = d.sessions.find((x: any) => x.id === next.id).roster.find((r: any) => r.name === 'Alex');
+    expect(row).toMatchObject({ owesCents: 900, creditCents: 500, shareCents: 1400, paymentStatus: 'unpaid' });
     // The game-day pay card on the player's screen agrees.
     ctx.app.now = Date.parse(next.startsAt) - 11 * HOUR;
     g = (await alex.call('GET', '/api/group')).data;
-    expect(g.payDue.map((o: any) => [o.amountCents, o.creditCents])).toEqual([[900, 500]]);
+    expect(g.payDue.map((o: any) => [o.amountCents, o.creditCents, o.finalized])).toEqual([[900, 500, false]]);
   });
 });

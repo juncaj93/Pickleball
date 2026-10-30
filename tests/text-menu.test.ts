@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { smsHref } from '../shared/messages';
 import { fillTexts, owedGames, reminderText, sessionTexts, unpaidPeople } from '../src/pages/admin/textMenu';
-import { DAY, HOUR, playerPhone, PLAYER_NAMES, setupGroup } from './harness';
+import { DAY, HOUR, playerPhone, PLAYER_NAMES, setupGroup, withoutIds } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 const TZ = 'America/Detroit';
@@ -116,35 +116,44 @@ describe('the Text menu shows only the texts that fit', () => {
     expect(x.confirmedCount).toBe(6);
     expect(ids(items)).toEqual(['share', 'checkin']);
   });
-  it('now 6 because the waitlist moved in: Now 6 goes to the 2 extra players only, until I tell them', async () => {
+  it('6 in by sign-ups, the 5th and 6th simply in: Share and the Check-in to all 6, no extra text', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
-    let { d, items } = await menu(ctx, s.id);
-    expect(ids(items)).toEqual(['share', 'checkin', 'now6']);
-    const six = items[2];
-    expect(six.body).toBe(`Good news, we have 6 for pickleball Tue Nov 3, 8:00 PM. You're both in. Can\'t make it? Update here: ${LINK}`);
-    expect(six.phones).toEqual([phoneOf(ctx, d, 'Emery'), phoneOf(ctx, d, 'Frankie')]);
-    expect(six.who).toBe('The 2 extra players · 2');
-    expect(items[1].phones).toHaveLength(6);
-    // Once I have told them (the Home card's "I told" button), it goes away.
-    for (const n of ['Emery', 'Frankie']) await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/told`, { playerId: ctx.byName[n] });
-    ({ items } = await menu(ctx, s.id));
+    const { s: x, items } = await menu(ctx, s.id);
+    expect(x.confirmedCount).toBe(6);
+    expect(x.waitlistCount).toBe(0);
     expect(ids(items)).toEqual(['share', 'checkin']);
+    expect(items[1].phones).toHaveLength(6);
+    expect(x.roster.every((r: any) => r.promotionReason === null)).toBe(true);
   });
-  it('6 dropped to 5: Down to 5 and the Check-in (no Now 6)', async () => {
+  it('at the max (6 here): the 7th waits, and the Check-in goes to them too', async () => {
+    const ctx = await group();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 6 } });
+    await ctx.organizer.call('POST', '/api/admin/players', { name: 'Gale', phone: '(313) 555-0177' });
+    ctx.byName.Gale = (await dash(ctx)).players.find((p: any) => p.name === 'Gale').id;
+    const s = await on(ctx, '2026-11-03');
+    await join(ctx, s.id, [...PLAYER_NAMES, 'Gale']); // Gale waits
+    const { d, s: x, items } = await menu(ctx, s.id);
+    expect([x.confirmedCount, x.waitlistCount]).toEqual([6, 1]);
+    expect(ids(items)).toEqual(['share', 'checkin']);
+    expect(items[1].phones).toHaveLength(7);
+    expect(items[1].phones).toContain(phoneOf(ctx, d, 'Gale'));
+  });
+  it('6 dropped to 5: still just Share and the Check-in (no Down to 5)', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, PLAYER_NAMES);
     await out(ctx, s.id, 'Frankie');
     const { s: x, items } = await menu(ctx, s.id);
     expect(x.confirmedCount).toBe(5);
-    expect(ids(items)).toEqual(['share', 'down5', 'checkin']);
-    expect(items[1].body).toBe(`Down to 5 for pickleball Tue Nov 3. Need 1 more or 1 out to make 4 or 6. ${LINK}`);
-    expect(items[1].chat).toBe(true);
+    expect(ids(items)).toEqual(['share', 'checkin']);
+    expect(items[1].phones).toHaveLength(5);
+    for (const i of items) expect(i.body).not.toMatch(/Down to 5|4 or 6/);
   });
-  it('a waitlist player moves into the 4 after a drop: "Spot opened" to that one player', async () => {
+  it('a waitlist player moves in after a drop (above the max): "Spot opened" to that one player', async () => {
     const ctx = await group();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits
     expect(ids((await menu(ctx, s.id)).items)).toEqual(['share', 'checkin']);
@@ -159,15 +168,40 @@ describe('the Text menu shows only the texts that fit', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/told`, { playerId: ctx.byName.Emery });
     expect(ids((await menu(ctx, s.id)).items)).toEqual(['share', 'checkin']);
   });
-  it('a canceled game: just Canceled, to everyone signed up and on the waitlist', async () => {
+  it('a canceled game: just Canceled, with the credit words, to everyone signed up and on the waitlist', async () => {
     const ctx = await group();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const s = await on(ctx, '2026-11-03');
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']); // Emery waits
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     const { d, items } = await menu(ctx, s.id);
     expect(ids(items)).toEqual(['canceled']);
-    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it stays as your credit. Want a refund instead? Text me. ${LINK}`);
+    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a refund on the site. ${LINK}`);
     expect(items[0].phones).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery'].map((n) => phoneOf(ctx, d, n)));
+  });
+  it('after finalizing: the one Final price text to the group chat; nothing while the game is over but not finalized', async () => {
+    const ctx = await group();
+    const s = await on(ctx, '2026-11-03');
+    await join(ctx, s.id, PLAYER_NAMES);
+    for (const n of PLAYER_NAMES) await pay(ctx, s.id, n);
+    ctx.app.now = Date.parse(s.endsAt) + 5 * 60_000;
+    expect((await menu(ctx, s.id)).items).toEqual([]);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
+    const { items } = await menu(ctx, s.id);
+    expect(ids(items)).toEqual(['final']);
+    expect(items[0].label).toBe('Final price');
+    expect(items[0].body).toBe(`Pickleball Tue, Nov 3 is final: 6 played, $9 each. If you paid $14, the extra $5 is now credit on your account. ${LINK}`);
+    expect([items[0].chat, items[0].phones, items[0].who]).toEqual([true, [], 'Group chat, you pick']);
+    // At 4 played there is no credit line. Days later the text is still offered.
+    const t = await on(ctx, '2026-11-05');
+    await join(ctx, t.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    ctx.app.now = Date.parse(t.endsAt) + 5 * 60_000;
+    await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/finalize`, { everyone: true });
+    ctx.app.now += 3 * DAY;
+    expect((await menu(ctx, t.id)).items.map((i) => i.body)).toEqual([`Pickleball Thu, Nov 5 is final: 4 played, $14 each. ${LINK}`]);
+    // A reopened game offers nothing again until it is finalized.
+    await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/reopen`, {});
+    expect((await menu(ctx, t.id)).items).toEqual([]);
   });
   it('a moved game: Moved (to everyone signed up and waiting) plus the usual ones', async () => {
     const ctx = await group();
@@ -301,7 +335,7 @@ describe('the unpaid card on the player screen stays until they pay', () => {
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, { courtCostCents: 4567 });
     ctx.app.now = Date.parse('2026-10-28T13:00:00Z');
-    const text = (await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).text;
+    const text = withoutIds((await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).text);
     expect(text).not.toMatch(/4567|45\.67|courtCost|\(313\)|\+1313|555-01/);
     expect(DAY).toBeGreaterThan(0);
   });

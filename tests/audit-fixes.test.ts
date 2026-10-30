@@ -53,7 +53,7 @@ describe('audit fixes', () => {
     for (const good of ['Zo\u00eb O\u2019Brien', '\u{1F3D3} Sam', 'Pat \u{1F468}\u200d\u{1F469}\u200d\u{1F467}']) expect((await add(good)).status).toBe(200);
   });
 
-  it('a credit used on a payment comes back when that payment is refunded, and goes again if the refund is undone', async () => {
+  it('credit used on a seat comes back when the player drops out, cash and all, and goes again when used again', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const names = ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
@@ -61,45 +61,54 @@ describe('audit fixes', () => {
     for (const n of names) {
       phones[n] = await playerPhone(ctx, n);
       await phones[n].call('POST', `/api/sessions/${s.id}/join`, {});
+      await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName[n], paid: true });
     }
+    // Six played at $9: $5 of Alex's $14 comes back as credit.
     ctx.app.advance(Date.parse(s.endsAt) - ctx.app.now + HOUR);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
     const credit = async () => {
       const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
-      return d.credits.find((c: { name: string }) => c.name === 'Alex')?.balanceCents ?? 0;
+      return d.creditLedger.find((c: { playerId: string }) => c.playerId === ctx.byName.Alex)?.balanceCents ?? 0;
     };
     expect(await credit()).toBe(500);
     const next = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((x: { startsAt: string }) => Date.parse(x.startsAt) > ctx.app.now);
     await phones.Alex.call('POST', `/api/sessions/${next.id}/join`, {});
-    await phones.Alex.call('POST', `/api/sessions/${next.id}/paid`, { paid: true });
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).data).toMatchObject({ usedCents: 500, paid: false });
     expect(await credit()).toBe(0);
-    await phones.Alex.call('POST', `/api/sessions/${next.id}/withdraw`, {});
-    const refund = (refunded: boolean) => ctx.organizer.call('POST', `/api/admin/sessions/${next.id}/refund`, { playerId: ctx.byName.Alex, refunded });
-    expect((await refund(true)).status).toBe(200);
-    expect(await credit()).toBe(500);
-    expect((await refund(false)).status).toBe(200);
+    await phones.Alex.call('POST', `/api/sessions/${next.id}/paid`, { paid: true }); // the other $9 in cash
+    // I'm out: the $5 credit goes back and the $9 cash becomes credit too.
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/withdraw`, {})).data.creditBackCents).toBe(900);
+    expect(await credit()).toBe(1400);
+    // Back in and used again: the whole $14 pays the seat.
+    await phones.Alex.call('POST', `/api/sessions/${next.id}/join`, {});
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).data).toMatchObject({ usedCents: 1400, paid: true });
     expect(await credit()).toBe(0);
-    expect((await refund(true)).status).toBe(200);
-    expect(await credit()).toBe(500);
+    // And once more out: all of it is credit again, with no second cash entry.
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/withdraw`, {})).data.creditBackCents).toBe(0);
+    expect(await credit()).toBe(1400);
   });
 
-  it('rejoining after a refund owes again instead of showing as paid', async () => {
+  it('rejoining after a paid drop owes again instead of showing as paid: the money is credit now', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const blair = await playerPhone(ctx, 'Blair');
     await blair.call('POST', `/api/sessions/${s.id}/join`, {});
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
-    await blair.call('POST', `/api/sessions/${s.id}/withdraw`, {});
-    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/refund`, { playerId: ctx.byName.Blair, refunded: true });
+    expect((await blair.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data.creditBackCents).toBe(1400);
     await blair.call('POST', `/api/sessions/${s.id}/join`, {});
     const mine = (await blair.call('GET', '/api/group')).data.sessions.find((x: { id: string }) => x.id === s.id).mine;
     expect(mine.paymentStatus).toBe('unpaid');
     expect(mine.oweCents).toBe(1400);
-    // Without a refund, a payment still survives I'm out then I'm in.
-    const casey = await playerPhone(ctx, 'Casey');
-    await casey.call('POST', `/api/sessions/${s.id}/join`, {});
+    expect(mine.useCreditCents).toBe(1400);
+    // The organizer's own court payment is not player money: it survives I'm out then I'm in, and never becomes credit.
+    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Casey' });
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Casey, paid: true });
-    await casey.call('POST', `/api/sessions/${s.id}/withdraw`, {});
-    await casey.call('POST', `/api/sessions/${s.id}/join`, {});
-    expect((await casey.call('GET', '/api/group')).data.sessions.find((x: { id: string }) => x.id === s.id).mine.paymentStatus).toBe('paid');
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: false })).data.result).toBe('withdrawn');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
+    const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const me = d.sessions.find((x: { id: string }) => x.id === s.id).roster.find((r: { playerId: string }) => r.playerId === ctx.byName.Casey);
+    expect(me).toMatchObject({ isOrganizer: true, status: 'confirmed', paymentStatus: 'paid', creditBackCents: 0 });
+    expect(d.creditLedger.some((c: { playerId: string }) => c.playerId === ctx.byName.Casey)).toBe(false);
   });
 });

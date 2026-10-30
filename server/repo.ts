@@ -1,4 +1,4 @@
-import { allocateCredits, type Due, type OpenCredit, type SeatPrice, seatPrices } from '../shared/pricing';
+import { type SeatPrice, seatPrices } from '../shared/pricing';
 import { planSessions } from '../shared/schedule';
 import { zonedTimeToUtc } from '../shared/time';
 import { type GroupSettings, normalizeSettings } from '../shared/settings';
@@ -6,7 +6,6 @@ import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } f
 import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
 import type { D1Database } from './db';
-import { isPretend } from './pretend';
 
 export interface GroupRow {
   id: string;
@@ -75,6 +74,10 @@ export interface SessionRow {
   /** 1 for a one-off game the organizer added. */
   is_extra: number;
   note: string | null;
+  /** The organizer finalized who played: when, the final price each, how many played. */
+  finalized_at: string | null;
+  final_price_cents: number | null;
+  final_played_count: number | null;
   updated_at: string;
 }
 
@@ -99,6 +102,8 @@ export interface RosterRow {
   refunded_at: string | null;
   late_drop_at: string | null;
   late_drop_done_at: string | null;
+  /** Once finalized: 1 played, 0 did not. */
+  played: number | null;
   display_name: string;
   phone_number: string | null;
 }
@@ -256,13 +261,15 @@ export function waitlistOf(roster: RosterRow[]): RosterRow[] {
 
 /**
  * Each confirmed player's price for a session, before any credit: the flat
- * price, or price minus credit for the last two when exactly 6 are in.
+ * price until the game is finalized, then the final price for those who
+ * played (nothing for those who did not). Nobody owes for a canceled game.
  */
 export function pricesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, SeatPrice> {
   return seatPrices(
-    confirmedOf(roster).map((r) => ({ playerId: r.player_id, seq: r.confirm_seq ?? 0 })),
-    settings,
+    confirmedOf(roster).map((r) => ({ playerId: r.player_id, played: r.played })),
+    settings.pricePerPlayerCents,
     session.status === 'canceled',
+    session.finalized_at ? { priceCents: session.final_price_cents ?? settings.pricePerPlayerCents } : null,
   );
 }
 
@@ -273,138 +280,6 @@ export function courtCostOf(session: Pick<SessionRow, 'court_cost_cents'>, setti
 
 export function sharesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, number> {
   return new Map([...pricesFor(session, roster, settings)].map(([id, p]) => [id, p.cents]));
-}
-
-// ---------- Credits ----------
-
-export interface CreditRow {
-  id: string;
-  player_id: string;
-  earned_session_id: string;
-  amount_cents: number;
-  created_at: string;
-  used_session_id: string | null;
-  cleared_at: string | null;
-  earned_ends_at: string;
-}
-
-export async function loadCredits(db: D1Database, groupId: string): Promise<CreditRow[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT c.*, s.ends_at AS earned_ends_at FROM credits c JOIN sessions s ON s.id = c.earned_session_id
-       WHERE c.group_id = ? ORDER BY c.created_at`,
-    )
-    .bind(groupId)
-    .all<CreditRow>();
-  // Pretending it's later: credits that would have been issued by then, in memory only.
-  if (isPretend(db)) return [...results, ...([...db.virtualCredits.values()] as unknown as CreditRow[])];
-  return results;
-}
-
-/** Credits not yet used on a session and not cleared by the organizer. */
-export function openCredits(credits: CreditRow[]): OpenCredit[] {
-  return credits
-    .filter((c) => !c.used_session_id && !c.cleared_at)
-    .map((c) => ({ id: c.id, playerId: c.player_id, amountCents: c.amount_cents, earnedAfter: c.earned_ends_at }));
-}
-
-/**
- * After a session ends with exactly 6 playing, each of the first four earns
- * the credit. Runs on page loads like ensureSessions; each session is only
- * looked at once, and the unique (session, player) key blocks doubles.
- */
-export async function issueCredits(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
-  const settings = settingsOf(group);
-  const nowIso = new Date(nowMs).toISOString();
-  const { results } = await db
-    .prepare(
-      `SELECT * FROM sessions WHERE group_id = ? AND credits_issued_at IS NULL AND ends_at <= ? AND (starts_at >= ? OR shown_early = 1)`,
-    )
-    .bind(group.id, nowIso, visibleFrom(group))
-    .all<SessionRow>();
-  let issued = 0;
-  // The organizer pays the venue, not the other players, so they earn no credit.
-  const organizerId = await organizerIdOf(db, group);
-  for (const s of results) {
-    const stmts = [];
-    if (s.status !== 'canceled' && settings.creditCentsWhenSix > 0) {
-      for (const [playerId, price] of pricesFor(s, await loadRoster(db, s.id), settings)) {
-        if (!price.creditComing || playerId === organizerId) continue;
-        if (isPretend(db)) {
-          const id = `pretend-${s.id}-${playerId}`;
-          db.virtualCredits.set(id, {
-            id,
-            group_id: group.id,
-            player_id: playerId,
-            earned_session_id: s.id,
-            amount_cents: settings.creditCentsWhenSix,
-            created_at: nowIso,
-            used_session_id: null,
-            used_at: null,
-            cleared_at: null,
-            earned_ends_at: s.ends_at,
-          });
-          issued++;
-          continue;
-        }
-        stmts.push(
-          db
-            .prepare(
-              `INSERT OR IGNORE INTO credits (id, group_id, player_id, earned_session_id, amount_cents, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)`,
-            )
-            .bind(newId(), group.id, playerId, s.id, settings.creditCentsWhenSix, nowIso),
-        );
-        issued++;
-      }
-    }
-    stmts.push(db.prepare('UPDATE sessions SET credits_issued_at = ? WHERE id = ? AND credits_issued_at IS NULL').bind(nowIso, s.id));
-    await db.batch(stmts);
-  }
-  return issued;
-}
-
-/**
- * Remember when a session reaches 6 (the discount was shown), so a later
- * drop below 6 can show the organizer a "sort it out" card.
- */
-export async function syncSix(db: D1Database, sessionId: string, nowIso: string): Promise<void> {
-  const six = `(SELECT COUNT(*) FROM session_players WHERE session_id = ?2 AND status = 'confirmed') = 6`;
-  await db
-    .prepare(
-      `UPDATE sessions SET
-         six_reached_at = CASE WHEN ${six} THEN COALESCE(six_reached_at, ?1) ELSE six_reached_at END,
-         six_drop_resolved_at = CASE WHEN ${six} THEN NULL ELSE six_drop_resolved_at END
-       WHERE id = ?2`,
-    )
-    .bind(nowIso, sessionId)
-    .run();
-}
-
-/**
- * Which credits come off which unpaid seats, keyed `${sessionId}:${playerId}`.
- * Paid seats keep whatever was used when they were marked paid.
- */
-export function creditPlan(
-  sessions: SessionRow[],
-  rosters: Map<string, RosterRow[]>,
-  credits: CreditRow[],
-  settings: GroupSettings,
-  /** Credit from the pot already spent on a seat (partly covered), keyed `${sessionId}:${playerId}`. */
-  spent: Map<string, number> = new Map(),
-): Map<string, { cents: number; ids: string[] }> {
-  const dues: Due[] = [];
-  for (const s of sessions) {
-    const roster = rosters.get(s.id) ?? [];
-    const prices = pricesFor(s, roster, settings);
-    for (const r of roster) {
-      const price = prices.get(r.player_id);
-      if (price && r.status === 'confirmed' && r.payment_status === 'unpaid') {
-        dues.push({ sessionId: s.id, playerId: r.player_id, startsAt: s.starts_at, cents: Math.max(0, price.cents - (spent.get(`${s.id}:${r.player_id}`) ?? 0)) });
-      }
-    }
-  }
-  return allocateCredits(openCredits(credits), dues);
 }
 
 /** Weekday numbers stored as '2,4'. */

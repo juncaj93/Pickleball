@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { sessionCalendar } from '../shared/calendar';
 import { formatCents, formatPrice, parseDollars, venmoPayUrl } from '../shared/money';
-import { goingText, joinOutcome, openSpots } from '../shared/spots';
+import { countText, DEFAULT_MAX_PLAYERS, goingText, joinOutcome, MAX_PLAYERS_LIMIT, MIN_PLAYERS, openSpots, playersNeeded } from '../shared/spots';
 import { planSessions } from '../shared/schedule';
 import { DEFAULT_SETTINGS, normalizeSettings } from '../shared/settings';
 import { computeSessionState, type StatusInput } from '../shared/status';
@@ -90,25 +90,38 @@ describe('time display', () => {
   });
 });
 
-describe('spots: exactly 4 or 6', () => {
-  it('lets the first 4 in, waitlists the 5th, and lets the 6th in (bringing the 5th with them)', () => {
-    expect([0, 1, 2, 3].map((c) => joinOutcome(c, 0))).toEqual(['in', 'in', 'in', 'in']);
-    expect(joinOutcome(4, 0)).toBe('waitlist'); // 5th person
-    expect(joinOutcome(4, 1)).toBe('in'); // 6th person: both get in
-    expect(joinOutcome(6, 0)).toBe('waitlist');
-    expect(joinOutcome(5, 0)).toBe('in'); // turns 5 into 6
-    expect(joinOutcome(5, 1)).toBe('waitlist'); // someone is already first in line
+describe('spots: any number from 4 up to the max', () => {
+  it('lets everyone in until the max (10 by default), then waitlists; the 5th and 6th are simply in', () => {
+    expect([MIN_PLAYERS, DEFAULT_MAX_PLAYERS, MAX_PLAYERS_LIMIT]).toEqual([4, 10, 12]);
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((c) => joinOutcome(c, 10))).toEqual(Array(10).fill('in'));
+    expect(joinOutcome(10, 10)).toBe('waitlist'); // the 11th person
+    expect(joinOutcome(11, 10)).toBe('waitlist');
+    // The max is a setting.
+    expect(joinOutcome(3, 4)).toBe('in');
+    expect(joinOutcome(4, 4)).toBe('waitlist');
+    expect(joinOutcome(5, 6)).toBe('in');
+    expect(joinOutcome(6, 6)).toBe('waitlist');
+    expect(joinOutcome(11, 12)).toBe('in');
   });
 
   it('describes the count in plain words', () => {
-    expect(goingText(3, 0)).toBe('3 going · 1 more needed');
-    expect(goingText(4, 1)).toBe('4 going · 1 more makes 6');
-    expect(goingText(5, 0)).toBe('5 going · need 4 or 6');
-    expect(goingText(6, 2)).toBe('6 going');
-    expect(openSpots(2, 0)).toBe(2);
-    expect(openSpots(4, 1)).toBe(0);
-    expect(openSpots(5, 0)).toBe(1);
-    expect(openSpots(6, 0)).toBe(0);
+    expect(countText(0, 10)).toBe('0 of 4 in');
+    expect(countText(3, 10)).toBe('3 of 4 in');
+    expect(countText(4, 10)).toBe('4 in');
+    expect(countText(5, 10)).toBe('5 in');
+    expect(countText(9, 10)).toBe('9 in');
+    expect(countText(10, 10)).toBe('10 in, full');
+    expect(countText(6, 6)).toBe('6 in, full');
+    expect(goingText(3, 10)).toBe('3 going · 1 more needed');
+    expect(goingText(4, 10)).toBe('4 going');
+    expect(goingText(5, 10)).toBe('5 going');
+    expect(goingText(10, 10)).toBe('10 going · full');
+    expect(openSpots(2, 10)).toBe(8);
+    expect(openSpots(4, 10)).toBe(6);
+    expect(openSpots(10, 10)).toBe(0);
+    expect(openSpots(11, 10)).toBe(0);
+    expect(openSpots(4, 4)).toBe(0);
+    expect([0, 1, 3, 4, 7].map(playersNeeded)).toEqual([4, 3, 1, 0, 0]);
   });
 });
 
@@ -259,13 +272,19 @@ describe('session status', () => {
     expect(at({ unconfirmedAttendanceCount: 0 }, start - 2 * HOUR).flags.checkInsDue).toBe(false);
   });
 
-  it('warns when 5 are going, at any time before play', () => {
+  it('5 going is on track like any count from 4 to the max; the flags carry open spots, players needed and full', () => {
     const five = at({ confirmedCount: 5 }, start - 5 * DAY);
-    expect(five.label).toBe('five_going');
-    expect(five.text).toBe('5 going');
-    expect(five.flags.fiveGoing).toBe(true);
-    expect(five.flags.underfilled).toBe(false);
+    expect(five.label).toBe('on_track');
+    expect(five.text).toBe('On track');
+    expect(five.flags).toMatchObject({ underfilled: false, openSpots: 5, playersNeeded: 0, full: false });
+    expect(five.flags).not.toHaveProperty('fiveGoing');
     expect(at({ confirmedCount: 6 }, start - 5 * DAY).label).toBe('on_track');
+    expect(at({ confirmedCount: 10 }, start - 5 * DAY)).toMatchObject({ label: 'on_track', flags: { openSpots: 0, full: true } });
+    expect(at({ confirmedCount: 3 }, start - 5 * DAY).flags).toMatchObject({ underfilled: true, openSpots: 7, playersNeeded: 1, full: false });
+    // The max is a setting; a canceled or started game has no open spots.
+    expect(computeSessionState({ ...base, confirmedCount: 6 }, start - 5 * DAY, { ...DEFAULT_SETTINGS, maxPlayers: 6 }).flags).toMatchObject({ openSpots: 0, full: true });
+    expect(at({ confirmedCount: 5, status: 'canceled' }, start - 5 * DAY).flags).toMatchObject({ openSpots: 0, playersNeeded: 0, full: false });
+    expect(at({ confirmedCount: 5 }, start + HOUR).flags).toMatchObject({ openSpots: 0, full: false });
   });
 
   it('marks canceled sessions and stops other flags', () => {

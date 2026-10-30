@@ -31,10 +31,11 @@ export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-/** "All paid", "2 unpaid", or nothing when nobody owed anything. */
+/** "Finalize", "All paid", "2 unpaid", or nothing when nobody owed anything. */
 function moneyStatus(s: AdminSessionView): { text: string; tone: 'ok' | 'warn' } | null {
   if (s.state.flags.canceled) return null;
-  const owing = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null);
+  if (s.needsFinalize) return { text: 'Finalize', tone: 'warn' };
+  const owing = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.owesCents > 0);
   if (owing.length) return { text: `${owing.length} unpaid`, tone: 'warn' };
   if (s.roster.some((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'paid')) return { text: 'All paid', tone: 'ok' };
   return null;
@@ -52,7 +53,8 @@ function PastSessions({ ctx }: { ctx: AdminCtx }) {
     <>
       <ul className="card history-list" aria-label="Past sessions">
         {past.map((s) => {
-          const played = s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name);
+          // Once finalized, the people who actually played; until then everyone who was in.
+          const played = s.roster.filter((r) => r.status === 'confirmed' && (s.finalized ? r.played !== false : true)).map((r) => r.name);
           const money = moneyStatus(s);
           const late = lateDropsAll(s).length;
           return (
@@ -68,7 +70,7 @@ function PastSessions({ ctx }: { ctx: AdminCtx }) {
                     <span className="h-canceled">{s.courtState === 'not_opened' ? "Court didn't open" : 'Canceled'}</span>
                   ) : (
                     <>
-                      <strong>{played.length} played</strong>
+                      <strong>{s.finalized ? `${s.finalized.playedCount} played · $${s.finalized.priceCents / 100} each` : `${played.length} in`}</strong>
                       {played.length > 0 && <span className="h-names">{played.join(', ')}</span>}
                     </>
                   )}

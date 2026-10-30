@@ -43,7 +43,7 @@ async function main() {
   rmSync(dbFile, { force: true });
   const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN, DEV_CLOCK: '1' },
     stdio: 'ignore',
     detached: true,
   });
@@ -248,6 +248,40 @@ async function main() {
     const t = squash(await page.locator('body').innerText());
     assert(!/Pay \$|Pay with Venmo|you owe|\$14/i.test(t), `money shows in View as: ${t.slice(0, 300)}`);
     assert(!COURT_WORDS.test(t.replace(/Northville Pickleball Club/g, '')), `court words in View as: ${t.slice(0, 300)}`);
+    await ctx.close();
+  });
+
+  // ---- After the games: the court row counts others at the final price once finalized.
+  for (const n of ['Julian', 'Mitchel', 'Nathan']) await call(api.request, 'POST', `/api/admin/sessions/${six.id}/roster`, { playerId: id[n], action: 'confirm' });
+  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse(six.endsAt) + 3600_000 }) });
+  await check('before finalizing, the court row still counts others at $14; after finalizing it uses the final price (4 played with you: $14, cover $42; 5 others played: $11 each, they cover the $48 court)', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, isMobile: true, hasTouch: true });
+    const page = await ctx.newPage();
+    await ctx.request.post(BASE + '/api/admin/login', { headers: { Origin: BASE }, data: { pin: PIN } });
+    await page.goto(BASE + '/admin');
+    await page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: /^Money/ }).click();
+    const sess = (s) => page.locator(`details.money-sess[data-session="${s.id}"]`);
+    const open = async (s) => {
+      await sess(s).waitFor();
+      if (!(await sess(s).evaluate((el) => el.open))) await sess(s).locator('summary').click();
+    };
+    await open(six);
+    assert(/Players cover \$70, your share \$0|Players cover the court/.test(squash(await sess(six).locator('[data-court]').innerText())), `before: ${squash(await sess(six).locator('[data-court]').innerText())}`);
+    for (const s of [four, six]) {
+      const res = await api.request.post(`${BASE}/api/admin/sessions/${s.id}/finalize`, { data: { everyone: true }, headers: { Origin: BASE } });
+      assert(res.ok(), `finalize: ${res.status()} ${await res.text()}`);
+    }
+    await page.reload();
+    await page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: /^Money/ }).click();
+    await open(four);
+    assert(/4 played · \$14 each/.test(squash(await sess(four).locator('summary').innerText())), 'four: summary');
+    assert(/Players cover \$42, your share \$6/.test(squash(await sess(four).locator('[data-court]').innerText())), `four: ${squash(await sess(four).locator('[data-court]').innerText())}`);
+    await open(six);
+    assert(/5 played · \$11 each/.test(squash(await sess(six).locator('summary').innerText())), 'six: summary');
+    const t = squash(await sess(six).locator('[data-court]').innerText());
+    assert(/Players cover the court/.test(t) && /\$48/.test(t), `six: ${t}`);
+    assert((await sess(six).getByText(/owes \$11/).count()) === 5, 'five others owe the final $11');
+    assert(!/Alex owes|\$14/.test(squash(await sess(six).locator('[data-court]').innerText())), 'the organizer never owes');
     await ctx.close();
   });
 

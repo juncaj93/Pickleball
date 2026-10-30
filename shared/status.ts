@@ -1,5 +1,5 @@
 import type { GroupSettings } from './settings';
-import { MIN_PLAYERS, openSpots as spotsOpen } from './spots';
+import { MIN_PLAYERS, openSpots as spotsOpen, playersNeeded } from './spots';
 import { BOOKING_PROMPT_HOUR, bookingOpensMs, DEFAULT_TIMEZONE } from './time';
 
 export type SessionRecordStatus = 'planned' | 'booked' | 'canceled' | 'completed';
@@ -27,7 +27,6 @@ export type StatusLabel =
   | 'completed'
   | 'in_progress'
   | 'deadline_passed'
-  | 'five_going'
   | 'short_on_players'
   | 'needs_booking'
   | 'court_unavailable'
@@ -41,7 +40,6 @@ export const STATUS_TEXT: Record<StatusLabel, string> = {
   completed: 'Played',
   in_progress: 'Playing now',
   deadline_passed: 'Deadline passed',
-  five_going: '5 going',
   short_on_players: 'Short on players',
   needs_booking: 'Needs booking',
   court_unavailable: 'Court not available',
@@ -58,7 +56,6 @@ export const STATUS_TONE: Record<StatusLabel, Tone> = {
   completed: 'muted',
   in_progress: 'ok',
   deadline_passed: 'danger',
-  five_going: 'warn',
   short_on_players: 'warn',
   needs_booking: 'warn',
   court_unavailable: 'danger',
@@ -76,9 +73,12 @@ export interface SessionFlags {
   bookingPromptDue: boolean;
   courtUnavailable: boolean;
   underfilled: boolean; // fewer than 4
-  /** Exactly 5 confirmed: the organizer needs to get to 4 or 6. */
-  fiveGoing: boolean;
+  /** Spots left before the game is full (the max in Settings). */
   openSpots: number;
+  /** How many more are needed to reach 4. */
+  playersNeeded: number;
+  /** At the max: anyone else waits. */
+  full: boolean;
   /** The day-before check-in has started (default 24 hours before play). */
   inCheckIn: boolean;
   deadlinePassed: boolean;
@@ -114,7 +114,7 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const started = nowMs >= start;
   const live = !canceled && !started;
   const bookingWindowOpen = nowMs >= bookingOpensMs(s.startsAt, settings.bookingLeadDays, tz);
-  const openSpots = spotsOpen(s.confirmedCount, s.waitlistCount);
+  const openSpots = spotsOpen(s.confirmedCount, settings.maxPlayers);
   const underfilled = live && s.confirmedCount < MIN_PLAYERS;
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
   const inCheckIn = live && nowMs >= start - settings.checkInHours * HOUR;
@@ -131,8 +131,9 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
     bookingPromptDue: needsBooking && nowMs >= bookingOpensMs(s.startsAt, settings.bookingLeadDays, tz, BOOKING_PROMPT_HOUR),
     courtUnavailable: live && s.bookingStatus === 'unavailable',
     underfilled,
-    fiveGoing: live && s.confirmedCount === 5,
     openSpots: live ? openSpots : 0,
+    playersNeeded: live ? playersNeeded(s.confirmedCount) : 0,
+    full: live && s.confirmedCount >= settings.maxPlayers,
     inCheckIn,
     deadlinePassed,
     shortOnPlayers,
@@ -146,7 +147,6 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   else if (started) label = 'in_progress';
   else if (s.courtState === 'waitlist') label = 'court_waitlist';
   else if (shortOnPlayers && deadlinePassed) label = 'deadline_passed';
-  else if (flags.fiveGoing) label = 'five_going';
   else if (shortOnPlayers) label = 'short_on_players';
   else if (flags.needsBooking) label = 'needs_booking';
   else if (flags.courtUnavailable) label = 'court_unavailable';

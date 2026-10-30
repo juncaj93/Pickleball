@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { courtStatus, playerSlots } from '../shared/court';
+import { courtStatus } from '../shared/court';
 import { buildTodo, homeBadgeCount } from '../src/pages/admin/todo';
 import { suggestions } from '../src/pages/admin/suggestions';
 import { bookingOpensMs, formatDateTime, formatShortDate } from '../shared/time';
@@ -30,10 +30,6 @@ describe('court status words', () => {
     expect(courtStatus({ ...base, courtState: 'waitlist', bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('waitlist');
     expect(courtStatus({ ...base, bookingStatus: 'booked', canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
     expect(courtStatus({ ...base, bookingStatus: 'booked', started: true, past: true })).toMatchObject({ kind: 'off', text: 'Played' });
-  });
-
-  it('counts players toward 4, or toward 6 once more than 4 are in', () => {
-    expect([0, 3, 4, 5, 6].map(playerSlots)).toEqual([4, 4, 4, 6, 6]);
   });
 });
 
@@ -113,16 +109,32 @@ describe('organizer Home', () => {
     expect(suggestions(d, Date.parse(d.now)).map((c) => c.kind)).toContain('need');
   });
 
-  it('keeps the 5-going warning and who owes in "Needs attention"', async () => {
+  it('5 going is no warning; "Needs attention" keeps who owes, then the Finalize card, with refund requests first', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
     await (await playerPhone(ctx, 'Frankie')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
     ctx.app.now = Date.parse(s.startsAt) - 20 * HOUR;
-    const kinds = buildTodo(await dash(ctx)).map((i) => i.kind);
-    expect(kinds).toContain('five');
+    let d = await dash(ctx);
+    expect(d.sessions.find((x: any) => x.id === s.id)).toMatchObject({ confirmedCount: 5, state: { flags: { underfilled: false, openSpots: 5, playersNeeded: 0 } } });
+    let kinds = buildTodo(d).map((i) => i.kind);
+    expect(kinds).not.toContain('five');
     // On game day the unpaid players show as "Mark paid tonight".
     expect(kinds.some((k) => k === 'owed' || k === 'tonight')).toBe(true);
+    // Once the game is over: Finalize, until it is done.
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
+    ctx.app.now = Date.parse(s.endsAt) + HOUR;
+    kinds = buildTodo(await dash(ctx)).map((i) => i.kind);
+    expect(kinds[0]).toBe('finalize');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true });
+    kinds = buildTodo(await dash(ctx)).map((i) => i.kind);
+    expect(kinds).not.toContain('finalize');
+    // Alex paid $14 for a 5-player game: $3 credit. A refund request goes to the top.
+    expect((await (await playerPhone(ctx, 'Alex')).call('POST', '/api/me/refund-request', { cents: 300 })).status).toBe(200);
+    d = await dash(ctx);
+    const todo = buildTodo(d);
+    expect(todo[0]).toMatchObject({ kind: 'refund_request', request: { name: 'Alex', cents: 300 } });
+    expect(homeBadgeCount(d)).toBe(todo.length + d.sessions.filter((x: any) => x.state.flags.bookingPromptDue).length);
   });
 });
 

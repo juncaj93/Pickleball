@@ -91,3 +91,9 @@ command prints a "bookmark" you can use to undo the undo.
   emoji, and the canceled game stayed canceled.
 
 Backups made before Oct 28, 2026 (evening) have no Venmo field for players; they restore fine and leave it blank.
+
+Backups made before the "any number from 4 to 10" change (Oct 29, 2026) have no
+`refund_requests` table and no finalized state on games; they restore fine
+(no refund requests, every game not finalized yet). A backup made after the change
+restores onto a database that has migration 0013 applied; run the migrations first
+(step 2 does that for the practice copy, and the live database already has them).
