@@ -371,4 +371,9 @@ switch. Additive only.
   card on Home works.
 - Paste-ready Worker code: `worker/dashboard-paste.js`.
 - Deploy 3: set `GO_LINKS = "on"` in `wrangler.toml` and redeploy (after
-  Deploy 2).
+  Deploy 2). The TEST smart alert then carries a TEST direct link (never marks
+  anything done) for the iPhone test.
+- Step-by-step for the next session: `docs/SMART_ALERTS.md`, "Finishing Deploy 2 and Deploy 3".
+- Tests after the last change: 705 unit; browser 856 (run 229, names 24, gates 32, alerts 52, court 84,
+  held 81, credit 153, suggest 35, popup 33, texts 52, circles 18, audit-stage3 3, cancel-reason 8,
+  round2 25, want-in 4, double-tap 4, dryrun-screens 6, do-now 13), all green.

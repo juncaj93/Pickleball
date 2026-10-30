@@ -12,8 +12,8 @@ describe('the signed token', () => {
   it('reads back the game, and stops working after a few hours', async () => {
     const now = at('2026-11-03T01:00:00Z'); // Mon 8:00 PM
     const t = await makeGoToken(SECRET, 'game-1', START, now);
-    expect(await readGoToken(SECRET, t, now)).toEqual({ sessionId: 'game-1' });
-    expect(await readGoToken(SECRET, t, now + GO_LINK_HOURS * HOUR - 1)).toEqual({ sessionId: 'game-1' });
+    expect(await readGoToken(SECRET, t, now)).toEqual({ sessionId: 'game-1', test: false });
+    expect(await readGoToken(SECRET, t, now + GO_LINK_HOURS * HOUR - 1)).toEqual({ sessionId: 'game-1', test: false });
     expect(await readGoToken(SECRET, t, now + GO_LINK_HOURS * HOUR)).toEqual({ error: 'expired' });
   });
 
@@ -78,7 +78,7 @@ describe('the /api/go endpoint', () => {
     expect(m).not.toBeNull();
     const r = await g.open(m![1]);
     expect(r.status).toBe(200);
-    expect(r.data).toEqual({ ok: true, kind: 'need', body: 'Need 1 more for pickleball tomorrow, 8:00 PM. In? pickleball.juncaj.net' });
+    expect(r.data).toEqual({ ok: true, kind: 'need', body: 'Need 1 more for pickleball tomorrow, 8:00 PM. In? pickleball.juncaj.net', test: false });
     expect(r.text).not.toMatch(/555|\(313\)|\$|venmo|\/g\//i);
     expect((await g.dash()).taskMarks).toContain(`${g.tue.id}:night_text`);
   });
@@ -90,6 +90,24 @@ describe('the /api/go endpoint', () => {
     await g.ctx.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': SECRET });
     await g.app.settle();
     expect(g.sent).toEqual(['Tuesday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/admin']);
+  });
+
+  it('the TEST smart alert carries a TEST direct link that opens the text but never marks it done', async () => {
+    const g = await group();
+    expect((await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {})).status).toBe(200);
+    await g.app.settle();
+    const m = /TEST direct text link: https:\/\/pickleball\.juncaj\.net\/go\/([A-Za-z0-9_.-]+)$/.exec(g.sent[0]);
+    expect(m).not.toBeNull();
+    const r = await g.open(m![1]);
+    expect(r.status).toBe(200);
+    expect(r.data).toMatchObject({ kind: 'need', test: true });
+    expect((await g.dash()).taskMarks).toEqual([]);
+    // Switched off: no TEST link.
+    g.app.env = { ...g.app.env, GO_LINKS: 'off' };
+    g.sent.length = 0;
+    await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {});
+    await g.app.settle();
+    expect(g.sent[0]).not.toMatch(/\/go\//);
   });
 
   it('4 or more: the Check-in text', async () => {

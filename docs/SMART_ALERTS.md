@@ -162,3 +162,61 @@ requests. The table counts them anyway.
 - **Stop the clock:** `npx wrangler delete --config worker/wrangler.toml`.
   You can also delete the Worker "pickleball-alerts-clock" in the Cloudflare
   dashboard under Workers & Pages.
+
+## Finishing Deploy 2 (the clock) and Deploy 3 (direct text link)
+
+Deploy 1 is live. The first session couldn't finish 2 and 3 for two reasons:
+its safety rules block writing secrets, and its Cloudflare key can't create
+Workers.
+
+**Alex, before starting the new session:**
+1. Cloudflare dashboard > My Profile > API Tokens. Edit the token Claude
+   uses, add the permission **Account > Workers Scripts > Edit**, then save.
+   The token text stays the same, so nothing else changes.
+2. Start a new Claude session on this repo and paste:
+   "Finish Deploy 2 and 3 from docs/SMART_ALERTS.md. I approve
+   `npx wrangler pages secret put CRON_SECRET` and
+   `npx wrangler secret put CRON_SECRET --config worker/wrangler.toml`."
+
+**Claude, in the new session (deploy windows apply: never 5:00 to 10:30 PM on
+game days):**
+
+Deploy 2:
+1. Pull the latest `main`.
+2. Take a Time Travel bookmark: `npx wrangler d1 time-travel info pickleball`.
+3. Make the secret: `openssl rand -hex 32` into a file in the scratch folder.
+   Never commit it or show it.
+4. Set it on the site:
+   `npx wrangler pages secret put CRON_SECRET --project-name pickleball-club < file`.
+5. Create the clock: `npx wrangler deploy --config worker/wrangler.toml`. That
+   is one cron, `*/5 * * * *`, with no public address.
+6. Set the same secret on the clock:
+   `npx wrangler secret put CRON_SECRET --config worker/wrangler.toml < file`.
+7. Redeploy the site from `main`, so it picks up the secret:
+   `npm run build && npx wrangler pages deploy dist --project-name pickleball-club --branch main --commit-hash <sha>`.
+8. Check it:
+   - `POST https://pickleball-club-9h0.pages.dev/api/cron/tick` with header
+     `X-Cron-Secret` answers `{"ok":true,"sent":0,...}`
+   - the schedule shows up on the Worker
+   - after 5 minutes, the Worker shows runs.
+
+   Nothing real is due before Mon Nov 2, 7:00 PM, the last call for Tue Nov 3.
+
+Deploy 3:
+1. Take a bookmark.
+2. Set `GO_LINKS = "on"` in `wrangler.toml`, commit it to `main`, and
+   redeploy.
+3. Alex taps "Send TEST smart alert" in Settings > Alerts. The TEST message
+   includes a TEST direct text link for the next game. Opening it never marks
+   anything done.
+4. Alex tries it on his iPhone.
+   - Rollback: set `GO_LINKS = "off"` and redeploy. Alerts then use the admin
+     link.
+
+**Turn it off:**
+- Pause: Settings > Alerts > Smart alerts.
+- Stop the clock: `npx wrangler delete --config worker/wrangler.toml`.
+- Dashboard alternative: paste `worker/dashboard-paste.js` into a new Worker,
+  add the cron `*/5 * * * *` and the settings `SITE_URL` (text) and
+  `CRON_SECRET` (secret). Then add `CRON_SECRET` to the Pages project's
+  Production secrets and redeploy the site.

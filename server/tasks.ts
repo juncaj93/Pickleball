@@ -152,7 +152,16 @@ export async function smartTestAlert(ctx: Ctx) {
   const group = await requireAdmin(ctx);
   if (ctx.env.SANDBOX || isPretend(ctx.db)) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
   if (!connected(ctx.env)) throw new HttpError(409, 'not_connected', 'Not connected: the bot token or chat ID is missing on Cloudflare.');
-  const sent = await deliver(ctx, group.id, `TEST smart alert from Pickleball Bros. Nothing to do. Real ones look like: "Tuesday: 3 players in, need a 4th. Text the group: ${siteUrlOf(ctx)}/admin"`);
+  let text = `TEST smart alert from Pickleball Bros. Nothing to do. Real ones look like: "Tuesday: 3 players in, need a 4th. Text the group: ${siteUrlOf(ctx)}/admin"`;
+  // With the direct text link on: a TEST link for the next game, to try on a phone (it never marks anything done).
+  if (ctx.env.CRON_SECRET && ctx.env.GO_LINKS === 'on') {
+    const next = await ctx.db
+      .prepare("SELECT id, starts_at FROM sessions WHERE group_id = ? AND status <> 'canceled' AND starts_at > ? ORDER BY starts_at LIMIT 1")
+      .bind(group.id, ctx.nowIso)
+      .first<{ id: string; starts_at: string }>();
+    if (next) text += `\nTEST direct text link: ${siteUrlOf(ctx)}/go/${await makeGoToken(ctx.env.CRON_SECRET, next.id, next.starts_at, ctx.nowMs, true)}`;
+  }
+  const sent = await deliver(ctx, group.id, text);
   if (!sent.ok) throw new HttpError(502, 'telegram_failed', sent.error);
   return { ok: true };
 }

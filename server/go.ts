@@ -41,14 +41,15 @@ async function sign(secret: string, message: string): Promise<Uint8Array> {
 }
 
 /** "<payload>.<signature>": the payload is the game id and when the link stops working. */
-export async function makeGoToken(secret: string, sessionId: string, startsAt: string, nowMs: number): Promise<string> {
+/** `test`: from the TEST smart alert; opening it never marks the real night-before text as done. */
+export async function makeGoToken(secret: string, sessionId: string, startsAt: string, nowMs: number, test = false): Promise<string> {
   const expires = Math.min(Date.parse(startsAt), nowMs + GO_LINK_HOURS * 3600_000);
-  const payload = b64url(enc.encode(JSON.stringify({ s: sessionId, e: expires })));
+  const payload = b64url(enc.encode(JSON.stringify(test ? { s: sessionId, e: expires, t: 1 } : { s: sessionId, e: expires })));
   return `${payload}.${b64url(await sign(secret, payload))}`;
 }
 
 /** The game id, or why not. Equal-time signature check. */
-export async function readGoToken(secret: string, token: string, nowMs: number): Promise<{ sessionId: string } | { error: 'invalid' | 'expired' }> {
+export async function readGoToken(secret: string, token: string, nowMs: number): Promise<{ sessionId: string; test: boolean } | { error: 'invalid' | 'expired' }> {
   const [payload, sig, extra] = token.split('.');
   if (!payload || !sig || extra !== undefined || token.length > 300) return { error: 'invalid' };
   const got = fromB64url(sig);
@@ -57,7 +58,7 @@ export async function readGoToken(secret: string, token: string, nowMs: number):
   let diff = 0;
   for (let i = 0; i < want.length; i++) diff |= got[i] ^ want[i];
   if (diff !== 0) return { error: 'invalid' };
-  let data: { s?: unknown; e?: unknown };
+  let data: { s?: unknown; e?: unknown; t?: unknown };
   try {
     data = JSON.parse(new TextDecoder().decode(fromB64url(payload) ?? new Uint8Array()));
   } catch {
@@ -65,7 +66,7 @@ export async function readGoToken(secret: string, token: string, nowMs: number):
   }
   if (typeof data.s !== 'string' || typeof data.e !== 'number') return { error: 'invalid' };
   if (nowMs >= data.e) return { error: 'expired' };
-  return { sessionId: data.s };
+  return { sessionId: data.s, test: data.t === 1 };
 }
 
 /** POST /api/go { token }: the night-before text for that game, written fresh (today's count). */
@@ -88,12 +89,12 @@ export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   const s = { startsAt: session.starts_at, endsAt: session.ends_at };
   const text = n < MIN_PLAYERS ? needPlayersMessage(s, group.timezone, ctx.nowMs, MIN_PLAYERS - n, link) : checkInMessage(s, group.timezone, ctx.nowMs, link);
   // Opening it counts as the organizer's tap on "Text the group" (not from Pretend or the demo).
-  if (!ctx.env.SANDBOX) {
+  if (!ctx.env.SANDBOX && !read.test) {
     try {
       await writeMark(ctx.db, group.id, session.id, 'night_text', ctx.nowIso);
     } catch {
       // Never worth failing the page over.
     }
   }
-  return { ok: true, kind: n < MIN_PLAYERS ? 'need' : 'checkin', body: text };
+  return { ok: true, kind: n < MIN_PLAYERS ? 'need' : 'checkin', body: text, test: read.test };
 }
