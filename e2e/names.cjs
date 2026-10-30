@@ -101,6 +101,9 @@ async function main() {
     await call(ctx.request, 'POST', `/api/sessions/${waitG.id}/join`, {});
     await ctx.close();
   }
+  // A full game WITH a booked court keeps its "Waitlist: Gus" line for players. Games with no court booked read like normal
+  // games to players (everyone who tapped I'm in is simply in), so only this one shows a waitlist.
+  await call(api.request, 'POST', `/api/admin/sessions/${waitG.id}/booked`, {});
   await call(api.request, 'POST', `/api/admin/sessions/${standbyG.id}/court`, { action: 'waitlist' });
   for (const n of ['Hal', 'Frankie']) {
     const ctx = await browser.newContext();
@@ -224,7 +227,8 @@ async function main() {
         for (const [i, e] of expected.entries()) {
           const m = await measure(o.locator(`#row-${e.id}`));
           assert(!m.plus && m.cut.length === 0 && m.empties === 0, `game ${i + 1}: "+N", cut off or empty line`);
-          if (e.inNames.length) assert(m.names[0] === e.inNames.join(', '), `game ${i + 1}: names "${m.names}"`);
+          const shown = i === 4 ? [...e.inNames, ...e.waiting] : e.inNames; // the court-standby game reads like a normal one
+          if (shown.length) assert(m.names[0] === shown.join(', '), `game ${i + 1}: names "${m.names}" want "${shown.join(', ')}"`);
           else assert(m.names.length === 0, `game ${i + 1}: names line on an empty game`);
         }
       });
