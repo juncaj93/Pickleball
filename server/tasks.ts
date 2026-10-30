@@ -12,6 +12,7 @@ import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
 import type { D1Database } from './db';
+import { makeGoToken } from './go';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
 import { getGroup, getSession, type GroupRow, loadSessions, type SessionRow, settingsOf, visibleFrom } from './repo';
@@ -160,7 +161,7 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     ctx.nowMs,
     sessions.map((s) => taskSessionOf(s, countOf.get(s.id) ?? 0, group.timezone)),
     markSet,
-    goLinks(ctx, taskOptions(ctx, group)),
+    await goLinks(ctx, taskOptions(ctx, group), sessions),
   );
   let sent = 0;
   let failed = 0;
@@ -188,7 +189,19 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   return { ok: true, sent, failed };
 }
 
-/** The direct text link, once that part is turned on. Until then the admin link. */
-function goLinks(_ctx: Ctx, o: TaskOptions): TaskOptions {
-  return o;
+/**
+ * The direct text link for night-before alerts (/go/<token>): a signed link
+ * per game starting within the next day and a half. Without it the alert
+ * uses the admin link.
+ */
+async function goLinks(ctx: Ctx, o: TaskOptions, sessions: SessionRow[]): Promise<TaskOptions> {
+  const secret = ctx.env.CRON_SECRET;
+  if (!secret) return o;
+  const urls = new Map<string, string>();
+  for (const s of sessions) {
+    const start = Date.parse(s.starts_at);
+    if (s.status === 'canceled' || start <= ctx.nowMs || start > ctx.nowMs + 36 * 3600_000) continue;
+    urls.set(s.id, `${siteUrlOf(ctx)}/go/${await makeGoToken(secret, s.id, s.starts_at, ctx.nowMs)}`);
+  }
+  return { ...o, links: { ...o.links, go: (id) => urls.get(id) ?? null } };
 }

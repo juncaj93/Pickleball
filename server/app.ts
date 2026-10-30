@@ -12,6 +12,7 @@ import { requireAdmin } from './auth';
 import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 import * as alerts from './alerts';
 import * as tasks from './tasks';
+import { goText } from './go';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>;
 
@@ -103,6 +104,9 @@ route('PUT', '/api/admin/alerts', alerts.updateAlerts);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
 route('POST', '/api/admin/alerts/smart-test', (ctx) => tasks.smartTestAlert(ctx));
 route('POST', '/api/admin/sessions/:id/task-mark', tasks.taskMark);
+
+// The direct text link from a night-before Telegram alert (signed token, no sign-in).
+route('POST', '/api/go', goText);
 
 // The cron Worker's 5-minute tick (secret header; anyone else gets Not found).
 route('POST', '/api/cron/tick', (ctx) => tasks.cronTick(ctx));

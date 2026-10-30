@@ -248,6 +248,8 @@ const TOKEN = '123456:FAKE-test-token-never-real';
 const CHAT = '9988776655';
 const SECRET = 'test-cron-secret-0123456789abcdef0123456789';
 
+const GO = 'https://pickleball.juncaj.net/go/TOKEN';
+
 async function smartGroup(failFirst = 0) {
   const app = new TestApp();
   const sent: string[] = [];
@@ -263,7 +265,8 @@ async function smartGroup(failFirst = 0) {
         fails--;
         return new Response(JSON.stringify({ ok: false, description: 'Too Many Requests' }), { status: 429 });
       }
-      sent.push(JSON.parse(String(init.body)).text);
+      // Each direct text link has its own signed token; tests compare the words around it.
+      sent.push(String(JSON.parse(String(init.body)).text).replace(/\/go\/[A-Za-z0-9_.-]+/, '/go/TOKEN'));
       return new Response(JSON.stringify({ ok: true }), { status: 200 });
     }) as typeof fetch,
   };
@@ -306,7 +309,7 @@ describe('the tick endpoint', () => {
       g.app.now += 5 * MIN;
     }
     expect(g.sent).toEqual([
-      `Tuesday: 3 players in, need a 4th. Text the group: ${ADMIN}`,
+      `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
       `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
@@ -374,7 +377,7 @@ describe('the tick endpoint', () => {
     expect((await g.tick()).data.skipped).toBe('alerts_off');
     await g.ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: true });
     await g.tick();
-    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${ADMIN}`]);
+    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]);
   });
 
   it('a failed Telegram send is written down and retried on the next tick, and the site keeps working', async () => {
@@ -396,7 +399,7 @@ describe('the tick endpoint', () => {
     // (The join's own "it's on" alert used up the second fake failure.) Now 4 are in, and the retry says so.
     g.app.now += 5 * MIN;
     expect((await g.tick()).data).toMatchObject({ sent: 1 });
-    expect(g.sent).toEqual([`Tuesday: 4 players in. Text the group to confirm: ${ADMIN}`]);
+    expect(g.sent).toEqual([`Tuesday: 4 players in. Text the group to confirm: ${GO}`]);
     g.app.now += 5 * MIN;
     expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
   });
@@ -420,7 +423,7 @@ describe('the tick endpoint', () => {
     await fill(g, '2026-11-03', 3);
     g.app.now = at('2026-11-03T01:00:00Z');
     await Promise.all([g.tick(), g.tick(), g.tick()]);
-    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${ADMIN}`]);
+    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]);
   });
 
   it('the TEST smart alert is clearly labeled and refused in Pretend', async () => {
