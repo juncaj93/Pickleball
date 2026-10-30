@@ -126,3 +126,21 @@ Presentation only. No money rule, money math, schema or server change.
 `src/player-cards.css` (new), `ScheduleRow` / `PlayerTile` / `RowPay` in
 `src/pages/PlayerHome.tsx`, `formatTimeShort`, `weekTier`, `ordinal` in
 `shared/time.ts`, `creditBackNote` in `shared/pricing.ts`.
+
+### Deploy and tests (Fri Oct 30, 2026, about 1:05 AM Eastern)
+- Deployed through Cloudflare Pages (same route as before): deployment
+  `8ba53598`, commit `ae1811c`, branch main. No database migration.
+- Restore points: Time Travel bookmark taken just before the deploy
+  `00000111-00000000-00005114-fb1cd574b8df93227487f0f8d11e93fd`
+  (restore with `npx wrangler d1 time-travel restore pickleball --bookmark=...`),
+  plus a full SQL export (136 rows, has phone numbers, not committed) in that
+  session's scratch folder as `live-before-redesign-2026-10-30.sql`.
+  Code rollback: Pages deployment `de7bb199` (commit e687781).
+- Tests: 548 unit tests; browser checks all green (run 229, names 24, gates 32,
+  alerts 52, court 84, held 81, credit 153, suggest 35, popup 33, texts 52,
+  circles 18, audit-stage3 3). Old checks were rewritten for the new look, none
+  deleted; new ones cover no-tint on joined cards, the TONIGHT strip, the
+  extra-game tile and the Drop out link.
+- A fresh reviewer who wrote none of the code confirmed: no server, API or money
+  code changed, players still only get their own money and credit, and the
+  credit-back note matches the table (N=5 $3, 6 $5, 7 $6, 8 $7, 9 $8, 10 $9).
