@@ -14,4 +14,4 @@ migrations_dir = "migrations"
 [vars]
 SITE_URL = "https://pickleball.juncaj.net"
 # "on": night-before Telegram alerts link to the direct text page /go/... (turn "off" to fall back to the admin link).
-GO_LINKS = "off"
+GO_LINKS = "on"
