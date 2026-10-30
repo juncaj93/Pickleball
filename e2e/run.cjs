@@ -1004,11 +1004,12 @@ async function main() {
         assert((await admin.getByRole('article', { name }).count()) === 0, `old ${name} card still on Home`);
       }
       assert((await sessionCards(admin).locator('.chip').count()) === 0, 'session cards should have no status chip');
-      // Court buttons live only inside session cards.
+      // Court buttons live only inside session cards, plus "I booked it" on the "Do this now" card (no court yet).
       for (const label of ['I booked it', 'Court opened', "Didn't open"]) {
         const all = await admin.getByRole('button', { name: label, exact: true }).count();
         const inCards = await sessionCards(admin).getByRole('button', { name: label, exact: true }).count();
-        assert(all === inCards, `${label} shows outside a session card`);
+        const onDoNow = await admin.locator('.do-now').getByRole('button', { name: label, exact: true }).count();
+        assert(all === inCards + onDoNow && (label === 'I booked it' || onDoNow === 0), `${label} shows outside a session card`);
       }
       const cards = sessionCards(admin);
       for (let i = 0; i < (await cards.count()); i++) {

@@ -3,7 +3,7 @@ import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
-import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
+import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
 import { formatDateTime, formatTime, localParts } from '../../../shared/time';
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
@@ -119,19 +119,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const g = ctx.d.group;
   const auto = useAutosave(ctx);
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
-  const [gameTime, setGameTime] = useState({ defaultStartMinutes: minutesToHHMM(g.settings.defaultStartMinutes), defaultEndMinutes: minutesToHHMM(g.settings.defaultEndMinutes) });
   const [openAccess, setOpenAccess] = useState(g.openAccess);
-  const [timeProblem, setTimeProblem] = useState<string | null>(null);
-  function saveGameTime() {
-    const start = hhmmToMinutes(gameTime.defaultStartMinutes);
-    const end = hhmmToMinutes(gameTime.defaultEndMinutes);
-    if (start === null || end === null) return setTimeProblem('Pick a start and an end time.');
-    if (start > SETTING_LIMITS.defaultStartMinutes[1]) return setTimeProblem('Pick a start time before 11:00 PM.');
-    if (end <= start) return setTimeProblem('The end time must be after the start time.');
-    setTimeProblem(null);
-    if (start === g.settings.defaultStartMinutes && end === g.settings.defaultEndMinutes) return;
-    void auto.save('defaultStartMinutes', { settings: { defaultStartMinutes: start, defaultEndMinutes: end } });
-  }
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [askRotate, setAskRotate] = useState(false);
   const [curPin, setCurPin] = useState('');
@@ -304,46 +292,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             </div>
             <SaveProblem state={auto.rows.firstSessionDate} />
           </div>
-          {(['defaultStartMinutes', 'defaultEndMinutes'] as const).map((key) => (
-            <div className="set-row-wrap" data-row={key} key={key}>
-              <div className="set-row">
-                <label className="set-label" htmlFor={`set-${key}`}>
-                  <span className="set-name">
-                    {key === 'defaultStartMinutes' ? 'Usual start time' : 'Usual end time'} <SaveMark state={auto.rows.defaultStartMinutes} />
-                  </span>
-                  <span className="set-hint">{key === 'defaultStartMinutes' ? 'For new Tue and Thu games only' : 'Existing games keep their times'}</span>
-                </label>
-                <input
-                  id={`set-${key}`}
-                  className="set-input wide"
-                  type="time"
-                  step={300}
-                  value={gameTime[key]}
-                  aria-invalid={timeProblem && key === 'defaultEndMinutes' ? true : undefined}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    // A new start moves the end with it, keeping the game the same length (2 hours by default).
-                    const oldStart = hhmmToMinutes(gameTime.defaultStartMinutes);
-                    const oldEnd = hhmmToMinutes(gameTime.defaultEndMinutes);
-                    const minutes = hhmmToMinutes(v);
-                    if (key === 'defaultStartMinutes' && minutes !== null && oldStart !== null && oldEnd !== null && oldEnd > oldStart) {
-                      setGameTime({ defaultStartMinutes: v, defaultEndMinutes: minutesToHHMM(Math.min(minutes + (oldEnd - oldStart), 23 * 60 + 59)) });
-                    } else {
-                      setGameTime((cur) => ({ ...cur, [key]: v }));
-                    }
-                  }}
-                  // Saved once, when you leave the box (the time wheel sends many changes), and only a valid pair.
-                  onBlur={saveGameTime}
-                />
-              </div>
-              {key === 'defaultEndMinutes' && <SaveProblem state={auto.rows.defaultStartMinutes} />}
-            </div>
-          ))}
-          {timeProblem && (
-            <p className="field-error" role="alert" data-time-problem>
-              {timeProblem}
-            </p>
-          )}
+          <UsualTimeRow ctx={ctx} />
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
         </Section>
@@ -583,5 +532,91 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       {smartTest?.status === 'failed' && <Notice tone="danger">{smartTest.message}</Notice>}
       <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount). Smart alerts say what to do next (night before, booking day, after the game), checked every 5 minutes, and stay quiet once you tap the button on Home.</p>
     </>
+  );
+}
+
+/**
+ * Settings > Schedule > Usual game time: the start and end for NEW Tue and
+ * Thu games. One compact row; "Change" opens a small sheet. Existing games
+ * keep their times (change one game from its Edit booking).
+ */
+function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
+  const g = ctx.d.group.settings;
+  const toast = useToast();
+  const [open, setOpen] = useState(false);
+  const [start, setStart] = useState(minutesToHHMM(g.defaultStartMinutes));
+  const [end, setEnd] = useState(minutesToHHMM(g.defaultEndMinutes));
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const pickStart = (v: string) => {
+    // A new start moves the end with it, keeping the game the same length (2 hours by default).
+    const oldStart = hhmmToMinutes(start);
+    const oldEnd = hhmmToMinutes(end);
+    const next = hhmmToMinutes(v);
+    setStart(v);
+    if (next !== null && oldStart !== null && oldEnd !== null && oldEnd > oldStart) setEnd(minutesToHHMM(Math.min(next + (oldEnd - oldStart), 23 * 60 + 59)));
+  };
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    const s = hhmmToMinutes(start);
+    const t = hhmmToMinutes(end);
+    if (s === null || t === null) return setProblem('Pick a start and an end time.');
+    if (s > SETTING_LIMITS.defaultStartMinutes[1]) return setProblem('Pick a start time before 11:00 PM.');
+    if (t <= s) return setProblem('The end time must be after the start time.');
+    setProblem(null);
+    setBusy(true);
+    try {
+      await api('PUT', '/api/admin/group', { settings: { defaultStartMinutes: s, defaultEndMinutes: t } });
+      await ctx.reload();
+      toast('Usual time saved');
+      setOpen(false);
+    } catch (err) {
+      setProblem(err instanceof ApiError ? err.message : "Couldn't save the time.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="set-row-wrap" data-row="usualTime">
+      <div className="set-row">
+        <span className="set-label">
+          <span className="set-name">Usual game time</span>
+          <span className="set-hint" data-usual-time>
+            {minutesLabel(g.defaultStartMinutes)} to {minutesLabel(g.defaultEndMinutes)}
+          </span>
+        </span>
+        <button
+          type="button"
+          className="btn small secondary set-input"
+          onClick={() => {
+            setStart(minutesToHHMM(g.defaultStartMinutes));
+            setEnd(minutesToHHMM(g.defaultEndMinutes));
+            setProblem(null);
+            setOpen(true);
+          }}
+        >
+          Change
+        </button>
+      </div>
+      <Sheet open={open} title="Usual game time" onClose={() => setOpen(false)}>
+        <form className="stack" onSubmit={save}>
+          <p className="small muted">For new Tuesday and Thursday games only. Games already on the schedule keep their times; change one from its Edit booking.</p>
+          <div className="time-pair">
+            <label className="field">
+              Start
+              <input type="time" step={300} value={start} onChange={(e) => pickStart(e.target.value)} required />
+            </label>
+            <label className="field">
+              End
+              <input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} required aria-invalid={problem ? true : undefined} />
+            </label>
+          </div>
+          {problem && <Notice tone="danger">{problem}</Notice>}
+          <button className="btn block" type="submit" disabled={busy}>
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+        </form>
+      </Sheet>
+    </div>
   );
 }

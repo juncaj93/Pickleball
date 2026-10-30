@@ -33,7 +33,7 @@ export function pretendPresets(d: AdminDashboard, realNowMs: number) {
     presets: [
       { label: 'Game day, 7:00 AM', atMs: onGameDay(game.startsAt, tz, 7, 0) },
       { label: 'Game day, 8:30 AM', atMs: onGameDay(game.startsAt, tz, 8, 30) },
-      { label: `Night before, ${formatTime(new Date(nightLastCallMs(game.startsAt, tz)).toISOString(), tz)} (last call)`, atMs: nightLastCallMs(game.startsAt, tz) },
+      { label: `Day before, ${formatTime(new Date(nightLastCallMs(game.startsAt, tz)).toISOString(), tz)}`, atMs: nightLastCallMs(game.startsAt, tz) },
       { label: 'Last call', atMs: Date.parse(game.startsAt) - d.group.settings.lastCallHours * 3600_000 },
       { label: 'Booking opens, 12:00 AM', atMs: Date.parse(opening.bookingOpensAt) },
       { label: 'After the game', atMs: Date.parse(game.endsAt) + 30 * 60_000 },
