@@ -478,3 +478,76 @@ describe('dry run: edge cases', () => {
   });
 });
 
+describe('dry run at the new times: 7:00 to 9:00 PM and 7:30 to 9:30 PM games', () => {
+  /** Move a game to a new local start (Eastern), two hours long, through the organizer's existing time change. */
+  async function moveTo(d: Dry, s: any, startIso: string) {
+    const endIso = new Date(Date.parse(startIso) + 2 * HOUR).toISOString();
+    const r = await d.ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: new Date(Date.parse(startIso)).toISOString(), endsAt: endIso });
+    expect(r.status, r.text).toBe(200);
+    return view(d, s.id);
+  }
+
+  for (const [label, startEdt, startEst] of [
+    ['7:00 PM', '2026-10-29T19:00:00-04:00', '2026-11-03T19:00:00-05:00'],
+    ['7:30 PM', '2026-10-29T19:30:00-04:00', '2026-11-03T19:30:00-05:00'],
+  ] as const) {
+    for (const n of [4, 6, 10]) {
+      it(`${label} games, ${n} play, on both sides of the Nov 1 clock change: finalize opens at the real end, price and books right`, async () => {
+        const d = await dry();
+        const all = await games(d);
+        for (const iso of [startEdt, startEst]) {
+          const target = all.find((s: any) => new Date(s.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }) === iso.slice(0, 10));
+          const v0 = await moveTo(d, target, iso);
+          expect(Date.parse(v0.startsAt)).toBe(Date.parse(iso));
+          // Cancellation deadline: 12 hours before the real start.
+          expect(Date.parse(v0.cancellationDeadlineAt), 'deadline 12 hours before the real start').toBe(Date.parse(iso) - 12 * HOUR);
+          const others = EVERYONE.filter((x) => x !== 'Robin').slice(0, n - 1);
+          await join(d, target.id, others);
+          await d.ctx.organizer.call('POST', `/api/admin/sessions/${target.id}/me`, { in: true });
+          for (const x of others) await venmoAndMark(d, x, target.id);
+          const end = Date.parse(iso) + 2 * HOUR;
+          // One minute before the real end: no Finalize card, finalize refused.
+          d.ctx.app.now = end - 60_000;
+          expect((await view(d, target.id)).needsFinalize).toBe(false);
+          expect((await d.ctx.organizer.call('POST', `/api/admin/sessions/${target.id}/finalize`, { everyone: true })).status).toBe(409);
+          // At the real end (9:00 or 9:30 PM, not 10:00 PM): the card shows and finalize works.
+          d.ctx.app.now = end;
+          expect((await view(d, target.id)).needsFinalize).toBe(true);
+          const [P, back] = TABLE[n];
+          expect(await finalize(d, target.id, { everyone: true })).toMatchObject({ played: n, priceCents: P });
+          const v = await view(d, target.id);
+          for (const x of others) expect(row(v, x).creditBackCents, x).toBe(back);
+          await balanced(d, `${label} ${iso.slice(0, 10)} n=${n}`);
+        }
+      });
+    }
+
+    it(`${label} game canceled with paid players: credit for all; "Were you charged" counts 12 hours from the real start`, async () => {
+      const d = await dry();
+      // Tue Nov 3 and Thu Nov 5 at the new time.
+      const day = (s: any) => new Date(s.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' });
+      const t = label === '7:00 PM' ? 'T19:00:00-05:00' : 'T19:30:00-05:00';
+      const all = await games(d);
+      const tue = all.find((s: any) => day(s) === '2026-11-03');
+      const thu = all.find((s: any) => day(s) === '2026-11-05');
+      const tueV = await moveTo(d, tue, `2026-11-03${t}`);
+      await moveTo(d, thu, `2026-11-05${t}`);
+      await join(d, tue.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+      for (const x of ['Alex', 'Blair']) await venmoAndMark(d, x, tue.id);
+      // 13 hours before the real start: a charge is not recorded.
+      d.ctx.app.now = Date.parse(tueV.startsAt) - 13 * HOUR;
+      expect((await d.ctx.organizer.call('POST', `/api/admin/sessions/${tue.id}/decision`, { decision: 'cancel', confirm: true, chargedCents: 4800, reason: 'Moved to 7' })).status).toBe(200);
+      expect((await view(d, tue.id)).chargedCents).toBeNull();
+      await balanced(d, `${label} cancel`);
+      expect((await (await d.phone('Alex')).call('GET', '/api/group')).data.credit.balanceCents).toBe(1400);
+      // 11 hours before the real start of Thursday: the charge is recorded.
+      await join(d, thu.id, ['Casey']);
+      const thuV = await view(d, thu.id);
+      d.ctx.app.now = Date.parse(thuV.startsAt) - 11 * HOUR;
+      expect((await d.ctx.organizer.call('POST', `/api/admin/sessions/${thu.id}/decision`, { decision: 'cancel', confirm: true, chargedCents: 4800 })).status).toBe(200);
+      expect((await view(d, thu.id)).chargedCents).toBe(4800);
+      await balanced(d, `${label} cancel 2`);
+    });
+  }
+});
+
