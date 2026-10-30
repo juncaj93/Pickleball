@@ -16,7 +16,7 @@ Times are Eastern.
 - Tue Nov 3: 4 in (one paid $14). Thu Nov 5: 3 in (one paid with credit).
   Later games: fewer. Settings: 3 weeks ahead, $14, no max yet (default 10).
 
-## Stage 1: the rules, the money engine, and the screens (deployed Thu Oct 29, 2026, TIME_PLACEHOLDER)
+## Stage 1: the rules, the money engine, and the screens (deployed Thu Oct 29, 2026, about 10:35 PM Eastern)
 
 Everything in NEW_RULES.md sections 1 to 12 went live in one deploy (the credit
 chip, refund requests, the new texts and alert switches were built alongside
@@ -59,11 +59,12 @@ held money on canceled games found nothing to convert (checked read-only first).
 
 ### Restore points
 - Full SQL export of the live database right before the deploy:
-  `EXPORT_PLACEHOLDER` (in this session's scratch folder; it has phone numbers,
-  so it was not committed).
+  `live-before-stage1-2026-10-29.sql` (123 rows, in this session's scratch folder
+  `/tmp/claude-0/-home-user-Pickleball/90d62b44-36b0-5dcd-a873-3fa9f99f4d84/scratchpad/`;
+  it has phone numbers, so it was not committed). Taken Thu Oct 29 at about 10:30 PM Eastern.
 - Cloudflare Time Travel bookmark right before the migration:
-  `BOOKMARK_PLACEHOLDER` (good for 7 days).
-- To undo everything: `npx wrangler d1 time-travel restore pickleball --bookmark=BOOKMARK_PLACEHOLDER`
+  `00000107-00000000-00005114-7c54150a816404e11d75d3d5cffdcac0` (good for 7 days).
+- To undo everything: `npx wrangler d1 time-travel restore pickleball --bookmark=00000107-00000000-00005114-7c54150a816404e11d75d3d5cffdcac0`
   and redeploy the previous commit (`57e8a5f`).
 
 ### Tests
@@ -73,7 +74,8 @@ held money on canceled games found nothing to convert (checked read-only first).
   independent auditor that did not write the code; it found 3 real bugs, all
   fixed before deploy: a second credit entry for a re-paid seat, undo on the
   wrong refund request, and a player who paid a lower final price before a redo).
-- Browser: BROWSER_PLACEHOLDER
+- Browser (`npm run test:e2e`, run with `NODE_PATH=/opt/node-tools/node_modules`): 775 checks, 0 failed
+  (run 229, credit 153, court 84, held 81, alerts 52, texts 52, suggest 35, popup 33, gates 32, names 24).
 - Typecheck and production build clean.
 
 ### Left for later
