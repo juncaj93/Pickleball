@@ -604,7 +604,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       },
       undone: () => setHeldFor(r.playerId, false),
     });
-    toast(`${r.name} removed.`, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => undoHold(key) } });
+    toast(`${r.name} removed.`, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => { if (!undoHold(key)) toast(`Too late, ${r.name} was already removed.`, 'error'); } } });
   }
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>

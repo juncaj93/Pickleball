@@ -5,7 +5,7 @@ import type {
   EligibleSubstitute,
   PlayerSessionView,
 } from '../shared/api';
-import { cardWindows } from '../shared/cards';
+import { cardWindows, deadlineMs } from '../shared/cards';
 import { NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
 import { holidayFor } from '../shared/holidays';
 import { courtSplit, flatAtFinalize } from '../shared/pricing';
@@ -104,6 +104,7 @@ export function playerSessionView(
     bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     past: nowMs >= Date.parse(session.ends_at),
     finalized: session.finalized_at ? { playedCount: session.final_played_count ?? 0, priceCents: session.final_price_cents ?? settings.pricePerPlayerCents } : null,
+    dropCutoffAt: new Date(deadlineMs({ startsAt: session.starts_at, cancellationDeadlineAt: session.cancellation_deadline_at }, settings)).toISOString(),
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
     mine: ownRow && isOrganizer ? { ...ownRow, ...NO_MONEY } : ownRow,

@@ -50,7 +50,9 @@ function assert(cond, msg) {
 async function confirmDrop(p) {
   const sent = p.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
   await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
-  await sent;
+  // In the organizer's demo (View as...) nothing goes over the network, so just wait out the hold.
+  await Promise.race([sent, p.waitForTimeout(6000)]);
+  sent.catch(() => {});
   await p.waitForTimeout(400);
 }
 
@@ -3267,7 +3269,7 @@ async function main() {
         // The player screen too.
         const pl = await newPage(width, scheme);
         await pl.goto(BASE);
-        await pl.locator('.name-grid, .schedule').first().waitFor();
+        await pl.locator('.name-grid, .schedule:not(.skel-schedule)').first().waitFor();
         if (await pl.locator('.name-grid').count()) await pl.getByRole('button', { name: 'Blair', exact: true }).click();
         await pl.locator('.schedule article').first().waitFor();
         const pr = await pl.evaluate(layoutReport, { roots: 'main article, main section.card', items: 'button, a[href], .sched-time, .extra-tag, .holiday-text, .court-status, .in-count, .names-line, .dots, .tile, .pchip, .tonight-tag, .credit-note' });
@@ -3961,9 +3963,9 @@ async function main() {
         const out = await p.evaluate(() => {
           const ms = (el, pseudo) => parseFloat(getComputedStyle(el, pseudo).animationDuration) * 1000;
           // A ball added later carries .ball-new: it spins in (balls already on screen at load stay still).
-          const spot = document.querySelector('.schedule .dots .ball').cloneNode(true);
+          const spot = document.querySelector('.schedule .dots:not(.dots-celebrate) .ball').cloneNode(true);
           spot.classList.add('ball-new');
-          document.querySelector('.schedule .dots').appendChild(spot);
+          document.querySelector('.schedule .dots:not(.dots-celebrate)').appendChild(spot);
           const spotName = getComputedStyle(spot).animationName;
           const spotMs = ms(spot);
           spot.remove();

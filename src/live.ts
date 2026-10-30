@@ -1,9 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { liveIsBusy, onLiveQuiet } from './busy';
 import { api, demoOn } from './lib';
-import { LivePoller } from './livecore';
+import { LIVE_UPDATES, LivePoller } from './livecore';
 
-export { LIVE_UPDATES } from './livecore';
 
 /**
  * Keeps a screen fresh without a reload (see livecore.ts for the rhythm).
@@ -22,6 +21,8 @@ export function useLiveUpdates({ enabled, version, reload }: { enabled: boolean;
   reloadRef.current = reload;
   const pending = useRef(false);
   const applying = useRef(false);
+  // The tiny check works but the full load does not: wait (doubling, up to a minute) instead of reloading every check.
+  const cooldown = useRef({ until: 0, wait: 0 });
 
   // The screen was redrawn from newer data: that is the stamp to compare with now.
   useEffect(() => {
@@ -35,8 +36,12 @@ export function useLiveUpdates({ enabled, version, reload }: { enabled: boolean;
       applying.current = true;
       pending.current = false;
       try {
-        // A failed quiet load says nothing; the next check sees the old stamp still differs and tries again.
-        await reloadRef.current();
+        const ok = await reloadRef.current();
+        if (ok) cooldown.current = { until: 0, wait: 0 };
+        else {
+          const wait = Math.min(LIVE_UPDATES.maxBackoffMs, Math.max(LIVE_UPDATES.activeMs, cooldown.current.wait * 2));
+          cooldown.current = { until: Date.now() + wait, wait };
+        }
       } finally {
         applying.current = false;
       }
@@ -48,7 +53,7 @@ export function useLiveUpdates({ enabled, version, reload }: { enabled: boolean;
       fetchStamp: async () => (await api<{ v: string }>('GET', '/api/group/version')).v,
       isVisible: () => document.visibilityState === 'visible',
       onChange: () => {
-        if (demoOn()) return;
+        if (demoOn() || Date.now() < cooldown.current.until) return;
         if (liveIsBusy()) pending.current = true;
         else void apply();
       },
@@ -56,7 +61,7 @@ export function useLiveUpdates({ enabled, version, reload }: { enabled: boolean;
     p.setKnown(version);
     poller.current = p;
     const stopWaiting = onLiveQuiet(() => {
-      if (pending.current) void apply();
+      if (pending.current && Date.now() >= cooldown.current.until) void apply();
     });
     const touch = () => p.touch();
     const events = ['pointerdown', 'touchstart', 'keydown', 'wheel'] as const;

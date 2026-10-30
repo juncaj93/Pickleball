@@ -599,16 +599,22 @@ export function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
  */
 export function SpotDots({ names, me, celebrate }: { names: string[]; me?: string | null; celebrate?: boolean }) {
   const slots = Math.max(MIN_PLAYERS, names.length);
-  // Only balls that appeared since the last render spin in; the first look at a card is still.
-  const seen = useRef<number | null>(null);
-  const before = seen.current;
+  // Only balls that appeared since the last look spin in; the first look at a card is still.
+  // The marker lasts for the whole spin, even if the card redraws (instant tap, then the server's data).
+  const prevCount = useRef<number | null>(null);
+  const [freshFrom, setFreshFrom] = useState<number | null>(null);
   useEffect(() => {
-    seen.current = names.length;
+    const before = prevCount.current;
+    prevCount.current = names.length;
+    if (before === null || names.length <= before) return;
+    setFreshFrom((cur) => (cur === null ? before : Math.min(cur, before)));
+    const t = setTimeout(() => setFreshFrom(null), 700);
+    return () => clearTimeout(t);
   }, [names.length]);
   return (
     <span className={`dots${celebrate ? ' dots-celebrate' : ''}`} role="img" aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}>
       {Array.from({ length: slots }, (_, i) =>
-        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={before !== null && i >= before} /> : <span key={i} className="dot" />,
+        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} /> : <span key={i} className="dot" />,
       )}
     </span>
   );
@@ -651,10 +657,18 @@ export function NamesLine({
 }) {
   // A name that appeared since the last draw (someone joined while you were looking) fades in.
   const seen = useRef<Set<string> | null>(null);
-  const before = seen.current;
+  const [fresh, setFresh] = useState<string[]>([]);
+  const key = names.join('\u0001');
   useEffect(() => {
+    const was = seen.current;
     seen.current = new Set(names);
-  });
+    if (!was) return;
+    const added = names.filter((n) => !was.has(n));
+    if (added.length === 0) return;
+    setFresh((cur) => [...cur, ...added]);
+    setTimeout(() => setFresh((cur) => cur.filter((n) => !added.includes(n))), 700);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   if (names.length === 0) return null;
   const show = nameLabel([...everyone, ...names]);
   return (
@@ -663,7 +677,7 @@ export function NamesLine({
       {names.map((n, i) => (
         <Fragment key={n + i}>
           {i > 0 && ', '}
-          {before && !before.has(n) ? <span className="name-new">{n === me ? <strong>{show(n)}</strong> : show(n)}</span> : n === me ? <strong>{show(n)}</strong> : show(n)}
+          {fresh.includes(n) ? <span className="name-new">{n === me ? <strong>{show(n)}</strong> : show(n)}</span> : n === me ? <strong>{show(n)}</strong> : show(n)}
         </Fragment>
       ))}
       {children}

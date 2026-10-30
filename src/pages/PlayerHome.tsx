@@ -29,6 +29,14 @@ type GameFilter = 'all' | 'mine';
 /** In the game or waiting for a spot. */
 const isMineGame = (s: PlayerSessionView) => !!s.mine && (s.mine.status === 'confirmed' || s.mine.status === 'waitlisted');
 const NOTICE_GAP_MS = 2400;
+/** Only the note of this drop is removed (a second hold may have written its own). */
+function forgetPendingDrop(sessionId: string) {
+  try {
+    if (JSON.parse(storageGet(PENDING_DROP_KEY) ?? '{}').sessionId === sessionId) storageRemove(PENDING_DROP_KEY);
+  } catch {
+    storageRemove(PENDING_DROP_KEY);
+  }
+}
 const CELEBRATE_MS = 1600;
 const FADE_OUT_MS = 220;
 const BANNER_FADE_MS = BANNER_TIMING.fadeIn;
@@ -215,9 +223,12 @@ export function PlayerHome({
       /* broken note: drop it */
     }
     if (rec.sessionId && holdPending(rec.sessionId)) return;
+    const age = Date.now() - (rec.at ?? 0);
+    // Younger than the hold: another tab is still holding it (its Undo must work), so leave it alone.
+    if (age < UNDO_MS + 2_000) return;
     storageRemove(PENDING_DROP_KEY);
     const mineHere = g.sessions.find((x) => x.id === rec.sessionId)?.mine?.status === 'confirmed';
-    if (rec.sessionId && mineHere && Date.now() - (rec.at ?? 0) < 10 * 60_000) {
+    if (rec.sessionId && mineHere && age < 2 * 60_000) {
       void api('POST', `/api/sessions/${rec.sessionId}/withdraw`, {}).then(() => load.quiet(), () => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1133,6 +1144,11 @@ function ScheduleRow({
     }
   }
 
+  /** Undo tapped after the drop had already been sent (page hid, or the last instant): say so, never pretend. */
+  const tooLateToast = (undone: boolean) => {
+    if (!undone) toast("Too late, you're already out. Tap I'm in to rejoin.", 'error');
+  };
+
   /** I'm in: the card fills at once; if the server says no, it goes back and the banner says why. */
   async function join() {
     if (working.current) return;
@@ -1170,8 +1186,10 @@ function ScheduleRow({
   function dropOut() {
     setAskOut(false);
     if (working.current) return;
-    // Too close to the start to wait: send it now, like before.
-    if (Date.parse(s.startsAt) - Date.now() < 10_000) {
+    // Too close to the start, or to the late-drop deadline, to wait: send it now, like before, so the 5 seconds never change how it counts.
+    const soon = Date.now() + UNDO_MS + 3_000;
+    const deadline = Date.parse(s.dropCutoffAt);
+    if (Date.parse(s.startsAt) - Date.now() < 10_000 || (deadline > Date.now() - 1_000 && deadline < soon)) {
       void run('withdraw', () => "You're out");
       return;
     }
@@ -1183,7 +1201,7 @@ function ScheduleRow({
         await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: leaving && !demoOn() });
       },
       settled: async (err) => {
-        storageRemove(PENDING_DROP_KEY);
+        forgetPendingDrop(id);
         if (err) {
           setOverlay(id, null);
           if (isDemo(err)) toast(err.message);
@@ -1193,11 +1211,11 @@ function ScheduleRow({
         setOverlay(id, null);
       },
       undone: () => {
-        storageRemove(PENDING_DROP_KEY);
+        forgetPendingDrop(id);
         setOverlay(id, null);
       },
     });
-    toast('You dropped out.', 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => undoHold(id) } });
+    toast('You dropped out.', 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);

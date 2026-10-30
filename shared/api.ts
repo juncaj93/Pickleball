@@ -40,6 +40,8 @@ export interface PlayerSessionView {
   /** The organizer finalized who played: the final price each. */
   finalized: { playedCount: number; priceCents: number } | null;
   confirmationOpen: boolean;
+  /** The cancellation deadline. The page sends a drop at once when it is this close, so the 5-second Undo wait never changes how the drop counts. */
+  dropCutoffAt: string;
   mine: null | {
     status: RosterStatus;
     waitlistPosition: number | null;
