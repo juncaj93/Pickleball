@@ -31,7 +31,7 @@ import { isPlayed, lateDropsAll } from './todo';
 import { TextButton } from './Texts';
 import '../../credit-session.css';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'time';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -172,6 +172,11 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             <button className="btn secondary" onClick={() => ctx.open('roster', s.id)}>
               Players
             </button>
+            {live && (
+              <button className="btn secondary" data-change-time onClick={() => ctx.open('time', s.id)}>
+                Change time
+              </button>
+            )}
             <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Modify court</CourtReserveLink>
             {/* Once the court is booked, Add to calendar sits here with the other options. */}
             {court.kind === 'booked' && live && (
@@ -405,6 +410,7 @@ export function SessionSheets({
     payments: `Money · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
+    time: `Change time · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -413,12 +419,13 @@ export function SessionSheets({
           <BookingForm ctx={ctx} s={s} onDone={onClose} />
           {!s.state.flags.started && (
             <details className="advanced move-session">
-              <summary>Move this session</summary>
+              <summary>Change time or date (move this session)</summary>
               <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />
             </details>
           )}
         </div>
       )}
+      {s && kind === 'time' && <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
@@ -455,8 +462,37 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
         body={body}
         onOpen={canceled ? () => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {}) : undefined}
       />
+      {!canceled && <CourtForNewTime ctx={ctx} s={s} />}
       {canceled && <CreditBackList s={s} />}
     </div>
+  );
+}
+
+/** After a move: "Is the court booked for the new time? Yes / No" sets the court status from the answer. */
+function CourtForNewTime({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  const [answer, setAnswer] = useState<boolean | null>(null);
+  const pick = async (booked: boolean) => {
+    const ok = await run(() => api('POST', `/api/admin/sessions/${s.id}/court-answer`, { booked }), booked ? 'Court marked booked' : 'Court marked not booked');
+    if (ok) setAnswer(booked);
+  };
+  return (
+    <fieldset className="charge-ask" data-court-question>
+      <legend>Is the court booked for the new time?</legend>
+      <div className="segmented" role="group" aria-label="Is the court booked for the new time?">
+        <button type="button" aria-pressed={answer === true} disabled={busy} onClick={() => void pick(true)}>
+          Yes
+        </button>
+        <button type="button" aria-pressed={answer === false} disabled={busy} onClick={() => void pick(false)}>
+          No
+        </button>
+      </div>
+      {answer === false && (
+        <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+          Book on CourtReserve
+        </CourtReserveLink>
+      )}
+    </fieldset>
   );
 }
 
@@ -838,6 +874,15 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
   const [date, setDate] = useState(startLocal.slice(0, 10));
   const [start, setStart] = useState(startLocal.slice(11));
   const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
+  // The game's length (2 hours usually): a new start moves the end with it, unless the end is changed by hand.
+  const lengthMin = Math.max(30, Math.round((Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 60_000));
+  const pickStart = (v: string) => {
+    setStart(v);
+    const m = /^(\d{2}):(\d{2})$/.exec(v);
+    if (!m) return;
+    const total = Math.min(Number(m[1]) * 60 + Number(m[2]) + lengthMin, 23 * 60 + 59);
+    setEnd(`${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`);
+  };
   const { busy, run } = useAction(ctx);
   const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
   const endsAt = date && end ? fromLocalInputValue(`${date}T${end}`, tz) : null;
@@ -862,7 +907,7 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
       <div className="row" style={{ flexWrap: 'nowrap' }}>
         <label className="field" style={{ flex: 1 }}>
           Start
-          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+          <input type="time" value={start} onChange={(e) => pickStart(e.target.value)} required />
         </label>
         <label className="field" style={{ flex: 1 }}>
           End

@@ -1,4 +1,4 @@
-import { SESSION_DAYS, SESSION_END, SESSION_START } from './settings';
+import { DEFAULT_SETTINGS, SESSION_DAYS } from './settings';
 import { localParts, zonedTimeToUtc } from './time';
 
 export interface PlannedSession {
@@ -7,12 +7,17 @@ export interface PlannedSession {
 }
 
 /**
- * Every Tuesday and Thursday, 8–10 PM local time, from today through the
- * horizon. Sessions that already started are skipped. Pure and
- * deterministic: the database's unique (group_id, starts_at) key makes
- * repeated runs harmless.
+ * Every Tuesday and Thursday at the usual game time (Settings > Schedule,
+ * minutes after midnight local time), from today through the horizon.
+ * Sessions that already started are skipped. Pure and deterministic.
  */
-export function planSessions(nowMs: number, tz: string, horizonWeeks: number): PlannedSession[] {
+export function planSessions(
+  nowMs: number,
+  tz: string,
+  horizonWeeks: number,
+  startMinutes = DEFAULT_SETTINGS.defaultStartMinutes,
+  endMinutes = DEFAULT_SETTINGS.defaultEndMinutes,
+): PlannedSession[] {
   const today = localParts(nowMs, tz);
   const out: PlannedSession[] = [];
   const days = horizonWeeks * 7;
@@ -23,8 +28,8 @@ export function planSessions(nowMs: number, tz: string, horizonWeeks: number): P
     const y = d.getUTCFullYear();
     const m = d.getUTCMonth() + 1;
     const day = d.getUTCDate();
-    const start = zonedTimeToUtc(y, m, day, SESSION_START.hour, SESSION_START.minute, tz);
-    const end = zonedTimeToUtc(y, m, day, SESSION_END.hour, SESSION_END.minute, tz);
+    const start = zonedTimeToUtc(y, m, day, Math.floor(startMinutes / 60), startMinutes % 60, tz);
+    const end = zonedTimeToUtc(y, m, day, Math.floor(endMinutes / 60), endMinutes % 60, tz);
     if (start <= nowMs) continue;
     out.push({ startsAt: new Date(start).toISOString(), endsAt: new Date(end).toISOString() });
   }

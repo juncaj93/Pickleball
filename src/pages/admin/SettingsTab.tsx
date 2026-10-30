@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
-import { DEFAULT_VENUE_NAME, type GroupSettings, SETTING_LIMITS } from '../../../shared/settings';
+import { DEFAULT_VENUE_NAME, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, useToast } from '../../ui';
@@ -9,7 +9,7 @@ import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './
 import type { AdminCtx } from '../Admin';
 
 type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
-type WholeKey = Exclude<keyof GroupSettings, MoneyKey>;
+type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes'>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
@@ -119,6 +119,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const g = ctx.d.group;
   const auto = useAutosave(ctx);
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
+  const [gameTime, setGameTime] = useState({ defaultStartMinutes: minutesToHHMM(g.settings.defaultStartMinutes), defaultEndMinutes: minutesToHHMM(g.settings.defaultEndMinutes) });
   const [openAccess, setOpenAccess] = useState(g.openAccess);
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [askRotate, setAskRotate] = useState(false);
@@ -269,7 +270,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
         </Section>
 
-        <Section id="schedule" title="Schedule" sections={sections}>
+        <Section id="schedule" title="Schedule" note={`Tue & Thu ${minutesLabel(g.settings.defaultStartMinutes)}`} sections={sections}>
           <div className="set-row-wrap" data-row="firstSessionDate">
             <div className="set-row">
               <label className="set-label" htmlFor="set-first-date">
@@ -292,6 +293,41 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             </div>
             <SaveProblem state={auto.rows.firstSessionDate} />
           </div>
+          {(['defaultStartMinutes', 'defaultEndMinutes'] as const).map((key) => (
+            <div className="set-row-wrap" data-row={key} key={key}>
+              <div className="set-row">
+                <label className="set-label" htmlFor={`set-${key}`}>
+                  <span className="set-name">
+                    {key === 'defaultStartMinutes' ? 'Usual start time' : 'Usual end time'} <SaveMark state={auto.rows[key]} />
+                  </span>
+                  <span className="set-hint">{key === 'defaultStartMinutes' ? 'For new Tue and Thu games only' : 'Existing games keep their times'}</span>
+                </label>
+                <input
+                  id={`set-${key}`}
+                  className="set-input wide"
+                  type="time"
+                  step={300}
+                  value={gameTime[key]}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    const minutes = hhmmToMinutes(v);
+                    const oldStart = hhmmToMinutes(gameTime.defaultStartMinutes);
+                    const oldEnd = hhmmToMinutes(gameTime.defaultEndMinutes);
+                    // A new start moves the end with it, keeping the game the same length (2 hours by default).
+                    if (key === 'defaultStartMinutes' && minutes !== null && oldStart !== null && oldEnd !== null && oldEnd > oldStart) {
+                      const end = Math.min(minutes + (oldEnd - oldStart), 23 * 60 + 59);
+                      setGameTime({ defaultStartMinutes: v, defaultEndMinutes: minutesToHHMM(end) });
+                      void auto.save(key, { settings: { defaultStartMinutes: minutes, defaultEndMinutes: end } });
+                      return;
+                    }
+                    setGameTime((cur) => ({ ...cur, [key]: v }));
+                    if (minutes !== null) void auto.save(key, { settings: { [key]: minutes } });
+                  }}
+                />
+              </div>
+              <SaveProblem state={auto.rows[key]} />
+            </div>
+          ))}
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
         </Section>

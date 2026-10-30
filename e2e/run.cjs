@@ -1460,7 +1460,7 @@ async function main() {
       const tile = (await row.locator('.tile').innerText()).replace(/\s+/g, ' ').trim();
       assert(/^(TUE|THU|TONIGHT) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
       // The short time sits under the tile ("8\u201310 PM", en dash); the long "8:00 to 10:00 PM" line is gone.
-      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u201310 PM$/ });
+      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u20139:30 PM$|^7:30\u201310 PM$/ });
       await timeEl.waitFor();
       const tb = await row.locator('.tile').boundingBox();
       const mb = await timeEl.boundingBox();
@@ -2155,7 +2155,8 @@ async function main() {
       const change = sheet.getByRole('link', { name: /^Change court on CourtReserve/ });
       assert((await change.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1', 'reschedule should link to the modify/cancel page');
       await sheet.getByLabel('Start', { exact: true }).fill('19:30');
-      await sheet.getByText(/New time: .*7:30 to 10:00 PM$/).waitFor();
+      // The end moves with the start (the game keeps its 2 hours).
+      await sheet.getByText(/New time: .*7:30 to 9:30 PM$/).waitFor();
       await sheet.getByRole('button', { name: 'Move session' }).click();
       // Straight to a ready text for the group, with an optional reason.
       const moved = admin.locator('dialog[open]');
@@ -2167,9 +2168,12 @@ async function main() {
       await moved.getByRole('link', { name: 'Text the players who are in' }).waitFor();
       assert((await moved.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy');
       assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
+      // Then: is the court booked for the new time? The answer sets the court status.
+      await moved.getByRole('group', { name: 'Is the court booked for the new time?' }).getByRole('button', { name: 'Yes' }).click();
+      await moved.getByRole('button', { name: 'Yes', pressed: true }).waitFor();
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText('7:30 to 10:00 PM', { exact: true }).waitFor();
+      await card.getByText('7:30 to 9:30 PM', { exact: true }).waitFor();
     });
 
     await check('a booked session links to the CourtReserve modify/cancel page from More and from Cancel session', async () => {

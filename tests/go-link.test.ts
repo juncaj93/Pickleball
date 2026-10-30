@@ -69,7 +69,7 @@ async function group() {
 describe('the /api/go endpoint', () => {
   it('the 8:00 PM alert carries the link; opening it gives the Need players text with no numbers and quiets the card', async () => {
     const g = await group();
-    g.app.now = at('2026-11-03T01:00:00Z');
+    g.app.now = at('2026-11-03T00:00:00Z'); // Mon 7:00 PM, the last call
     await g.ctx.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': SECRET });
     await g.app.settle();
     expect(g.sent).toHaveLength(1);

@@ -102,7 +102,64 @@ export interface TaskOptions {
 /** A missed tick still sends an alert that came due within this long. */
 export const CATCH_UP_MS = 60 * 60_000;
 
-const MIN = 60_000;
+const MIN_MS = 60_000;
+
+// ---------- When things happen ----------
+// Every time comes from the game's own start, end and cancellation deadline
+// (default 12 hours before play, editable per booking). Nothing assumes an
+// 8:00 PM or 7:00 PM game. "Before" is counted on the wall clock in the
+// group's time zone, so a game the day after a clock change still gets its
+// last call at the same clock time (6:00 PM for a 7:00 PM game).
+
+/** Night-before last call (card and alert): this long before the start. 7:00 PM game: 6:00 PM the day before. */
+export const NIGHT_LAST_CALL_BEFORE_START_MIN = 25 * 60;
+/** Cancel warning when under 4: this long before the cancellation deadline. 7:00 AM deadline: 9:00 PM the night before. */
+export const CANCEL_WARNING_BEFORE_DEADLINE_MIN = 10 * 60;
+/** The cancel follow-up ("court canceled? Now cancel the session"): this long after the cancel warning. */
+export const CANCEL_FOLLOWUP_AFTER_WARNING_MIN = 30;
+/** Game-day check: this long before the cancellation deadline. 7:00 AM deadline: 6:15 AM. */
+export const GAMEDAY_CHECK_BEFORE_DEADLINE_MIN = 45;
+/** Finalize alert: this long after the game ends. */
+export const FINALIZE_AFTER_END_MIN = 5;
+/** Booking-day alert: this clock time on the day the court opens (the only fixed time: courts open by date). */
+export const BOOKING_ALERT_TIME = { hour: 8, minute: 30 };
+/** Booking-day follow-up: this clock time, if still not booked. */
+export const BOOKING_FOLLOWUP_TIME = { hour: 10, minute: 30 };
+
+/** The same wall-clock time shifted by `minutes` (negative: earlier), in the group's time zone. */
+export function wallShift(ms: number, tz: string, minutes: number): number {
+  const p = localParts(ms, tz);
+  const d = new Date(Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute) + minutes * MIN_MS);
+  return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), tz);
+}
+
+
+/** When the night-before card opens and its alert is due. */
+export function nightLastCallMs(startsAt: string, tz: string): number {
+  return wallShift(Date.parse(startsAt), tz, -NIGHT_LAST_CALL_BEFORE_START_MIN);
+}
+
+/** The cancellation deadline: the game's own, or the default hours before play. */
+export function deadlineMsOf(s: Pick<TaskSession, 'startsAt' | 'cancellationDeadlineAt'>, defaultDeadlineHours: number): number {
+  return s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : Date.parse(s.startsAt) - defaultDeadlineHours * 3600_000;
+}
+
+/** All of a game's task times, for the card, the alerts and the tests. */
+export function taskTimes(s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'cancellationDeadlineAt'>, o: Pick<TaskOptions, 'tz' | 'defaultDeadlineHours' | 'bookingLeadDays'>) {
+  const deadline = deadlineMsOf(s, o.defaultDeadlineHours);
+  const cancelWarning = wallShift(deadline, o.tz, -CANCEL_WARNING_BEFORE_DEADLINE_MIN);
+  return {
+    nightLastCall: nightLastCallMs(s.startsAt, o.tz),
+    deadline,
+    cancelWarning,
+    cancelFollowup: cancelWarning + CANCEL_FOLLOWUP_AFTER_WARNING_MIN * MIN_MS,
+    gamedayCheck: wallShift(deadline, o.tz, -GAMEDAY_CHECK_BEFORE_DEADLINE_MIN),
+    finalize: Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS,
+    booking: dayAt(s.startsAt, o.tz, -o.bookingLeadDays, BOOKING_ALERT_TIME.hour, BOOKING_ALERT_TIME.minute),
+    bookingFollowup: dayAt(s.startsAt, o.tz, -o.bookingLeadDays, BOOKING_FOLLOWUP_TIME.hour, BOOKING_FOLLOWUP_TIME.minute),
+  };
+}
+
 
 /** A wall-clock time on the calendar day `offset` days from the game's date. */
 export function dayAt(startsAt: string, tz: string, offset: number, hour: number, minute = 0): number {
@@ -139,18 +196,16 @@ function shortLine(n: number): string {
   return n === 0 ? 'no one in.' : `only ${players(n)} in.`;
 }
 
-function deadlineOf(s: TaskSession, o: TaskOptions): number {
-  return s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : Date.parse(s.startsAt) - o.defaultDeadlineHours * 3600_000;
-}
 
 function alertIf(list: TaskAlert[], s: TaskSession, id: AlertId, dueMs: number, text: string) {
   list.push({ key: `${s.id}:${id}`, id, dueMs, text });
 }
 
-/** The night-before text card: 6:00 PM the day before until the game starts. Telegram at 8:00 PM. */
+/** The night-before text card and its Telegram alert: from the last call (25 hours before the start) until the game starts. */
 function nightTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions): Task | null {
   const start = Date.parse(s.startsAt);
-  if (s.canceled || nowMs >= start || nowMs < dayAt(s.startsAt, o.tz, -1, 18)) return null;
+  const opens = nightLastCallMs(s.startsAt, o.tz);
+  if (s.canceled || nowMs >= start || nowMs < opens) return null;
   if (marks.has(markKey(s.id, 'night_text'))) return null;
   const n = s.confirmedCount;
   const under = n < MIN_PLAYERS;
@@ -158,7 +213,7 @@ function nightTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions):
   const label = under ? 'Text the group' : 'Text the group to confirm';
   const alerts: TaskAlert[] = [];
   const link = o.links.go?.(s.id) ?? o.links.admin;
-  alertIf(alerts, s, 'night', dayAt(s.startsAt, o.tz, -1, 20), `${text} ${label}: ${link}`);
+  alertIf(alerts, s, 'night', opens, `${text} ${label}: ${link}`);
   return {
     id: `night:${s.id}`,
     kind: 'night',
@@ -172,14 +227,15 @@ function nightTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions):
 }
 
 /**
- * Under 4 at 10:00 PM the night before: the three-step cancel checklist
+ * Under 4 at the cancel warning (10 hours before the cancellation deadline): the three-step cancel checklist
  * (cancel the court, cancel the session, text everyone), until the game
  * starts or every step is done. A game canceled during this time keeps its
  * card until the canceled text is sent.
  */
 function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions): Task | null {
   const start = Date.parse(s.startsAt);
-  const opens = dayAt(s.startsAt, o.tz, -1, 22);
+  const times = taskTimes(s, o);
+  const opens = times.cancelWarning;
   if (nowMs >= start || nowMs < opens) return null;
   const courtDone = marks.has(markKey(s.id, 'court_canceled'));
   const textDone = marks.has(markKey(s.id, 'canceled_text'));
@@ -191,7 +247,7 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
     return null;
   }
   const day = dayLabel(s.startsAt, nowMs, o.tz);
-  const deadline = deadlineOf(s, o);
+  const deadline = times.deadline;
   const gameDay = sameDay(start, nowMs, o.tz);
   const beforeDeadline = nowMs < deadline;
   const lead = `${day}: ${shortLine(n)}`;
@@ -222,24 +278,25 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
   if (!s.canceled) {
     if (s.booked && !courtDone) alertIf(alerts, s, 'cancel', opens, `${lead} Cancel court: ${o.links.cancel}`);
     else if (!s.booked) alertIf(alerts, s, 'cancel', opens, `${lead} Cancel the session: ${o.links.admin}`);
-    if (s.booked) alertIf(alerts, s, 'cancel_followup', dayAt(s.startsAt, o.tz, -1, 22, 30), `${day}: court canceled? Now cancel the session and text everyone: ${o.links.admin}`);
+    if (s.booked) alertIf(alerts, s, 'cancel_followup', times.cancelFollowup, `${day}: court canceled? Now cancel the session and text everyone: ${o.links.admin}`);
     if (s.booked && !courtDone && beforeDeadline) {
-      alertIf(alerts, s, 'gameday', dayAt(s.startsAt, o.tz, 0, 7, 15), `${text.replace(/\.$/, '')}: ${o.links.cancel}`);
+      alertIf(alerts, s, 'gameday', times.gamedayCheck, `${text.replace(/\.$/, '')}: ${o.links.cancel}`);
     }
   }
   return { id: `cancel:${s.id}`, kind: 'cancel', sessionId: s.id, startsAt: s.startsAt, text, buttons: [], steps, alerts };
 }
 
-/** Booking day: from 8:30 AM on the day the court opens (14 days before) until it is marked booked. */
+/** Booking day: from the booking alert time (8:30 AM) on the day the court opens (14 days before) until it is marked booked. */
 function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Task | null {
   if (s.canceled || !s.needsBooking || nowMs >= Date.parse(s.startsAt)) return null;
-  const opens = dayAt(s.startsAt, o.tz, -o.bookingLeadDays, 8, 30);
+  const times = taskTimes(s, o);
+  const opens = times.booking;
   if (nowMs < opens) return null;
   const text = `${textDay(s.startsAt, o.tz)} opened${s.holiday ? ` (${s.holiday})` : ''}.`;
   const alerts: TaskAlert[] = [];
   const msg = `${text} Book now: ${o.links.book}\nThen tap I booked it: ${o.links.admin}`;
   alertIf(alerts, s, 'book', opens, msg);
-  alertIf(alerts, s, 'book_followup', dayAt(s.startsAt, o.tz, -o.bookingLeadDays, 10, 30), `Reminder: ${msg}`);
+  alertIf(alerts, s, 'book_followup', times.bookingFollowup, `Reminder: ${msg}`);
   return {
     id: `book:${s.id}`,
     kind: 'book',
@@ -262,7 +319,7 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Task | null {
  */
 function finalizeTask(s: TaskSession, nowMs: number, o: TaskOptions): Task | null {
   if (s.canceled || s.finalized || s.confirmedCount < MIN_PLAYERS) return null;
-  const due = Date.parse(s.endsAt) + 5 * MIN;
+  const due = taskTimes(s, o).finalize;
   if (nowMs < due) return null;
   const text = `${formatWeekday(s.startsAt, o.tz)}: finalize who played.`;
   const alerts: TaskAlert[] = [];

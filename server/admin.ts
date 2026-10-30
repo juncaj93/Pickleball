@@ -333,6 +333,24 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true, promoted: promoted.length };
 }
 
+/**
+ * After moving a game: "Is the court booked for the new time?" Yes marks it
+ * booked (same as "I booked it"); No marks it not booked, so the booking
+ * card and alerts come back for it.
+ */
+export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
+  const booked = v.bool(body.booked, 'booked');
+  if (booked) return markBooked(ctx, {});
+  const { group, session } = await adminSession(ctx);
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  await ctx.db
+    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
+    .bind(ctx.nowIso, session.id)
+    .run();
+  await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
+  return { ok: true };
+}
+
 /** The venue's court waitlist: start waiting, give up ("Didn't open"), or go back to not booked. */
 export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);

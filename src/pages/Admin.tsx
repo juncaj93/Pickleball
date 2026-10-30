@@ -8,7 +8,7 @@ import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
-import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, RefundRequestCard } from './admin/HomeCards';
@@ -488,8 +488,9 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   const toast = useToast();
   const chips = quickDates(Date.parse(ctx.d.now), tz);
   const [date, setDate] = useState(chips[0].iso);
-  const [start, setStart] = useState('20:00');
-  const [end, setEnd] = useState('22:00');
+  // The usual game time from Settings > Schedule; editable here for this one game.
+  const [start, setStart] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultStartMinutes));
+  const [end, setEnd] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultEndMinutes));
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
