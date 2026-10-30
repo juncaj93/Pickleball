@@ -217,15 +217,15 @@
 .tier-later .tile.ptile {
   border: 1.5px solid var(--pc-line);
   border-radius: 12px;
-  padding: 4px 0 4px;
+  padding: 6px 0 6px;
 }
 .tier-later .ptile .dow,
 .tier-later .ptile .mon {
   font-size: 0.64rem;
 }
 .tier-later .ptile .day {
-  font-size: 1.3rem;
-  margin: 2px 0 1px;
+  font-size: 1.15rem;
+  margin: 3px 0 2px;
 }
 
 /* TONIGHT: a blue strip where the weekday would be. */
@@ -316,8 +316,8 @@
 .tier-later .tile-check {
   width: 22px;
   height: 22px;
-  top: -9px;
-  right: -9px;
+  top: -7px;
+  right: -7px;
 }
 .tier-later .tile-check svg {
   width: 13px;
@@ -373,18 +373,18 @@
 .schedule .sched-head {
   display: flex;
   align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 4px;
 }
 .schedule .sched-status {
   display: flex;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px 7px;
+  gap: 2px 6px;
   min-width: 0;
   min-height: 24px;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 800;
   color: var(--pc-ink);
 }
@@ -417,11 +417,10 @@
 }
 .schedule .sched-head .cal-icon-link {
   flex: none;
-  margin: -3px -6px -3px 0;
+  width: 24px;
+  height: 30px;
+  margin: -3px 0 -3px 0;
   color: var(--pc-muted);
-}
-.tier-later .sched-head .cal-icon-link {
-  margin-right: -2px;
 }
 .court-dot {
   width: 10px;
@@ -595,10 +594,18 @@
     'tile head head'
     'tile main money'
     'tile links money';
-  column-gap: 12px;
+  grid-template-rows: auto 1fr auto;
+  column-gap: 14px;
   row-gap: 4px;
   align-items: start;
-  padding: 8px 2px;
+  padding: 10px 2px;
+}
+/* Not joined (no calendar icon): the controls are centered against the whole row. */
+.schedule > .sched.tier-later:not([data-mine]) {
+  grid-template-areas:
+    'tile head money'
+    'tile main money'
+    'tile links money';
 }
 .tier-later .sched-body {
   display: contents;

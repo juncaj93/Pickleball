@@ -178,9 +178,9 @@ async function main() {
           ['this', true, /due/, 250, 'THIS WEEK joined and owing'],
           ['next', true, /Paid/, 205, 'NEXT WEEK joined and paid'],
           ['next', true, /due/, 215, 'NEXT WEEK joined and owing'],
-          ['later', true, /due/, 140, 'LATER joined and owing'],
-          ['later', true, /Paid/, 135, 'LATER joined and paid'],
-          ['later', false, null, 112, 'LATER not joined'],
+          ['later', true, /due/, 145, 'LATER joined and owing'],
+          ['later', true, /Paid/, 140, 'LATER joined and paid'],
+          ['later', false, null, 120, 'LATER not joined'],
         ];
         for (const [tier, joined, text, limit, label] of limits) {
           const list = tall(tier, joined, text);
