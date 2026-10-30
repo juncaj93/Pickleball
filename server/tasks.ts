@@ -6,7 +6,7 @@
 // A failed tick or a failed send never touches any other data or any tap.
 import { holidayFor } from '../shared/holidays';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
-import { dueAlerts, MARK_NAMES, markKey, nextTasks, type TaskOptions, type TaskSession } from '../shared/tasks';
+import { dueAlerts, MARK_NAMES, markKey, mayAlertSoon, nextTasks, type TaskOptions, type TaskSession } from '../shared/tasks';
 import { connected, deliver, PAUSED_PREFIX, prefsOfGroup, TIMEOUT_ERROR } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
@@ -60,7 +60,18 @@ export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string,
   };
 }
 
-/** The organizer's marks, as "sessionId:mark". */
+/** What the tick's quick check needs from a game row (no time zone work). */
+function rowFacts(s: SessionRow) {
+  return {
+    startsAt: s.starts_at,
+    endsAt: s.ends_at,
+    canceled: s.status === 'canceled',
+    booked: s.booking_status === 'booked',
+    finalized: !!s.finalized_at,
+    cancellationDeadlineAt: s.cancellation_deadline_at,
+  };
+}
+
 /** The task mark for "court booked": when the organizer marked it (not one the card can set). */
 export const COURT_BOOKED_MARK = 'court_booked';
 
@@ -199,17 +210,25 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   if (!(await smartAlertsOn(ctx.db, group.id))) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
 
   const settings = settingsOf(group);
-  const sessions = (await loadSessions(ctx.db, group.id, new Date(ctx.nowMs - LOOK_BACK_MS).toISOString(), visibleFrom(group))).filter(
-    (s) => Date.parse(s.starts_at) <= ctx.nowMs + (settings.bookingLeadDays + 1) * DAY_MS,
+  const o = { tz: group.timezone, bookingLeadDays: settings.bookingLeadDays, defaultDeadlineHours: settings.defaultDeadlineHours };
+  // Quick check first (plain arithmetic, see mayAlertSoon): only games that could have an alert due now go on.
+  // Read with an early-enough start (12:00 AM on the first date in any US zone); the exact first-date rule is applied below.
+  const looseFrom = /^\d{4}-\d{2}-\d{2}$/.test(group.first_session_date ?? '') ? `${group.first_session_date}T00:00:00.000Z` : '0000';
+  const rows = (await loadSessions(ctx.db, group.id, new Date(ctx.nowMs - LOOK_BACK_MS).toISOString(), looseFrom)).filter(
+    (s) => Date.parse(s.starts_at) <= ctx.nowMs + (settings.bookingLeadDays + 1) * DAY_MS && mayAlertSoon(rowFacts(s), null, ctx.nowMs, o),
   );
+  if (rows.length === 0) return { ok: true, sent: 0, failed: 0 };
+  const rowIds = rows.map((s) => s.id);
+  const counts = await ctx.db
+    .prepare(`SELECT session_id, COUNT(*) AS n FROM session_players WHERE status = 'confirmed' AND session_id IN (${rowIds.map(() => '?').join(',')}) GROUP BY session_id`)
+    .bind(...rowIds)
+    .all<{ session_id: string; n: number }>();
+  const countOf = new Map(counts.results.map((r) => [r.session_id, Number(r.n)]));
+  const shownFrom = visibleFrom(group);
+  const sessions = rows.filter((s) => (s.starts_at >= shownFrom || Number(s.shown_early) === 1) && mayAlertSoon(rowFacts(s), countOf.get(s.id) ?? 0, ctx.nowMs, o));
   if (sessions.length === 0) return { ok: true, sent: 0, failed: 0 };
   const ids = sessions.map((s) => s.id);
   const marks = ids.map(() => '?').join(',');
-  const counts = await ctx.db
-    .prepare(`SELECT session_id, COUNT(*) AS n FROM session_players WHERE status = 'confirmed' AND session_id IN (${marks}) GROUP BY session_id`)
-    .bind(...ids)
-    .all<{ session_id: string; n: number }>();
-  const countOf = new Map(counts.results.map((r) => [r.session_id, Number(r.n)]));
   const logs = await ctx.db
     .prepare(`SELECT session_id, task, kind, at FROM task_log WHERE session_id IN (${marks})`)
     .bind(...ids)

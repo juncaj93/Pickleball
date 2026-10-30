@@ -73,9 +73,21 @@ Not sent for canceled games, past games, the demo, or Pretend it's.
 Cloudflare cron (every 5 min)
   -> Worker "pickleball-alerts-clock" (worker/cron.ts, no public address)
      -> POST https://pickleball-club-9h0.pages.dev/api/cron/tick  (header X-Cron-Secret)
-        -> server/tasks.ts cronTick: read games, counts and marks from D1,
+        -> server/tasks.ts cronTick: read games from D1, quick check
+           (mayAlertSoon), and only for games that pass: counts and marks,
            nextTasks(), send what came due in the last 60 minutes and wasn't sent
 ```
+
+- **Quick check.** Most ticks nothing is due. Before any time zone work,
+  `mayAlertSoon()` in `shared/tasks.ts` asks, with plain arithmetic, whether
+  each game could have an alert due now (90 minutes of slack around every
+  alert time, more than a clock change can move one). Games that can't are
+  skipped, so most ticks stop after one read. A game's alerts depend only on
+  that game, so this never changes what is sent or when.
+  `tests/tick-fast.test.ts` proves it: the old and new code give the same
+  cards and alerts every 5 minutes Oct 14 to Nov 27, and 150 random games in
+  every zone across four clock changes never lose a due alert. If you change
+  an alert rule, keep `mayAlertSoon()` in step (that test fails if not).
 
 - The Worker holds no Telegram token and reads no data. The site sends with
   the Telegram secrets it already had. Both sides share one random secret,
@@ -130,7 +142,7 @@ due in the last hour.
 | --- | --- | --- |
 | Workers + Pages Functions requests | 100,000 a day per account (one shared pool) | 288 cron runs + 288 tick requests = 576 a day (0.6%) |
 | Cron Triggers | 5 per account | 1 (the account had no Workers before) |
-| CPU per invocation | 10 ms | Worker: one fetch, well under 1 ms of CPU. Tick: a few small queries and string work |
+| CPU per invocation | 10 ms | Worker: one fetch, well under 1 ms of CPU. Tick: one read and the quick check on most runs (see "Tick CPU" below) |
 | Subrequests per invocation | 50 | Worker: 1. Tick: at most 5 Telegram calls |
 | D1 rows read | 5,000,000 a day | About 200 rows a tick (detail below), so about 58,000 a day (1.2%) |
 | D1 rows written | 100,000 a day | Only when something sends or a button is tapped: a few dozen a day |

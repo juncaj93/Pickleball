@@ -53,7 +53,24 @@ export interface LocalParts {
   weekday: number; // 0 = Sunday
 }
 
+// The same few instants (a game's start, end, deadline) are looked up many
+// times per task list, and each lookup is slow, so answers are remembered.
+// Same instant and zone, same answer; callers get a copy.
+const partsMemo = new Map<string, LocalParts>();
+const PARTS_MEMO_MAX = 5000;
+
 export function localParts(utcMs: number, tz: string): LocalParts {
+  const key = `${tz}|${utcMs}`;
+  let p = partsMemo.get(key);
+  if (!p) {
+    if (partsMemo.size >= PARTS_MEMO_MAX) partsMemo.clear();
+    p = readParts(utcMs, tz);
+    partsMemo.set(key, p);
+  }
+  return { ...p };
+}
+
+function readParts(utcMs: number, tz: string): LocalParts {
   const parts = partsFormatter(tz).formatToParts(new Date(utcMs));
   const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '0';
   return {
@@ -90,8 +107,18 @@ export function zonedTimeToUtc(
   return result;
 }
 
+// Building a formatter is slow and the same few are used over and over
+// (the 5-minute alert tick has a 10 ms CPU budget), so each is made once.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
 function fmt(tz: string, opts: Intl.DateTimeFormatOptions) {
-  return new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: true, ...opts });
+  const key = `${tz}|${JSON.stringify(opts)}`;
+  let f = formatters.get(key);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', { timeZone: tz, hour12: true, ...opts });
+    formatters.set(key, f);
+  }
+  return f;
 }
 
 /** "Tuesday" */

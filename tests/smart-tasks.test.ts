@@ -496,6 +496,22 @@ describe('the tick endpoint', () => {
     }
   });
 
+  it('a first session date: the game on that date still gets its last call; a game before it stays silent', async () => {
+    for (const [first, want] of [
+      ['2026-11-03', [`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]],
+      ['2026-11-04', []],
+    ] as const) {
+      const g = await smartGroup();
+      g.app.now = at('2026-11-02T17:00:00Z'); // Mon Nov 2, noon EST
+      await g.dash();
+      await fill(g, '2026-11-03', 3);
+      g.app.db.raw.prepare('UPDATE groups SET first_session_date = ?').run(first);
+      g.app.now = at('2026-11-03T00:00:00Z'); // Mon 7:00 PM EST, the last call for Tue 8:00 PM
+      expect((await g.tick()).status).toBe(200);
+      expect(g.sent).toEqual(want);
+    }
+  });
+
   it('the card on Home lists the same task as the alert, and a tap there keeps Telegram quiet', async () => {
     const g = await smartGroup();
     g.app.now = at('2026-11-02T22:00:00Z'); // Mon 5:00 PM, before the last call

@@ -417,6 +417,71 @@ export function nextTasks(nowMs: number, sessions: TaskSession[], marks: Marks, 
   return out.sort((a, b) => a.rank - b.rank || Date.parse(a.startsAt) - Date.parse(b.startsAt)).map(({ rank: _rank, ...t }) => t);
 }
 
+// ---------- The tick's quick check ----------
+// The 5-minute tick has a 10 ms CPU budget, and building the task list (time
+// zone math and wording) is most of it. Most ticks nothing is due, so the
+// tick first asks, with plain arithmetic, whether a game could have an alert
+// due right now, and only builds tasks for the games that could. A game's
+// alerts depend only on that game, so this never changes what is sent: it
+// only skips games that can't send. Each check below mirrors one alert in
+// the tasks above, padded by ALERT_PAD_MS, more than the 1 hour a clock
+// change can move a wall-clock time. tests/tick-fast.test.ts sweeps a year
+// of ticks to prove nothing is ever skipped; change it with the rules.
+
+/** The UTC offsets (hours) each offered time zone can have. A zone not listed is never skipped. */
+const ZONE_OFFSETS_H: Record<string, number[]> = {
+  'America/Detroit': [-5, -4],
+  'America/New_York': [-5, -4],
+  'America/Chicago': [-6, -5],
+  'America/Denver': [-7, -6],
+  'America/Phoenix': [-7],
+  'America/Los_Angeles': [-8, -7],
+  'America/Anchorage': [-9, -8],
+  'Pacific/Honolulu': [-10],
+};
+const ALERT_PAD_MS = 90 * MIN_MS;
+
+/**
+ * Could this game have an alert due on a tick at `nowMs`? False only when
+ * none of its alerts can be. `confirmedCount` null: not known yet (then the
+ * player-count rules don't rule anything out).
+ */
+export function mayAlertSoon(
+  s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'canceled' | 'booked' | 'finalized' | 'cancellationDeadlineAt'>,
+  confirmedCount: number | null,
+  nowMs: number,
+  o: Pick<TaskOptions, 'tz' | 'bookingLeadDays' | 'defaultDeadlineHours'>,
+): boolean {
+  if (s.canceled) return false; // every alert is for a game still on
+  const offsets = ZONE_OFFSETS_H[o.tz];
+  if (!offsets) return true;
+  const near = (dueMs: number) => dueMs - ALERT_PAD_MS <= nowMs && nowMs < dueMs + ALERT_PAD_MS + CATCH_UP_MS;
+  const enough = confirmedCount === null || confirmedCount >= MIN_PLAYERS;
+  const short = confirmedCount === null || confirmedCount < MIN_PLAYERS;
+  // Finalize (the only alert after the start).
+  if (!s.finalized && enough && near(Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS)) return true;
+  const start = Date.parse(s.startsAt);
+  if (nowMs >= start) return false;
+  const deadline = deadlineMsOf(s, o.defaultDeadlineHours);
+  if (s.booked) {
+    if (near(start - NIGHT_LAST_CALL_BEFORE_START_MIN * MIN_MS)) return true;
+    if (short) {
+      const warning = deadline - CANCEL_WARNING_BEFORE_DEADLINE_MIN * MIN_MS;
+      if (near(warning) || near(warning + CANCEL_FOLLOWUP_AFTER_WARNING_MIN * MIN_MS)) return true;
+      if (near(deadline - GAMEDAY_CHECK_BEFORE_DEADLINE_MIN * MIN_MS)) return true;
+    }
+    return false;
+  }
+  if (enough && near(deadline + NO_COURT_CHECK_AFTER_DEADLINE_MIN * MIN_MS)) return true;
+  // Booking day: the court opens on the game's date minus the lead days, at the opening time, worked out with each offset the zone can have.
+  for (const h of offsets) {
+    const local = new Date(start + h * HOUR_MS);
+    const opens = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() - o.bookingLeadDays, COURT_OPENS_TIME.hour, COURT_OPENS_TIME.minute) - h * HOUR_MS;
+    if (near(opens - BOOKING_HEADS_UP_BEFORE_OPEN_MIN * MIN_MS) || near(opens + BOOKING_FOLLOWUP_AFTER_OPEN_MIN * MIN_MS)) return true;
+  }
+  return false;
+}
+
 /** The alerts to send on this tick: due within the catch-up window and not sent yet. */
 export function dueAlerts(tasks: Task[], nowMs: number, sent: ReadonlySet<string>): TaskAlert[] {
   return tasks.flatMap((t) => t.alerts).filter((a) => a.dueMs <= nowMs && nowMs < a.dueMs + CATCH_UP_MS && !sent.has(a.key));
