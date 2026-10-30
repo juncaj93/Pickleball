@@ -252,15 +252,20 @@ Fixed (not money):
 - The player error for a second cash-out request said "refund"; it now reads "You
   already asked for a cash out. Cancel it to make a new one."
 
-Money questions left for Alex (no money code changed):
-- Credit used on a seat that still owes the rest (for example $3 credit on a $9 seat,
-  $6 unpaid) is in no Money row (not Held, Collected or Credits owed) and not in
-  "Players cover" until the rest is paid. Books are short by that credit until then.
-  Pinned in `tests/dryrun-money.test.ts` ("KNOWN MONEY QUESTION").
-- An "I paid" tap the organizer has not confirmed counts as paid at finalize, so that
-  player gets credit back. Unmarking later takes the credit back unless it was spent.
-- After Reopen, a player who paid the final price late ($9) shows as paid until the
-  redo; the redo charges the right difference.
+Alex's answers to the money questions (display only, no balance, price or credit change):
+- A: credit put on a seat that still owes the rest (for example $3 credit on a $9
+  seat, $6 unpaid) now counts as Held on Money and Players right away, finalized or
+  not, until the seat is paid; then the whole payment is Collected. Players cover
+  counts that seat's whole price ($54, not $51, at 6 played). The dry-run books check
+  (cash in = kept + held + credit + cashed out) holds at every step, and Players
+  held = Money held. `tests/audit-money.test.ts` was updated to this rule.
+- B: an unconfirmed "I paid" still counts as paid at finalize. The Finalize card and
+  the Who played sheet now warn first: "Ryan tapped I paid, not confirmed yet. Confirm
+  or finalize anyway." (names listed).
+- C: Reopen with a late payer stays as is.
+- Header: when the CREDIT chip leaves no room, "not you?" moves under the name, and a
+  long name wraps to two lines (was "Brand..."). Test: `e2e/dryrun-screens.cjs`
+  (360, 375, 390, 430 px, light and dark).
 
 Tests: `tests/dryrun-money.test.ts` (18), `tests/dryrun-clock.test.ts` (31),
 `e2e/double-tap.cjs` (4).
@@ -278,5 +283,3 @@ Tue/Thu game), `src/pages/Setup.tsx:92` (setup text), `src/pages/Admin.tsx:481-4
 (+ Add game form starts at 8 to 10). Many e2e files assume generated games are at 8 PM.
 Moving every game one by one gives each a "Moved" tag and Moved text.
 
-Not deployed: the live database backup (Time Travel bookmark and SQL export) was
-blocked by the sandbox's permission check, and the rule is backup first.
