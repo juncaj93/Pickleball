@@ -234,14 +234,15 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     // A Yes counts as that canceled game's court cost; it is kept with the cancel in the Activity log.
     const askedCharge = ctx.nowMs >= Date.parse(session.starts_at) - CHARGE_ASK_HOURS * 3600_000 && ctx.nowMs < Date.parse(session.starts_at);
     const chargedCents = askedCharge ? (v.cents(body.chargedCents, 'chargedCents') ?? 0) : 0;
+    const reason = v.cancelReason(body.reason);
     await ctx.db
-      .prepare("UPDATE sessions SET status = 'canceled', canceled_at = ?, canceled_by = 'organizer', updated_at = ? WHERE id = ?")
-      .bind(ctx.nowIso, ctx.nowIso, session.id)
+      .prepare("UPDATE sessions SET status = 'canceled', canceled_at = ?, canceled_by = 'organizer', cancel_reason = ?, updated_at = ? WHERE id = ?")
+      .bind(ctx.nowIso, reason, ctx.nowIso, session.id)
       .run();
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
     const returned = await returnSessionCredit(ctx.db, session.id, ctx.nowIso);
     const back = await creditEveryone(ctx, group, session, 'canceled');
-    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back }, ctx.nowIso);
+    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back, ...(reason ? { reason } : {}) }, ctx.nowIso);
     return { ok: true, changed: true };
   }
   if (decision === 'reopen') {
@@ -250,7 +251,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     await ctx.db
       .prepare(
         `UPDATE sessions SET status = CASE WHEN booking_status = 'booked' THEN 'booked' ELSE 'planned' END,
-           canceled_at = NULL, canceled_by = NULL, admin_decision = NULL, decision_at = NULL, updated_at = ?
+           canceled_at = NULL, canceled_by = NULL, cancel_reason = NULL, admin_decision = NULL, decision_at = NULL, updated_at = ?
          WHERE id = ?`,
       )
       .bind(ctx.nowIso, session.id)

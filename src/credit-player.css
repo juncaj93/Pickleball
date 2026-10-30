@@ -84,8 +84,37 @@
   margin-top: 2px;
   font-variant-numeric: tabular-nums;
 }
+.credit-chip .cc-amount {
+  display: inline-grid;
+  text-align: center;
+  font-feature-settings: 'tnum' 1;
+}
+.credit-chip .cc-ghost,
+.credit-chip .cc-now {
+  grid-area: 1 / 1;
+}
+.credit-chip .cc-ghost {
+  visibility: hidden;
+}
 .credit-chip:active {
   transform: scale(0.97);
+}
+/* Credit went up: a tiny pulse when the count ends; a chip that was not there fades in. */
+.credit-chip.pulse {
+  animation: chip-pulse 0.45s ease-out;
+}
+.credit-chip.fresh {
+  animation: chip-fade 0.3s ease-out both;
+}
+@keyframes chip-pulse {
+  40% {
+    transform: scale(1.07);
+  }
+}
+@keyframes chip-fade {
+  from {
+    opacity: 0;
+  }
 }
 
 .credit-sheet .credit-big {

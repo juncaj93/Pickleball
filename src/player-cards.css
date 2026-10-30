@@ -124,7 +124,7 @@
   color: var(--pc-ink);
   border: 1px solid var(--pc-line);
   border-radius: 24px;
-  padding: 18px;
+  padding: 16px;
   box-shadow: none;
 }
 .schedule > .sched.tier-this {
@@ -217,15 +217,15 @@
 .tier-later .tile.ptile {
   border: 1.5px solid var(--pc-line);
   border-radius: 12px;
-  padding: 5px 0 5px;
+  padding: 4px 0 4px;
 }
 .tier-later .ptile .dow,
 .tier-later .ptile .mon {
   font-size: 0.64rem;
 }
 .tier-later .ptile .day {
-  font-size: 1.35rem;
-  margin: 3px 0 2px;
+  font-size: 1.3rem;
+  margin: 2px 0 1px;
 }
 
 /* TONIGHT: a blue strip where the weekday would be. */
@@ -342,25 +342,48 @@
   color: var(--pc-muted);
 }
 
-/* ---- Body ---- */
+/* ---- Body: head (status + calendar), main (count, names), money line, links ---- */
 .schedule .sched-body {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: stretch;
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  gap: 8px;
+  gap: 5px;
 }
 .schedule .sched-body > * {
   min-width: 0;
   max-width: 100%;
 }
+.schedule .sched-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+}
+.schedule .sched-main > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.schedule .sched-main:empty {
+  display: none;
+}
+/* The status line: text on the left, the calendar icon at the right end (never on a line of its own). */
+.schedule .sched-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
 .schedule .sched-status {
   display: flex;
+  flex: 1 1 auto;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 7px;
+  gap: 2px 7px;
+  min-width: 0;
+  min-height: 24px;
   font-size: 1rem;
   font-weight: 800;
   color: var(--pc-ink);
@@ -382,10 +405,23 @@
 .schedule .sched-status .st-in {
   color: var(--pc-green);
 }
-.schedule .sched-status .st-in + .court-status {
+.schedule .sched-status .st-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+.schedule .sched-status .st-lead + .court-status {
   font-weight: 600;
   color: var(--pc-muted);
-  gap: 5px;
+}
+.schedule .sched-head .cal-icon-link {
+  flex: none;
+  margin: -3px -6px -3px 0;
+  color: var(--pc-muted);
+}
+.tier-later .sched-head .cal-icon-link {
+  margin-right: -2px;
 }
 .court-dot {
   width: 10px;
@@ -464,18 +500,16 @@
   line-height: 1.3;
   color: var(--pc-muted);
 }
-.schedule .credit-back-line {
-  margin: 0;
-  color: var(--pc-muted);
-}
 
 /* ---- Chips: amber owing, green paid ---- */
 .schedule .pchip {
-  align-self: flex-start;
+  flex: none;
   padding: 4px 12px;
   border-radius: 999px;
   font-size: 0.92rem;
   font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 .schedule .pchip.chip-warn {
   color: var(--pc-amber);
@@ -486,36 +520,44 @@
   background: var(--pc-ok-bg);
 }
 
-/* ---- Buttons and links ---- */
-.schedule .act-row {
+/* ---- The money line: chip and button side by side; paid pill and links on one line ---- */
+.schedule .sched-money {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 12px;
+  gap: 6px 10px;
 }
-.schedule .act-row:empty {
-  display: none;
+.schedule .sched-btns {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
 }
 .schedule .sched-btn,
 .schedule .pay-btn {
   flex: none;
-}
-.tier-later .sched-btn {
   min-height: 44px;
   padding: 0 18px;
   border-radius: 12px;
   font-size: 1rem;
 }
-.tier-next .sched-btn,
-.tier-next .pay-btn {
-  min-height: 44px;
-  padding: 0 18px;
-  border-radius: 12px;
-  font-size: 1rem;
+/* The one line of small links under the money line. */
+.schedule .inline-links {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 16px;
 }
+.schedule .sched-links {
+  margin-top: 4px;
+}
+.schedule .sched-links:empty {
+  display: none;
+}
+/* Quiet links are small on the page; the 44px tap area is drawn with ::before so they take no extra height. */
 .schedule .quiet-link {
   position: relative;
-  min-height: 44px;
+  min-height: 24px;
   padding: 0;
   font-size: 0.95rem;
   font-weight: 700;
@@ -527,30 +569,104 @@
   align-items: center;
 }
 .schedule .quiet-link::before {
-  content: none;
+  content: '';
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
 }
-.schedule .act-row .cal-icon-link {
-  margin: 0 0 0 auto;
-  color: var(--pc-muted);
+.schedule .quiet-link.didnt-pay {
+  font-size: 0.95rem;
 }
 .schedule .credit-note {
-  margin: -2px 0 0;
+  margin: 0;
   font-size: 0.85rem;
   line-height: 1.3;
   color: var(--pc-muted);
 }
 
-/* LATER rows: the action sits on the right, the text keeps the middle. */
-.schedule .sched-act {
-  flex: none;
+/* ---- LATER rows: tile | middle | controls, the status line across the top ---- */
+.schedule > .sched.tier-later {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-areas:
+    'tile head head'
+    'tile main money'
+    'tile links money';
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: start;
+  padding: 8px 2px;
+}
+.tier-later .sched-body {
+  display: contents;
+}
+.tier-later .sched-tilecol {
+  grid-area: tile;
+}
+.tier-later .sched-head {
+  grid-area: head;
+}
+.tier-later .sched-main {
+  grid-area: main;
+}
+.tier-later .sched-links {
+  grid-area: links;
+  margin-top: 0;
+}
+.tier-later .sched-money {
+  grid-area: money;
   align-self: center;
-  display: flex;
+  justify-self: end;
+  justify-content: flex-end;
+}
+/* Short controls stack in the right column: chip above the button. A pill (or chip) with links: the pill goes
+   right, the links go under the middle block. */
+.tier-later .sched-money.pay-line {
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
+  gap: 4px;
 }
-.tier-later .sched-act .quiet-link {
-  min-height: 44px;
+.tier-later .sched-money.stacked {
+  display: contents;
+}
+.tier-later .sched-money.stacked > .pchip {
+  grid-area: money;
+  align-self: center;
+  justify-self: end;
+}
+.tier-later .sched-money.stacked > .inline-links {
+  grid-area: links;
+}
+/* Wider controls (two buttons, a long pill) drop under the middle block instead of squeezing the names. */
+.schedule > .sched.tier-later.wide-money {
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-areas:
+    'tile head'
+    'tile main'
+    'tile money'
+    'tile links';
+}
+.tier-later.wide-money .sched-money,
+.tier-later.wide-money .sched-money.pay-line {
+  flex-direction: row;
+  align-items: center;
+  justify-self: start;
+  justify-content: flex-start;
+  gap: 6px 10px;
+}
+.tier-later.wide-money .sched-money.stacked {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-self: start;
+}
+.tier-later.wide-money .sched-money.stacked > .pchip,
+.tier-later.wide-money .sched-money.stacked > .inline-links {
+  grid-area: auto;
 }
 
 @media (max-width: 380px) {
@@ -573,6 +689,13 @@
   }
   .tier-next .ptile .day {
     font-size: 1.6rem;
+  }
+  .schedule > .sched.tier-later {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+    column-gap: 10px;
+  }
+  .schedule > .sched.tier-later.wide-money {
+    grid-template-columns: 52px minmax(0, 1fr);
   }
   .tier-later .sched-tilecol {
     width: 52px;

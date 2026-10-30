@@ -176,7 +176,7 @@ describe('the Text menu shows only the texts that fit', () => {
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true });
     const { d, items } = await menu(ctx, s.id);
     expect(ids(items)).toEqual(['canceled']);
-    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a refund on the site. ${LINK}`);
+    expect(items[0].body).toBe(`Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a cash out on the site. ${LINK}`);
     expect(items[0].phones).toEqual(['Alex', 'Blair', 'Casey', 'Devon', 'Emery'].map((n) => phoneOf(ctx, d, n)));
   });
   it('after finalizing: the one Final price text to the group chat; nothing while the game is over but not finalized', async () => {

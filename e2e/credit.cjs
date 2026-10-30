@@ -332,20 +332,20 @@ async function main() {
     await check('Request refund: the amount box starts at the full $14, never takes more, and a $5 request reserves $5: the chip says REFUND, $9 is left to use', async () => {
       const sheet = await openSheet(page);
       await sheet.locator('[data-request-refund]').click();
-      const amount = sheet.getByLabel('Refund amount');
+      const amount = sheet.getByLabel('Cash out amount');
       assert((await amount.inputValue()) === '14', `prefilled with ${await amount.inputValue()}`);
       await amount.fill('20');
-      await sheet.getByRole('button', { name: 'Request refund' }).click();
+      await sheet.getByRole('button', { name: /^Request cash out from/ }).click();
       await sheet.getByText('You have $14 credit.').waitFor();
       await amount.fill('5');
-      await sheet.getByRole('button', { name: 'Request refund' }).click();
-      await page.locator('.toast', { hasText: 'Refund requested' }).waitFor();
+      await sheet.getByRole('button', { name: /^Request cash out from/ }).click();
+      await page.locator('.toast', { hasText: 'Cash out requested' }).waitFor();
       const pending = sheet.locator('[data-refund-pending]');
       await pending.waitFor();
-      assert(/^Refund requested: \$5, pending Cancel request$/.test(squash(await pending.innerText())), `pending line was "${await pending.innerText()}"`);
+      assert(/^Cash out requested: \$5, pending Cancel request$/.test(squash(await pending.innerText())), `pending line was "${await pending.innerText()}"`);
       assert((await sheet.locator('[data-request-refund]').count()) === 0, 'one request at a time');
       await closeSheet(page);
-      assert((await chipText(page)) === 'REFUND $14', `chip was "${await chipText(page)}"`);
+      assert((await chipText(page)) === 'CASH OUT $14', `chip was "${await chipText(page)}"`);
       // The reserved $5 cannot be spent: $9 covers part of the $14 game.
       const foot = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first().locator('.sched-body');
       await foot.getByText(/Uses your \$9 credit\. \$5 left to pay/).waitFor();
@@ -364,12 +364,12 @@ async function main() {
     await check('a request for the full $14 blocks spending it: no Use credit, Pay $14 stays', async () => {
       const sheet = await openSheet(page);
       await sheet.locator('[data-request-refund]').click();
-      await sheet.getByRole('button', { name: 'Request refund' }).click();
-      await sheet.locator('[data-refund-pending]').getByText('Refund requested: $14, pending').waitFor();
+      await sheet.getByRole('button', { name: /^Request cash out from/ }).click();
+      await sheet.locator('[data-refund-pending]').getByText('Cash out requested: $14, pending').waitFor();
       await closeSheet(page);
       assert((await page.locator('[data-use-credit]').count()) === 0, 'Use credit should be gone while the whole credit is reserved');
       await page.locator('article.sched', { hasText: 'Nov' }).getByRole('link', { name: /^Pay \$14/ }).first().waitFor();
-      assert((await chipText(page)) === 'REFUND $14', `chip was "${await chipText(page)}"`);
+      assert((await chipText(page)) === 'CASH OUT $14', `chip was "${await chipText(page)}"`);
       await page.screenshot({ path: path.join(SHOTS, 'credit-player-refund-pending.png'), fullPage: true });
     });
     await ctx.close();
@@ -420,7 +420,7 @@ async function main() {
       // He asks again, for the next check.
       const sheet = await openSheet(m.page);
       await sheet.locator('[data-request-refund]').click();
-      await sheet.getByRole('button', { name: 'Request refund' }).click();
+      await sheet.getByRole('button', { name: /^Request cash out from/ }).click();
       await sheet.locator('[data-refund-pending]').waitFor();
       await m.ctx.close();
     });
@@ -493,6 +493,8 @@ async function main() {
       assert((await page.getByRole('button', { name: 'I paid' }).count()) === 0 && (await page.getByText("Didn't pay?").count()) === 0, 'only Undo under the paid tag');
       await undo.click();
       await chip(page).waitFor();
+      // The chip counts up to the new amount, so wait for it to finish.
+      for (let i = 0; i < 40 && (await chipText(page)) !== 'CREDIT $14'; i++) await page.waitForTimeout(100);
       assert((await chipText(page)) === 'CREDIT $14', 'credit is back');
       assert((await page.getByText('Paid with credit').count()) === 0, 'still paid with credit');
       const row = page.locator('article.sched').filter({ has: page.locator('[data-use-credit]') }).first();
@@ -685,7 +687,7 @@ async function main() {
       assert(afterCancel.some((t) => /^Ryan \$14 credit$/.test(t)), `the list had: ${JSON.stringify(afterCancel)}`);
       const r = await player('Ryan', 'light', 390);
       const row = r.page.locator('article.sched', { hasText: 'Nov 10' });
-      assert((await row.locator('[data-credit-back]').count()) === 1, 'Ryan: no "Your $14 is now credit" line on the canceled game');
+      assert((await row.locator('[data-credit-back]').count()) === 0, 'Ryan: no refund line on the canceled game');
       await r.ctx.close();
     });
     await ctx.close();

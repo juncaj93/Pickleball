@@ -167,7 +167,7 @@ async function main() {
       const shown = await line.count();
       if (shown === 0) return; // fixed: no stale line
       const text = squash(await line.first().innerText());
-      await line.first().getByRole('button', { name: 'Request refund' }).click();
+      await line.first().getByRole('button', { name: /^Request cash out from/ }).click();
       await page.waitForTimeout(400);
       const sheets = await page.locator('dialog[open] [data-credit-sheet]').count();
       assert(sheets > 0, `"${text}" is shown with $0 credit and its Request refund opened nothing`);

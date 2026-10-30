@@ -130,11 +130,11 @@ function withReason(text: string, reason?: string | null): string {
 
 /**
  * "Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You
- * can request a refund on the site. pickleball.juncaj.net", with an optional
+ * can request a cash out on the site. pickleball.juncaj.net", with an optional
  * reason right after the first sentence.
  */
 export function canceledMessage(s: SessionLike, tz: string, nowMs: number, link: string, reason?: string | null): string {
-  return `${withReason(`Pickleball ${dayWord(s.startsAt, tz, nowMs)} is canceled.`, reason)} If you paid, it's now your credit. You can request a refund on the site. ${link}`;
+  return `${withReason(`Pickleball ${dayWord(s.startsAt, tz, nowMs)} is canceled.`, reason)} If you paid, it's now your credit. You can request a cash out on the site. ${link}`;
 }
 
 /**

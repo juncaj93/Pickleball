@@ -347,7 +347,7 @@ async function main() {
     await page.locator('.schedule article').first().waitFor();
     const t = squash(await page.locator('body').innerText());
     assert(!/held|Mitchel-K|not played yet|not finalized|Collected|Court costs/i.test(t), t.slice(0, 300));
-    assert(!/refund/i.test(t.replace(/Request refund/g, '')), `refund words beyond "Request refund": ${t.slice(0, 300)}`);
+    assert(!/refund/i.test(t.replace(/Request cash out from \w+/g, '')), `refund words beyond "Request cash out": ${t.slice(0, 300)}`);
     assert(/CREDIT \$14/.test(t), 'his own credit chip');
     const raw = await (await ctx.request.get(BASE + '/api/group')).text();
     assert(!/Mitchel-K|venmo_handle|"venmo":|heldCents|creditLedger/.test(raw), 'API leaks it');

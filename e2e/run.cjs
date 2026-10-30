@@ -114,7 +114,9 @@ async function quietNextToPay(card) {
   const pay = await card.getByRole('link', { name: /^Pay \$\d+ with Venmo$/ }).evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, r: el.getBoundingClientRect().toJSON() }));
   const paid = await card.getByRole('button', { name: 'I paid' }).evaluate((el) => ({ bg: getComputedStyle(el).backgroundColor, r: el.getBoundingClientRect().toJSON() }));
   assert(pay.bg !== paid.bg, 'I paid should be quiet, not green');
-  assert(paid.r.y >= pay.r.y + pay.r.height - 4 && Math.abs(paid.r.x - pay.r.x) < 6, 'I paid sits right under Pay, a quiet link');
+  // Compact cards: Pay sits beside the amber chip; "I paid" is a small underlined link on the line below (or beside the middle block in a LATER row).
+  assert(paid.r.height <= 30, `I paid should be a small link, it is ${paid.r.height}px tall`);
+  assert(paid.r.y + paid.r.height / 2 > pay.r.y + pay.r.height / 2 - 2 || paid.r.x + paid.r.width <= pay.r.x, 'I paid sits under or left of Pay, a quiet link');
 }
 
 /** Home lists 4 sessions at first; show them all. */
@@ -1690,14 +1692,16 @@ async function main() {
       const pop = p.locator('.pop');
       await pop.waitFor();
       // The tapped button turns into a Drop out link, so the bubble is checked against where the button was just before the tap.
-      assert((await pop.innerText()).trim() === "You're in", `bubble said ${await pop.innerText()}`);
+      assert((await pop.innerText()).trim() === "You're in", `banner said ${await pop.innerText()}`);
+      // The new banner: bottom center of the screen, clear of the Safari bar, never next to the tapped button.
       const pb = await pop.boundingBox();
       const vw = p.viewportSize().width;
-      assert(pb.x >= 0 && pb.x + pb.width <= vw && pb.y >= 0, 'bubble must stay on screen');
-      assert(Math.abs(pb.y + pb.height - b.y) < 24 || Math.abs(pb.y - (b.y + b.height)) < 24, 'bubble should sit right next to the button');
-      assert(Math.abs(pb.x + pb.width / 2 - (b.x + b.width / 2)) < pb.width / 2 + 8 || pb.x + pb.width >= vw - 9, 'bubble should point at the button');
-      const style = await pop.evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), hidden: el.getAttribute('aria-hidden'), arrow: getComputedStyle(el, '::after').content }));
-      assert(style.size <= 14 && style.hidden === 'true' && style.arrow !== 'none', `bubble style: ${JSON.stringify(style)}`);
+      const vh = p.viewportSize().height;
+      assert(pb.x >= 0 && pb.x + pb.width <= vw && pb.y >= 0 && pb.width <= 342, `banner must stay on screen and at most about 340px wide: ${JSON.stringify(pb)}`);
+      assert(Math.abs(pb.x + pb.width / 2 - vw / 2) < 3, 'banner is centered');
+      assert(vh - (pb.y + pb.height) >= 85 && vh - (pb.y + pb.height) <= 125, `banner sits about 96px above the bottom, it is ${vh - (pb.y + pb.height)}px`);
+      const style = await pop.evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), hidden: el.getAttribute('aria-hidden'), pos: getComputedStyle(el).position, icon: !!el.querySelector('.toast-icon') }));
+      assert(style.size >= 13 && style.hidden === 'true' && style.pos === 'fixed' && style.icon, `banner style: ${JSON.stringify(style)}`);
       await p.locator('[aria-live="polite"]', { hasText: "You're in" }).waitFor({ state: 'attached' });
       assert(Math.abs((await row.boundingBox()).y - rowTop) < 2 && (await p.evaluate(() => document.documentElement.scrollHeight)) >= before - 2, 'the bubble must not push the page around');
       assert((await p.locator('.toast:not(.pop)').count()) === 0, 'old white banner should be gone');
@@ -2203,11 +2207,11 @@ async function main() {
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
       const bubble = after.locator('.bubble');
-      const want = /^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. If you paid, it's now your credit\. You can request a refund on the site\. \S+$/;
+      const want = /^Pickleball (Tue|Thu) [A-Z][a-z]{2} \d{1,2} is canceled\. If you paid, it's now your credit\. You can request a cash out on the site\. \S+$/;
       assert(want.test((await bubble.innerText()).trim()), `cancel text was: ${await bubble.innerText()}`);
       assert(!/Text me|stays as your credit/.test(await bubble.innerText()), 'old cancel wording');
       await after.getByLabel(/Reason/).fill('Rain');
-      await bubble.getByText(/is canceled\. Rain\. If you paid, it's now your credit\. You can request a refund on the site\. \S+$/).waitFor();
+      await bubble.getByText(/is canceled\. Rain\. If you paid, it's now your credit\. You can request a cash out on the site\. \S+$/).waitFor();
       await after.getByRole('link', { name: 'Text the players who were in' }).waitFor();
       assert(!/\bsent\b/i.test(await after.innerText()), 'never say sent');
       // Whoever paid has it as credit now, automatically: a list, nothing to tap.
@@ -2233,14 +2237,14 @@ async function main() {
       assert(p, `no open phone for ${payer}`);
       await p.reload();
       const prow = p.locator('article', { has: p.locator(`#s-${(await card.getAttribute('id')).replace('session-', '')}`) });
-      await prow.locator('[data-credit-back]').waitFor();
-      assert((await prow.locator('[data-credit-back]').innerText()).replace(/\s+/g, ' ').trim() === 'Your $14 is now credit. Request refund', `credit line was "${await prow.locator('[data-credit-back]').innerText()}"`);
-      await prow.locator('[data-credit-back]').getByRole('button', { name: 'Request refund' }).waitFor();
+      // No "Your $14 is now credit. Request refund" line on the card any more; the chip carries it.
+      assert((await prow.locator('[data-credit-back]').count()) === 0, 'the refund line is gone from the card');
+      assert(!/Request refund|Your \$14 is now credit/.test(await prow.innerText()), 'no refund wording on the card');
       const chip = p.locator('header [data-credit-chip]');
       assert((await chip.innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', `chip was "${await chip.innerText()}"`);
       assert((await p.locator('[data-credit-line]').count()) === 0, 'the old "You have $14 credit" line is gone');
-      // Tapping the line opens the credit sheet, ready to ask.
-      await prow.locator('[data-credit-back]').getByRole('button', { name: 'Request refund' }).click();
+      // Tapping the chip opens the credit sheet, ready to ask.
+      await chip.click();
       const cs = p.locator('[data-credit-sheet]');
       await cs.waitFor();
       await cs.locator('[data-credit-balance]').getByText('$14 credit').waitFor();
@@ -2409,8 +2413,7 @@ async function main() {
         // Frankie's phone: the line on that game, the chip in the header, the sheet's history.
         await f.reload();
         const frow = f.locator('article', { has: f.locator(`#s-${first.id}`) });
-        await frow.locator('[data-credit-back]').waitFor();
-        assert((await frow.locator('[data-credit-back]').innerText()).replace(/\s+/g, ' ').trim() === 'Your $14 is now credit. Request refund', `credit line was "${await frow.locator('[data-credit-back]').innerText()}"`);
+        assert((await frow.locator('[data-credit-back]').count()) === 0 && !/Request refund/.test(await frow.innerText()), 'no refund line on the dropped game');
         const chip = f.locator('header [data-credit-chip]');
         assert((await chip.innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', `chip was "${await chip.innerText()}"`);
         assert((await f.locator('[data-credit-line]').count()) === 0, 'the old "You have $14 credit" line is gone');
@@ -3553,7 +3556,7 @@ async function main() {
       // Already paid, then out: the $14 is credit now (the line says so, the chip appears); in again, that credit is the green Use credit, Pay is quiet.
       await row.getByRole('button', { name: 'Drop out' }).click();
       await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
-      await row.locator('[data-credit-back]', { hasText: 'Your $14 is now credit.' }).waitFor();
+      assert((await row.locator('[data-credit-back]').count()) === 0, 'no refund line on the card after a paid drop');
       await p.locator('header [data-credit-chip]', { hasText: /CREDIT/ }).waitFor();
       assert((await p.locator('header [data-credit-chip]').innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', 'chip after dropping a paid game');
       await row.getByRole('button', { name: "I'm in" }).click();
@@ -3942,7 +3945,7 @@ async function main() {
       }
     }
 
-    await check('motion: buttons press, dots spring, sheets slide, bubbles pop; all of it off with Reduce Motion', async () => {
+    await check('motion: buttons press, balls spin in, sheets slide, the banner fades; all of it off with Reduce Motion', async () => {
       const read = async (reducedMotion) => {
         const ctx = await browser.newContext({ ...phone(390), reducedMotion });
         const p = await ctx.newPage();
@@ -3951,9 +3954,15 @@ async function main() {
         await p.locator('.schedule .dots .ball').first().waitFor();
         const out = await p.evaluate(() => {
           const ms = (el, pseudo) => parseFloat(getComputedStyle(el, pseudo).animationDuration) * 1000;
-          const spot = document.querySelector('.schedule .dots .ball');
+          // A ball added later carries .ball-new: it spins in (balls already on screen at load stay still).
+          const spot = document.querySelector('.schedule .dots .ball').cloneNode(true);
+          spot.classList.add('ball-new');
+          document.querySelector('.schedule .dots').appendChild(spot);
+          const spotName = getComputedStyle(spot).animationName;
+          const spotMs = ms(spot);
+          spot.remove();
           const btn = document.querySelector('.schedule .sched-btn');
-          return { spot: getComputedStyle(spot).animationName, spotMs: ms(spot), press: getComputedStyle(btn).transitionDuration };
+          return { spot: spotName, spotMs, press: getComputedStyle(btn).transitionDuration };
         });
         await p.getByRole('button', { name: /^Out for|Drop out/ }).first().click();
         const dlg = p.locator('dialog[open]');
@@ -3964,7 +3973,7 @@ async function main() {
         return out;
       };
       const on = await read('no-preference');
-      assert(on.spot === 'spot-pop' && on.spotMs >= 200, `filled spots should spring in: ${JSON.stringify(on)}`);
+      assert(on.spot === 'ball-spin-in' && on.spotMs >= 400 && on.spotMs <= 500, `filled spots should spin in: ${JSON.stringify(on)}`);
       assert(on.sheet[0] === 'sheet-up' && on.sheet[1] >= 200, `sheets should slide up: ${JSON.stringify(on)}`);
       assert(!/^0s(, 0s)*$/.test(on.press), `buttons should press down: ${on.press}`);
       const off = await read('reduce');
@@ -4166,18 +4175,18 @@ async function main() {
       await sheet.getByText('Use your credit when you pay for a game.').waitFor();
       assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'nothing pending yet');
       await sheet.locator('[data-request-refund]').click();
-      const amount = sheet.getByLabel('Refund amount');
+      const amount = sheet.getByLabel('Cash out amount');
       assert((await amount.inputValue()) === '3', `prefilled with ${await amount.inputValue()}`);
       await amount.fill('5');
-      await sheet.getByRole('button', { name: 'Request refund' }).click();
+      await sheet.getByRole('button', { name: /^Request cash out from/ }).click();
       await sheet.getByText('You have $3 credit.').waitFor();
       assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'too much must not be requested');
       await amount.fill('3');
-      await sheet.getByRole('button', { name: 'Request refund' }).click();
-      await b.locator('.toast', { hasText: 'Refund requested' }).waitFor();
+      await sheet.getByRole('button', { name: /^Request cash out from/ }).click();
+      await b.locator('.toast', { hasText: 'Cash out requested' }).waitFor();
       const pending = sheet.locator('[data-refund-pending]');
       await pending.waitFor();
-      assert(/^Refund requested: \$3, pending Cancel request$/.test(squash(await pending.innerText())), `pending line was "${await pending.innerText()}"`);
+      assert(/^Cash out requested: \$3, pending Cancel request$/.test(squash(await pending.innerText())), `pending line was "${await pending.innerText()}"`);
       await pending.getByRole('button', { name: 'Cancel request' }).waitFor();
       assert((await sheet.locator('[data-request-refund]').count()) === 0, 'one request at a time');
       const gr = await b.evaluate(greenReport);
@@ -4186,8 +4195,8 @@ async function main() {
       await b.keyboard.press('Escape');
       await b.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       const chip = b.locator('header [data-credit-chip]');
-      assert(squash(await chip.innerText()) === 'REFUND $3', `chip was "${await chip.innerText()}"`);
-      assert(/refund requested/.test(await chip.getAttribute('aria-label')), 'chip label says a refund is requested');
+      assert(squash(await chip.innerText()) === 'CASH OUT $3', `chip was "${await chip.innerText()}"`);
+      assert(/cash out requested/.test(await chip.getAttribute('aria-label')), 'chip label says a cash out is requested');
       // Other players never see Blair's credit or request.
       const html = await players.Emery.content();
       assert(!/Blair.*(credit|refund)/i.test(html.replace(/\s+/g, ' ')), "Blair's credit leaked");
@@ -4227,7 +4236,7 @@ async function main() {
       const b = players.Blair;
       await b.locator('header [data-credit-chip]').click();
       await b.locator('[data-credit-sheet] [data-request-refund]').click();
-      await b.locator('[data-credit-sheet]').getByRole('button', { name: 'Request refund' }).click();
+      await b.locator('[data-credit-sheet]').getByRole('button', { name: /^Request cash out from/ }).click();
       await b.locator('[data-refund-pending]').waitFor();
       await b.keyboard.press('Escape');
       await b.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
@@ -4322,7 +4331,7 @@ async function main() {
       await dlg.getByRole('button', { name: 'Cancel session' }).click();
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
-      assert(/^Pickleball Wed Oct 28 is canceled\. If you paid, it's now your credit\. You can request a refund on the site\. \S+$/.test((await after.locator('.bubble').innerText()).trim()), `cancel text was: ${await after.locator('.bubble').innerText()}`);
+      assert(/^Pickleball Wed Oct 28 is canceled\. If you paid, it's now your credit\. You can request a cash out on the site\. \S+$/.test((await after.locator('.bubble').innerText()).trim()), `cancel text was: ${await after.locator('.bubble').innerText()}`);
       const back = after.locator('[data-credit-back-list]');
       await back.getByRole('heading', { name: 'Now their credit' }).waitFor();
       await back.locator('li', { hasText: 'Devon' }).getByText('$14 credit', { exact: true }).waitFor();

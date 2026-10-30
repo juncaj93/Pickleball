@@ -505,11 +505,11 @@ describe('the Text menu and Home suggestion cards', () => {
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
     const d = await dashboard(ctx);
     const item = sessionTexts(d, d.sessions.find((x: any) => x.id === s.id), ctx.app.now).find((i) => i.id === 'canceled')!;
-    expect(item.body).toBe(`Pickleball tomorrow is canceled. If you paid, it's now your credit. You can request a refund on the site. ${LINK}`);
+    expect(item.body).toBe(`Pickleball tomorrow is canceled. If you paid, it's now your credit. You can request a cash out on the site. ${LINK}`);
     ctx.app.now = Date.parse('2026-11-01T12:00:00-05:00');
     const d2 = await dashboard(ctx);
     expect(sessionTexts(d2, d2.sessions.find((x: any) => x.id === s.id), ctx.app.now).find((i) => i.id === 'canceled')!.body).toBe(
-      `Pickleball Thu Nov 5 is canceled. If you paid, it's now your credit. You can request a refund on the site. ${LINK}`,
+      `Pickleball Thu Nov 5 is canceled. If you paid, it's now your credit. You can request a cash out on the site. ${LINK}`,
     );
   });
 

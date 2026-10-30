@@ -11,6 +11,8 @@ export interface PlayerSessionView {
   startsAt: string;
   endsAt: string;
   canceled: boolean;
+  /** Why the organizer canceled (up to 40 characters), or null. Only set for a canceled game. */
+  cancelReason: string | null;
   started: boolean;
   bookingStatus: BookingStatus;
   venueName: string | null;
@@ -216,6 +218,8 @@ export interface AdminSessionView {
   decisionAt: string | null;
   canceledAt: string | null;
   canceledBy: string | null;
+  /** Why the organizer canceled (up to 40 characters), or null. */
+  cancelReason: string | null;
   state: SessionState;
   roster: AdminRosterEntry[];
   confirmedCount: number;

@@ -1574,65 +1574,123 @@ dialog.sheet::backdrop {
   color: var(--warn-fg);
 }
 
-/* ---------- Confirmation bubble next to the tapped button (see ToastProvider) ---------- */
+/* ---------- Pop-up banner: one place for every message (see ToastProvider) ---------- */
 
+/* Bottom center, clear of the floating Safari bar (about 96px up from the bottom). */
 .pop {
+  --b-in: 200ms;
+  --b-out: 250ms;
   position: fixed;
   inset: auto;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 96px);
   margin: 0;
   z-index: 60;
-  max-width: min(260px, calc(100vw - 16px));
   width: max-content;
-  padding: 7px 12px;
+  max-width: min(340px, calc(100vw - 24px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px 11px 12px;
   border: 1px solid var(--pop-line);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--pop-bg);
   color: var(--pop-fg);
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-weight: 650;
-  line-height: 1.3;
-  text-align: center;
-  box-shadow: 0 6px 20px rgb(10 20 15 / 22%);
-  pointer-events: none;
-  overflow: visible;
-  transform-origin: var(--arrow-x, 50%) 100%;
-  animation: pop-in 0.32s var(--spring);
+  line-height: 1.25;
+  text-align: left;
+  box-shadow: 0 10px 28px rgb(10 20 15 / 30%);
+  cursor: pointer;
+  touch-action: pan-y;
+  overflow: hidden;
+  transform: translateX(-50%);
+  animation: banner-in var(--b-in) ease-out both;
 }
-.pop[data-side='below'] {
-  transform-origin: var(--arrow-x, 50%) 0;
+.pop .toast-icon {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--pop-fg);
+  color: var(--pop-bg);
+  font-size: 0.8rem;
+  font-weight: 800;
 }
-.pop::after {
-  content: '';
-  position: absolute;
-  left: var(--arrow-x, 50%);
-  width: 9px;
-  height: 9px;
-  background: inherit;
-  border: inherit;
-  transform: translateX(-50%) rotate(45deg);
+.pop .toast-icon svg {
+  width: 14px;
+  height: 14px;
 }
-.pop[data-side='above']::after {
-  bottom: -5.5px;
-  border-top: 0;
-  border-left: 0;
-}
-.pop[data-side='below']::after {
-  top: -5.5px;
-  border-bottom: 0;
-  border-right: 0;
-}
-.pop[data-side='none']::after {
-  display: none;
+.pop .toast-msg {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .pop.pop-error {
   --pop-bg: var(--pop-err-bg);
   --pop-fg: var(--pop-err-fg);
   --pop-line: var(--pop-err-line);
 }
-@keyframes pop-in {
+.pop.leaving-down {
+  animation: banner-out-down var(--b-out) ease-in forwards;
+}
+.pop.leaving-left {
+  animation: banner-out-left var(--b-out) ease-in forwards;
+}
+.pop.leaving-right {
+  animation: banner-out-right var(--b-out) ease-in forwards;
+}
+@keyframes banner-in {
   from {
     opacity: 0;
-    transform: scale(0.85);
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%);
+  }
+}
+@keyframes banner-out-down {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(26px);
+  }
+}
+@keyframes banner-out-left {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-50% - 120px));
+  }
+}
+@keyframes banner-out-right {
+  to {
+    opacity: 0;
+    transform: translateX(calc(-50% + 120px));
+  }
+}
+/* Less motion: fade only. (The global reduce rule turns animations off, so these restore a plain fade.) */
+@media (prefers-reduced-motion: reduce) {
+  .pop {
+    animation: banner-fade-in var(--b-in) linear both !important;
+  }
+  .pop.leaving-down,
+  .pop.leaving-left,
+  .pop.leaving-right {
+    animation: banner-fade-out var(--b-out) linear forwards !important;
+  }
+  @keyframes banner-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes banner-fade-out {
+    to {
+      opacity: 0;
+    }
   }
 }
 
@@ -2036,7 +2094,23 @@ dialog.sheet::backdrop {
   width: 13px;
   height: 13px;
   flex: none;
-  animation: spot-pop 0.42s var(--spring);
+}
+/* A ball that just filled a circle (or was added past 4) spins in: small to full with one turn and a little overshoot. */
+.ball.ball-new {
+  animation: ball-spin-in 0.46s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+@keyframes ball-spin-in {
+  from {
+    opacity: 0;
+    transform: scale(0.2) rotate(-360deg);
+  }
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .ball .ball-skin {
   fill: var(--ball);

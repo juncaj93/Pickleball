@@ -61,6 +61,8 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
     { ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen },
     tz,
   );
+  // A canceled game shows why, when the organizer said: "Canceled - Thanksgiving".
+  if (s.state.flags.canceled && s.cancelReason && s.courtState !== 'not_opened') court.text = `Canceled - ${s.cancelReason}`;
   const later = court.kind === 'later';
   const courtWait = court.kind === 'waitlist';
   const needsCourt = court.kind === 'needs';
@@ -884,6 +886,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const [charged, setCharged] = useState(false);
   const [amount, setAmount] = useState(() => (((s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents) || 0) / 100).toFixed(2));
   const [amountError, setAmountError] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
   return (
     <ConfirmDialog
       open
@@ -904,6 +907,10 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                   Cancel court on CourtReserve
                 </CourtReserveLink>
               )}
+              <label className="field">
+                Reason (optional)
+                <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={40} placeholder="Thanksgiving" autoComplete="off" />
+              </label>
               {askCharge && (
                 <fieldset className="charge-ask">
                   <legend>Were you charged for this court?</legend>
@@ -953,7 +960,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
             api(
               'POST',
               `/api/admin/sessions/${s.id}/decision`,
-              reopening ? { decision: 'reopen' } : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}) },
+              reopening ? { decision: 'reopen' } : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) },
             ),
           reopening ? 'Session reopened' : 'Session canceled',
         );

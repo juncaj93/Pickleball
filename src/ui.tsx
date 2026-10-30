@@ -46,56 +46,45 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="empty card">{children}</div>;
 }
 
-// ---------- Confirmation bubbles ----------
+// ---------- Pop-up messages: one banner at the bottom ----------
 //
-// A small speech bubble next to the button that was tapped, with a tiny
-// pointer toward it. Shown in the top layer (above any open sheet), it never
-// moves the page and stays on screen near the edges. Screen readers hear it
-// through a live region. Confirmations last about 2 seconds, errors 4.
+// Every "You're in" / "Marked paid" / error message shows in ONE place: a
+// rounded banner at the bottom center, above the Safari bar. It fades in,
+// stays, then swipes away. A tap or swipe closes it early; a new message
+// replaces the old one. It lives in the top layer, so it shows above an open
+// sheet. Screen readers hear it through a live region.
+
+/** Banner timing, in milliseconds. Change these to try other feels. */
+export const BANNER_TIMING = {
+  /** Fade in. */
+  fadeIn: 200,
+  /** How long a confirmation stays after it has faded in. */
+  stay: 1500,
+  /** How long an error stays (longer, so it can be read). */
+  errorStay: 4000,
+  /** Swipe away while fading out. */
+  out: 250,
+};
 
 type ToastKind = 'ok' | 'error';
 type ToastFn = (msg: string, kind?: ToastKind) => void;
 
 const ToastContext = createContext<ToastFn>(() => {});
 
-/** The element the person last tapped or pressed Enter on, so the bubble can point at it. */
-let lastTarget: { el: Element; rect: DOMRect; at: number } | null = null;
-if (typeof document !== 'undefined') {
-  const remember = (el: EventTarget | null) => {
-    const hit = el instanceof Element ? el.closest('button, a, [role="button"], label, summary') : null;
-    if (hit) lastTarget = { el: hit, rect: hit.getBoundingClientRect(), at: Date.now() };
-  };
-  document.addEventListener('pointerdown', (e) => remember(e.target), true);
-  document.addEventListener('click', (e) => remember(e.target), true);
-  document.addEventListener('keydown', (e) => (e.key === 'Enter' || e.key === ' ') && remember(document.activeElement), true);
-}
-
 interface Shown {
   id: number;
   msg: string;
   kind: ToastKind;
-  /** Viewport box of the tapped button, or null to sit above the bottom bar. */
-  anchor: { top: number; bottom: number; left: number; right: number } | null;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState<Shown | null>(null);
   const [spoken, setSpoken] = useState<{ msg: string; kind: ToastKind } | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const show = useCallback<ToastFn>((msg, kind = 'ok') => {
     // "Demo only" (View as, Pretend it's...) is a plain note, never a red error.
     if (msg === DEMO_MESSAGE) kind = 'ok';
-    let anchor: Shown['anchor'] = null;
-    if (lastTarget && Date.now() - lastTarget.at < 15_000) {
-      const live = lastTarget.el.isConnected ? lastTarget.el.getBoundingClientRect() : null;
-      // A button that's gone (a sheet closed) or scrolled away gets the fallback spot.
-      const r = live && live.width > 0 ? live : null;
-      if (r && r.bottom > 0 && r.top < window.innerHeight) anchor = { top: r.top, bottom: r.bottom, left: r.left, right: r.right };
-    }
-    setShown({ id: Date.now(), msg, kind, anchor });
+    setShown({ id: Date.now() + Math.random(), msg, kind });
     setSpoken({ msg, kind });
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => setShown(null), kind === 'error' ? 4000 : 2000);
   }, []);
   return (
     <ToastContext.Provider value={show}>
@@ -106,57 +95,66 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="assertive" className="sr-only">
         {spoken?.kind === 'error' ? spoken.msg : ''}
       </div>
-      {shown && <Bubble key={shown.id} shown={shown} />}
+      {shown && <Banner key={shown.id} shown={shown} onGone={() => setShown((cur) => (cur && cur.id === shown.id ? null : cur))} />}
     </ToastContext.Provider>
   );
 }
 
-function Bubble({ shown }: { shown: Shown }) {
+function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>('');
+  const swipe = useRef<{ x: number; y: number } | null>(null);
   useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
     // The top layer keeps it above an open sheet; older browsers fall back to a high z-index.
     try {
-      if ('showPopover' in el) (el as HTMLElement & { showPopover: () => void }).showPopover();
+      const el = ref.current;
+      if (el && 'showPopover' in el) (el as HTMLElement & { showPopover: () => void }).showPopover();
     } catch {
       /* already showing */
     }
-    const vw = document.documentElement.clientWidth;
-    const vh = window.innerHeight;
-    const w = el.offsetWidth;
-    const h = el.offsetHeight;
-    const gap = 10;
-    const margin = 8;
-    const a = shown.anchor;
-    let top: number;
-    let center: number;
-    let below = false;
-    if (a) {
-      center = (a.left + a.right) / 2;
-      below = a.top - h - gap < margin + 4;
-      top = below ? a.bottom + gap : a.top - h - gap;
-      top = Math.min(Math.max(top, margin), vh - h - margin);
-    } else {
-      center = vw / 2;
-      top = vh - h - 96; // above the bottom bar
-    }
-    const left = Math.min(Math.max(center - w / 2, margin), vw - w - margin);
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.style.setProperty('--arrow-x', `${Math.min(Math.max(center - left, 14), w - 14)}px`);
-    el.dataset.side = a ? (below ? 'below' : 'above') : 'none';
-    el.style.visibility = 'visible';
+  }, []);
+  useEffect(() => {
+    const stay = shown.kind === 'error' ? BANNER_TIMING.errorStay : BANNER_TIMING.stay;
+    const t = setTimeout(() => setLeaving((v) => v || 'down'), BANNER_TIMING.fadeIn + stay);
+    return () => clearTimeout(t);
   }, [shown]);
+  const gone = useRef(onGone);
+  gone.current = onGone;
+  useEffect(() => {
+    if (!leaving) return;
+    const t = setTimeout(() => gone.current(), BANNER_TIMING.out);
+    return () => clearTimeout(t);
+  }, [leaving]);
   return (
     <div
       ref={ref}
       popover="manual"
-      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}`}
+      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
+      data-banner
       aria-hidden="true"
-      style={{ visibility: 'hidden' }}
+      style={{ '--b-in': `${BANNER_TIMING.fadeIn}ms`, '--b-out': `${BANNER_TIMING.out}ms` } as React.CSSProperties}
+      onClick={() => setLeaving((v) => v || 'down')}
+      onPointerDown={(e) => {
+        swipe.current = { x: e.clientX, y: e.clientY };
+      }}
+      onPointerUp={(e) => {
+        const from = swipe.current;
+        swipe.current = null;
+        if (!from) return;
+        const dx = e.clientX - from.x;
+        const dy = e.clientY - from.y;
+        if (Math.abs(dx) > 24 && Math.abs(dx) >= Math.abs(dy)) setLeaving(dx < 0 ? 'left' : 'right');
+        else if (dy > 18) setLeaving('down');
+      }}
     >
-      {shown.msg}
+      <span className="toast-icon" aria-hidden="true">
+        {shown.kind === 'error' ? '!' : (
+          <svg viewBox="0 0 20 20">
+            <path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+      <span className="toast-msg">{shown.msg}</span>
     </div>
   );
 }
@@ -510,9 +508,9 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
 }
 
 /** One pickleball: a yellow-green ball with the hole pattern. Inline SVG, no image files. */
-function Pickleball({ me }: { me?: boolean }) {
+function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
   return (
-    <svg className={`ball${me ? ' me' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+    <svg className={`ball${me ? ' me' : ''}${fresh ? ' ball-new' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
       <circle cx="10" cy="10" r="9" className="ball-skin" />
       <g className="ball-holes">
         <circle cx="10" cy="5.2" r="1.3" />
@@ -534,10 +532,16 @@ function Pickleball({ me }: { me?: boolean }) {
  */
 export function SpotDots({ names, me }: { names: string[]; me?: string | null }) {
   const slots = Math.max(MIN_PLAYERS, names.length);
+  // Only balls that appeared since the last render spin in; the first look at a card is still.
+  const seen = useRef<number | null>(null);
+  const before = seen.current;
+  useEffect(() => {
+    seen.current = names.length;
+  }, [names.length]);
   return (
     <span className="dots" role="img" aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}>
       {Array.from({ length: slots }, (_, i) =>
-        i < names.length ? <Pickleball key={i} me={names[i] === me} /> : <span key={i} className="dot" />,
+        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={before !== null && i >= before} /> : <span key={i} className="dot" />,
       )}
     </span>
   );

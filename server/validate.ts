@@ -27,6 +27,22 @@ export function optionalText(v: unknown, field: string, max: number): string | n
   return text(v, field, { max });
 }
 
+/**
+ * The organizer's optional reason for canceling: a string if present, control
+ * characters dropped, runs of whitespace (and newlines) made single spaces,
+ * trimmed, cut to 40 characters (whole characters, never half an emoji).
+ * Empty becomes null.
+ */
+export const CANCEL_REASON_MAX = 40;
+export function cancelReason(v: unknown): string | null {
+  if (v === undefined || v === null) return null;
+  if (typeof v !== 'string') bad('reason', 'The reason must be text.');
+  // eslint-disable-next-line no-control-regex
+  const clean = v.replace(/[\u0000-\u0008\u000e-\u001f\u007f-\u009f]/g, '').replace(/\s+/g, ' ').trim();
+  const cut = Array.from(clean).slice(0, CANCEL_REASON_MAX).join('').trim();
+  return cut === '' ? null : cut;
+}
+
 export function bool(v: unknown, field: string): boolean {
   if (typeof v !== 'boolean') bad(field, `${field} must be true or false.`);
   return v;

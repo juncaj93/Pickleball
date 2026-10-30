@@ -67,7 +67,7 @@ function PastSessions({ ctx }: { ctx: AdminCtx }) {
                 </span>
                 <span className="h-who">
                   {s.state.flags.canceled ? (
-                    <span className="h-canceled">{s.courtState === 'not_opened' ? "Court didn't open" : 'Canceled'}</span>
+                    <span className="h-canceled">{s.courtState === 'not_opened' ? "Court didn't open" : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>
                   ) : (
                     <>
                       <strong>{s.finalized ? `${s.finalized.playedCount} played · $${s.finalized.priceCents / 100} each` : `${played.length} in`}</strong>

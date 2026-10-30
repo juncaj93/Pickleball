@@ -144,3 +144,47 @@ Presentation only. No money rule, money math, schema or server change.
 - A fresh reviewer who wrote none of the code confirmed: no server, API or money
   code changed, players still only get their own money and credit, and the
   credit-back note matches the table (N=5 $3, 6 $5, 7 $6, 8 $7, 9 $8, 10 $9).
+
+## Round 2: feedback on the live redesign, plus Cancel with a reason (Oct 30, 2026)
+
+Status: built and tested, NOT deployed yet. Deploy order matters: back up, apply
+migration 0014, then deploy the code (the new code names the new column).
+
+### What changed
+- Credit sheet: "Request refund" is now "Request cash out from Alex" (the organizer's
+  name). The pending line, toast, chip label ("CASH OUT"), history line ("-$14 cashed
+  out") and the canceled-game text ("You can request a cash out on the site.") match.
+  Organizer screens and Telegram alerts keep "refund".
+- The "Your $14 is now credit. Request refund" line is gone from cards. The CREDIT
+  chip counts up (0.75 s, whole dollars, width held steady) and pulses once; a chip
+  that was not there fades in and counts from $0. Reduce Motion: new number only.
+- A pickleball spins in (0.46 s, one turn, small overshoot) only when it is new.
+  Balls already on screen at load stay still.
+- Compact cards in every tier. After the names: one money line (amber chip with its
+  button beside it, or green pill with the quiet links on the same line) and at most
+  one line of small links. LATER rows are three-part grids (tile, middle, controls)
+  with the status line across the top; wide controls (two buttons, long pill) drop
+  under the middle block. The calendar icon sits at the right end of the status line.
+  Quiet links are small on the page with a 44 px tap area drawn by ::before.
+- With credit to use, the chip reads "$14 due · $9 credit" (one chip instead of a
+  chip plus a sub-line). Part credit: "$5 left to pay" (credit used is read by
+  screen readers).
+- One banner for every pop-up message: bottom center, about 96 px above the bottom,
+  max 340 px, check icon, fades in 0.2 s, stays 1.5 s (errors 4 s), then slides away
+  0.25 s; tap or swipe closes it; new message replaces old; shows above sheets.
+  Timings: `BANNER_TIMING` at the top of the pop-up section in `src/ui.tsx`.
+  Chip timings: `CHIP_COUNT_MS`, `CHIP_PULSE_MS` in `src/pages/CreditSheet.tsx`.
+- Cancel with a reason: organizer cancel dialog has "Reason (optional)" (40
+  characters). Stored in new nullable column `sessions.cancel_reason`
+  (`migrations/0014_cancel_reason.sql`, additive only). Reopen clears it. Player card
+  reads "Cancelled - Thanksgiving" or "Cancelled"; organizer screens read "Canceled -
+  Thanksgiving". The reason is not added to any text message.
+
+### Tests
+- 558 unit tests (10 new for the reason). Browser: run 229, names 24, gates 32,
+  alerts 52, court 84, held 81, credit 153, suggest 35, popup 33, texts 52, circles 18,
+  audit-stage3 3, cancel-reason 8, round2 17 (new: layout at 4 widths x light/dark,
+  joining height growth, chip count-up, spin-in, banner, cash-out wording).
+  Old checks were updated for the new wording and layout; none were deleted.
+- A fresh reviewer who wrote none of the code checked privacy, money, HTML
+  injection and the migration: all passed.

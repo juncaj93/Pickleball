@@ -50,7 +50,7 @@ describe('texts when a session changes', () => {
   const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
   const moved = { startsAt: '2026-11-06T01:00:00.000Z', endsAt: '2026-11-06T03:00:00.000Z' };
   it('cancel: "Pickleball Tue Nov 3 is canceled." then the credit line, with an optional reason after the first sentence', () => {
-    const credit = "If you paid, it's now your credit. You can request a refund on the site.";
+    const credit = "If you paid, it's now your credit. You can request a cash out on the site.";
     expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net')).toBe(`Pickleball Tue Nov 3 is canceled. ${credit} pickleball.juncaj.net`);
     expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net', '  rain in the forecast ')).toBe(`Pickleball Tue Nov 3 is canceled. rain in the forecast. ${credit} pickleball.juncaj.net`);
     expect(canceledMessage(s, TZ, LONG_BEFORE, 'pickleball.juncaj.net', 'Court closed!')).toBe(`Pickleball Tue Nov 3 is canceled. Court closed! ${credit} pickleball.juncaj.net`);

@@ -208,16 +208,26 @@ async function main() {
     await ctx.close();
   });
 
-  await check('balls spring in when someone joins, and stay still under Reduce Motion', async () => {
+  await check('balls spin in when someone joins (see round2.cjs for the live join), and stay still under Reduce Motion', async () => {
     for (const reducedMotion of ['no-preference', 'reduce']) {
       const ctx = await browser.newContext({ ...phone(390, 'light'), reducedMotion });
       await post(ctx.request, '/api/me', { playerId: d.players.find((p) => p.name === 'Ryan').id });
       const page = await ctx.newPage();
       await page.goto(BASE);
       await page.locator('.schedule .dots .ball').first().waitFor();
-      const anim = await page.evaluate(() => getComputedStyle(document.querySelector('.schedule .dots .ball')).animationName);
+      // Balls already there at load stay still; a ball added later carries .ball-new and spins.
+      const loaded = await page.evaluate(() => getComputedStyle(document.querySelector('.schedule .dots .ball')).animationName);
+      assert(loaded === 'none', `balls animate on load (${loaded})`);
+      const anim = await page.evaluate(() => {
+        const b = document.querySelector('.schedule .dots .ball').cloneNode(true);
+        b.classList.add('ball-new');
+        document.querySelector('.schedule .dots').appendChild(b);
+        const name = getComputedStyle(b).animationName;
+        b.remove();
+        return name;
+      });
       if (reducedMotion === 'reduce') assert(anim === 'none', `Reduce Motion still animates (${anim})`);
-      else assert(anim === 'spot-pop', `no spring when someone joins (${anim})`);
+      else assert(anim === 'ball-spin-in', `no spin when someone joins (${anim})`);
       await ctx.close();
     }
   });

@@ -81,12 +81,18 @@ export function PlayerHome({
   // A shared link like ?s=<session id> opens with that session highlighted.
   const [focusId] = useState(() => new URLSearchParams(window.location.search).get('s'));
   const scrolled = useRef(false);
+  // The credit the last screen showed, so a chip that appears later can count up from it.
+  const lastBalance = useRef<number | null>(null);
 
   useEffect(() => {
     if (load.data && groupKey && !viewAs) storageSet('pb_group_key', groupKey);
   }, [load.data, groupKey, viewAs]);
 
   const g = load.data;
+  const balance = g && (switching || (!viewAs && !g.me)) ? null : (g?.credit.balanceCents ?? null);
+  useEffect(() => {
+    if (balance !== null) lastBalance.current = balance;
+  }, [balance]);
   // Scroll to a shared session once the schedule shows (after picking a name).
   const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
   const choosing = !!g && (switching || (!viewAs && !g.me));
@@ -117,6 +123,7 @@ export function PlayerHome({
   const pickName = !!g && (switching || (!viewAs && !g.me));
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
   const showChip = !!g && !pickName && (g.credit.balanceCents > 0 || !!g.credit.pending);
+  const chipStart = lastBalance.current;
   const sessions = g ? (showAll || focusIndex >= SHOW_FIRST ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
 
   return (
@@ -146,7 +153,7 @@ export function PlayerHome({
           ) : undefined
         }
         tools={<ModeButton preview={!!viewAs} />}
-        chip={showChip ? <CreditChip credit={g.credit} onOpen={() => setCreditOpen(true)} /> : undefined}
+        chip={showChip ? <CreditChip credit={g.credit} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
       />
       <main className="page stack-lg">
         {load.loading && !g && <Spinner />}
@@ -187,7 +194,7 @@ export function PlayerHome({
                 return (
                   <Fragment key={s.id}>
                     {header && <h3 className={`week-break tier-${tier}`}>{header}</h3>}
-                    <ScheduleRow s={s} g={g} tier={tier} highlight={s.id === focusId} onChanged={load.reload} onRequestRefund={() => setCreditOpen(true)} />
+                    <ScheduleRow s={s} g={g} tier={tier} highlight={s.id === focusId} onChanged={load.reload} />
                   </Fragment>
                 );
               })}
@@ -204,7 +211,7 @@ export function PlayerHome({
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
-      {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
+      {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </>
   );
 }
@@ -722,12 +729,12 @@ function countLine(s: PlayerSessionView): string {
 }
 
 /**
- * What this player owes on a card, in the new look: an amber chip ("$14 due",
- * "$5 left to pay") or a green pill ("Paid $14", "Paid with credit"), a
- * small gray credit line, then the one filled button (Pay, or Use credit
- * when credit covers it) and quiet links. `drop` is the "Drop out" link, which
- * the card puts last. On game day after 8:00 AM the card at the top takes
- * over the buttons and this shows only the chip.
+ * What this player owes on a card, in the compact look. At most two lines
+ * after the names: the money line (an amber chip with its button beside it, or
+ * the green "Paid" pill with the quiet links on the same line) and one line of
+ * small links ("I paid", "Drop out"). `drop` is the "Drop out" link. On game
+ * day after 8:00 AM the card at the top takes over the buttons and this shows
+ * only the chip. In the flat LATER rows the money line is the right column.
  */
 function RowPay({
   g,
@@ -750,9 +757,9 @@ function RowPay({
   if (mine.paymentStatus === 'paid') {
     const amount = mine.shareCents;
     return (
-      <>
+      <div className="sched-money stacked">
         <span className="pchip chip-ok paid-tag" data-paid>{mine.paidWithCredit ? 'Paid with credit' : amount ? `Paid ${formatPrice(amount)}` : 'Paid'}</span>
-        <div className="act-row">
+        <span className="inline-links">
           {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
           {mine.paidWithCredit && (
             <button className="link-btn quiet-link" data-undo-credit disabled={credit.busy} onClick={() => credit.undo(s.id)}>
@@ -765,44 +772,53 @@ function RowPay({
             </button>
           )}
           {drop}
-        </div>
-      </>
+        </span>
+      </div>
     );
   }
-  if (mine.oweCents <= 0) return <div className="act-row">{drop}</div>;
+  if (mine.oweCents <= 0) {
+    return (
+      <div className="sched-money stacked">
+        <span className="inline-links">{drop}</span>
+      </div>
+    );
+  }
   const left = mine.creditCents > 0;
+  // With credit to use, "Use credit" is the filled button and Pay is its outline twin (covers all or part).
+  const showCredit = mine.useCreditCents > 0;
+  const chipText = left
+    ? `${formatPrice(mine.oweCents)} left to pay`
+    : showCredit
+      ? `${formatPrice(mine.oweCents)} due · ${formatPrice(g.credit.usableCents)} credit`
+      : `${formatPrice(mine.oweCents)} due`;
   const chip = (
     <span className="pchip chip-warn" data-owe>
-      {left ? `${formatPrice(mine.oweCents)} left to pay` : `${formatPrice(mine.oweCents)} due`}
+      {chipText}
+      {left && <span className="sr-only">, {formatPrice(mine.creditCents)} credit used</span>}
     </span>
   );
   if (onTop) {
     return (
-      <>
+      <div className="sched-money stacked">
         {chip}
-        <div className="act-row">{drop}</div>
-      </>
+        <span className="inline-links">{drop}</span>
+      </div>
     );
   }
   const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
-  // Credit: the one filled button when it covers everything, otherwise an outline button beside Pay.
-  const showCredit = mine.useCreditCents > 0;
-  // With credit to use, "Use credit" is the filled button and Pay is its outline twin (covers all or part).
-  const creditCovers = showCredit;
   const filled = 'btn pay-btn';
   const outline = 'btn pay-btn outline';
   const creditBtn = showCredit && (
-    <button className={creditCovers ? filled : outline} data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.oweCents, mine.useCreditCents)}>
+    <button className={filled} data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.oweCents, mine.useCreditCents)}>
       Use credit
     </button>
   );
-  const creditLine = left ? `${formatPrice(mine.creditCents)} credit used` : showCredit ? `You have ${formatPrice(g.credit.usableCents)} credit` : null;
   const creditHint = showCredit && !left ? <span className="credit-hint sr-only">{creditHintText(mine.useCreditCents, g.credit.usableCents, mine.oweCents)}</span> : null;
   const payLabel = `Pay ${formatPrice(mine.oweCents)}`;
   // Always pay first when credit does not cover it; "I paid" stays for anyone who paid another way.
   const payBtn = pay.url ? (
     <a
-      className={creditCovers ? outline : filled}
+      className={showCredit ? outline : filled}
       href={pay.url}
       data-app-href={pay.appUrl ?? undefined}
       target="_blank"
@@ -816,7 +832,7 @@ function RowPay({
       {left ? payLabel : 'Pay'}
     </a>
   ) : (
-    <button className={creditCovers ? outline : filled} disabled={busy} onClick={() => paid.set(true)}>
+    <button className={showCredit ? outline : filled} disabled={busy} onClick={() => paid.set(true)}>
       I paid
     </button>
   );
@@ -827,15 +843,15 @@ function RowPay({
   );
   return (
     <>
-      {chip}
-      {creditLine && <p className="sched-sub credit-line">{creditLine}</p>}
-      {creditHint}
-      <div className="act-row">
-        {creditCovers && creditBtn}
-        {payBtn}
-        {!creditCovers && creditBtn}
+      <div className="sched-money pay-line">
+        {chip}
+        {creditHint}
+        <span className="sched-btns">
+          {showCredit && creditBtn}
+          {payBtn}
+        </span>
       </div>
-      <div className="act-row">
+      <div className="sched-links inline-links">
         {iPaid}
         {drop}
       </div>
@@ -846,8 +862,9 @@ function RowPay({
 /**
  * One session in the schedule. Three looks by tier: THIS WEEK (big tile,
  * green outline, soft shadow), NEXT WEEK (smaller, thin outline) and LATER
- * (a flat row). The tile carries the weekday (or TONIGHT), date, and a check
- * when you're in; the short time sits under it. No green tint for joined.
+ * (a flat two-column row). The tile carries the weekday (or TONIGHT), date,
+ * and a check when you're in; the short time sits under it. No green tint for
+ * joined. The calendar icon sits at the right end of the status line.
  */
 function ScheduleRow({
   s,
@@ -855,7 +872,6 @@ function ScheduleRow({
   tier,
   onChanged,
   highlight,
-  onRequestRefund,
 }: {
   s: PlayerSessionView;
   g: GroupView;
@@ -863,8 +879,6 @@ function ScheduleRow({
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
-  /** "Request refund" on the "Your $14 is now credit" line opens the credit sheet. */
-  onRequestRefund: () => void;
 }) {
   const tz = g.group.timezone;
   const toast = useToast();
@@ -900,6 +914,7 @@ function ScheduleRow({
   const onTop = g.payDue.some((o) => o.sessionId === s.id);
   const isIn = inSession && !s.canceled;
   const tonight = open && playerDay(s.startsAt, tz, nowMs).word === 'tonight';
+  // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
   const calLink = isIn && open && (
     <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
       <CalendarPlusIcon />
@@ -911,31 +926,25 @@ function ScheduleRow({
       Drop out
     </button>
   );
-  const dropAndCal = (
-    <>
-      {dropLink}
-      {calLink}
-    </>
-  );
   const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || onTop);
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
   const notIn = open && !(inSession || waiting);
   const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice) : null;
 
-  // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled.
+  // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Cancelled (with the organizer's reason).
   const courtWord = <span>{court.playerText}</span>;
   let status: ReactNode;
-  if (s.canceled) status = <span className="st-canceled">{court.playerText}</span>;
+  if (s.canceled) status = <span className="st-canceled">{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Cancelled - ${s.cancelReason}` : 'Cancelled'}</span>;
   else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn)
     status = (
       <>
-        <strong className="st-in">You're in</strong>
-        <span className="court-status">
+        <span className="st-lead">
+          <strong className="st-in">You're in</strong>
           <span className="st-sep">·</span>
-          {courtWord}
         </span>
+        <span className="court-status">{courtWord}</span>
       </>
     );
   else
@@ -956,51 +965,22 @@ function ScheduleRow({
       {courtWait ? 'Leave standby' : 'Leave waitlist'}
     </button>
   );
-  // In the flat LATER row the join button and the Drop out link sit on the right, away from the text.
-  const rightSide = tier === 'later' && !payShows;
-
-  const body = (
-    <div className="sched-body">
-      <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
-        {status}
-      </div>
-      {showCount && (
-        <div className="in-line">
-          <span className="in-count">{countLine(s)}</span>
-          <SpotDots names={names} me={g.me?.name} />
-        </div>
-      )}
-      {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
-      {!s.canceled && !waiting && (
-        <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
-      )}
-      {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
-      {s.canceled && <p className="sched-sub">If you paid, it's now your credit.</p>}
-
-      {s.extra && <span className="sr-only">Extra game</span>}
-      {s.note && <p className="game-note">{s.note}</p>}
-      {goodNews && <Notice tone="ok">{goodNews}</Notice>}
-      {/* Money that came back from this game (they dropped out, or it was canceled) is credit now. */}
-      {mine && mine.creditBackCents > 0 && (mine.status === 'withdrawn' || s.canceled) && (
-        <p className="small credit-back-line" data-credit-back>
-          Your {formatPrice(mine.creditBackCents)} is now credit.{' '}
-          <button className="link-btn" onClick={onRequestRefund}>
-            Request refund
-          </button>
-        </p>
-      )}
-
-      {payShows && <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} drop={dropAndCal} />}
-      {isIn && !payShows && !rightSide && (dropLink || calLink) && <div className="act-row">{dropAndCal}</div>}
-      {!rightSide && (joinBtn || leaveBtn) && <div className="act-row">{joinBtn}{leaveBtn}</div>}
-      {note && <p className="credit-note" data-credit-note>{note}</p>}
-    </div>
+  // In a LATER row the right column holds one short control. Anything wider (two buttons, a long button or pill)
+  // drops under the middle block instead of squeezing the names.
+  const wide =
+    !!(joinBtn && (courtWait || s.joinAs !== 'in')) ||
+    !!leaveBtn ||
+    (payShows && !!mine && !onTop && (mine.useCreditCents > 0 || mine.creditCents > 0 || (mine.paymentStatus === 'paid' && !!mine.paidWithCredit)));
+  const noteEl = note && (
+    <p className="credit-note" data-credit-note>
+      {note}
+    </p>
   );
 
   return (
     <article
       id={`row-${s.id}`}
-      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
+      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${wide ? ' wide-money' : ''}`}
       data-tier={tier}
       data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
@@ -1016,13 +996,42 @@ function ScheduleRow({
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
         {isIn ? ". You're in" : ''}
       </h2>
-      {body}
-      {rightSide && (
-        <div className="sched-act">
-          {joinBtn || leaveBtn}
-          {isIn && dropAndCal}
+      <div className="sched-body">
+        <div className="sched-head">
+          <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
+            {status}
+          </div>
+          {calLink}
         </div>
-      )}
+        <div className="sched-main">
+          {showCount && (
+            <div className="in-line">
+              <span className="in-count">{countLine(s)}</span>
+              <SpotDots names={names} me={g.me?.name} />
+            </div>
+          )}
+          {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
+          {!s.canceled && !waiting && (
+            <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
+          )}
+          {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
+          {s.canceled && <p className="sched-sub">If you paid, it's now your credit.</p>}
+
+          {s.extra && <span className="sr-only">Extra game</span>}
+          {s.note && <p className="game-note">{s.note}</p>}
+          {goodNews && <Notice tone="ok">{goodNews}</Notice>}
+          {tier === 'later' && noteEl}
+        </div>
+
+        {payShows && <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} drop={dropLink} />}
+        {isIn && !payShows && dropLink && (
+          <div className="sched-money stacked">
+            <span className="inline-links">{dropLink}</span>
+          </div>
+        )}
+        {(joinBtn || leaveBtn) && <div className="sched-money">{joinBtn}{leaveBtn}</div>}
+        {tier !== 'later' && noteEl}
+      </div>
 
       <ConfirmDialog
         open={askOut}

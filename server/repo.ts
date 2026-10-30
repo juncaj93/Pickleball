@@ -61,6 +61,8 @@ export interface SessionRow {
   decision_at: string | null;
   canceled_at: string | null;
   canceled_by: string | null;
+  /** Why the organizer canceled, up to 40 characters. Null when none was given or the game is not canceled. */
+  cancel_reason: string | null;
   planned_starts_at: string | null;
   six_reached_at: string | null;
   six_drop_resolved_at: string | null;

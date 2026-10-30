@@ -37,8 +37,8 @@ describe('the Text menu wording', () => {
     expect(needPlayersMessage(s, TZ, LONG_BEFORE, 2, link)).toBe('Need 2 more for pickleball Tue Nov 3, 8:00 PM. In? pickleball.juncaj.net');
     expect(promotedMessage(s, TZ, LONG_BEFORE, link)).toBe("A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. pickleball.juncaj.net");
     expect(checkInMessage(s, TZ, Date.parse('2026-11-02T17:00:00Z'), link)).toBe('Pickleball tomorrow, 8:00 PM. Can\'t make it? Update here: pickleball.juncaj.net');
-    expect(canceledMessage(s, TZ, LONG_BEFORE, link)).toBe("Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a refund on the site. pickleball.juncaj.net");
-    expect(canceledMessage(s, TZ, LONG_BEFORE, link, 'Court flooded')).toBe("Pickleball Tue Nov 3 is canceled. Court flooded. If you paid, it's now your credit. You can request a refund on the site. pickleball.juncaj.net");
+    expect(canceledMessage(s, TZ, LONG_BEFORE, link)).toBe("Pickleball Tue Nov 3 is canceled. If you paid, it's now your credit. You can request a cash out on the site. pickleball.juncaj.net");
+    expect(canceledMessage(s, TZ, LONG_BEFORE, link, 'Court flooded')).toBe("Pickleball Tue Nov 3 is canceled. Court flooded. If you paid, it's now your credit. You can request a cash out on the site. pickleball.juncaj.net");
   });
   it('Final price: played count and price each, the credit line only when something comes back', () => {
     const thu = { startsAt: '2026-10-30T00:00:00.000Z', endsAt: '2026-10-30T02:00:00.000Z' }; // Thu Oct 29, 8 PM EDT

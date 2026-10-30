@@ -85,7 +85,7 @@ describe('every text that names a game date uses the day word', () => {
     expect(promotedMessage(TUE, TZ, farNow, L)).toBe(`A spot opened and you're in for pickleball Tue Nov 3, 8:00 PM. ${L}`);
   });
   it('Canceled, with the credit wording', () => {
-    const credit = "If you paid, it's now your credit. You can request a refund on the site.";
+    const credit = "If you paid, it's now your credit. You can request a cash out on the site.";
     expect(canceledMessage(TUE, TZ, tonightNow, L)).toBe(`Pickleball tonight is canceled. ${credit} ${L}`);
     expect(canceledMessage(TUE, TZ, tomorrowNow, L)).toBe(`Pickleball tomorrow is canceled. ${credit} ${L}`);
     expect(canceledMessage(TUE, TZ, farNow, L)).toBe(`Pickleball Tue Nov 3 is canceled. ${credit} ${L}`);

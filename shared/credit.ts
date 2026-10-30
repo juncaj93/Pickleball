@@ -202,13 +202,14 @@ export function creditOweText(oweCents: number, creditCents: number): string {
 /**
  * One line of credit history, the same for the player's sheet and the
  * organizer: "+$5 Thu, Oct 29 (6 played)", "-$14 used for Tue, Nov 3",
- * "+$14 canceled Thu, Nov 5", "-$14 refunded".
+ * "+$14 canceled Thu, Nov 5", "-$14 refunded" (a player's sheet: "-$14 cashed out").
  */
-export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'sessionStartsAt' | 'reason' | 'playedCount'>, tz: string): string {
+export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'sessionStartsAt' | 'reason' | 'playedCount'>, tz: string, forPlayer = false): string {
   const money = formatPrice(e.cents);
   const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
   if (e.kind === 'used') return `-${money} used${day ? ` for ${day}` : ''}`;
-  if (e.kind === 'refunded') return `-${money} refunded`;
+  // The organizer's screens say refunded; the player's own sheet says cashed out.
+  if (e.kind === 'refunded') return `-${money} ${forPlayer ? 'cashed out' : 'refunded'}`;
   switch (e.reason) {
     case 'finalized':
       return `+${money}${day ? ` ${day}` : ''}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;
