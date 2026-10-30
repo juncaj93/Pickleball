@@ -1,7 +1,8 @@
-/* Held money and refunds, on a phone: blue "Paid, not played yet" until the
- * game is played, the Held row, "$X held" on Players, the refund card on Home
- * and on the Money row (Refund opens Venmo, Mark refunded records it, Undo),
- * and the Venmo field on the player Edit screen.
+/* Held money, on a phone: blue "Paid, not finalized yet" until the organizer
+ * finalizes the game, the Held row, "$X held" on Players, a canceled game's
+ * money turning into credit by itself (listed on the Money row, no refund
+ * card), Refund credit balance on Players (Venmo, Mark refunded, Undo), and
+ * the Venmo field on the player Edit screen.
  *
  *   node e2e/held.cjs      (also run by npm run test:e2e)
  *
@@ -76,7 +77,9 @@ async function main() {
     await new Promise((r) => setTimeout(r, 500));
   }
   // Mon Oct 26, 2026, 12:00 PM Eastern.
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse('2026-10-26T12:00:00-04:00') }) });
+  const MON = Date.parse('2026-10-26T12:00:00-04:00');
+  const clock = (atMs) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs }) });
+  await clock(MON);
 
   const browser = await chromium.launch();
   const api = await browser.newContext();
@@ -117,6 +120,11 @@ async function main() {
     if (!(await sess(page, s).evaluate((el) => el.open))) await sess(page, s).locator('summary').click();
   };
   const overflow = (page) => page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  const sticksOut = (loc) =>
+    loc.evaluate((el) => {
+      const box = el.getBoundingClientRect();
+      return [...el.querySelectorAll('*')].filter((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1); }).length;
+    });
 
   // ---- The Venmo field on the Edit screen (once).
   {
@@ -155,25 +163,23 @@ async function main() {
       const tag = `${width}px ${scheme}`;
       const { ctx, page, errors } = await open(scheme, width);
       await nav(page, 'Money').click();
-      await check(`${tag}: a prepaid game shows Paid in blue with "not played yet", AA contrast, nothing cut off`, async () => {
+      await check(`${tag}: a prepaid game shows Paid in blue with "not finalized yet", AA contrast, nothing cut off`, async () => {
         await openSess(page, thu);
         const row = sess(page, thu).locator('li.pay-row', { hasText: 'Mitchel' });
         const chip = row.locator('.chip');
         assert(/^Paid$/.test((await chip.innerText()).trim()), 'pill word');
         assert(await chip.evaluate((el) => el.classList.contains('tone-info')), 'pill is not blue');
         const t = squash(await row.innerText());
-        assert(/paid \$14 on .*not played yet/.test(t), t);
+        assert(/paid \$14 on .*not finalized yet/.test(t), t);
+        assert(!/not played yet/.test(t), 'old wording');
         const cols = await row.evaluate((el) => {
-          const amt = el.querySelector('.held-amt');
-          const c = getComputedStyle(amt);
           const chip = getComputedStyle(el.querySelector('.chip'));
-          const bg = getComputedStyle(el.closest('details')).backgroundColor;
-          return { amt: c.color, bg, chip: chip.color, chipBg: chip.backgroundColor };
+          return { chip: chip.color, chipBg: chip.backgroundColor };
         });
-        assert(contrast(cols.amt, cols.bg) >= 4.5, `blue text contrast ${contrast(cols.amt, cols.bg).toFixed(2)}`);
         assert(contrast(cols.chip, cols.chipBg) >= 4.5, `pill contrast ${contrast(cols.chip, cols.chipBg).toFixed(2)}`);
         const cut = await row.evaluate((el) => [...el.querySelectorAll('.pay-who, .pay-who *')].filter((x) => x.scrollWidth > x.clientWidth + 1).length);
         assert(cut === 0, 'cut-off text');
+        assert((await sess(page, thu).locator('[data-price-each]').innerText()).trim() === '$14', 'each player pays $14 until finalized');
         assert((await overflow(page)) <= 0, 'sideways scroll');
       });
       await check(`${tag}: monthly Held row is blue and Collected, Court costs and Left stay at $0`, async () => {
@@ -189,15 +195,11 @@ async function main() {
         const row = page.locator('li.player-row[data-player="Mitchel"]');
         await row.getByText('$28 held').waitFor();
         assert((await page.getByText(/held/).count()) === 1, 'held shows for someone else');
-        const b = await row.evaluate((el) => {
-          const box = el.getBoundingClientRect();
-          return [...el.querySelectorAll('*')].filter((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1); }).length;
-        });
-        assert(b === 0, 'something sticks out of the row');
+        assert((await sticksOut(row)) === 0, 'something sticks out of the row');
         await row.locator('.player-open').click();
         const sheet = page.locator('dialog[open]');
-        await sheet.getByText(/not played yet/).first().waitFor();
-        assert((await sheet.getByText(/not played yet/).count()) === 2, 'both games should say not played yet');
+        await sheet.getByText(/not finalized yet/).first().waitFor();
+        assert((await sheet.getByText(/not finalized yet/).count()) === 2, 'both games should say not finalized yet');
         await page.keyboard.press('Escape');
         await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       });
@@ -214,95 +216,86 @@ async function main() {
     }
   }
 
-  // ---- The game is played: it turns green and moves to Collected.
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse(thu.endsAt) + 3600_000 }) });
-  await check('once played, the pill is green (not blue) and the money moved from Held to Collected', async () => {
-    const { ctx, page } = await open('light', 390);
-    await nav(page, 'Money').click();
-    await openSess(page, thu);
-    const row = sess(page, thu).locator('li.pay-row', { hasText: 'Mitchel' });
-    assert(await row.locator('.chip').evaluate((el) => el.classList.contains('tone-ok')), 'pill is not green');
-    assert(!/not played yet/.test(await row.innerText()), 'still says not played yet');
-    const sum = squash(await page.locator('.money-sum').innerText());
-    assert(/Collected \$28/.test(sum) && !/Held/.test(sum), sum);
-    await ctx.close();
-  });
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse('2026-10-26T12:00:00-04:00') }) });
-
-  // ---- Thu Oct 29 is canceled: refund prompt.
+  // ---- Thu Oct 29 is canceled: Mitchel's $14 is credit by itself.
   await call(api.request, 'POST', `/api/admin/sessions/${thu.id}/decision`, { decision: 'cancel', confirm: true });
   for (const scheme of ['light', 'dark']) {
     for (const width of [360, 375, 390, 430]) {
       const tag = `${width}px ${scheme}`;
       const { ctx, page, errors } = await open(scheme, width);
-      await check(`${tag}: Home shows the refund card first, with name, amount and Refund; Tue Oct 27 is not in it`, async () => {
-        const card = page.getByRole('article', { name: /^Thu, Oct 29 was canceled\. Refund needed:/ });
-        await card.waitFor();
-        const first = await page.locator('main article').first().getAttribute('aria-label');
-        assert(/Refund needed/.test(first), `first card is "${first}"`);
-        const t = squash(await card.innerText());
-        assert(/Mitchel \$14/.test(t) && /paid \$14/.test(t), t);
-        assert(!/Oct 27/.test(t), 'mentions the other game');
-        const refund = card.getByRole('link', { name: /^Refund Mitchel/ });
-        const href = await refund.getAttribute('href');
-        assert(href === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20Thu%20Oct%2029%20refund', `href ${href}`);
-        assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20Thu%20Oct%2029%20refund', 'app link');
-        assert((await card.getByRole('button', { name: 'Mark refunded' }).count()) === 0, 'Mark refunded shown before tapping Refund');
-        const m = await card.evaluate((el) => {
-          const box = el.getBoundingClientRect();
-          const btns = [...el.querySelectorAll('.pay-btns > *')].map((b) => b.getBoundingClientRect());
-          return { out: [...el.querySelectorAll('*')].filter((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && (r.right > box.right + 1 || r.left < box.left - 1); }).length, h: btns.map((b) => b.height) };
-        });
-        assert(m.out === 0, 'sticks out of the card');
-        assert(m.h.every((h) => h >= 44), `tap target ${m.h}`);
-        assert((await overflow(page)) <= 0, 'sideways scroll');
-      });
-      await check(`${tag}: the Money row for the canceled game has the same Refund button, and Tue Oct 27 still shows Mitchel paid`, async () => {
+      await check(`${tag}: Home has no refund card; the Money row for the canceled game lists Mitchel's $14 as credit, with nothing to tap`, async () => {
+        await page.locator('section[aria-labelledby="sessions-title"] article').first().waitFor();
+        assert((await page.getByRole('article', { name: /Refund needed|was canceled/ }).count()) === 0, 'the old refund card is on Home');
+        assert((await page.getByRole('link', { name: /^Refund Mitchel/ }).count()) === 0, 'a Refund button on Home');
         await nav(page, 'Money').click();
         await openSess(page, thu);
-        const row = sess(page, thu).locator('li[data-refund="Mitchel"]');
-        await row.getByRole('link', { name: /^Refund Mitchel/ }).waitFor();
-        assert(/canceled/.test(await sess(page, thu).locator('summary').innerText()), 'row should say canceled');
-        const widths = await row.locator('.pay-btns > *').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
-        assert(widths.length === 2, `buttons ${widths}`); // Refund and Keep as credit
+        const row = sess(page, thu);
+        assert(/canceled/.test(await row.locator('summary').innerText()), 'row should say canceled');
+        await row.getByText('Nobody owes for it. Anyone who paid has it as credit.').waitFor();
+        const list = row.locator('[data-credit-back-list]');
+        await list.getByRole('heading', { name: 'Now their credit' }).waitFor();
+        await list.locator('li', { hasText: 'Mitchel' }).getByText('$14 credit', { exact: true }).waitFor();
+        assert((await list.locator('li').count()) === 1, 'only Mitchel paid');
+        assert((await row.getByRole('link', { name: /^Refund/ }).count()) === 0 && (await row.getByRole('button', { name: /Mark refunded|Keep .* credit|Undo/ }).count()) === 0, 'the old Refund / Keep as credit choice is gone');
+        assert((await row.locator('li[data-refund]').count()) === 0, 'old refund rows');
+        assert((await sticksOut(list)) === 0, 'sticks out of the row');
+        assert((await overflow(page)) <= 0, 'sideways scroll');
+      });
+      await check(`${tag}: Tue Oct 27 still shows Mitchel paid in blue; the month holds $14 and owes $14 in credit`, async () => {
         await openSess(page, tue);
         const tueRow = sess(page, tue).locator('li.pay-row', { hasText: 'Mitchel' });
         assert(await tueRow.locator('.chip').evaluate((el) => el.classList.contains('tone-info')), 'Tue should still be blue');
         const sum = squash(await page.locator('.money-sum').innerText());
-        assert(/Held \$28/.test(sum), `canceled game's money is still held until paid back: ${sum}`);
+        assert(/Held \$14/.test(sum), `only Tue is held now: ${sum}`);
+        assert(/Credits owed \$14/.test(sum), `the canceled game's money is credit: ${sum}`);
+        assert(/Money that came back to players as credit/.test(sum), `credits note: ${sum}`);
         assert((await overflow(page)) <= 0, 'sideways scroll');
       });
+      await check(`${tag}: Players tab: "$14 held" and "Credit $14" for Mitchel, nothing for anyone else`, async () => {
+        await nav(page, 'Players').click();
+        const row = page.locator('li.player-row[data-player="Mitchel"]');
+        await row.getByText('$14 held').waitFor();
+        await row.getByText('Credit $14').waitFor();
+        assert((await page.getByText(/held|Credit \$/).count()) === 2, 'held or credit shows for someone else');
+        assert((await sticksOut(row)) === 0, 'something sticks out of the row');
+      });
       await check(`${tag}: no browser errors`, async () => assert(errors.length === 0, errors.join(' | ')));
-      if (width === 390) await page.screenshot({ path: path.join(SHOTS, `held-refund-${scheme}.png`), fullPage: true });
+      if (width === 390) await page.screenshot({ path: path.join(SHOTS, `held-canceled-${scheme}.png`), fullPage: true });
       await ctx.close();
     }
   }
 
-  // ---- Refund, Mark refunded, Undo.
+  // ---- Refund credit balance on Players: Venmo, Mark refunded, Undo.
   {
     const { ctx, page } = await open('light', 390);
-    await check('tapping Refund opens Venmo (blocked here) and marks nothing; then Mark refunded appears, and the card goes away', async () => {
-      const card = page.getByRole('article', { name: /^Thu, Oct 29 was canceled/ });
-      await card.getByRole('link', { name: /^Refund Mitchel/ }).click();
-      const mark = card.getByRole('button', { name: 'Mark refunded' });
-      await mark.waitFor();
-      assert((await card.getByText('Refunded', { exact: true }).count()) === 0, 'marked on tap');
+    await check('Refund credit balance opens Venmo for exactly $14 to @Mitchel-K with the credit note and marks nothing; then Mark refunded appears (also after a reload) and takes the credit off', async () => {
+      await nav(page, 'Players').click();
+      const row = page.locator('li.player-row[data-player="Mitchel"]');
+      const refund = row.locator('[data-credit-refund="Mitchel"]');
+      await refund.waitFor();
+      assert((await refund.getAttribute('href')) === 'https://venmo.com/?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', `href ${await refund.getAttribute('href')}`);
+      assert((await refund.getAttribute('data-app-href')) === 'venmo://paycharge?txn=pay&recipients=Mitchel-K&amount=14&note=Pickleball%20credit%20refund', 'app link');
+      assert((await row.locator('[data-credit-mark="Mitchel"]').count()) === 0, 'Mark refunded shown before tapping Refund');
+      await refund.click();
+      await row.locator('[data-credit-mark="Mitchel"]').waitFor();
+      await row.getByText('Credit $14').waitFor(); // tapping Refund marks nothing
       await page.reload();
-      await page.getByRole('article', { name: /^Thu, Oct 29 was canceled/ }).getByRole('button', { name: 'Mark refunded' }).waitFor(); // survives a reload
-      await page.getByRole('article', { name: /^Thu, Oct 29 was canceled/ }).getByRole('button', { name: 'Mark refunded' }).click();
-      await page.getByRole('article', { name: /^Thu, Oct 29 was canceled/ }).waitFor({ state: 'detached' });
+      await nav(page, 'Players').click();
+      await page.locator('[data-credit-mark="Mitchel"]').waitFor(); // survives a reload
+      await page.locator('[data-credit-mark="Mitchel"]').click();
+      await page.locator('.toast', { hasText: 'Credit marked refunded' }).waitFor();
+      await page.locator('li.player-row[data-player="Mitchel"]').getByText('Credit $14').waitFor({ state: 'detached' });
+      assert(/\$0/.test(squash(await page.locator('li.player-row[data-player="Mitchel"]').innerText())), 'balance should be $0');
     });
-    await check('Held drops by $14, and Undo on the Money row brings the card back', async () => {
+    await check('Credits owed drops to $0, and Undo brings the credit back', async () => {
       await nav(page, 'Money').click();
-      await openSess(page, thu);
-      assert(/Held \$14/.test(squash(await page.locator('.money-sum').innerText())), 'Held after refund');
-      const row = sess(page, thu).locator('li[data-refund="Mitchel"]');
-      await row.getByText('Refunded', { exact: true }).waitFor();
-      await row.getByRole('button', { name: 'Undo' }).click();
-      await row.getByRole('link', { name: /^Refund Mitchel/ }).waitFor();
-      assert(/Held \$28/.test(squash(await page.locator('.money-sum').innerText())), 'Held after undo');
-      await nav(page, 'Home').click();
-      await page.getByRole('article', { name: /^Thu, Oct 29 was canceled/ }).waitFor();
+      const sum = squash(await page.locator('.money-sum').innerText());
+      assert(/Credits owed \$0/.test(sum) && /Held \$14/.test(sum), `after the refund: ${sum}`);
+      await nav(page, 'Players').click();
+      await page.locator('[data-credit-undo="Mitchel"]').click();
+      await page.locator('.toast', { hasText: 'Credit refund undone' }).waitFor();
+      await page.locator('li.player-row[data-player="Mitchel"]').getByText('Credit $14').waitFor();
+      await nav(page, 'Money').click();
+      assert(/Credits owed \$14/.test(squash(await page.locator('.money-sum').innerText())), 'credits owed after undo');
     });
     await check('nothing here ever says money was sent', async () => {
       const t = await page.locator('body').innerText();
@@ -311,17 +304,53 @@ async function main() {
     await ctx.close();
   }
 
+  // ---- The game is over: still held until finalized; finalizing moves it to Collected.
+  await clock(Date.parse(tue.endsAt) + 3600_000);
+  await check('after the game but before finalizing: still blue, still held, the row is tagged "finalize"', async () => {
+    const { ctx, page } = await open('light', 390);
+    await nav(page, 'Money').click();
+    await openSess(page, tue);
+    const row = sess(page, tue).locator('li.pay-row', { hasText: 'Mitchel' });
+    assert(await row.locator('.chip').evaluate((el) => el.classList.contains('tone-info')), 'pill should still be blue');
+    assert(/not finalized yet/.test(await row.innerText()), 'should say not finalized yet');
+    await sess(page, tue).locator('summary .owes-tag', { hasText: 'finalize' }).waitFor();
+    await sess(page, tue).getByText('Not finalized yet. Finalize it from Home.').waitFor();
+    const sum = squash(await page.locator('.money-sum').innerText());
+    assert(/Held \$14/.test(sum) && /Collected \$0/.test(sum), sum);
+    await ctx.close();
+  });
+  await check('once finalized (4 played, $14 each), the pill is green (not blue) and the money moved from Held to Collected', async () => {
+    const res = await api.request.post(`${BASE}/api/admin/sessions/${tue.id}/finalize`, { data: { everyone: true }, headers: { Origin: BASE } });
+    assert(res.ok(), `finalize: ${res.status()} ${await res.text()}`);
+    const { ctx, page } = await open('light', 390);
+    await nav(page, 'Money').click();
+    await openSess(page, tue);
+    const row = sess(page, tue).locator('li.pay-row', { hasText: 'Mitchel' });
+    assert(await row.locator('.chip').evaluate((el) => el.classList.contains('tone-ok')), 'pill is not green');
+    assert(!/not finalized yet|not played yet/.test(await row.innerText()), 'still says not finalized yet');
+    assert((await sess(page, tue).locator('[data-finalized-line]').innerText()).trim() === '4 played · $14 each', 'finalized line');
+    const sum = squash(await page.locator('.money-sum').innerText());
+    assert(/Collected \$14/.test(sum) && !/Held/.test(sum), sum);
+    assert(/Court costs −\$48/.test(sum), `court cost counts once finalized: ${sum}`);
+    await nav(page, 'Players').click();
+    assert((await page.getByText(/held/).count()) === 0, 'nothing held once finalized');
+    await ctx.close();
+  });
+  await clock(MON);
+
   // ---- Players never see any of it.
-  await check('player screens carry no held money, refund card or Venmo handle', async () => {
+  await check('player screens carry no held money, refund card or Venmo handle; only their own credit and a way to ask for it back', async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, isMobile: true, hasTouch: true });
     await call(ctx.request, 'POST', '/api/me', { playerId: id.Mitchel });
     const page = await ctx.newPage();
     await page.goto(BASE + '/');
     await page.locator('.schedule article').first().waitFor();
     const t = squash(await page.locator('body').innerText());
-    assert(!/held|refund|Mitchel-K|not played yet/i.test(t), t.slice(0, 300));
+    assert(!/held|Mitchel-K|not played yet|not finalized|Collected|Court costs/i.test(t), t.slice(0, 300));
+    assert(!/refund/i.test(t.replace(/Request refund/g, '')), `refund words beyond "Request refund": ${t.slice(0, 300)}`);
+    assert(/CREDIT \$14/.test(t), 'his own credit chip');
     const raw = await (await ctx.request.get(BASE + '/api/group')).text();
-    assert(!/Mitchel-K|venmo_handle|"venmo":|heldCents/.test(raw), 'API leaks it');
+    assert(!/Mitchel-K|venmo_handle|"venmo":|heldCents|creditLedger/.test(raw), 'API leaks it');
     await ctx.close();
   });
 

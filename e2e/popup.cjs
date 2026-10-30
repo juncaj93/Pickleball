@@ -99,20 +99,28 @@ async function main() {
       return { w: el.getBoundingClientRect().width, textW: r.getBoundingClientRect().width, size: cs.fontSize, weight: cs.fontWeight, color: cs.color, bg: cs.backgroundColor, text: el.textContent.trim() };
     });
 
-  // ---- Every count: the title and the second line, exactly.
+  // ---- Every count: the title and the second line, exactly. Under 4 it says how many more
+  // are needed; from 4 on "you'd make it N+1"; only at the organizer's max (set to 6 here) the waitlist.
   const WANT = [
-    [0, 'Want in tomorrow?', ''],
-    [1, 'Want in tomorrow?', '3 spots left'],
-    [2, 'Want in tomorrow?', '2 spots left'],
-    [3, 'Want in tomorrow?', '1 spot left'],
-    [4, "Want in on tomorrow's waitlist?", "4 are in. You'd be on the waitlist until a 6th joins."],
-    [5, 'Want in tomorrow?', "5 are in. You'd make it 6 and everyone plays."],
-    [6, "Want in on tomorrow's waitlist?", "6 are in. You'd be on the waitlist."],
+    [0, 'Want in tomorrow?', '', 10],
+    [1, 'Want in tomorrow?', 'Needs 3 more to play', 10],
+    [2, 'Want in tomorrow?', 'Needs 2 more to play', 10],
+    [3, 'Want in tomorrow?', 'Needs 1 more to play', 10],
+    [4, 'Want in tomorrow?', "4 are in. You'd make it 5.", 10],
+    [5, 'Want in tomorrow?', "5 are in. You'd make it 6.", 10],
+    [6, 'Want in tomorrow?', "6 are in. You'd make it 7.", 10],
+    [5, 'Want in tomorrow?', "5 are in. You'd make it 6.", 6],
+    [6, "Want in on tomorrow's waitlist?", "6 are in. You'd be on the waitlist.", 6],
   ];
-  for (const [n, title, sub] of WANT) {
+  let maxNow = 10;
+  for (const [n, title, sub, max] of WANT) {
+    if (max !== maxNow) {
+      await call(api.request, 'PUT', '/api/admin/group', { settings: { maxPlayers: max } });
+      maxNow = max;
+    }
     await setIn(n);
     const { ctx, page } = await player('light', 390);
-    await check(`${n} in: "${title}" and ${sub ? `"${sub}"` : 'no second line'}; date, time and Election Day pill on one line`, async () => {
+    await check(`${n} in (max ${max}): "${title}" and ${sub ? `"${sub}"` : 'no second line'}; date, time and Election Day pill on one line`, async () => {
       const card = page.locator('section.suggest').first();
       await card.waitFor();
       assert((await card.locator('h2').innerText()).trim() === title, `title: ${await card.locator('h2').innerText()}`);
@@ -124,13 +132,17 @@ async function main() {
       const ys = await when.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().top)));
       assert(ys.length === 2 && Math.abs(ys[0] - ys[1]) <= 6, `date and pill are not on one line: ${ys}`);
       assert((await card.getByRole('button', { name: 'Yes' }).count()) === 1 && (await card.getByRole('button', { name: 'No' }).count()) === 1, 'Yes and No');
-      // Only the popup shows spots left, never the session cards.
-      assert(!/spots? left/.test(await page.locator('.schedule').innerText()), 'spots left on a session card');
+      // The old "spots left" / "until a 6th joins" lines are gone everywhere; the session cards keep their own count.
+      assert(!/spots? left|until a 6th|everyone plays|make it \d/.test(await page.locator('.schedule').innerText()), 'popup wording on a session card');
+      assert(!/spots? left|until a 6th|everyone plays/.test(await card.innerText()), 'old wording in the popup');
+      const count = (await page.locator('.schedule article').first().locator('.in-count').innerText()).trim();
+      assert(count === (n < 4 ? `${n} of 4 in` : n >= max ? `${n} in, full` : `${n} in`), `count read "${count}" with ${n} in and a max of ${max}`);
     });
     await ctx.close();
   }
 
   // ---- The pill: same small pill everywhere, hugging its text, at every width.
+  await call(api.request, 'PUT', '/api/admin/group', { settings: { maxPlayers: 10 } });
   await setIn(4);
   for (const scheme of ['light', 'dark']) {
     for (const width of WIDTHS) {
