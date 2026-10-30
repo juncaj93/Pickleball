@@ -50,13 +50,11 @@ export function textHref(d: AdminDashboard, s: AdminSessionView, nowMs: number, 
 /**
  * Text suggestions the "Do this now" card already covers, so nothing shows
  * twice: Need players and Check-in from 6:00 PM the night before (the
- * night-before task), and the post-game note for a game of 4 or more (the
- * after-the-game task).
+ * night-before task). The post-game note stays on its own "Final price" card.
  */
 export function coveredByDoNow(c: Suggestion, d: AdminDashboard, nowMs: number): boolean {
   const s = d.sessions.find((x) => x.id === c.sessionId);
   if (!s) return false;
   if (c.kind === 'need' || c.kind === 'checkin') return nowMs >= checkInOpensMs(s.startsAt, d.group.timezone);
-  if (c.kind === 'final') return !s.state.flags.canceled && s.confirmedCount >= 4;
   return false;
 }

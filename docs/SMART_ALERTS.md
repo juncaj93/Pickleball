@@ -39,7 +39,14 @@ Cloudflare cron (every 5 min)
   `task_log`. A unique index allows one per game and alert, so two ticks at
   once can't both send.
 - **Failures.** A failed send gives its row back and writes a `failed` row
-  with the reason. The next tick retries, inside the 60-minute window only.
+  with the reason.
+  - It is retried at most every 15 minutes, up to 3 tries, and only inside
+    the 60-minute window.
+  - A tick stops at its first failure, so a Telegram outage can't use up the
+    hour's alert budget that player alerts share.
+  - If Telegram is too slow to answer, the message may still have arrived.
+    The row is kept, so the alert is never sent twice.
+  - `failed` rows older than 30 days are pruned.
 - **Limits.** At most 5 alerts per tick. The existing cap of 20 Telegram
   messages an hour still applies.
 - **Kill switch.** Settings > Alerts > Smart alerts. The main "Telegram
@@ -53,6 +60,8 @@ Cloudflare cron (every 5 min)
     text and mark it opened.
   - It expires 6 hours after the alert, and never later than the game's start.
   - It holds no phone number and needs no sign-in.
+  - Opening the page counts as tapping "Text the group". The card and the
+    alert treat that text as handled, even if Messages didn't open.
 
 ### Database
 

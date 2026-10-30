@@ -101,8 +101,6 @@ export interface TaskOptions {
 
 /** A missed tick still sends an alert that came due within this long. */
 export const CATCH_UP_MS = 60 * 60_000;
-/** The post-game note is offered for this many calendar days after the game. */
-export const POSTGAME_DAYS = 7;
 
 const MIN = 60_000;
 
@@ -117,14 +115,6 @@ function sameDay(aMs: number, bMs: number, tz: string): boolean {
   const a = localParts(aMs, tz);
   const b = localParts(bMs, tz);
   return a.year === b.year && a.month === b.month && a.day === b.day;
-}
-
-function daysBetween(fromMs: number, toMs: number, tz: string): number {
-  const num = (ms: number) => {
-    const p = localParts(ms, tz);
-    return Date.UTC(p.year, p.month - 1, p.day) / 86_400_000;
-  };
-  return Math.round(num(toMs) - num(fromMs));
 }
 
 /** "Tonight" on game day (from 5:00 PM games; "Today" for earlier ones), else "Tuesday". */
@@ -265,33 +255,26 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Task | null {
   };
 }
 
-/** After a game that was played (4 or more, not canceled): finalize, then the post-game note. From 5 minutes after it ends. */
-function finalizeTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions): Task | null {
-  if (s.canceled || s.confirmedCount < MIN_PLAYERS) return null;
+/**
+ * After a game that was played (4 or more, not canceled): "Finalize who
+ * played", from 5 minutes after it ends until it is finalized. The post-game
+ * note then comes from the existing "Final price" text card on Home.
+ */
+function finalizeTask(s: TaskSession, nowMs: number, o: TaskOptions): Task | null {
+  if (s.canceled || s.finalized || s.confirmedCount < MIN_PLAYERS) return null;
   const due = Date.parse(s.endsAt) + 5 * MIN;
   if (nowMs < due) return null;
-  const noteDone = marks.has(markKey(s.id, 'postgame_text'));
-  if (s.finalized && (noteDone || daysBetween(Date.parse(s.startsAt), nowMs, o.tz) >= POSTGAME_DAYS)) return null;
   const text = `${formatWeekday(s.startsAt, o.tz)}: finalize who played.`;
   const alerts: TaskAlert[] = [];
-  if (!s.finalized) alertIf(alerts, s, 'finalize', due, `${text.replace(/\.$/, '')}: ${o.links.admin}`);
+  alertIf(alerts, s, 'finalize', due, `${text.replace(/\.$/, '')}: ${o.links.admin}`);
   return {
     id: `finalize:${s.id}`,
     kind: 'finalize',
     sessionId: s.id,
     startsAt: s.startsAt,
     text,
-    buttons: [],
-    steps: [
-      { id: 'finalize', label: 'Finalize who played', done: s.finalized, enabled: true, buttons: [{ id: 'finalize', label: 'Finalize who played', action: { type: 'finalize' } }] },
-      {
-        id: 'note',
-        label: 'Text the post-game note',
-        done: noteDone,
-        enabled: s.finalized,
-        buttons: [{ id: 'note', label: 'Text the post-game note', action: { type: 'text', text: 'final', mark: 'postgame_text' } }],
-      },
-    ],
+    buttons: [{ id: 'finalize', label: 'Finalize who played', action: { type: 'finalize' } }],
+    steps: [],
     alerts,
   };
 }
@@ -311,7 +294,7 @@ function rank(t: Task, nowMs: number, o: TaskOptions): number {
 export function nextTasks(nowMs: number, sessions: TaskSession[], marks: Marks, o: TaskOptions): Task[] {
   const out: Task[] = [];
   for (const s of sessions) {
-    for (const t of [cancelTask(s, nowMs, marks, o), bookTask(s, nowMs, o), nightTask(s, nowMs, marks, o), finalizeTask(s, nowMs, marks, o)]) {
+    for (const t of [cancelTask(s, nowMs, marks, o), bookTask(s, nowMs, o), nightTask(s, nowMs, marks, o), finalizeTask(s, nowMs, o)]) {
       if (t) out.push(t);
     }
   }

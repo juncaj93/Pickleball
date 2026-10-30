@@ -7,7 +7,7 @@
 import { holidayFor } from '../shared/holidays';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { dueAlerts, MARK_NAMES, markKey, nextTasks, type TaskOptions, type TaskSession } from '../shared/tasks';
-import { connected, deliver, prefsOfGroup } from './alerts';
+import { connected, deliver, prefsOfGroup, TIMEOUT_ERROR } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
@@ -23,6 +23,12 @@ const DAY_MS = 86_400_000;
 const LOOK_BACK_MS = 8 * DAY_MS;
 /** A bug can't make one tick send more than this. */
 const MAX_PER_TICK = 5;
+/** A failed alert is retried at most this often, and given up after this many tries (so a Telegram outage can't use up the hour's alerts). */
+const RETRY_AFTER_MS = 15 * 60_000;
+const MAX_TRIES = 3;
+/** A tick stops starting new sends after this long, well inside the clock Worker's 25-second wait. */
+const TICK_BUDGET_MS = 12_000;
+const FAILED_KEEP_MS = 30 * DAY_MS;
 
 export function siteUrlOf(ctx: Ctx): string {
   return (ctx.env.SITE_URL || ctx.url.origin).replace(/\/$/, '');
@@ -55,12 +61,20 @@ export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string)
 }
 
 /** The organizer's marks, as "sessionId:mark". */
-export async function loadMarks(db: D1Database, groupId: string): Promise<string[]> {
-  const { results } = await db
-    .prepare("SELECT session_id, task FROM task_log WHERE group_id = ? AND kind = 'mark' AND session_id IS NOT NULL")
-    .bind(groupId)
-    .all<{ session_id: string; task: string }>();
-  return results.map((r) => `${r.session_id}:${r.task}`);
+/** Marks for games that ended in the last 30 days or are still ahead. Display only: never breaks Home. */
+export async function loadMarks(db: D1Database, groupId: string, nowMs: number): Promise<string[]> {
+  try {
+    const { results } = await db
+      .prepare(
+        `SELECT t.session_id, t.task FROM task_log t JOIN sessions s ON s.id = t.session_id
+         WHERE t.group_id = ? AND t.kind = 'mark' AND s.ends_at > ?`,
+      )
+      .bind(groupId, new Date(nowMs - FAILED_KEEP_MS).toISOString())
+      .all<{ session_id: string; task: string }>();
+    return results.map((r) => `${r.session_id}:${r.task}`);
+  } catch {
+    return [];
+  }
 }
 
 /** Settings > Alerts > Smart alerts. On unless switched off. */
@@ -151,11 +165,22 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     .all<{ session_id: string; n: number }>();
   const countOf = new Map(counts.results.map((r) => [r.session_id, Number(r.n)]));
   const logs = await ctx.db
-    .prepare(`SELECT session_id, task, kind FROM task_log WHERE kind IN ('mark', 'sent') AND session_id IN (${marks})`)
+    .prepare(`SELECT session_id, task, kind, at FROM task_log WHERE session_id IN (${marks})`)
     .bind(...ids)
-    .all<{ session_id: string; task: string; kind: string }>();
+    .all<{ session_id: string; task: string; kind: string; at: string }>();
   const markSet = new Set(logs.results.filter((r) => r.kind === 'mark').map((r) => `${r.session_id}:${r.task}`));
   const sentSet = new Set(logs.results.filter((r) => r.kind === 'sent').map((r) => `${r.session_id}:${r.task}`));
+  // Failed tries per alert: give up after MAX_TRIES, and wait RETRY_AFTER_MS between them.
+  const tries = new Map<string, { n: number; last: number }>();
+  for (const r of logs.results.filter((x) => x.kind === 'failed')) {
+    const k = `${r.session_id}:${r.task}`;
+    const t = tries.get(k) ?? { n: 0, last: 0 };
+    tries.set(k, { n: t.n + 1, last: Math.max(t.last, Date.parse(r.at)) });
+  }
+  const waiting = (key: string) => {
+    const t = tries.get(key);
+    return !!t && (t.n >= MAX_TRIES || ctx.nowMs - t.last < RETRY_AFTER_MS);
+  };
 
   const tasks = nextTasks(
     ctx.nowMs,
@@ -165,7 +190,9 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   );
   let sent = 0;
   let failed = 0;
-  for (const alert of dueAlerts(tasks, ctx.nowMs, sentSet).slice(0, MAX_PER_TICK)) {
+  const began = Date.now();
+  for (const alert of dueAlerts(tasks, ctx.nowMs, sentSet).filter((a) => !waiting(a.key)).slice(0, MAX_PER_TICK)) {
+    if (Date.now() - began > TICK_BUDGET_MS) break;
     const [sessionId, task] = alert.key.split(':');
     const claimId = newId();
     const claim = await ctx.db
@@ -179,12 +206,20 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
       continue;
     }
     failed++;
-    await ctx.db.batch([
-      ctx.db.prepare('DELETE FROM task_log WHERE id = ?').bind(claimId),
-      ctx.db
-        .prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, ?, ?, 'failed', ?, ?)")
-        .bind(newId(), group.id, sessionId, task, result.error.slice(0, 200), ctx.nowIso),
-    ]);
+    const logFailure = ctx.db
+      .prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, ?, ?, 'failed', ?, ?)")
+      .bind(newId(), group.id, sessionId, task, result.error.slice(0, 200), ctx.nowIso);
+    // Telegram too slow to answer: it may have arrived, so keep the claim (a missed alert beats a double one).
+    if (result.error === TIMEOUT_ERROR) await logFailure.run();
+    else await ctx.db.batch([ctx.db.prepare('DELETE FROM task_log WHERE id = ?').bind(claimId), logFailure]);
+    // One failure is enough for this tick; the rest wait for the next one.
+    break;
+  }
+  if (failed === 0 && sent > 0) {
+    await ctx.db
+      .prepare("DELETE FROM task_log WHERE group_id = ? AND kind = 'failed' AND at < ?")
+      .bind(group.id, new Date(ctx.nowMs - FAILED_KEEP_MS).toISOString())
+      .run();
   }
   return { ok: true, sent, failed };
 }

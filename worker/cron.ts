@@ -24,8 +24,11 @@ export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<nu
       body: '{}',
       signal: AbortSignal.timeout(25_000),
     });
+    // Shows in the Worker's logs on Cloudflare (a wrong secret reads 404).
+    if (!res.ok) console.log(`tick answered ${res.status}`);
     return res.status;
-  } catch {
+  } catch (err) {
+    console.log(`tick failed: ${err instanceof Error ? err.message : 'unknown'}`);
     return 0;
   }
 }

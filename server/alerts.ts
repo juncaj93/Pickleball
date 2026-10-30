@@ -20,6 +20,8 @@ import { setSmartAlerts, smartAlertsOn } from './tasks';
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
 const SEND_TIMEOUT_MS = 5000;
+/** What deliver() says when Telegram took too long: the message may still have arrived. */
+export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
 const HOUR_MS = 3600_000;
 
 interface AlertRow {
@@ -62,7 +64,8 @@ export async function alertsView(ctx: Ctx, groupId: string): Promise<AdminDashbo
   const row = await alertRow(ctx.db, groupId);
   return {
     ...prefsOf(row),
-    smartAlerts: await smartAlertsOn(ctx.db, groupId),
+    // Display only: if the new table is ever missing, Settings still loads.
+    smartAlerts: await smartAlertsOn(ctx.db, groupId).catch(() => true),
     connected: connected(ctx.env),
     lastAt: row?.last_at ?? null,
     lastOk: row?.last_ok === null || row?.last_ok === undefined ? null : !!row.last_ok,
@@ -148,7 +151,7 @@ async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ 
     });
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    return { ok: false, error: timedOut ? "Telegram didn't answer in time." : "Couldn't reach Telegram." };
+    return { ok: false, error: timedOut ? TIMEOUT_ERROR : "Couldn't reach Telegram." };
   }
   if (res.ok) return { ok: true };
   const data = (await res.json().catch(() => ({}))) as { description?: unknown };

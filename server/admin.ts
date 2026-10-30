@@ -150,7 +150,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     creditLedger,
     refundRequests: await pendingRequestViews(ctx, group),
     me: await organizerPlayer(ctx, group, false),
-    taskMarks: await loadMarks(ctx.db, group.id),
+    taskMarks: await loadMarks(ctx.db, group.id, ctx.nowMs),
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
   };

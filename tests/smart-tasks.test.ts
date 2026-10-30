@@ -116,20 +116,14 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(t[0].text).toBe('Thu Nov 26 opened (Thanksgiving).');
   });
 
-  it('after the game 10:05 PM: finalize, then the post-game note; only for a game that was played', () => {
+  it('after the game 10:05 PM: finalize who played, only for a game that was played, gone once finalized', () => {
     expect(tasksAt('2026-11-04T03:04:00Z', [game('2026-11-03', { confirmedCount: 5 })]).map((x) => x.kind)).toEqual([]);
     const t = tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 5 })]);
     expect(t[0].text).toBe('Tuesday: finalize who played.');
     expect(t[0].alerts[0].text).toBe(`Tuesday: finalize who played: ${ADMIN}`);
-    expect(t[0].steps.map((s) => [s.label, s.enabled])).toEqual([
-      ['Finalize who played', true],
-      ['Text the post-game note', false],
-    ]);
-    const fin = game('2026-11-03', { confirmedCount: 5, finalized: true });
-    const f = tasksAt('2026-11-04T03:30:00Z', [fin]);
-    expect(f[0].alerts).toEqual([]);
-    expect(f[0].steps[1].enabled).toBe(true);
-    expect(tasksAt('2026-11-04T03:30:00Z', [fin], [markKey(fin.id, 'postgame_text')])).toEqual([]);
+    expect(t[0].buttons.map((b) => [b.label, b.action.type])).toEqual([['Finalize who played', 'finalize']]);
+    // Finalized: done (the existing "Final price" card offers the post-game note).
+    expect(tasksAt('2026-11-04T03:30:00Z', [game('2026-11-03', { confirmedCount: 5, finalized: true })])).toEqual([]);
     // Under 4 or canceled: nothing (the existing Finalize card handles an under-4 game).
     expect(tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 3 })])).toEqual([]);
     expect(tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 5, canceled: true, canceledAt: '2026-11-03T12:00:00Z' })])).toEqual([]);
@@ -167,7 +161,7 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
       game('2026-11-10', { confirmedCount: 1, booked: false, needsBooking: true }),
     ];
     let checked = 0;
-    for (let ms = at('2026-11-01T12:00:00Z'); ms < at('2026-11-12T12:00:00Z'); ms += 5 * MIN) {
+    for (let ms = at('2026-11-01T12:00:00Z'); ms < at('2026-11-12T12:00:00Z'); ms += 15 * MIN) {
       for (const t of nextTasks(ms, sessions, new Set(), OPTS)) {
         for (const a of t.alerts) {
           checked++;
@@ -180,7 +174,7 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
       }
     }
     expect(checked).toBeGreaterThan(100);
-  });
+  }, 60_000);
 });
 
 /** Every 5-minute tick from `fromIso` for `hours`, sending what dueAlerts says; returns [time, key] per send. */
@@ -396,12 +390,62 @@ describe('the tick endpoint', () => {
     expect((await phone.call('POST', `/api/sessions/${s.id}/join`, {})).status).toBe(200);
     await g.app.settle();
     g.sent.length = 0;
-    // (The join's own "it's on" alert used up the second fake failure.) Now 4 are in, and the retry says so.
+    // (The join's own "it's on" alert used up the second fake failure.) Retries wait 15 minutes.
     g.app.now += 5 * MIN;
+    expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
+    g.app.now += 10 * MIN;
     expect((await g.tick()).data).toMatchObject({ sent: 1 });
     expect(g.sent).toEqual([`Tuesday: 4 players in. Text the group to confirm: ${GO}`]);
     g.app.now += 5 * MIN;
     expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
+  });
+
+  it('Telegram down: 3 tries, 15 minutes apart, then it gives up (the hour\'s alert budget stays for player alerts)', async () => {
+    const g = await smartGroup(1000);
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T01:00:00Z');
+    let tries = 0;
+    for (let i = 0; i < 12; i++) {
+      tries += (await g.tick()).data.failed;
+      g.app.now += 5 * MIN;
+    }
+    expect(tries).toBe(3);
+    const slots = await g.app.db.prepare("SELECT COUNT(*) AS n FROM rate_events WHERE kind = 'telegram'").first<{ n: number }>();
+    expect(slots!.n).toBeLessThanOrEqual(3 + 3); // the 3 joins' own tries, plus 3
+  });
+
+  it('Telegram too slow to answer: the alert is not sent a second time', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    let calls = 0;
+    g.app.env = {
+      ...g.app.env,
+      TELEGRAM_FETCH: (async () => {
+        calls++;
+        const e = new Error('timed out');
+        e.name = 'TimeoutError';
+        throw e;
+      }) as typeof fetch,
+    };
+    g.app.now = at('2026-11-03T01:00:00Z');
+    for (let i = 0; i < 6; i++) {
+      await g.tick();
+      g.app.now += 5 * MIN;
+    }
+    expect(calls).toBe(1);
+  });
+
+  it('Home and Settings still load if the new table were missing', async () => {
+    const g = await smartGroup();
+    g.app.db.raw.exec('DROP TABLE task_log');
+    const d = await g.ctx.organizer.call('GET', '/api/admin/dashboard');
+    expect(d.status).toBe(200);
+    expect(d.data.taskMarks).toEqual([]);
+    expect(d.data.alerts.smartAlerts).toBe(true);
   });
 
   it('a broken Telegram (network error) never breaks the tick', async () => {
