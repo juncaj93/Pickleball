@@ -85,3 +85,42 @@ held money on canceled games found nothing to convert (checked read-only first).
   button per card, 44 px tap targets and reduce-motion, so this is a human eye
   pass), fresh `docs/screenshots` (`node e2e/shots.cjs`), and the out-of-date
   state gallery.
+
+## Player screen cleanup and redesign (Oct 30, 2026)
+
+Presentation only. No money rule, money math, schema or server change.
+
+### What changed
+- Three tiers on the player screen: THIS WEEK (84 px tile, green outline,
+  soft shadow), NEXT WEEK (70 px tile, thin outline), and one LATER header
+  with flat rows (small tiles, button on the right).
+- The time sits under the date tile ("8–10 PM", en dash). The big
+  "8:00 to 10:00 PM" line is gone.
+- Joined: check badge on the tile corner, "You're in · Court booked", a
+  quiet underlined "Drop out" link. No green tint anywhere.
+- Blue TONIGHT strip in the tile (light #2F5BD3, dark #8FB0FF).
+- Extra games: ink tile in light mode, cream tile in dark mode (the words
+  "Extra game" stay for screen readers).
+- Holiday pills removed from player cards and the "Want in?" popup. The
+  organizer's holiday label is now plain text with the "Hours OK" button.
+- Payment states: amber "$14 due" / "$5 left to pay" chip, green "Paid $14" /
+  "Paid with credit" pill, "Use credit" or "Pay" as the one filled button.
+  Waitlist ("Waitlist, 2nd in line") and canceled cards use the same layout.
+- Credit-back note under "I'm in": "If 6 play, you get $5 back as credit."
+  Only when the person has not joined, would be 5th or later, there is room
+  (not at the max), and it is not a waitlist or standby. Amount comes from
+  the existing credit-back table (`creditBack` in shared/pricing.ts). The old
+  "You get credit back if 5 or more play." line is gone.
+- "I'm out" is now "Drop out" (also on the confirmation button).
+- Dark mode: page #0F1612, cards #18221C, mint buttons with dark text.
+
+### Not changed on purpose
+- The game-day Pay card at the top (from 8:00 AM) stays; that day's row shows
+  the amber chip but no button, so there are never two Pay buttons.
+- "Undo" on a part-credit game is not shown: the server only undoes a game
+  that is fully paid with credit, and changing that is a money rule.
+
+### Code
+`src/player-cards.css` (new), `ScheduleRow` / `PlayerTile` / `RowPay` in
+`src/pages/PlayerHome.tsx`, `formatTimeShort`, `weekTier`, `ordinal` in
+`shared/time.ts`, `creditBackNote` in `shared/pricing.ts`.

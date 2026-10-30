@@ -131,6 +131,19 @@ export function formatTimeRange(startIso: string, endIso: string, tz: string): s
   return `${left} to ${end}`;
 }
 
+/**
+ * The short time under a date tile: "8\u201310 PM", "9\u201311 AM", "7:30\u201310 PM"
+ * (en dash). Whole hours drop the ":00"; a range across noon keeps both
+ * AM and PM ("11 AM\u20131 PM").
+ */
+export function formatTimeShort(startIso: string, endIso: string, tz: string): string {
+  const hm = (iso: string) => formatTime(iso, tz).replace(/[\u202f\u00a0]/g, ' ').replace(':00', '');
+  const start = hm(startIso);
+  const end = hm(endIso);
+  const left = start.slice(-2) === end.slice(-2) ? start.slice(0, -3) : start;
+  return `${left}\u2013${end}`;
+}
+
 /** "Tue, Oct 28, 8:00 AM" */
 export function formatDateTime(iso: string, tz: string): string {
   return `${formatShortDate(iso, tz)}, ${formatTime(iso, tz)}`;
@@ -194,6 +207,23 @@ export function weekLabel(iso: string, nowMs: number, tz: string): string {
   if (diff === -7) return 'Last week';
   const monday = new Date(weekStart(iso, tz) * DAY_MS);
   return `Week of ${monday.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}`;
+}
+
+/** The three looks on the player screen: this week, next week, everything later. */
+export type WeekTier = 'this' | 'next' | 'later';
+
+export function weekTier(iso: string, nowMs: number, tz: string): WeekTier {
+  const diff = weekStart(iso, tz) - weekStart(nowMs, tz);
+  if (diff <= 0) return 'this';
+  if (diff === 7) return 'next';
+  return 'later';
+}
+
+/** "2nd", "3rd", "11th". */
+export function ordinal(n: number): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'}`;
 }
 
 /** The organizer is reminded to book a newly opened court from this hour (7:00 AM local) on the day it opens. */

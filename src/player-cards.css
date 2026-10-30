@@ -1,0 +1,593 @@
+/* ---------- Player screen cards: three tiers (this week, next week, later) ----------
+   Presentation only. Markup lives in PlayerHome.tsx (ScheduleRow, PlayerTile, RowPay).
+   Colors come from the --pc-* tokens below, light and dark. Fonts are the site's own. */
+
+.schedule,
+.pay-card {
+  --pc-card: #ffffff;
+  --pc-ink: #18241d;
+  --pc-muted: #4a4f46;
+  --pc-line: #dad9cf;
+  --pc-tile: #fafaf5;
+  --pc-red: #c23b22;
+  --pc-green: #226b4b;
+  --pc-green-line: #226b4b;
+  --pc-btn: #226b4b;
+  --pc-btn-ink: #ffffff;
+  --pc-amber: #8a5a00;
+  --pc-amber-bg: #fff3d6;
+  --pc-ok-bg: #e6f2eb;
+  --pc-blue: #2f5bd3;
+  --pc-blue-ink: #ffffff;
+  --pc-ring: #18241d;
+  --pc-shadow: rgb(24 36 29 / 45%);
+}
+:root[data-theme='dark'] .schedule,
+:root[data-theme='dark'] .pay-card {
+  --pc-card: #18221c;
+  --pc-ink: #f1f3ec;
+  --pc-muted: #b8bfb2;
+  --pc-line: #2b3a31;
+  --pc-tile: #1f2b24;
+  --pc-red: #ff8a70;
+  --pc-green: #7fd9a3;
+  --pc-green-line: #3a8f69;
+  --pc-btn: #7fd9a3;
+  --pc-btn-ink: #0b140f;
+  --pc-amber: #f0b84a;
+  --pc-amber-bg: #2e2410;
+  --pc-ok-bg: #1b3527;
+  --pc-blue: #8fb0ff;
+  --pc-blue-ink: #0f1612;
+  --pc-ring: #d5dacf;
+  --pc-shadow: rgb(0 0 0 / 70%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .schedule,
+  :root:not([data-theme='light']) .pay-card {
+    --pc-card: #18221c;
+    --pc-ink: #f1f3ec;
+    --pc-muted: #b8bfb2;
+    --pc-line: #2b3a31;
+    --pc-tile: #1f2b24;
+    --pc-red: #ff8a70;
+    --pc-green: #7fd9a3;
+    --pc-green-line: #3a8f69;
+    --pc-btn: #7fd9a3;
+    --pc-btn-ink: #0b140f;
+    --pc-amber: #f0b84a;
+    --pc-amber-bg: #2e2410;
+    --pc-ok-bg: #1b3527;
+    --pc-blue: #8fb0ff;
+    --pc-blue-ink: #0f1612;
+    --pc-ring: #d5dacf;
+    --pc-shadow: rgb(0 0 0 / 70%);
+  }
+}
+
+/* The mint/green button and its outline twin, scoped to the player cards. */
+.schedule .btn,
+.pay-card .btn {
+  background: var(--pc-btn);
+  color: var(--pc-btn-ink);
+  border: 2px solid var(--pc-btn);
+  border-radius: 14px;
+  min-height: 48px;
+  padding: 0 20px;
+  font-weight: 750;
+  font-size: 1.05rem;
+}
+.schedule .btn.outline,
+.pay-card .btn.outline {
+  background: transparent;
+  color: var(--pc-green);
+  border-color: var(--pc-green-line);
+}
+
+/* ---- Tier headers ---- */
+.schedule {
+  gap: 14px;
+}
+.schedule > .week-break {
+  margin: 6px 4px -2px;
+  color: var(--pc-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+}
+.schedule > .week-break::after {
+  background: var(--pc-line);
+}
+.schedule > .week-break.tier-this {
+  margin-top: 2px;
+  color: var(--pc-green);
+  font-size: 1rem;
+  font-weight: 800;
+}
+.schedule > .week-break.tier-this::after {
+  height: 2px;
+  background: var(--pc-green-line);
+}
+.schedule > .week-break.tier-next {
+  color: var(--pc-ink);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+/* ---- The card ---- */
+.schedule > .sched {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  background: var(--pc-card);
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-line);
+  border-radius: 24px;
+  padding: 18px;
+  box-shadow: none;
+}
+.schedule > .sched.tier-this {
+  border: 2px solid var(--pc-green-line);
+  box-shadow: 0 12px 26px -14px var(--pc-shadow);
+}
+.schedule > .sched.tier-next {
+  gap: 14px;
+  padding: 14px;
+  border-radius: 20px;
+}
+.schedule > .sched.tier-later {
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 2px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--pc-line);
+  border-radius: 0;
+}
+.schedule > .sched.off {
+  opacity: 0.7;
+  background: transparent;
+  box-shadow: none;
+  border: 1px solid var(--pc-line);
+}
+.schedule > .sched.highlight {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc-green-line) 22%, transparent);
+}
+
+/* ---- Tile and time ---- */
+.sched-tilecol {
+  flex: none;
+  width: 84px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tier-next .sched-tilecol {
+  width: 70px;
+  gap: 6px;
+}
+.tier-later .sched-tilecol {
+  width: 56px;
+  gap: 4px;
+}
+.tile-wrap {
+  position: relative;
+}
+.schedule .tile.ptile {
+  width: 100%;
+  box-sizing: border-box;
+  align-self: auto;
+  border: 2px solid var(--pc-ink);
+  border-radius: 16px;
+  background: var(--pc-tile);
+  color: var(--pc-ink);
+  padding: 9px 0 8px;
+  line-height: 1;
+}
+.schedule .ptile .dow,
+.schedule .ptile .mon {
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--pc-red);
+}
+.schedule .ptile .mon {
+  color: var(--pc-ink);
+}
+.schedule .ptile .day {
+  font-size: 2.35rem;
+  font-weight: 800;
+  margin: 5px 0 3px;
+  color: var(--pc-ink);
+}
+.tier-next .tile.ptile {
+  border-width: 1.5px;
+  border-radius: 13px;
+  padding: 7px 0 6px;
+}
+.tier-next .ptile .dow,
+.tier-next .ptile .mon {
+  font-size: 0.7rem;
+}
+.tier-next .ptile .day {
+  font-size: 1.8rem;
+  margin: 4px 0 2px;
+}
+.tier-later .tile.ptile {
+  border: 1.5px solid var(--pc-line);
+  border-radius: 12px;
+  padding: 5px 0 5px;
+}
+.tier-later .ptile .dow,
+.tier-later .ptile .mon {
+  font-size: 0.64rem;
+}
+.tier-later .ptile .day {
+  font-size: 1.35rem;
+  margin: 3px 0 2px;
+}
+
+/* TONIGHT: a blue strip where the weekday would be. */
+.tonight-tag {
+  display: block;
+  margin: 0 7px;
+  padding: 4px 0;
+  border-radius: 8px;
+  background: var(--pc-blue);
+  color: var(--pc-blue-ink);
+  font-size: 0.56rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.tier-next .tonight-tag {
+  margin: 0 4px;
+  font-size: 0.5rem;
+}
+.tier-later .tonight-tag {
+  margin: 0 2px;
+  padding: 3px 0;
+  font-size: 0.42rem;
+}
+
+/* Extra (added by hand): ink tile in light mode, cream tile in dark mode. */
+.schedule .tile.ptile.extra {
+  background: #18241d;
+  border-color: #18241d;
+}
+.schedule .ptile.extra .dow,
+.schedule .ptile.extra .mon {
+  color: #d9e2d4;
+}
+.schedule .ptile.extra .day {
+  color: #ffffff;
+}
+:root[data-theme='dark'] .schedule .tile.ptile.extra {
+  background: #e9ede4;
+  border-color: #e9ede4;
+}
+:root[data-theme='dark'] .schedule .ptile.extra .dow {
+  color: #8a3a28;
+}
+:root[data-theme='dark'] .schedule .ptile.extra .mon {
+  color: #3c4139;
+}
+:root[data-theme='dark'] .schedule .ptile.extra .day {
+  color: #0f1612;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .schedule .tile.ptile.extra {
+    background: #e9ede4;
+    border-color: #e9ede4;
+  }
+  :root:not([data-theme='light']) .schedule .ptile.extra .dow {
+    color: #8a3a28;
+  }
+  :root:not([data-theme='light']) .schedule .ptile.extra .mon {
+    color: #3c4139;
+  }
+  :root:not([data-theme='light']) .schedule .ptile.extra .day {
+    color: #0f1612;
+  }
+}
+
+/* The check badge: top-right corner of the tile, never over the TONIGHT strip. */
+.schedule .tile-check {
+  top: -10px;
+  right: -10px;
+  width: 26px;
+  height: 26px;
+  background: var(--pc-btn);
+  color: var(--pc-btn-ink);
+  box-shadow: none;
+  border: 2px solid var(--pc-card);
+}
+.schedule .tile-check svg {
+  width: 16px;
+  height: 16px;
+}
+.tier-next .tile-check {
+  width: 24px;
+  height: 24px;
+  top: -8px;
+  right: -8px;
+}
+.tier-later .tile-check {
+  width: 22px;
+  height: 22px;
+  top: -9px;
+  right: -9px;
+}
+.tier-later .tile-check svg {
+  width: 13px;
+  height: 13px;
+}
+
+.schedule .sched-time {
+  text-align: center;
+  font-family: var(--display);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  white-space: nowrap;
+  color: var(--pc-ink);
+}
+.tier-next .sched-time {
+  font-size: 0.82rem;
+}
+.tier-later .sched-time {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--pc-muted);
+}
+
+/* ---- Body ---- */
+.schedule .sched-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  gap: 8px;
+}
+.schedule .sched-body > * {
+  min-width: 0;
+  max-width: 100%;
+}
+.schedule .sched-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 7px;
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--pc-ink);
+}
+.tier-next .sched-status,
+.tier-later .sched-status {
+  font-size: 0.95rem;
+}
+.tier-later .sched-status {
+  color: var(--pc-muted);
+}
+.schedule .sched-status .court-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+  font-weight: inherit;
+}
+.schedule .sched-status .st-in {
+  color: var(--pc-green);
+}
+.schedule .sched-status .st-in + .court-status {
+  font-weight: 600;
+  color: var(--pc-muted);
+  gap: 5px;
+}
+.court-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--pc-green);
+}
+.court-needs .court-dot,
+.court-later .court-dot {
+  background: var(--pc-amber);
+}
+.court-waitlist .court-dot {
+  background: var(--info-edge);
+}
+.court-off .court-dot {
+  background: var(--pc-muted);
+}
+.st-wait,
+.st-canceled {
+  color: var(--pc-muted);
+}
+
+.schedule .in-line {
+  flex-wrap: wrap;
+  gap: 5px 6px;
+  min-height: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--pc-ink);
+}
+.schedule .in-count {
+  color: var(--pc-ink);
+}
+.schedule .dot {
+  width: 19px;
+  height: 19px;
+  box-sizing: border-box;
+  border: 2px solid var(--pc-ring);
+}
+.schedule .ball {
+  width: 19px;
+  height: 19px;
+}
+.schedule .dots {
+  gap: 6px;
+}
+.tier-next .dot,
+.tier-next .ball,
+.tier-later .dot,
+.tier-later .ball {
+  width: 16px;
+  height: 16px;
+}
+.tier-later .dots {
+  gap: 5px;
+}
+.schedule .names-line,
+.schedule .waitlist-line {
+  font-size: 0.95rem;
+  line-height: 1.3;
+  color: var(--pc-muted);
+}
+.schedule .names-line strong,
+.schedule .waitlist-line strong {
+  color: var(--pc-ink);
+}
+.tier-later .names-line,
+.tier-later .waitlist-line {
+  font-size: 0.9rem;
+}
+.schedule .sched-sub,
+.schedule .game-note {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  color: var(--pc-muted);
+}
+.schedule .credit-back-line {
+  margin: 0;
+  color: var(--pc-muted);
+}
+
+/* ---- Chips: amber owing, green paid ---- */
+.schedule .pchip {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+.schedule .pchip.chip-warn {
+  color: var(--pc-amber);
+  background: var(--pc-amber-bg);
+}
+.schedule .pchip.chip-ok {
+  color: var(--pc-green);
+  background: var(--pc-ok-bg);
+}
+
+/* ---- Buttons and links ---- */
+.schedule .act-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.schedule .act-row:empty {
+  display: none;
+}
+.schedule .sched-btn,
+.schedule .pay-btn {
+  flex: none;
+}
+.tier-later .sched-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 1rem;
+}
+.tier-next .sched-btn,
+.tier-next .pay-btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  font-size: 1rem;
+}
+.schedule .quiet-link {
+  position: relative;
+  min-height: 44px;
+  padding: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--pc-muted);
+  text-decoration: underline;
+  text-decoration-color: currentColor;
+  text-underline-offset: 3px;
+  display: inline-flex;
+  align-items: center;
+}
+.schedule .quiet-link::before {
+  content: none;
+}
+.schedule .act-row .cal-icon-link {
+  margin: 0 0 0 auto;
+  color: var(--pc-muted);
+}
+.schedule .credit-note {
+  margin: -2px 0 0;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: var(--pc-muted);
+}
+
+/* LATER rows: the action sits on the right, the text keeps the middle. */
+.schedule .sched-act {
+  flex: none;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.tier-later .sched-act .quiet-link {
+  min-height: 44px;
+}
+
+@media (max-width: 380px) {
+  .tier-this .tonight-tag {
+    margin: 0 4px;
+    font-size: 0.5rem;
+  }
+  .schedule > .sched.tier-this {
+    padding: 14px;
+    gap: 12px;
+  }
+  .tier-this .sched-tilecol {
+    width: 76px;
+  }
+  .tier-next .sched-tilecol {
+    width: 64px;
+  }
+  .schedule .ptile .day {
+    font-size: 2.1rem;
+  }
+  .tier-next .ptile .day {
+    font-size: 1.6rem;
+  }
+  .tier-later .sched-tilecol {
+    width: 52px;
+  }
+  .schedule .sched-status,
+  .schedule .in-line,
+  .schedule .names-line {
+    font-size: 0.9rem;
+  }
+}
+
+/* Organizer side: the holiday note is plain text now, not a pill. */
+.holiday {
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 0;
+  font-weight: 600;
+}

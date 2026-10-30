@@ -98,8 +98,8 @@
    The same values twice: once for "follow the phone", once for "Dark". */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #0b0d0c;
-    --surface: #171a18;
+    --bg: #0f1612;
+    --surface: #18221c;
     --surface-2: #1f2320;
     --fill: #272b28;
     --fill-press: #313632;
@@ -150,8 +150,8 @@
 }
 
 :root[data-theme='dark'] {
-  --bg: #0b0d0c;
-  --surface: #171a18;
+  --bg: #0f1612;
+  --surface: #18221c;
   --surface-2: #1f2320;
   --fill: #272b28;
   --fill-press: #313632;

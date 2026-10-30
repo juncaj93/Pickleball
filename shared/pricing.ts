@@ -27,6 +27,19 @@ export function creditBack(priceCents: number, played: number): number {
 }
 
 /**
+ * The gray note under "I'm in": "If 6 play, you get $5 back as credit."
+ * `confirmedCount` is who is in now, so the person reading would be number
+ * `confirmedCount + 1`. Empty (null) unless that is 5th or later, there is
+ * room (not at the max), and the table gives them something back.
+ */
+export function creditBackNote(priceCents: number, confirmedCount: number, maxPlayers: number, fmt: (cents: number) => string): string | null {
+  const n = confirmedCount + 1;
+  if (n < MIN_PLAYERS + 1 || n > maxPlayers) return null;
+  const back = creditBack(priceCents, n);
+  return back > 0 ? `If ${n} play, you get ${fmt(back)} back as credit.` : null;
+}
+
+/**
  * The flat price a finalized game was played at, for the post-game note
  * ("If you paid $14, the extra $5 ..."). The setting can change after the
  * game, so it comes from what the players who played actually paid (the most

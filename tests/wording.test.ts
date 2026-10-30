@@ -36,7 +36,7 @@ describe('fewer words on screen', () => {
       'The old link stops working right away.',
       'Mark it off',
       "Couldn't save. Tap to retry.",
-      'You get credit back if 5 or more play.',
+      'back as credit.',
       'Cancel by',
       'Missing numbers:',
       'Demo: taps work, nothing is saved.',

@@ -2,17 +2,21 @@ import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
-import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatWeekday, localParts, weekFade, weekLabel, weekStart } from '../../shared/time';
-import { creditHintText, creditOweText, creditUsedMessage } from '../../shared/credit';
+import { creditBackNote } from '../../shared/pricing';
+import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatTimeShort, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
+import { creditHintText, creditUsedMessage } from '../../shared/credit';
 import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { ModeButton, TopBar } from '../Shell';
-import { CalendarPlusIcon, ConfirmDialog, CourtIcon, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
+import { CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 import '../credit-player.css';
+import '../player-cards.css';
 
 const SHOW_FIRST = 6;
+
+const TIER_LABEL: Record<WeekTier, string> = { this: 'This week', next: 'Next week', later: 'Later' };
 
 type JoinResponse = { result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby'; position?: number };
 
@@ -175,20 +179,18 @@ export function PlayerHome({
             {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
-              {sessions.map((s, i) => (
-                <Fragment key={s.id}>
-                  {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(sessions[i - 1].startsAt, tz)) && (
-                    <h3 className="week-break">{weekLabel(s.startsAt, Date.parse(g.now), tz)}</h3>
-                  )}
-                  <ScheduleRow
-                    s={s}
-                    g={g}
-                    highlight={s.id === focusId}
-                    onChanged={load.reload}
-                    onRequestRefund={() => setCreditOpen(true)}
-                  />
-                </Fragment>
-              ))}
+              {sessions.map((s, i) => {
+                const tier = weekTier(s.startsAt, Date.parse(g.now), tz);
+                const prev = i > 0 ? weekTier(sessions[i - 1].startsAt, Date.parse(g.now), tz) : null;
+                // One header per tier: THIS WEEK, NEXT WEEK, LATER (every week after next shares one).
+                const header = prev !== tier ? TIER_LABEL[tier] : null;
+                return (
+                  <Fragment key={s.id}>
+                    {header && <h3 className={`week-break tier-${tier}`}>{header}</h3>}
+                    <ScheduleRow s={s} g={g} tier={tier} highlight={s.id === focusId} onChanged={load.reload} onRequestRefund={() => setCreditOpen(true)} />
+                  </Fragment>
+                );
+              })}
             </div>
             {g.sessions.length > SHOW_FIRST && (
               <button className="btn ghost block" onClick={() => setShowAll((v) => !v)}>
@@ -514,8 +516,6 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     due.length > 1 ? `You owe ${formatPrice(total)} total` : tonight ? `Tonight: you owe ${formatPrice(total)}` : `You owe ${formatPrice(total)} for ${formatShortDate(due[0].startsAt, tz)}`;
   const detail = (o: (typeof due)[number]) =>
     [o.finalized ? 'final price' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
-  // Before paying the flat price: a reminder that the final price can be lower.
-  const creditNote = due.every((o) => !o.finalized) && <p className="small muted pay-note" data-pay-note>You get credit back if 5 or more play.</p>;
   // (On this card the amounts are already after any credit; each game's own line says what is left.)
   const who = g.group.organizerName ?? 'The organizer';
   return (
@@ -571,7 +571,6 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
           {!creditCovers && creditBtn}
         </>
       )}
-      {creditNote}
       {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
         <div className="venmo-note">
@@ -634,12 +633,11 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   return (
     <section className="card stack suggest" aria-labelledby="suggest-title">
       <h2 id="suggest-title">{wantInTitle(s.startsAt, tz, Date.parse(g.now), waitlistForm)}</h2>
-      {/* Line 1: date, time and the holiday pill, together. Line 2: spots left, or where they would be. */}
+      {/* Line 1: date and time. Line 2: spots left, or where they would be. */}
       <div className="suggest-when">
         <span className="muted small">
           {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
         </span>
-        {s.holiday && <HolidayPill name={s.holiday} />}
       </div>
       {subline && <p className="muted small suggest-sub">{subline}</p>}
       {error && <Notice tone="danger">{error}</Notice>}
@@ -655,7 +653,7 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
   );
 }
 
-/** The one holiday pill, used on the popup, player cards and organizer cards. Only as wide as its text, no check mark. */
+/** The organizer's small plain holiday note ("Election Day \u00b7 check hours"). Players no longer see holidays. */
 export function HolidayPill({ name, venueNote, confirmed }: { name: string; venueNote?: boolean; confirmed?: boolean }) {
   return (
     <span className="holiday">
@@ -691,123 +689,175 @@ export function DateTile({ iso, tz, mine }: { iso: string; tz: string; mine?: bo
   );
 }
 
+const CHECK = (
+  <svg viewBox="0 0 20 20" aria-hidden="true">
+    <path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/**
+ * The player card's date tile. Normal: weekday, big day, month. Tonight: a
+ * blue TONIGHT strip where the weekday would be. Extra (added by hand): an
+ * ink tile (cream in dark mode). A check badge on the corner when you're in.
+ */
+function PlayerTile({ iso, tz, mine, tonight, extra }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean }) {
+  const p = localParts(Date.parse(iso), tz);
+  const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
+  return (
+    <div className="tile-wrap" aria-hidden="true">
+      <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}`}>
+        {tonight ? <span className="tonight-tag">TONIGHT</span> : <span className="dow">{TILE_DOW[p.weekday]}</span>}
+        <span className="day">{p.day}</span>
+        <span className="mon">{month}</span>
+      </div>
+      {mine && <span className="tile-check">{CHECK}</span>}
+    </div>
+  );
+}
+
 function countLine(s: PlayerSessionView): string {
   if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   return s.countText;
 }
 
 /**
- * The row's money, kept small: "Pay $14" after signing up (with the Venmo
- * note filled in), then a quiet "Sent?" note once tapped, or "Paid" once the
- * organizer marks it. On game day after 8:00 AM the card at the top takes over.
+ * What this player owes on a card, in the new look: an amber chip ("$14 due",
+ * "$5 left to pay") or a green pill ("Paid $14", "Paid with credit"), a
+ * small gray credit line, then the one filled button (Pay, or Use credit
+ * when credit covers it) and quiet links. `drop` is the "Drop out" link, which
+ * the card puts last. On game day after 8:00 AM the card at the top takes
+ * over the buttons and this shows only the chip.
  */
 function RowPay({
   g,
   s,
   onTop,
   onChanged,
+  drop,
 }: {
   g: GroupView;
   s: PlayerSessionView;
   onTop: boolean;
   onChanged: () => Promise<void>;
+  drop: ReactNode;
 }) {
   const mine = s.mine!;
   const paid = usePaid([s.id], onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(s.id);
+  const busy = paid.busy || credit.busy;
   if (mine.paymentStatus === 'paid') {
+    const amount = mine.shareCents;
     return (
-      <span className="paid-wrap">
-        <span className="paid-tag">{mine.paidWithCredit ? '✓ Paid with credit' : '✓ Paid'}</span>
-        {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
-        {mine.paidWithCredit && (
-          <button className="link-btn didnt-pay" data-undo-credit disabled={credit.busy} onClick={() => credit.undo(s.id)}>
-            Undo
-          </button>
-        )}
-        {mine.selfPaid && !mine.paidWithCredit && (
-          <button className="link-btn didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
-            Didn't pay?
-          </button>
-        )}
-      </span>
+      <>
+        <span className="pchip chip-ok paid-tag" data-paid>{mine.paidWithCredit ? 'Paid with credit' : amount ? `Paid ${formatPrice(amount)}` : 'Paid'}</span>
+        <div className="act-row">
+          {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
+          {mine.paidWithCredit && (
+            <button className="link-btn quiet-link" data-undo-credit disabled={credit.busy} onClick={() => credit.undo(s.id)}>
+              Undo
+            </button>
+          )}
+          {mine.selfPaid && !mine.paidWithCredit && (
+            <button className="link-btn quiet-link didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
+              Didn't pay?
+            </button>
+          )}
+          {drop}
+        </div>
+      </>
     );
   }
-  if (onTop || mine.oweCents <= 0) return <span />;
+  if (mine.oweCents <= 0) return <div className="act-row">{drop}</div>;
+  const left = mine.creditCents > 0;
+  const chip = (
+    <span className="pchip chip-warn" data-owe>
+      {left ? `${formatPrice(mine.oweCents)} left to pay` : `${formatPrice(mine.oweCents)} due`}
+    </span>
+  );
+  if (onTop) {
+    return (
+      <>
+        {chip}
+        <div className="act-row">{drop}</div>
+      </>
+    );
+  }
   const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
-  // Credit: the one green button when it covers everything, otherwise a quiet one beside Pay.
+  // Credit: the one filled button when it covers everything, otherwise an outline button beside Pay.
   const showCredit = mine.useCreditCents > 0;
   const creditCovers = showCredit && mine.useCreditCents >= mine.oweCents;
-  const busy = paid.busy || credit.busy;
-  const btn = 'btn small pay-small';
-  const quiet = 'btn small secondary pay-small';
+  const filled = 'btn pay-btn';
+  const outline = 'btn pay-btn outline';
   const creditBtn = showCredit && (
-    <button className={creditCovers ? btn : quiet} data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.oweCents, mine.useCreditCents)}>
+    <button className={creditCovers ? filled : outline} data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.oweCents, mine.useCreditCents)}>
       Use credit
     </button>
   );
-  const creditHint = showCredit && <span className="credit-hint">{creditHintText(mine.useCreditCents, g.credit.usableCents, mine.oweCents)}</span>;
-  // Before paying the flat price: a reminder that the final price can be lower.
-  const payNote = !s.finalized && <span className="credit-hint pay-note" data-pay-note>You get credit back if 5 or more play.</span>;
-  // No usable Venmo link: "I paid" is the only other thing to tap.
-  if (!pay.url) {
-    return (
-      <span className="pay-pair">
-        {creditCovers && creditBtn}
-        <button className={creditCovers ? quiet : btn} disabled={busy} onClick={() => paid.set(true)}>
-          I paid
-        </button>
-        {!creditCovers && creditBtn}
-        {creditHint}
-        {payNote}
-      </span>
-    );
-  }
-  // While they owe: Pay, and a quiet "I paid" next to it for anyone who paid another way.
+  const creditLine = left ? `${formatPrice(mine.creditCents)} credit used` : showCredit ? `You have ${formatPrice(g.credit.usableCents)} credit` : null;
+  const creditHint = showCredit && !left ? <span className="credit-hint sr-only">{creditHintText(mine.useCreditCents, g.credit.usableCents, mine.oweCents)}</span> : null;
+  const payLabel = `Pay ${formatPrice(mine.oweCents)}`;
+  // Always pay first when credit does not cover it; "I paid" stays for anyone who paid another way.
+  const payBtn = pay.url ? (
+    <a
+      className={creditCovers ? outline : filled}
+      href={pay.url}
+      data-app-href={pay.appUrl ?? undefined}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
+      onClick={(e) => {
+        payTap.mark();
+        openVenmo(e, pay);
+      }}
+    >
+      {left || creditCovers ? payLabel : 'Pay'}
+    </a>
+  ) : (
+    <button className={creditCovers ? outline : filled} disabled={busy} onClick={() => paid.set(true)}>
+      I paid
+    </button>
+  );
+  const iPaid = pay.url && (!showCredit || payTap.tapped) && (
+    <button className="link-btn quiet-link" disabled={busy} onClick={() => paid.set(true)}>
+      I paid
+    </button>
+  );
   return (
-    <span className="pay-pair">
-      {creditCovers && creditBtn}
-      <a
-        className={creditCovers ? quiet : btn}
-        href={pay.url}
-        data-app-href={pay.appUrl ?? undefined}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
-        onClick={(e) => {
-          payTap.mark();
-          openVenmo(e, pay);
-        }}
-      >
-        Pay {formatPrice(mine.oweCents)}
-      </a>
-      {!creditCovers && creditBtn}
-      {(!showCredit || payTap.tapped) && (
-        <button className={quiet} disabled={busy} onClick={() => paid.set(true)}>
-          I paid
-        </button>
-      )}
+    <>
+      {chip}
+      {creditLine && <p className="sched-sub credit-line">{creditLine}</p>}
       {creditHint}
-      {payNote}
-    </span>
+      <div className="act-row">
+        {creditCovers && creditBtn}
+        {payBtn}
+        {!creditCovers && creditBtn}
+      </div>
+      <div className="act-row">
+        {iPaid}
+        {drop}
+      </div>
+    </>
   );
 }
 
 /**
- * One session in the schedule: date tile, time, court status and holiday,
- * who's in (only people who signed up), one big button, and this player's
- * money for it.
+ * One session in the schedule. Three looks by tier: THIS WEEK (big tile,
+ * green outline, soft shadow), NEXT WEEK (smaller, thin outline) and LATER
+ * (a flat row). The tile carries the weekday (or TONIGHT), date, and a check
+ * when you're in; the short time sits under it. No green tint for joined.
  */
 function ScheduleRow({
   s,
   g,
+  tier,
   onChanged,
   highlight,
   onRequestRefund,
 }: {
   s: PlayerSessionView;
   g: GroupView;
+  tier: WeekTier;
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
@@ -823,6 +873,7 @@ function ScheduleRow({
   const waiting = mine?.status === 'waitlisted';
   const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
+  const nowMs = Date.parse(g.now);
 
   async function run(path: string, label: (data: any) => string) {
     setBusy(true);
@@ -845,109 +896,139 @@ function ScheduleRow({
   const names = s.confirmed.map((p) => p.name);
   const everyone = g.players.map((p) => p.name);
   const onTop = g.payDue.some((o) => o.sessionId === s.id);
-  // Row 4 holds Pay (or Paid) and the calendar icon. With nothing to pay
-  // there, the calendar icon sits at the end of the who's in row instead, so
-  // the card stays short.
-  const payShows = inSession && !s.canceled && (mine.paymentStatus === 'paid' || (!onTop && mine.oweCents > 0));
-  const rowFour = payShows;
-  const calLink = inSession && open && (
+  const isIn = inSession && !s.canceled;
+  const tonight = open && playerDay(s.startsAt, tz, nowMs).word === 'tonight';
+  const calLink = isIn && open && (
     <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
       <CalendarPlusIcon />
     </a>
   );
   const showCount = !s.canceled && (s.confirmed.length > 0 || !courtWait);
-  const fade = weekFade(s.startsAt, Date.parse(g.now), tz);
+  const dropLink = isIn && open && (
+    <button className="link-btn quiet-link drop-link" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
+      Drop out
+    </button>
+  );
+  const dropAndCal = (
+    <>
+      {dropLink}
+      {calLink}
+    </>
+  );
+  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || onTop);
+
+  // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
+  const notIn = open && !(inSession || waiting);
+  const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice) : null;
+
+  // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled.
+  const courtWord = <span>{court.playerText}</span>;
+  let status: ReactNode;
+  if (s.canceled) status = <span className="st-canceled">Canceled</span>;
+  else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
+  else if (isIn)
+    status = (
+      <>
+        <strong className="st-in">You're in</strong>
+        <span className="court-status">
+          <span className="st-sep">·</span>
+          {courtWord}
+        </span>
+      </>
+    );
+  else
+    status = (
+      <span className="court-status">
+        <span className="court-dot" aria-hidden="true" />
+        {courtWord}
+      </span>
+    );
+
+  const joinBtn = notIn && (
+    <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
+      {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
+    </button>
+  );
+  const leaveBtn = waiting && open && (
+    <button className="btn sched-btn outline" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
+      {courtWait ? 'Leave standby' : 'Leave waitlist'}
+    </button>
+  );
+  // In the flat LATER row the join button and the Drop out link sit on the right, away from the text.
+  const rightSide = tier === 'later' && !payShows;
+
+  const body = (
+    <div className="sched-body">
+      <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
+        {status}
+      </div>
+      {showCount && (
+        <div className="in-line">
+          <span className="in-count">{countLine(s)}</span>
+          <SpotDots names={names} me={g.me?.name} />
+        </div>
+      )}
+      {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
+      {!s.canceled && !waiting && (
+        <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
+      )}
+      {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
+      {s.canceled && <p className="sched-sub">If you paid, it's now your credit.</p>}
+
+      {s.extra && <span className="sr-only">Extra game</span>}
+      {s.note && <p className="game-note">{s.note}</p>}
+      {goodNews && <Notice tone="ok">{goodNews}</Notice>}
+      {/* Money that came back from this game (they dropped out, or it was canceled) is credit now. */}
+      {mine && mine.creditBackCents > 0 && (mine.status === 'withdrawn' || s.canceled) && (
+        <p className="small credit-back-line" data-credit-back>
+          Your {formatPrice(mine.creditBackCents)} is now credit.{' '}
+          <button className="link-btn" onClick={onRequestRefund}>
+            Request refund
+          </button>
+        </p>
+      )}
+
+      {payShows && <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} drop={dropAndCal} />}
+      {isIn && !payShows && !rightSide && (dropLink || calLink) && <div className="act-row">{dropAndCal}</div>}
+      {!rightSide && (joinBtn || leaveBtn) && <div className="act-row">{joinBtn}{leaveBtn}</div>}
+      {note && <p className="credit-note" data-credit-note>{note}</p>}
+    </div>
+  );
 
   return (
     <article
       id={`row-${s.id}`}
-      className={`sched${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
-      data-fade={fade || undefined}
-      data-mine={inSession && !s.canceled ? 'in' : undefined}
-      data-holiday={s.holiday || s.extra ? 'yes' : undefined}
+      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
+      data-tier={tier}
+      data-extra={s.extra ? 'yes' : undefined}
       aria-labelledby={`s-${s.id}`}
     >
-      <DateTile iso={s.startsAt} tz={tz} mine={inSession && !s.canceled} />
-      <div className="sched-body">
-        <h2 id={`s-${s.id}`} className="sr-only">
-          {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}
-          {inSession && !s.canceled ? ". You're in" : ''}
-        </h2>
-        {/* Row 1: the time. */}
-        <div className="sched-head">
-          <span className="sched-time">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
+      <div className="sched-tilecol">
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} />
+        <div className="sched-time">
+          <span aria-hidden="true">{formatTimeShort(s.startsAt, s.endsAt, tz)}</span>
         </div>
-        {/* The one button, in its own column beside rows 1 and 2. Sign-up never depends on the court being booked. */}
-        {open && (
-          <div className="sched-act">
-            {inSession || waiting ? (
-              <button className="btn secondary sched-btn" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
-                I'm out
-              </button>
-            ) : (
-              <button className={`btn sched-btn${courtWait || s.joinAs !== 'in' ? ' long' : ''}`} disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
-                {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
-              </button>
-            )}
-          </div>
-        )}
-        {/* Row 2: court status, with a holiday or "Extra game" as small colored words on the same line. */}
-        <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
-          <span className="court-status">
-            <CourtIcon kind={court.kind} />
-            <span>{court.playerText}</span>
-          </span>
-          {s.holiday && <HolidayPill name={s.holiday} />}
-          {s.extra && <span className="holiday-text extra-text">Extra game</span>}
-        </div>
-        {/* Row 3: "2 of 4 in", a dot per spot, and the names in plain text. */}
-        {showCount && (
-          <div className="in-line">
-            <span className="in-count">{countLine(s)}</span>
-            <SpotDots names={names} me={g.me?.name} />
-            {!rowFour && calLink}
-          </div>
-        )}
-        {/* Row 4: every name that's in, on its own line; then anyone waiting. */}
-        {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
-        {!s.canceled && (
-          <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'}>
-            {waiting && <strong> · you're #{mine.waitlistPosition}</strong>}
-          </NamesLine>
-        )}
-
-        {s.note && <p className="game-note">{s.note}</p>}
-        {goodNews && <Notice tone="ok">{goodNews}</Notice>}
-        {/* Money that came back from this game (they dropped out, or it was canceled) is credit now. */}
-        {mine && mine.creditBackCents > 0 && (mine.status === 'withdrawn' || s.canceled) && (
-          <p className="small credit-back-line" data-credit-back>
-            Your {formatPrice(mine.creditBackCents)} is now credit.{' '}
-            <button className="link-btn" onClick={onRequestRefund}>
-              Request refund
-            </button>
-          </p>
-        )}
-
-        {/* Credit used shows only on the game it comes off, and only while that game is unpaid (the pay card says it on game day). */}
-        {inSession && !onTop && mine.oweCents > 0 && mine.creditCents > 0 && <p className="small">{creditOweText(mine.oweCents, mine.creditCents)}</p>}
-
-        {/* Row 4, only when needed: Pay (the card's one green button) and the calendar icon. */}
-        {rowFour && (
-          <div className="row-foot">
-            <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} />
-            {calLink}
-          </div>
-        )}
       </div>
+      <h2 id={`s-${s.id}`} className="sr-only">
+        {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
+        {isIn ? ". You're in" : ''}
+      </h2>
+      {body}
+      {rightSide && (
+        <div className="sched-act">
+          {joinBtn || leaveBtn}
+          {isIn && dropAndCal}
+        </div>
+      )}
 
       <ConfirmDialog
         open={askOut}
-        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${playerDay(s.startsAt, tz, Date.parse(g.now)).word}?`}
+        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${playerDay(s.startsAt, tz, nowMs).word}?`}
         body={waiting ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
-        confirmLabel="I'm out"
+        confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : 'Drop out'}
         danger
         busy={busy}
-        onConfirm={() => run('withdraw', () => "You're out")}
+        onConfirm={() => run('withdraw', () => (waiting ? "You're off the list" : "You're out"))}
         onCancel={() => setAskOut(false)}
       />
     </article>
