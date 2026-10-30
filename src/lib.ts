@@ -128,7 +128,11 @@ async function answer<T>(res: Response): Promise<T> {
   return data as T;
 }
 
-export async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
+/** What the banner says when the phone has no signal. */
+export const OFFLINE_MESSAGE = 'No signal, try again';
+
+/** `keepalive`: let the request finish even if the page is closing (a held drop being sent on the way out). */
+export async function api<T>(method: string, path: string, body?: unknown, opts: { keepalive?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -150,9 +154,10 @@ export async function api<T>(method: string, path: string, body?: unknown): Prom
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'same-origin',
+      keepalive: opts.keepalive || undefined,
     });
   } catch {
-    throw new ApiError(0, 'offline', "Couldn't reach the site. Check your connection and try again.");
+    throw new ApiError(0, 'offline', OFFLINE_MESSAGE);
   }
   return answer<T>(res);
 }
@@ -187,7 +192,18 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
-  return { data, error, loading, reload, refresh, setData };
+  /** Like refresh, but says whether it worked (live updates back off when it did not). */
+  const quiet = useCallback(async () => {
+    try {
+      setData(await loader());
+      setError(null);
+      return true;
+    } catch {
+      return false;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return { data, error, loading, reload, refresh, quiet, setData };
 }
 
 /** How long the page must have been out of sight before coming back refreshes it. */
@@ -288,6 +304,14 @@ export function storageGet(key: string): string | null {
     return localStorage.getItem(key);
   } catch {
     return null;
+  }
+}
+
+export function storageRemove(key: string) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* private mode: ignore */
   }
 }
 

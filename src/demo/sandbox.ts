@@ -41,6 +41,8 @@ class Statement implements D1PreparedStatement {
   }
 
   runSync(): D1Result {
+    // A batched read (like real D1) hands its rows back.
+    if (/^\s*select\b/i.test(this.sql)) return { results: this.rows(), meta: { changes: 0 } };
     this.db.run(this.sql, this.args());
     return { results: [], meta: { changes: this.db.getRowsModified() } };
   }

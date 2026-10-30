@@ -22,6 +22,8 @@ import {
   weekFade,
 } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
+import { BANNER_TIMING } from '../../ui';
+import { startHold, undoHold, UNDO_MS } from '../../hold';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
@@ -573,7 +575,37 @@ const ROSTER_LABEL: Record<string, string> = {
 
 function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
+  const toast = useToast();
   const [removing, setRemoving] = useState<AdminRosterEntry | null>(null);
+  // Removed people whose Remove is being held for Undo: shown as removed, not sent yet.
+  const [held, setHeld] = useState<Set<string>>(new Set());
+  const setHeldFor = (playerId: string, on: boolean) =>
+    setHeld((h) => {
+      const next = new Set(h);
+      if (on) next.add(playerId);
+      else next.delete(playerId);
+      return next;
+    });
+  /** Remove: shown at once, sent after 5 seconds unless Undo is tapped (or at once if the page closes). */
+  function removeHeld(r: AdminRosterEntry) {
+    const key = `${s.id}:${r.playerId}`;
+    setHeldFor(r.playerId, true);
+    startHold(key, {
+      send: async (leaving) => {
+        await api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: r.playerId, action: 'withdraw' }, { keepalive: leaving });
+      },
+      settled: async (err) => {
+        if (err) {
+          setHeldFor(r.playerId, false);
+          toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+        }
+        await ctx.reload();
+        setHeldFor(r.playerId, false);
+      },
+      undone: () => setHeldFor(r.playerId, false),
+    });
+    toast(`${r.name} removed.`, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => undoHold(key) } });
+  }
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);
@@ -591,12 +623,12 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
               <div>
                 <strong>{r.name}</strong>
                 <div className="small muted">
-                  {r.status === 'waitlisted' ? `#${r.waitlistPosition} on waitlist` : ROSTER_LABEL[r.status]}
+                  {held.has(r.playerId) ? 'Removed' : r.status === 'waitlisted' ? `#${r.waitlistPosition} on waitlist` : ROSTER_LABEL[r.status]}
                 </div>
               </div>
-              <Chip tone={r.status === 'confirmed' ? 'ok' : r.status === 'waitlisted' ? 'info' : 'muted'}>{ROSTER_LABEL[r.status]}</Chip>
+              <Chip tone={held.has(r.playerId) ? 'muted' : r.status === 'confirmed' ? 'ok' : r.status === 'waitlisted' ? 'info' : 'muted'}>{held.has(r.playerId) ? 'Removed' : ROSTER_LABEL[r.status]}</Chip>
             </div>
-            {live && (
+            {live && !held.has(r.playerId) && (
               <div className="btn-row">
                 {r.status === 'confirmed' && (
                   <button className="btn small secondary" disabled={busy} onClick={() => act(r.playerId, 'waitlist', `${r.name} moved to waitlist`)}>
@@ -648,8 +680,8 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         confirmLabel="Remove"
         danger
         busy={busy}
-        onConfirm={async () => {
-          if (removing) await act(removing.playerId, 'withdraw', `${removing.name} removed`);
+        onConfirm={() => {
+          if (removing) removeHeld(removing);
           setRemoving(null);
         }}
         onCancel={() => setRemoving(null)}

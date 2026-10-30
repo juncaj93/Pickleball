@@ -365,7 +365,7 @@ async function main() {
     await p.ctx.unroute('**/api/group');
     await p.ctx.route('**/api/group', (r) => r.abort('internetdisconnected'));
     await p.page.reload();
-    await p.page.getByText(/Couldn't reach the site/).waitFor();
+    await p.page.getByText(/No signal, try again/).waitFor();
     await snap(p.page, 'player', '19-offline-error', 'No connection: the error message with Try again', t);
     await p.ctx.unroute('**/api/group');
     await p.page.goto(`${BASE}/t/not-a-real-link-0000000000000000000000`);

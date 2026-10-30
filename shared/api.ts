@@ -137,6 +137,8 @@ export interface GroupView {
     /** The venue's court waitlist: players go on standby. */
     courtState: 'waitlist' | 'opened' | 'not_opened' | null;
   } | null;
+  /** The "did anything change?" code this data was read at (see server/stamp.ts). */
+  version: string;
 }
 
 export interface AdminRosterEntry {

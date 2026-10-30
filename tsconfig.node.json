@@ -13,5 +13,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["vite.config.ts", "dev", "tests", "server", "shared", "src/pages/admin/todo.ts", "src/pages/admin/textMenu.ts", "src/pages/admin/suggestions.ts", "src/demo/sandbox.ts"]
+  "include": ["vite.config.ts", "dev", "tests", "server", "shared", "src/pages/admin/todo.ts", "src/pages/admin/textMenu.ts", "src/pages/admin/suggestions.ts", "src/demo/sandbox.ts", "src/livecore.ts", "src/celebrate.ts", "src/optimistic.ts"]
 }

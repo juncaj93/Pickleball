@@ -30,6 +30,7 @@ import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
+import { changeStamp } from './stamp';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -64,8 +65,18 @@ export async function viewer(ctx: Ctx): Promise<Viewer> {
   return { group, playerId: await currentPlayerId(ctx, group), viewAsName: null };
 }
 
+/** GET /api/group/version: the tiny "did anything change?" answer the open page asks every few seconds. */
+export async function groupVersion(ctx: Ctx): Promise<Response> {
+  const { group, playerId } = await viewer(ctx);
+  return new Response(JSON.stringify({ v: await changeStamp(ctx, group, playerId) }), {
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 export async function groupView(ctx: Ctx): Promise<GroupView> {
   const { group, playerId: meId, viewAsName } = await viewer(ctx);
+  // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
+  const version = await changeStamp(ctx, group, meId);
   await ensureSessions(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
   const tz = group.timezone;
@@ -180,6 +191,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     }),
     credit,
     suggestion,
+    version,
   };
 }
 

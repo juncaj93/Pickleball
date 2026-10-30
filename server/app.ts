@@ -43,6 +43,7 @@ route('POST', '/api/access', enterGroupWord);
 
 // Players (private group link)
 route('GET', '/api/group', (ctx) => player.groupView(ctx));
+route('GET', '/api/group/version', (ctx) => player.groupVersion(ctx));
 route('POST', '/api/me', player.pickName);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);

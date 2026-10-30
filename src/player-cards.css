@@ -712,3 +712,213 @@
   border-radius: 0;
   font-weight: 600;
 }
+
+/* ---------- Live updates, Game on, My games, loading polish ---------- */
+
+/* "All games / My games": part of the first section line, at its right end. 26px to look at, 44px to tap. */
+.schedule > .week-break {
+  min-height: 0;
+}
+.filter-toggle {
+  order: 2;
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  margin: -6px -4px -6px 0;
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--pc-muted);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.filter-toggle::before {
+  content: '';
+  position: absolute;
+  inset: -9px -6px;
+}
+.filter-toggle[data-filter='mine'] {
+  color: var(--pc-green);
+}
+.filter-toggle .filter-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.schedule > .week-break.filter-only {
+  margin-top: 2px;
+  justify-content: flex-end;
+}
+.schedule > .week-break.filter-only::after {
+  margin-right: 0;
+}
+.schedule .empty-mine {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 22px 16px;
+  text-align: center;
+  background: var(--pc-card);
+  color: var(--pc-ink);
+  border: 1px solid var(--pc-line);
+  border-radius: 24px;
+}
+.schedule .empty-mine p {
+  margin: 0;
+  font-weight: 700;
+}
+.schedule .empty-mine .link-btn {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 0.95rem;
+  color: var(--pc-green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A pressed look on every button and link. */
+button:not(:disabled):active,
+a[href]:active {
+  opacity: 0.72;
+}
+.link-btn:not(:disabled):active,
+.filter-toggle:active,
+.toast-action:active {
+  transform: scale(0.96);
+}
+button,
+a[href] {
+  transition:
+    opacity var(--fast, 120ms),
+    transform var(--fast, 120ms) var(--ease, ease-out);
+}
+
+/* Placeholder cards while the page loads: same size as the real ones. */
+.skel {
+  display: block;
+  border-radius: 10px;
+  background: linear-gradient(100deg, var(--pc-skel-a) 30%, var(--pc-skel-b) 50%, var(--pc-skel-a) 70%);
+  background-size: 300% 100%;
+  animation: skel-shimmer 1.4s linear infinite;
+}
+.schedule,
+.pay-card {
+  --pc-skel-a: #ecebe3;
+  --pc-skel-b: #f6f5ef;
+}
+:root[data-theme='dark'] .schedule {
+  --pc-skel-a: #202c25;
+  --pc-skel-b: #2a3830;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .schedule {
+    --pc-skel-a: #202c25;
+    --pc-skel-b: #2a3830;
+  }
+}
+@keyframes skel-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+.skel-card {
+  pointer-events: none;
+}
+.skel-card .skel-tile {
+  width: 84px;
+  height: 84px;
+  border-radius: 18px;
+}
+.skel-card.tier-next .skel-tile {
+  width: 70px;
+  height: 70px;
+}
+.skel-card .skel-time {
+  width: 60px;
+  height: 14px;
+  margin: 6px auto 0;
+}
+.skel-card .sched-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px;
+  flex: 1;
+}
+.skel-card .skel-line {
+  height: 14px;
+}
+.skel-card .w60 {
+  width: 60%;
+}
+.skel-card .w40 {
+  width: 40%;
+}
+.skel-card .w80 {
+  width: 80%;
+}
+.skel-head .skel-label {
+  width: 88px;
+  height: 14px;
+}
+
+/* Cards that leave fade out first; a name that arrives fades in. */
+.schedule > .sched.leaving {
+  animation: card-out 0.22s ease-in forwards;
+  pointer-events: none;
+}
+@keyframes card-out {
+  to {
+    opacity: 0;
+  }
+}
+.name-new {
+  animation: name-in 0.5s ease-out both;
+}
+@keyframes name-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A game I'm in just reached 4: the pickleballs ripple once. */
+.dots.dots-celebrate .ball {
+  animation: ball-ripple 0.9s ease-in-out both;
+}
+.dots.dots-celebrate .ball:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.dots.dots-celebrate .ball:nth-child(3) {
+  animation-delay: 0.2s;
+}
+.dots.dots-celebrate .ball:nth-child(4) {
+  animation-delay: 0.3s;
+}
+.dots.dots-celebrate .ball:nth-child(n + 5) {
+  animation-delay: 0.4s;
+}
+@keyframes ball-ripple {
+  0%,
+  100% {
+    transform: none;
+  }
+  35% {
+    transform: scale(1.55) rotate(25deg);
+  }
+  65% {
+    transform: scale(0.92);
+  }
+}

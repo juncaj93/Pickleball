@@ -1640,6 +1640,44 @@ dialog.sheet::backdrop {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+.pop .toast-action {
+  flex: none;
+  position: relative;
+  min-height: 44px;
+  margin: -11px -16px -11px 4px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 0 16px 16px 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+/* "Game on!": the pickleball pops in, no circle behind it. */
+.pop.pop-ball .toast-icon {
+  background: none;
+  width: 26px;
+  height: 26px;
+}
+.pop.pop-ball .toast-icon .ball {
+  width: 26px;
+  height: 26px;
+  animation: ball-pop 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+}
+@keyframes ball-pop {
+  0% {
+    transform: scale(0.3);
+  }
+  60% {
+    transform: scale(1.35) rotate(40deg);
+  }
+  100% {
+    transform: none;
+  }
+}
 .pop.pop-error {
   --pop-bg: var(--pop-err-bg);
   --pop-fg: var(--pop-err-fg);

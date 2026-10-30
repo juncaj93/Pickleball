@@ -1,20 +1,67 @@
-import { Fragment, type ReactNode, useEffect, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { creditBackNote } from '../../shared/pricing';
 import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatTimeShort, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage } from '../../shared/credit';
+import { MIN_PLAYERS } from '../../shared/spots';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, setGroupKey, setViewAs, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
+import { holdLive } from '../busy';
+import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
+import { flushHold, holdPending, startHold, undoHold, UNDO_MS } from '../hold';
+import { useLiveUpdates } from '../live';
+import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
-import { CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, NamesLine, Notice, SpotDots, Spinner, useToast } from '../ui';
+import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 import '../credit-player.css';
 import '../player-cards.css';
 
 const SHOW_FIRST = 6;
+
+const FILTER_KEY = 'pb_games_filter';
+/** A drop that was held for Undo and may not have reached the server yet (page closed first). */
+const PENDING_DROP_KEY = 'pb_pending_drop';
+type GameFilter = 'all' | 'mine';
+/** In the game or waiting for a spot. */
+const isMineGame = (s: PlayerSessionView) => !!s.mine && (s.mine.status === 'confirmed' || s.mine.status === 'waitlisted');
+const NOTICE_GAP_MS = 2400;
+const CELEBRATE_MS = 1600;
+const FADE_OUT_MS = 220;
+const BANNER_FADE_MS = BANNER_TIMING.fadeIn;
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/**
+ * Cards that disappear (a filter switch, a game that ends) fade out instead of
+ * vanishing: the old card stays in place for a moment, marked as leaving.
+ */
+function useFadeOut(items: PlayerSessionView[]): { s: PlayerSessionView; leaving: boolean }[] {
+  const [ghosts, setGhosts] = useState<{ s: PlayerSessionView; after: string | null; at: number }[]>([]);
+  const prev = useRef<PlayerSessionView[]>(items);
+  useEffect(() => {
+    const was = prev.current;
+    prev.current = items;
+    if (reducedMotion()) return;
+    const now = new Set(items.map((i) => i.id));
+    const gone = was.map((s, at) => ({ s, at, after: at > 0 ? was[at - 1].id : null })).filter((x) => !now.has(x.s.id));
+    if (gone.length === 0) return;
+    setGhosts((g) => [...g, ...gone]);
+    const ids = new Set(gone.map((x) => x.s.id));
+    setTimeout(() => setGhosts((g) => g.filter((x) => !ids.has(x.s.id))), FADE_OUT_MS);
+  }, [items]);
+  const out = items.map((s) => ({ s, leaving: false }));
+  const live = new Set(items.map((i) => i.id));
+  for (const gh of [...ghosts].sort((a, b) => a.at - b.at)) {
+    if (live.has(gh.s.id)) continue;
+    let at = gh.after === null ? 0 : out.findIndex((r) => r.s.id === gh.after) + 1;
+    if (at === 0 && gh.after !== null) at = out.length;
+    out.splice(at, 0, { s: gh.s, leaving: true });
+  }
+  return out;
+}
 
 const TIER_LABEL: Record<WeekTier, string> = { this: 'This week', next: 'Next week', later: 'Later' };
 
@@ -91,6 +138,93 @@ export function PlayerHome({
   }, [load.data, groupKey, viewAs]);
 
   const g = load.data;
+  const toast = useToast();
+
+  // Taps still waiting on the server are drawn at once (I'm in, and a held Drop out).
+  const [overlay, setOverlayState] = useState<Overlay>({});
+  const setOverlay = useCallback((id: string, kind: 'join' | 'drop' | null) => {
+    setOverlayState((o) => {
+      if (kind === null) {
+        if (!(id in o)) return o;
+        const { [id]: _gone, ...rest } = o;
+        return rest;
+      }
+      return { ...o, [id]: kind };
+    });
+  }, []);
+  const view = useMemo(() => (g ? applyOverlay(g, overlay) : null), [g, overlay]);
+
+  // All games / My games, remembered on this phone (not in the organizer's "View as...").
+  const [filter, setFilterState] = useState<GameFilter>(() => (!viewAs && storageGet(FILTER_KEY) === 'mine' ? 'mine' : 'all'));
+  const setFilter = (f: GameFilter) => {
+    setFilterState(f);
+    if (!viewAs) storageSet(FILTER_KEY, f);
+  };
+
+  // The page keeps itself fresh: a tiny "did anything change?" check, the full list only when it did.
+  useLiveUpdates({ enabled: !!g && !!g.me && !switching && !viewAs && !pretend, version: g?.version ?? null, reload: load.quiet });
+
+  // One-time moments: a game I'm in reached 4, and a cash out the organizer sent.
+  const celebrated = useRef<Set<string> | null>(null);
+  if (!celebrated.current) celebrated.current = celebratedIds();
+  const [celebrating, setCelebrating] = useState<Set<string>>(new Set());
+  const markCelebrated = useCallback((id: string) => {
+    celebrated.current!.add(id);
+    rememberCelebrated(celebrated.current!);
+  }, []);
+  useEffect(() => {
+    if (!g || !g.me || switching || viewAs) return;
+    const plan = planCelebration(g.sessions, celebrated.current!);
+    celebrated.current = plan.next;
+    rememberCelebrated(plan.next, new Set(g.sessions.map((x) => x.id)));
+    const cash = planCashOut(g.credit.history, cashOutSeen(), Date.parse(g.now));
+    if (cash.show) rememberCashOuts(cash.next);
+    const notices: { msg: string; ball?: boolean }[] = [];
+    if (cash.show) notices.push({ msg: `${g.group.organizerName ?? 'The organizer'} sent your ${formatPrice(cash.show.cents)}` });
+    if (plan.now.length) notices.push({ msg: `Game on! ${plan.now[0].confirmed.length} in`, ball: true });
+    // Not cleaned up on purpose: the memory above is already saved, so a repeat of this effect must not cancel them.
+    notices.forEach((n, i) => (i === 0 ? toast(n.msg, 'ok', { ball: n.ball }) : setTimeout(() => toast(n.msg, 'ok', { ball: n.ball }), i * NOTICE_GAP_MS)));
+    if (plan.now.length) {
+      const ids = new Set(plan.now.map((x) => x.id));
+      setCelebrating(ids);
+      setTimeout(() => setCelebrating((cur) => (cur === ids ? new Set() : cur)), CELEBRATE_MS);
+    }
+  }, [g, switching, viewAs, toast]);
+  /** My own tap on I'm in / Yes: "Game on!" when it completed the 4th player, else "You're in". */
+  const joinToast = useCallback(
+    (sessionId: string, before: number, res: JoinResponse) => {
+      if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
+        // I was there for it, so the card does not celebrate again later.
+        markCelebrated(sessionId);
+        if (before + 1 === MIN_PLAYERS) return toast('Game on!', 'ok', { ball: true });
+      }
+      toast(joinedText(res));
+    },
+    [toast, markCelebrated],
+  );
+
+  // A drop that was held for Undo when the page closed: finish it.
+  useEffect(() => {
+    if (!g || !g.me || switching || viewAs) return;
+    const raw = storageGet(PENDING_DROP_KEY);
+    if (!raw) return;
+    let rec: { sessionId?: string; at?: number } = {};
+    try {
+      rec = JSON.parse(raw);
+    } catch {
+      /* broken note: drop it */
+    }
+    if (rec.sessionId && holdPending(rec.sessionId)) return;
+    storageRemove(PENDING_DROP_KEY);
+    const mineHere = g.sessions.find((x) => x.id === rec.sessionId)?.mine?.status === 'confirmed';
+    if (rec.sessionId && mineHere && Date.now() - (rec.at ?? 0) < 10 * 60_000) {
+      void api('POST', `/api/sessions/${rec.sessionId}/withdraw`, {}).then(() => load.quiet(), () => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [g?.me?.id]);
+  // Leaving the screen sends a held drop right away.
+  useEffect(() => () => flushHold(true), []);
+
   const balance = g && (switching || (!viewAs && !g.me)) ? null : (g?.credit.balanceCents ?? null);
   useEffect(() => {
     if (balance !== null) lastBalance.current = balance;
@@ -98,6 +232,10 @@ export function PlayerHome({
   // Scroll to a shared session once the schedule shows (after picking a name).
   const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
   const choosing = !!g && (switching || (!viewAs && !g.me));
+  const mineOnly = filter === 'mine';
+  const filtered = view ? (mineOnly ? view.sessions.filter(isMineGame) : view.sessions) : [];
+  const shownSessions = showAll || focusIndex >= SHOW_FIRST ? filtered : filtered.slice(0, SHOW_FIRST);
+  const rows = useFadeOut(shownSessions);
   useEffect(() => {
     if (!g || choosing || focusIndex < 0 || scrolled.current) return;
     scrolled.current = true;
@@ -126,7 +264,7 @@ export function PlayerHome({
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
   const showChip = !!g && !pickName && (g.credit.balanceCents > 0 || !!g.credit.pending);
   const chipStart = lastBalance.current;
-  const sessions = g ? (showAll || focusIndex >= SHOW_FIRST ? g.sessions : g.sessions.slice(0, SHOW_FIRST)) : [];
+
 
   return (
     <>
@@ -158,7 +296,7 @@ export function PlayerHome({
         chip={showChip ? <CreditChip credit={g.credit} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
       />
       <main className="page stack-lg">
-        {load.loading && !g && <Spinner />}
+        {load.loading && !g && !load.error && <ScheduleSkeleton />}
         {load.error && load.error.status !== 404 && <ErrorState error={load.error} onRetry={load.reload} />}
 
         {g && pickName && (
@@ -184,7 +322,7 @@ export function PlayerHome({
 
         {g && !pickName && (
           <>
-            {g.payDue.length > 0 && <PayCard g={g} onChanged={load.reload} />}
+            {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} />}
             {answered ? (
               <section className="card stack suggest" aria-label="Your answer">
                 <h2>{answered.text}</h2>
@@ -196,26 +334,56 @@ export function PlayerHome({
                 </button>
               </section>
             ) : (
-              g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} onJoined={setAnswered} />
+              g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
-              {sessions.map((s, i) => {
+              {/* Nothing to list (My games with no games): the switch still has a line of its own. */}
+              {g.sessions.length > 0 && rows.length === 0 && (
+                <div className="week-break tier-next filter-only">
+                  <GameFilterToggle filter={filter} onChange={setFilter} />
+                </div>
+              )}
+              {g.sessions.length > 0 && mineOnly && filtered.length === 0 && (
+                <div className="card empty-mine" role="status">
+                  <p>You're not in any games yet</p>
+                  <button className="link-btn quiet-link" onClick={() => setFilter('all')}>
+                    See all games
+                  </button>
+                </div>
+              )}
+              {rows.map(({ s, leaving }, i) => {
                 const tier = weekTier(s.startsAt, Date.parse(g.now), tz);
-                const prev = i > 0 ? weekTier(sessions[i - 1].startsAt, Date.parse(g.now), tz) : null;
+                const prev = i > 0 ? weekTier(rows[i - 1].s.startsAt, Date.parse(g.now), tz) : null;
                 // One header per tier: THIS WEEK, NEXT WEEK, LATER (every week after next shares one).
                 const header = prev !== tier ? TIER_LABEL[tier] : null;
                 return (
                   <Fragment key={s.id}>
-                    {header && <h3 className={`week-break tier-${tier}`}>{header}</h3>}
-                    <ScheduleRow s={s} g={g} tier={tier} highlight={s.id === focusId} onChanged={load.reload} />
+                    {header && (
+                      <div className={`week-break tier-${tier}`}>
+                        <h3>{header}</h3>
+                        {/* The switch sits at the right end of the first line, as part of it. */}
+                        {i === 0 && <GameFilterToggle filter={filter} onChange={setFilter} />}
+                      </div>
+                    )}
+                    <ScheduleRow
+                      s={s}
+                      g={view!}
+                      tier={tier}
+                      highlight={s.id === focusId}
+                      onChanged={load.reload}
+                      setOverlay={setOverlay}
+                      joinToast={joinToast}
+                      celebrating={celebrating.has(s.id)}
+                      leaving={leaving}
+                    />
                   </Fragment>
                 );
               })}
             </div>
-            {g.sessions.length > SHOW_FIRST && (
+            {filtered.length > SHOW_FIRST && (
               <button className="btn ghost block" onClick={() => setShowAll((v) => !v)}>
-                {showAll ? 'Show fewer' : `More sessions (${g.sessions.length - SHOW_FIRST})`}
+                {showAll ? 'Show fewer' : `More sessions (${filtered.length - SHOW_FIRST})`}
               </button>
             )}
             {/* The end of the page: just a thin line and a little space. */}
@@ -227,6 +395,23 @@ export function PlayerHome({
       </main>
       {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </>
+  );
+}
+
+/** "All games" / "My games": a quiet switch at the right end of the first section line. */
+function GameFilterToggle({ filter, onChange }: { filter: GameFilter; onChange: (f: GameFilter) => void }) {
+  const mine = filter === 'mine';
+  return (
+    <button
+      type="button"
+      className="filter-toggle"
+      data-filter={filter}
+      aria-label={`Showing ${mine ? 'my games' : 'all games'}. Switch to ${mine ? 'all games' : 'my games'}`}
+      onClick={() => onChange(mine ? 'all' : 'mine')}
+    >
+      <FilterIcon />
+      <span aria-hidden="true">{mine ? 'My games' : 'All games'}</span>
+    </button>
   );
 }
 
@@ -393,6 +578,7 @@ function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
   const [busy, setBusy] = useState(false);
   async function set(paid: boolean) {
     setBusy(true);
+    const release = holdLive();
     try {
       for (const id of sessionIds) await api('POST', `/api/sessions/${id}/paid`, { paid });
       toast(paid ? 'Marked paid' : 'Marked not paid');
@@ -403,6 +589,7 @@ function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
       await onChanged();
     } finally {
       setBusy(false);
+      release();
     }
   }
   return { busy, set };
@@ -448,6 +635,7 @@ function useCredit(onChanged: () => Promise<void>) {
     if (working.current) return;
     working.current = true;
     setBusy(true);
+    const release = holdLive();
     let used = 0;
     try {
       let left = potCents;
@@ -473,6 +661,7 @@ function useCredit(onChanged: () => Promise<void>) {
     } finally {
       working.current = false;
       setBusy(false);
+      release();
     }
   }
   /** "Undo" under "Paid with credit": the credit goes back, the game is owed again. */
@@ -480,6 +669,7 @@ function useCredit(onChanged: () => Promise<void>) {
     if (working.current) return;
     working.current = true;
     setBusy(true);
+    const release = holdLive();
     try {
       await api('POST', `/api/sessions/${sessionId}/undo-credit`, {});
       toast('Credit put back');
@@ -491,6 +681,7 @@ function useCredit(onChanged: () => Promise<void>) {
     } finally {
       working.current = false;
       setBusy(false);
+      release();
     }
   }
   return { busy, use, undo };
@@ -617,12 +808,21 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
 }
 
 /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
-function SuggestionCard({ g, onChanged, onJoined }: { g: GroupView; onChanged: () => Promise<void>; onJoined: (a: { sessionId: string; text: string; startsAt: string; endsAt: string }) => void }) {
+function SuggestionCard({
+  g,
+  onChanged,
+  onJoined,
+  joinToast,
+}: {
+  g: GroupView;
+  onChanged: () => Promise<void>;
+  onJoined: (a: { sessionId: string; text: string; startsAt: string; endsAt: string }) => void;
+  joinToast: (sessionId: string, before: number, res: JoinResponse) => void;
+}) {
   const toast = useToast();
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
   const standby = s.courtState === 'waitlist';
   const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
@@ -630,12 +830,12 @@ function SuggestionCard({ g, onChanged, onJoined }: { g: GroupView; onChanged: (
 
   async function answer(yes: boolean) {
     setBusy(true);
-    setError(null);
+    const release = holdLive();
     try {
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
-        toast(joinedText(res));
+        joinToast(s.sessionId, s.confirmedCount, res);
         onJoined({ sessionId: s.sessionId, text: joinedText(res), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
       } else {
@@ -644,9 +844,10 @@ function SuggestionCard({ g, onChanged, onJoined }: { g: GroupView; onChanged: (
       }
     } catch (err) {
       if (isDemo(err)) toast(err.message);
-      else setError(err instanceof ApiError ? err.message : 'That did not work. Try again.');
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {
       setBusy(false);
+      release();
     }
   }
 
@@ -660,7 +861,6 @@ function SuggestionCard({ g, onChanged, onJoined }: { g: GroupView; onChanged: (
         </span>
       </div>
       {subline && <p className="muted small suggest-sub">{subline}</p>}
-      {error && <Notice tone="danger">{error}</Notice>}
       <div className="btn-row">
         <button className="btn" disabled={busy} onClick={() => answer(true)}>
           Yes
@@ -881,6 +1081,10 @@ function ScheduleRow({
   tier,
   onChanged,
   highlight,
+  setOverlay,
+  joinToast,
+  celebrating,
+  leaving,
 }: {
   s: PlayerSessionView;
   g: GroupView;
@@ -888,6 +1092,13 @@ function ScheduleRow({
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
+  /** Draw a tap at once (I'm in, a held Drop out) until the server answers, or take it back off. */
+  setOverlay: (id: string, kind: 'join' | 'drop' | null) => void;
+  joinToast: (sessionId: string, before: number, res: JoinResponse) => void;
+  /** The pickleballs ripple once: this game just reached 4 and this device had not seen it. */
+  celebrating?: boolean;
+  /** Fading out of the list. */
+  leaving?: boolean;
 }) {
   const tz = g.group.timezone;
   const toast = useToast();
@@ -906,6 +1117,7 @@ function ScheduleRow({
     if (working.current) return;
     working.current = true;
     setBusy(true);
+    const release = holdLive();
     try {
       toast(label(await api<any>('POST', `/api/sessions/${s.id}/${path}`, {})));
       await onChanged();
@@ -917,7 +1129,75 @@ function ScheduleRow({
       working.current = false;
       setBusy(false);
       setAskOut(false);
+      release();
     }
+  }
+
+  /** I'm in: the card fills at once; if the server says no, it goes back and the banner says why. */
+  async function join() {
+    if (working.current) return;
+    // Tapping I'm in while a drop is still waiting for Undo just takes the drop back.
+    if (undoHold(s.id)) {
+      toast("You're back in");
+      return;
+    }
+    const before = s.confirmed.length;
+    const instant = canJoinInstantly(s);
+    working.current = true;
+    setBusy(true);
+    const release = holdLive();
+    if (instant) setOverlay(s.id, 'join');
+    try {
+      joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}));
+      await onChanged();
+    } catch (err) {
+      setOverlay(s.id, null);
+      if (isDemo(err)) toast(err.message);
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      await onChanged();
+    } finally {
+      setOverlay(s.id, null);
+      working.current = false;
+      setBusy(false);
+      release();
+    }
+  }
+
+  /**
+   * Drop out: the card shows it at once, but nothing is sent for 5 seconds so Undo can take it back
+   * (money is involved, so a finished drop is never reversed). Closing the page sends it right away.
+   */
+  function dropOut() {
+    setAskOut(false);
+    if (working.current) return;
+    // Too close to the start to wait: send it now, like before.
+    if (Date.parse(s.startsAt) - Date.now() < 10_000) {
+      void run('withdraw', () => "You're out");
+      return;
+    }
+    const id = s.id;
+    setOverlay(id, 'drop');
+    storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now() }));
+    startHold(id, {
+      send: async (leaving) => {
+        await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: leaving && !demoOn() });
+      },
+      settled: async (err) => {
+        storageRemove(PENDING_DROP_KEY);
+        if (err) {
+          setOverlay(id, null);
+          if (isDemo(err)) toast(err.message);
+          else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+        }
+        await onChanged();
+        setOverlay(id, null);
+      },
+      undone: () => {
+        storageRemove(PENDING_DROP_KEY);
+        setOverlay(id, null);
+      },
+    });
+    toast('You dropped out.', 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => undoHold(id) } });
   }
 
   const court = courtStatus(s, tz);
@@ -973,7 +1253,7 @@ function ScheduleRow({
     );
 
   const joinBtn = notIn && (
-    <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} disabled={busy} aria-busy={busy} onClick={() => run('join', joinedText)}>
+    <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} disabled={busy} aria-busy={busy} onClick={join}>
       {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
     </button>
   );
@@ -991,7 +1271,8 @@ function ScheduleRow({
   return (
     <article
       id={`row-${s.id}`}
-      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}`}
+      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}`}
+      aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
@@ -1017,7 +1298,7 @@ function ScheduleRow({
           {showCount && (
             <div className="in-line">
               <span className="in-count">{countLine(s)}</span>
-              <SpotDots names={names} me={g.me?.name} />
+              <SpotDots names={names} me={g.me?.name} celebrate={celebrating} />
             </div>
           )}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
@@ -1050,7 +1331,7 @@ function ScheduleRow({
         confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : 'Drop out'}
         danger
         busy={busy}
-        onConfirm={() => run('withdraw', () => (waiting ? "You're off the list" : "You're out"))}
+        onConfirm={() => (waiting ? run('withdraw', () => "You're off the list") : dropOut())}
         onCancel={() => setAskOut(false)}
       />
     </article>

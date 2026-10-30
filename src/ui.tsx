@@ -2,6 +2,7 @@ import { createContext, Fragment, type ReactNode, useCallback, useContext, useEf
 import { type CourtKind } from '../shared/court';
 import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
+import { holdLive } from './busy';
 import { DEMO_MESSAGE, isIOS } from './lib';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
@@ -15,6 +16,37 @@ export function Notice({ tone, title, children }: { tone: Tone; title?: string; 
     <div className={`notice tone-${tone}`} role={tone === 'danger' ? 'alert' : undefined}>
       {title && <strong>{title}</strong>}
       {children}
+    </div>
+  );
+}
+
+/** Soft placeholder cards while the schedule loads. Same shape and size as the real cards, so nothing jumps when they arrive. */
+export function ScheduleSkeleton() {
+  const card = (tier: 'this' | 'next', key: number) => (
+    <div key={key} className={`sched skel-card tier-${tier}`} aria-hidden="true">
+      <div className="sched-tilecol">
+        <div className="skel skel-tile" />
+        <div className="skel skel-time" />
+      </div>
+      <div className="sched-body">
+        <div className="skel skel-line w60" />
+        <div className="skel skel-line w40" />
+        <div className="skel skel-line w80" />
+      </div>
+    </div>
+  );
+  return (
+    <div className="schedule skel-schedule" role="status">
+      <span className="sr-only">Loading…</span>
+      <h3 className="week-break tier-this skel-head" aria-hidden="true">
+        <span className="skel skel-label" />
+      </h3>
+      {card('this', 0)}
+      {card('this', 1)}
+      <h3 className="week-break tier-next skel-head" aria-hidden="true">
+        <span className="skel skel-label" />
+      </h3>
+      {card('next', 2)}
     </div>
   );
 }
@@ -67,7 +99,13 @@ export const BANNER_TIMING = {
 };
 
 type ToastKind = 'ok' | 'error';
-type ToastFn = (msg: string, kind?: ToastKind) => void;
+/** Extras for one banner: a button on it ("Undo"), how long it stays, or the pickleball pop for "Game on!". */
+export interface ToastOptions {
+  action?: { label: string; onClick: () => void };
+  stayMs?: number;
+  ball?: boolean;
+}
+type ToastFn = (msg: string, kind?: ToastKind, opts?: ToastOptions) => void;
 
 const ToastContext = createContext<ToastFn>(() => {});
 
@@ -75,15 +113,16 @@ interface Shown {
   id: number;
   msg: string;
   kind: ToastKind;
+  opts: ToastOptions;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState<Shown | null>(null);
   const [spoken, setSpoken] = useState<{ msg: string; kind: ToastKind } | null>(null);
-  const show = useCallback<ToastFn>((msg, kind = 'ok') => {
+  const show = useCallback<ToastFn>((msg, kind = 'ok', opts = {}) => {
     // "Demo only" (View as, Pretend it's...) is a plain note, never a red error.
     if (msg === DEMO_MESSAGE) kind = 'ok';
-    setShown({ id: Date.now() + Math.random(), msg, kind });
+    setShown({ id: Date.now() + Math.random(), msg, kind, opts });
     setSpoken({ msg, kind });
   }, []);
   return (
@@ -114,7 +153,7 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
     }
   }, []);
   useEffect(() => {
-    const stay = shown.kind === 'error' ? BANNER_TIMING.errorStay : BANNER_TIMING.stay;
+    const stay = shown.opts.stayMs ?? (shown.kind === 'error' ? BANNER_TIMING.errorStay : BANNER_TIMING.stay);
     const t = setTimeout(() => setLeaving((v) => v || 'down'), BANNER_TIMING.fadeIn + stay);
     return () => clearTimeout(t);
   }, [shown]);
@@ -129,9 +168,10 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
     <div
       ref={ref}
       popover="manual"
-      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
+      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}${shown.opts.ball ? ' pop-ball' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
       data-banner
-      aria-hidden="true"
+      // Screen readers hear the message through the live regions; a banner with a button must stay reachable.
+      aria-hidden={shown.opts.action ? undefined : true}
       style={{ '--b-in': `${BANNER_TIMING.fadeIn}ms`, '--b-out': `${BANNER_TIMING.out}ms` } as React.CSSProperties}
       onClick={() => setLeaving((v) => v || 'down')}
       onPointerDown={(e) => {
@@ -148,13 +188,31 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
       }}
     >
       <span className="toast-icon" aria-hidden="true">
-        {shown.kind === 'error' ? '!' : (
+        {shown.opts.ball ? (
+          <Pickleball />
+        ) : shown.kind === 'error' ? (
+          '!'
+        ) : (
           <svg viewBox="0 0 20 20">
             <path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         )}
       </span>
       <span className="toast-msg">{shown.msg}</span>
+      {shown.opts.action && (
+        <button
+          className="toast-action"
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            shown.opts.action!.onClick();
+            setLeaving((v) => v || 'down');
+          }}
+        >
+          {shown.opts.action.label}
+        </button>
+      )}
     </div>
   );
 }
@@ -176,6 +234,8 @@ export function Sheet({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // An open sheet holds live updates back until it closes.
+  useEffect(() => (open ? holdLive() : undefined), [open]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -429,6 +489,13 @@ export const MessageIcon = () => (
   </svg>
 );
 
+/** Filter: three lines, getting shorter. The "All games / My games" switch. */
+export const FilterIcon = () => (
+  <svg {...ICON} data-icon="filter" className="filter-icon">
+    <path d="M4 7h16M7 12h10M10 17h4" />
+  </svg>
+);
+
 /** A small calendar page with a plus: "Add to calendar" on narrow cards. */
 export const CalendarPlusIcon = () => (
   <svg {...ICON} data-icon="calendar-plus" className="cal-icon">
@@ -508,7 +575,7 @@ export function CourtIcon({ kind }: { kind: CourtKind }) {
 }
 
 /** One pickleball: a yellow-green ball with the hole pattern. Inline SVG, no image files. */
-function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
+export function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
   return (
     <svg className={`ball${me ? ' me' : ''}${fresh ? ' ball-new' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
       <circle cx="10" cy="10" r="9" className="ball-skin" />
@@ -530,7 +597,7 @@ function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
  * for every extra person beyond 4, up to the max. Never empty circles past
  * the first 4. The count text beside it carries the number for screen readers.
  */
-export function SpotDots({ names, me }: { names: string[]; me?: string | null }) {
+export function SpotDots({ names, me, celebrate }: { names: string[]; me?: string | null; celebrate?: boolean }) {
   const slots = Math.max(MIN_PLAYERS, names.length);
   // Only balls that appeared since the last render spin in; the first look at a card is still.
   const seen = useRef<number | null>(null);
@@ -539,7 +606,7 @@ export function SpotDots({ names, me }: { names: string[]; me?: string | null })
     seen.current = names.length;
   }, [names.length]);
   return (
-    <span className="dots" role="img" aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}>
+    <span className={`dots${celebrate ? ' dots-celebrate' : ''}`} role="img" aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}>
       {Array.from({ length: slots }, (_, i) =>
         i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={before !== null && i >= before} /> : <span key={i} className="dot" />,
       )}
@@ -582,6 +649,12 @@ export function NamesLine({
   label?: string;
   children?: ReactNode;
 }) {
+  // A name that appeared since the last draw (someone joined while you were looking) fades in.
+  const seen = useRef<Set<string> | null>(null);
+  const before = seen.current;
+  useEffect(() => {
+    seen.current = new Set(names);
+  });
   if (names.length === 0) return null;
   const show = nameLabel([...everyone, ...names]);
   return (
@@ -590,7 +663,7 @@ export function NamesLine({
       {names.map((n, i) => (
         <Fragment key={n + i}>
           {i > 0 && ', '}
-          {n === me ? <strong>{show(n)}</strong> : show(n)}
+          {before && !before.has(n) ? <span className="name-new">{n === me ? <strong>{show(n)}</strong> : show(n)}</span> : n === me ? <strong>{show(n)}</strong> : show(n)}
         </Fragment>
       ))}
       {children}

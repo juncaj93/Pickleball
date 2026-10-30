@@ -46,6 +46,14 @@ function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
 
+/** Drop out now waits 5 seconds for Undo before it is sent: confirm, then wait until the server has it. */
+async function confirmDrop(p) {
+  const sent = p.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
+  await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+  await sent;
+  await p.waitForTimeout(400);
+}
+
 /** Bottom tab bar button (card buttons can share the same label). */
 const tab = (page, name) => page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: new RegExp(`^${name}`) });
 /** Session cards on the organizer Home (attention cards above them are articles too). */
@@ -960,7 +968,7 @@ async function main() {
     await check('someone drops out of 6: "5 in", nothing for the organizer to sort out, everyone still owes $14', async () => {
       const card = firstCard(players.Casey);
       await card.getByRole('button', { name: 'Drop out' }).click();
-      await players.Casey.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+      await confirmDrop(players.Casey);
       await card.getByRole('button', { name: "I'm in" }).waitFor();
       await card.locator('.in-count', { hasText: /^5 in$/ }).waitFor();
       assert((await card.locator('[data-credit-back]').count()) === 0, 'an unpaid drop gives no credit line');
@@ -1712,7 +1720,7 @@ async function main() {
       const out = row.getByRole('button', { name: 'Drop out', exact: true });
       await p.route('**/api/sessions/*/withdraw', (r) => r.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ error: 'test', message: 'Try again' }) }));
       await out.click();
-      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+      await confirmDrop(p);
       const err = p.locator('.pop.pop-error');
       await err.waitFor();
       const colors = await p.evaluate(() => {
@@ -1731,8 +1739,7 @@ async function main() {
       await err.waitFor({ state: 'detached', timeout: 2500 });
       await p.unroute('**/api/sessions/*/withdraw');
       await out.click();
-      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
-      await p.locator('.pop', { hasText: "You're out" }).waitFor();
+      await confirmDrop(p);
     });
 
     await check('player rows are light: count and dots on one line, every name on the line under it, no money', async () => {
@@ -1902,7 +1909,7 @@ async function main() {
         }
         await admin.screenshot({ path: path.join(SHOTS, 'admin-view-as-after-in.png'), fullPage: true });
         await second.getByRole('button', { name: 'Drop out' }).click();
-        await admin.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+        await confirmDrop(admin);
         await second.getByRole('button', { name: "I'm in" }).waitFor();
         // Reset throws the demo changes away.
         await second.getByRole('button', { name: "I'm in" }).click();
@@ -2399,8 +2406,7 @@ async function main() {
         await f.reload();
         const row = f.locator('article', { has: f.locator(`#s-${first.id}`) });
         await row.getByRole('button', { name: 'Drop out' }).click();
-        await f.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
-        await f.locator('.pop', { hasText: "You're out" }).waitFor();
+        await confirmDrop(f);
 
         await admin.reload();
         const card = admin.getByRole('article', { name: /^Late drop/ });
@@ -2533,7 +2539,7 @@ async function main() {
       assert(!(await cal.getAttribute('class')).includes('btn'), 'small and quiet, not a big button');
       await icsOk(p, await cal.getAttribute('href'));
       await row.getByRole('button', { name: 'Drop out' }).click();
-      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+      await confirmDrop(p);
       await row.getByRole('link', { name: /to calendar$/ }).waitFor({ state: 'detached' });
       // The organizer: inside the gear panel of a booked card, never floating under the gear.
       await tab(admin, 'Home').click();
@@ -3530,7 +3536,7 @@ async function main() {
       const row = p.locator(`#${id}`);
       const inAgain = async () => {
         await row.getByRole('button', { name: 'Drop out' }).click();
-        await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+        await confirmDrop(p);
         await row.getByRole('button', { name: "I'm in" }).click();
         await row.locator('.tile-check').waitFor();
       };
@@ -3555,7 +3561,7 @@ async function main() {
       await row.getByRole('button', { name: "Didn't pay?" }).waitFor();
       // Already paid, then out: the $14 is credit now (the line says so, the chip appears); in again, that credit is the green Use credit, Pay is quiet.
       await row.getByRole('button', { name: 'Drop out' }).click();
-      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+      await confirmDrop(p);
       assert((await row.locator('[data-credit-back]').count()) === 0, 'no refund line on the card after a paid drop');
       await p.locator('header [data-credit-chip]', { hasText: /CREDIT/ }).waitFor();
       assert((await p.locator('header [data-credit-chip]').innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', 'chip after dropping a paid game');
@@ -3573,7 +3579,7 @@ async function main() {
       await row.locator('[data-undo-credit]').click();
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
       await row.getByRole('button', { name: 'Drop out' }).click();
-      await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+      await confirmDrop(p);
       await row.getByRole('button', { name: "I'm in" }).waitFor();
       await admin.context().route('https://venmo.com/**', (r) => r.abort());
       await admin.reload();
@@ -3667,7 +3673,7 @@ async function main() {
           assert((await pl.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)) <= 0, 'player page scrolls sideways');
           await pl.screenshot({ path: path.join(SHOTS, `design-player-${width}-${scheme}.png`), fullPage: true });
           await joined.getByRole('button', { name: 'Drop out' }).click();
-          await pl.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+          await confirmDrop(pl);
           await joined.getByRole('button', { name: "I'm in" }).waitFor();
         } finally {
           await undo();

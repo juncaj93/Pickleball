@@ -39,6 +39,14 @@ async function check(name, fn) {
 function assert(cond, msg) {
   if (!cond) throw new Error(msg);
 }
+
+/** Drop out now waits 5 seconds for Undo before it is sent: confirm, then wait until the server has it. */
+async function confirmDrop(p) {
+  const sent = p.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
+  await p.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+  await sent;
+  await p.waitForTimeout(400);
+}
 const squash = (t) => t.replace(/\s+/g, ' ').trim();
 
 async function main() {
@@ -314,7 +322,7 @@ async function main() {
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
     await card.getByRole('button', { name: 'Drop out' }).click();
-    await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+    await confirmDrop(page);
     const chip = page.locator('header [data-credit-chip]');
     await chip.waitFor();
     const seen = [];
@@ -345,7 +353,7 @@ async function main() {
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
     await card.getByRole('button', { name: 'Drop out' }).click();
-    await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+    await confirmDrop(page);
     const chip = page.locator('header [data-credit-chip]');
     await chip.waitFor();
     assert(squash(await chip.locator('.cc-amount').innerText()) === '$14', `chip showed ${await chip.locator('.cc-amount').innerText()}`);
@@ -396,7 +404,7 @@ async function main() {
     assert(gone >= 1500 && gone <= 2700, `banner was on screen about ${gone} ms`);
     // Tap to dismiss.
     await card.getByRole('button', { name: 'Drop out' }).click();
-    await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
+    await confirmDrop(page);
     await page.locator('.pop').waitFor();
     await page.locator('.pop').click();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 900 });
@@ -405,8 +413,7 @@ async function main() {
     await page.locator('.pop').waitFor();
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'Drop out' }).click();
-    await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
-    await page.locator('.pop', { hasText: "You're out" }).waitFor();
+    await confirmDrop(page);
     assert((await page.locator('.pop').count()) === 1, 'two banners at once');
     await ctx.close();
   });

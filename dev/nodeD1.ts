@@ -21,6 +21,8 @@ class Statement implements D1PreparedStatement {
   }
 
   runSync(): D1Result {
+    // A batched read (like real D1) hands its rows back.
+    if (/^\s*select\b/i.test(this.sql)) return { results: this.db.prepare(this.sql).all(...this.args()).map((r) => ({ ...r })), meta: { changes: 0 } };
     const res = this.db.prepare(this.sql).run(...this.args());
     return { results: [], meta: { changes: Number(res.changes) } };
   }
