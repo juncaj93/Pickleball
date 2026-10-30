@@ -15,6 +15,8 @@ describe('the usual time setting', () => {
     expect(normalizeSettings({ defaultStartMinutes: 19 * 60, defaultEndMinutes: 21 * 60 })).toMatchObject({ defaultStartMinutes: 1140, defaultEndMinutes: 1260 });
     // An end before the start falls back to two hours long.
     expect(normalizeSettings({ defaultStartMinutes: 19 * 60, defaultEndMinutes: 18 * 60 })).toMatchObject({ defaultEndMinutes: 21 * 60 });
+    // Never a zero-length game: the latest start is 10:59 PM.
+    expect(normalizeSettings({ defaultStartMinutes: 23 * 60 + 59, defaultEndMinutes: 23 * 60 + 59 })).toMatchObject({ defaultStartMinutes: 22 * 60 + 59, defaultEndMinutes: 23 * 60 + 59 });
     expect(minutesToHHMM(19 * 60 + 30)).toBe('19:30');
     expect(hhmmToMinutes('19:30')).toBe(1170);
     expect(hhmmToMinutes('25:00')).toBeNull();
@@ -91,6 +93,9 @@ describe("changing one game's time", () => {
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-answer`, { booked: true })).status).toBe(200);
     expect((await dash()).sessions.find((x: any) => x.id === s.id).bookingStatus).toBe('booked');
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-answer`, { booked: 'yes' })).status).toBe(400);
+    // Not for a game that is already over.
+    ctx.app.now = Date.parse('2026-11-04T04:00:00Z');
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-answer`, { booked: false })).status).toBe(409);
     const player = await playerPhone(ctx, 'Casey');
     expect((await player.call('POST', `/api/admin/sessions/${s.id}/court-answer`, { booked: true })).status).toBe(401);
   });

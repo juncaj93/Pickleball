@@ -15,6 +15,8 @@ const KIND_LABEL: Record<Task['kind'], string> = {
   cancel: 'Cancel',
   night: 'Night before',
   book: 'Book the court',
+  nocourt: 'No court yet',
+  nocourt_later: 'No court yet',
   finalize: 'After the game',
 };
 

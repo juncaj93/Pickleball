@@ -31,7 +31,7 @@ import { isPlayed, lateDropsAll } from './todo';
 import { TextButton } from './Texts';
 import '../../credit-session.css';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'time';
+export type SheetKind = 'booking' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved';
 
 function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -172,11 +172,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             <button className="btn secondary" onClick={() => ctx.open('roster', s.id)}>
               Players
             </button>
-            {live && (
-              <button className="btn secondary" data-change-time onClick={() => ctx.open('time', s.id)}>
-                Change time
-              </button>
-            )}
             <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Modify court</CourtReserveLink>
             {/* Once the court is booked, Add to calendar sits here with the other options. */}
             {court.kind === 'booked' && live && (
@@ -410,7 +405,6 @@ export function SessionSheets({
     payments: `Money · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
-    time: `Change time · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -425,7 +419,6 @@ export function SessionSheets({
           )}
         </div>
       )}
-      {s && kind === 'time' && <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
@@ -889,8 +882,12 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const ok = await run(() => api('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt }), 'Session moved');
-    if (ok) onDone();
+    let changed = false;
+    const ok = await run(async () => {
+      changed = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
+    }, 'Session moved');
+    // Then the Moved text and "Is the court booked for the new time?" (only when the time really changed).
+    if (ok && changed) onDone();
   }
 
   return (

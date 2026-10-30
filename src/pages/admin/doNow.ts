@@ -7,7 +7,7 @@ import { nextTasks, type Task, type TaskAction, type TaskSession } from '../../.
 import { checkInOpensMs, type Suggestion } from './suggestions';
 import { sessionTexts } from './textMenu';
 
-export function taskSessionOfView(s: AdminSessionView): TaskSession {
+export function taskSessionOfView(s: AdminSessionView, courtBookedAt: Record<string, string> = {}): TaskSession {
   return {
     id: s.id,
     startsAt: s.startsAt,
@@ -16,7 +16,7 @@ export function taskSessionOfView(s: AdminSessionView): TaskSession {
     canceledAt: s.canceledAt,
     confirmedCount: s.confirmedCount,
     booked: s.bookingStatus === 'booked',
-    needsBooking: s.bookingStatus === 'needs_booking' && s.courtState !== 'waitlist',
+    bookedAt: s.bookingStatus === 'booked' ? (courtBookedAt[s.id] ?? null) : null,
     cancellationDeadlineAt: s.cancellationDeadlineAt,
     finalized: !!s.finalized,
     holiday: s.holiday,
@@ -25,7 +25,7 @@ export function taskSessionOfView(s: AdminSessionView): TaskSession {
 
 /** The organizer's open tasks right now, most urgent first: the same list the Telegram alerts come from. */
 export function dashboardTasks(d: AdminDashboard, nowMs: number, adminUrl: string): Task[] {
-  return nextTasks(nowMs, d.sessions.map(taskSessionOfView), new Set(d.taskMarks ?? []), {
+  return nextTasks(nowMs, d.sessions.map((s) => taskSessionOfView(s, d.courtBookedAt ?? {})), new Set(d.taskMarks ?? []), {
     tz: d.group.timezone,
     bookingLeadDays: d.group.settings.bookingLeadDays,
     defaultDeadlineHours: d.group.settings.defaultDeadlineHours,
@@ -55,6 +55,7 @@ export function textHref(d: AdminDashboard, s: AdminSessionView, nowMs: number, 
 export function coveredByDoNow(c: Suggestion, d: AdminDashboard, nowMs: number): boolean {
   const s = d.sessions.find((x) => x.id === c.sessionId);
   if (!s) return false;
-  if (c.kind === 'need' || c.kind === 'checkin') return nowMs >= checkInOpensMs(s.startsAt, d.group.timezone);
+  // Only booked games get the night-before card; others keep their suggestion card as before.
+  if (c.kind === 'need' || c.kind === 'checkin') return s.bookingStatus === 'booked' && nowMs >= checkInOpensMs(s.startsAt, d.group.timezone);
   return false;
 }

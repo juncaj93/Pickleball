@@ -22,6 +22,8 @@ export const MAX_ALERTS_PER_HOUR = 20;
 const SEND_TIMEOUT_MS = 5000;
 /** What deliver() says when Telegram took too long: the message may still have arrived. */
 export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
+/** How deliver() starts its message when the hour's alert limit is used up (nothing went to Telegram). */
+export const PAUSED_PREFIX = 'Paused:';
 const HOUR_MS = 3600_000;
 
 interface AlertRow {
@@ -166,12 +168,13 @@ function siteUrl(ctx: Ctx): string {
 export async function deliver(ctx: Ctx, groupId: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!(await takeSlot(ctx))) {
-      const error = `Paused: more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
+      const error = `${PAUSED_PREFIX} more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
       await recordResult(ctx, groupId, false, error);
       return { ok: false, error };
     }
     const sent = await sendTelegram(ctx.env, siteUrl(ctx), text);
-    await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error);
+    // Once Telegram took it, it counts as sent even if writing down the result fails (so it is never sent twice).
+    await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error).catch(() => {});
     return sent;
   } catch {
     return { ok: false, error: 'Something went wrong sending the alert.' };

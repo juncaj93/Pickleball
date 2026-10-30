@@ -7,7 +7,7 @@
 import { holidayFor } from '../shared/holidays';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { dueAlerts, MARK_NAMES, markKey, nextTasks, type TaskOptions, type TaskSession } from '../shared/tasks';
-import { connected, deliver, prefsOfGroup, TIMEOUT_ERROR } from './alerts';
+import { connected, deliver, PAUSED_PREFIX, prefsOfGroup, TIMEOUT_ERROR } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
@@ -44,7 +44,7 @@ export function taskOptions(ctx: Ctx, group: GroupRow): TaskOptions {
   };
 }
 
-export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string): TaskSession {
+export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string, bookedAt: string | null = null): TaskSession {
   return {
     id: s.id,
     startsAt: s.starts_at,
@@ -53,7 +53,7 @@ export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string)
     canceledAt: s.canceled_at,
     confirmedCount,
     booked: s.booking_status === 'booked',
-    needsBooking: s.booking_status === 'needs_booking' && s.court_state !== 'waitlist',
+    bookedAt: s.booking_status === 'booked' ? bookedAt : null,
     cancellationDeadlineAt: s.cancellation_deadline_at,
     finalized: !!s.finalized_at,
     holiday: holidayFor(s.starts_at, tz),
@@ -61,19 +61,56 @@ export function taskSessionOf(s: SessionRow, confirmedCount: number, tz: string)
 }
 
 /** The organizer's marks, as "sessionId:mark". */
-/** Marks for games that ended in the last 30 days or are still ahead. Display only: never breaks Home. */
-export async function loadMarks(db: D1Database, groupId: string, nowMs: number): Promise<string[]> {
+/** The task mark for "court booked": when the organizer marked it (not one the card can set). */
+export const COURT_BOOKED_MARK = 'court_booked';
+
+/**
+ * Marks for games that ended in the last 30 days or are still ahead, as
+ * "sessionId:mark", and when each court was marked booked. Display only:
+ * never breaks Home.
+ */
+export async function loadMarks(db: D1Database, groupId: string, nowMs: number): Promise<{ marks: string[]; courtBookedAt: Record<string, string> }> {
   try {
     const { results } = await db
       .prepare(
-        `SELECT t.session_id, t.task FROM task_log t JOIN sessions s ON s.id = t.session_id
+        `SELECT t.session_id, t.task, t.at FROM task_log t JOIN sessions s ON s.id = t.session_id
          WHERE t.group_id = ? AND t.kind = 'mark' AND s.ends_at > ?`,
       )
       .bind(groupId, new Date(nowMs - FAILED_KEEP_MS).toISOString())
-      .all<{ session_id: string; task: string }>();
-    return results.map((r) => `${r.session_id}:${r.task}`);
+      .all<{ session_id: string; task: string; at: string }>();
+    const courtBookedAt: Record<string, string> = {};
+    for (const r of results) if (r.task === COURT_BOOKED_MARK) courtBookedAt[r.session_id] = r.at;
+    return { marks: results.filter((r) => r.task !== COURT_BOOKED_MARK).map((r) => `${r.session_id}:${r.task}`), courtBookedAt };
   } catch {
-    return [];
+    return { marks: [], courtBookedAt: {} };
+  }
+}
+
+/**
+ * Remember when a court was marked booked (I booked it, Edit booking, or Yes
+ * after a move), or forget it when it goes back to not booked. Alerts whose
+ * time passed before the booking are then never sent. Never fails the tap.
+ */
+export async function recordCourtBooked(db: D1Database, groupId: string, sessionId: string, booked: boolean, nowIso: string): Promise<void> {
+  try {
+    await db.prepare("DELETE FROM task_log WHERE session_id = ? AND task = ? AND kind = 'mark'").bind(sessionId, COURT_BOOKED_MARK).run();
+    if (booked) await writeMark(db, groupId, sessionId, COURT_BOOKED_MARK, nowIso);
+  } catch {
+    // Only fine-tunes alerts; never worth failing the tap over.
+  }
+}
+
+/**
+ * A game moved to another day is in effect a new game: its alerts can go
+ * again and the card taps start over. A change of time on the same day
+ * keeps them, so nothing already sent is sent twice. Whether the court is
+ * booked is kept (the organizer answers that right after the move).
+ */
+export async function resetTasksForNewDay(db: D1Database, sessionId: string): Promise<void> {
+  try {
+    await db.prepare(`DELETE FROM task_log WHERE session_id = ? AND (kind IN ('sent', 'failed') OR (kind = 'mark' AND task <> ?))`).bind(sessionId, COURT_BOOKED_MARK).run();
+  } catch {
+    // Never worth failing the move over.
   }
 }
 
@@ -169,6 +206,7 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     .bind(...ids)
     .all<{ session_id: string; task: string; kind: string; at: string }>();
   const markSet = new Set(logs.results.filter((r) => r.kind === 'mark').map((r) => `${r.session_id}:${r.task}`));
+  const bookedAt = new Map(logs.results.filter((r) => r.kind === 'mark' && r.task === COURT_BOOKED_MARK).map((r) => [r.session_id, r.at]));
   const sentSet = new Set(logs.results.filter((r) => r.kind === 'sent').map((r) => `${r.session_id}:${r.task}`));
   // Failed tries per alert: give up after MAX_TRIES, and wait RETRY_AFTER_MS between them.
   const tries = new Map<string, { n: number; last: number }>();
@@ -184,7 +222,7 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
 
   const tasks = nextTasks(
     ctx.nowMs,
-    sessions.map((s) => taskSessionOf(s, countOf.get(s.id) ?? 0, group.timezone)),
+    sessions.map((s) => taskSessionOf(s, countOf.get(s.id) ?? 0, group.timezone, bookedAt.get(s.id) ?? null)),
     markSet,
     await goLinks(ctx, taskOptions(ctx, group), sessions),
   );
@@ -204,6 +242,11 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     if (result.ok) {
       sent++;
       continue;
+    }
+    if (result.error.startsWith(PAUSED_PREFIX)) {
+      // The hour's alert limit: nothing went to Telegram and it isn't Telegram's fault, so it is not a try. Wait for the next tick.
+      await ctx.db.prepare('DELETE FROM task_log WHERE id = ?').bind(claimId).run();
+      break;
     }
     failed++;
     const logFailure = ctx.db

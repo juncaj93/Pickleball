@@ -2101,9 +2101,12 @@ async function main() {
     await check('check-in the night before: the Do this now card opens the Check-in text with no numbers, hides after the tap; never "sent"', async () => {
       const first = await admin.evaluate(async () => {
         const d = await (await fetch('/api/admin/dashboard')).json();
-        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.parse(d.now) + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
+        const later = d.sessions.filter((s) => Date.parse(s.startsAt) > Date.parse(d.now) + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
+        return later.find((s) => s.bookingStatus === 'booked') ?? later[0];
       });
       assert(first, 'need a later session with 4 in');
+      // The night-before card is for games with a booked court.
+      if (first.bookingStatus !== 'booked') await admin.request.post(`${BASE}/api/admin/sessions/${first.id}/booked`, { data: {}, headers: { Origin: BASE } });
       const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
       try {
         await clock(Date.parse(first.startsAt) - 20 * 3600_000);

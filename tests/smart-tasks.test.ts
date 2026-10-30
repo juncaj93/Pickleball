@@ -24,7 +24,7 @@ function game(date: string, over: Partial<TaskSession> = {}, hour = 20, minute =
     canceledAt: null,
     confirmedCount: 3,
     booked: true,
-    needsBooking: false,
+    bookedAt: null,
     cancellationDeadlineAt: new Date(start - 12 * HOUR).toISOString(),
     finalized: false,
     holiday: null,
@@ -98,22 +98,34 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(tasksAt('2026-11-03T12:15:00Z', [tue], [markKey(tue.id, 'court_canceled')])[0].alerts.find((a) => a.id === 'gameday')).toBeUndefined();
   });
 
-  it('booking day 8:30 AM: "Tue Nov 17 opened.", one follow-up at 10:30 AM, nothing once booked', () => {
-    const nov17 = game('2026-11-17', { booked: false, needsBooking: true, confirmedCount: 0 });
-    expect(tasksAt('2026-11-03T13:29:00Z', [nov17])).toEqual([]);
-    const t = tasksAt('2026-11-03T13:30:00Z', [nov17]); // Tue Nov 3, 8:30 AM EST
-    expect(t[0].text).toBe('Tue Nov 17 opened.');
+  it('booking day: heads-up at 6:45 AM for the game exactly 14 days out, one follow-up at 7:30 AM, nothing once booked', () => {
+    const nov17 = game('2026-11-17', { booked: false, confirmedCount: 0 });
+    expect(tasksAt('2026-11-03T11:44:00Z', [nov17])).toEqual([]);
+    const t = tasksAt('2026-11-03T11:45:00Z', [nov17]); // Tue Nov 3, 6:45 AM EST
+    expect(t[0].text).toBe('Tue Nov 17 opens at 7:00 AM.');
     expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
-    expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opened. Book now: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
-    expect(t[0].alerts[1]).toMatchObject({ id: 'book_followup', dueMs: at('2026-11-03T15:30:00Z') });
-    expect(t[0].alerts[1].text.startsWith('Reminder: Tue Nov 17 opened.')).toBe(true);
-    expect(tasksAt('2026-11-03T13:30:00Z', [{ ...nov17, booked: true, needsBooking: false }])).toEqual([]);
+    expect(t[0].alerts[0]).toMatchObject({ id: 'book', dueMs: at('2026-11-03T11:45:00Z') });
+    expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(t[0].alerts[1]).toMatchObject({ id: 'book_followup', dueMs: at('2026-11-03T12:30:00Z') }); // 7:30 AM
+    expect(t[0].alerts[1].text).toBe(`Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(tasksAt('2026-11-03T12:30:00Z', [nov17])[0].text).toBe('Tue Nov 17 opened at 7:00 AM.');
+    expect(tasksAt('2026-11-03T11:45:00Z', [{ ...nov17, booked: true }])).toEqual([]);
+    // The next day it is just one of the games with no court yet (no alert).
+    const next = tasksAt('2026-11-04T12:00:00Z', [nov17]);
+    expect(next.map((x) => [x.kind, x.text, x.alerts.length])).toEqual([['nocourt_later', 'Tue Nov 17 has no court yet.', 0]]);
   });
 
-  it('a holiday is named: "Thu Nov 26 opened (Thanksgiving)."', () => {
-    const nov26 = game('2026-11-26', { booked: false, needsBooking: true, confirmedCount: 0, holiday: 'Thanksgiving' });
-    const t = tasksAt('2026-11-12T13:30:00Z', [nov26]);
-    expect(t[0].text).toBe('Thu Nov 26 opened (Thanksgiving).');
+  it('on a holiday: "Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ..."', () => {
+    const nov26 = game('2026-11-26', { booked: false, confirmedCount: 0, holiday: 'Thanksgiving' });
+    const t = tasksAt('2026-11-12T11:45:00Z', [nov26]); // Thu Nov 12, 6:45 AM
+    expect(t[0].text).toBe('Thu Nov 26 opens at 7:00 AM (Thanksgiving).');
+    expect(t[0].alerts[0].text).toBe(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+  });
+
+  it('no booking alert for any other unbooked game: only the one 14 days out', () => {
+    const list = [13, 14, 15].map((d) => game(`2026-11-${d}`, { booked: false, confirmedCount: 2 })); // Fri 13, Sat 14, Sun 15 (extra games)
+    const ids = simulate('2026-10-31T00:00:00Z', 24, () => list).map((l) => l.key);
+    expect(ids).toEqual(['s-2026-11-14:book', 's-2026-11-14:book_followup']); // Sat Oct 31 is 14 days before Sat Nov 14
   });
 
   it('after the game 10:05 PM: finalize who played, only for a game that was played, gone once finalized', () => {
@@ -135,19 +147,19 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(tasksAt('2026-11-10T03:00:00Z', [tue])).toEqual([]);
   });
 
-  it('most urgent first: cancel, a court that opened today, night text, finalize, older courts to book', () => {
+  it('most urgent first: cancel, the court opening today, night text, finalize, then games with no court yet', () => {
     const list = [
       game('2026-11-03'),
-      game('2026-11-17', { booked: false, needsBooking: true, confirmedCount: 0 }),
+      game('2026-11-17', { booked: false, confirmedCount: 0 }),
       game('2026-10-29', { confirmedCount: 6 }),
-      game('2026-11-12', { booked: false, needsBooking: true, confirmedCount: 2 }),
+      game('2026-11-12', { booked: false, confirmedCount: 2 }),
     ];
-    expect(tasksAt('2026-11-03T13:30:00Z', list).map((t) => `${t.kind}:${t.sessionId}`)).toEqual([
+    expect(tasksAt('2026-11-03T12:30:00Z', list).map((t) => `${t.kind}:${t.sessionId}`)).toEqual([
       'cancel:s-2026-11-03',
       'book:s-2026-11-17',
       'night:s-2026-11-03',
       'finalize:s-2026-10-29',
-      'book:s-2026-11-12',
+      'nocourt_later:s-2026-11-12',
     ]);
   });
 
@@ -155,15 +167,16 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     const sessions = [
       game('2026-11-03'),
       game('2026-11-05', { confirmedCount: 6 }),
-      game('2026-11-17', { booked: false, needsBooking: true, confirmedCount: 0 }),
-      game('2026-11-19', { booked: false, needsBooking: true, confirmedCount: 0 }),
+      game('2026-11-17', { booked: false, confirmedCount: 0 }),
+      game('2026-11-19', { booked: false, confirmedCount: 0 }),
       game('2026-10-29', { confirmedCount: 7 }),
-      game('2026-11-10', { confirmedCount: 1, booked: false, needsBooking: true }),
+      game('2026-11-10', { confirmedCount: 1, booked: false }),
     ];
     let checked = 0;
     for (let ms = at('2026-11-01T12:00:00Z'); ms < at('2026-11-12T12:00:00Z'); ms += 15 * MIN) {
       for (const t of nextTasks(ms, sessions, new Set(), OPTS)) {
-        for (const a of t.alerts) {
+        // Compared at the moment each alert goes out (the card's words can change later, like "opens" to "opened").
+        for (const a of t.alerts.filter((x) => x.dueMs <= ms && ms < x.dueMs + 15 * MIN)) {
           checked++;
           const lead = t.text.replace(/\.$/, '');
           if (a.id === 'cancel_followup') expect(a.text.startsWith(`${lead.split(':')[0]}: court canceled?`)).toBe(true);
@@ -173,7 +186,7 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
         }
       }
     }
-    expect(checked).toBeGreaterThan(100);
+    expect(checked).toBeGreaterThan(5);
   }, 60_000);
 });
 
@@ -203,7 +216,10 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
     expect(iso(t.cancelFollowup)).toBe('2026-11-03T02:30:00.000Z'); // Mon 9:30 PM
     expect(iso(t.gamedayCheck)).toBe('2026-11-03T11:15:00.000Z'); // Tue 6:15 AM
     expect(iso(t.finalize)).toBe('2026-11-04T02:05:00.000Z'); // Tue 9:05 PM
-    expect(iso(t.booking)).toBe('2026-10-20T12:30:00.000Z'); // Tue Oct 20, 8:30 AM EDT
+    expect(iso(t.courtOpens)).toBe('2026-10-20T11:00:00.000Z'); // Tue Oct 20, 7:00 AM EDT
+    expect(iso(t.bookingHeadsUp)).toBe('2026-10-20T10:45:00.000Z'); // 6:45 AM
+    expect(iso(t.bookingFollowup)).toBe('2026-10-20T11:30:00.000Z'); // 7:30 AM
+    expect(iso(t.noCourtCheck)).toBe('2026-11-03T12:15:00.000Z'); // Tue 7:15 AM
   });
 
   it('7:30 PM: last call 6:30 PM, cancel warning 9:30 PM, game-day check 6:45 AM, finalize 9:35 PM', () => {
@@ -263,17 +279,108 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
   });
 });
 
+describe('court status gates the alerts', () => {
+  const g7 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 0);
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  it('booked and not booked games at the same moment: only the booked one gets the last call, cancel warning and game-day check', () => {
+    const booked = { ...g7('2026-11-03'), id: 'yes' };
+    const none = { ...g7('2026-11-03', { booked: false }), id: 'no' };
+    const log = simulate('2026-11-02T17:00:00Z', 30, () => [booked, none]);
+    expect(log.map((l) => l.key)).toEqual(['yes:night', 'yes:cancel', 'yes:cancel_followup', 'yes:gameday']);
+    // The card: the unbooked game shows only "has no court yet" (no cancel-court steps).
+    const t = tasksAt('2026-11-03T02:10:00Z', [booked, none]);
+    expect(t.filter((x) => x.sessionId === 'no').map((x) => [x.kind, x.text])).toEqual([['nocourt_later', 'Tue Nov 3 has no court yet.']]);
+    expect(t.find((x) => x.sessionId === 'yes' && x.kind === 'cancel')!.steps[0].label).toBe('Cancel the court');
+  });
+
+  it('"I booked it" after alert times passed: those alerts are never sent; later ones still are', () => {
+    const before = { ...g7('2026-11-03', { booked: false }), id: 'late' };
+    const bookedAt = '2026-11-03T02:20:00.000Z'; // Mon 9:20 PM: after the 6:00 PM last call and the 9:00 PM cancel warning
+    const after = { ...before, booked: true, bookedAt };
+    const log = simulate('2026-11-02T17:00:00Z', 30, (ms) => [ms < Date.parse(bookedAt) ? before : after]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-11-03T02:30:00.000Z', 'late:cancel_followup'], // 9:30 PM
+      ['2026-11-03T11:15:00.000Z', 'late:gameday'], // 6:15 AM
+    ]);
+    // The card: the one-time "Court booked" text card (no Telegram), plus the cancel checklist (3 in).
+    const t = tasksAt('2026-11-03T02:25:00Z', [after]);
+    expect(t.map((x) => x.kind)).toEqual(['cancel', 'night']);
+    const night = t.find((x) => x.kind === 'night')!;
+    expect(night.text).toBe('Court booked for tomorrow. Text the group the game is on.');
+    expect(night.alerts).toEqual([]);
+    expect(night.buttons[0]).toMatchObject({ label: 'Text the group', action: { type: 'text', text: 'checkin', mark: 'night_text' } });
+    // Tapped: gone for good.
+    expect(tasksAt('2026-11-03T02:25:00Z', [after], [markKey('late', 'night_text')]).map((x) => x.kind)).toEqual(['cancel']);
+  });
+
+  it('booked the morning of the game with 5 in: "Court booked for tonight." and no Telegram at all', () => {
+    const before = { ...g7('2026-11-03', { booked: false, confirmedCount: 5 }), id: 'am' };
+    const after = { ...before, booked: true, bookedAt: '2026-11-03T13:00:00.000Z' }; // Tue 8:00 AM
+    // Before the tap, the 7:15 AM morning-of check went out; after it, nothing until the game (its time passed at 8:00 AM).
+    const log = simulate('2026-11-03T12:00:00Z', 12, (ms) => [ms < at('2026-11-03T13:00:00Z') ? before : after]);
+    expect(log.map((l) => [new Date(l.ms).toISOString(), l.key])).toEqual([['2026-11-03T12:15:00.000Z', 'am:nocourt']]);
+    expect(texts(tasksAt('2026-11-03T13:05:00Z', [after]))).toEqual(['Court booked for tonight. Text the group the game is on.']);
+  });
+
+  it('morning-of check: 4 or more in and no court, at the deadline + 15 minutes, silent once booked or under 4', () => {
+    const five = { ...g7('2026-11-03', { booked: false, confirmedCount: 5 }), id: 'five' };
+    const t = tasksAt('2026-11-03T12:15:00Z', [five]); // Tue 7:15 AM
+    expect(t[0]).toMatchObject({ kind: 'nocourt', text: 'Tonight: 5 in, no court yet. Check CourtReserve for an opening.' });
+    expect(t[0].alerts[0]).toMatchObject({ id: 'nocourt', dueMs: at('2026-11-03T12:15:00Z'), text: `Tonight: 5 in, no court yet. Check CourtReserve for an opening: ${COURTRESERVE_BOOKING_URL}` });
+    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
+    expect(simulate('2026-11-03T05:00:00Z', 15, () => [five]).map((l) => [iso(l.ms), l.key])).toEqual([['2026-11-03T12:15:00.000Z', 'five:nocourt']]);
+    expect(simulate('2026-11-03T05:00:00Z', 15, () => [{ ...five, confirmedCount: 3 }])).toEqual([]);
+    expect(simulate('2026-11-03T05:00:00Z', 15, () => [{ ...five, booked: true, bookedAt: '2026-11-03T05:00:00.000Z' }]).map((l) => l.key)).not.toContain('five:nocourt');
+  });
+
+  it('"has no court yet" for the next 2 games without a court, never more', () => {
+    const list = ['2026-11-05', '2026-11-10', '2026-11-12', '2026-11-17'].map((d) => game(d, { booked: false, confirmedCount: 1 }));
+    expect(texts(tasksAt('2026-11-04T18:00:00Z', list))).toEqual(['Thu Nov 5 has no court yet.', 'Tue Nov 10 has no court yet.']);
+  });
+
+  it('mixed 7:00 and 8:00 PM games on the same day keep their own times', () => {
+    const a = { ...g7('2026-11-05'), id: 'seven' };
+    const b = { ...game('2026-11-05'), id: 'eight' };
+    const log = simulate('2026-11-04T17:00:00Z', 30, () => [a, b]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-11-04T23:00:00.000Z', 'seven:night'], // Wed 6:00 PM
+      ['2026-11-05T00:00:00.000Z', 'eight:night'], // Wed 7:00 PM
+      ['2026-11-05T02:00:00.000Z', 'seven:cancel'], // 9:00 PM
+      ['2026-11-05T02:30:00.000Z', 'seven:cancel_followup'],
+      ['2026-11-05T03:00:00.000Z', 'eight:cancel'], // 10:00 PM
+      ['2026-11-05T03:30:00.000Z', 'eight:cancel_followup'],
+      ['2026-11-05T11:15:00.000Z', 'seven:gameday'], // Thu 6:15 AM
+      ['2026-11-05T12:15:00.000Z', 'eight:gameday'], // Thu 7:15 AM
+    ]);
+  });
+
+  it('across the Sun Nov 1 clock change: booking heads-up at 6:45 AM on both sides, morning-of check at 7:15 AM EST', () => {
+    const sat14 = { ...g7('2026-11-14', { booked: false, confirmedCount: 0 }), id: 'sat14' }; // books Sat Oct 31 (EDT)
+    const sun15 = { ...g7('2026-11-15', { booked: false, confirmedCount: 0 }), id: 'sun15' }; // books Sun Nov 1 (EST)
+    const sun1 = { ...g7('2026-11-01', { booked: false, confirmedCount: 6 }), id: 'sun1' };
+    const log = simulate('2026-10-31T04:00:00Z', 40, () => [sat14, sun15, sun1]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-10-31T10:45:00.000Z', 'sat14:book'], // Sat 6:45 AM EDT
+      ['2026-10-31T11:30:00.000Z', 'sat14:book_followup'], // Sat 7:30 AM EDT
+      ['2026-11-01T11:45:00.000Z', 'sun15:book'], // Sun 6:45 AM EST
+      ['2026-11-01T12:15:00.000Z', 'sun1:nocourt'], // Sun 7:15 AM EST (deadline 7:00 AM)
+      ['2026-11-01T12:30:00.000Z', 'sun15:book_followup'], // Sun 7:30 AM EST
+    ]);
+  });
+});
+
 describe('ticks every 5 minutes', () => {
   it('48 hours, Mon noon to Wed noon: each alert exactly once, at its time', () => {
-    const sessions = () => [game('2026-11-03'), game('2026-11-05', { confirmedCount: 5 }), game('2026-11-17', { booked: false, needsBooking: true, confirmedCount: 0 })];
+    const sessions = () => [game('2026-11-03'), game('2026-11-05', { confirmedCount: 5 }), game('2026-11-17', { booked: false, confirmedCount: 0 })];
     const log = simulate('2026-11-02T17:00:00Z', 48, sessions);
     expect(log.map((l) => [new Date(l.ms).toISOString(), l.key])).toEqual([
       ['2026-11-03T00:00:00.000Z', 's-2026-11-03:night'], // Mon 7:00 PM (25 hours before 8:00 PM)
       ['2026-11-03T03:00:00.000Z', 's-2026-11-03:cancel'], // Mon 10:00 PM
       ['2026-11-03T03:30:00.000Z', 's-2026-11-03:cancel_followup'], // Mon 10:30 PM
+      ['2026-11-03T11:45:00.000Z', 's-2026-11-17:book'], // Tue 6:45 AM
       ['2026-11-03T12:15:00.000Z', 's-2026-11-03:gameday'], // Tue 7:15 AM
-      ['2026-11-03T13:30:00.000Z', 's-2026-11-17:book'], // Tue 8:30 AM
-      ['2026-11-03T15:30:00.000Z', 's-2026-11-17:book_followup'], // Tue 10:30 AM
+      ['2026-11-03T12:30:00.000Z', 's-2026-11-17:book_followup'], // Tue 7:30 AM
     ]);
     expect(new Set(log.map((l) => l.key)).size).toBe(log.length);
   });
@@ -379,9 +486,9 @@ describe('the tick endpoint', () => {
       `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
+      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
       `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
-      `Tue Nov 17 opened. Book now: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
-      `Reminder: Tue Nov 17 opened. Book now: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
+      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
     ]);
     for (const t of g.sent) {
       expect(t).not.toMatch(/555|\(313\)|\$|venmo/i);
@@ -551,13 +658,68 @@ describe('the tick endpoint', () => {
       g.app.now += 5 * MIN;
     }
     // New deadline 8:30 AM: cancel warning 10:30 PM, follow-up 11:00 PM, game-day check 7:45 AM.
-    expect(g.sent).toEqual([
+    expect(g.sent.filter((t) => !t.includes('Nov 17'))).toEqual([
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
       `Tonight: only 3 players in. Cancel court before 8:30 AM: ${COURTRESERVE_CANCEL_URL}`,
     ]);
     const card = (await import('../src/pages/admin/doNow')).dashboardTasks(await g.dash(), at('2026-11-03T12:50:00Z'), ADMIN);
     expect(card[0].text).toBe('Tonight: only 3 players in. Cancel court before 8:30 AM.');
+  });
+
+  it('moving the game to another day: its alerts can go again for the new day', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    const s = await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    await g.tick();
+    expect(g.sent).toHaveLength(1);
+    // Tue 8:00 PM moved to Wed 8:00 PM (still booked): Wed's last call (Tue 7:00 PM) goes out.
+    await g.ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: '2026-11-05T01:00:00.000Z', endsAt: '2026-11-05T03:00:00.000Z' });
+    g.sent.length = 0;
+    g.app.now = at('2026-11-04T00:00:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([`Wednesday: 3 players in, need a 4th. Text the group: ${GO}`]);
+  });
+
+  it('the hour\'s alert limit is not counted as a failed try', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    // Use up the hour's 20 alert slots.
+    for (let i = 0; i < 20; i++) await g.app.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'telegram', 'server', ?)").bind(`x${i}`, new Date(g.app.now - 60_000).toISOString()).run();
+    expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
+    expect((await g.app.db.prepare("SELECT COUNT(*) AS n FROM task_log WHERE kind IN ('failed', 'sent')").first<{ n: number }>())!.n).toBe(0);
+    // Once the slots free up (still inside the catch-up hour), it goes.
+    await g.app.db.prepare("DELETE FROM rate_events WHERE id LIKE 'x%'").run();
+    g.app.now += 5 * MIN;
+    expect((await g.tick()).data).toMatchObject({ sent: 1 });
+  });
+
+  it('"I booked it" after the last call: no Telegram for it, and the card says "Court booked for tomorrow"', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    const s = await g.sessionOn('2026-11-03');
+    for (const name of ['Blair', 'Casey', 'Devon', 'Emery']) await (await playerPhone(g.ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {});
+    await g.app.settle();
+    g.sent.length = 0;
+    // No court: nothing at 7:00 PM.
+    g.app.now = at('2026-11-03T00:00:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([]);
+    // Booked at 7:20 PM.
+    g.app.now = at('2026-11-03T00:20:00Z');
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {})).status).toBe(200);
+    g.app.now = at('2026-11-03T00:25:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([]);
+    const { dashboardTasks } = await import('../src/pages/admin/doNow');
+    const cards = dashboardTasks(await g.dash(), g.app.now, ADMIN);
+    expect(cards.find((t) => t.sessionId === s.id)?.text).toBe('Court booked for tomorrow. Text the group the game is on.');
   });
 
   it('two ticks at the same moment send an alert once', async () => {

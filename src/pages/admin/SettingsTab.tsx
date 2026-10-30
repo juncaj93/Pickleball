@@ -121,6 +121,17 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
   const [gameTime, setGameTime] = useState({ defaultStartMinutes: minutesToHHMM(g.settings.defaultStartMinutes), defaultEndMinutes: minutesToHHMM(g.settings.defaultEndMinutes) });
   const [openAccess, setOpenAccess] = useState(g.openAccess);
+  const [timeProblem, setTimeProblem] = useState<string | null>(null);
+  function saveGameTime() {
+    const start = hhmmToMinutes(gameTime.defaultStartMinutes);
+    const end = hhmmToMinutes(gameTime.defaultEndMinutes);
+    if (start === null || end === null) return setTimeProblem('Pick a start and an end time.');
+    if (start > SETTING_LIMITS.defaultStartMinutes[1]) return setTimeProblem('Pick a start time before 11:00 PM.');
+    if (end <= start) return setTimeProblem('The end time must be after the start time.');
+    setTimeProblem(null);
+    if (start === g.settings.defaultStartMinutes && end === g.settings.defaultEndMinutes) return;
+    void auto.save('defaultStartMinutes', { settings: { defaultStartMinutes: start, defaultEndMinutes: end } });
+  }
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [askRotate, setAskRotate] = useState(false);
   const [curPin, setCurPin] = useState('');
@@ -298,7 +309,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               <div className="set-row">
                 <label className="set-label" htmlFor={`set-${key}`}>
                   <span className="set-name">
-                    {key === 'defaultStartMinutes' ? 'Usual start time' : 'Usual end time'} <SaveMark state={auto.rows[key]} />
+                    {key === 'defaultStartMinutes' ? 'Usual start time' : 'Usual end time'} <SaveMark state={auto.rows.defaultStartMinutes} />
                   </span>
                   <span className="set-hint">{key === 'defaultStartMinutes' ? 'For new Tue and Thu games only' : 'Existing games keep their times'}</span>
                 </label>
@@ -308,26 +319,31 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                   type="time"
                   step={300}
                   value={gameTime[key]}
+                  aria-invalid={timeProblem && key === 'defaultEndMinutes' ? true : undefined}
                   onChange={(e) => {
                     const v = e.target.value;
-                    const minutes = hhmmToMinutes(v);
+                    // A new start moves the end with it, keeping the game the same length (2 hours by default).
                     const oldStart = hhmmToMinutes(gameTime.defaultStartMinutes);
                     const oldEnd = hhmmToMinutes(gameTime.defaultEndMinutes);
-                    // A new start moves the end with it, keeping the game the same length (2 hours by default).
+                    const minutes = hhmmToMinutes(v);
                     if (key === 'defaultStartMinutes' && minutes !== null && oldStart !== null && oldEnd !== null && oldEnd > oldStart) {
-                      const end = Math.min(minutes + (oldEnd - oldStart), 23 * 60 + 59);
-                      setGameTime({ defaultStartMinutes: v, defaultEndMinutes: minutesToHHMM(end) });
-                      void auto.save(key, { settings: { defaultStartMinutes: minutes, defaultEndMinutes: end } });
-                      return;
+                      setGameTime({ defaultStartMinutes: v, defaultEndMinutes: minutesToHHMM(Math.min(minutes + (oldEnd - oldStart), 23 * 60 + 59)) });
+                    } else {
+                      setGameTime((cur) => ({ ...cur, [key]: v }));
                     }
-                    setGameTime((cur) => ({ ...cur, [key]: v }));
-                    if (minutes !== null) void auto.save(key, { settings: { [key]: minutes } });
                   }}
+                  // Saved once, when you leave the box (the time wheel sends many changes), and only a valid pair.
+                  onBlur={saveGameTime}
                 />
               </div>
-              <SaveProblem state={auto.rows[key]} />
+              {key === 'defaultEndMinutes' && <SaveProblem state={auto.rows.defaultStartMinutes} />}
             </div>
           ))}
+          {timeProblem && (
+            <p className="field-error" role="alert" data-time-problem>
+              {timeProblem}
+            </p>
+          )}
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
         </Section>

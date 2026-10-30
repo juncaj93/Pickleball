@@ -38,7 +38,7 @@ const LIMITS: Record<keyof GroupSettings, [number, number]> = {
   lastCallHours: [1, 48],
   typicalCourtCostCents: [0, 500_00],
   monthlyMembershipCents: [0, 1000_00],
-  defaultStartMinutes: [0, 23 * 60 + 59],
+  defaultStartMinutes: [0, 22 * 60 + 59],
   defaultEndMinutes: [1, 23 * 60 + 59],
 };
 

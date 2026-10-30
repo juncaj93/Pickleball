@@ -38,7 +38,7 @@ import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, mov
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
-import { loadMarks } from './tasks';
+import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -150,7 +150,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     creditLedger,
     refundRequests: await pendingRequestViews(ctx, group),
     me: await organizerPlayer(ctx, group, false),
-    taskMarks: await loadMarks(ctx.db, group.id, ctx.nowMs),
+    ...(await loadMarks(ctx.db, group.id, ctx.nowMs).then((m) => ({ taskMarks: m.marks, courtBookedAt: m.courtBookedAt }))),
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
   };
@@ -222,6 +222,7 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
     )
     .run();
   await audit(ctx.db, group.id, session.id, 'booking_updated', changes, ctx.nowIso);
+  if (changes.booking_status) await recordCourtBooked(ctx.db, group.id, session.id, next.booking_status === 'booked', ctx.nowIso);
   return { ok: true, changed: true };
 }
 
@@ -330,24 +331,27 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
     promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso, settingsOf(group).maxPlayers);
   }
   await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: promoted.length }, ctx.nowIso);
+  await recordCourtBooked(ctx.db, group.id, session.id, true, ctx.nowIso);
   return { ok: true, promoted: promoted.length };
 }
 
 /**
  * After moving a game: "Is the court booked for the new time?" Yes marks it
- * booked (same as "I booked it"); No marks it not booked, so the booking
- * card and alerts come back for it.
+ * booked (same as "I booked it"); No marks it not booked, so its "no court
+ * yet" card and the morning-of court check come back for it.
  */
 export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
   const booked = v.bool(body.booked, 'booked');
   if (booked) return markBooked(ctx, {});
   const { group, session } = await adminSession(ctx);
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   await ctx.db
     .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
     .bind(ctx.nowIso, session.id)
     .run();
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
+  await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
   return { ok: true };
 }
 
@@ -361,6 +365,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
       .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
       .bind(ctx.nowIso, session.id)
       .run();
+    await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
   } else if (action === 'clear') {
     await ctx.db.prepare('UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = \'waitlist\'').bind(ctx.nowIso, session.id).run();
   } else {
@@ -434,6 +439,8 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
     throw err;
   }
   await audit(ctx.db, group.id, session.id, 'session_rescheduled', { from: session.starts_at, to: startsAt }, ctx.nowIso);
+  const dayOf = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: group.timezone });
+  if (dayOf(startsAt) !== dayOf(session.starts_at)) await resetTasksForNewDay(ctx.db, session.id);
   return { ok: true, changed: true };
 }
 
