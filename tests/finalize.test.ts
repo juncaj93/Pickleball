@@ -548,7 +548,8 @@ describe('the numbers agree and nothing private leaks', () => {
       const g = (await phones[name].call('GET', '/api/group')).data;
       const text = JSON.stringify(g);
       expect(text).not.toMatch(/phone|venmo_handle|venmoHandle|courtCost|membership/i);
-      expect(text).not.toContain('555-');
+      // The made-up numbers are "(313) 555-01xx"; ids are random hex, so look for the phone shapes, not just "555-".
+      expect(text).not.toMatch(/\(313\)|313\D{0,2}555|555-01\d\d(?![0-9a-f-])|31355501\d\d/);
       expect(g.credit.balanceCents).toBe(name === 'Emery' ? 1400 : 0);
       // Nobody else's credit or payment is in the response.
       for (const other of PLAYER_NAMES.filter((x) => x !== name)) expect(text).not.toMatch(new RegExp(`${other}[^"]*(credit|paid|owe)`, 'i'));
