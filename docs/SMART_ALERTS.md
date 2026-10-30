@@ -130,7 +130,7 @@ due in the last hour.
 | --- | --- | --- |
 | Workers + Pages Functions requests | 100,000 a day per account (one shared pool) | 288 cron runs + 288 tick requests = 576 a day (0.6%) |
 | Cron Triggers | 5 per account | 1. The account's other Worker, fantasy-analyst, uses 4, so the account is at 5 of 5 (checked Oct 30) |
-| CPU per invocation | 10 ms | Worker: one fetch, well under 1 ms of CPU. Tick: a few small queries and string work |
+| CPU per invocation | 10 ms | Worker: measured 0.5 to 0.8 ms. Tick (on the site): measured 12 to 30 ms on Oct 30, over the limit, but Cloudflare logged no errors and no "exceeded CPU" (see stage notes) |
 | Subrequests per invocation | 50 | Worker: 1. Tick: at most 5 Telegram calls |
 | D1 rows read | 5,000,000 a day | About 200 rows a tick (detail below), so about 58,000 a day (1.2%) |
 | D1 rows written | 100,000 a day | Only when something sends or a button is tapped: a few dozen a day |

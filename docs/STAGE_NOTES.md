@@ -421,3 +421,14 @@ Status: built and tested on the branch `claude/new-session-ekyoyg`. NOT deployed
 - Deploy 3: `GO_LINKS = "on"`, commit 24c6384 on main, Pages deployment `fb9d3e50-de4a-4d99-a623-b498d081bc4c`. Check: a TEST direct text link for Tue Nov 3 returns the check-in text with `test: true` (marks nothing); a bad link answers 404.
 - Rollback: deploy 3, set `GO_LINKS = "off"` and redeploy (or roll back to `24d49885`). Deploy 2 site half: roll back to `00fbd694`; the secret alone does nothing without the Worker.
 - To finish: give the session a token with Workers Scripts Edit, then run steps 5, 6 and 8 of "Finishing Deploy 2" (Worker deploy, Worker secret, checks). The Worker secret must be the same value as the site's; if that value is lost, make a new one and set it on both, then redeploy the site.
+
+### Smart alerts deploy 2 finished: the clock (Fri Oct 30, 2026, 5:51 to 6:21 PM Eastern)
+- No game that day. 741 unit tests green. No database change. Same token as before (ID `16e52fe92a6bf0db0e9fdc6587802e93`), now with Workers Scripts Edit and Account Analytics Read.
+- Restore points: Time Travel bookmark `00000143-00000000-00005114-9dfd82a8be9a7bf4b2330d9c95ad2d9b` (5:51 PM). Full SQL export (164 INSERT lines, has phone numbers, not committed) `live-before-clock-2026-10-30.sql` in that session's scratch folder.
+- New `CRON_SECRET` (the old value was lost) set on the Pages project and on the Worker. Not written anywhere else.
+- Worker `pickleball-alerts-clock` created, version `8d0f28bc-c15f-4308-a186-b6cf96925641`, cron `*/5 * * * *`, workers.dev and preview links off.
+- Site redeployed from main 7be1b79 (same code as fb9d3e50 plus notes): Pages deployment `87ad17c5`.
+- Checks: right secret answers 200 `{"ok":true,"sent":0,"failed":0}` in 0.56 s; wrong or missing secret answers 404. Cron ran on its own at 6:00, 6:05, 6:10 and 6:15 PM, all success, 0 errors. D1 query analytics show the tick's reads (groups, sessions, task_log by game) at each of those minutes and no errors; those reads only happen after the secret check passes. Live tail is blocked by the session's network proxy.
+- Cron triggers: the account's other Worker, fantasy-analyst, has 4, so the account is now at 5 of 5. No room for another.
+- CPU (Account Analytics): Worker 0.47 to 0.80 ms. Pages production, last 7 days, 2,387 requests, 0 errors, median 8.9 ms, 90th percentile 24.0 ms, 99th 46.1 ms. The tick alone measured 12.2, 18.5 and 29.8 ms. No request has been stopped for CPU so far, but the tick is over the Free plan's 10 ms on paper. Worth trimming.
+- Rollback: `npx wrangler delete --config worker/wrangler.toml` stops the clock. Site: roll back to `fb9d3e50`.
