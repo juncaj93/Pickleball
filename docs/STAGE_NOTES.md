@@ -264,3 +264,19 @@ Money questions left for Alex (no money code changed):
 
 Tests: `tests/dryrun-money.test.ts` (18), `tests/dryrun-clock.test.ts` (31),
 `e2e/double-tap.cjs` (4).
+
+Earlier game times (7:00 to 9:00 PM, 7:30 to 9:30 PM), checked with games moved through
+the existing per-game time change, on both sides of Nov 1: cancellation deadline (12
+hours before the real start), late drop, the 36-hour drop alert, day-before and last
+call cards, "started", Finalize at the real end (9:00 / 9:30 PM), the post-game note,
+the .ics file, day words and week labels, and every text all follow the game's own
+time. Tests: `tests/dryrun-times.test.ts` (23) and the 7 PM / 7:30 PM cases in
+`tests/dryrun-money.test.ts`.
+Hardcoded 8 to 10 PM (for the team changing the regular time): `shared/settings.ts:67-68`
+(`SESSION_START` / `SESSION_END`, used by `shared/schedule.ts` for every newly made
+Tue/Thu game), `src/pages/Setup.tsx:92` (setup text), `src/pages/Admin.tsx:481-482`
+(+ Add game form starts at 8 to 10). Many e2e files assume generated games are at 8 PM.
+Moving every game one by one gives each a "Moved" tag and Moved text.
+
+Not deployed: the live database backup (Time Travel bookmark and SQL export) was
+blocked by the sandbox's permission check, and the rule is backup first.
