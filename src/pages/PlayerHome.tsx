@@ -932,10 +932,10 @@ function ScheduleRow({
   const notIn = open && !(inSession || waiting);
   const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice) : null;
 
-  // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Cancelled (with the organizer's reason).
+  // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled (with the organizer's reason).
   const courtWord = <span>{court.playerText}</span>;
   let status: ReactNode;
-  if (s.canceled) status = <span className="st-canceled">{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Cancelled - ${s.cancelReason}` : 'Cancelled'}</span>;
+  if (s.canceled) status = <span className="st-canceled">{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn)
     status = (

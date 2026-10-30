@@ -1,6 +1,6 @@
 /* "Cancel with a reason", in the browser: the organizer cancels a future game
  * with a reason (Sessions tab), sees "Canceled - <reason>", the player's card
- * for that game reads "Cancelled - <reason>" (the player-side checks follow the
+ * for that game reads "Canceled - <reason>" (the player-side checks follow the
  * new player wording and may fail until that ships), an HTML-looking reason is
  * shown as plain text with no injected element, and Reopen clears it.
  * Fake group; the clock is Mon Nov 2, 9:00 AM Eastern.
@@ -139,9 +139,9 @@ async function main() {
   // ---- The player's card (player-side wording is being changed in parallel).
   {
     const { ctx, page, card } = await playerCard();
-    await check('player card for that game reads "Cancelled - Thanksgiving week"', async () => {
+    await check('player card for that game reads "Canceled - Thanksgiving week"', async () => {
       const t = squash(await card.locator('.sched-status').innerText());
-      assert(t === 'Cancelled - Thanksgiving week', `status: ${t}`);
+      assert(t === 'Canceled - Thanksgiving week', `status: ${t}`);
     });
     await ctx.close();
   }
@@ -156,7 +156,7 @@ async function main() {
       assert((await adminSession()).cancelReason === null, 'still stored');
       assert(!/Canceled/.test(await card.innerText()), 'card still says canceled');
       const p = await playerCard();
-      assert(!/Cancelled|Canceled|Thanksgiving/.test(await p.card.innerText()), 'player card still shows it');
+      assert(!/Canceled|Thanksgiving/.test(await p.card.innerText()), 'player card still shows it');
       await p.ctx.close();
     });
     await ctx.close();
@@ -165,7 +165,7 @@ async function main() {
   // ---- No reason: plain Canceled, then an HTML-looking reason shown literally.
   {
     const { ctx, page, card } = await organizer();
-    await check('cancel with no reason reads plain "Canceled"; the player card reads "Cancelled"', async () => {
+    await check('cancel with no reason reads plain "Canceled"; the player card reads "Canceled" too', async () => {
       await pick(card, 'Cancel session');
       await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
       await page.getByText('Session canceled').first().waitFor();
@@ -179,7 +179,7 @@ async function main() {
       const p = await playerCard();
       const t = squash(await p.card.locator('.sched-status').innerText());
       await p.ctx.close();
-      assert(t === 'Cancelled', `player status: ${t}`);
+      assert(t === 'Canceled', `player status: ${t}`);
     });
     await check('reopen again, then cancel with an HTML-looking reason', async () => {
       await page.reload();
@@ -223,7 +223,7 @@ async function main() {
       await page.reload();
       await card.waitFor();
       const t = squash(await page.locator(`#row-${thu.id}`).locator('.sched-status').innerText());
-      assert(t === `Cancelled - ${HTML_REASON}`, `status: ${t}`);
+      assert(t === `Canceled - ${HTML_REASON}`, `status: ${t}`);
       assert((await page.locator('main img[src="x"], img[onerror]').count()) === 0, 'an img element was injected');
       assert(dialogs.length === 0, `an alert fired: ${dialogs}`);
     });

@@ -177,7 +177,7 @@ migration 0014, then deploy the code (the new code names the new column).
 - Cancel with a reason: organizer cancel dialog has "Reason (optional)" (40
   characters). Stored in new nullable column `sessions.cancel_reason`
   (`migrations/0014_cancel_reason.sql`, additive only). Reopen clears it. Player card
-  reads "Cancelled - Thanksgiving" or "Cancelled"; organizer screens read "Canceled -
+  reads "Canceled - Thanksgiving" or "Canceled"; organizer screens read "Canceled -
   Thanksgiving". The reason is not added to any text message.
 
 ### Tests
