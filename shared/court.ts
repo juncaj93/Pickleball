@@ -39,9 +39,9 @@ export function courtStatus(s: CourtInput, tz = 'America/Detroit'): CourtStatus 
   if (s.courtState === 'waitlist') return { kind: 'waitlist', text: 'Court waitlist', playerText: 'Waiting on the court' };
   if (s.bookingStatus === 'unavailable') return off('No court available');
   if (s.bookingOpen === false && s.bookingOpensAt) {
-    return { kind: 'later', text: `Booking opens ${formatShortDate(s.bookingOpensAt, tz)}`, playerText: 'Court not booked yet' };
+    return { kind: 'later', text: `Booking opens ${formatShortDate(s.bookingOpensAt, tz)}`, playerText: 'Court not booked' };
   }
-  return { kind: 'needs', text: 'Court not booked', playerText: 'Court not booked yet' };
+  return { kind: 'needs', text: 'Court not booked', playerText: 'Court not booked' };
 }
 
 function off(reason: string): CourtStatus {

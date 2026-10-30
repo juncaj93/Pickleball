@@ -1092,7 +1092,7 @@ async function main() {
       const row = firstCard(players.Alex);
       await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
       assert((await players.Alex.getByText(/Court #/).count()) === 0, 'court number shows to players');
-      assert((await players.Alex.getByText('Court not booked yet', { exact: true }).count()) > 0, 'other sessions should say Court not booked yet');
+      assert((await players.Alex.getByText('Court not booked', { exact: true }).count()) > 0, 'other sessions should say Court not booked');
       assert((await row.getByRole('button', { name: /I booked it|Court opened/ }).count()) === 0, 'players get no court buttons');
     });
 

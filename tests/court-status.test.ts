@@ -12,7 +12,7 @@ const base = { canceled: false, started: false, past: false, bookingStatus: 'nee
 describe('court status words', () => {
   it('gives each look its own words, for the organizer and for players', () => {
     expect(courtStatus({ ...base, bookingStatus: 'booked' })).toEqual({ kind: 'booked', text: 'Court booked', playerText: 'Court booked' });
-    expect(courtStatus(base)).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked yet' });
+    expect(courtStatus(base)).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked' });
     expect(courtStatus({ ...base, courtState: 'waitlist' })).toEqual({
       kind: 'waitlist',
       text: 'Court waitlist',
@@ -67,9 +67,9 @@ describe('organizer Home', () => {
     const g = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data;
     const far = g.sessions.find((x: any) => x.id === outside[0].id);
     expect(far.bookingOpen).toBe(false);
-    expect(courtStatus(far, d.group.timezone)).toMatchObject({ kind: 'later', playerText: 'Court not booked yet' });
+    expect(courtStatus(far, d.group.timezone)).toMatchObject({ kind: 'later', playerText: 'Court not booked' });
     const near = g.sessions.find((x: any) => x.id === inside[0].id);
-    expect(courtStatus(near, d.group.timezone)).toMatchObject({ kind: 'needs', playerText: 'Court not booked yet' });
+    expect(courtStatus(near, d.group.timezone)).toMatchObject({ kind: 'needs', playerText: 'Court not booked' });
   });
 
   it('the Home badge counts only courts inside the booking window', async () => {
@@ -149,7 +149,7 @@ describe('player wording', () => {
     expect(words(a.id)).toBe('Court booked');
     expect(words(b.id)).toBe('Waiting on the court');
     const other = g.sessions.find((x: any) => x.id !== a.id && x.id !== b.id);
-    expect(courtStatus(other).playerText).toBe('Court not booked yet');
+    expect(courtStatus(other).playerText).toBe('Court not booked');
   });
 });
 
