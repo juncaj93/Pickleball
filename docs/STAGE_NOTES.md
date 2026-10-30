@@ -283,3 +283,14 @@ Tue/Thu game), `src/pages/Setup.tsx:92` (setup text), `src/pages/Admin.tsx:481-4
 (+ Add game form starts at 8 to 10). Many e2e files assume generated games are at 8 PM.
 Moving every game one by one gives each a "Moved" tag and Moved text.
 
+
+Deploy (Fri Oct 30, 2026, about 1:20 PM Eastern): deployment `e7074075`, commit 0b21eb1,
+branch main, no database change. Time Travel bookmark right before:
+`0000013a-00000000-00005114-f6fdc0f2b454288716c5732243f9a2f8` (an earlier one at the
+backup: `00000138-00000000-00005114-91a3bb2d82c626aa912c08fdb364a4d5`). Full SQL export
+before deploy (144 rows, has phone numbers, not committed):
+`live-before-dryrun-fixes-2026-10-30.sql` in that session's scratch folder. Code rollback:
+deployment `f8b0971e`. Tests: 645 unit, 843 browser (run 229, names 24, gates 32,
+alerts 52, court 84, held 81, credit 153, suggest 35, popup 33, texts 52, circles 18,
+audit-stage3 3, cancel-reason 8, round2 25, want-in 4, double-tap 4, dryrun-screens 6),
+all green. After deploy, read-only: the backup address returned 200 with the new bundle.
