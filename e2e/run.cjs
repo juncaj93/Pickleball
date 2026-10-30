@@ -1520,7 +1520,7 @@ async function main() {
     await check('a regular gets "Want in on ...? Yes / No"; Yes shows "You\'re in" with no payment', async () => {
       const p = players.Devon;
       await p.reload();
-      const card = p.getByRole('region', { name: /^Want in (tonight|tomorrow|this (Tuesday|Thursday)|next (Tuesday|Thursday)|on (the )?[A-Za-z0-9, ']+)\?/ });
+      const card = p.getByRole('region', { name: /^Want in (tonight|tomorrow|(Tuesday|Thursday)|next (Tuesday|Thursday)|on (the )?[A-Za-z0-9, ']+)\?/ });
       await card.waitFor();
       await p.screenshot({ path: path.join(SHOTS, 'player-suggestion.png'), fullPage: true });
       await card.getByRole('button', { name: 'Yes' }).click();

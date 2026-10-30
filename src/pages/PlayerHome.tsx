@@ -78,6 +78,8 @@ export function PlayerHome({
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [creditOpen, setCreditOpen] = useState(false);
+  // The "Want in?" answer ("You're in" + Done) lives here, so the game cards below can refresh at once.
+  const [answered, setAnswered] = useState<{ sessionId: string; text: string; startsAt: string; endsAt: string } | null>(null);
   // A shared link like ?s=<session id> opens with that session highlighted.
   const [focusId] = useState(() => new URLSearchParams(window.location.search).get('s'));
   const scrolled = useRef(false);
@@ -183,7 +185,19 @@ export function PlayerHome({
         {g && !pickName && (
           <>
             {g.payDue.length > 0 && <PayCard g={g} onChanged={load.reload} />}
-            {g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} />}
+            {answered ? (
+              <section className="card stack suggest" aria-label="Your answer">
+                <h2>{answered.text}</h2>
+                <p className="muted small">
+                  {formatShortDate(answered.startsAt, tz)} · {formatTimeShort(answered.startsAt, answered.endsAt, tz)}
+                </p>
+                <button className="btn secondary block" onClick={() => setAnswered(null)}>
+                  Done
+                </button>
+              </section>
+            ) : (
+              g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} onJoined={setAnswered} />
+            )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
               {sessions.map((s, i) => {
@@ -595,13 +609,12 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
 }
 
 /** "Want in on Tuesday?" for a usual day the player hasn't answered yet. */
-function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void> }) {
+function SuggestionCard({ g, onChanged, onJoined }: { g: GroupView; onChanged: () => Promise<void>; onJoined: (a: { sessionId: string; text: string; startsAt: string; endsAt: string }) => void }) {
   const toast = useToast();
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [joined, setJoined] = useState<JoinResponse | null>(null);
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
   const standby = s.courtState === 'waitlist';
   const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
@@ -611,8 +624,13 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
     setBusy(true);
     setError(null);
     try {
-      if (yes) setJoined(await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {}));
-      else {
+      if (yes) {
+        // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
+        const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
+        toast(joinedText(res));
+        onJoined({ sessionId: s.sessionId, text: joinedText(res), startsAt: s.startsAt, endsAt: s.endsAt });
+        await onChanged();
+      } else {
         await api('POST', `/api/sessions/${s.sessionId}/decline`, {});
         await onChanged();
       }
@@ -624,27 +642,13 @@ function SuggestionCard({ g, onChanged }: { g: GroupView; onChanged: () => Promi
     }
   }
 
-  if (joined) {
-    return (
-      <section className="card stack suggest" aria-label="Your answer">
-        <h2>{joinedText(joined)}</h2>
-        <p className="muted small">
-          {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
-        </p>
-        <button className="btn secondary block" onClick={() => void onChanged()}>
-          Done
-        </button>
-      </section>
-    );
-  }
-
   return (
     <section className="card stack suggest" aria-labelledby="suggest-title">
       <h2 id="suggest-title">{wantInTitle(s.startsAt, tz, Date.parse(g.now), waitlistForm)}</h2>
       {/* Line 1: date and time. Line 2: spots left, or where they would be. */}
       <div className="suggest-when">
         <span className="muted small">
-          {formatShortDate(s.startsAt, tz)} · {formatTimeRange(s.startsAt, s.endsAt, tz)}
+          {formatShortDate(s.startsAt, tz)} · {formatTimeShort(s.startsAt, s.endsAt, tz)}
         </span>
       </div>
       {subline && <p className="muted small suggest-sub">{subline}</p>}

@@ -269,9 +269,27 @@ export function playerDay(iso: string, tz: string, nowMs: number): PlayerDay {
   return { word: formatShortDate(iso, tz), waitlistOf: `the ${formatMonthDay(iso, tz)}`, isDate: true };
 }
 
-/** "Want in tonight?", "Want in on Thu, Nov 12?", "Want in on next Tuesday's waitlist?", "Want in on the Nov 12 waitlist?" */
+/**
+ * How the "Want in?" popup names the game's day, by Eastern calendar days away:
+ * tonight, tomorrow, 2 to 6 days: the weekday alone ("Thursday"), 7 to 13 days:
+ * "next Thursday", after that the date.
+ */
+export function suggestDay(iso: string, tz: string, nowMs: number): PlayerDay {
+  const g = localParts(Date.parse(iso), tz);
+  const n = localParts(nowMs, tz);
+  const num = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / DAY_MS;
+  const gap = Math.round(num(g) - num(n));
+  const weekday = formatWeekday(iso, tz);
+  if (gap === 0) return { word: 'tonight', waitlistOf: "tonight's", isDate: false };
+  if (gap === 1) return { word: 'tomorrow', waitlistOf: "tomorrow's", isDate: false };
+  if (gap >= 2 && gap <= 6) return { word: weekday, waitlistOf: `${weekday}'s`, isDate: false };
+  if (gap >= 7 && gap <= 13) return { word: `next ${weekday}`, waitlistOf: `next ${weekday}'s`, isDate: false };
+  return { word: formatShortDate(iso, tz), waitlistOf: `the ${formatMonthDay(iso, tz)}`, isDate: true };
+}
+
+/** "Want in tonight?", "Want in Thursday?", "Want in next Tuesday?", "Want in on Thu, Nov 19?", "Want in on Thursday's waitlist?" */
 export function wantInTitle(iso: string, tz: string, nowMs: number, waitlist: boolean): string {
-  const d = playerDay(iso, tz, nowMs);
+  const d = suggestDay(iso, tz, nowMs);
   if (waitlist) return `Want in on ${d.waitlistOf} waitlist?`;
   return `Want in ${d.isDate ? 'on ' : ''}${d.word}?`;
 }

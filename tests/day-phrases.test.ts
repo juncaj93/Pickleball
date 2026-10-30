@@ -50,20 +50,65 @@ describe('the "Want in?" titles', () => {
   it('normal titles', () => {
     expect(wantInTitle(game('2026-11-02'), TZ, now, false)).toBe('Want in tonight?');
     expect(wantInTitle(game('2026-11-03'), TZ, now, false)).toBe('Want in tomorrow?');
-    expect(wantInTitle(game('2026-11-05'), TZ, now, false)).toBe('Want in this Thursday?');
+    expect(wantInTitle(game('2026-11-05'), TZ, now, false)).toBe('Want in Thursday?');
     expect(wantInTitle(game('2026-11-10'), TZ, now, false)).toBe('Want in next Tuesday?');
     expect(wantInTitle(game('2026-11-12'), TZ, now, false)).toBe('Want in next Thursday?');
     expect(wantInTitle(game('2026-11-19'), TZ, now, false)).toBe('Want in on Thu, Nov 19?');
-    expect(wantInTitle(game('2026-11-12'), TZ, at('2026-11-01T09:00:00-05:00'), false)).toBe('Want in on Thu, Nov 12?'); // two weeks out
+    expect(wantInTitle(game('2026-11-19'), TZ, at('2026-11-02T09:00:00-05:00'), false)).toBe('Want in on Thu, Nov 19?'); // 17 days out: the date
   });
   it('waitlist titles', () => {
     expect(wantInTitle(game('2026-11-02'), TZ, now, true)).toBe("Want in on tonight's waitlist?");
     expect(wantInTitle(game('2026-11-03'), TZ, now, true)).toBe("Want in on tomorrow's waitlist?");
-    expect(wantInTitle(game('2026-11-05'), TZ, now, true)).toBe("Want in on this Thursday's waitlist?");
+    expect(wantInTitle(game('2026-11-05'), TZ, now, true)).toBe("Want in on Thursday's waitlist?");
     expect(wantInTitle(game('2026-11-10'), TZ, now, true)).toBe("Want in on next Tuesday's waitlist?");
     expect(wantInTitle(game('2026-11-12'), TZ, now, true)).toBe("Want in on next Thursday's waitlist?");
     expect(wantInTitle(game('2026-11-19'), TZ, now, true)).toBe('Want in on the Nov 19 waitlist?');
-    expect(wantInTitle(game('2026-11-12'), TZ, at('2026-11-01T09:00:00-05:00'), true)).toBe('Want in on the Nov 12 waitlist?');
+    expect(wantInTitle(game('2026-11-19'), TZ, at('2026-11-02T09:00:00-05:00'), true)).toBe('Want in on the Nov 19 waitlist?');
+  });
+});
+
+describe('"next" only when the game is 7 or more days away (Eastern calendar days)', () => {
+  const t = (date: string, now: string, tz = TZ) => wantInTitle(game(date, date < '2026-11-01' ? '-04:00' : '-05:00'), tz, at(now), false);
+  it('Friday (Oct 30): Tue Nov 3 is 4 days, Thu Nov 5 is 6 days, Tue Nov 10 is 11 days', () => {
+    const now = '2026-10-30T09:00:00-04:00';
+    expect(t('2026-11-03', now)).toBe('Want in Tuesday?');
+    expect(t('2026-11-05', now)).toBe('Want in Thursday?'); // 6 days: no "next"
+    expect(t('2026-11-10', now)).toBe('Want in next Tuesday?');
+    expect(t('2026-11-12', now)).toBe('Want in next Thursday?'); // 13 days
+    expect(t('2026-11-13', now)).toBe('Want in on Fri, Nov 13?'); // not a game day, shows the date rules still hold (14 days)
+  });
+  it('Monday (Nov 2): tomorrow, then Thursday (3 days), then next Tuesday (8 days)', () => {
+    const now = '2026-11-02T09:00:00-05:00';
+    expect(t('2026-11-03', now)).toBe('Want in tomorrow?');
+    expect(t('2026-11-05', now)).toBe('Want in Thursday?');
+    expect(t('2026-11-10', now)).toBe('Want in next Tuesday?');
+  });
+  it('Tuesday (Nov 3): tonight, Thursday (2 days), next Tuesday (exactly 7 days)', () => {
+    const now = '2026-11-03T09:00:00-05:00';
+    expect(t('2026-11-03', now)).toBe('Want in tonight?');
+    expect(t('2026-11-05', now)).toBe('Want in Thursday?');
+    expect(t('2026-11-10', now)).toBe('Want in next Tuesday?');
+  });
+  it('Thursday (Nov 5): tonight, Tuesday (5 days), next Thursday (exactly 7 days)', () => {
+    const now = '2026-11-05T09:00:00-05:00';
+    expect(t('2026-11-05', now)).toBe('Want in tonight?');
+    expect(t('2026-11-10', now)).toBe('Want in Tuesday?');
+    expect(t('2026-11-12', now)).toBe('Want in next Thursday?');
+  });
+  it('Sunday Nov 1, the day the clocks go back: Tuesday (2 days), Thursday (4 days), next Tuesday (9 days), at every hour of that day', () => {
+    for (const now of ['2026-11-01T00:30:00-04:00', '2026-11-01T01:30:00-04:00', '2026-11-01T01:30:00-05:00', '2026-11-01T09:00:00-05:00', '2026-11-01T23:30:00-05:00']) {
+      expect(t('2026-11-03', now)).toBe('Want in Tuesday?');
+      expect(t('2026-11-05', now)).toBe('Want in Thursday?');
+      expect(t('2026-11-10', now)).toBe('Want in next Tuesday?');
+    }
+  });
+  it('the Eastern date decides, not UTC: Sat 11:30 PM Eastern (already Sunday in UTC) still counts Sat as today', () => {
+    expect(t('2026-11-03', '2026-10-31T23:30:00-04:00')).toBe('Want in Tuesday?'); // Tue Nov 3 is 3 days from Sat Oct 31
+    expect(t('2026-11-05', '2026-10-30T23:30:00-04:00')).toBe('Want in Thursday?'); // Fri night: still 6 days
+  });
+  it('the waitlist title follows the same rule', () => {
+    expect(wantInTitle(game('2026-11-05'), TZ, at('2026-10-30T09:00:00-04:00'), true)).toBe("Want in on Thursday's waitlist?");
+    expect(wantInTitle(game('2026-11-12'), TZ, at('2026-10-30T09:00:00-04:00'), true)).toBe("Want in on next Thursday's waitlist?");
   });
 });
 
