@@ -347,3 +347,28 @@ Status: built and tested; deploy details below.
 `migrations/0015_task_log.sql`: one new table, `task_log`. It holds card taps,
 when a court was marked booked, sent and failed alerts, and the Smart alerts
 switch. Additive only.
+
+### Deploy 1: the new table, the card, game times, court rules (Fri Oct 30, 2026, about 2:00 PM Eastern)
+- Merged with the dry-run channel's work first (main at 357b0d7).
+- Migration `0015_task_log.sql` applied to the live database at about 1:58 PM.
+- Pages deployment `5ab12c01`, commit dcafeaf.
+- Read-only checks: site 200, the new screens are in the live bundle, the
+  `task_log` table is there and empty, and `/api/cron/tick` answers Not found
+  (no secret yet).
+- Restore points:
+  - Time Travel bookmark right before the migration:
+    `0000013b-00000000-00005114-e0b9eae6abdcff65e60ba9667f75bb08`
+  - Full SQL export (144 rows, has phone numbers, not committed):
+    `live-before-smart-alerts-2026-10-30.sql` in this session's scratch folder.
+  - Code rollback: Pages deployment `e7074075` (commit 0b21eb1). The old code
+    ignores the new table, so rolling back needs no database change.
+- Tests on the merged code: 704 unit, 856 browser checks in 18 files, all green.
+
+### Deploy 2 (clock Worker) and 3 (direct text link): waiting on Alex
+- This session can't write Cloudflare secrets (blocked by its safety rules),
+  and its Cloudflare key can't create Workers ("No access"). So the Worker and
+  `CRON_SECRET` still need setting up. Until then no smart alert is sent; the
+  card on Home works.
+- Paste-ready Worker code: `worker/dashboard-paste.js`.
+- Deploy 3: set `GO_LINKS = "on"` in `wrangler.toml` and redeploy (after
+  Deploy 2).
