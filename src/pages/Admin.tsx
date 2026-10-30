@@ -8,10 +8,11 @@ import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
 import { PlayerHome } from './PlayerHome';
-import { COURTRESERVE_BOOKING_URL } from '../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, RefundRequestCard } from './admin/HomeCards';
+import { DoNowCard } from './admin/DoNow';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
@@ -227,12 +228,21 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
 
 function HomeTab({ ctx }: { ctx: AdminCtx }) {
   const items = buildTodo(ctx.d);
-  // Order: refund requests, then games to finalize, then the text cards, then the rest.
-  const first = items.filter((i) => i.kind === 'refund_request' || i.kind === 'finalize');
-  const rest = items.filter((i) => !first.includes(i));
+  // Order: refund requests, then "Do this now", then games to finalize, then the text cards, then the rest.
+  const refunds: TodoItem[] = items.filter((i) => i.kind === 'refund_request');
+  const first: TodoItem[] = items.filter((i) => i.kind === 'finalize');
+  const rest = items.filter((i) => !first.includes(i) && !refunds.includes(i));
   const key = (item: TodoItem) => item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : '');
   return (
     <>
+      {refunds.length > 0 && (
+        <section className="stack" aria-label="Refund requests">
+          {refunds.map((item) => (
+            <TodoCard key={key(item)} ctx={ctx} item={item} />
+          ))}
+        </section>
+      )}
+      <DoNowCard ctx={ctx} />
       {first.length > 0 && (
         <section className="stack" aria-label="After the game">
           {first.map((item) => (
@@ -478,8 +488,9 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   const toast = useToast();
   const chips = quickDates(Date.parse(ctx.d.now), tz);
   const [date, setDate] = useState(chips[0].iso);
-  const [start, setStart] = useState('20:00');
-  const [end, setEnd] = useState('22:00');
+  // The usual game time from Settings > Schedule; editable here for this one game.
+  const [start, setStart] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultStartMinutes));
+  const [end, setEnd] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultEndMinutes));
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

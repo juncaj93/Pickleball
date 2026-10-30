@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { AdminDashboard } from '../../../shared/api';
 import { formatShortDate, formatTime, fromLocalInputValue, localParts, toLocalInputValue, zonedTimeToUtc } from '../../../shared/time';
+import { nightLastCallMs } from '../../../shared/tasks';
 import { resetDemo, setPretend, useDemoOn, usePretend } from '../../lib';
 
 // "Pretend it's...": see the site as it will look at another moment, to
@@ -32,7 +33,7 @@ export function pretendPresets(d: AdminDashboard, realNowMs: number) {
     presets: [
       { label: 'Game day, 7:00 AM', atMs: onGameDay(game.startsAt, tz, 7, 0) },
       { label: 'Game day, 8:30 AM', atMs: onGameDay(game.startsAt, tz, 8, 30) },
-      { label: 'Day before, 8:00 PM', atMs: onGameDay(game.startsAt, tz, 20, 0, -1) },
+      { label: `Day before, ${formatTime(new Date(nightLastCallMs(game.startsAt, tz)).toISOString(), tz)}`, atMs: nightLastCallMs(game.startsAt, tz) },
       { label: 'Last call', atMs: Date.parse(game.startsAt) - d.group.settings.lastCallHours * 3600_000 },
       { label: 'Booking opens, 12:00 AM', atMs: Date.parse(opening.bookingOpensAt) },
       { label: 'After the game', atMs: Date.parse(game.endsAt) + 30 * 60_000 },

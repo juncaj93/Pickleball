@@ -1,0 +1,132 @@
+/* "Do this now": one task card at the top of the organizer's Home. */
+
+.do-now {
+  display: grid;
+  gap: 8px;
+}
+
+.dn-card {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+/* The top task: a court-green edge and a touch more weight, nothing louder. */
+.dn-card.lead {
+  border-left: 5px solid var(--primary);
+  padding-left: 13px;
+}
+
+.dn-eyebrow {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+.dn-text {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.18rem;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.dn-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.dn-btns .btn {
+  min-height: 44px;
+  flex: 1 1 auto;
+}
+
+.dn-btns .btn svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.dn-steps {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.dn-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.dn-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  border: 2px solid var(--line-strong);
+  color: var(--ink-2);
+  background: var(--surface);
+}
+
+.dn-step.now .dn-num {
+  border-color: var(--primary);
+  color: var(--accent-text);
+}
+
+.dn-step.done .dn-num {
+  border-color: var(--ok-edge);
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+.dn-step-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 3px;
+}
+
+.dn-step-label {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.dn-step.done .dn-step-label {
+  color: var(--ink-2);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.dn-step.later .dn-step-label {
+  color: var(--ink-2);
+  font-weight: 550;
+}
+
+.dn-more {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 4px;
+  font-weight: 650;
+}
+
+/* The direct text link page (/go/...): one big button with a normal-size icon. */
+.go-card .btn svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+}

@@ -1,0 +1,760 @@
+import { describe, expect, it } from 'vitest';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
+import { CATCH_UP_MS, countLine, dayAt, dueAlerts, markKey, nextTasks, type Task, type TaskOptions, type TaskSession, taskTimes } from '../shared/tasks';
+import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
+
+// "Do this now" and smart Telegram alerts. A fake clock throughout; Telegram
+// is always a stand-in, so no test ever sends a real message.
+
+const TZ = 'America/Detroit';
+const ADMIN = 'https://pickleball.juncaj.net/admin';
+const OPTS: TaskOptions = { tz: TZ, bookingLeadDays: 14, defaultDeadlineHours: 12, links: { admin: ADMIN, book: COURTRESERVE_BOOKING_URL, cancel: COURTRESERVE_CANCEL_URL } };
+const MIN = 60_000;
+const at = (iso: string) => Date.parse(iso);
+
+/** A two-hour game Eastern on a date like "2026-11-03", at 8:00 PM unless `hour`/`minute` say otherwise. */
+function game(date: string, over: Partial<TaskSession> = {}, hour = 20, minute = 0): TaskSession {
+  const [y, m, d] = date.split('-').map(Number);
+  const start = dayAt(new Date(Date.UTC(y, m - 1, d, 17)).toISOString(), TZ, 0, hour, minute);
+  return {
+    id: `s-${date}`,
+    startsAt: new Date(start).toISOString(),
+    endsAt: new Date(start + 2 * HOUR).toISOString(),
+    canceled: false,
+    canceledAt: null,
+    confirmedCount: 3,
+    booked: true,
+    bookedAt: null,
+    cancellationDeadlineAt: new Date(start - 12 * HOUR).toISOString(),
+    finalized: false,
+    holiday: null,
+    ...over,
+  };
+}
+
+const tasksAt = (iso: string, sessions: TaskSession[], marks: string[] = []) => nextTasks(at(iso), sessions, new Set(marks), OPTS);
+const texts = (list: Task[]) => list.map((t) => t.text);
+
+describe('the task brain: times (Eastern, America/Detroit)', () => {
+  const tue = game('2026-11-03');
+
+  it('night before (8:00 PM game): card and alert at the last call, 25 hours before (7:00 PM Monday), gone at the start', () => {
+    expect(tasksAt('2026-11-02T23:59:00Z', [tue])).toEqual([]); // 6:59 PM EST
+    const t = tasksAt('2026-11-03T00:00:00Z', [tue]); // 7:00 PM
+    expect(texts(t)).toEqual(['Tuesday: 3 players in, need a 4th.']);
+    expect(t[0].alerts[0]).toMatchObject({ id: 'night', dueMs: at('2026-11-03T00:00:00Z') });
+    expect(tasksAt('2026-11-04T01:00:00Z', [tue]).filter((x) => x.kind === 'night')).toEqual([]);
+  });
+
+  it('the count words', () => {
+    expect(countLine(3)).toBe('3 players in, need a 4th.');
+    expect(countLine(2)).toBe('2 players in, need 2 more.');
+    expect(countLine(1)).toBe('1 player in, need 3 more.');
+    expect(countLine(0)).toBe('No one in yet, need 4.');
+    expect(countLine(5)).toBe('5 players in.');
+    const t = tasksAt('2026-11-03T00:00:00Z', [game('2026-11-03', { confirmedCount: 5 })]);
+    expect(t[0].alerts[0].text).toBe(`Tuesday: 5 players in. Text the group to confirm: ${ADMIN}`);
+    expect(t[0].buttons[0]).toMatchObject({ label: 'Text the group to confirm', action: { type: 'text', text: 'checkin' } });
+  });
+
+  it('10:00 PM under 4: the cancel checklist and its alert; 10:30 PM follow-up only while not canceled', () => {
+    expect(tasksAt('2026-11-03T02:59:00Z', [tue]).map((x) => x.kind)).toEqual(['night']);
+    const t = tasksAt('2026-11-03T03:00:00Z', [tue]);
+    expect(t.map((x) => x.kind)).toEqual(['cancel', 'night']);
+    expect(t[0].text).toBe('Tuesday: only 3 players in.');
+    expect(t[0].steps.map((s) => [s.label, s.done, s.enabled])).toEqual([
+      ['Cancel the court', false, true],
+      ['Cancel the session', false, true],
+      ["Text everyone it's canceled", false, false],
+    ]);
+    const alerts = Object.fromEntries(t[0].alerts.map((a) => [a.id, a]));
+    expect(alerts.cancel.text).toBe(`Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`);
+    expect(alerts.cancel_followup).toMatchObject({ dueMs: at('2026-11-03T03:30:00Z'), text: `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}` });
+    // Canceled on the site at 10:20 PM: the follow-up has nothing left to say; the text step opens.
+    const canceled = { ...tue, canceled: true, canceledAt: '2026-11-03T03:20:00Z' };
+    const c = tasksAt('2026-11-03T03:30:00Z', [canceled], [markKey(tue.id, 'court_canceled')]);
+    expect(c.map((x) => x.kind)).toEqual(['cancel']);
+    expect(c[0].alerts).toEqual([]);
+    expect(c[0].steps.map((s) => s.done)).toEqual([true, true, false]);
+    expect(c[0].steps[2].enabled).toBe(true);
+    // Texted: the card is done.
+    expect(tasksAt('2026-11-03T03:40:00Z', [canceled], [markKey(tue.id, 'court_canceled'), markKey(tue.id, 'canceled_text')])).toEqual([]);
+  });
+
+  it('4 or more at 10:00 PM: no cancel checklist', () => {
+    expect(tasksAt('2026-11-03T03:00:00Z', [game('2026-11-03', { confirmedCount: 4 })]).map((x) => x.kind)).toEqual(['night']);
+  });
+
+  it('game day 7:15 AM: uses the real deadline, silent once it passed or the court is marked canceled', () => {
+    const t = tasksAt('2026-11-03T12:15:00Z', [tue]);
+    expect(t[0].text).toBe('Tonight: only 3 players in. Cancel court before 8:00 AM.');
+    const g = t[0].alerts.find((a) => a.id === 'gameday')!;
+    expect(g).toMatchObject({ dueMs: at('2026-11-03T12:15:00Z'), text: `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}` });
+    // Its own deadline, not a fixed 8:00 AM.
+    const early = game('2026-11-03', { cancellationDeadlineAt: '2026-11-03T14:30:00Z' }); // 9:30 AM
+    expect(tasksAt('2026-11-03T12:15:00Z', [early])[0].text).toBe('Tonight: only 3 players in. Cancel court before 9:30 AM.');
+    const passed = game('2026-11-03', { cancellationDeadlineAt: '2026-11-03T12:00:00Z' }); // 7:00 AM
+    expect(tasksAt('2026-11-03T12:15:00Z', [passed])[0].alerts.find((a) => a.id === 'gameday')).toBeUndefined();
+    expect(tasksAt('2026-11-03T12:15:00Z', [tue], [markKey(tue.id, 'court_canceled')])[0].alerts.find((a) => a.id === 'gameday')).toBeUndefined();
+  });
+
+  it('booking day: heads-up at 6:45 AM for the game exactly 14 days out, one follow-up at 7:30 AM, nothing once booked', () => {
+    const nov17 = game('2026-11-17', { booked: false, confirmedCount: 0 });
+    expect(tasksAt('2026-11-03T11:44:00Z', [nov17])).toEqual([]);
+    const t = tasksAt('2026-11-03T11:45:00Z', [nov17]); // Tue Nov 3, 6:45 AM EST
+    expect(t[0].text).toBe('Tue Nov 17 opens at 7:00 AM.');
+    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
+    expect(t[0].alerts[0]).toMatchObject({ id: 'book', dueMs: at('2026-11-03T11:45:00Z') });
+    expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(t[0].alerts[1]).toMatchObject({ id: 'book_followup', dueMs: at('2026-11-03T12:30:00Z') }); // 7:30 AM
+    expect(t[0].alerts[1].text).toBe(`Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(tasksAt('2026-11-03T12:30:00Z', [nov17])[0].text).toBe('Tue Nov 17 opened at 7:00 AM.');
+    expect(tasksAt('2026-11-03T11:45:00Z', [{ ...nov17, booked: true }])).toEqual([]);
+    // The next day it is just one of the games with no court yet (no alert).
+    const next = tasksAt('2026-11-04T12:00:00Z', [nov17]);
+    expect(next.map((x) => [x.kind, x.text, x.alerts.length])).toEqual([['nocourt_later', 'Tue Nov 17 has no court yet.', 0]]);
+  });
+
+  it('on a holiday: "Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ..."', () => {
+    const nov26 = game('2026-11-26', { booked: false, confirmedCount: 0, holiday: 'Thanksgiving' });
+    const t = tasksAt('2026-11-12T11:45:00Z', [nov26]); // Thu Nov 12, 6:45 AM
+    expect(t[0].text).toBe('Thu Nov 26 opens at 7:00 AM (Thanksgiving).');
+    expect(t[0].alerts[0].text).toBe(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+  });
+
+  it('no booking alert for any other unbooked game: only the one 14 days out', () => {
+    const list = [13, 14, 15].map((d) => game(`2026-11-${d}`, { booked: false, confirmedCount: 2 })); // Fri 13, Sat 14, Sun 15 (extra games)
+    const ids = simulate('2026-10-31T00:00:00Z', 24, () => list).map((l) => l.key);
+    expect(ids).toEqual(['s-2026-11-14:book', 's-2026-11-14:book_followup']); // Sat Oct 31 is 14 days before Sat Nov 14
+  });
+
+  it('after the game 10:05 PM: finalize who played, only for a game that was played, gone once finalized', () => {
+    expect(tasksAt('2026-11-04T03:04:00Z', [game('2026-11-03', { confirmedCount: 5 })]).map((x) => x.kind)).toEqual([]);
+    const t = tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 5 })]);
+    expect(t[0].text).toBe('Tuesday: finalize who played.');
+    expect(t[0].alerts[0].text).toBe(`Tuesday: finalize who played: ${ADMIN}`);
+    expect(t[0].buttons.map((b) => [b.label, b.action.type])).toEqual([['Finalize who played', 'finalize']]);
+    // Finalized: done (the existing "Final price" card offers the post-game note).
+    expect(tasksAt('2026-11-04T03:30:00Z', [game('2026-11-03', { confirmedCount: 5, finalized: true })])).toEqual([]);
+    // Under 4 or canceled: nothing (the existing Finalize card handles an under-4 game).
+    expect(tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 3 })])).toEqual([]);
+    expect(tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 5, canceled: true, canceledAt: '2026-11-03T12:00:00Z' })])).toEqual([]);
+  });
+
+  it('canceled and past games get no tasks', () => {
+    const canceled = game('2026-11-03', { canceled: true, canceledAt: '2026-11-01T12:00:00Z' });
+    for (const iso of ['2026-11-03T00:00:00Z', '2026-11-03T03:00:00Z', '2026-11-03T12:15:00Z']) expect(tasksAt(iso, [canceled])).toEqual([]);
+    expect(tasksAt('2026-11-10T03:00:00Z', [tue])).toEqual([]);
+  });
+
+  it('most urgent first: cancel, the court opening today, night text, finalize, then games with no court yet', () => {
+    const list = [
+      game('2026-11-03'),
+      game('2026-11-17', { booked: false, confirmedCount: 0 }),
+      game('2026-10-29', { confirmedCount: 6 }),
+      game('2026-11-12', { booked: false, confirmedCount: 2 }),
+    ];
+    expect(tasksAt('2026-11-03T12:30:00Z', list).map((t) => `${t.kind}:${t.sessionId}`)).toEqual([
+      'cancel:s-2026-11-03',
+      'book:s-2026-11-17',
+      'night:s-2026-11-03',
+      'finalize:s-2026-10-29',
+      'nocourt_later:s-2026-11-12',
+    ]);
+  });
+
+  it('the card and the Telegram message always say the same thing', () => {
+    const sessions = [
+      game('2026-11-03'),
+      game('2026-11-05', { confirmedCount: 6 }),
+      game('2026-11-17', { booked: false, confirmedCount: 0 }),
+      game('2026-11-19', { booked: false, confirmedCount: 0 }),
+      game('2026-10-29', { confirmedCount: 7 }),
+      game('2026-11-10', { confirmedCount: 1, booked: false }),
+    ];
+    let checked = 0;
+    for (let ms = at('2026-11-01T12:00:00Z'); ms < at('2026-11-12T12:00:00Z'); ms += 15 * MIN) {
+      for (const t of nextTasks(ms, sessions, new Set(), OPTS)) {
+        // Compared at the moment each alert goes out (the card's words can change later, like "opens" to "opened").
+        for (const a of t.alerts.filter((x) => x.dueMs <= ms && ms < x.dueMs + 15 * MIN)) {
+          checked++;
+          const lead = t.text.replace(/\.$/, '');
+          if (a.id === 'cancel_followup') expect(a.text.startsWith(`${lead.split(':')[0]}: court canceled?`)).toBe(true);
+          else if (a.id === 'book_followup') expect(a.text.startsWith(`Reminder: ${t.text}`)).toBe(true);
+          else if (a.id === 'cancel' || a.id === 'gameday') expect(a.text.startsWith(a.id === 'gameday' ? lead : t.text.split(' Cancel court before')[0])).toBe(true);
+          else expect(a.text.startsWith(lead)).toBe(true);
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(5);
+  }, 60_000);
+});
+
+/** Every 5-minute tick from `fromIso` for `hours`, sending what dueAlerts says; returns [time, key] per send. */
+function simulate(fromIso: string, hours: number, sessions: (ms: number) => TaskSession[], marks: (ms: number) => string[] = () => []) {
+  const sent = new Set<string>();
+  const log: { ms: number; key: string; text: string }[] = [];
+  for (let ms = at(fromIso); ms <= at(fromIso) + hours * HOUR; ms += 5 * MIN) {
+    for (const a of dueAlerts(nextTasks(ms, sessions(ms), new Set(marks(ms)), OPTS), ms, sent)) {
+      sent.add(a.key);
+      log.push({ ms, key: a.key, text: a.text });
+    }
+  }
+  return log;
+}
+
+describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
+  const at7 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 0);
+  const at730 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 30);
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  it('7:00 PM: last call 6:00 PM, cancel warning 9:00 PM (+9:30 follow-up), game-day check 6:15 AM, finalize 9:05 PM, booking 8:30 AM', () => {
+    const t = taskTimes(at7('2026-11-03'), OPTS);
+    expect(iso(t.nightLastCall)).toBe('2026-11-02T23:00:00.000Z'); // Mon 6:00 PM EST
+    expect(iso(t.deadline)).toBe('2026-11-03T12:00:00.000Z'); // Tue 7:00 AM
+    expect(iso(t.cancelWarning)).toBe('2026-11-03T02:00:00.000Z'); // Mon 9:00 PM
+    expect(iso(t.cancelFollowup)).toBe('2026-11-03T02:30:00.000Z'); // Mon 9:30 PM
+    expect(iso(t.gamedayCheck)).toBe('2026-11-03T11:15:00.000Z'); // Tue 6:15 AM
+    expect(iso(t.finalize)).toBe('2026-11-04T02:05:00.000Z'); // Tue 9:05 PM
+    expect(iso(t.courtOpens)).toBe('2026-10-20T11:00:00.000Z'); // Tue Oct 20, 7:00 AM EDT
+    expect(iso(t.bookingHeadsUp)).toBe('2026-10-20T10:45:00.000Z'); // 6:45 AM
+    expect(iso(t.bookingFollowup)).toBe('2026-10-20T11:30:00.000Z'); // 7:30 AM
+    expect(iso(t.noCourtCheck)).toBe('2026-11-03T12:15:00.000Z'); // Tue 7:15 AM
+  });
+
+  it('7:30 PM: last call 6:30 PM, cancel warning 9:30 PM, game-day check 6:45 AM, finalize 9:35 PM', () => {
+    const t = taskTimes(at730('2026-11-05'), OPTS);
+    expect(iso(t.nightLastCall)).toBe('2026-11-04T23:30:00.000Z'); // Wed 6:30 PM
+    expect(iso(t.cancelWarning)).toBe('2026-11-05T02:30:00.000Z'); // Wed 9:30 PM
+    expect(iso(t.gamedayCheck)).toBe('2026-11-05T11:45:00.000Z'); // Thu 6:45 AM
+    expect(iso(t.finalize)).toBe('2026-11-06T02:35:00.000Z'); // Thu 9:35 PM
+  });
+
+  it("the game's own deadline moves the cancel warning and the game-day check, and the card names it", () => {
+    const g = at7('2026-11-03', { cancellationDeadlineAt: '2026-11-03T14:00:00Z' }); // 9:00 AM
+    const t = taskTimes(g, OPTS);
+    expect(iso(t.cancelWarning)).toBe('2026-11-03T04:00:00.000Z'); // Mon 11:00 PM
+    expect(iso(t.gamedayCheck)).toBe('2026-11-03T13:15:00.000Z'); // Tue 8:15 AM
+    expect(tasksAt(iso(t.gamedayCheck), [g])[0].text).toBe('Tonight: only 3 players in. Cancel court before 9:00 AM.');
+  });
+
+  it('across the Sun Nov 1 clock change: a 7:00 PM Sunday game and a 7:30 PM Monday game keep their clock times', () => {
+    const sun = taskTimes(at7('2026-11-01'), OPTS);
+    expect(iso(sun.nightLastCall)).toBe('2026-10-31T22:00:00.000Z'); // Sat 6:00 PM EDT
+    expect(iso(sun.cancelWarning)).toBe('2026-11-01T01:00:00.000Z'); // Sat 9:00 PM EDT (deadline Sun 7:00 AM EST)
+    expect(iso(sun.gamedayCheck)).toBe('2026-11-01T11:15:00.000Z'); // Sun 6:15 AM EST
+    const mon = taskTimes(at730('2026-11-02'), OPTS);
+    expect(iso(mon.nightLastCall)).toBe('2026-11-01T23:30:00.000Z'); // Sun 6:30 PM EST
+  });
+
+  it('48 hours of ticks for a 7:00 PM game: each alert once, at its own time', () => {
+    const log = simulate('2026-11-02T17:00:00Z', 48, () => [{ ...at7('2026-11-03'), id: 'g7' }]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-11-02T23:00:00.000Z', 'g7:night'], // Mon 6:00 PM
+      ['2026-11-03T02:00:00.000Z', 'g7:cancel'], // Mon 9:00 PM
+      ['2026-11-03T02:30:00.000Z', 'g7:cancel_followup'], // Mon 9:30 PM
+      ['2026-11-03T11:15:00.000Z', 'g7:gameday'], // Tue 6:15 AM
+    ]);
+    expect(log[3].text).toBe(`Tonight: only 3 players in. Cancel court before 7:00 AM: ${COURTRESERVE_CANCEL_URL}`);
+  });
+
+  it('moved from 7:00 to 7:30 PM after the last call went out: not sent again; the unsent alerts move to the new times; the card shows the new truth', () => {
+    const before = { ...at7('2026-11-03'), id: 'mv' };
+    // Moving resets the deadline to the default for the new time (12 hours before 7:30 PM).
+    const after = { ...at730('2026-11-03'), id: 'mv' };
+    const movedAt = at('2026-11-02T23:10:00Z'); // Mon 6:10 PM, after the 6:00 PM last call
+    const log = simulate('2026-11-02T17:00:00Z', 48, (ms) => [ms < movedAt ? before : after]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-11-02T23:00:00.000Z', 'mv:night'], // sent for 7:00 PM; not repeated at 6:30 PM
+      ['2026-11-03T02:30:00.000Z', 'mv:cancel'], // Mon 9:30 PM (was 9:00)
+      ['2026-11-03T03:00:00.000Z', 'mv:cancel_followup'], // Mon 10:00 PM
+      ['2026-11-03T11:45:00.000Z', 'mv:gameday'], // Tue 6:45 AM (was 6:15)
+    ]);
+    expect(log[3].text).toBe(`Tonight: only 3 players in. Cancel court before 7:30 AM: ${COURTRESERVE_CANCEL_URL}`);
+    // A moved game whose new last call is still ahead gets it at the new time.
+    const early = { ...at7('2026-11-05'), id: 'e' };
+    const later = { ...at730('2026-11-05'), id: 'e' };
+    const log2 = simulate('2026-11-04T17:00:00Z', 8, (ms) => (ms < at('2026-11-04T22:00:00Z') ? [early] : [later]));
+    expect(log2.map((l) => [iso(l.ms), l.key])).toEqual([['2026-11-04T23:30:00.000Z', 'e:night']]); // Wed 6:30 PM
+  });
+});
+
+describe('court status gates the alerts', () => {
+  const g7 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 0);
+  const iso = (ms: number) => new Date(ms).toISOString();
+
+  it('booked and not booked games at the same moment: only the booked one gets the last call, cancel warning and game-day check', () => {
+    const booked = { ...g7('2026-11-03'), id: 'yes' };
+    const none = { ...g7('2026-11-03', { booked: false }), id: 'no' };
+    const log = simulate('2026-11-02T17:00:00Z', 30, () => [booked, none]);
+    expect(log.map((l) => l.key)).toEqual(['yes:night', 'yes:cancel', 'yes:cancel_followup', 'yes:gameday']);
+    // The card: the unbooked game shows only "has no court yet" (no cancel-court steps).
+    const t = tasksAt('2026-11-03T02:10:00Z', [booked, none]);
+    expect(t.filter((x) => x.sessionId === 'no').map((x) => [x.kind, x.text])).toEqual([['nocourt_later', 'Tue Nov 3 has no court yet.']]);
+    expect(t.find((x) => x.sessionId === 'yes' && x.kind === 'cancel')!.steps[0].label).toBe('Cancel the court');
+  });
+
+  it('"I booked it" after alert times passed: those alerts are never sent; later ones still are', () => {
+    const before = { ...g7('2026-11-03', { booked: false }), id: 'late' };
+    const bookedAt = '2026-11-03T02:20:00.000Z'; // Mon 9:20 PM: after the 6:00 PM last call and the 9:00 PM cancel warning
+    const after = { ...before, booked: true, bookedAt };
+    const log = simulate('2026-11-02T17:00:00Z', 30, (ms) => [ms < Date.parse(bookedAt) ? before : after]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-11-03T02:30:00.000Z', 'late:cancel_followup'], // 9:30 PM
+      ['2026-11-03T11:15:00.000Z', 'late:gameday'], // 6:15 AM
+    ]);
+    // The card: the one-time "Court booked" text card (no Telegram), plus the cancel checklist (3 in).
+    const t = tasksAt('2026-11-03T02:25:00Z', [after]);
+    expect(t.map((x) => x.kind)).toEqual(['cancel', 'night']);
+    const night = t.find((x) => x.kind === 'night')!;
+    expect(night.text).toBe('Court booked for tomorrow. Text the group the game is on.');
+    expect(night.alerts).toEqual([]);
+    expect(night.buttons[0]).toMatchObject({ label: 'Text the group', action: { type: 'text', text: 'checkin', mark: 'night_text' } });
+    // Tapped: gone for good.
+    expect(tasksAt('2026-11-03T02:25:00Z', [after], [markKey('late', 'night_text')]).map((x) => x.kind)).toEqual(['cancel']);
+  });
+
+  it('booked the morning of the game with 5 in: "Court booked for tonight." and no Telegram at all', () => {
+    const before = { ...g7('2026-11-03', { booked: false, confirmedCount: 5 }), id: 'am' };
+    const after = { ...before, booked: true, bookedAt: '2026-11-03T13:00:00.000Z' }; // Tue 8:00 AM
+    // Before the tap, the 7:15 AM morning-of check went out; after it, nothing until the game (its time passed at 8:00 AM).
+    const log = simulate('2026-11-03T12:00:00Z', 12, (ms) => [ms < at('2026-11-03T13:00:00Z') ? before : after]);
+    expect(log.map((l) => [new Date(l.ms).toISOString(), l.key])).toEqual([['2026-11-03T12:15:00.000Z', 'am:nocourt']]);
+    expect(texts(tasksAt('2026-11-03T13:05:00Z', [after]))).toEqual(['Court booked for tonight. Text the group the game is on.']);
+  });
+
+  it('morning-of check: 4 or more in and no court, at the deadline + 15 minutes, silent once booked or under 4', () => {
+    const five = { ...g7('2026-11-03', { booked: false, confirmedCount: 5 }), id: 'five' };
+    const t = tasksAt('2026-11-03T12:15:00Z', [five]); // Tue 7:15 AM
+    expect(t[0]).toMatchObject({ kind: 'nocourt', text: 'Tonight: 5 in, no court yet. Check CourtReserve for an opening.' });
+    expect(t[0].alerts[0]).toMatchObject({ id: 'nocourt', dueMs: at('2026-11-03T12:15:00Z'), text: `Tonight: 5 in, no court yet. Check CourtReserve for an opening: ${COURTRESERVE_BOOKING_URL}` });
+    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
+    expect(simulate('2026-11-03T05:00:00Z', 15, () => [five]).map((l) => [iso(l.ms), l.key])).toEqual([['2026-11-03T12:15:00.000Z', 'five:nocourt']]);
+    expect(simulate('2026-11-03T05:00:00Z', 15, () => [{ ...five, confirmedCount: 3 }])).toEqual([]);
+    expect(simulate('2026-11-03T05:00:00Z', 15, () => [{ ...five, booked: true, bookedAt: '2026-11-03T05:00:00.000Z' }]).map((l) => l.key)).not.toContain('five:nocourt');
+  });
+
+  it('"has no court yet" for the next 2 games without a court, never more', () => {
+    const list = ['2026-11-05', '2026-11-10', '2026-11-12', '2026-11-17'].map((d) => game(d, { booked: false, confirmedCount: 1 }));
+    expect(texts(tasksAt('2026-11-04T18:00:00Z', list))).toEqual(['Thu Nov 5 has no court yet.', 'Tue Nov 10 has no court yet.']);
+  });
+
+  it('mixed 7:00 and 8:00 PM games on the same day keep their own times', () => {
+    const a = { ...g7('2026-11-05'), id: 'seven' };
+    const b = { ...game('2026-11-05'), id: 'eight' };
+    const log = simulate('2026-11-04T17:00:00Z', 30, () => [a, b]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-11-04T23:00:00.000Z', 'seven:night'], // Wed 6:00 PM
+      ['2026-11-05T00:00:00.000Z', 'eight:night'], // Wed 7:00 PM
+      ['2026-11-05T02:00:00.000Z', 'seven:cancel'], // 9:00 PM
+      ['2026-11-05T02:30:00.000Z', 'seven:cancel_followup'],
+      ['2026-11-05T03:00:00.000Z', 'eight:cancel'], // 10:00 PM
+      ['2026-11-05T03:30:00.000Z', 'eight:cancel_followup'],
+      ['2026-11-05T11:15:00.000Z', 'seven:gameday'], // Thu 6:15 AM
+      ['2026-11-05T12:15:00.000Z', 'eight:gameday'], // Thu 7:15 AM
+    ]);
+  });
+
+  it('across the Sun Nov 1 clock change: booking heads-up at 6:45 AM on both sides, morning-of check at 7:15 AM EST', () => {
+    const sat14 = { ...g7('2026-11-14', { booked: false, confirmedCount: 0 }), id: 'sat14' }; // books Sat Oct 31 (EDT)
+    const sun15 = { ...g7('2026-11-15', { booked: false, confirmedCount: 0 }), id: 'sun15' }; // books Sun Nov 1 (EST)
+    const sun1 = { ...g7('2026-11-01', { booked: false, confirmedCount: 6 }), id: 'sun1' };
+    const log = simulate('2026-10-31T04:00:00Z', 40, () => [sat14, sun15, sun1]);
+    expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
+      ['2026-10-31T10:45:00.000Z', 'sat14:book'], // Sat 6:45 AM EDT
+      ['2026-10-31T11:30:00.000Z', 'sat14:book_followup'], // Sat 7:30 AM EDT
+      ['2026-11-01T11:45:00.000Z', 'sun15:book'], // Sun 6:45 AM EST
+      ['2026-11-01T12:15:00.000Z', 'sun1:nocourt'], // Sun 7:15 AM EST (deadline 7:00 AM)
+      ['2026-11-01T12:30:00.000Z', 'sun15:book_followup'], // Sun 7:30 AM EST
+    ]);
+  });
+});
+
+describe('ticks every 5 minutes', () => {
+  it('48 hours, Mon noon to Wed noon: each alert exactly once, at its time', () => {
+    const sessions = () => [game('2026-11-03'), game('2026-11-05', { confirmedCount: 5 }), game('2026-11-17', { booked: false, confirmedCount: 0 })];
+    const log = simulate('2026-11-02T17:00:00Z', 48, sessions);
+    expect(log.map((l) => [new Date(l.ms).toISOString(), l.key])).toEqual([
+      ['2026-11-03T00:00:00.000Z', 's-2026-11-03:night'], // Mon 7:00 PM (25 hours before 8:00 PM)
+      ['2026-11-03T03:00:00.000Z', 's-2026-11-03:cancel'], // Mon 10:00 PM
+      ['2026-11-03T03:30:00.000Z', 's-2026-11-03:cancel_followup'], // Mon 10:30 PM
+      ['2026-11-03T11:45:00.000Z', 's-2026-11-17:book'], // Tue 6:45 AM
+      ['2026-11-03T12:15:00.000Z', 's-2026-11-03:gameday'], // Tue 7:15 AM
+      ['2026-11-03T12:30:00.000Z', 's-2026-11-17:book_followup'], // Tue 7:30 AM
+    ]);
+    expect(new Set(log.map((l) => l.key)).size).toBe(log.length);
+  });
+
+  it('across the Sun Nov 1 clock change: Sunday and Monday games alert at the right Eastern times', () => {
+    const sun = { ...game('2026-11-01'), id: 'sun' };
+    const mon = { ...game('2026-11-02', { confirmedCount: 5 }), id: 'mon' };
+    expect(sun.startsAt).toBe('2026-11-02T01:00:00.000Z'); // 8:00 PM EST
+    const log = simulate('2026-10-31T12:00:00Z', 60, () => [sun, mon]);
+    expect(log.map((l) => [new Date(l.ms).toISOString(), l.key])).toEqual([
+      ['2026-10-31T23:00:00.000Z', 'sun:night'], // Sat Oct 31, 7:00 PM EDT (same clock time, across the change)
+      ['2026-11-01T02:00:00.000Z', 'sun:cancel'], // Sat 10:00 PM EDT
+      ['2026-11-01T02:30:00.000Z', 'sun:cancel_followup'],
+      ['2026-11-01T12:15:00.000Z', 'sun:gameday'], // Sun 7:15 AM EST (after the change)
+      ['2026-11-02T00:00:00.000Z', 'mon:night'], // Sun 7:00 PM EST
+    ]);
+  });
+
+  it('a missed tick is caught up within the hour; after an hour it is dropped, never sent late twice', () => {
+    const sessions = () => [game('2026-11-03')];
+    const night = (ms: number) => dueAlerts(nextTasks(ms, sessions(), new Set(), OPTS), ms, new Set()).map((a) => a.id);
+    expect(night(at('2026-11-03T00:55:00Z'))).toContain('night');
+    expect(night(at('2026-11-03T00:00:00Z') + CATCH_UP_MS)).not.toContain('night');
+  });
+
+  it('silent once Alex taps the button, even before the alert time', () => {
+    const log = simulate('2026-11-02T17:00:00Z', 12, () => [game('2026-11-03', { confirmedCount: 5 })], (ms) => (ms >= at('2026-11-02T23:00:00Z') ? [markKey('s-2026-11-03', 'night_text')] : []));
+    expect(log).toEqual([]);
+  });
+
+  it('nothing for canceled games', () => {
+    expect(simulate('2026-11-02T17:00:00Z', 48, () => [game('2026-11-03', { canceled: true, canceledAt: '2026-11-01T15:00:00Z' })])).toEqual([]);
+  });
+});
+
+// ---------- Through the real API: the tick, marks, the switch ----------
+
+const TOKEN = '123456:FAKE-test-token-never-real';
+const CHAT = '9988776655';
+const SECRET = 'test-cron-secret-0123456789abcdef0123456789';
+
+const GO = 'https://pickleball.juncaj.net/go/TOKEN';
+
+async function smartGroup(failFirst = 0) {
+  const app = new TestApp();
+  const sent: string[] = [];
+  let fails = failFirst;
+  app.env = {
+    ...app.env,
+    SITE_URL: 'https://pickleball.juncaj.net',
+    TELEGRAM_BOT_TOKEN: TOKEN,
+    TELEGRAM_CHAT_ID: CHAT,
+    CRON_SECRET: SECRET,
+    GO_LINKS: 'on',
+    TELEGRAM_FETCH: (async (_url: string, init: RequestInit) => {
+      if (fails > 0) {
+        fails--;
+        return new Response(JSON.stringify({ ok: false, description: 'Too Many Requests' }), { status: 429 });
+      }
+      // Each direct text link has its own signed token; tests compare the words around it.
+      sent.push(String(JSON.parse(String(init.body)).text).replace(/\/go\/[A-Za-z0-9_.-]+/, '/go/TOKEN'));
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    }) as typeof fetch,
+  };
+  const ctx = await setupGroup(app);
+  const tick = async (secret = SECRET) => {
+    const r = await ctx.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': secret });
+    await app.settle();
+    return r;
+  };
+  const dash = async () => (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+  const sessionOn = async (date: string) => (await dash()).sessions.find((x: any) => new Date(x.startsAt).toLocaleDateString('en-CA', { timeZone: TZ }) === date);
+  return { app, ctx, sent, tick, dash, sessionOn };
+}
+
+/** Put n players into a game, book its court, then forget the "it's on" style tap alerts. */
+async function fill(g: Awaited<ReturnType<typeof smartGroup>>, date: string, n: number) {
+  const s = await g.sessionOn(date);
+  await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
+  for (const name of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie'].slice(0, n)) {
+    const phone = await playerPhone(g.ctx, name);
+    const r = await phone.call('POST', `/api/sessions/${s.id}/join`, {});
+    expect(r.status).toBe(200);
+  }
+  await g.app.settle();
+  g.sent.length = 0;
+  return s;
+}
+
+describe('the tick endpoint', () => {
+  it('48 hours of ticks through the API: the same six alerts, once each, with no phone numbers or money', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z'); // Mon Nov 2, noon EST
+    await g.dash(); // makes the games up to six weeks out
+    await fill(g, '2026-11-03', 3);
+    await fill(g, '2026-11-05', 5);
+    const end = g.app.now + 48 * HOUR;
+    while (g.app.now <= end) {
+      const r = await g.tick();
+      expect(r.status).toBe(200);
+      g.app.now += 5 * MIN;
+    }
+    expect(g.sent).toEqual([
+      `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
+      `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
+      `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
+      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
+      `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
+      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
+    ]);
+    for (const t of g.sent) {
+      expect(t).not.toMatch(/555|\(313\)|\$|venmo/i);
+    }
+  });
+
+  it('the card on Home lists the same task as the alert, and a tap there keeps Telegram quiet', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T22:00:00Z'); // Mon 5:00 PM, before the last call
+    await g.dash();
+    const s = await fill(g, '2026-11-03', 5);
+    g.app.now = at('2026-11-03T00:00:00Z'); // 7:00 PM: the card opens
+    const d = await g.dash();
+    const { dashboardTasks } = await import('../src/pages/admin/doNow');
+    const cards = dashboardTasks(d, g.app.now, ADMIN);
+    expect(cards.find((t) => t.kind === 'night')?.text).toBe('Tuesday: 5 players in.');
+    const r = await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/task-mark`, { mark: 'night_text' });
+    expect(r.status).toBe(200);
+    expect((await g.dash()).taskMarks).toContain(`${s.id}:night_text`);
+    g.app.now = at('2026-11-03T00:05:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([]);
+    // A second tap is harmless.
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/task-mark`, { mark: 'night_text' })).status).toBe(200);
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/task-mark`, { mark: 'not_a_mark' })).status).toBe(400);
+  });
+
+  it('a mark needs the organizer', async () => {
+    const g = await smartGroup();
+    const s = await g.sessionOn('2026-10-27');
+    const player = await playerPhone(g.ctx, 'Blair');
+    expect((await player.call('POST', `/api/admin/sessions/${s.id}/task-mark`, { mark: 'night_text' })).status).toBe(401);
+  });
+
+  it('a wrong or missing secret gets Not found and sends nothing', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    expect((await g.tick('wrong')).status).toBe(404);
+    expect((await g.tick('')).status).toBe(404);
+    expect((await g.tick(SECRET.slice(0, -1) + 'x')).status).toBe(404);
+    expect(g.sent).toEqual([]);
+    const noSecret = await smartGroup();
+    noSecret.app.env = { ...noSecret.app.env, CRON_SECRET: undefined };
+    expect((await noSecret.tick()).status).toBe(404);
+  });
+
+  it('the Smart alerts switch (and the main Telegram switch) silence the tick', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    expect((await g.dash()).alerts.smartAlerts).toBe(true);
+    await g.ctx.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: false });
+    expect((await g.dash()).alerts.smartAlerts).toBe(false);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    expect((await g.tick()).data.skipped).toBe('smart_off');
+    await g.ctx.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: true, enabled: false });
+    expect((await g.tick()).data.skipped).toBe('alerts_off');
+    await g.ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: true });
+    await g.tick();
+    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]);
+  });
+
+  it('a failed Telegram send is written down and retried on the next tick, and the site keeps working', async () => {
+    const g = await smartGroup(2);
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    const s = await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    const first = await g.tick();
+    expect(first.status).toBe(200);
+    expect(first.data).toMatchObject({ sent: 0, failed: 1 });
+    const failed = await g.app.db.prepare("SELECT task, detail FROM task_log WHERE kind = 'failed'").all<{ task: string; detail: string }>();
+    expect(failed.results).toEqual([{ task: 'night', detail: 'Telegram asked us to slow down. Try again in a minute.' }]);
+    // A player's tap is unaffected.
+    const phone = await playerPhone(g.ctx, 'Frankie');
+    expect((await phone.call('POST', `/api/sessions/${s.id}/join`, {})).status).toBe(200);
+    await g.app.settle();
+    g.sent.length = 0;
+    // (The join's own "it's on" alert used up the second fake failure.) Retries wait 15 minutes.
+    g.app.now += 5 * MIN;
+    expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
+    g.app.now += 10 * MIN;
+    expect((await g.tick()).data).toMatchObject({ sent: 1 });
+    expect(g.sent).toEqual([`Tuesday: 4 players in. Text the group to confirm: ${GO}`]);
+    g.app.now += 5 * MIN;
+    expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
+  });
+
+  it('Telegram down: 3 tries, 15 minutes apart, then it gives up (the hour\'s alert budget stays for player alerts)', async () => {
+    const g = await smartGroup(1000);
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    let tries = 0;
+    for (let i = 0; i < 12; i++) {
+      tries += (await g.tick()).data.failed;
+      g.app.now += 5 * MIN;
+    }
+    expect(tries).toBe(3);
+    const slots = await g.app.db.prepare("SELECT COUNT(*) AS n FROM rate_events WHERE kind = 'telegram'").first<{ n: number }>();
+    expect(slots!.n).toBeLessThanOrEqual(3 + 3); // the 3 joins' own tries, plus 3
+  });
+
+  it('Telegram too slow to answer: the alert is not sent a second time', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    let calls = 0;
+    g.app.env = {
+      ...g.app.env,
+      TELEGRAM_FETCH: (async () => {
+        calls++;
+        const e = new Error('timed out');
+        e.name = 'TimeoutError';
+        throw e;
+      }) as typeof fetch,
+    };
+    g.app.now = at('2026-11-03T00:00:00Z');
+    for (let i = 0; i < 6; i++) {
+      await g.tick();
+      g.app.now += 5 * MIN;
+    }
+    expect(calls).toBe(1);
+  });
+
+  it('Home and Settings still load if the new table were missing', async () => {
+    const g = await smartGroup();
+    g.app.db.raw.exec('DROP TABLE task_log');
+    const d = await g.ctx.organizer.call('GET', '/api/admin/dashboard');
+    expect(d.status).toBe(200);
+    expect(d.data.taskMarks).toEqual([]);
+    expect(d.data.alerts.smartAlerts).toBe(true);
+  });
+
+  it('a broken Telegram (network error) never breaks the tick', async () => {
+    const g = await smartGroup();
+    g.app.env = { ...g.app.env, TELEGRAM_FETCH: (async () => { throw new Error('down'); }) as typeof fetch };
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    const r = await g.tick();
+    expect(r.status).toBe(200);
+    expect(r.data).toMatchObject({ sent: 0, failed: 1 });
+  });
+
+  it('moving the game after its last call went out: no repeat, and the next alerts follow the new time', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    const s = await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z'); // Mon 7:00 PM: last call for the 8:00 PM game
+    await g.tick();
+    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]);
+    // Moved to 8:30 PM: its new last call (7:30 PM) is not sent again.
+    expect((await g.ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: '2026-11-04T01:30:00.000Z', endsAt: '2026-11-04T03:30:00.000Z' })).status).toBe(200);
+    g.sent.length = 0;
+    const until = at('2026-11-03T13:20:00Z'); // up to 8:20 AM (the booking alert for Nov 17 comes at 8:30)
+    while (g.app.now <= until) {
+      await g.tick();
+      g.app.now += 5 * MIN;
+    }
+    // New deadline 8:30 AM: cancel warning 10:30 PM, follow-up 11:00 PM, game-day check 7:45 AM.
+    expect(g.sent.filter((t) => !t.includes('Nov 17'))).toEqual([
+      `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
+      `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
+      `Tonight: only 3 players in. Cancel court before 8:30 AM: ${COURTRESERVE_CANCEL_URL}`,
+    ]);
+    const card = (await import('../src/pages/admin/doNow')).dashboardTasks(await g.dash(), at('2026-11-03T12:50:00Z'), ADMIN);
+    expect(card[0].text).toBe('Tonight: only 3 players in. Cancel court before 8:30 AM.');
+  });
+
+  it('moving the game to another day: its alerts can go again for the new day', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    const s = await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    await g.tick();
+    expect(g.sent).toHaveLength(1);
+    // Tue 8:00 PM moved to Wed 8:00 PM (still booked): Wed's last call (Tue 7:00 PM) goes out.
+    await g.ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: '2026-11-05T01:00:00.000Z', endsAt: '2026-11-05T03:00:00.000Z' });
+    g.sent.length = 0;
+    g.app.now = at('2026-11-04T00:00:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([`Wednesday: 3 players in, need a 4th. Text the group: ${GO}`]);
+  });
+
+  it('the hour\'s alert limit is not counted as a failed try', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    // Use up the hour's 20 alert slots.
+    for (let i = 0; i < 20; i++) await g.app.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'telegram', 'server', ?)").bind(`x${i}`, new Date(g.app.now - 60_000).toISOString()).run();
+    expect((await g.tick()).data).toMatchObject({ sent: 0, failed: 0 });
+    expect((await g.app.db.prepare("SELECT COUNT(*) AS n FROM task_log WHERE kind IN ('failed', 'sent')").first<{ n: number }>())!.n).toBe(0);
+    // Once the slots free up (still inside the catch-up hour), it goes.
+    await g.app.db.prepare("DELETE FROM rate_events WHERE id LIKE 'x%'").run();
+    g.app.now += 5 * MIN;
+    expect((await g.tick()).data).toMatchObject({ sent: 1 });
+  });
+
+  it('"I booked it" after the last call: no Telegram for it, and the card says "Court booked for tomorrow"', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    const s = await g.sessionOn('2026-11-03');
+    for (const name of ['Blair', 'Casey', 'Devon', 'Emery']) await (await playerPhone(g.ctx, name)).call('POST', `/api/sessions/${s.id}/join`, {});
+    await g.app.settle();
+    g.sent.length = 0;
+    // No court: nothing at 7:00 PM.
+    g.app.now = at('2026-11-03T00:00:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([]);
+    // Booked at 7:20 PM.
+    g.app.now = at('2026-11-03T00:20:00Z');
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {})).status).toBe(200);
+    g.app.now = at('2026-11-03T00:25:00Z');
+    await g.tick();
+    expect(g.sent).toEqual([]);
+    const { dashboardTasks } = await import('../src/pages/admin/doNow');
+    const cards = dashboardTasks(await g.dash(), g.app.now, ADMIN);
+    expect(cards.find((t) => t.sessionId === s.id)?.text).toBe('Court booked for tomorrow. Text the group the game is on.');
+  });
+
+  it('two ticks at the same moment send an alert once', async () => {
+    const g = await smartGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    await g.dash();
+    await fill(g, '2026-11-03', 3);
+    g.app.now = at('2026-11-03T00:00:00Z');
+    await Promise.all([g.tick(), g.tick(), g.tick()]);
+    expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]);
+  });
+
+  it('the TEST smart alert is clearly labeled and refused in Pretend', async () => {
+    const g = await smartGroup();
+    const r = await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {});
+    expect(r.status).toBe(200);
+    await g.app.settle();
+    expect(g.sent[0].startsWith('TEST smart alert from Pickleball Bros.')).toBe(true);
+    const p = await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {}, { 'X-Pretend-Now': '2026-11-03T12:00' });
+    expect(p.status).toBe(403);
+  });
+});
+
+describe('the cron Worker', () => {
+  it('only knocks on /api/cron/tick with the secret, and a failure is just a number', async () => {
+    const { knock } = await import('../worker/cron');
+    const calls: { url: string; init: RequestInit }[] = [];
+    const ok = (async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch;
+    expect(await knock({ SITE_URL: 'https://pickleball-club-9h0.pages.dev/', CRON_SECRET: SECRET }, ok)).toBe(200);
+    expect(calls[0].url).toBe('https://pickleball-club-9h0.pages.dev/api/cron/tick');
+    expect((calls[0].init.headers as Record<string, string>)['X-Cron-Secret']).toBe(SECRET);
+    expect(await knock({ SITE_URL: 'https://x.example', CRON_SECRET: SECRET }, (async () => { throw new Error('down'); }) as typeof fetch)).toBe(0);
+  });
+});

@@ -341,6 +341,17 @@
   font-weight: 700;
   color: var(--pc-muted);
 }
+/* Half-hour ranges like "7:30–9:30 PM": smaller and a little tighter so they fit under the tile. */
+.schedule .sched-time.long {
+  font-size: 0.74rem;
+  letter-spacing: -0.02em;
+}
+.tier-next .sched-time.long {
+  font-size: 0.68rem;
+}
+.tier-later .sched-time.long {
+  font-size: 0.64rem;
+}
 
 /* ---- Body: head (status + calendar), main (count, names), money line, links ---- */
 .schedule .sched-body {

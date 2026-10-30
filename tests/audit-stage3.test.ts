@@ -475,7 +475,7 @@ describe('the Text menu and Home suggestion cards', () => {
     }
   });
 
-  it('the Check-in card: from 6:00 PM the day before, to everyone signed up including the waitlist', async () => {
+  it('the Check-in card: from the night-before last call (7:00 PM before an 8:00 PM game), to everyone signed up including the waitlist', async () => {
     const ctx = await group();
     expect((await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } })).status).toBe(200);
     const s = await on(ctx, '2026-11-03');
@@ -485,8 +485,8 @@ describe('the Text menu and Home suggestion cards', () => {
       const d = await dashboard(ctx);
       return { d, all: suggestions(d, ctx.app.now).filter((c) => c.sessionId === s.id) };
     };
-    expect((await at('2026-11-02T17:59:00-05:00')).all.map((c) => c.kind)).not.toContain('checkin');
-    const { d, all } = await at('2026-11-02T18:00:00-05:00');
+    expect((await at('2026-11-02T18:59:00-05:00')).all.map((c) => c.kind)).not.toContain('checkin');
+    const { d, all } = await at('2026-11-02T19:00:00-05:00');
     const c = all.find((x) => x.kind === 'checkin')!;
     expect(c).toBeDefined();
     expect(c.body).toBe(`Pickleball tomorrow, 8:00 PM. Can't make it? Update here: ${LINK}`);

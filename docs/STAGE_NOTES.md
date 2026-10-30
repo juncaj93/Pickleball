@@ -294,6 +294,90 @@ deployment `f8b0971e`. Tests: 645 unit, 843 browser (run 229, names 24, gates 32
 alerts 52, court 84, held 81, credit 153, suggest 35, popup 33, texts 52, circles 18,
 audit-stage3 3, cancel-reason 8, round2 25, want-in 4, double-tap 4, dryrun-screens 6),
 all green. After deploy, read-only: the backup address returned 200 with the new bundle.
+## "Do this now" card, smart Telegram alerts, game times and courts (Oct 30, 2026)
+
+Status: built and tested; deploy details below.
+
+### What changed
+- **One brain.** `nextTasks()` in `shared/tasks.ts` makes the organizer's task
+  list. The card at the top of Home and the Telegram alerts both use it, so they
+  always say the same thing. Refund requests stay first, with their own card and
+  alert. Full rules, timing constants and free-plan math: `docs/SMART_ALERTS.md`.
+- **Courts gate the alerts.** Without "court booked" a game gets no last call
+  and no cancel warnings. Instead:
+  - a 6:45 AM heads-up and a 7:30 AM follow-up, only for the game exactly 14
+    days out (CourtReserve opens at 7:00 AM)
+  - a morning-of check at the deadline + 15 minutes, when 4 or more are in
+  - "has no court yet" on the card for the next 2 games.
+
+  Booking after an alert time never sends that alert late. Booking after the
+  last call shows a one-time "Court booked for tonight" card.
+- **Times follow each game.** Every time comes from the game's own start, end
+  and cancellation deadline (wall clock, so the Nov 1 clock change is safe):
+  - last call 25 hours before the start
+  - cancel warning 10 hours before the deadline, follow-up 30 minutes later
+  - game-day check 45 minutes before the deadline
+  - finalize 5 minutes after the end.
+- **Usual game time.** Settings > Schedule > Usual game time (start and end,
+  default 8:00 to 10:00 PM). It's stored in the existing settings, so no
+  schema change. It only shapes new Tue/Thu games. Regular games are matched by
+  calendar day, so changing it never adds a second game on a day. The Add game
+  form starts at the usual time.
+- **Changing one game's time.** Gear > Edit booking > Change time or date. The
+  end moves with the start. Saving opens the existing Moved text, then asks "Is
+  the court booked for the new time? Yes / No" (new `court-answer` route).
+  - On the same day, alerts not sent yet move and sent ones never repeat.
+  - Moved to another day, its alerts and taps start over.
+- **The clock.** A separate tiny Worker, `pickleball-alerts-clock`
+  (`worker/cron.ts`), runs a cron every 5 minutes. It only calls
+  `/api/cron/tick` with a shared secret (`CRON_SECRET`). The site sends with
+  its existing Telegram secrets.
+  - Each alert is claimed before sending, so it goes once.
+  - A missed tick catches up within 60 minutes.
+  - A failed send is retried every 15 minutes, up to 3 tries.
+  - The hourly limit is shared with player alerts.
+  - Kill switch: Settings > Alerts > Smart alerts. "Send TEST smart alert"
+    sends one message that starts with "TEST".
+- **Direct text link.** The night-before alert links to `/go/<token>`. That page
+  opens Messages with the text and no recipients, and shows a big Open Messages
+  button if the phone blocks it. The token is signed, single purpose, expires in
+  6 hours or at the start, and has no phone number.
+
+### Database
+`migrations/0015_task_log.sql`: one new table, `task_log`. It holds card taps,
+when a court was marked booked, sent and failed alerts, and the Smart alerts
+switch. Additive only.
+
+### Deploy 1: the new table, the card, game times, court rules (Fri Oct 30, 2026, about 2:00 PM Eastern)
+- Merged with the dry-run channel's work first (main at 357b0d7).
+- Migration `0015_task_log.sql` applied to the live database at about 1:58 PM.
+- Pages deployment `5ab12c01`, commit dcafeaf.
+- Read-only checks: site 200, the new screens are in the live bundle, the
+  `task_log` table is there and empty, and `/api/cron/tick` answers Not found
+  (no secret yet).
+- Restore points:
+  - Time Travel bookmark right before the migration:
+    `0000013b-00000000-00005114-e0b9eae6abdcff65e60ba9667f75bb08`
+  - Full SQL export (144 rows, has phone numbers, not committed):
+    `live-before-smart-alerts-2026-10-30.sql` in this session's scratch folder.
+  - Code rollback: Pages deployment `e7074075` (commit 0b21eb1). The old code
+    ignores the new table, so rolling back needs no database change.
+- Tests on the merged code: 704 unit, 856 browser checks in 18 files, all green.
+
+### Deploy 2 (clock Worker) and 3 (direct text link): waiting on Alex
+- This session can't write Cloudflare secrets (blocked by its safety rules),
+  and its Cloudflare key can't create Workers ("No access"). So the Worker and
+  `CRON_SECRET` still need setting up. Until then no smart alert is sent; the
+  card on Home works.
+- Paste-ready Worker code: `worker/dashboard-paste.js`.
+- Deploy 3: set `GO_LINKS = "on"` in `wrangler.toml` and redeploy (after
+  Deploy 2). The TEST smart alert then carries a TEST direct link (never marks
+  anything done) for the iPhone test.
+- Step-by-step for the next session: `docs/SMART_ALERTS.md`, "Finishing Deploy 2 and Deploy 3".
+- Tests after the last change: 705 unit; browser 856 (run 229, names 24, gates 32, alerts 52, court 84,
+  held 81, credit 153, suggest 35, popup 33, texts 52, circles 18, audit-stage3 3, cancel-reason 8,
+  round2 25, want-in 4, double-tap 4, dryrun-screens 6, do-now 13), all green.
+
 
 ## Live updates, Game on, My games, loading polish, Undo (Fri Oct 30, 2026)
 

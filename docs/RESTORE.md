@@ -97,3 +97,8 @@ Backups made before the "any number from 4 to 10" change (Oct 29, 2026) have no
 (no refund requests, every game not finalized yet). A backup made after the change
 restores onto a database that has migration 0013 applied; run the migrations first
 (step 2 does that for the practice copy, and the live database already has them).
+
+Restoring a backup file also empties the "Do this now" log (`task_log`, Nov 2026): which card buttons were
+tapped, which smart alerts went out, and the Smart alerts switch. After a restore, check Settings > Alerts >
+Smart alerts (it comes back On), and done tasks may show on Home again until tapped. An alert that came due
+in the hour before the restore could be sent once more.

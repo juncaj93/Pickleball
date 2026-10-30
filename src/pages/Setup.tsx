@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, minutesLabel } from '../../shared/settings';
 import { type FormEvent, useState } from 'react';
 import { api, ApiError, copyText, navigate } from '../lib';
 import { TopBar } from '../Shell';
@@ -89,7 +90,9 @@ export function SetupPage() {
               Group name
               <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} maxLength={60} required placeholder="Pickleball Bros" />
             </label>
-            <p className="small muted">Sessions: every Tuesday and Thursday, 8:00–10:00 PM Eastern time.</p>
+            <p className="small muted">
+              Sessions: every Tuesday and Thursday, {minutesLabel(DEFAULT_SETTINGS.defaultStartMinutes)} to {minutesLabel(DEFAULT_SETTINGS.defaultEndMinutes)} Eastern time. You can change the usual time later in Settings &gt; Schedule.
+            </p>
             <NumberField label="Plan sessions this many weeks ahead" value={horizonWeeks} onChange={setHorizonWeeks} error={horizonError} />
           </div>
 

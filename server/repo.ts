@@ -1,6 +1,6 @@
 import { type SeatPrice, seatPrices } from '../shared/pricing';
 import { planSessions } from '../shared/schedule';
-import { zonedTimeToUtc } from '../shared/time';
+import { localParts, zonedTimeToUtc } from '../shared/time';
 import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
@@ -159,20 +159,30 @@ export async function getSession(db: D1Database, groupId: string, sessionId: str
  * Create any missing Tue/Thu sessions inside the rolling horizon. Safe to
  * call on every page load: it only inserts slots that don't exist yet, and
  * the unique (group_id, planned_starts_at) key blocks duplicates even if two
- * loads race. Slots are matched on planned_starts_at, so a session the
- * organizer moved to another time is never re-created in its old slot.
+ * loads race. Slots are matched by the calendar day of planned_starts_at,
+ * so a session the organizer moved to another time is never re-created in
+ * its old slot, and a new usual time in Settings only shapes games that
+ * don't exist yet.
  */
 export async function ensureSessions(db: D1Database, group: GroupRow, nowMs: number): Promise<number> {
   const settings = settingsOf(group);
   const firstStart = visibleFrom(group);
-  const planned = planSessions(nowMs, group.timezone, settings.horizonWeeks).filter((p) => p.startsAt >= firstStart);
+  const planned = planSessions(nowMs, group.timezone, settings.horizonWeeks, settings.defaultStartMinutes, settings.defaultEndMinutes).filter(
+    (p) => p.startsAt >= firstStart,
+  );
   if (planned.length === 0) return 0;
+  // A regular game already planned for that calendar day, at whatever time, counts: changing the usual
+  // time in Settings must never add a second game next to an existing one.
+  const dayOf = (iso: string) => {
+    const p = localParts(Date.parse(iso), group.timezone);
+    return `${p.year}-${p.month}-${p.day}`;
+  };
   const { results } = await db
     .prepare('SELECT planned_starts_at FROM sessions WHERE group_id = ? AND planned_starts_at >= ?')
-    .bind(group.id, planned[0].startsAt)
+    .bind(group.id, new Date(Date.parse(planned[0].startsAt) - 86_400_000).toISOString())
     .all<{ planned_starts_at: string }>();
-  const existing = new Set(results.map((r) => r.planned_starts_at));
-  const missing = planned.filter((p) => !existing.has(p.startsAt));
+  const existing = new Set(results.map((r) => dayOf(r.planned_starts_at)));
+  const missing = planned.filter((p) => !existing.has(dayOf(p.startsAt)));
   if (missing.length === 0) return 0;
   const now = new Date(nowMs).toISOString();
   await db.batch(

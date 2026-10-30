@@ -28,6 +28,7 @@ import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, Gea
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 import { reach, reminderText } from './textMenu';
+import { markTask } from './DoNow';
 import { isPlayed, lateDropsAll } from './todo';
 import { TextButton } from './Texts';
 import '../../credit-session.css';
@@ -419,7 +420,7 @@ export function SessionSheets({
           <BookingForm ctx={ctx} s={s} onDone={onClose} />
           {!s.state.flags.started && (
             <details className="advanced move-session">
-              <summary>Move this session</summary>
+              <summary>Change time or date (move this session)</summary>
               <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />
             </details>
           )}
@@ -452,9 +453,46 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
         Reason (optional)
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder={canceled ? 'Rain in the forecast' : 'Court swap'} />
       </label>
-      <SmsDraft to="Everyone signed up and waiting" phone={null} phones={who.phones} missing={who.missing} openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'} body={body} />
+      <SmsDraft
+        to="Everyone signed up and waiting"
+        phone={null}
+        phones={who.phones}
+        missing={who.missing}
+        openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'}
+        body={body}
+        onOpen={canceled ? () => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {}) : undefined}
+      />
+      {!canceled && <CourtForNewTime ctx={ctx} s={s} />}
       {canceled && <CreditBackList s={s} />}
     </div>
+  );
+}
+
+/** After a move: "Is the court booked for the new time? Yes / No" sets the court status from the answer. */
+function CourtForNewTime({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, run } = useAction(ctx);
+  const [answer, setAnswer] = useState<boolean | null>(null);
+  const pick = async (booked: boolean) => {
+    const ok = await run(() => api('POST', `/api/admin/sessions/${s.id}/court-answer`, { booked }), booked ? 'Court marked booked' : 'Court marked not booked');
+    if (ok) setAnswer(booked);
+  };
+  return (
+    <fieldset className="charge-ask" data-court-question>
+      <legend>Is the court booked for the new time?</legend>
+      <div className="segmented" role="group" aria-label="Is the court booked for the new time?">
+        <button type="button" aria-pressed={answer === true} disabled={busy} onClick={() => void pick(true)}>
+          Yes
+        </button>
+        <button type="button" aria-pressed={answer === false} disabled={busy} onClick={() => void pick(false)}>
+          No
+        </button>
+      </div>
+      {answer === false && (
+        <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+          Book on CourtReserve
+        </CourtReserveLink>
+      )}
+    </fieldset>
   );
 }
 
@@ -866,14 +904,27 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
   const [date, setDate] = useState(startLocal.slice(0, 10));
   const [start, setStart] = useState(startLocal.slice(11));
   const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
+  // The game's length (2 hours usually): a new start moves the end with it, unless the end is changed by hand.
+  const lengthMin = Math.max(30, Math.round((Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 60_000));
+  const pickStart = (v: string) => {
+    setStart(v);
+    const m = /^(\d{2}):(\d{2})$/.exec(v);
+    if (!m) return;
+    const total = Math.min(Number(m[1]) * 60 + Number(m[2]) + lengthMin, 23 * 60 + 59);
+    setEnd(`${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`);
+  };
   const { busy, run } = useAction(ctx);
   const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
   const endsAt = date && end ? fromLocalInputValue(`${date}T${end}`, tz) : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
-    const ok = await run(() => api('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt }), 'Session moved');
-    if (ok) onDone();
+    let changed = false;
+    const ok = await run(async () => {
+      changed = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
+    }, 'Session moved');
+    // Then the Moved text and "Is the court booked for the new time?" (only when the time really changed).
+    if (ok && changed) onDone();
   }
 
   return (
@@ -890,7 +941,7 @@ function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView
       <div className="row" style={{ flexWrap: 'nowrap' }}>
         <label className="field" style={{ flex: 1 }}>
           Start
-          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+          <input type="time" value={start} onChange={(e) => pickStart(e.target.value)} required />
         </label>
         <label className="field" style={{ flex: 1 }}>
           End

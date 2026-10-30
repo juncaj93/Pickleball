@@ -7,7 +7,8 @@
 // file decides WHEN each one is worth suggesting, and which cards to show.
 import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { remindAllMessage, siteAddress } from '../../../shared/messages';
-import { formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../../../shared/time';
+import { formatShortDate, formatTimeRange, localParts } from '../../../shared/time';
+import { nightLastCallMs } from '../../../shared/tasks';
 import { owedGames, reminderText, sessionTexts, type TextItem } from './textMenu';
 
 export type SuggestionKind = 'promoted' | 'need' | 'checkin' | 'final' | 'pay';
@@ -32,16 +33,13 @@ export interface Suggestion {
 
 /** Fewer than 4 in: suggested once the game is this close. */
 export const NEED_WITHIN_HOURS = 48;
-/** Check-in: from this hour (local) on the day before. */
-export const CHECKIN_FROM_HOUR = 18;
+
 /** An unpaid game is suggested for a reminder once it was this many calendar days ago. */
 export const PAY_AFTER_DAYS = 7;
 
-/** 6:00 PM on the calendar day before the game, in the group's time zone. */
+/** Check-in: from the night-before last call (25 hours before the game's own start), the same moment the "Do this now" card opens. */
 export function checkInOpensMs(startsAt: string, tz: string): number {
-  const p = localParts(Date.parse(startsAt), tz);
-  const d = new Date(Date.UTC(p.year, p.month - 1, p.day - 1));
-  return zonedTimeToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), CHECKIN_FROM_HOUR, 0, tz);
+  return nightLastCallMs(startsAt, tz);
 }
 
 /** Whole calendar days from the game's date to today, in the group's time zone (not blocks of 24 hours). */

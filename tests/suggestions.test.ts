@@ -92,15 +92,15 @@ describe('Need players: fewer than 4 in, game within 48 hours', () => {
   });
 });
 
-describe('Check-in: 4 or more in, from 6:00 PM the day before', () => {
-  it('opens at 6:00 PM the day before, not at 5:59 PM, in Eastern time', async () => {
+describe('Check-in: 4 or more in, from the night-before last call (25 hours before the start)', () => {
+  it('opens at 7:00 PM the day before an 8:00 PM game, not at 6:59 PM, in Eastern time', async () => {
     const ctx = await group();
     const s = await on(ctx, '2026-11-03'); // Tue 8:00 PM EST
     await join(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
-    expect(new Date(checkInOpensMs(s.startsAt, TZ)).toISOString()).toBe('2026-11-02T23:00:00.000Z'); // Mon 6:00 PM EST
-    at(ctx, '2026-11-02T22:59:00Z'); // Mon 5:59 PM
+    expect(new Date(checkInOpensMs(s.startsAt, TZ)).toISOString()).toBe('2026-11-03T00:00:00.000Z'); // Mon 7:00 PM EST
+    at(ctx, '2026-11-02T23:59:00Z'); // Mon 6:59 PM
     expect(kinds((await now(ctx)).all)).not.toContain('checkin');
-    at(ctx, '2026-11-02T23:00:00Z'); // Mon 6:00 PM
+    at(ctx, '2026-11-03T00:00:00Z'); // Mon 7:00 PM
     const { d, all } = await now(ctx);
     const c = all.find((x) => x.kind === 'checkin')!;
     expect(c).toBeDefined();
@@ -117,12 +117,15 @@ describe('Check-in: 4 or more in, from 6:00 PM the day before', () => {
     expect(kinds((await now(ctx)).all)).not.toContain('checkin');
   });
 
-  it('is 6:00 PM local on the calendar day before, also around the Sun Nov 1 clock change', () => {
-    expect(new Date(checkInOpensMs('2026-11-08T01:00:00.000Z', TZ)).toISOString()).toBe('2026-11-06T23:00:00.000Z'); // Sat Nov 7 8 PM EST game: Fri Nov 6, 6 PM EST
-    // Mon Nov 2 8:00 PM EST game: the day before is Sun Nov 1 (a 25-hour day); 6:00 PM EST is 23:00Z.
-    expect(new Date(checkInOpensMs('2026-11-03T01:00:00.000Z', TZ)).toISOString()).toBe('2026-11-01T23:00:00.000Z');
-    // Sun Nov 1 game at 8 PM EST: the day before is Sat Oct 31, 6:00 PM EDT is 22:00Z.
-    expect(new Date(checkInOpensMs('2026-11-02T01:00:00.000Z', TZ)).toISOString()).toBe('2026-10-31T22:00:00.000Z');
+  it('is one clock hour earlier on the day before (25 hours), also around the Sun Nov 1 clock change, for 8:00, 7:00 and 7:30 PM games', () => {
+    expect(new Date(checkInOpensMs('2026-11-08T01:00:00.000Z', TZ)).toISOString()).toBe('2026-11-07T00:00:00.000Z'); // Sat Nov 7 8 PM EST game: Fri Nov 6, 7 PM EST
+    // Mon Nov 2 8:00 PM EST game: the day before is Sun Nov 1 (a 25-hour day); 7:00 PM EST is 00:00Z.
+    expect(new Date(checkInOpensMs('2026-11-03T01:00:00.000Z', TZ)).toISOString()).toBe('2026-11-02T00:00:00.000Z');
+    // Sun Nov 1 game at 8 PM EST: the day before is Sat Oct 31, 7:00 PM EDT is 23:00Z.
+    expect(new Date(checkInOpensMs('2026-11-02T01:00:00.000Z', TZ)).toISOString()).toBe('2026-10-31T23:00:00.000Z');
+    // 7:00 PM and 7:30 PM games: 6:00 PM and 6:30 PM the day before.
+    expect(new Date(checkInOpensMs('2026-11-04T00:00:00.000Z', TZ)).toISOString()).toBe('2026-11-02T23:00:00.000Z');
+    expect(new Date(checkInOpensMs('2026-11-06T00:30:00.000Z', TZ)).toISOString()).toBe('2026-11-04T23:30:00.000Z');
   });
 
   it('is for 4 or more in (not under 4), and says who is missing a number', async () => {

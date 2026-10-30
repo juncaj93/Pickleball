@@ -1014,11 +1014,12 @@ async function main() {
         assert((await admin.getByRole('article', { name }).count()) === 0, `old ${name} card still on Home`);
       }
       assert((await sessionCards(admin).locator('.chip').count()) === 0, 'session cards should have no status chip');
-      // Court buttons live only inside session cards.
+      // Court buttons live only inside session cards, plus "I booked it" on the "Do this now" card (no court yet).
       for (const label of ['I booked it', 'Court opened', "Didn't open"]) {
         const all = await admin.getByRole('button', { name: label, exact: true }).count();
         const inCards = await sessionCards(admin).getByRole('button', { name: label, exact: true }).count();
-        assert(all === inCards, `${label} shows outside a session card`);
+        const onDoNow = await admin.locator('.do-now').getByRole('button', { name: label, exact: true }).count();
+        assert(all === inCards + onDoNow && (label === 'I booked it' || onDoNow === 0), `${label} shows outside a session card`);
       }
       const cards = sessionCards(admin);
       for (let i = 0; i < (await cards.count()); i++) {
@@ -1470,7 +1471,7 @@ async function main() {
       const tile = (await row.locator('.tile').innerText()).replace(/\s+/g, ' ').trim();
       assert(/^(TUE|THU|TONIGHT) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
       // The short time sits under the tile ("8\u201310 PM", en dash); the long "8:00 to 10:00 PM" line is gone.
-      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u201310 PM$/ });
+      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u20139:30 PM$|^7:30\u201310 PM$/ });
       await timeEl.waitFor();
       const tb = await row.locator('.tile').boundingBox();
       const mb = await timeEl.boundingBox();
@@ -2107,42 +2108,47 @@ async function main() {
       // The court-waitlist banner keeps its words and buttons on one row (checked before it opened).
     });
 
-    await check('check-in card: the text to the players who are in (all their numbers, the site address), hides after the tap; never "sent"', async () => {
+    await check('check-in the night before: the Do this now card opens the Check-in text with no numbers, hides after the tap; never "sent"', async () => {
       const first = await admin.evaluate(async () => {
         const d = await (await fetch('/api/admin/dashboard')).json();
-        return d.sessions.find((s) => Date.parse(s.startsAt) > Date.parse(d.now) + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
+        const later = d.sessions.filter((s) => Date.parse(s.startsAt) > Date.parse(d.now) + 30 * 3600_000 && s.status !== 'canceled' && s.confirmedCount === 4);
+        return later.find((s) => s.bookingStatus === 'booked') ?? later[0];
       });
       assert(first, 'need a later session with 4 in');
+      // The night-before card is for games with a booked court.
+      if (first.bookingStatus !== 'booked') await admin.request.post(`${BASE}/api/admin/sessions/${first.id}/booked`, { data: {}, headers: { Origin: BASE } });
       const clock = (atMs) => admin.request.post(`${BASE}/__dev/clock`, { data: { atMs } });
       try {
         await clock(Date.parse(first.startsAt) - 20 * 3600_000);
         await admin.reload();
-        const card = admin.locator(`article[data-suggest="checkin"][data-session="${first.id}"]`);
+        // The night before, the check-in is the "Do this now" card's job (no separate suggestion card): its
+        // button opens Messages with the Check-in words and NO numbers, so the group chat can be picked.
+        // The addressed version (all their numbers) stays in the game's Text menu.
+        assert((await admin.locator(`article[data-suggest="checkin"][data-session="${first.id}"]`).count()) === 0, 'no second check-in card');
+        if (await admin.locator('.dn-more[aria-expanded="false"]').count()) await admin.locator('.dn-more').click();
+        const card = admin.locator(`.dn-card[data-task="night"][data-session="${first.id}"]`);
         await card.waitFor({ timeout: 5000 }).catch(async () => {
           const names = await admin.locator('article').evaluateAll((as) => as.map((a) => a.getAttribute('aria-label')).filter(Boolean));
-          throw new Error(`no check-in card for ${first.startsAt}; Home shows: ${names.join(' | ')}`);
+          throw new Error(`no night-before card for ${first.startsAt}; Home shows: ${names.join(' | ')}`);
         });
-        const open = card.getByRole('link', { name: /^Text/ });
+        assert((await card.locator('.dn-text').innerText()).trim() === 'Tonight: 4 players in.', `card words: ${await card.locator('.dn-text').innerText()}`);
+        const open = card.getByRole('link', { name: /^Text the group to confirm/ });
         const href = await open.getAttribute('href');
-        const phones = first.roster.filter((r) => r.status === 'confirmed' && r.phone).length;
-        const addressed = href.startsWith('sms://open?addresses=') ? href.split('addresses=')[1].split('&body=')[0] : href.split('?body=')[0].replace(/^sms:/, '');
-        assert(phones === 4 && addressed.split(',').length === 4 && addressed.split(',').every((n) => /^\+1\d{10}$/.test(n)), `should address all ${phones} players at once: ${href}`);
+        assert(/^sms:[&?]body=/.test(href), `should open with no numbers: ${href}`);
         // The game is 20 hours away, so later the same day: "tonight".
         const want = `Pickleball tonight, 8:00 PM. Can't make it? Update here: ${SITE}`;
         assert(smsOf(href).body === want, `Messages opens with: ${smsOf(href).body}`);
-        assert((await card.innerText()).includes('4 players'), 'who it goes to');
-        assert((await card.getByText(/Missing numbers/).count()) === 0, 'no missing numbers when all are saved');
-        assert((await card.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy on the card');
         assert(!/\bsent\b/i.test(await card.innerText()), 'card must never say sent');
         await admin.screenshot({ path: path.join(SHOTS, 'admin-check-in-card.png'), fullPage: true });
         await card.evaluate((el) => el.querySelector('a[href^="sms"]').addEventListener('click', (e) => e.preventDefault()));
         await open.click();
         await card.waitFor({ state: 'detached' });
-        // Later the same day, still 4 in: it stays hidden (same situation), also after a reload.
+        // Later the same day, still 4 in: it stays done, also after a reload (the tap is saved on the server).
         await clock(Date.parse(first.startsAt) - 12.5 * 3600_000);
         await admin.reload();
         await admin.locator('main').waitFor();
-        assert((await admin.locator(`article[data-suggest="checkin"][data-session="${first.id}"]`).count()) === 0, 'came back with the same situation');
+        assert((await admin.locator(`.dn-card[data-task="night"][data-session="${first.id}"]`).count()) === 0, 'came back after the tap');
+        assert((await admin.locator(`article[data-suggest="checkin"][data-session="${first.id}"]`).count()) === 0, 'suggestion came back');
       } finally {
         await clock(Date.now() + BASE_OFFSET);
         await admin.reload();
@@ -2162,7 +2168,8 @@ async function main() {
       const change = sheet.getByRole('link', { name: /^Change court on CourtReserve/ });
       assert((await change.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1', 'reschedule should link to the modify/cancel page');
       await sheet.getByLabel('Start', { exact: true }).fill('19:30');
-      await sheet.getByText(/New time: .*7:30 to 10:00 PM$/).waitFor();
+      // The end moves with the start (the game keeps its 2 hours).
+      await sheet.getByText(/New time: .*7:30 to 9:30 PM$/).waitFor();
       await sheet.getByRole('button', { name: 'Move session' }).click();
       // Straight to a ready text for the group, with an optional reason.
       const moved = admin.locator('dialog[open]');
@@ -2174,9 +2181,12 @@ async function main() {
       await moved.getByRole('link', { name: 'Text the players who are in' }).waitFor();
       assert((await moved.getByRole('button', { name: /^Copy/ }).count()) === 0, 'no Copy');
       assert(!/\bsent\b/i.test(await moved.innerText()), 'never say sent');
+      // Then: is the court booked for the new time? The answer sets the court status.
+      await moved.getByRole('group', { name: 'Is the court booked for the new time?' }).getByRole('button', { name: 'Yes' }).click();
+      await moved.getByRole('button', { name: 'Yes', pressed: true }).waitFor();
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText('7:30 to 10:00 PM', { exact: true }).waitFor();
+      await card.getByText('7:30 to 9:30 PM', { exact: true }).waitFor();
     });
 
     await check('a booked session links to the CourtReserve modify/cancel page from More and from Cancel session', async () => {
@@ -2440,7 +2450,9 @@ async function main() {
         await f.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
         // The text for the opened spot is now the suggestion card for that game (not a second copy on the late-drop card).
         assert((await card.locator('.bubble').count()) === 0, 'the late-drop card no longer carries a text');
-        const sug = admin.locator(`article[data-suggest][data-session="${first.id}"]`);
+        // From 6:00 PM the night before, the "Do this now" card carries this text instead of a suggestion card.
+        if (await admin.locator('.dn-more[aria-expanded="false"]').count()) await admin.locator('.dn-more').click();
+        const sug = admin.locator(`article[data-suggest][data-session="${first.id}"], .dn-card[data-task="night"][data-session="${first.id}"]`).first();
         await sug.waitFor();
         // Whichever fits the game now: the spot opened for someone moved in, need players, or the check-in once it is back to 4 or 6.
         const spot = smsOf(await sug.getByRole('link', { name: /^Text/ }).getAttribute('href'));

@@ -1298,9 +1298,15 @@ function ScheduleRow({
     >
       <div className="sched-tilecol">
         <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} />
-        <div className="sched-time">
-          <span aria-hidden="true">{formatTimeShort(s.startsAt, s.endsAt, tz)}</span>
-        </div>
+        {(() => {
+          const short = formatTimeShort(s.startsAt, s.endsAt, tz);
+          // Half-hour games ("7:30–9:30 PM") are wider: a touch smaller so they stay under the tile.
+          return (
+            <div className={`sched-time${short.length > 10 ? ' long' : ''}`}>
+              <span aria-hidden="true">{short}</span>
+            </div>
+          );
+        })()}
       </div>
       <h2 id={`s-${s.id}`} className="sr-only">
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}

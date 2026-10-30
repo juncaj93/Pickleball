@@ -46,7 +46,7 @@ function localApi(setupToken: string): Plugin {
             headers,
             body: req.method === 'GET' || req.method === 'HEAD' ? undefined : Buffer.concat(chunks),
           });
-          const response: Response = await handleApi(request, { DB: db, SETUP_TOKEN: setupToken }, Date.now() + clockOffsetMs);
+          const response: Response = await handleApi(request, { DB: db, SETUP_TOKEN: setupToken, CRON_SECRET: process.env.CRON_SECRET, GO_LINKS: process.env.GO_LINKS }, Date.now() + clockOffsetMs);
           res.statusCode = response.status;
           response.headers.forEach((value, key) => {
             if (key.toLowerCase() !== 'set-cookie') res.setHeader(key, value);

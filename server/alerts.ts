@@ -15,10 +15,15 @@ import { HttpError } from './http';
 import { isPretend } from './pretend';
 import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
 import * as v from './validate';
+import { setSmartAlerts, smartAlertsOn } from './tasks';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
 const SEND_TIMEOUT_MS = 5000;
+/** What deliver() says when Telegram took too long: the message may still have arrived. */
+export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
+/** How deliver() starts its message when the hour's alert limit is used up (nothing went to Telegram). */
+export const PAUSED_PREFIX = 'Paused:';
 const HOUR_MS = 3600_000;
 
 interface AlertRow {
@@ -34,6 +39,11 @@ interface AlertRow {
 
 async function alertRow(db: D1Database, groupId: string): Promise<AlertRow | null> {
   return db.prepare('SELECT * FROM organizer_alerts WHERE group_id = ?').bind(groupId).first<AlertRow>();
+}
+
+/** The organizer's switches, read fresh. */
+export async function prefsOfGroup(db: D1Database, groupId: string): Promise<AlertPrefs> {
+  return prefsOf(await alertRow(db, groupId));
 }
 
 function prefsOf(row: AlertRow | null): AlertPrefs {
@@ -56,6 +66,8 @@ export async function alertsView(ctx: Ctx, groupId: string): Promise<AdminDashbo
   const row = await alertRow(ctx.db, groupId);
   return {
     ...prefsOf(row),
+    // Display only: if the new table is ever missing, Settings still loads.
+    smartAlerts: await smartAlertsOn(ctx.db, groupId).catch(() => true),
     connected: connected(ctx.env),
     lastAt: row?.last_at ?? null,
     lastOk: row?.last_ok === null || row?.last_ok === undefined ? null : !!row.last_ok,
@@ -63,9 +75,10 @@ export async function alertsView(ctx: Ctx, groupId: string): Promise<AdminDashbo
   };
 }
 
-/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedMin?, refundRequests? }: one switch at a time is fine. */
+/** PUT /api/admin/alerts { enabled?, drop36?, belowMin?, reachedMin?, refundRequests?, smartAlerts? }: one switch at a time is fine. */
 export async function updateAlerts(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
+  if (body.smartAlerts !== undefined) await setSmartAlerts(ctx.db, group.id, v.bool(body.smartAlerts, 'smartAlerts'), ctx.nowIso);
   const cur = prefsOf(await alertRow(ctx.db, group.id));
   const pick = (key: keyof AlertPrefs) => (body[key] === undefined ? cur[key] : v.bool(body[key], key));
   const next: AlertPrefs = {
@@ -140,7 +153,7 @@ async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ 
     });
   } catch (err) {
     const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError');
-    return { ok: false, error: timedOut ? "Telegram didn't answer in time." : "Couldn't reach Telegram." };
+    return { ok: false, error: timedOut ? TIMEOUT_ERROR : "Couldn't reach Telegram." };
   }
   if (res.ok) return { ok: true };
   const data = (await res.json().catch(() => ({}))) as { description?: unknown };
@@ -152,15 +165,16 @@ function siteUrl(ctx: Ctx): string {
 }
 
 /** Rate limit, send, write down how it went. Never throws. */
-async function deliver(ctx: Ctx, groupId: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function deliver(ctx: Ctx, groupId: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!(await takeSlot(ctx))) {
-      const error = `Paused: more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
+      const error = `${PAUSED_PREFIX} more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
       await recordResult(ctx, groupId, false, error);
       return { ok: false, error };
     }
     const sent = await sendTelegram(ctx.env, siteUrl(ctx), text);
-    await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error);
+    // Once Telegram took it, it counts as sent even if writing down the result fails (so it is never sent twice).
+    await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error).catch(() => {});
     return sent;
   } catch {
     return { ok: false, error: 'Something went wrong sending the alert.' };

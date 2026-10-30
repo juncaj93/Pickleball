@@ -353,6 +353,10 @@ export interface AdminDashboard {
   refundRequests: RefundRequestView[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
+  /** "Do this now" taps saved on the server, as "sessionId:mark". */
+  taskMarks: string[];
+  /** When each court was marked booked on the site, by session id (games booked before Nov 2026 have none). */
+  courtBookedAt: Record<string, string>;
   /** Settings > Alerts: the switches and whether Telegram is set up. Never the token or chat ID. */
   alerts: {
     enabled: boolean;
@@ -360,6 +364,8 @@ export interface AdminDashboard {
     belowMin: boolean;
     reachedMin: boolean;
     refundRequests: boolean;
+    /** Settings > Alerts > Smart alerts: the "Do this now" Telegram messages. */
+    smartAlerts: boolean;
     connected: boolean;
     lastAt: string | null;
     lastOk: boolean | null;

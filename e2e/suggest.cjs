@@ -195,13 +195,13 @@ async function main() {
       const { body } = smsOf(await card.getByRole('link', { name: /^Text/ }).getAttribute('href'));
       assert(/^Need 1 more for pickleball/.test(body), body);
     });
-    await check('with 4 in the Need card is gone; 6:00 PM the day before brings Check-in to the 4 who are in', async () => {
+    await check('with 4 in the Need card is gone; the last call (25 hours before, 7:00 PM for an 8:00 PM game) brings Check-in to the 4 who are in', async () => {
       await roster(thu, 'Julian');
-      await clock('2026-11-02T17:59:00-05:00'); // Mon 5:59 PM
+      await clock('2026-11-02T18:59:00-05:00'); // Mon 6:59 PM
       await page.reload();
       await page.locator('section[aria-labelledby="sessions-title"] article').first().waitFor();
-      assert((await cards(page).count()) === 0, `cards at 5:59 PM: ${await cards(page).count()}`);
-      await clock('2026-11-02T18:00:00-05:00'); // Mon 6:00 PM
+      assert((await cards(page).count()) === 0, `cards at 6:59 PM: ${await cards(page).count()}`);
+      await clock('2026-11-02T19:00:00-05:00'); // Mon 7:00 PM
       await page.reload();
       const card = cards(page).first();
       await card.waitFor();
