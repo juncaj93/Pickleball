@@ -1393,7 +1393,8 @@ describe('Money, Players and per-session numbers agree across months', () => {
     await endGame(ctx, nov);
     expect((await finalize(ctx, nov.id)).status).toBe(200);
     view = await adminSession(ctx, nov.id);
-    expect(view.finalized).toMatchObject({ playedCount: 4, priceCents: 1400, creditBackCents: 1400 });
+    expect(view.finalized).toMatchObject({ playedCount: 4, priceCents: 1400, creditBackCents: 0 });
+    expect(row(view, 'Harper')).toMatchObject({ creditBackCents: 1400, creditBackReason: 'dropped' });
     a = await agree(ctx);
     expect(a.months[1]).toMatchObject({ collectedCents: 4 * 1400, heldCents: 0, creditsOwedCents: 1400 });
     expect(a.months[0].creditsOwedCents).toBe(3 * 500);
