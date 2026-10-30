@@ -1,0 +1,110 @@
+# "Do this now" card and smart Telegram alerts
+
+Times are Eastern (America/Detroit). Everything here runs on the Cloudflare
+free plan and costs $0.
+
+## What it does
+
+- **Home card.** The top of the organizer's Home shows the one most urgent
+  task, with "+N more" for the rest. Refund requests stay above it, as before.
+- **Telegram.** The same words, with a link, at the times below. If the
+  organizer already tapped the card's button, Telegram stays quiet.
+- **One brain.** `nextTasks()` in `shared/tasks.ts` makes the list for both the
+  card and Telegram, so they can't disagree.
+
+| When | Card | Telegram |
+| --- | --- | --- |
+| Night before, from 6:00 PM | "Tuesday: 3 players in, need a 4th." + **Text the group** (Need players text, no recipients). At 4 or more: "Tuesday: 5 players in." + **Text the group to confirm** (Check-in text, no recipients) | 8:00 PM, unless the text button was tapped |
+| Night before, 10:00 PM, under 4 | Checklist: Cancel the court (CourtReserve) + **Court canceled**, Cancel the session (the cancel prompt with the reason field), Text everyone it's canceled (Canceled text to the signed-up numbers) | 10:00 PM "Tuesday: only 3 players in. Cancel court: ...". 10:30 PM follow-up only if the game is still not canceled on the site |
+| Game day, 7:15 AM | Same checklist; the words name the game's own deadline: "Tonight: only 3 players in. Cancel court before 8:00 AM." | Only if still under 4, not canceled, the deadline hasn't passed, and Court canceled wasn't tapped |
+| Booking day, 8:30 AM | "Tue Nov 17 opened." (+ holiday name) with **Book on CourtReserve** and **I booked it** | 8:30 AM and one follow-up at 10:30 AM, only while not marked booked |
+| After the game, 10:05 PM | Finalize who played (opens the existing Finalize card), then Text the post-game note (Final price text, no recipients) | 10:05 PM, only if 4 or more played, not canceled, not finalized |
+
+Not sent for canceled games, past games, the demo, or Pretend it's.
+
+## How it runs
+
+```
+Cloudflare cron (every 5 min)
+  -> Worker "pickleball-alerts-clock" (worker/cron.ts, no public address)
+     -> POST https://pickleball-club-9h0.pages.dev/api/cron/tick  (header X-Cron-Secret)
+        -> server/tasks.ts cronTick: read games, counts and marks from D1,
+           nextTasks(), send what came due in the last 60 minutes and wasn't sent
+```
+
+- The Worker holds no Telegram token and reads no data. The site sends with
+  the Telegram secrets it already had. Both sides share one random secret,
+  `CRON_SECRET`, set on the Pages project and on the Worker.
+- **Once only.** Before sending, the tick writes a `sent` row into
+  `task_log`. A unique index allows one per game and alert, so two ticks at
+  once can't both send.
+- **Failures.** A failed send gives its row back and writes a `failed` row
+  with the reason. The next tick retries, inside the 60-minute window only.
+- **Limits.** At most 5 alerts per tick. The existing cap of 20 Telegram
+  messages an hour still applies.
+- **Kill switch.** Settings > Alerts > Smart alerts. The main "Telegram
+  alerts to me" switch also silences them. "Send TEST smart alert" sends one
+  message that starts with "TEST".
+- **Direct text link.** The night-before alert links to `/go/<token>`. That
+  page opens Messages with the text filled in and no recipients. If the phone
+  blocks the automatic open, it shows a big **Open Messages** button.
+  - The token is signed with an HMAC derived from `CRON_SECRET`.
+  - It names one game and does one thing: give out that game's night-before
+    text and mark it opened.
+  - It expires 6 hours after the alert, and never later than the game's start.
+  - It holds no phone number and needs no sign-in.
+
+### Database
+
+`migrations/0015_task_log.sql` adds one new table, `task_log`. Nothing else
+changes. The `kind` column says what each row is:
+
+| kind | What it means |
+| --- | --- |
+| `mark` | The organizer tapped a card button |
+| `sent` | An alert went to Telegram |
+| `failed` | A send didn't go through |
+| `off` | The Smart alerts switch is off |
+
+Rows are deleted along with their game (ON DELETE CASCADE). A restore from a
+backup file empties this table. Worst case, that resends an alert that came
+due in the last hour.
+
+## Free-plan math (limits read from developers.cloudflare.com, Oct 30, 2026)
+
+| Limit (Free plan) | Real number | Our use |
+| --- | --- | --- |
+| Workers + Pages Functions requests | 100,000 a day per account (one shared pool) | 288 cron runs + 288 tick requests = 576 a day (0.6%) |
+| Cron Triggers | 5 per account | 1 (the account had no Workers before) |
+| CPU per invocation | 10 ms | Worker: one fetch, well under 1 ms of CPU. Tick: a few small queries and string work |
+| Subrequests per invocation | 50 | Worker: 1. Tick: at most 5 Telegram calls |
+| D1 rows read | 5,000,000 a day | About 200 rows a tick (detail below), so about 58,000 a day (1.2%) |
+| D1 rows written | 100,000 a day | Only when something sends or a button is tapped: a few dozen a day |
+| D1 storage | 500 MB per database, 5 GB per account | `task_log` grows by roughly 10 small rows per game |
+
+Rows read per tick, with about 15 games in range and 6 players each:
+
+| Read | Rows |
+| --- | --- |
+| Group | 1 |
+| Alert switches | 1 |
+| Smart alerts switch (indexed) | 0 to 1 |
+| Games (the sessions table holds about 100 rows a year) | up to about 100 |
+| Who's in (indexed by game) | about 90 |
+| Marks and sent rows (indexed by game) | a few dozen |
+
+The tick stops early when Telegram isn't connected or either switch is off.
+
+On the Free plan, going over a limit returns an error. It never sends a bill:
+Workers return error 1027, and D1 refuses queries until the daily reset at
+00:00 UTC. Free never charges, so the cost stays $0.
+
+One thing the docs don't confirm: whether cron runs count toward the 100,000
+requests. The table counts them anyway.
+
+## Turning it off
+
+- **Pause:** Settings > Alerts > Smart alerts off. The card on Home stays.
+- **Stop the clock:** `npx wrangler delete --config worker/wrangler.toml`.
+  You can also delete the Worker "pickleball-alerts-clock" in the Cloudflare
+  dashboard under Workers & Pages.
