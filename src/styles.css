@@ -470,20 +470,33 @@ a {
   box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 8%);
 }
 
-/* "Ryan  not you?": the name, then small gray underlined text on the same line.
- * When both don't fit (the CREDIT chip takes room on a phone), "not you?" moves
- * under the name, and a long name wraps to two lines instead of being cut. */
+/* "Ryan  not you?": the name, then small gray underlined text on the same line. */
 .title-line {
   display: flex;
-  flex-wrap: wrap;
   align-items: baseline;
-  column-gap: 8px;
-  row-gap: 0;
+  gap: 8px;
   min-width: 0;
 }
 .title-line h1 {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   min-width: 0;
   flex: 0 1 auto;
+}
+/* With the CREDIT chip there is less room: rather than "Brand…", "not you?"
+ * moves under the name when both don't fit, and a long name wraps to two lines. */
+.topbar-row:has(.credit-chip) .title-line {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.topbar-row:has(.credit-chip) .title-line h1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 .not-you {
   position: relative;
