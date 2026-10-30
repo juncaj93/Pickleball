@@ -34,6 +34,8 @@ export interface Env {
   /** Cloudflare secrets for the organizer's Telegram alerts. Never sent to a browser. */
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
+  /** Shared with the cron Worker (worker/cron.ts): only a caller that knows it can run the 5-minute alert tick. */
+  CRON_SECRET?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

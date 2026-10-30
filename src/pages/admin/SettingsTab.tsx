@@ -416,12 +416,13 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedMin' | 'refundRequests';
+type AlertKey = 'enabled' | 'drop36' | 'belowMin' | 'reachedMin' | 'refundRequests' | 'smartAlerts';
 const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
   { key: 'drop36', label: 'Someone drops within 36 hours' },
   { key: 'belowMin', label: 'A game falls below 4' },
   { key: 'reachedMin', label: "A game reaches 4 (it's on)" },
   { key: 'refundRequests', label: 'Refund requests' },
+  { key: 'smartAlerts', label: 'Smart alerts ("Do this now" reminders)' },
 ];
 
 /**
@@ -437,7 +438,9 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
     belowMin: a.belowMin,
     reachedMin: a.reachedMin,
     refundRequests: a.refundRequests,
+    smartAlerts: a.smartAlerts,
   });
+  const [smartTest, setSmartTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
   const [test, setTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
 
   function flip(key: AlertKey, value: boolean) {
@@ -452,6 +455,17 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       setTest({ status: 'sent' });
     } catch (err) {
       setTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn't send the test alert." });
+    }
+    void ctx.reload();
+  }
+
+  async function sendSmartTest() {
+    setSmartTest({ status: 'sending' });
+    try {
+      await api('POST', '/api/admin/alerts/smart-test', {});
+      setSmartTest({ status: 'sent' });
+    } catch (err) {
+      setSmartTest({ status: 'failed', message: err instanceof ApiError ? err.message : "Couldn't send the TEST smart alert." });
     }
     void ctx.reload();
   }
@@ -504,7 +518,18 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         )}
       </div>
       {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
-      <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount).</p>
+      <div className="alert-test">
+        <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending' || !on.enabled || !on.smartAlerts}>
+          {smartTest?.status === 'sending' ? 'Sending…' : 'Send TEST smart alert'}
+        </button>
+        {smartTest?.status === 'sent' && (
+          <span className="alert-result ok" role="status">
+            ✓ Sent to Telegram
+          </span>
+        )}
+      </div>
+      {smartTest?.status === 'failed' && <Notice tone="danger">{smartTest.message}</Notice>}
+      <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount). Smart alerts say what to do next (night before, booking day, after the game), checked every 5 minutes, and stay quiet once you tap the button on Home.</p>
     </>
   );
 }

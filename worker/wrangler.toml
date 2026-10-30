@@ -1,0 +1,16 @@
+# The smart-alert clock (worker/cron.ts). Free plan: one cron trigger.
+# Deploy: npx wrangler deploy --config worker/wrangler.toml
+# Secret (same value as the Pages project's CRON_SECRET):
+#   npx wrangler secret put CRON_SECRET --config worker/wrangler.toml
+name = "pickleball-alerts-clock"
+main = "cron.ts"
+compatibility_date = "2025-10-01"
+# No public address: it only runs on its schedule.
+workers_dev = false
+preview_urls = false
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+SITE_URL = "https://pickleball-club-9h0.pages.dev"

@@ -38,6 +38,7 @@ import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, mov
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
+import { loadMarks } from './tasks';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -149,6 +150,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     creditLedger,
     refundRequests: await pendingRequestViews(ctx, group),
     me: await organizerPlayer(ctx, group, false),
+    taskMarks: await loadMarks(ctx.db, group.id),
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
   };

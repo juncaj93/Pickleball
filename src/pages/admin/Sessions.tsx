@@ -26,6 +26,7 @@ import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, Gea
 import { courtStatus } from '../../../shared/court';
 import { type AdminCtx, deadlineLine } from '../Admin';
 import { reach, reminderText } from './textMenu';
+import { markTask } from './DoNow';
 import { isPlayed, lateDropsAll } from './todo';
 import { TextButton } from './Texts';
 import '../../credit-session.css';
@@ -445,7 +446,15 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
         Reason (optional)
         <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder={canceled ? 'Rain in the forecast' : 'Court swap'} />
       </label>
-      <SmsDraft to="Everyone signed up and waiting" phone={null} phones={who.phones} missing={who.missing} openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'} body={body} />
+      <SmsDraft
+        to="Everyone signed up and waiting"
+        phone={null}
+        phones={who.phones}
+        missing={who.missing}
+        openLabel={canceled ? 'Text the players who were in' : 'Text the players who are in'}
+        body={body}
+        onOpen={canceled ? () => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {}) : undefined}
+      />
       {canceled && <CreditBackList s={s} />}
     </div>
   );
