@@ -901,6 +901,11 @@ async function main() {
       assert((await p.getByRole('heading', { name: 'Who are you?' }).count()) === 0, 'asked for the name again');
     });
 
+    // Pay prompts only show once a court is booked (a game with no court reads like a normal game and asks for nothing).
+    // The checks up to "someone drops out of 6" are about the flat $14, so they run on a game with a booked court; it is put
+    // back afterwards so the later "not booked" checks still start from a game that needs a court. See e2e/no-court.cjs.
+    const courtGame = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.find((x) => !x.state.flags.past).id;
+    assert((await admin.request.post(`${BASE}/api/admin/sessions/${courtGame}/booked`, { data: {}, headers: { Origin: BASE } })).ok(), 'could not book the first game');
     await check('player Home is one button per session, no extra screens', async () => {
       const card = firstCard(players.Alex);
       const buttons = (await card.getByRole('button').allInnerTexts()).map((t) => t.trim());
@@ -986,6 +991,10 @@ async function main() {
       }
       await admin.screenshot({ path: path.join(SHOTS, 'admin-five-in.png'), fullPage: true });
     });
+    assert(
+      (await admin.request.put(`${BASE}/api/admin/sessions/${courtGame}/booking`, { data: { bookingStatus: 'needs_booking', courtCostCents: null }, headers: { Origin: BASE } })).ok(),
+      'could not put the first game back to not booked',
+    );
 
     console.log('Booking & payments');
     await check('Home: court and players are separate lines; no chip; no duplicate court cards', async () => {
