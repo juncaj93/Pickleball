@@ -8,7 +8,6 @@ import { finalMessage } from '../shared/messages';
 import { creditBack, finalPrice } from '../shared/pricing';
 import { HOUR, PLAYER_NAMES, playerPhone, setupGroup } from './harness';
 
-type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 type Phone = Awaited<ReturnType<typeof playerPhone>>;
 
 const MORE = ['Gale', 'Harper', 'Indy', 'Jules', 'Kit', 'Lee'];
@@ -423,6 +422,59 @@ describe('dry run: edge cases', () => {
     await finalize(d, g2.id, { everyone: true });
     expect((await d.ctx.organizer.call('POST', `/api/admin/sessions/${g2.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(409);
     await balanced(d, 'end');
+  });
+
+  it('KNOWN MONEY QUESTION: credit used on a seat that still owes is in no Money row until the rest is paid', async () => {
+    const d = await dry();
+    const [g1, g2] = await games(d);
+    await join(d, g1.id, ['Alex']);
+    await venmoAndMark(d, 'Alex', g1.id);
+    await d.ctx.organizer.call('POST', `/api/admin/sessions/${g1.id}/decision`, { decision: 'cancel', confirm: true });
+    await (await d.phone('Alex')).call('POST', '/api/me/refund-request', { cents: 1100 });
+    const req = (await dash(d)).refundRequests[0];
+    await d.ctx.organizer.call('POST', `/api/admin/refund-requests/${req.id}`, { action: 'refunded' });
+    d.book.cashedOut += 1100;
+    await join(d, g2.id, PLAYER_NAMES);
+    expect(await useCredit(d, 'Alex', g2.id)).toMatchObject({ usedCents: 300 });
+    for (const x of PLAYER_NAMES.slice(1)) await venmoAndMark(d, x, g2.id);
+    endOf(d, g2);
+    await finalize(d, g2.id, { everyone: true });
+    const v = await view(d, g2.id);
+    expect(row(v, 'Alex').owesCents).toBe(600);
+    // Today: the $3 is missing from collected + held + pots (books short by $3) and the court row leaves it out too.
+    let collected = 0, held = 0;
+    for (const m of ['2026-10', '2026-11']) { const r = (await d.ctx.organizer.call('GET', `/api/admin/money?month=${m}`)).data; collected += r.collectedCents; held += r.heldCents; }
+    const pots = ((await dash(d)).creditLedger as any[]).reduce((s, l) => s + l.balanceCents, 0);
+    expect(d.book.cashIn - (collected + held + pots + d.book.cashedOut)).toBe(300);
+    // Court row: 5 x $9 paid + Alex's $6 still owed = $51; with his $3 credit it would be $54.
+    expect(v.court.playersCoverCents).toBe(5100);
+    // Once Alex pays the $6 rest, everything balances again.
+    await venmoAndMark(d, 'Alex', g2.id);
+    await balanced(d, 'Alex paid the rest');
+  });
+
+  it('Players tab "played" leaves out a game someone was marked "did not play" for', async () => {
+    const d = await dry();
+    const [, g2] = await games(d);
+    await join(d, g2.id, PLAYER_NAMES);
+    endOf(d, g2);
+    await finalize(d, g2.id, played(d, PLAYER_NAMES.slice(0, 5)));
+    const players = (await dash(d)).players as any[];
+    expect(players.find((p) => p.name === 'Frankie').played).toBe(0);
+    expect(players.find((p) => p.name === 'Alex').played).toBe(1);
+  });
+
+  it('a second cash-out request says "cash out", not "refund"', async () => {
+    const d = await dry();
+    const [g1] = await games(d);
+    await join(d, g1.id, ['Alex']);
+    await venmoAndMark(d, 'Alex', g1.id);
+    await d.ctx.organizer.call('POST', `/api/admin/sessions/${g1.id}/decision`, { decision: 'cancel', confirm: true });
+    const alex = await d.phone('Alex');
+    expect((await alex.call('POST', '/api/me/refund-request', { cents: 500 })).status).toBe(200);
+    const again = await alex.call('POST', '/api/me/refund-request', { cents: 500 });
+    expect(again.status).toBe(409);
+    expect(again.data.message).toBe('You already asked for a cash out. Cancel it to make a new one.');
   });
 });
 

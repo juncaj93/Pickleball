@@ -229,3 +229,38 @@ back up, apply migration 0014, then deploy the code (the new code names the new 
   after that the date. Tests in `tests/day-phrases.test.ts` (Friday, Monday, Tuesday,
   Thursday, Sunday Nov 1 across the clock change, and the Eastern-vs-UTC edge).
 - Tests: 565 unit, 833 browser, all green.
+
+### Finalize dry run (Fri Oct 30, 2026, before the first real game Tue Nov 3)
+Done on a local copy with fake data only. Nothing on the live site was changed.
+
+What was walked: every player count 4 to 10 (organizer playing, one unpaid, one paid
+with credit, one "I paid", the rest Venmo + Mark paid), drops before and after the
+cutoff (cash, credit, unpaid), a no-show, the waitlist moving in, partial credit,
+someone owing nothing, a canceled game after payment, Reopen and redo, Undo of
+"Paid with credit", a cash-out request pending during finalize, double taps, the
+Nov 1 clock change (Sat Oct 31, Sun Nov 1 including the repeated 1 AM hour, Tue Nov 3
+around 8 and 10 PM), cancel with a reason, and every screen at 390 px light and dark.
+After each step the books are checked: cash players sent = collected + held + credit
+in pots + cashed out (`tests/dryrun-money.test.ts`).
+
+Fixed (not money):
+- Players tab "N played" counted games a player was marked "did not play" for.
+- A quick second tap on Use credit, Everyone played / Confirm, Reopen, Request cash
+  out (and the other buttons that share those handlers) sent two requests and flashed
+  a red error. A lock now ignores the second tap. Test: `e2e/double-tap.cjs` (fails on
+  the old code).
+- The player error for a second cash-out request said "refund"; it now reads "You
+  already asked for a cash out. Cancel it to make a new one."
+
+Money questions left for Alex (no money code changed):
+- Credit used on a seat that still owes the rest (for example $3 credit on a $9 seat,
+  $6 unpaid) is in no Money row (not Held, Collected or Credits owed) and not in
+  "Players cover" until the rest is paid. Books are short by that credit until then.
+  Pinned in `tests/dryrun-money.test.ts` ("KNOWN MONEY QUESTION").
+- An "I paid" tap the organizer has not confirmed counts as paid at finalize, so that
+  player gets credit back. Unmarking later takes the credit back unless it was spent.
+- After Reopen, a player who paid the final price late ($9) shows as paid until the
+  redo; the redo charges the right difference.
+
+Tests: `tests/dryrun-money.test.ts` (18), `tests/dryrun-clock.test.ts` (31),
+`e2e/double-tap.cjs` (4).

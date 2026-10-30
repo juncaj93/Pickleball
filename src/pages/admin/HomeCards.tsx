@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { AdminSessionView, RefundRequestView } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
 import { finalPreview } from '../../../shared/pricing';
@@ -13,7 +13,11 @@ const CREDIT_NOTE = 'Pickleball credit refund';
 function useRun(ctx: AdminCtx) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
+  const working = useRef(false);
   async function run(fn: () => Promise<unknown>, msg: string) {
+    if (working.current) return false;
+    working.current = true;
     setBusy(true);
     try {
       await fn();
@@ -24,6 +28,7 @@ function useRun(ctx: AdminCtx) {
       toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       return false;
     } finally {
+      working.current = false;
       setBusy(false);
     }
   }
