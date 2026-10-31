@@ -98,6 +98,8 @@ async function main() {
   // Blair: $14 of credit, then a cash out request the organizer can mark sent.
   await join('Blair', 6);
   await post(who.Blair, `/api/sessions/${games[6].id}/paid`, { paid: true });
+  // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+  await post(areq, `/api/admin/sessions/${games[6].id}/payment`, { playerId: idOf('Blair'), paid: true });
   await withdraw('Blair', 6);
   await post(who.Blair, '/api/me/refund-request', { cents: 1400 });
 

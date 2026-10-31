@@ -122,6 +122,8 @@ async function main() {
   for (const n of ['Wren', 'Zed']) {
     await join(n, 1);
     await post(who[n], `/api/sessions/${games[1].id}/paid`, { paid: true });
+    // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+    await post(areq, `/api/admin/sessions/${games[1].id}/payment`, { playerId: idOf(n), paid: true });
     await post(who[n], `/api/sessions/${games[1].id}/withdraw`, {});
   }
   await post(who.Zed, '/api/me/refund-request', { cents: 500 });
@@ -334,6 +336,9 @@ async function main() {
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
+    // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+    const sid = (await card.getAttribute('id')).replace(/^row-/, '');
+    await post(areq, `/api/admin/sessions/${sid}/payment`, { playerId: idOf('Julian'), paid: true });
     await card.getByRole('button', { name: 'Drop out' }).click();
     await confirmDrop(page);
     const chip = page.locator('header [data-credit-chip]');
@@ -365,6 +370,9 @@ async function main() {
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
+    // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+    const sid = (await card.getAttribute('id')).replace(/^row-/, '');
+    await post(areq, `/api/admin/sessions/${sid}/payment`, { playerId: idOf('Blair'), paid: true });
     await card.getByRole('button', { name: 'Drop out' }).click();
     await confirmDrop(page);
     const chip = page.locator('header [data-credit-chip]');
