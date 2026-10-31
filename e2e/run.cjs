@@ -242,7 +242,8 @@ function layoutReport({ roots, items }) {
 /**
  * In the page: every card (and sheet) with more than one filled green button.
  * Green is the color a plain "btn" gets; only buttons whose own card is this
- * one count, so a card inside a card is judged on its own.
+ * one count, so a card inside a card is judged on its own. The court switch's chosen segment
+ * (Booked is green by design) shows a state, not an action, so it is not counted as a button.
  */
 function greenReport() {
   // A plain button's green, and the player cards' own green (and mint in dark mode).
@@ -262,7 +263,7 @@ function greenReport() {
   for (const card of document.querySelectorAll(`main :is(${box}), dialog[open] .sheet-body`)) {
     if (!card.getClientRects().length || !card.checkVisibility()) continue;
     cards++;
-    const filled = [...card.querySelectorAll('button, a')].filter((b) => b.closest(box) === card && b.checkVisibility() && greens.has(getComputedStyle(b).backgroundColor));
+    const filled = [...card.querySelectorAll('button, a')].filter((b) => b.closest(box) === card && b.checkVisibility() && !b.closest('.court-switch') && greens.has(getComputedStyle(b).backgroundColor));
     if (filled.length > 1) problems.push(`"${(card.getAttribute('aria-label') || card.id || card.className).slice(0, 40)}" has ${filled.length} green buttons: ${filled.map((b) => b.textContent.trim()).join(', ')}`);
   }
   return { problems, cards, green };
