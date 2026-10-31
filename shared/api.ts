@@ -185,6 +185,10 @@ export interface AdminRosterEntry {
   creditBackReason: CreditReason | null;
   /** The seat's money as this screen shows it (shared/credit.ts moneySeen): sent back with Mark paid / Unmark. */
   moneySeen: string;
+  /** What Remove would give back now: credit back to the pot, cash that becomes credit, an unconfirmed I paid that waits. */
+  dropCreditCents: number;
+  dropCashCents: number;
+  dropClaimCents: number;
   /** Set once the game is finalized: did they play. */
   played: boolean | null;
   /**

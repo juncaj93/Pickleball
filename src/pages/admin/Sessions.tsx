@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   canceledMessage,
@@ -13,7 +13,7 @@ import { DateTile, HolidayPill } from '../PlayerHome';
 import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
-import { startHold, undoHold, UNDO_MS } from '../../hold';
+import { flushHold, startHold, undoHold, UNDO_MS } from '../../hold';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { type AdminCtx } from '../Admin';
@@ -483,8 +483,18 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       },
       undone: () => setHeldFor(r.playerId, false),
     });
-    toast(`${r.name} removed.`, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => { if (!undoHold(key)) toast(`Too late, ${r.name} was already removed.`, 'error'); } } });
+    // Says what happens to their money, at once (nothing is sent until Undo runs out).
+    const back = r.dropCreditCents + r.dropCashCents;
+    const said =
+      r.dropClaimCents > 0
+        ? `${r.name} removed. Their ${formatPrice(r.dropClaimCents)} I paid waits for your Paid or Didn't pay.`
+        : back > 0
+          ? `${r.name} removed. ${formatPrice(back)} ${r.dropCashCents > 0 ? 'back as credit' : 'credit returned'}.`
+          : `${r.name} removed.`;
+    toast(said, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => { if (!undoHold(key)) toast(`Too late, ${r.name} was already removed.`, 'error'); } } });
   }
+  // Leaving this game's screen sends a held Remove at once, so Players and Money never show the money before it moved.
+  useEffect(() => () => flushHold(), []);
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);

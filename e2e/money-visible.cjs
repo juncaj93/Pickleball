@@ -199,9 +199,13 @@ async function main() {
         const confirm = page.getByRole('button', { name: /^Drop out/ }).last();
         await confirm.click();
         await bannerSays(page, /^You dropped out\. \$14 credit returned\. Undo$/, 'drop');
+        // The CREDIT chip is there at the same moment as the banner (Undo still offered), not after it goes.
+        await page.locator('header [data-credit-chip]').waitFor({ timeout: 1500 });
+        assert((await banner(page).getByRole('button', { name: 'Undo' }).count()) === 1, 'the chip came with the banner, while Undo still shows');
         await fits(page, banner(page), width, 'drop banner');
         await page.screenshot({ path: path.join(SHOTS, `money-visible-drop-${width}-${scheme}.png`) });
-        // Let the 5 seconds run out: the drop is sent and the credit is back in the pot.
+        // Let the 5 seconds run out: the drop is sent and the credit is back in the pot (the chip already said so).
+        await page.waitForTimeout(6500);
         // (The chip fades in and counts up from $0, so wait for it to land.)
         await page
           .waitForFunction(() => document.querySelector('header [data-credit-chip] .cc-now')?.textContent === '$14', null, { timeout: 15000 })
@@ -232,7 +236,10 @@ async function main() {
     await card(page, nov3).getByRole('button', { name: /^Drop out/ }).click();
     await page.getByRole('button', { name: /^Drop out/ }).last().click();
     await bannerSays(page, /credit returned\. Undo$/, 'drop');
+    await page.locator('header [data-credit-chip]').waitFor({ timeout: 1500 });
     await banner(page).getByRole('button', { name: 'Undo' }).click();
+    // Undo: the credit goes away again at once, and the seat is back Paid with credit.
+    await page.locator('header [data-credit-chip]').waitFor({ state: 'detached', timeout: 1500 });
     await card(page, nov3).locator('[data-paid]').waitFor();
     await page.waitForTimeout(6500);
     assert(liveUsed('Mitchel') === 1400, 'the credit stayed on the game');

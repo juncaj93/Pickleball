@@ -11,7 +11,7 @@ import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
-import { flushHold, holdPending, startHold, undoHold, UNDO_MS } from '../hold';
+import { flushHold, holdPending, pendingDropAction, type PendingDropNote, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
@@ -232,32 +232,56 @@ export function PlayerHome({
     [toast, markCelebrated, g?.group.priceCents],
   );
 
-  // A drop that was held for Undo when the page closed: finish it.
+  // A drop that was held for Undo when the page closed (or lost signal): finish it. A note younger than the hold
+  // may belong to another tab still holding it, so this page looks again once it is old enough, instead of
+  // leaving it for a later visit (where it could have run out).
   useEffect(() => {
     if (!g || !g.me || switching || viewAs) return;
-    const raw = storageGet(PENDING_DROP_KEY);
-    if (!raw) return;
-    let rec: { sessionId?: string; at?: number } = {};
-    try {
-      rec = JSON.parse(raw);
-    } catch {
-      /* broken note: drop it */
-    }
-    if (rec.sessionId && holdPending(rec.sessionId)) return;
-    const age = Date.now() - (rec.at ?? 0);
-    // Younger than the hold: another tab is still holding it (its Undo must work), so leave it alone.
-    if (age < UNDO_MS + 2_000) return;
-    storageRemove(PENDING_DROP_KEY);
-    const mineHere = g.sessions.find((x) => x.id === rec.sessionId)?.mine?.status === 'confirmed';
-    if (rec.sessionId && mineHere && age < 2 * 60_000) {
-      void api('POST', `/api/sessions/${rec.sessionId}/withdraw`, {}).then(() => load.quiet(), () => {});
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const look = async () => {
+      let note: PendingDropNote | null = null;
+      const raw = storageGet(PENDING_DROP_KEY);
+      if (raw) {
+        try {
+          note = JSON.parse(raw);
+        } catch {
+          note = {};
+        }
+      }
+      // Whether they are still in comes from the server as it is now, not from this page's older copy.
+      const fresh = note?.sessionId ? await api<GroupView>('GET', '/api/group').catch(() => null) : null;
+      const next = pendingDropAction(note, Date.now(), (id) => fresh?.sessions.find((x) => x.id === id)?.mine?.status === 'confirmed', holdPending);
+      if (next.do === 'wait') timer = setTimeout(() => void look(), next.ms);
+      else if (next.do === 'forget') storageRemove(PENDING_DROP_KEY);
+      else if (next.do === 'send') {
+        try {
+          await api('POST', `/api/sessions/${next.sessionId}/withdraw`, {});
+          storageRemove(PENDING_DROP_KEY);
+          await load.quiet();
+        } catch {
+          // No signal again: the note stays and the next look (or visit) tries again.
+          timer = setTimeout(() => void look(), 15_000);
+        }
+      }
+    };
+    void look();
+    // Back to the page (after a send that failed while it was hidden): finish the drop then.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void look();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [g?.me?.id]);
   // Leaving the screen sends a held drop right away.
   useEffect(() => () => flushHold(true), []);
 
-  const balance = g && (switching || (!viewAs && !g.me)) ? null : (g?.credit.balanceCents ?? null);
+  // The header chip and the credit sheet read the screen's data, so a held drop's credit shows with its banner.
+  const credit = view?.credit ?? g?.credit;
+  const balance = g && (switching || (!viewAs && !g.me)) ? null : (credit?.balanceCents ?? null);
   useEffect(() => {
     if (balance !== null) lastBalance.current = balance;
   }, [balance]);
@@ -294,7 +318,7 @@ export function PlayerHome({
 
   const pickName = !!g && (switching || (!viewAs && !g.me));
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
-  const showChip = !!g && !pickName && (g.credit.balanceCents > 0 || !!g.credit.pending);
+  const showChip = !!g && !!credit && !pickName && (credit.balanceCents > 0 || !!credit.pending);
   const chipStart = lastBalance.current;
 
 
@@ -325,7 +349,7 @@ export function PlayerHome({
           ) : undefined
         }
         tools={<ModeButton preview={!!viewAs} />}
-        chip={showChip ? <CreditChip credit={g.credit} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
+        chip={showChip ? <CreditChip credit={credit!} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
       />
       <main className="page stack-lg">
         {load.loading && !g && !load.error && <ScheduleSkeleton />}
@@ -426,7 +450,7 @@ export function PlayerHome({
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
       {cashOut && <CashOutPrompt key={cashOut.sessionId} sessionId={cashOut.sessionId} cents={cashOut.cents} onClose={() => setCashOut(null)} onChanged={load.reload} />}
-      {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
+      {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </>
   );
 }
@@ -1235,11 +1259,16 @@ export function ScheduleRow({
     const id = s.id;
     setOverlay(id, 'drop');
     storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now() }));
+    // Sent because the page was going away (closed, hidden, switched app): a failure then is most likely no
+    // signal while leaving, so the note stays and the drop is finished on return or the next open.
+    let leavingSend = false;
     startHold(id, {
       send: async (leaving) => {
+        leavingSend = leaving;
         await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: leaving && !demoOn() });
       },
       settled: async (err) => {
+        if (err && leavingSend && err instanceof ApiError && err.code === 'offline') return;
         forgetPendingDrop(id);
         if (err) {
           setOverlay(id, null);

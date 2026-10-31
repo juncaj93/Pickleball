@@ -71,3 +71,36 @@ if (typeof document !== 'undefined') {
   });
   window.addEventListener('pagehide', () => flushHold(true));
 }
+
+// ---------- A held drop the page may not have sent (it closed or lost signal) ----------
+
+/** Kept in storage while a drop is held, so a page that died before sending it can finish it next time. */
+export interface PendingDropNote {
+  sessionId?: string;
+  at?: number;
+}
+
+/** How long after the tap a left-over note is still finished (older ones are dropped: too late to be sure). */
+export const PENDING_DROP_MAX_MS = 2 * 60_000;
+
+/**
+ * What to do with a left-over drop note when the page opens (or looks again):
+ *  - 'keep': this page still holds that drop (its Undo must keep working);
+ *  - 'wait' for `ms`: younger than the hold, so another tab may still be holding it; look again after that;
+ *  - 'send': the drop never reached the server and they are still in: send it now;
+ *  - 'forget': already done (they are out), taken back (they are in again from a later tap), or too old.
+ */
+export function pendingDropAction(
+  note: PendingDropNote | null,
+  nowMs: number,
+  stillIn: (sessionId: string) => boolean,
+  heldHere: (sessionId: string) => boolean,
+): { do: 'none' } | { do: 'keep' } | { do: 'wait'; ms: number } | { do: 'send'; sessionId: string } | { do: 'forget' } {
+  if (!note) return { do: 'none' };
+  if (!note.sessionId || typeof note.at !== 'number') return { do: 'forget' };
+  if (heldHere(note.sessionId)) return { do: 'keep' };
+  const age = nowMs - note.at;
+  if (age < UNDO_MS + 2_000) return { do: 'wait', ms: UNDO_MS + 2_000 - age + 50 };
+  if (age >= PENDING_DROP_MAX_MS) return { do: 'forget' };
+  return stillIn(note.sessionId) ? { do: 'send', sessionId: note.sessionId } : { do: 'forget' };
+}

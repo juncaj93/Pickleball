@@ -210,6 +210,16 @@ export function adminSessionView(
         paidEarlierCents: r.payment_status === 'unpaid' ? seat.cashCents : 0,
         creditBackCents: seat.backCents,
         creditBackReason: seat.backReason,
+        // What Remove would give back right now (the same sums as a drop; a claim moves nothing).
+        ...(() => {
+          const paidNow = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;
+          const claimed = paidNow > 0 && !!r.self_paid_at;
+          return {
+            dropCreditCents: me || claimed ? 0 : seat.usedCents,
+            dropCashCents: me || claimed ? 0 : seat.cashCents + Math.max(0, paidNow - seat.usedCents - seat.cashCents),
+            dropClaimCents: me || !claimed ? 0 : Math.max(0, paidNow - seat.usedCents - seat.cashCents),
+          };
+        })(),
         moneySeen: moneySeen({ paymentStatus: r.payment_status, paymentAmountCents: r.payment_amount_cents, refunded: !!r.refunded_at, selfPaid: !!r.self_paid_at, creditCents: seat.usedCents, cashCents: seat.cashCents }),
         played: r.played === null || r.played === undefined ? null : r.played === 1,
         isOrganizer: me,
