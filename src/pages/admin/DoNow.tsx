@@ -6,7 +6,7 @@ import type { AdminCtx } from '../Admin';
 import { CourtWaitButtons } from './Sessions';
 import { courtSwitchOf } from '../../../shared/court';
 import { formatShortDate } from '../../../shared/time';
-import { dashboardTasks, textHref } from './doNow';
+import { textHref, visibleTasks } from './doNow';
 import '../../do-now.css';
 
 /** Save a card tap on the server. */
@@ -47,7 +47,7 @@ function useServerNow(serverNow: string): number {
 export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useServerNow(ctx.d.now);
   const [more, setMore] = useState(false);
-  const tasks = dashboardTasks(ctx.d, nowMs, `${window.location.origin}/admin`);
+  const tasks = visibleTasks(ctx.d, nowMs, `${window.location.origin}/admin`);
   // Games waiting on the venue's court list: "Court opened" or "Didn't open?" lives here, not on the game card.
   const waiting = ctx.d.sessions.filter((s) => !s.state.flags.canceled && !s.state.flags.started && courtSwitchOf(s) === 'waitlist');
   if (tasks.length === 0 && waiting.length === 0) return null;

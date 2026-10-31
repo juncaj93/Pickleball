@@ -481,6 +481,15 @@ async function main() {
     await card1.getByRole('button', { name: 'Court opened' }).waitFor();
     await card1.getByRole('button', { name: "Didn't open" }).waitFor();
     assert((await page.locator(`${CARDS} button:has-text("Court opened")`).count()) === 0, 'Court opened is on a game card');
+    // One court card per game: a waitlisted game never also gets "No court yet / I booked it".
+    await page.getByRole('button', { name: /^\+\d+ more/ }).click().catch(() => {});
+    for (const id of [roles.waitA, roles.waitB]) {
+      const cards = await page.locator(`.do-now article[data-session="${id}"]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-task')));
+      assert(cards.length === 1 && cards[0] === 'court_waitlist', `waitlisted game has Do this now cards: ${cards}`);
+    }
+    for (const kind of ['nocourt', 'nocourt_later', 'book']) {
+      for (const id of [roles.waitA, roles.waitB]) assert((await page.locator(`.do-now [data-task="${kind}"][data-session="${id}"]`).count()) === 0, `${kind} card on a waitlisted game`);
+    }
     await ctx.close();
   });
 

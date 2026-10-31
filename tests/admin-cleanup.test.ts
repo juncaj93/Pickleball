@@ -332,3 +332,43 @@ describe('the organizer change stamp', () => {
     expect(text).not.toMatch(/Alex|555|venmo|\$/i);
   });
 });
+
+describe('Do this now: one court card per game', () => {
+  it('Waitlist shows only the Waitlist question, Not booked only "No court yet", Booked nothing, at every hour for two weeks', async () => {
+    const { visibleTasks, dashboardTasks } = await import('../src/pages/admin/doNow');
+    const ctx = await setupGroup();
+    const first = await firstSession(ctx);
+    const family = new Set(['book', 'nocourt', 'nocourt_later']);
+    const start = ctx.app.now;
+    const seenNoCourt = { not_booked: 0, waitlist: 0, booked: 0 };
+    for (const to of ['not_booked', 'waitlist', 'booked'] as const) {
+      await setCourt(ctx, first.id, to);
+      const d = await dash(ctx);
+      for (let h = 0; h < 14 * 24; h++) {
+        const tasks = visibleTasks(d, start + h * HOUR, 'https://x/admin');
+        for (const s of d.sessions) {
+          const mine = tasks.filter((t: any) => t.sessionId === s.id && family.has(t.kind));
+          expect(mine.length).toBeLessThanOrEqual(1);
+          if (s.id === first.id) {
+            if (to !== 'not_booked') expect(mine).toEqual([]);
+            seenNoCourt[to] += mine.length;
+          }
+        }
+        // No game ever has two cards that say the same thing (same kind twice).
+        const kinds = tasks.map((t: any) => `${t.sessionId}:${t.kind}`);
+        expect(new Set(kinds).size).toBe(kinds.length);
+      }
+      // The alerts keep coming from the full list, untouched.
+      expect(dashboardTasks(d, start + 20 * HOUR, 'https://x/admin').length).toBeGreaterThanOrEqual(visibleTasks(d, start + 20 * HOUR, 'https://x/admin').length);
+    }
+    // The old list really did double up for a waitlisted game (so this test would catch it coming back).
+    await setCourt(ctx, first.id, 'waitlist');
+    const dw = await dash(ctx);
+    let raw = 0;
+    for (let h = 0; h < 14 * 24; h++) raw += dashboardTasks(dw, start + h * HOUR, 'https://x/admin').filter((t: any) => t.sessionId === first.id && family.has(t.kind)).length;
+    expect(raw).toBeGreaterThan(0);
+    expect(seenNoCourt.not_booked).toBeGreaterThan(0);
+    expect(seenNoCourt.waitlist).toBe(0);
+    expect(seenNoCourt.booked).toBe(0);
+  });
+});
