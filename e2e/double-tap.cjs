@@ -81,15 +81,24 @@ async function main() {
   for (const s of d.sessions.filter((x) => !x.state.flags.past)) await call(admin.request, 'POST', `/api/admin/sessions/${s.id}/booked`, {});
   const id = Object.fromEntries(d.players.map((p) => [p.name, p.id]));
   const [tue, thu] = d.sessions; // Tue Oct 27 and Thu Oct 29
-  // Mitchel and Ryan get $14 credit each from a canceled Tuesday.
+  // Mitchel and Ryan paid for Tuesday.
   for (const n of ['Mitchel', 'Ryan']) {
     await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/roster`, { playerId: id[n], action: 'confirm' });
     await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/payment`, { playerId: id[n], paid: true });
   }
-  await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/decision`, { decision: 'cancel', confirm: true });
-  // Thursday: six in, everyone but Mitchel paid.
+  // Thursday: six in, everyone but Mitchel paid. They are added before any credit exists, so Mitchel's seat stays
+  // unpaid and Use credit is still his to tap (credit at sign-up is automatic now).
   for (const n of ['Ryan', 'Mitchel', 'Brandon', 'Julian', 'Nathan', 'Dana']) await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/roster`, { playerId: id[n], action: 'confirm' });
   for (const n of ['Ryan', 'Brandon', 'Julian', 'Nathan', 'Dana']) await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/payment`, { playerId: id[n], paid: true });
+  // Then Tuesday is canceled: Mitchel and Ryan get $14 credit each.
+  await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/decision`, { decision: 'cancel', confirm: true });
+  {
+    const d1 = await dash();
+    for (const n of ['Mitchel', 'Ryan']) {
+      const l = d1.creditLedger.find((x) => x.playerId === id[n]);
+      if (!l || l.balanceCents !== 1400) throw new Error(`${n} credit after the cancel: ${JSON.stringify(l)}`);
+    }
+  }
 
   const phone = (name) => async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
