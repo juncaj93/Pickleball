@@ -365,6 +365,103 @@ async function main() {
     await ctx.close();
   });
 
+  // ---------- the pop-up never hides behind the bottom bar ----------
+  for (const [height, label] of [[664, 'with Safari\'s bottom bar showing'], [560, 'on a short phone'], [420, 'on a very short screen']]) {
+    await check(`390px ${label}: the gear pop-up on the first, a middle and the LAST card has every row on screen and tappable, above the tab bar`, async () => {
+      const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height } });
+      await post(ctx.request, '/api/admin/login', { pin: PIN });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}/admin`);
+      await page.locator(CARDS).first().waitFor();
+      const all = page.getByRole('button', { name: /^Show all/ });
+      if (await all.count()) await all.click();
+      const n = await page.locator(CARDS).count();
+      assert(n >= 7, `only ${n} cards`);
+      const picks = [0, Math.floor(n / 2), n - 1];
+      const seen = new Set();
+      for (const i of picks) {
+        const c = page.locator(CARDS).nth(i);
+        await c.scrollIntoViewIfNeeded();
+        if (i === n - 1) await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        const gear = c.getByRole('button', { name: /^Game menu for/ });
+        await gear.click();
+        const menu = page.getByRole('menu');
+        await menu.waitFor();
+        const r = await page.evaluate(() => {
+          const bar = document.querySelector('.tabbar').getBoundingClientRect();
+          const pop = document.querySelector('[role="menu"]');
+          const pr = pop.getBoundingClientRect();
+          const rows = [...pop.querySelectorAll('[role="menuitem"]')].map((e) => {
+            const b = e.getBoundingClientRect();
+            const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+            return { text: e.textContent.trim(), top: b.top, bottom: b.bottom, left: b.left, right: b.right, tappable: !!hit && (hit === e || e.contains(hit)), clipped: pop.scrollHeight > pop.clientHeight + 1 };
+          });
+          return { place: [...pop.classList].find((c) => c.startsWith('place-')), barTop: bar.top, vh: window.innerHeight, vw: window.innerWidth, popTop: pr.top, popBottom: pr.bottom, rows };
+        });
+        seen.add(r.place);
+        const w = `card ${i + 1}/${n} (${r.place})`;
+        const names = r.rows.map((x) => x.text);
+        assert(['Text the group', 'Edit game', 'Players', 'Cancel session'].every((t) => names.includes(t)), `${w}: rows ${names}`);
+        assert(names[names.length - 1] === 'Cancel session', `${w}: Cancel session should be last`);
+        for (const row of r.rows) {
+          assert(row.top >= 0 && row.bottom <= r.barTop + 0.5 && row.bottom <= r.vh && row.left >= 0 && row.right <= r.vw, `${w}: "${row.text}" is off screen or behind the tab bar (top ${Math.round(row.top)}, bottom ${Math.round(row.bottom)}, tab bar at ${Math.round(r.barTop)})`);
+          assert(row.tappable, `${w}: "${row.text}" is covered by something else`);
+        }
+        assert(r.popBottom <= r.barTop + 0.5, `${w}: pop-up runs behind the tab bar`);
+        // Players really opens from here, then the menu works again.
+        await page.getByRole('menuitem', { name: 'Players' }).click();
+        assert(/^Players/.test(await page.locator('dialog[open] h2').innerText()), `${w}: Players did not open`);
+        await page.locator('dialog[open]').getByRole('button', { name: 'Close' }).click();
+        // Close paths and scrolling still work.
+        await gear.click();
+        await page.getByRole('menu').waitFor();
+        await page.keyboard.press('Escape');
+        await page.getByRole('menu').waitFor({ state: 'detached', timeout: 4000 }).catch(() => { throw new Error(`${w}: Escape did not close the pop-up`); });
+        await gear.click();
+        await page.getByRole('menu').waitFor();
+        await page.mouse.click(8, 8);
+        await page.getByRole('menu').waitFor({ state: 'detached', timeout: 4000 }).catch(() => { throw new Error(`${w}: a tap outside did not close the pop-up`); });
+      }
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.mouse.wheel(0, 300);
+      await sleep(300);
+      assert((await page.evaluate(() => window.scrollY)) > 100, 'the page no longer scrolls with the pop-up closed');
+      // The last card is never hidden by the tab bar once scrolled to the end.
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      const gap = await page.evaluate(() => {
+        const cards = document.querySelectorAll('section[aria-labelledby="sessions-title"] article.scard');
+        return document.querySelector('.tabbar').getBoundingClientRect().top - cards[cards.length - 1].getBoundingClientRect().bottom;
+      });
+      assert(gap >= 8, `the last card sits ${Math.round(gap)}px from the tab bar (it is hidden)`);
+      await page.screenshot({ path: path.join(SHOTS, `admin-menu-last-${height}.png`) });
+      console.log(`      (placements used: ${[...seen].join(', ')})`);
+      await ctx.close();
+    });
+  }
+
+  await check('Edit game on a short phone (390 x 560): Save can be scrolled to and tapped, and the sheet stays above the tab bar', async () => {
+    const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height: 560 } });
+    await post(ctx.request, '/api/admin/login', { pin: PIN });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/admin`);
+    await page.locator(CARDS).first().waitFor();
+    const c = card(page, roles.paid);
+    await c.scrollIntoViewIfNeeded();
+    await c.getByRole('button', { name: /^Game menu for/ }).click();
+    await page.getByRole('menuitem', { name: 'Edit game' }).click();
+    const save = page.locator('dialog[open]').getByRole('button', { name: 'Save', exact: true });
+    await save.scrollIntoViewIfNeeded();
+    const r = await save.evaluate((e) => {
+      const b = e.getBoundingClientRect();
+      const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+      return { top: b.top, bottom: b.bottom, vh: window.innerHeight, tappable: hit === e || e.contains(hit), tab: document.querySelector('.tabbar').getBoundingClientRect().top };
+    });
+    assert(r.top >= 0 && r.bottom <= r.vh && r.tappable, `Save is off screen or covered: ${JSON.stringify(r)}`);
+    await save.click();
+    await page.locator('dialog[open]').waitFor({ state: 'detached' });
+    await ctx.close();
+  });
+
   // ---------- Edit game ----------
   await check('Edit game: one sheet with the switch, the automatic cancel-by line, Date, Start, End, the CourtReserve button and one Save; none of the old fields', async () => {
     const { ctx, page } = await openAdmin();

@@ -1,4 +1,5 @@
-import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
+import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { formatShortDate } from '../../../shared/time';
@@ -21,6 +22,9 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
   const [texts, setTexts] = useState(false);
   const [opened, setOpened] = useState<string | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
+  const pop = useRef<HTMLDivElement>(null);
+  // Where it opens: under the gear when it fits, else above it, else as a panel just above the tab bar.
+  const [place, setPlace] = useState<'down' | 'up' | 'sheet'>('down');
   const gear = useRef<HTMLButtonElement>(null);
   const menuId = `menu-${s.id}`;
   const day = formatShortDate(s.startsAt, tz);
@@ -30,18 +34,58 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
     setOpen(false);
     setTexts(false);
     setOpened(null);
+    setPlace('down');
     if (refocus) gear.current?.focus();
   };
+
+  // Measure with the pop-up drawn (hidden) under the gear, then choose. Runs again when the text list opens or the screen turns.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const fit = (scrolled = false) => {
+      const el = pop.current;
+      const g = gear.current;
+      if (!el || !g) return;
+      // Leave room for the text choices too, so opening them never pushes the pop-up off screen.
+      const need = el.scrollHeight + 8 + (texts ? 0 : items.length * 56 + 8);
+      const gr = g.getBoundingClientRect();
+      const bar = document.querySelector('.tabbar')?.getBoundingClientRect();
+      const vv = window.visualViewport;
+      const bottom = Math.min(bar ? bar.top : Infinity, vv ? vv.offsetTop + vv.height : window.innerHeight) - 8;
+      const topLimit = Math.max(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0, vv?.offsetTop ?? 0) + 8;
+      if (gr.bottom + 2 + need <= bottom) setPlace('down');
+      else if (gr.top - 2 - need >= topLimit) setPlace('up');
+      else if (!scrolled && window.scrollY < document.documentElement.scrollHeight - window.innerHeight - 1) {
+        // Neither side has room: scroll the page so the gear sits near the top, then look again.
+        const by = Math.min(gr.top - topLimit, document.documentElement.scrollHeight - window.innerHeight - window.scrollY);
+        if (by > 24) {
+          window.scrollBy(0, by);
+          fit(true);
+        } else setPlace('sheet');
+      } else setPlace('sheet');
+    };
+    fit();
+    const onResize = () => fit(true);
+    window.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('resize', onResize);
+    };
+  }, [open, texts]);
+
+  // The first row gets focus so a keyboard or screen reader lands inside the menu (again if it moved to a panel).
+  useEffect(() => {
+    if (open) pop.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+  }, [open, place]);
 
   useEffect(() => {
     if (!open) return;
     const release = holdLive();
     const onDown = (e: Event) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) close(false);
+      const t = e.target as Node;
+      if (wrap.current && !wrap.current.contains(t) && !pop.current?.contains(t)) close(false);
     };
     document.addEventListener('pointerdown', onDown, true);
-    // First row gets focus so a keyboard or screen reader lands inside the menu.
-    wrap.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
     return () => {
       document.removeEventListener('pointerdown', onDown, true);
       release();
@@ -56,7 +100,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
       return close();
     }
     if (e.key === 'Tab') return close(false);
-    const rows = [...(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+    const rows = [...(pop.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
     const at = rows.indexOf(document.activeElement as HTMLElement);
     const go = (i: number) => {
       e.preventDefault();
@@ -74,21 +118,14 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
   };
   const canceled = s.state.flags.canceled;
 
-  return (
-    <div className="game-menu" ref={wrap} onKeyDown={onKeyDown}>
-      <button
-        ref={gear}
-        className="icon-round"
-        aria-label={`Game menu for ${day}`}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={open ? menuId : undefined}
-        onClick={() => (open ? close() : setOpen(true))}
-      >
-        <GearIcon />
-      </button>
-      {open && (
-        <div className="menu-pop" id={menuId} role="menu" aria-label={`Game menu for ${day}`}>
+  const menu = (
+    <div
+      ref={pop}
+      className={`menu-pop place-${place}`}
+      id={menuId}
+      role="menu"
+      aria-label={`Game menu for ${day}`}
+    >
           {items.length > 0 && (
             <>
               <button role="menuitem" className="menu-row" aria-expanded={texts} onClick={() => setTexts((v) => !v)}>
@@ -139,8 +176,23 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
             <CancelIcon />
             {canceled ? 'Reopen session' : 'Cancel session'}
           </button>
-        </div>
-      )}
+    </div>
+  );
+
+  return (
+    <div className="game-menu" ref={wrap} onKeyDown={onKeyDown}>
+      <button
+        ref={gear}
+        className="icon-round"
+        aria-label={`Game menu for ${day}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => (open ? close() : setOpen(true))}
+      >
+        <GearIcon />
+      </button>
+      {open && (place === 'sheet' ? createPortal(menu, document.body) : menu)}
     </div>
   );
 }

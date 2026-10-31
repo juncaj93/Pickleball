@@ -282,3 +282,31 @@
 body:has(dialog[open]) .updated-line {
   visibility: hidden;
 }
+
+/* ---- Pop-up placement: under the gear if it fits, above it if not, else a panel above the tab bar ---- */
+.menu-pop.place-up {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
+.menu-pop.place-sheet {
+  position: fixed;
+  top: auto;
+  right: auto;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Just above the floating tab bar (about 62px tall) and its safe-area gap, never behind it. */
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 78px);
+  width: min(430px, calc(100% - 20px));
+  max-width: none;
+  max-height: calc(100dvh - env(safe-area-inset-bottom, 0px) - 78px - 72px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 50;
+  box-shadow: 0 -6px 34px rgb(0 0 0 / 28%);
+  animation: none;
+}
+
+/* Extra room under the last card, so the floating tab bar never hides it (organizer screens only). */
+.page.has-tabs.admin-page {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
+}

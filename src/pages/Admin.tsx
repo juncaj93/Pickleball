@@ -176,7 +176,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
         }
       />
       {tab !== 'settings' && <UpdatedLine at={checkedAt} />}
-      <main className="page has-tabs stack-lg">
+      <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}`}>
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
