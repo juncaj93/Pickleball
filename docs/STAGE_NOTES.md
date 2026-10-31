@@ -472,3 +472,70 @@ Status: built and tested on the branch `claude/new-session-ekyoyg`. NOT deployed
 - Deploy 3: `GO_LINKS = "on"`, commit 24c6384 on main, Pages deployment `fb9d3e50-de4a-4d99-a623-b498d081bc4c`. Check: a TEST direct text link for Tue Nov 3 returns the check-in text with `test: true` (marks nothing); a bad link answers 404.
 - Rollback: deploy 3, set `GO_LINKS = "off"` and redeploy (or roll back to `24d49885`). Deploy 2 site half: roll back to `00fbd694`; the secret alone does nothing without the Worker.
 - To finish: give the session a token with Workers Scripts Edit, then run steps 5, 6 and 8 of "Finishing Deploy 2" (Worker deploy, Worker secret, checks). The Worker secret must be the same value as the site's; if that value is lost, make a new one and set it on both, then redeploy the site.
+
+## Banner position, card start times, games with no court (Fri Oct 30, 2026, evening)
+
+Three front-end fixes, one deploy. No database change, no money logic touched.
+
+### What changed
+- **Pop-up banner** ("You're in", "You dropped out. Undo"): it was placed
+  `safe area + 96px` up from the bottom (sized for the organizer's floating tab
+  bar), so on the player screen it floated about 94px up and covered the next
+  card's I'm in button. It now ends 20px above the bottom edge (16 to 24px; the
+  iPhone safe area is counted once, through `--safe-bottom`). On the organizer
+  screen it stands just above the tab pill. A banner that is leaving no longer
+  catches taps. The 5-second Undo is unchanged and stays tappable.
+- **Time under the date tile**: only the start ("7 PM", "7:30 PM", "10:30 AM"),
+  sized to its column so it can never run into the names or Drop out (a
+  7:30 to 9:30 PM game used to be wider than the tile). A game that is not the
+  usual length from Settings > Schedule also shows its end on a second short
+  line. The Want in prompt, its answer and the pay card say the same.
+  Screen-reader text, organizer screens, texts and alerts are unchanged.
+- **Games with no court booked** (player view only, `src/courtDisplay.ts`): they
+  read like normal games. Status "Court not booked", count "3 of 4 in", button
+  "I'm in" / "You're in" with Drop out, never the words waitlist, waiting or
+  standby. Everyone who tapped I'm in on a game waiting on the venue is shown as
+  in (the server still keeps them as standby until "Court opened"). No "$14 due",
+  Pay or I paid, and no top Pay card, until the court is booked; booked and later
+  un-booked, they go away again. A payment already made stays and shows as Paid.
+  A booked, full game keeps its waitlist wording. Display only: amounts, credit,
+  refunds and payment records are untouched.
+
+### Decisions worth knowing
+- Standby people on a game with no court count in "3 of 4 in". If more than the
+  max tap I'm in before a court is booked, they all show as in; once the court
+  opens the server confirms people in order up to the max, and anyone over it
+  then sees the normal waitlist wording on the now-booked game.
+- Several older browser checks assumed pay prompts on games with no court. They
+  now book the court first (run, court, credit, texts, double-tap), and names.cjs
+  books its one full game so the waitlist line is still covered.
+
+### CPU per request (read-only look, Cloudflare Analytics)
+- Cloudflare's analytics API reports CPU time in **microseconds**
+  (`pagesFunctionsInvocationsAdaptiveGroups`, fields `cpuTimeP50` and friends),
+  not milliseconds. It has no path or route dimension, so the 5-second check
+  cannot be split from the full page load there.
+- This session's token was refused by every analytics dataset ("authorization
+  denied"), so no production numbers were taken. A token added to a cloud
+  environment is only read by a new session.
+- Local profile only (Node, 6 players, 12 games, NOT Cloudflare CPU): the
+  change-check (`GET /api/group/version`, 9 statements, 1 batch of 7) about
+  1.4 ms; the full page load (`GET /api/group`, 18 statements) about 4.7 ms.
+
+### Restore points
+- Time Travel bookmark taken Fri Oct 30 at 8:13 PM Eastern, before the deploy:
+  `00000161-00000000-00005115-5466fc24ee114374e6aae8f0353e577b`
+  (`npx wrangler d1 time-travel restore pickleball --bookmark=<that>`; this
+  deploy changes no data, so rolling back the code is enough).
+- SQL export, same time: `live-before-banner-times-nocourt-2026-10-30.sql`
+  (165 rows, in this session's scratch folder; it has phone numbers, so it was
+  not committed).
+- Code to go back to: the 5:54 PM production deployment `87ad17c5` (commit 7be1b79).
+
+### Tests
+- Unit: 756 passed in 48 files, typecheck clean (new: `tests/court-display.test.ts`
+  renders the real player card on real API data; `tests/player-cards.test.ts`
+  covers the start-time helper).
+- Browser: 22 suites, 916 checks, 0 failed (new: `e2e/banner.cjs` 11,
+  `e2e/card-times.cjs` 13, `e2e/no-court.cjs` 10). Each new suite was shown to
+  fail on the old code.
