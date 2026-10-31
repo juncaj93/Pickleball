@@ -1457,6 +1457,8 @@ async function randomLife(seed: number, steps: number) {
   // paired (the book reads the seat around it).
   const pairable = new Set([0, 1, 2, 3, 6, 8, 10, 11, 13, 14, 16, 18, 19, 20, 23]);
   for (let i = 0; i < steps; i++) {
+    // A second passes between taps (so every Finalize gets its own time, as on the real server).
+    w.app.now += 1000;
     if (phase < clock.length - 1 && r() < 0.045) {
       phase++;
       w.app.now = clock[phase];
@@ -1753,5 +1755,163 @@ describe('confirmed failures (stale organizer screen)', () => {
     // Correct: her $4 still counts (she now owes $5, the credit that went back), or the tap is refused as stale.
     // Actually: the whole payment is gone, the $5 is back in her pot, and she owes $9 although she sent $4.
     expect(await shownOwe(w, 'Casey', sid)).toBe(500);
+  });
+});
+
+// ---------------------------------------------------------------- second pass (HEAD 2d43618): the new finalize guards
+
+/** `sweep`, but B happens a minute later on the clock (another device, a slow phone): A keeps the time it started with. */
+async function sweepLater<S extends { w: World }>(name: string, setup: () => Promise<S>, A: (s: S) => Promise<any>, B: (s: S) => Promise<any>, after?: (s: S, ra: any, rb: any) => Promise<void>) {
+  return sweep(name, setup, A, async (s) => {
+    s.w.app.now += 60_000;
+    return B(s);
+  }, after);
+}
+
+describe('second pass: Reopen and the taps that check the exact finalize', () => {
+  type P = { w: World; sid: string };
+  /** Tue Oct 27, 8 in (Lee and Kai too), 7 played: $8. Blair credit, Casey part credit, Devon and Gale cash, Emery/Frankie/Kai/Lee unpaid, organizer plays. */
+  const eight = async (): Promise<P> => {
+    const w = await world();
+    const sid = await on(w, OCT27);
+    await givePot(w, 'Blair', 1400);
+    await givePot(w, 'Casey', 500);
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Lee']) expect((await join(w, n, sid)).status).toBe(200);
+    expect((await w.org.call('POST', `/api/admin/sessions/${sid}/me`, { in: true })).status).toBe(200);
+    expect((await iPaid(w, 'Devon', sid)).status).toBe(200);
+    expect((await markPaid(w, 'Gale', sid)).status).toBe(200);
+    await givePot(w, 'Frankie', 1400); // credit that arrives after joining: Use credit
+    atIso(w, AFTER_OCT27);
+    expect((await finalize(w, sid, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', ORG])).status).toBe(200); // Lee did not play: 7, $8
+    await books(w, 'eight base');
+    return { w, sid };
+  };
+  const swap = ['Blair', 'Casey', 'Devon', 'Lee', 'Frankie', 'Gale', ORG]; // still 7 ($8), Emery out, Lee in
+  const swapF = ['Blair', 'Casey', 'Devon', 'Emery', 'Lee', 'Gale', ORG]; // still 7, Frankie out
+  const redo = (played: string[]) => async (s: P) => {
+    const r1 = await reopen(s.w, s.sid);
+    const r2 = await finalize(s.w, s.sid, played);
+    return [r1.status, r2.status];
+  };
+
+  it('Reopen at every point inside another device\'s reopen + finalize (same set, same price other set, other price), and Reopen inside Reopen', async () => {
+    SCENARIOS++;
+    for (const played of [swap, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Lee', ORG], ['Blair', 'Casey', 'Devon', 'Emery', ORG]]) {
+      await sweepLater(`reopen ⊃ (reopen, finalize ${played.length})`, eight, (s) => reopen(s.w, s.sid), redo(played), async (s, ra) => {
+        // The stale Reopen either is the one that reopened (B then failed to reopen) or is refused; the game is finalized and its credit back intact.
+        expect([200, 409]).toContain(ra.status);
+      });
+    }
+    await sweepLater('reopen ⊃ reopen', eight, (s) => reopen(s.w, s.sid), (s) => reopen(s.w, s.sid));
+    await sweepLater('finalize-again ⊃ (reopen, finalize)', async () => {
+      const s = await eight();
+      expect((await reopen(s.w, s.sid)).status).toBe(200);
+      return s;
+    }, (s) => finalize(s.w, s.sid, swap), async (s) => {
+      await finalize(s.w, s.sid, 'everyone');
+      return reopen(s.w, s.sid);
+    });
+  });
+
+  it('I paid, Mark paid, Use credit, Unmark, Didn\'t pay at every point around a reopen + redo (a minute later)', async () => {
+    SCENARIOS++;
+    await sweepLater('Emery I paid $8 ⊃ redo without Emery', eight, (s) => iPaid(s.w, 'Emery', s.sid, 0, 800), redo(swap), async (s) => {
+      const seat = seatRow(s.w, s.sid, 'Emery');
+      // A payment that landed first comes back in full when the redo says he did not play (settled); one that lands after is refused.
+      expect(seat.payment_status === 'paid' && !seat.refunded_at && seat.played === 0).toBe(false);
+    });
+    await sweepLater('Mark paid Emery ⊃ redo without Emery', eight, (s) => markPaid(s.w, 'Emery', s.sid), redo(swap));
+    await sweepLater('Frankie Use credit ⊃ redo without Frankie', eight, (s) => useCredit(s.w, 'Frankie', s.sid), redo(swapF), async (s) => {
+      if (seatRow(s.w, s.sid, 'Frankie').played === 0) expect(potOf(s.w, 'Frankie')).toBe(1400);
+    });
+    await sweepLater('Casey I paid $3 ⊃ redo, same set', eight, (s) => iPaid(s.w, 'Casey', s.sid, 0, 300), redo(['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', ORG]));
+    await sweepLater('Emery I paid $8 ⊃ reopen only', eight, (s) => iPaid(s.w, 'Emery', s.sid, 0, 800), (s) => reopen(s.w, s.sid));
+    await sweepLater('unmark Devon ⊃ redo', eight, (s) => unmark(s.w, 'Devon', s.sid), redo(swap));
+    await sweepLater('unmark Blair ⊃ redo', eight, (s) => unmark(s.w, 'Blair', s.sid), redo(swap));
+    await sweepLater('redo ⊃ Emery I paid (what the screen shows now)', eight, redo(swap), async (s) => iPaid(s.w, 'Emery', s.sid));
+  });
+
+  it('cut off halfway, then retried a minute later: Reopen, Finalize again, I paid and Use credit after a redo', async () => {
+    SCENARIOS++;
+    const later = <S extends P>(A: (s: S) => Promise<any>) => async (s: S) => {
+      s.w.app.now += 60_000;
+      return A(s);
+    };
+    await cutoffSweep('reopen (retry later)', eight, later((s) => reopen(s.w, s.sid)));
+    const reopened = async () => {
+      const s = await eight();
+      expect((await reopen(s.w, s.sid)).status).toBe(200);
+      return s;
+    };
+    await cutoffSweep('finalize again (retry later)', reopened, later((s) => finalize(s.w, s.sid, swap)));
+    const redone = async () => {
+      const s = await eight();
+      s.w.app.now += 60_000;
+      expect((await redo(swap)(s))).toEqual([200, 200]);
+      return { ...s, counted: false };
+    };
+    await cutoffSweep('Lee pays after the redo (retry later)', redone, later(async (s: P & { counted: boolean }) => {
+      const before = seatRow(s.w, s.sid, 'Lee').payment_status;
+      const shown = await shownOwe(s.w, 'Lee', s.sid);
+      const r = await (await phone(s.w, 'Lee')).call('POST', `/api/sessions/${s.sid}/paid`, { paid: true, cents: shown });
+      if (!s.counted && before !== 'paid' && seatRow(s.w, s.sid, 'Lee').payment_status === 'paid') {
+        s.w.cash += shown;
+        s.counted = true;
+      }
+      return r;
+    }), async (s) => expect(seatRow(s.w, s.sid, 'Lee').payment_status).toBe('paid'));
+    await cutoffSweep('Frankie Use credit after the redo (retry later)', redone, later((s) => useCredit(s.w, 'Frankie', s.sid)), async (s) => {
+      // Frankie did not play in swap? He did (swap keeps Frankie): after the retry his $8 is paid with credit.
+      expect(usedOn(s.w, s.sid, 'Frankie')).toBe(800);
+    });
+  });
+
+  it('normal flows are not broken by the new guards: double-tap I paid, two phones, I paid while the organizer confirms, before and after Finalize', async () => {
+    SCENARIOS++;
+    // Before Finalize (game upcoming), and after Finalize: every interleaving answers 200 (one changed), never an error.
+    const upcoming = async () => {
+      const w = await world();
+      const sid = await on(w, NOV3);
+      await givePot(w, 'Casey', 500);
+      for (const n of ['Casey', 'Emery']) expect((await join(w, n, sid)).status).toBe(200);
+      return { w, sid };
+    };
+    const both200 = async (_s: any, ra: any, rb: any) => {
+      expect([ra.status, rb.status], `${ra.text} / ${rb.text}`).toEqual([200, 200]);
+      expect([ra.data.changed, rb.data.changed].filter(Boolean).length).toBeGreaterThanOrEqual(1);
+    };
+    for (const setup of [upcoming, eight]) {
+      const isUp = setup === upcoming;
+      const amt = isUp ? 1400 : 800;
+      await sweep(`I paid ⊃ I paid (other phone) ${isUp ? 'upcoming' : 'finalized'}`, setup, (s: any) => iPaid(s.w, 'Emery', s.sid, 0, amt), (s: any) => iPaid(s.w, 'Emery', s.sid, 1, amt), both200);
+      await sweep(`Casey I paid the rest ⊃ again ${isUp ? 'upcoming' : 'finalized'}`, setup, (s: any) => iPaid(s.w, 'Casey', s.sid, 0, isUp ? 900 : 300), (s: any) => iPaid(s.w, 'Casey', s.sid, 1, isUp ? 900 : 300), both200);
+      await sweep(`I paid ⊃ organizer Mark paid ${isUp ? 'upcoming' : 'finalized'}`, setup, (s: any) => iPaid(s.w, 'Emery', s.sid, 0, amt), (s: any) => markPaid(s.w, 'Emery', s.sid), both200);
+      await sweep(`Mark paid ⊃ Mark paid ${isUp ? 'upcoming' : 'finalized'}`, setup, (s: any) => markPaid(s.w, 'Emery', s.sid), (s: any) => markPaid(s.w, 'Emery', s.sid), both200);
+    }
+    // Use credit twice at once after Finalize: one 200, the other a clean 409 "nothing owed" / "credit changed", and a later tap sees it paid.
+    await sweep('Use credit ⊃ Use credit (finalized)', eight, (s) => useCredit(s.w, 'Frankie', s.sid), (s) => useCredit(s.w, 'Frankie', s.sid, 1), async (s, ra, rb) => {
+      expect([ra.status, rb.status].filter((x) => x === 200).length).toBe(1);
+      expect(seatRow(s.w, s.sid, 'Frankie').payment_status).toBe('paid');
+      expect(usedOn(s.w, s.sid, 'Frankie')).toBe(800);
+    });
+    // After a Reopen: a stale tap is refused once, the next tap (fresh read) goes through.
+    const s = await eight();
+    const stale = await shownOwe(s.w, 'Emery', s.sid); // $8 shown
+    s.w.app.now += 60_000;
+    expect((await reopen(s.w, s.sid)).status).toBe(200);
+    expect((await iPaid(s.w, 'Emery', s.sid, 0, stale)).status).toBe(409);
+    const fresh = await shownOwe(s.w, 'Emery', s.sid);
+    expect(fresh).toBe(1400);
+    expect((await iPaid(s.w, 'Emery', s.sid, 0, fresh)).status).toBe(200);
+    expect((await useCredit(s.w, 'Frankie', s.sid)).status).toBe(200);
+    await books(s.w, 'after reopen: fresh taps go through');
+    s.w.app.now += 60_000;
+    expect((await finalize(s.w, s.sid, 'everyone')).status).toBe(200);
+    await books(s.w, 'finalized again with everyone');
+    for (const n of ['Lee']) {
+      const owe = await shownOwe(s.w, n, s.sid);
+      expect((await iPaid(s.w, n, s.sid, 0, owe)).status).toBe(200);
+    }
+    await books(s.w, 'everyone paid after the redo');
   });
 });
