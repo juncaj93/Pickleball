@@ -35,6 +35,8 @@ function joined(s: PlayerSessionView, name: string, max: number): PlayerSessionV
       signupAt: new Date().toISOString(),
       oweCents: 0,
       creditCents: 0,
+      dropCreditCents: 0,
+      dropCashCents: 0,
       paidEarlierCents: 0,
       paidWithCredit: false,
       useCreditCents: 0,

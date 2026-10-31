@@ -32,6 +32,8 @@ const NO_MONEY = {
   selfPaid: false,
   oweCents: 0,
   creditCents: 0,
+  dropCreditCents: 0,
+  dropCashCents: 0,
   paidEarlierCents: 0,
   paidWithCredit: false,
   useCreditCents: 0,
@@ -74,6 +76,12 @@ export function playerSessionView(
         signupAt: mine.confirmed_at ?? mine.claimed_at,
         oweCents: owe,
         creditCents: mine.payment_status === 'unpaid' ? pot.seat.usedCents : 0,
+        // What a drop out would give back right now (the same sums as seatMoneyBackStatements): credit used on the
+        // seat goes back to the pot; cash paid toward it (and cash held against it) comes back as credit.
+        dropCreditCents: isOrganizer ? 0 : pot.seat.usedCents,
+        dropCashCents: isOrganizer
+          ? 0
+          : pot.seat.cashCents + Math.max(0, (mine.payment_status === 'paid' && !mine.refunded_at ? (mine.payment_amount_cents ?? 0) : 0) - pot.seat.usedCents - pot.seat.cashCents),
         paidEarlierCents: mine.payment_status === 'unpaid' ? pot.seat.cashCents : 0,
         paidWithCredit: mine.payment_status === 'paid' && pot.seat.usedCents > 0 && pot.seat.usedCents >= (mine.payment_amount_cents ?? 0),
         useCreditCents: owes && !canceled ? Math.min(pot.usableCents, owe) : 0,

@@ -2458,7 +2458,7 @@ async function main() {
         const cs = f.locator('[data-credit-sheet]');
         await cs.waitFor();
         await cs.locator('[data-credit-balance]').getByText('$14 credit').waitFor();
-        await cs.locator('[data-credit-history] li').first().getByText(/^\+\$14 dropped out of (Tue|Thu), [A-Z][a-z]{2} \d{1,2}$/).waitFor();
+        await cs.locator('[data-credit-history] li').first().getByText(/^[A-Z][a-z]{2} \d{1,2}: \$14 back from [A-Z][a-z]{2} \d{1,2} \(you dropped\)$/).waitFor();
         await cs.locator('[data-request-refund]').waitFor();
         await f.keyboard.press('Escape');
         await f.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
@@ -4210,8 +4210,8 @@ async function main() {
       await sheet.waitFor();
       assert(squash(await sheet.locator('[data-credit-balance]').innerText()) === '$3 credit', `balance was "${await sheet.locator('[data-credit-balance]').innerText()}"`);
       const hist = sheet.locator('[data-credit-history] li');
-      assert((await hist.count()) === 1 && squash(await hist.first().innerText()) === '+$3 Tue, Oct 27 (5 played)', `history: ${await hist.allInnerTexts()}`);
-      await sheet.getByText('Use your credit when you pay for a game.').waitFor();
+      assert((await hist.count()) === 1 && / \$3 back from Oct 27 \(5 played\)$/.test(squash(await hist.first().innerText())), `history: ${await hist.allInnerTexts()}`);
+      await sheet.getByText("Your credit goes on a game by itself when you tap I'm in.").waitFor();
       assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'nothing pending yet');
       await sheet.locator('[data-request-refund]').click();
       const amount = sheet.getByLabel('Cash out amount');
@@ -4386,7 +4386,7 @@ async function main() {
       await dv.locator('header [data-credit-chip]').click();
       const hist = dv.locator('[data-credit-sheet] [data-credit-history] li');
       const lines = (await hist.allInnerTexts()).map(squash);
-      assert(JSON.stringify(lines.slice(0, 2)) === JSON.stringify(['+$14 canceled Wed, Oct 28', '+$3 Tue, Oct 27 (5 played)']), `history: ${lines}`);
+      assert(/: \$14 back from Oct 28 \(canceled\)$/.test(lines[0] ?? '') && /: \$3 back from Oct 27 \(5 played\)$/.test(lines[1] ?? ''), `history: ${lines}`);
       await dv.keyboard.press('Escape');
       await dv.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
       await tab(admin, 'Players').click();

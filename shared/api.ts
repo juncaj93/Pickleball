@@ -58,6 +58,9 @@ export interface PlayerSessionView {
     /** What they still owe for this session, after credit used on it (0 when paid). */
     oweCents: number;
     /** Credit from their pot already used on this session. */
+    /** What Drop out would give back right now: credit used on this seat (back to the pot) and cash paid toward it (becomes credit). */
+    dropCreditCents: number;
+    dropCashCents: number;
     creditCents: number;
     /** Cash they paid toward this session before its price went up (a redo with fewer players). */
     paidEarlierCents: number;

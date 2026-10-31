@@ -4,7 +4,7 @@ import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { creditBackNote } from '../../shared/pricing';
 import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
-import { creditHintText, creditUsedMessage } from '../../shared/credit';
+import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
@@ -90,12 +90,15 @@ const GOOD_NEWS = {
   court_opened: "Good news, the court opened, so you're in.",
 };
 
-/** What the banner says after I'm in. With no court booked everyone who taps I'm in is simply in. */
-export function joinedText(d: JoinResponse, noCourt = false): string {
-  if (noCourt) return "You're in";
-  if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
-  if (d.result === 'standby') return `You're on standby, #${d.position}`;
-  return "You're in";
+/**
+ * What the banner says after I'm in. With no court booked everyone who taps I'm in is simply in.
+ * Credit that went on the game at once is said too: "You're in. $14 credit used." or, part cover on a
+ * booked court, "You're in. $3 credit used, $11 due." (`priceCents` is the flat price.)
+ */
+export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0): string {
+  if (!noCourt && d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
+  if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
+  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, !noCourt);
 }
 
 /**
@@ -220,13 +223,13 @@ export function PlayerHome({
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
-        if (before + 1 === MIN_PLAYERS && !offer) return toast('Game on!', 'ok', { ball: true });
+        if (before + 1 === MIN_PLAYERS && !offer) return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, !noCourt), 'ok', { ball: true });
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents });
-      toast(joinedText(res, noCourt));
+      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0));
     },
-    [toast, markCelebrated],
+    [toast, markCelebrated, g?.group.priceCents],
   );
 
   // A drop that was held for Undo when the page closed: finish it.
@@ -1223,7 +1226,7 @@ export function ScheduleRow({
     const soon = Date.now() + UNDO_MS + 3_000;
     const deadline = Date.parse(s.dropCutoffAt);
     if (Date.parse(s.startsAt) - Date.now() < 10_000 || (deadline > Date.now() - 1_000 && deadline < soon)) {
-      void run('withdraw', () => "You're out");
+      void run('withdraw', (d) => droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out."));
       return;
     }
     const id = s.id;
@@ -1248,7 +1251,8 @@ export function ScheduleRow({
         setOverlay(id, null);
       },
     });
-    toast('You dropped out.', 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
+    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);

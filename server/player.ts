@@ -126,8 +126,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       const startsOf = new Map(
         (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
       );
+      // Their own entries only, including ones that ended (credit used on a game that went back to them), so the
+      // credit sheet can say what happened to their money in plain words.
       credit.history = visibleEntries(ledger)
-        .filter((e) => e.playerId === me.id && !e.endedAt)
+        .filter((e) => e.playerId === me.id)
         .map(
           (e): CreditEntryView => ({
             id: e.id,
@@ -136,8 +138,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
             sessionId: e.sessionId,
             sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : null,
             at: e.createdAt,
-            endedAt: null,
-            endedReason: null,
+            endedAt: e.endedAt,
+            endedReason: (e.endedReason as CreditEntryView['endedReason']) ?? null,
             reason: e.reason ?? null,
             playedCount: e.playedCount ?? null,
           }),
@@ -352,7 +354,8 @@ export async function playerWithdraw(ctx: Ctx) {
     await audit(ctx.db, who.group.id, who.session.id, 'credit_back', { player: p?.display_name ?? 'A player', playerId: who.playerId, amountCents: res.creditBackCents, reason: 'dropped' }, ctx.nowIso);
   }
   await afterTap(ctx, watch);
-  return { result, creditBackCents: res.creditBackCents };
+  // creditBackCents: cash paid that became credit; creditReturnedCents: credit used on the game that went back.
+  return { result, creditBackCents: res.creditBackCents, creditReturnedCents: res.creditReturnedCents };
 }
 
 /**

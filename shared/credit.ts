@@ -7,7 +7,7 @@
 
 import type { CreditEntryView } from './api';
 import { formatPrice } from './money';
-import { formatShortDate } from './time';
+import { formatMonthDay, formatShortDate } from './time';
 
 export type CreditKind = 'kept' | 'used' | 'refunded';
 /**
@@ -243,3 +243,85 @@ export function unconfirmedPaidWarning(names: string[]): string | null {
 /** Why Reopen waits: a pending refund request is holding credit this game gave back. */
 export const reopenRequestedReason = (names: string[]) =>
   `Can't reopen: ${names.join(' and ')} asked for this credit back. Answer the refund request on Home first.`;
+
+// ---------- What a player reads when their money moves (Oct 31, 2026) ----------
+// Nothing happens to a player's money without the screen saying so in plain words.
+
+/**
+ * The drop-out banner: "You dropped out. $14 credit returned." when the seat
+ * was paid with credit, "You dropped out. $14 back as credit." when cash they
+ * paid becomes credit (or part of each), plain "You dropped out." when
+ * nothing was paid. `creditCents` and `cashCents` are what the seat holds now.
+ */
+export function droppedText(creditCents: number, cashCents: number, lead = 'You dropped out.'): string {
+  const total = creditCents + cashCents;
+  if (total <= 0) return lead;
+  return cashCents > 0 ? `${lead} ${formatPrice(total)} back as credit.` : `${lead} ${formatPrice(total)} credit returned.`;
+}
+
+/**
+ * The sign-up banner when credit went on the game at once: "You're in. $14
+ * credit used." Part cover: "You're in. $3 credit used, $11 due." The amount
+ * due is left out while the court is not booked (no "$ due" shows then).
+ */
+export function joinedCreditText(lead: string, creditCents: number, priceCents: number, courtBooked: boolean): string {
+  if (creditCents <= 0) return lead;
+  const due = priceCents - creditCents;
+  const sep = /[.!]$/.test(lead) ? '' : '.';
+  return due > 0 && courtBooked
+    ? `${lead}${sep} ${formatPrice(creditCents)} credit used, ${formatPrice(due)} due.`
+    : `${lead}${sep} ${formatPrice(creditCents)} credit used.`;
+}
+
+/** One change to a player's credit, for their credit sheet. */
+export interface CreditChange {
+  key: string;
+  at: string;
+  text: string;
+}
+
+/**
+ * The last changes to a player's credit in plain words, newest first:
+ * "Oct 31: $14 used for Nov 10", "Oct 31: $14 returned from Nov 5 (you
+ * dropped)", "Nov 3: $5 back from Nov 3 (6 played)", "Nov 4: $14 cashed out".
+ * Built only from their own credit entries, the ones that ended too (a use
+ * that went back is two changes: the use, then the return).
+ */
+export function creditChanges(history: CreditEntryView[], tz: string, organizerName: string | null, limit = 10): CreditChange[] {
+  const day = (iso: string) => formatMonthDay(iso, tz);
+  const out: (CreditChange & { order: number })[] = [];
+  history.forEach((e, i) => {
+    if (e.reason === 'cash') return;
+    const money = formatPrice(e.cents);
+    const game = e.sessionStartsAt ? day(e.sessionStartsAt) : null;
+    const from = game ? ` from ${game}` : '';
+    let text: string;
+    if (e.kind === 'used') text = `${money} used${game ? ` for ${game}` : ''}`;
+    else if (e.kind === 'refunded') text = `${money} cashed out`;
+    else if (e.reason === 'finalized') text = `${money} back${from}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;
+    else if (e.reason === 'not_played') text = `${money} back${from} (did not play)`;
+    else if (e.reason === 'dropped') text = `${money} back${from} (you dropped)`;
+    else if (e.reason === 'canceled') text = `${money} back${from} (canceled)`;
+    else text = `${money} kept${from}`;
+    out.push({ key: `${e.id}:start`, at: e.at, text: `${day(e.at)}: ${text}`, order: i * 2 });
+    if (!e.endedAt) return;
+    let end: string;
+    if (e.kind === 'used') {
+      const why =
+        e.endedReason === 'dropped'
+          ? 'you dropped'
+          : e.endedReason === 'canceled'
+            ? 'canceled'
+            : e.endedReason === 'undone'
+              ? 'you took it back'
+              : `${organizerName ?? 'the organizer'} took it off`;
+      end = `${money} returned${from} (${why})`;
+    } else if (e.kind === 'refunded') end = `${money} back (cash out undone)`;
+    else end = `${money} taken back${from} (game changed)`;
+    out.push({ key: `${e.id}:end`, at: e.endedAt, text: `${day(e.endedAt)}: ${end}`, order: i * 2 + 1 });
+  });
+  return out
+    .sort((a, b) => b.at.localeCompare(a.at) || b.order - a.order)
+    .slice(0, limit)
+    .map(({ key, at, text }) => ({ key, at, text }));
+}
