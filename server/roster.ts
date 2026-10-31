@@ -2,7 +2,7 @@ import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { isCourtWaitlist } from '../shared/court';
 import type { GroupSettings } from '../shared/settings';
-import { creditBack, returnSeatCredit } from './credit';
+import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, creditBack, returnSeatCredit } from './credit';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
@@ -34,7 +34,7 @@ const KEEP_PAYMENT_UNLESS_REFUNDED = `payment_status = CASE WHEN payment_status 
   refunded_at = NULL`;
 
 export type JoinResult =
-  | { result: 'confirmed' }
+  | { result: 'confirmed'; creditCents?: number; paidWithCredit?: boolean }
   | { result: 'standby'; position: number }
   | { result: 'already_confirmed' }
   | { result: 'waitlisted'; position: number }
@@ -43,6 +43,9 @@ export type JoinResult =
 export interface Promotion {
   playerId: string;
   reason: 'spot_opened';
+  /** Credit used on the seat automatically as they moved in. */
+  creditCents: number;
+  paidWithCredit: boolean;
 }
 
 interface ExistingRow {
@@ -62,46 +65,56 @@ async function existingRow(db: D1Database, sessionId: string, playerId: string) 
     .first<ExistingRow>();
 }
 
-/** Give the player a confirmed spot if the guard allows it. Returns false if it didn't. */
-async function tryConfirm(db: D1Database, session: SessionRow, playerId: string, nowIso: string, maxPlayers: number) {
+/**
+ * Give the player a confirmed spot if the guard allows it: 'new' when this
+ * call gave it, 'already' when they had it (or a second tap racing this one
+ * gave it), false when it didn't. With `auto`, their credit goes on the new
+ * seat in the same batch.
+ */
+async function tryConfirm(db: D1Database, session: SessionRow, playerId: string, nowIso: string, maxPlayers: number, auto: AutoCredit | null) {
+  const withCredit = auto ? autoCreditStatements(db, auto, session.id, playerId, nowIso) : [];
   try {
     const existing = await existingRow(db, session.id, playerId);
-    if (existing?.status === 'confirmed') return true;
+    if (existing?.status === 'confirmed') return 'already';
     if (existing) {
-      const res = await db
-        .prepare(
-          `UPDATE session_players
-           SET status = 'confirmed',
-               confirmed_at = ?3,
-               confirm_seq = ${NEXT_CONFIRM_SEQ},
-               claimed_at = CASE WHEN status = 'waitlisted' THEN claimed_at ELSE ?3 END,
-               claim_seq = CASE WHEN status = 'waitlisted' THEN claim_seq ELSE ${NEXT_CLAIM_SEQ} END,
-               attendance_confirmed_at = NULL,
-               promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
-               ${KEEP_PAYMENT_UNLESS_REFUNDED},
-               updated_at = ?3
-           WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD}`,
-        )
-        .bind(session.id, playerId, nowIso, existing.id, maxPlayers)
-        .run();
-      return res.meta.changes === 1;
+      const [res] = await db.batch([
+        db
+          .prepare(
+            `UPDATE session_players
+             SET status = 'confirmed',
+                 confirmed_at = ?3,
+                 confirm_seq = ${NEXT_CONFIRM_SEQ},
+                 claimed_at = CASE WHEN status = 'waitlisted' THEN claimed_at ELSE ?3 END,
+                 claim_seq = CASE WHEN status = 'waitlisted' THEN claim_seq ELSE ${NEXT_CLAIM_SEQ} END,
+                 attendance_confirmed_at = NULL,
+                 promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
+                 ${KEEP_PAYMENT_UNLESS_REFUNDED},
+                 updated_at = ?3
+             WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD}`,
+          )
+          .bind(session.id, playerId, nowIso, existing.id, maxPlayers),
+        ...withCredit,
+      ]);
+      return res.meta.changes === 1 ? 'new' : false;
     }
-    const res = await db
-      .prepare(
-        `INSERT INTO session_players
-           (id, session_id, player_id, status, claimed_at, claim_seq, confirmed_at, confirm_seq, payment_status, updated_at)
-         SELECT ?4, ?1, ?2, 'confirmed', ?3, ${NEXT_CLAIM_SEQ}, ?3, ${NEXT_CONFIRM_SEQ}, 'unpaid', ?3
-         WHERE ${GUARD}`,
-      )
-      .bind(session.id, playerId, nowIso, newId(), maxPlayers)
-      .run();
-    return res.meta.changes === 1;
+    const [res] = await db.batch([
+      db
+        .prepare(
+          `INSERT INTO session_players
+             (id, session_id, player_id, status, claimed_at, claim_seq, confirmed_at, confirm_seq, payment_status, updated_at)
+           SELECT ?4, ?1, ?2, 'confirmed', ?3, ${NEXT_CLAIM_SEQ}, ?3, ${NEXT_CONFIRM_SEQ}, 'unpaid', ?3
+           WHERE ${GUARD}`,
+        )
+        .bind(session.id, playerId, nowIso, newId(), maxPlayers),
+      ...withCredit,
+    ]);
+    return res.meta.changes === 1 ? 'new' : false;
   } catch (err) {
     if (isTriggerError(err, 'session_full')) return false;
     if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
     // A second tap racing the first can hit the unique (session, player) key.
     if (err instanceof Error && /UNIQUE/i.test(err.message)) {
-      return (await existingRow(db, session.id, playerId))?.status === 'confirmed';
+      return (await existingRow(db, session.id, playerId))?.status === 'confirmed' ? 'already' : false;
     }
     throw err;
   }
@@ -146,31 +159,39 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
  */
 export async function settle(db: D1Database, session: SessionRow, nowIso: string, maxPlayers: number): Promise<Promotion[]> {
   const promoted: Promotion[] = [];
+  // Looked up once, only when someone may move in. Moving in uses their credit like tapping I'm in.
+  let auto: AutoCredit | null | undefined;
   for (let i = 0; i < 16; i++) {
     const roster = await loadRoster(db, session.id);
     const confirmed = confirmedOf(roster).length;
     const waiting = waitlistOf(roster);
     if (confirmed >= maxPlayers || waiting.length === 0) break;
     const row = waiting[0];
+    if (auto === undefined) auto = await autoCreditFor(db, session);
     const res = await db
-      .prepare(
-        `UPDATE session_players
-         SET status = 'confirmed', confirmed_at = ?2,
-             confirm_seq = ${NEXT_CONFIRM_SEQ},
-             attendance_confirmed_at = NULL,
-             promoted_at = ?2, promotion_reason = 'spot_opened', promotion_notified_at = NULL,
-             ${KEEP_PAYMENT_UNLESS_REFUNDED},
-             updated_at = ?2
-         WHERE id = ?3 AND status = 'waitlisted' AND ${CONFIRMED} < ?4`,
-      )
-      .bind(session.id, nowIso, row.id, maxPlayers)
-      .run()
+      .batch([
+        db
+          .prepare(
+            `UPDATE session_players
+             SET status = 'confirmed', confirmed_at = ?2,
+                 confirm_seq = ${NEXT_CONFIRM_SEQ},
+                 attendance_confirmed_at = NULL,
+                 promoted_at = ?2, promotion_reason = 'spot_opened', promotion_notified_at = NULL,
+                 ${KEEP_PAYMENT_UNLESS_REFUNDED},
+                 updated_at = ?2
+             WHERE id = ?3 AND status = 'waitlisted' AND ${CONFIRMED} < ?4`,
+          )
+          .bind(session.id, nowIso, row.id, maxPlayers),
+        ...(auto ? autoCreditStatements(db, auto, session.id, row.player_id, nowIso) : []),
+      ])
+      .then(([first]) => first)
       .catch((err) => {
         if (isTriggerError(err, 'session_full')) return { meta: { changes: 0 } };
         throw err;
       });
     if (res.meta.changes === 0) break;
-    promoted.push({ playerId: row.player_id, reason: 'spot_opened' });
+    const credit = auto ? await auditAutoCredit(db, auto.groupId, session.id, row.player_id, nowIso) : { cents: 0, paid: false };
+    promoted.push({ playerId: row.player_id, reason: 'spot_opened', creditCents: credit.cents, paidWithCredit: credit.paid });
   }
   return promoted;
 }
@@ -207,15 +228,20 @@ export async function joinSession(
     return { result: 'standby', position: await waitlistPosition(db, session.id, playerId) };
   }
 
-  if (await tryConfirm(db, session, playerId, nowIso, maxPlayers)) {
-    return { result: 'confirmed' };
+  // Their credit goes on the seat in the same step as the seat itself (never for the organizer).
+  const auto = await autoCreditFor(db, session);
+  const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto);
+  if (got) {
+    // A second tap or device that found the seat already taken by the first reports (and logs) nothing new.
+    const credit = auto && got === 'new' ? await auditAutoCredit(db, auto.groupId, session.id, playerId, nowIso) : { cents: 0, paid: false };
+    return credit.cents > 0 ? { result: 'confirmed', creditCents: credit.cents, paidWithCredit: credit.paid } : { result: 'confirmed' };
   }
   if (mode !== 'auto') return { result: 'spot_taken' };
 
   await addToWaitlist(db, session, playerId, nowIso);
   const promoted = await settle(db, session, nowIso, maxPlayers);
   const mine = promoted.find((p) => p.playerId === playerId);
-  if (mine) return { result: 'confirmed' };
+  if (mine) return mine.creditCents > 0 ? { result: 'confirmed', creditCents: mine.creditCents, paidWithCredit: mine.paidWithCredit } : { result: 'confirmed' };
   const row = await existingRow(db, session.id, playerId);
   if (row?.status === 'confirmed') return { result: 'already_confirmed' };
   return { result: 'waitlisted', position: await waitlistPosition(db, session.id, playerId) };
@@ -279,7 +305,8 @@ export async function keepPaymentAsCredit(db: D1Database, groupId: string, sessi
     .first<{ payment_amount_cents: number | null }>();
   const cents = row?.payment_amount_cents ?? 0;
   if (cents <= 0) return 0;
-  const ok = await creditBack(db, { groupId, sessionId, playerId, cents, reason, nowIso, settle: true });
+  // A drop only while they are still out: an I'm in from a second phone in between keeps the payment on the seat.
+  const ok = await creditBack(db, { groupId, sessionId, playerId, cents, reason, nowIso, settle: true, ...(reason === 'dropped' ? { seatStatus: 'withdrawn' as const } : {}) });
   return ok ? cents : 0;
 }
 
@@ -394,5 +421,13 @@ export async function confirmAttendance(db: D1Database, session: SessionRow, pla
  */
 export async function moveToWaitlist(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
-  await addToWaitlist(db, session, playerId, new Date(nowMs).toISOString());
+  const nowIso = new Date(nowMs).toISOString();
+  await addToWaitlist(db, session, playerId, nowIso);
+  // Credit on a seat that still owed would sit on a waitlist spot that owes nothing: it goes back to them.
+  // (A seat paid in full, with credit or cash, stays paid, as before.)
+  await db
+    .prepare("SELECT 1 FROM session_players WHERE session_id = ? AND player_id = ? AND status = 'waitlisted' AND payment_status <> 'paid'")
+    .bind(session.id, playerId)
+    .first()
+    .then((r) => (r ? returnSeatCredit(db, session.id, playerId, nowIso, 'unmarked', { creditOnly: true }) : 0));
 }

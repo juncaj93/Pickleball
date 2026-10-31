@@ -567,3 +567,68 @@ Screens only. No money rule, amount, credit rule or Telegram word changed, and t
 - Unit: `tests/admin-cleanup.test.ts` (22): switch, stored values, standby order, money untouched, players read Waitlist as Not booked, cancel-by across the clock change and holidays, move saves, pill numbers, the change stamp.
 - Browser: `e2e/admin-cleanup.cjs` (22): phone widths 360, 393, 430 in light and dark, the switch (colors, 4.5:1 text, tap targets), the pop-up (anchor, order, keys, focus), Edit game, pill, cancel-by line, players' view, Do this now, live refresh that does not move the page or close a pop-up or sheet.
 - Existing suites updated only where the old screens they drove were removed on purpose; see each file's history. Player-side checks were not changed.
+
+- Follow-up (Fri Oct 30, 10:50 PM): links only where a tap does the job. "Text the group" opens the direct /go/ text; CourtReserve words open CourtReserve; /admin words are plain (Open site button kept). TEST smart alert is one line with a TEST direct link on "Text the group".
+
+## Credit used automatically at I'm in (Sat Oct 31, 2026)
+
+Spec: CREDIT_SPEC.md from Alex (all decisions final). One money rule changed: credit
+is used automatically at sign-up. Everything else about money is unchanged.
+
+### What changed
+- **At sign-up.** When a player gets a seat (I'm in, the Want in card, a claim link,
+  the organizer adding them, moving in from a waitlist, Court opened), their usable
+  credit (the pot minus a pending cash out) goes on that game at once, up to the $14
+  owed. It is one database batch with the seat (`autoCreditStatements` in
+  `server/credit.ts`, added to the seat statement in `tryConfirm` and `settle` in
+  `server/roster.ts`). The amount is worked out inside the database, so two games
+  tapped at once, a double tap, a retry or two phones never spend credit twice. The
+  organizer never uses credit. Entries are tagged `reason = 'auto'` in `credit_ledger`.
+- **Full cover**: "Paid with credit" at once, even with no court booked. **Part cover**:
+  a "Credit $3 used" chip; "$11 due" and Pay appear once the court is booked.
+- **Back**: Drop out, Remove player, cancel, court "Didn't open" and the organizer's
+  Unmark put it back at once (as before). The 5-second Undo sends nothing, so the
+  credit never moves. The organizer moving someone to the waitlist puts part credit back.
+- **Pending cash out**: never used by itself. When it would help pay a game just
+  joined, a small question at the bottom asks "Use the $10 you asked to cash out for
+  this game?" (`src/pages/CashOutPrompt.tsx`). Use it (POST
+  `/api/sessions/:id/use-cash-out`) puts it on the game and shrinks the request, or
+  withdraws it when all of it is used, in one batch; the Home card shrinks or goes;
+  one Telegram line under the "Refund requests" switch: "Mitchel withdrew the $10 cash
+  out request (using it for Thu Nov 5)" (first name only; "the" instead of "his").
+  Keep cash out just closes it. Mark refunded now sends the card's amount and is
+  refused if the request changed since.
+- **Who paid**: "Paid with credit" or "Credit $3" with Unmark (credit back to the pot).
+  Players tab rows say "Credit $3 used"; the history shows each use and return.
+  Activity: "Casey used $14 credit for Tue, Nov 3 (automatic at sign-up)".
+- Use credit (the button) stays for credit that arrives after joining (like money back
+  from a 5+ player game, which is never put on games already joined by itself).
+
+### Fixed on the way (found by the fresh review)
+- A cash-out request is saved only while the credit is still there.
+- A drop turns the payment into credit only while the seat is still out (a second
+  phone's I'm in in between could make a free seat).
+- Did not play with credit on a seat that still owed: that credit now comes back
+  (it used to stay stuck on the seat).
+- "Back as credit" for a seat counts drop, rejoin, drop once, not twice.
+
+### Database
+No change, no migration. The existing `credit_ledger` already records credit used on a
+game (kind `used` with the game's id).
+
+### Deploy (Fri Oct 30, 2026, about 11:16 PM Eastern)
+- Merged as #50 (main a46cf0f, after merging the alert clock channel's latest main).
+  Pages deployment `f92365f0-f23c-4cbc-ba28-37fdc5e82fa8`, Production, branch main. No migration.
+- Read-only look right before (11:05 PM) and after: credit only Mitchel at $0, no
+  cash-out requests, unpaid sign-ups Nathan and Julian (Tue Nov 3) and Brandon (Thu Nov 5),
+  2 ledger rows, 16 seats, nothing changed by the deploy.
+- After: backup address 200 with the new bundle, `/api/status`, `/api/group`,
+  `/api/group/version` and `/admin` 200 (pickleball.juncaj.net can't be reached from the
+  build sandbox). Clock Worker: every run 0 errors. Tick CPU after the deploy: 10.9 ms on
+  the first tick (fresh server), then 6.6 and under 9.5 ms.
+- Restore points: Time Travel bookmark `0000018b-00000000-00005115-998001d3f534101cf4926f1d1e7d3585`
+  (11:08 PM); SQL export `live-before-auto-credit-2026-10-30.sql` (169 rows, has phone
+  numbers, in that session's scratch folder, not committed). Code rollback: Pages
+  deployment `6721fb3d` (commit 6d35cb0). The deploy changed no data, so rolling the code
+  back is enough.
+- Tests: 828 unit (52 files), 938 browser checks in 23 files, all green.

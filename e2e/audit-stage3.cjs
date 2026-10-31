@@ -101,12 +101,14 @@ async function main() {
   await call(mitchel.request, 'POST', '/api/me/refund-request', { cents: 500 });
 
   // Ryan: paid Tue Nov 3, taps I'm out ($14 credit), then spends it all on Thu Nov 5.
+  // He signed up for Nov 5 before the credit came back, so Use credit is still his to tap (credit at sign-up is automatic now).
   const ryan = await playerReq('Ryan');
   await call(ryan.request, 'POST', `/api/sessions/${nov3.id}/join`, {});
   await call(api.request, 'POST', `/api/admin/sessions/${nov3.id}/payment`, { playerId: id.Ryan, paid: true });
-  await call(ryan.request, 'POST', `/api/sessions/${nov3.id}/withdraw`, {});
   await call(ryan.request, 'POST', `/api/sessions/${nov5.id}/join`, {});
-  await call(ryan.request, 'POST', `/api/sessions/${nov5.id}/use-credit`, {});
+  await call(ryan.request, 'POST', `/api/sessions/${nov3.id}/withdraw`, {});
+  const used = await call(ryan.request, 'POST', `/api/sessions/${nov5.id}/use-credit`, {});
+  if (!(used.ok === true && used.usedCents === 1400 && used.paid === true)) throw new Error(`Ryan's Use credit on Nov 5: ${JSON.stringify(used)}`);
 
   const organizer = async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, isMobile: true, hasTouch: true });

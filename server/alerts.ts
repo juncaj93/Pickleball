@@ -4,7 +4,7 @@
 // so a slow or broken Telegram can't slow down or break anyone's tap. The
 // bot token and chat ID are Cloudflare secrets: they never reach a browser
 // and the bot only ever messages that one chat.
-import { type AlertPerson, type AlertPrefs, alertMessage, DEFAULT_ALERT_PREFS, refundRequestMessage } from '../shared/alerts';
+import { type AlertPerson, type AlertPrefs, alertMessage, cashOutUsedMessage, DEFAULT_ALERT_PREFS, refundRequestMessage } from '../shared/alerts';
 import type { AdminDashboard } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { requireAdmin } from './auth';
@@ -16,7 +16,7 @@ import { isPretend } from './pretend';
 import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
 import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
-import { linkText, type TextLink } from './telegram-links';
+import { isAdminPage, linkText, type TextLink } from './telegram-links';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
@@ -137,10 +137,10 @@ function telegramProblem(status: number, description: string): string {
 }
 
 /** Send one message to the organizer's chat, with an "Open site" button. */
-/** The message with each "words: address" shown as tappable words (see telegram-links.ts). */
+/** The message with each "words: address" shown as tappable words, and the /admin page (the Open site button) as plain words (see telegram-links.ts). */
 function telegramText(text: string): { text: string; entities?: TextLink[] } {
-  const linked = linkText(text);
-  return linked.entities.length ? linked : { text };
+  const linked = linkText(text, isAdminPage);
+  return linked.entities.length ? linked : { text: linked.text };
 }
 
 async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
@@ -256,6 +256,22 @@ export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: s
       .bind(newId(), playerId, new Date(ctx.nowMs).toISOString())
       .run();
     ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents)));
+  } catch {
+    // Never worth failing the request over.
+  }
+}
+
+/**
+ * One short line when a player puts their pending cash out toward a game
+ * ("Use it" at sign-up), under the same "Refund requests" switch. Never from
+ * the demo or Pretend, and never worth failing the request over.
+ */
+export async function notifyCashOutUsed(ctx: Ctx, group: GroupRow, name: string, usedCents: number, requestCents: number, startsAt: string): Promise<void> {
+  try {
+    if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
+    const prefs = prefsOf(await alertRow(ctx.db, group.id));
+    if (!prefs.enabled || !prefs.refundRequests) return;
+    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone)));
   } catch {
     // Never worth failing the request over.
   }

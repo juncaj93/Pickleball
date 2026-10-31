@@ -72,34 +72,38 @@ describe('audit fixes', () => {
     };
     expect(await credit()).toBe(500);
     const next = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((x: { startsAt: string }) => Date.parse(x.startsAt) > ctx.app.now);
-    await phones.Alex.call('POST', `/api/sessions/${next.id}/join`, {});
-    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).data).toMatchObject({ usedCents: 500, paid: false });
+    // Joining the next game uses that $5 by itself (credit at sign-up is automatic): $9 is left to pay.
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 500, paidWithCredit: false });
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).status).toBe(409); // nothing left to tap
     expect(await credit()).toBe(0);
     await phones.Alex.call('POST', `/api/sessions/${next.id}/paid`, { paid: true }); // the other $9 in cash
     // I'm out: the $5 credit goes back and the $9 cash becomes credit too.
     expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/withdraw`, {})).data.creditBackCents).toBe(900);
     expect(await credit()).toBe(1400);
-    // Back in and used again: the whole $14 pays the seat.
-    await phones.Alex.call('POST', `/api/sessions/${next.id}/join`, {});
-    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).data).toMatchObject({ usedCents: 1400, paid: true });
+    // Back in and used again (as he joins): the whole $14 pays the seat.
+    expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
     expect(await credit()).toBe(0);
     // And once more out: all of it is credit again, with no second cash entry.
     expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/withdraw`, {})).data.creditBackCents).toBe(0);
     expect(await credit()).toBe(1400);
   });
 
-  it('rejoining after a paid drop owes again instead of showing as paid: the money is credit now', async () => {
+  it('rejoining after a paid drop is a new seat: the old payment is credit now, and that credit (not the old payment) pays the new seat', async () => {
     const ctx = await setupGroup();
     const s = await firstSession(ctx);
     const blair = await playerPhone(ctx, 'Blair');
     await blair.call('POST', `/api/sessions/${s.id}/join`, {});
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
     expect((await blair.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data.creditBackCents).toBe(1400);
-    await blair.call('POST', `/api/sessions/${s.id}/join`, {});
-    const mine = (await blair.call('GET', '/api/group')).data.sessions.find((x: { id: string }) => x.id === s.id).mine;
-    expect(mine.paymentStatus).toBe('unpaid');
-    expect(mine.oweCents).toBe(1400);
-    expect(mine.useCreditCents).toBe(1400);
+    // The new seat owes $14; her credit pays it as she joins (credit at sign-up is automatic), so the $14 is spent once, not kept twice.
+    expect((await blair.call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    const g = (await blair.call('GET', '/api/group')).data;
+    const mine = g.sessions.find((x: { id: string }) => x.id === s.id).mine;
+    expect(mine).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, oweCents: 0, useCreditCents: 0 });
+    expect(g.credit.balanceCents).toBe(0);
+    const ledger = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.creditLedger.find((c: { playerId: string }) => c.playerId === ctx.byName.Blair);
+    expect(ledger.balanceCents).toBe(0);
+    expect(ledger.entries.filter((e: { endedAt: string | null }) => !e.endedAt).map((e: { kind: string; cents: number }) => [e.kind, e.cents])).toEqual([['kept', 1400], ['used', 1400]]);
     // The organizer's own court payment is not player money: it survives I'm out then I'm in, and never becomes credit.
     await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Casey' });
     await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });

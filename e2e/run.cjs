@@ -3594,7 +3594,7 @@ async function main() {
       await row.getByRole('button', { name: 'I paid' }).click();
       await row.locator('.paid-tag', { hasText: /^Paid/  }).waitFor();
       await row.getByRole('button', { name: "Didn't pay?" }).waitFor();
-      // Already paid, then out: the $14 is credit now (the line says so, the chip appears); in again, that credit is the green Use credit, Pay is quiet.
+      // Already paid, then out: the $14 is credit now (the chip appears); in again, that credit is used by itself: Paid with credit at once.
       await row.getByRole('button', { name: 'Drop out' }).click();
       await confirmDrop(p);
       assert((await row.locator('[data-credit-back]').count()) === 0, 'no refund line on the card after a paid drop');
@@ -3602,6 +3602,11 @@ async function main() {
       assert((await p.locator('header [data-credit-chip]').innerText()).replace(/\s+/g, ' ').trim() === 'CREDIT $14', 'chip after dropping a paid game');
       await row.getByRole('button', { name: "I'm in" }).click();
       await row.locator('.tile-check').waitFor();
+      await row.locator('.paid-tag', { hasText: 'Paid with credit' }).waitFor();
+      await p.locator('header [data-credit-chip]').waitFor({ state: 'detached' });
+      assert((await row.getByRole('link', { name: /Pay/ }).count()) === 0, 'no Pay once credit paid it');
+      // Undo puts the $14 back in the pot: owed again, and that credit is the green Use credit, Pay is quiet.
+      await row.locator('[data-undo-credit]').click();
       const use = row.locator('[data-use-credit]');
       await use.waitFor();
       assert(await use.evaluate((b) => !b.classList.contains('secondary')), 'Use credit should be the green button when the credit covers the game');

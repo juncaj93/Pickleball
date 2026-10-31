@@ -60,7 +60,7 @@ describe('Venmo link', () => {
 });
 
 describe('a fresh sign-up starts the Pay steps over', () => {
-  it("I'm out then I'm in again gets a new sign-up time; someone who paid gets the $14 as credit and can use it", async () => {
+  it("I'm out then I'm in again gets a new sign-up time; someone who paid gets the $14 as credit and it pays the new sign-up", async () => {
     const { playerPhone, setupGroup } = await import('./harness');
     const ctx = await setupGroup();
     const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
@@ -79,18 +79,17 @@ describe('a fresh sign-up starts the Pay steps over', () => {
     const again = await mine();
     expect(again.signupAt).not.toBe(first.signupAt);
     expect(again.oweCents).toBe(1400);
-    // Paid, then out: the $14 is credit right away. In again: a fresh sign-up that owes $14, with the credit ready to use.
+    // Paid, then out: the $14 is credit right away. In again: a fresh sign-up that owes $14, and the credit pays it as he joins (credit at sign-up is automatic).
     await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: true });
     ctx.app.now += 60_000;
     expect((await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data).toMatchObject({ result: 'withdrawn', creditBackCents: 1400 });
     ctx.app.now += 60_000;
-    await alex.call('POST', `/api/sessions/${s.id}/join`, {});
+    expect((await alex.call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
     const back = await mine();
     expect(back.signupAt).not.toBe(again.signupAt);
-    expect(back).toMatchObject({ paymentStatus: 'unpaid', selfPaid: false, oweCents: 1400, useCreditCents: 1400, creditBackCents: 1400 });
-    expect((await alex.call('POST', `/api/sessions/${s.id}/use-credit`, {})).data).toMatchObject({ paid: true, usedCents: 1400 });
-    const paid = await mine();
-    expect(paid).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, oweCents: 0, creditCents: 0 });
+    // The seat is paid again, so the old "$14 is now credit" line is spent (as it was after tapping Use credit).
+    expect(back).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, selfPaid: false, oweCents: 0, useCreditCents: 0, creditCents: 0, creditBackCents: 0 });
+    expect((await alex.call('POST', `/api/sessions/${s.id}/use-credit`, {})).status).toBe(409); // nothing left to tap
     expect((await alex.call('GET', '/api/group')).data.credit.balanceCents).toBe(0);
   });
 });

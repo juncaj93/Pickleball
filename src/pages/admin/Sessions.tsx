@@ -680,9 +680,11 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                       : r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0)
                         ? 'Paid with credit'
                         : 'Paid'
-                    : r.owesCents > 0
-                      ? 'Unpaid'
-                      : 'Nothing owed'}
+                    : r.creditCents > 0 && r.status === 'confirmed'
+                      ? `Credit ${formatPrice(r.creditCents)}`
+                      : r.owesCents > 0
+                        ? 'Unpaid'
+                        : 'Nothing owed'}
                 </Chip>
               </div>
               <div className="pay-btns">
@@ -698,11 +700,25 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                     </button>
                   </>
                 ) : (
-                  r.status === 'confirmed' &&
-                  r.owesCents > 0 && (
-                    <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
-                      Mark paid
-                    </button>
+                  r.status === 'confirmed' && (
+                    <>
+                      {r.owesCents > 0 && (
+                        <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
+                          Mark paid
+                        </button>
+                      )}
+                      {/* Credit on a seat that still owes ("Credit $3"): Unmark puts it back in their credit. */}
+                      {r.paymentStatus === 'unpaid' && r.creditCents > 0 && (
+                        <button
+                          className="btn small secondary"
+                          disabled={busy}
+                          data-unmark-credit={r.name}
+                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false }), `${r.name}'s credit put back`)}
+                        >
+                          Unmark
+                        </button>
+                      )}
+                    </>
                   )
                 )}
                 {r.paymentStatus === 'unpaid' && r.owesCents > 0 && (

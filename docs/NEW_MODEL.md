@@ -70,9 +70,28 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
   away: they tapped I'm out after paying, the game was canceled, they did
   not play, or they paid more than the final price. Nothing to decide, no
   refund card for the organizer.
-- One credit pot per player, whole dollars, no expiry. It is used on any
-  later game with **Use credit** (partial credit works: "Used $5 credit. $9
-  left to pay.").
+- One credit pot per player, whole dollars, no expiry.
+- **Credit is used automatically at sign-up** (from Oct 31, 2026). When a
+  player taps I'm in (or a claim link, or the organizer adds them, or they
+  move in from a waitlist), the server puts their usable credit on that game
+  at once, up to the $14 owed, in the same database step as the seat. Usable
+  credit = the pot minus a pending cash-out request. Full cover: "Paid with
+  credit". Part cover ($3): a "Credit $3 used" chip; "$11 due" and Pay appear
+  once the court is booked. It happens even when no court is booked yet; a
+  later cancel puts it straight back. Two games: the first one tapped gets it.
+  The organizer never uses credit. Nothing that existed before Oct 31 changed.
+- **Use credit** (the button) stays for someone already in and unpaid when
+  credit arrives later, like the money back from a 5+ player game. That
+  money back is never put on games they already joined by itself.
+- Drop out, Remove player, cancel and the organizer's **Unmark** (on Money >
+  Who paid: "Paid with credit" or "Credit $3") put the credit back at once.
+  The 5-second Undo for Drop out sends nothing, so the credit never moves.
+- A pending cash out is never used by itself. When it would help pay a game
+  just joined, a small question at the bottom asks "Use the $10 you asked to
+  cash out for this game?" **Use it** puts it on the game and shrinks the
+  request (or withdraws it); the organizer's Home card shrinks or goes and
+  Telegram gets one line ("Mitchel withdrew the $10 cash out request (using
+  it for Thu Nov 5)"). **No, keep cash out**: they are in and pay as usual.
 - Players see their credit as a small **CREDIT $14** chip in the header, next
   to the date tile. Tapping it opens a sheet with the balance, the history
   ("+$5 Thu, Oct 29 (6 played)", "-$14 used for Tue, Nov 3"), and **Request

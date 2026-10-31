@@ -3,7 +3,8 @@
 //
 // We expect to get a court, so until one is booked such a game works like any
 // other game: "Court not booked", "3 of 4 in", "I'm in" / "You're in" with Drop
-// out, and no money prompts (nobody pays before a court is booked). The words
+// out, and no money prompts (nobody pays before a court is booked; credit used at
+// sign-up still shows as "Paid with credit" or "Credit $3 used"). The words
 // waitlist, waiting and standby are not used for it. (Behind the scenes the
 // server still keeps people who tap I'm in on a game that is waiting on the
 // venue's court list in order; the screen simply calls them in.) Once the court
@@ -31,8 +32,9 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
     ? {
         ...s.mine,
         ...(s.mine.status === 'waitlisted' ? { status: 'confirmed' as const, waitlistPosition: null } : {}),
-        // No money prompts before a court is booked. A payment that is already recorded stays and shows.
-        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, creditCents: 0, paidEarlierCents: 0, useCreditCents: 0 }),
+        // No money prompts before a court is booked. A payment that is already recorded stays and shows, and so
+        // does credit already used on the seat ("Credit $3 used"); what is left to pay waits for the court.
+        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0, useCreditCents: 0 }),
       }
     : s.mine;
   return {

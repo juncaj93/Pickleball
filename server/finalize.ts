@@ -91,6 +91,21 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     } else if (paid > 0) {
       const ok = await creditBack(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: paid, reason: 'not_played', nowIso: ctx.nowIso, settle: true });
       if (ok) backs.push({ player: r.display_name, playerId: r.player_id, cents: paid, reason: 'not_played' });
+    } else if (r.status === 'confirmed' && r.payment_status === 'unpaid') {
+      // Did not play with credit on a seat that still owed the rest (credit used at sign-up): that credit comes back.
+      // The seat is marked paid with it first, the same way a played seat is, so Reopen can take it back the same way.
+      const used = await usedOn(ctx, session.id, r.player_id);
+      if (used > 0) {
+        await ctx.db
+          .prepare(
+            `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+             WHERE id = ?3 AND payment_status = 'unpaid'`,
+          )
+          .bind(ctx.nowIso, used, r.id)
+          .run();
+        const ok = await creditBack(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: used, reason: 'not_played', nowIso: ctx.nowIso, settle: true });
+        if (ok) backs.push({ player: r.display_name, playerId: r.player_id, cents: used, reason: 'not_played' });
+      }
     }
   }
   // Unpaid seats whose used credit now covers the final price are paid.
