@@ -12,6 +12,7 @@ vi.hoisted(() => {
 import { creditChanges, droppedText, joinedCreditText } from '../shared/credit';
 import { cashOutUsedMessage, refundRequestMessage } from '../shared/alerts';
 import type { CreditEntryView } from '../shared/api';
+// @ts-ignore (the player screen is checked by the app's own typecheck; this file only needs joinedText)
 import { joinedText } from '../src/pages/PlayerHome';
 import { playerPhone, setupGroup, TestApp } from './harness';
 
@@ -78,8 +79,8 @@ describe('the words', () => {
     });
     const history = [
       e({ reason: 'canceled', sessionStartsAt: '2026-10-30T00:00:00.000Z', at: '2026-10-29T20:00:00.000Z' }),
-      e({ kind: 'used', reason: 'auto', at: '2026-10-31T14:00:00.000Z', endedAt: '2026-10-31T15:00:00.000Z', endedReason: 'dropped' }),
-      e({ kind: 'used', reason: 'auto', sessionStartsAt: '2026-11-11T01:00:00.000Z', at: '2026-10-31T16:00:00.000Z' }),
+      e({ kind: 'used', reason: 'auto' as any, at: '2026-10-31T14:00:00.000Z', endedAt: '2026-10-31T15:00:00.000Z', endedReason: 'dropped' }),
+      e({ kind: 'used', reason: 'auto' as any, sessionStartsAt: '2026-11-11T01:00:00.000Z', at: '2026-10-31T16:00:00.000Z' }),
       e({ kind: 'kept', reason: 'cash', at: '2026-10-31T17:00:00.000Z' }),
     ];
     expect(creditChanges(history, TZ, 'Alex').map((c) => c.text)).toEqual([

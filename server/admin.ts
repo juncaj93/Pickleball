@@ -249,7 +249,11 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       session,
       ctx.db.prepare("UPDATE sessions SET status = 'canceled', canceled_at = ?, canceled_by = 'organizer', cancel_reason = ?, updated_at = ? WHERE id = ? AND status <> 'canceled' AND finalized_at IS NULL").bind(ctx.nowIso, reason, ctx.nowIso, session.id),
     );
-    if (!changed) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+    if (!changed) {
+      // A second tap that lost the race to the first: already canceled, nothing more to do.
+      if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') return { ok: true, changed: false };
+      throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+    }
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
     await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back, ...(reason ? { reason } : {}) }, ctx.nowIso);
     return { ok: true, changed: true };
