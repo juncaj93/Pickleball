@@ -103,3 +103,17 @@ export function alertMessage(a: AlertInput): string | null {
 export function refundRequestMessage(name: string, cents: number): string {
   return `Refund requested: ${name} wants $${Math.floor(cents / 100)} back.`;
 }
+
+/**
+ * A player put their pending cash out toward a game instead (the "Use it"
+ * prompt at sign-up). First name, amounts and the day only:
+ * "Mitchel withdrew the $10 cash out request (using it for Thu Nov 5)", or for
+ * part of it "Mitchel withdrew $4 of the $10 cash out request (using it for Thu Nov 5)".
+ */
+export function cashOutUsedMessage(name: string, usedCents: number, requestCents: number, startsAt: string, tz: string): string {
+  const first = name.trim().split(/\s+/)[0] || 'A player';
+  const day = new Date(startsAt).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: tz }).replace(/,/g, '');
+  const dollars = (c: number) => `$${Math.floor(c / 100)}`;
+  const what = usedCents >= requestCents ? `the ${dollars(requestCents)}` : `${dollars(usedCents)} of the ${dollars(requestCents)}`;
+  return `${first} withdrew ${what} cash out request (using it for ${day})`;
+}

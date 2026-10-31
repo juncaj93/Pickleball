@@ -544,7 +544,14 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
       actor ?? (self ? self : 'organizer'),
     );
   } else {
-    if (row.payment_status !== 'paid') return { ok: true, changed: false };
+    if (row.payment_status !== 'paid') {
+      // "Credit $3" on a seat that still owes: the organizer's Unmark puts that credit back in the player's pot.
+      if (self || row.status !== 'confirmed') return { ok: true, changed: false };
+      const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true });
+      if (back <= 0) return { ok: true, changed: false };
+      await audit(ctx.db, group.id, session.id, 'marked_unpaid', { player: row.display_name, creditReturnedCents: back }, ctx.nowIso, actor ?? 'organizer');
+      return { ok: true, changed: true };
+    }
     if (self && !row.self_paid_at) throw new HttpError(409, 'organizer_marked', 'The organizer marked this paid. Ask them to change it.');
     if (row.refunded_at) throw new HttpError(409, 'already_settled', 'That payment already came back to them as credit.');
     // Credit that came back from this payment (paid above the final price) is taken back first; if they already spent it, say so.

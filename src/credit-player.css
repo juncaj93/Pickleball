@@ -175,3 +175,61 @@
 .pay-pair .pay-note {
   flex-basis: 100%;
 }
+
+/* ---- "Use the $10 you asked to cash out for this game?": a small sheet at the bottom, in the banner's style ---- */
+.cashout-prompt {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--safe-bottom) + 20px);
+  z-index: 59;
+  width: min(340px, calc(100vw - 24px));
+  box-sizing: border-box;
+  padding: 14px 14px 12px;
+  border: 1px solid var(--pop-line);
+  border-radius: 16px;
+  background: var(--pop-bg);
+  color: var(--pop-fg);
+  box-shadow: 0 10px 28px rgb(10 20 15 / 30%);
+  transform: translateX(-50%);
+  animation: banner-in 200ms ease-out both;
+}
+.cashout-prompt .cashout-q {
+  margin: 0 0 12px;
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.cashout-prompt .cashout-btns {
+  display: flex;
+  gap: 8px;
+}
+.cashout-prompt .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+.cashout-prompt .cashout-keep {
+  background: transparent;
+  color: var(--pop-fg);
+  border: 1px solid color-mix(in srgb, var(--pop-fg) 45%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cashout-prompt {
+    animation: none;
+  }
+}
+
+/* ---- "Credit $3 used" on a card: credit already on the seat, an outline next to the amber "$11 due" ---- */
+.schedule .pchip.chip-credit-used {
+  color: var(--pc-green);
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--pc-green-line);
+}
+.schedule .chip-pair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}

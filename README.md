@@ -198,10 +198,12 @@ Venmo link (**Refund**, then **Mark refunded**; or **Not now**).
 
 Credit is **one pot per player**, with no expiry, usable on any later game. On their own
 screen a player sees a small **CREDIT $14** chip in the header (tap it for the balance, the
-history and Request refund), and on a game they owe for a **Use credit** button. It
-takes the smaller of their credit and what they owe, and only when they tap it. If it covers
-everything the game shows "Paid with credit"; otherwise they pay the rest with the normal
-Pay button for the remaining amount. At most one green button per card: Use credit is the
+history and Request refund). Credit is used **automatically when they tap I'm in** (or move
+in from a waitlist): the smaller of their usable credit and the $14 owed, in the same step
+as the seat. If it covers everything the game shows "Paid with credit"; otherwise it shows
+"Credit $3 used" and they pay the rest with the normal Pay button once the court is booked.
+A pending cash out is only used if they say yes to "Use the $10 you asked to cash out for
+this game?". A **Use credit** button stays for credit that arrives after they joined. At most one green button per card: Use credit is the
 green one when it covers the whole amount, otherwise Pay stays green. If they drop out of a
 game paid with credit, or it is canceled, the credit goes back to them. You can **Unmark**
 any credit use. Nobody sees anyone else's credit.

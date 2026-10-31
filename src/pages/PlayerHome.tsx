@@ -6,6 +6,7 @@ import { creditBackNote } from '../../shared/pricing';
 import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
+import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { holdLive } from '../busy';
@@ -74,7 +75,15 @@ function useFadeOut(items: PlayerSessionView[]): { s: PlayerSessionView; leaving
 
 const TIER_LABEL: Record<WeekTier, string> = { this: 'This week', next: 'Next week', later: 'Later' };
 
-type JoinResponse = { result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby'; position?: number };
+type JoinResponse = {
+  result: 'confirmed' | 'already_confirmed' | 'waitlisted' | 'standby';
+  position?: number;
+  /** Credit used on the seat at once (only when some was). */
+  creditCents?: number;
+  paidWithCredit?: boolean;
+  /** A pending cash out that could cover the rest: "Use the $10 you asked to cash out for this game?" */
+  cashOutOffer?: { cents: number; requestCents: number } | null;
+};
 
 const GOOD_NEWS = {
   spot_opened: "Good news, a spot opened up, so you're in.",
@@ -202,14 +211,19 @@ export function PlayerHome({
       setTimeout(() => setCelebrating((cur) => (cur === ids ? new Set() : cur)), CELEBRATE_MS);
     }
   }, [g, switching, viewAs, toast]);
+  // "Use the $10 you asked to cash out for this game?" after I'm in, only when it matters (the server decides).
+  const [cashOut, setCashOut] = useState<{ sessionId: string; cents: number } | null>(null);
   /** My own tap on I'm in / Yes: "Game on!" when it completed the 4th player, else "You're in". */
   const joinToast = useCallback(
     (sessionId: string, before: number, res: JoinResponse, noCourt = false) => {
+      const offer = res.cashOutOffer && res.cashOutOffer.cents > 0 ? res.cashOutOffer : null;
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
-        if (before + 1 === MIN_PLAYERS) return toast('Game on!', 'ok', { ball: true });
+        if (before + 1 === MIN_PLAYERS && !offer) return toast('Game on!', 'ok', { ball: true });
       }
+      // The cash-out question sits where the banner would; the card already says "You're in".
+      if (offer) return setCashOut({ sessionId, cents: offer.cents });
       toast(joinedText(res, noCourt));
     },
     [toast, markCelebrated],
@@ -408,6 +422,7 @@ export function PlayerHome({
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
+      {cashOut && <CashOutPrompt key={cashOut.sessionId} sessionId={cashOut.sessionId} cents={cashOut.cents} onClose={() => setCashOut(null)} onChanged={load.reload} />}
       {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </>
   );
@@ -1004,28 +1019,40 @@ function RowPay({
       </div>
     );
   }
+  const left = mine.creditCents > 0;
+  // Credit already on the seat (used at sign-up, or with Use credit): its own small chip, even before a court is booked.
+  const creditChip = left && (
+    <span className="pchip chip-credit-used" data-credit-used>
+      Credit {formatPrice(mine.creditCents)} used
+    </span>
+  );
   if (mine.oweCents <= 0) {
     return (
       <div className="sched-money stacked">
+        {creditChip}
         <span className="inline-links">{drop}</span>
       </div>
     );
   }
-  const left = mine.creditCents > 0;
   // With credit to use, "Use credit" is the filled button and Pay is its outline twin (covers all or part).
   const showCredit = mine.useCreditCents > 0;
-  const chipText = left ? `${formatPrice(mine.oweCents)} left to pay` : `${formatPrice(mine.oweCents)} due`;
   const chip = (
     <span className="pchip chip-warn" data-owe>
-      {chipText}
-      {left && <span className="sr-only">, {formatPrice(mine.creditCents)} credit used</span>}
+      {formatPrice(mine.oweCents)} due
       {showCredit && !left && <span className="chip-credit"> · {formatPrice(g.credit.usableCents)} credit</span>}
     </span>
   );
   if (onTop) {
     return (
       <div className="sched-money stacked">
-        {chip}
+        {left ? (
+          <span className="chip-pair">
+            {creditChip}
+            {chip}
+          </span>
+        ) : (
+          chip
+        )}
         <span className="inline-links">{drop}</span>
       </div>
     );
@@ -1069,6 +1096,7 @@ function RowPay({
   return (
     <>
       <div className="sched-money pay-line">
+        {creditChip}
         {chip}
         {creditHint}
         <span className="sched-btns">
@@ -1243,7 +1271,7 @@ export function ScheduleRow({
       Drop out
     </button>
   );
-  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || onTop);
+  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || onTop);
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
   const notIn = open && !(inSession || waiting);

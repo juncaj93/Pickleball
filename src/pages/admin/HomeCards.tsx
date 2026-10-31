@@ -174,7 +174,8 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
   const [, bump] = useState(0);
   const pay = venmoRefundUrl(r.venmo, r.cents, CREDIT_NOTE);
   const tapped = readOpened(r.id);
-  const act = (action: 'refunded' | 'not_now', msg: string) => run(() => api('POST', `/api/admin/refund-requests/${r.id}`, { action }), msg);
+  // The amount on the card goes along: if the player put part of it toward a game since, the server says look again.
+  const act = (action: 'refunded' | 'not_now', msg: string) => run(() => api('POST', `/api/admin/refund-requests/${r.id}`, action === 'refunded' ? { action, cents: r.cents } : { action }), msg);
   return (
     <article className="card stack refund-request" aria-label={`${r.name} requested a refund`} data-refund-request={r.name}>
       <h3>

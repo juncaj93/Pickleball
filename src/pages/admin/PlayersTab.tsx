@@ -253,6 +253,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
                       `Nothing owed${back}`
                     )}
                     {withCredit && !allCredit ? ` · ${formatPrice(r.creditCents)} from credit` : ''}
+                    {r.paymentStatus === 'unpaid' && r.creditCents > 0 ? ` · Credit ${formatPrice(r.creditCents)} used` : ''}
                     {s.finalized && r.played === false ? ' · did not play' : ''}
                   </span>
                 </span>
