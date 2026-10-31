@@ -35,18 +35,17 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
     setTexts(false);
     setOpened(null);
     setPlace('down');
-    if (refocus) gear.current?.focus();
+    if (refocus) gear.current?.focus({ preventScroll: true });
   };
 
   // Measure with the pop-up drawn (hidden) under the gear, then choose. Runs again when the text list opens or the screen turns.
   useLayoutEffect(() => {
     if (!open) return;
-    const fit = (scrolled = false) => {
+    const fit = () => {
       const el = pop.current;
       const g = gear.current;
       if (!el || !g) return;
-      // Leave room for the text choices too, so opening them never pushes the pop-up off screen.
-      const need = el.scrollHeight + 8 + (texts ? 0 : items.length * 56 + 8);
+      const need = el.scrollHeight + 8;
       const gr = g.getBoundingClientRect();
       const bar = document.querySelector('.tabbar')?.getBoundingClientRect();
       const vv = window.visualViewport;
@@ -54,17 +53,10 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
       const topLimit = Math.max(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0, vv?.offsetTop ?? 0) + 8;
       if (gr.bottom + 2 + need <= bottom) setPlace('down');
       else if (gr.top - 2 - need >= topLimit) setPlace('up');
-      else if (!scrolled && window.scrollY < document.documentElement.scrollHeight - window.innerHeight - 1) {
-        // Neither side has room: scroll the page so the gear sits near the top, then look again.
-        const by = Math.min(gr.top - topLimit, document.documentElement.scrollHeight - window.innerHeight - window.scrollY);
-        if (by > 24) {
-          window.scrollBy(0, by);
-          fit(true);
-        } else setPlace('sheet');
-      } else setPlace('sheet');
+      else setPlace('sheet');
     };
     fit();
-    const onResize = () => fit(true);
+    const onResize = () => fit();
     window.addEventListener('resize', onResize);
     window.visualViewport?.addEventListener('resize', onResize);
     return () => {
@@ -75,7 +67,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
 
   // The first row gets focus so a keyboard or screen reader lands inside the menu (again if it moved to a panel).
   useEffect(() => {
-    if (open) pop.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    if (open) pop.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus({ preventScroll: true });
   }, [open, place]);
 
   useEffect(() => {
@@ -104,7 +96,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
     const at = rows.indexOf(document.activeElement as HTMLElement);
     const go = (i: number) => {
       e.preventDefault();
-      rows[(i + rows.length) % rows.length]?.focus();
+      rows[(i + rows.length) % rows.length]?.focus({ preventScroll: true });
     };
     if (e.key === 'ArrowDown') go(at + 1);
     else if (e.key === 'ArrowUp') go(at - 1);

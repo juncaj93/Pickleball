@@ -66,7 +66,7 @@ async function more(card) {
   // Wait until the card has drawn, then open the pop-up unless it is open.
   await gear.waitFor();
   if ((await gear.getAttribute('aria-expanded')) !== 'true') await gear.click();
-  await card.locator('[role="menu"]').waitFor();
+  await card.page().locator('[role="menu"]').waitFor();
 }
 
 /** The Money tab, with this session's payments opened. */
@@ -138,9 +138,11 @@ async function showAll(page) {
 /** Open a card's gear pop-up and expand its "Text the group" choices. */
 async function textMenu(card) {
   await more(card);
-  const btn = card.getByRole('menuitem', { name: 'Text the group', exact: true });
+  // The pop-up can open under the gear, above it, or as a panel above the tab bar (outside the card): look page-wide.
+  const page = card.page();
+  const btn = page.getByRole('menu').getByRole('menuitem', { name: 'Text the group', exact: true });
   if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
-  const menu = card.locator('.text-menu');
+  const menu = page.getByRole('menu').locator('.text-menu');
   await menu.locator('.text-row').first().waitFor();
   return menu;
 }
@@ -156,7 +158,7 @@ function smsOf(href) {
 async function closeOptions(card) {
   const gear = card.getByRole('button', { name: /^Game menu for/ });
   if ((await gear.getAttribute('aria-expanded')) === 'true') await card.page().keyboard.press('Escape');
-  await card.locator('[role="menu"]').waitFor({ state: 'detached' });
+  await card.page().locator('[role="menu"]').waitFor({ state: 'detached' });
 }
 
 /** How far the test server's clock is pinned from real time (see the start of the run). */
@@ -1147,7 +1149,7 @@ async function main() {
       assert(JSON.stringify(await visible()) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
-      const menu = card.locator('[role="menu"]');
+      const menu = card.page().locator('[role="menu"]');
       await menu.waitFor();
       const rows = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
       // Once the court is booked, Add to calendar joins the list; Cancel session is always last.
@@ -2590,7 +2592,7 @@ async function main() {
       assert((await booked.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar icon under the gear');
       assert((await booked.locator('.cal-btn').count()) === 0, 'the floating calendar icon is gone');
       await more(booked);
-      const orgCal = booked.locator('[role="menu"]').getByRole('menuitem', { name: /to calendar$/ });
+      const orgCal = booked.page().locator('[role="menu"]').getByRole('menuitem', { name: /to calendar$/ });
       await orgCal.waitFor();
       assert((await orgCal.innerText()).trim() === 'Add to calendar', 'says Add to calendar');
       await icsOk(admin, await orgCal.getAttribute('href'));
@@ -2876,7 +2878,7 @@ async function main() {
         for (const i of [0, 2]) {
           const c = sessionCards(p).nth(i);
           await more(c);
-          const pop = await c.locator('[role="menu"]').evaluate((m) => {
+          const pop = await c.page().locator('[role="menu"]').evaluate((m) => {
             const vw = window.innerWidth;
             const b = m.getBoundingClientRect();
             const rows = [...m.querySelectorAll('[role="menuitem"]')].map((r) => r.getBoundingClientRect());
@@ -3772,7 +3774,7 @@ async function main() {
           }
         }
         const menu = await textMenu(card);
-        const order = await card.locator('[role="menu"]').evaluate((o) => ({ text: o.querySelector('[role="menuitem"]').textContent.trim(), textTop: o.querySelector('[role="menuitem"]').getBoundingClientRect().top, rowsTops: [...o.querySelectorAll(':scope > [role="menuitem"]')].map((r) => r.getBoundingClientRect().top) }));
+        const order = await p.locator('[role="menu"]').evaluate((o) => ({ text: o.querySelector('[role="menuitem"]').textContent.trim(), textTop: o.querySelector('[role="menuitem"]').getBoundingClientRect().top, rowsTops: [...o.querySelectorAll(':scope > [role="menuitem"]')].map((r) => r.getBoundingClientRect().top) }));
         assert(order.text === 'Text the group' && order.rowsTops.every((t) => t >= order.textTop), 'Text the group comes first in the pop-up');
         for (const row of await menu.locator('.text-row').all()) {
           const link = row.locator('a.text-choice');

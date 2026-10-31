@@ -439,6 +439,74 @@ async function main() {
     });
   }
 
+  await check('390px: opening the gear menu (and Edit game, Players, Cancel) never moves the page, at several scroll positions, on the first, a middle and the last card', async () => {
+    const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height: 700 } });
+    await post(ctx.request, '/api/admin/login', { pin: PIN });
+    const page = await ctx.newPage();
+    await page.goto(`${BASE}/admin`);
+    await page.locator(CARDS).first().waitFor();
+    const all = page.getByRole('button', { name: /^Show all/ });
+    if (await all.count()) await all.click();
+    const n = await page.locator(CARDS).count();
+    const maxY = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+    const spots = [0, Math.round(maxY * 0.25), Math.round(maxY * 0.5), Math.round(maxY * 0.75), maxY];
+    const y = () => page.evaluate(() => Math.round(window.scrollY * 100) / 100);
+    let opened = 0;
+    const placements = new Set();
+    for (const target of spots) {
+      await page.evaluate((t) => window.scrollTo(0, t), target);
+      await sleep(150);
+      const visible = await page.locator(CARDS).evaluateAll((els) =>
+        els.map((e, idx) => ({ idx, b: e.querySelector('.icon-round').getBoundingClientRect() })).filter((x) => x.b.top >= 70 && x.b.bottom <= 640).map((x) => x.idx),
+      );
+      const picks = [...new Set([visible[0], visible[Math.floor(visible.length / 2)], visible[visible.length - 1]])].filter((v) => v !== undefined);
+      for (const i of picks) {
+        await page.evaluate((t) => window.scrollTo(0, t), target);
+        await sleep(120);
+        const before = await y();
+        const c = page.locator(CARDS).nth(i);
+        const box = await c.getByRole('button', { name: /^Game menu for/ }).boundingBox();
+        // Only gears that are on screen here (a tap on one that is not would be impossible for a person too).
+        if (!box || box.y < 70 || box.y + box.height > 640) continue;
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await page.getByRole('menu').waitFor();
+        await sleep(250);
+        const during = await y();
+        placements.add(await page.getByRole('menu').evaluate((e) => [...e.classList].find((c) => c.startsWith('place-'))));
+        assert(during === before, `card ${i + 1}: opening the menu moved the page from ${before} to ${during}`);
+        // Every row is on screen and tappable without scrolling.
+        const rows = await page.getByRole('menu').getByRole('menuitem').evaluateAll((els) =>
+          els.map((e) => {
+            const b = e.getBoundingClientRect();
+            const hit = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+            return { t: e.textContent.trim(), ok: b.top >= 0 && b.bottom <= window.innerHeight && !!hit && (hit === e || e.contains(hit)) };
+          }),
+        );
+        assert(rows.every((r) => r.ok), `card ${i + 1}: rows not reachable ${JSON.stringify(rows.filter((r) => !r.ok))}`);
+        await page.keyboard.press('Escape');
+        await page.getByRole('menu').waitFor({ state: 'detached' });
+        assert((await y()) === before, `card ${i + 1}: closing the menu moved the page`);
+        // The other pop-ups opened from the menu.
+        for (const row of ['Edit game', 'Players', 'Cancel session']) {
+          await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+          await page.getByRole('menu').waitFor();
+          await page.getByRole('menuitem', { name: row }).click();
+          await page.locator('dialog[open]').waitFor();
+          await sleep(200);
+          assert((await y()) === before, `card ${i + 1}: opening "${row}" moved the page`);
+          await page.keyboard.press('Escape');
+          await page.locator('dialog[open]').waitFor({ state: 'detached' });
+          assert((await y()) === before, `card ${i + 1}: closing "${row}" moved the page`);
+        }
+        opened++;
+      }
+    }
+    assert(opened >= 8, `only ${opened} menus were tried`);
+    assert(placements.has('place-down') && placements.has('place-up'), `expected both down and up placements, saw ${[...placements]}`);
+    console.log(`      (${opened} menus opened, placements used: ${[...placements].join(', ')})`);
+    await ctx.close();
+  });
+
   await check('Edit game on a short phone (390 x 560): Save can be scrolled to and tapped, and the sheet stays above the tab bar', async () => {
     const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height: 560 } });
     await post(ctx.request, '/api/admin/login', { pin: PIN });
