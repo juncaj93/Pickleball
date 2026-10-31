@@ -539,3 +539,49 @@ Three front-end fixes, one deploy. No database change, no money logic touched.
 - Browser: 22 suites, 916 checks, 0 failed (new: `e2e/banner.cjs` 11,
   `e2e/card-times.cjs` 13, `e2e/no-court.cjs` 10). Each new suite was shown to
   fail on the old code.
+
+## Credit used automatically at I'm in (Sat Oct 31, 2026)
+
+Spec: CREDIT_SPEC.md from Alex (all decisions final). One money rule changed: credit
+is used automatically at sign-up. Everything else about money is unchanged.
+
+### What changed
+- **At sign-up.** When a player gets a seat (I'm in, the Want in card, a claim link,
+  the organizer adding them, moving in from a waitlist, Court opened), their usable
+  credit (the pot minus a pending cash out) goes on that game at once, up to the $14
+  owed. It is one database batch with the seat (`autoCreditStatements` in
+  `server/credit.ts`, added to the seat statement in `tryConfirm` and `settle` in
+  `server/roster.ts`). The amount is worked out inside the database, so two games
+  tapped at once, a double tap, a retry or two phones never spend credit twice. The
+  organizer never uses credit. Entries are tagged `reason = 'auto'` in `credit_ledger`.
+- **Full cover**: "Paid with credit" at once, even with no court booked. **Part cover**:
+  a "Credit $3 used" chip; "$11 due" and Pay appear once the court is booked.
+- **Back**: Drop out, Remove player, cancel, court "Didn't open" and the organizer's
+  Unmark put it back at once (as before). The 5-second Undo sends nothing, so the
+  credit never moves. The organizer moving someone to the waitlist puts part credit back.
+- **Pending cash out**: never used by itself. When it would help pay a game just
+  joined, a small question at the bottom asks "Use the $10 you asked to cash out for
+  this game?" (`src/pages/CashOutPrompt.tsx`). Use it (POST
+  `/api/sessions/:id/use-cash-out`) puts it on the game and shrinks the request, or
+  withdraws it when all of it is used, in one batch; the Home card shrinks or goes;
+  one Telegram line under the "Refund requests" switch: "Mitchel withdrew the $10 cash
+  out request (using it for Thu Nov 5)" (first name only; "the" instead of "his").
+  Keep cash out just closes it. Mark refunded now sends the card's amount and is
+  refused if the request changed since.
+- **Who paid**: "Paid with credit" or "Credit $3" with Unmark (credit back to the pot).
+  Players tab rows say "Credit $3 used"; the history shows each use and return.
+  Activity: "Casey used $14 credit for Tue, Nov 3 (automatic at sign-up)".
+- Use credit (the button) stays for credit that arrives after joining (like money back
+  from a 5+ player game, which is never put on games already joined by itself).
+
+### Fixed on the way (found by the fresh review)
+- A cash-out request is saved only while the credit is still there.
+- A drop turns the payment into credit only while the seat is still out (a second
+  phone's I'm in in between could make a free seat).
+- Did not play with credit on a seat that still owed: that credit now comes back
+  (it used to stay stuck on the seat).
+- "Back as credit" for a seat counts drop, rejoin, drop once, not twice.
+
+### Database
+No change, no migration. The existing `credit_ledger` already records credit used on a
+game (kind `used` with the game's id).
