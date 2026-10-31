@@ -700,3 +700,24 @@ database change, no migration.
 - `tests/audit-attack.test.ts`: the independent attack suite (exact interleavings,
   cut-offs on 21 actions, random sequences with full books).
 - `tests/audit-oct31.test.ts`, `tests/money-visible.test.ts`, `e2e/money-visible.cjs`.
+
+### Round 2 (Sat Oct 31, 2026, morning): Alex's answers
+- Base: the live site runs the admin cleanup (branch `claude/new-session-sm74gy`, commit
+  41dea7a, deployed as production "main" but never merged into GitHub main). It was
+  merged into this branch first, so deploying this branch keeps it.
+- Read-only live check (8:35 AM): no pot below $0, no credit or cash stuck on a seat
+  that left or a canceled game, no cash out larger than its pot, organizer id saved.
+  Only one player has credit history (Mitchel: $14 back from the canceled Oct 29 game,
+  used on Thu Nov 5; balance $0, matching his history and the Nov 5 seat). 2 unconfirmed
+  "I paid" taps live, 0 pending cash outs.
+- Decisions built: unconfirmed I paid is a claim (Home card Paid / Didn't pay, nothing
+  on the seat moves until then, Held not Collected); Unmark undoes only the latest
+  payment; organizer Mark paid / Unmark carry what the screen showed (`moneySeen`);
+  Players-tab refund Undo names the refund (`ledgerId`); Players Held and Money
+  Collected fixes. Tests: `tests/decisions-oct31.test.ts`.
+- Not built, waits for Alex: "existing sign-ups keep the price they signed at" needs
+  one new additive table (the price each seat signed at is not stored today).
+- Restore points before the preview: Time Travel bookmark
+  `00000218-00000004-00005115-0636e0716ea7288a3b03715050d8c00f` (10:22 AM Eastern);
+  SQL export `live-before-money-audit-preview-2026-10-31.sql` (185 rows, has phone
+  numbers, not committed) in this session's scratch folder.
