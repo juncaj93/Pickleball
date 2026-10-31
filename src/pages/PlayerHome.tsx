@@ -605,15 +605,18 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
   );
 }
 
-/** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */
-function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
+/**
+ * "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. "I paid" sends the
+ * amount the screen showed for each game, so a price that changed in the meantime is refused, not recorded.
+ */
+function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   async function set(paid: boolean) {
     setBusy(true);
     const release = holdLive();
     try {
-      for (const id of sessionIds) await api('POST', `/api/sessions/${id}/paid`, { paid });
+      for (const o of owed) await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
       toast(paid ? 'Marked paid' : 'Marked not paid');
       await onChanged();
     } catch (err) {
@@ -738,7 +741,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
-  const paid = usePaid(due.map((o) => o.sessionId), onChanged);
+  const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
@@ -996,7 +999,7 @@ function RowPay({
   drop: ReactNode;
 }) {
   const mine = s.mine!;
-  const paid = usePaid([s.id], onChanged);
+  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(s.id);
   const busy = paid.busy || credit.busy;
