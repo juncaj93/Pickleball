@@ -53,6 +53,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
       if (statusChanged) await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status });
     }, moved || timeChanged ? 'Game saved' : 'Court status saved');
     if (ok) onDone(moved, statusChanged);
+    else if (moved) await ctx.reload(); // the move went through even though the switch did not
   }
 
   return (

@@ -152,6 +152,25 @@ describe('Waitlist reads as Not booked for players', () => {
     expect(p.confirmed.map((c: any) => c.name)).toEqual(['Blair']);
     expect(JSON.stringify(p)).not.toMatch(/standby/i);
   });
+
+  it('players get the same look (amber, not blue) for Waitlist as for Not booked, and old third-value rows join like any waitlisted game', async () => {
+    const ctx = await setupGroup();
+    const s = await firstSession(ctx);
+    const alex = await playerPhone(ctx, 'Alex');
+    const kind = async () => {
+      const g = courtDisplay((await alex.call('GET', '/api/group')).data);
+      const p = g.sessions.find((v: any) => v.id === s.id)!;
+      return courtStatus({ ...p, bookingOpen: true }).kind;
+    };
+    const plain = await kind();
+    await setCourt(ctx, s.id, 'waitlist');
+    expect(await kind()).toBe(plain);
+    await setCourt(ctx, s.id, 'not_booked');
+    ctx.app.db.raw.prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = NULL WHERE id = ?").run(s.id);
+    expect(await kind()).toBe(plain);
+    expect(await join(ctx, 'Alex', s.id)).toEqual({ result: 'standby', position: 1 });
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'not_opened' })).status).toBe(200);
+  });
 });
 
 describe('cancel-by is always 12 hours before the start', () => {

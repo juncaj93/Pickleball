@@ -120,9 +120,9 @@ async function main() {
       await page.screenshot({ path: path.join(SHOTS, 'texts-debug.png'), fullPage: true });
       throw e;
     });
-    const gear = card.getByRole('button', { name: /^Session options/ });
+    const gear = card.getByRole('button', { name: /^Game menu for/ });
     if ((await gear.getAttribute('aria-expanded')) !== 'true') await gear.click();
-    const btn = card.getByRole('button', { name: 'Text', exact: true });
+    const btn = card.getByRole('menuitem', { name: 'Text the group', exact: true });
     if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
     const menu = card.locator('.text-menu');
     await menu.locator('.text-row').first().waitFor();

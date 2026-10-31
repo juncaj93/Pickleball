@@ -44,6 +44,8 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
     joinAs: 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
     courtState: s.courtState === 'waitlist' ? null : s.courtState,
+    // The old third value must not leave a different look (blue) behind: to players it is plain Not booked.
+    bookingStatus: s.bookingStatus === 'unavailable' ? 'needs_booking' : s.bookingStatus,
     mine,
   };
 }

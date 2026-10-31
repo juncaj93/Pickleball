@@ -1,5 +1,6 @@
 import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
+import { isCourtWaitlist } from '../shared/court';
 import type { GroupSettings } from '../shared/settings';
 import { creditBack, returnSeatCredit } from './credit';
 import { newId } from './crypto';
@@ -200,7 +201,7 @@ export async function joinSession(
 
   // Waiting on the venue for a court: players can only go on standby, in
   // order, owing nothing. "Court opened" confirms them up to the max.
-  if (session.court_state === 'waitlist' && mode !== 'organizer') {
+  if (isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state }) && mode !== 'organizer') {
     if (mode === 'claim_only') return { result: 'spot_taken' };
     await addToWaitlist(db, session, playerId, nowIso);
     return { result: 'standby', position: await waitlistPosition(db, session.id, playerId) };
@@ -263,7 +264,7 @@ export async function withdraw(
       .run();
   }
   // While waiting on a court nobody moves in; that happens on "Court opened".
-  const promoted = changed && session.court_state !== 'waitlist' ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
+  const promoted = changed && !isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state }) ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents };
 }
 

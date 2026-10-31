@@ -40,7 +40,7 @@ import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views'
 import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
 import { adminChangeStamp } from './stamp';
-import { courtSwitchOf } from '../shared/court';
+import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -360,7 +360,7 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   await ctx.db
-    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
+    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ? WHERE id = ? AND status <> 'canceled'")
     .bind(ctx.nowIso, session.id)
     .run();
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
@@ -390,7 +390,7 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
   }
   if (to === 'waitlist') {
     await ctx.db
-      .prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned', updated_at = ? WHERE id = ?")
+      .prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
       .bind(ctx.nowIso, session.id)
       .run();
     await audit(ctx.db, group.id, session.id, 'court_waitlist', {}, ctx.nowIso);
@@ -399,7 +399,7 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
       .prepare(
         `UPDATE sessions SET booking_status = 'needs_booking', status = 'planned',
            court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND status <> 'canceled'`,
       )
       .bind(ctx.nowIso, session.id)
       .run();
@@ -427,7 +427,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
   } else if (action === 'clear') {
     await ctx.db.prepare('UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = \'waitlist\'').bind(ctx.nowIso, session.id).run();
   } else {
-    if (session.court_state !== 'waitlist') throw new HttpError(409, 'not_waiting', 'This session is not on the court waitlist.');
+    if (!isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state })) throw new HttpError(409, 'not_waiting', 'This session is not on the court waitlist.');
     await ctx.db
       .prepare(
         `UPDATE sessions SET court_state = 'not_opened', status = 'canceled', canceled_at = ?, canceled_by = 'court_not_opened', updated_at = ?

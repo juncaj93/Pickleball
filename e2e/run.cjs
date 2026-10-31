@@ -60,13 +60,13 @@ async function confirmDrop(p) {
 const tab = (page, name) => page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: new RegExp(`^${name}`) });
 /** Session cards on the organizer Home (attention cards above them are articles too). */
 const sessionCards = (page) => page.locator('section[aria-labelledby="sessions-title"] article');
-/** Open a session card's "More" buttons (Money, Texts, Reschedule, Invite, Cancel). */
+/** Open a game card's gear pop-up (Text the group, Edit game, Players, Add to calendar, Cancel session). */
 async function more(card) {
-  const gear = card.getByRole('button', { name: /^Session options/ });
-  // Wait until the card has drawn, then open the options unless they're open.
+  const gear = card.getByRole('button', { name: /^Game menu for/ });
+  // Wait until the card has drawn, then open the pop-up unless it is open.
   await gear.waitFor();
   if ((await gear.getAttribute('aria-expanded')) !== 'true') await gear.click();
-  await card.locator('.options').waitFor();
+  await card.locator('[role="menu"]').waitFor();
 }
 
 /** The Money tab, with this session's payments opened. */
@@ -135,10 +135,10 @@ async function showAll(page) {
   if (await btn.count()) await btn.click();
 }
 
-/** Open a card's gear panel and its "Text" choices. */
+/** Open a card's gear pop-up and expand its "Text the group" choices. */
 async function textMenu(card) {
   await more(card);
-  const btn = card.getByRole('button', { name: 'Text', exact: true });
+  const btn = card.getByRole('menuitem', { name: 'Text the group', exact: true });
   if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
   const menu = card.locator('.text-menu');
   await menu.locator('.text-row').first().waitFor();
@@ -152,11 +152,11 @@ function smsOf(href) {
   return { to: m[1] ? m[1].split(',') : [], body: decodeURIComponent(m[2]) };
 }
 
-/** Close a session card's options panel. */
+/** Close a game card's gear pop-up (Escape, which the pop-up listens for). */
 async function closeOptions(card) {
-  const gear = card.getByRole('button', { name: /^Session options/ });
-  if ((await gear.getAttribute('aria-expanded')) === 'true') await gear.click();
-  await card.locator('.options').waitFor({ state: 'detached' });
+  const gear = card.getByRole('button', { name: /^Game menu for/ });
+  if ((await gear.getAttribute('aria-expanded')) === 'true') await card.page().keyboard.press('Escape');
+  await card.locator('[role="menu"]').waitFor({ state: 'detached' });
 }
 
 /** How far the test server's clock is pinned from real time (see the start of the run). */
@@ -186,7 +186,7 @@ async function autoSet(field, value, { pause = false } = {}) {
 
 
 /** What counts as a "thing" on a card or a Settings row for the overlap checks. */
-const CARD_ITEMS = 'button, a[href], input, .court-status, .tile, .sched-time, .late-tag, .holiday, .holiday-text, .court-sub, .players-line, .in-count, .names-line, .dots, .pchip, .tonight-tag, .sched-status, .credit-note, .sched-sub';
+const CARD_ITEMS = 'button, a[href], input, .court-status, .court-switch, .paid-pill, .cancel-by-soon, [data-card-time], .tile, .sched-time, .late-tag, .holiday, .holiday-text, .court-sub, .players-line, .in-count, .names-line, .dots, .pchip, .tonight-tag, .sched-status, .credit-note, .sched-sub';
 const SETTINGS_ITEMS = 'summary > span, .set-label, .set-input, .set-row input, .field-label, .auto-field input, .check, .set-body > button, .set-line button, .save-retry, .field-error';
 
 /**
@@ -572,22 +572,24 @@ async function main() {
         const kind = await c.getAttribute('data-court');
         if (kind === 'needs') {
           amber++;
-          await c.locator('.court-banner').getByText('Court not booked', { exact: true }).waitFor();
+          // The old amber banner is gone: an open, unbooked game shows the always-on switch resting on Not booked.
+          assert((await c.getAttribute('data-switch')) === 'not_booked', 'an open, unbooked game should rest on Not booked');
+          assert((await c.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Not booked', 'the switch should rest on Not booked');
         }
         if (kind === 'later') {
           gray++;
-          const text = (await c.locator('.court-status').innerText()).trim();
+          const text = (await c.locator('.court-sub').innerText()).trim();
           const m = text.match(/^Booking opens (Sun|Mon|Tue|Wed|Thu|Fri|Sat), ([A-Z][a-z]{2} \d{1,2})$/);
           assert(m, `quiet card said: ${text}`);
           // The opening date is 14 days before the session.
-          const day = (await c.locator('h2').innerText()).trim().replace(/^[A-Z][a-z]{2}, /, '');
+          const day = (await c.locator('h2').innerText()).trim().replace(/, \d{1,2}:\d{2} (AM|PM)$/, '').replace(/^[A-Z][a-z]{2}, /, '');
           let start = new Date(`${day}, ${new Date(today).getFullYear()} 12:00`);
           if (start.getTime() < today - 60 * 24 * 3600_000) start = new Date(`${day}, ${new Date(today).getFullYear() + 1} 12:00`);
           const opens = new Date(start.getTime() - 14 * 24 * 3600_000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
           assert(text === `Booking opens ${opens}`, `quiet card said "${text}", expected "Booking opens ${opens}" for ${day}`);
           const look = await c.evaluate((el) => ({ border: getComputedStyle(el).borderTopStyle, banner: el.querySelectorAll('.court-banner').length }));
           assert(look.border !== 'dashed' && look.banner === 0, 'far-off sessions should not get the amber look');
-          assert((await c.getByRole('button', { name: 'I booked it' }).count()) === 0, 'quiet card should keep I booked it under More');
+          assert((await c.getByRole('button', { name: 'I booked it' }).count()) === 0, 'quiet card should not offer I booked it');
         }
       }
       assert(amber > 0 && gray > 0, `expected both looks, got ${amber} amber and ${gray} gray`);
@@ -596,7 +598,9 @@ async function main() {
       const card14 = sessionCards(admin).filter({ has: admin.locator('h2', { hasText: in14 }) });
       if (await card14.count()) {
         assert((await card14.getAttribute('data-court')) === 'needs', `${in14} is 14 days out and should be open to book`);
-        await card14.locator('.court-banner').getByRole('button', { name: 'I booked it' }).waitFor();
+        // The old banner's "I booked it" is now one tap on the card's own Booked segment.
+        await card14.locator('.court-switch').getByRole('button', { name: 'Booked', exact: true }).waitFor();
+        assert((await card14.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Not booked', `${in14} should be waiting to be booked`);
       }
       // The badge reminds from 7:00 AM on the day booking opens (the test clock is 12:30 AM).
       const reminded = await sessionCards(admin).locator('xpath=self::*[@data-remind="true"]').count();
@@ -1025,17 +1029,19 @@ async function main() {
         assert((await admin.getByRole('article', { name }).count()) === 0, `old ${name} card still on Home`);
       }
       assert((await sessionCards(admin).locator('.chip').count()) === 0, 'session cards should have no status chip');
-      // Court buttons live only inside session cards, plus "I booked it" on the "Do this now" card (no court yet).
+      // The court buttons now live only on the "Do this now" card (I booked it for a game with no court, Court opened / Didn't open for a waitlisted one); a game card has just the switch.
       for (const label of ['I booked it', 'Court opened', "Didn't open"]) {
         const all = await admin.getByRole('button', { name: label, exact: true }).count();
         const inCards = await sessionCards(admin).getByRole('button', { name: label, exact: true }).count();
         const onDoNow = await admin.locator('.do-now').getByRole('button', { name: label, exact: true }).count();
-        assert(all === inCards + onDoNow && (label === 'I booked it' || onDoNow === 0), `${label} shows outside a session card`);
+        assert(inCards === 0, `${label} is still on a game card`);
+        assert(all === onDoNow, `${label} shows outside the Do this now card`);
       }
       const cards = sessionCards(admin);
       for (let i = 0; i < (await cards.count()); i++) {
         const c = cards.nth(i);
-        assert((await c.locator('.court-status').count()) >= 1, 'every card needs a court line');
+        // A live card has the always-visible switch; a canceled, started or played one keeps the gray reason line.
+        assert((await c.locator('.court-switch, .court-status').count()) >= 1, 'every card needs a court switch or a court line');
         if ((await c.getAttribute('data-court')) !== 'off') {
           const line = (await c.locator('.players-line .players-count').innerText()).trim();
           // "3 of 4 in" under 4, then "5 in", and "10 in, full" at the max.
@@ -1055,20 +1061,18 @@ async function main() {
       }
     });
 
-    await check('not booked: amber dashed border, banner with I booked it; one tap books it', async () => {
+    await check('not booked: amber dashed border, the switch rests on Not booked; one tap on Booked books it', async () => {
       const card = sessionCards(admin).first();
       assert((await card.getAttribute('data-court')) === 'needs', 'first card should need a court');
-      const banner = card.locator('.court-banner');
-      await banner.getByText('Court not booked', { exact: true }).waitFor();
-      assert((await banner.locator('svg.court-icon').count()) === 1, 'banner needs an icon with the words');
-      const look = await card.evaluate((el) => ({ style: getComputedStyle(el).borderTopStyle, banner: getComputedStyle(el.querySelector('.court-banner')).backgroundColor }));
+      assert((await card.getAttribute('data-switch')) === 'not_booked', 'the card should say not_booked');
+      const sw = card.locator('.court-switch');
+      assert((await sw.locator('button[aria-pressed="true"]').innerText()) === 'Not booked', 'the switch should rest on Not booked');
+      assert((await sw.getByRole('button').count()) === 3, 'three segments');
+      // The old banner and its buttons are gone from the card.
+      assert((await card.locator('.court-banner').count()) === 0, 'the old banner is still on the card');
+      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0 && (await card.getByRole('link', { name: /^Book/ }).count()) === 0, 'old banner buttons are still on the card');
+      const look = await card.evaluate((el) => ({ style: getComputedStyle(el).borderTopStyle }));
       assert(look.style === 'dashed', `not-booked border should be dashed, was ${look.style}`);
-      // A Book link right next to I booked it, to the booking page.
-      const book = banner.getByRole('link', { name: /^Book/ });
-      assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442', 'banner Book link should go to the booking page');
-      const bb = await book.boundingBox();
-      const ib = await banner.getByRole('button', { name: 'I booked it' }).boundingBox();
-      assert(Math.abs(bb.y - ib.y) < 4 && bb.x < ib.x, 'Book should sit right before I booked it');
       for (const scheme of ['light', 'dark']) {
         await admin.emulateMedia({ colorScheme: scheme });
         await card.screenshot({ path: path.join(SHOTS, `card-needs-${scheme}.png`) });
@@ -1076,38 +1080,38 @@ async function main() {
       }
       await admin.emulateMedia({ colorScheme: 'light' });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-not-booked.png') });
-      await banner.getByRole('button', { name: 'I booked it' }).click();
+      await sw.getByRole('button', { name: 'Booked', exact: true }).click();
       await admin.locator('.toast', { hasText: 'Court booked' }).waitFor();
-      assert((await admin.locator('dialog[open]').count()) === 0, 'I booked it should not ask anything');
+      assert((await admin.locator('dialog[open]').count()) === 0, 'one tap should not ask anything');
       const booked = sessionCards(admin).first();
-      assert((await booked.getAttribute('data-court')) === 'booked', 'card should now be booked');
-      await booked.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
-      await booked.getByText(/^Cancel by .*8:00 AM/).waitFor();
+      await admin.waitForFunction(() => document.querySelector('section[aria-labelledby="sessions-title"] article')?.getAttribute('data-court') === 'booked');
+      assert((await booked.getAttribute('data-switch')) === 'booked', 'card should now be booked');
+      assert((await booked.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Booked', 'the switch should rest on Booked');
+      // Cancel-by is automatic and only shows (in red) in the last 24 hours before it; the always-on line is gone.
+      assert((await booked.getByText(/^Cancel by .*(AM|PM)$/).count()) === 0, 'the always-on Cancel by line is back');
       const edge = await booked.evaluate((el) => ({ style: getComputedStyle(el).borderLeftStyle, width: parseFloat(getComputedStyle(el).borderLeftWidth) }));
       assert(edge.style === 'solid' && edge.width >= 6, `booked card needs a solid left edge: ${JSON.stringify(edge)}`);
       assert((await booked.locator('.court-banner').count()) === 0, 'booked card should have no banner');
     });
 
-    await check('Edit booking: no court number; reservation number and cost under More details', async () => {
+    await check('Edit game: no court number; no reservation number or court cost fields any more; a stored cost still never reaches players', async () => {
       const card = sessionCards(admin).first();
       await more(card);
-      await card.getByRole('button', { name: 'Edit booking' }).click();
+      await card.getByRole('menuitem', { name: 'Edit game' }).click();
       const edit = admin.locator('dialog[open]');
-      await edit.getByLabel(/Cancellation deadline/).waitFor();
-      assert((await edit.getByLabel(/Court #|Court number/).count()) === 0, 'court number field still in Edit booking');
-      assert(!(await edit.getByLabel(/Reservation number/).isVisible()), 'extras should be tucked under More details');
-      await edit.getByText('More details').click();
-      await edit.getByLabel(/Reservation number/).fill('R-1042');
-      await edit.getByLabel(/Court cost/).fill('48.37');
-      await edit.getByLabel('Court cost (only you see this)').waitFor();
-      assert((await edit.getByText(/Split four ways/i).count()) === 0, 'old split helper text still shown');
-      await edit.getByText(/Deadline: .*8:00 AM$/).waitFor();
+      await edit.locator('[data-cancel-by]').waitFor();
+      assert((await edit.getByLabel(/Court #|Court number/).count()) === 0, 'court number field in Edit game');
+      assert((await edit.getByLabel(/Reservation number|Court cost|Cancellation deadline/).count()) === 0 && (await edit.getByText('More details').count()) === 0, 'old booking fields are still in Edit game');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booking.png') });
-      await edit.getByRole('button', { name: 'Save booking' }).click();
-      await admin.locator('.toast', { hasText: 'Booking saved' }).waitFor();
-      await more(card);
-      await card.getByText('Reservation #R-1042', { exact: false }).waitFor();
-      await card.getByText('$48.37 (only you see this)', { exact: false }).waitFor();
+      await edit.getByRole('button', { name: 'Close' }).click();
+      // The cost is still stored for the Money tab (set here through the same server call the old sheet used), and nothing on the card shows it.
+      const id = (await card.getAttribute('id')).replace('session-', '');
+      const dashNow = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.find((x) => x.id === id);
+      assert((await admin.request.put(`${BASE}/api/admin/sessions/${id}/booking`, { data: { bookingStatus: 'booked', reservationReference: 'R-1042', courtCostCents: 4837, cancellationDeadlineAt: dashNow.cancellationDeadlineAt }, headers: { Origin: BASE } })).ok(), 'could not store the cost');
+      await admin.reload();
+      await sessionCards(admin).first().waitFor();
+      const shown = await sessionCards(admin).first().innerText();
+      assert(!/R-1042|48\.37|only you see this|Reservation/.test(shown), 'reservation number or cost shows on the card');
       assert((await admin.getByText(/Court #|Court number/).count()) === 0, 'court number shows on organizer Home');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-booked.png') });
       await players.Alex.reload();
@@ -1123,7 +1127,7 @@ async function main() {
       assert((await admin.getByText(/\d+ needs? a court/).count()) === 0, 'summary text should be gone');
     });
 
-    await check('session card: only the gear at the top right (no phone button); it opens Share the game and a 2 by 2 grid', async () => {
+    await check('session card: only the gear at the top right (no phone button); it opens a small pop-up with Text the group on top', async () => {
       const card = sessionCards(admin).first();
       await card.locator('.tile').waitFor();
       await card.locator('.players-line .dots > *').first().waitFor();
@@ -1131,25 +1135,28 @@ async function main() {
       assert((await card.getByRole('button', { name: /^(More|Less)$/ }).count()) === 0, 'More / Less should be gone');
       assert((await card.locator('[data-icon="phone"]').count()) === 0, 'no phone button on the card');
       assert((await card.locator('.card-icons button').count()) === 1, 'only the gear at the top right');
-      const gear = card.getByRole('button', { name: /^Session options for / });
+      const gear = card.getByRole('button', { name: /^Game menu for (Mon|Tue|Wed|Thu|Fri|Sat|Sun), [A-Z][a-z]{2} \d{1,2}$/ });
       const gb = await gear.boundingBox();
       const cb = await card.boundingBox();
       assert(gb.x + gb.width > cb.x + cb.width - 24, 'gear at the top right');
       const tapArea = { w: gb.width, h: Math.max(gb.height, await gear.evaluate((b) => parseFloat(getComputedStyle(b, '::before').height) || 0)) };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
-      // Collapsed: no main button any more (the poll lives in Texts).
-      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x));
-      assert(JSON.stringify(await visible()) === '[]', `collapsed card buttons were ${await visible()}`);
+      // Collapsed: only the one-tap court switch (and the paid pill); no main button, the poll lives in Texts.
+      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x) && !/ of \d+ paid$/.test(x));
+      assert(JSON.stringify(await visible()) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
-      const opts = card.locator('.options');
-      const textBtn = opts.getByRole('button', { name: 'Text', exact: true });
-      const sb = await textBtn.boundingBox();
-      const ob = await opts.boundingBox();
-      assert(sb.width > ob.width * 0.9, 'Text should be the full-width main button');
-      assert((await textBtn.locator('svg[data-icon="message"]').count()) === 1, 'Text has a message icon');
-      // Text has its own color family: not the green buttons, not the blue CourtReserve links, and strong contrast.
-      const tc = await textBtn.evaluate((el) => {
+      const menu = card.locator('[role="menu"]');
+      await menu.waitFor();
+      const rows = (await menu.getByRole('menuitem').allInnerTexts()).map((t) => t.trim());
+      // Once the court is booked, Add to calendar joins the list; Cancel session is always last.
+      const isBooked = (await card.getAttribute('data-court')) === 'booked';
+      const want = isBooked ? ['Text the group', 'Edit game', 'Players', 'Add to calendar', 'Cancel session'] : ['Text the group', 'Edit game', 'Players', 'Cancel session'];
+      assert(JSON.stringify(rows) === JSON.stringify(want), `menu rows were ${rows}`);
+      const textRow = menu.getByRole('menuitem', { name: 'Text the group', exact: true });
+      assert((await textRow.locator('svg[data-icon="message"]').count()) === 1, 'Text the group has a message icon');
+      // Text the group has its own color family: not the green buttons, not the blue CourtReserve links, and strong contrast.
+      const tc = await textRow.evaluate((el) => {
         const rgb = (c) => c.match(/\d+(\.\d+)?/g).slice(0, 3).map(Number);
         const lum = ([r, g, b]) => [r, g, b].map((v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
         const probe = document.createElement('button');
@@ -1159,44 +1166,35 @@ async function main() {
         probe.className = 'btn external';
         const blue = getComputedStyle(probe).backgroundColor;
         probe.remove();
-        const bg = getComputedStyle(el).backgroundColor;
-        const [a, b] = [lum(rgb(bg)), lum(rgb(getComputedStyle(el).color))];
-        const [r, g, bl] = rgb(bg);
-        return { bg, green, blue, contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), spread: Math.max(r, g, bl) - Math.min(r, g, bl) };
+        let bgEl = el;
+        while (bgEl && ['rgba(0, 0, 0, 0)', 'transparent'].includes(getComputedStyle(bgEl).backgroundColor)) bgEl = bgEl.parentElement;
+        const bg = bgEl ? getComputedStyle(bgEl).backgroundColor : 'rgb(255, 255, 255)';
+        const fg = getComputedStyle(el).color;
+        const [a, b] = [lum(rgb(bg)), lum(rgb(fg))];
+        const [r, g, bl] = rgb(fg);
+        return { fg, bg, green, blue, contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), spread: Math.max(r, g, bl) - Math.min(r, g, bl) };
       });
-      assert(tc.bg !== tc.green && tc.bg !== tc.blue, `Text should not match the green or blue buttons: ${JSON.stringify(tc)}`);
-      assert(tc.spread < 30, `Text should be a neutral charcoal, not green or blue: ${JSON.stringify(tc)}`);
-      assert(tc.contrast >= 7, `Text needs strong contrast: ${tc.contrast.toFixed(2)}`);
-      const gb2 = await opts.locator('.opt-grid').boundingBox();
-      assert(sb.y < gb2.y, 'Text sits above the grid');
-      assert((await opts.getByRole('button', { name: /^Copy/ }).count()) === 0 && (await opts.locator('.other-texts').count()) === 0, 'no Copy or Other texts');
-      const grid = await opts.locator('.opt-grid > *').evaluateAll((els) =>
-        els.map((e) => {
-          const r = e.getBoundingClientRect();
-          return { text: e.textContent.trim().replace(/\s+/g, ' ').replace(' (opens CourtReserve)', ''), x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) };
-        }),
-      );
-      // Once the court is booked, Add to calendar joins the grid and Cancel session takes the last full row.
-      const isBooked = (await card.getAttribute('data-court')) === 'booked';
-      const want = isBooked ? ['Edit booking', 'Players', 'Modify court', 'Add to calendar', 'Cancel session'] : ['Edit booking', 'Players', 'Modify court', 'Cancel session'];
-      assert(JSON.stringify(grid.map((g) => g.text)) === JSON.stringify(want), `grid was ${grid.map((g) => g.text)}`);
-      assert(grid[0].y === grid[1].y && grid[2].y === grid[3].y && grid[0].x === grid[2].x && grid[1].x === grid[3].x, 'grid should be 2 by 2');
-      const four = grid.slice(0, 4);
-      assert(new Set(four.map((g) => g.w)).size === 1 && new Set(grid.map((g) => g.h)).size === 1, `grid buttons should match: ${JSON.stringify(grid)}`);
-      if (isBooked) assert(grid[4].x === grid[0].x && grid[4].w > grid[0].w * 1.8, 'Cancel session spans the last row');
-      assert(grid.every((g) => g.h >= 44 && g.h < 60), 'grid buttons fit on one line, 44px+');
-      const modify = opts.getByRole('link', { name: /^Modify court/ });
-      assert((await modify.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1' && (await modify.getAttribute('target')) === '_blank', 'Modify court link');
-      const cancelBg = await opts.getByRole('button', { name: 'Cancel session' }).evaluate((el) => getComputedStyle(el).color);
-      const dangerFg = await admin.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--danger-fg').trim());
-      assert(cancelBg !== '' && dangerFg !== '', 'Cancel session uses the red style');
-      for (const gone of ['Text the group poll', 'Money', 'Texts', 'Reschedule', 'Invite substitutes', 'Change or cancel court']) {
-        assert((await card.getByRole('button', { name: gone, exact: true }).count()) === 0 && (await card.getByRole('link', { name: gone, exact: true }).count()) === 0, `${gone} should be gone from the card`);
+      assert(tc.fg !== tc.green && tc.fg !== tc.blue && tc.bg !== tc.green && tc.bg !== tc.blue, `Text the group should not match the green or blue buttons: ${JSON.stringify(tc)}`);
+      assert(tc.spread < 30, `Text the group should be a neutral charcoal, not green or blue: ${JSON.stringify(tc)}`);
+      assert(tc.contrast >= 7, `Text the group needs strong contrast: ${tc.contrast.toFixed(2)}`);
+      assert((await menu.getByRole('button', { name: /^Copy/ }).count()) === 0 && (await card.locator('.other-texts').count()) === 0, 'no Copy or Other texts');
+      const heights = await menu.getByRole('menuitem').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+      assert(heights.every((h) => h >= 44 && h < 60), `menu rows fit on one line, 44px+: ${heights}`);
+      const cancelFg = await menu.getByRole('menuitem', { name: 'Cancel session' }).evaluate((el) => getComputedStyle(el).color);
+      const [cr, cg, cbl] = cancelFg.match(/[\d.]+/g).map(Number);
+      assert(cr > cg + 30 && cr > cbl + 30, `Cancel session uses the red style: ${cancelFg}`);
+      for (const gone of ['Text the group poll', 'Money', 'Texts', 'Reschedule', 'Invite substitutes', 'Change or cancel court', 'Edit booking', 'Modify court', 'Text']) {
+        assert((await card.getByRole('button', { name: gone, exact: true }).count()) === 0 && (await card.getByRole('link', { name: gone, exact: true }).count()) === 0 && (await card.getByRole('menuitem', { name: gone, exact: true }).count()) === 0, `${gone} should be gone from the card`);
       }
+      assert((await card.locator('.options, .opt-grid, .text-btn').count()) === 0, 'the old options panel is still there');
       assert((await admin.getByText(/Invite (substitutes|people|someone)/).count()) === 0, 'Invite substitutes should be gone everywhere');
       await card.screenshot({ path: path.join(SHOTS, 'card-options.png') });
-      await gear.click();
-      await opts.waitFor({ state: 'detached' });
+      // The CourtReserve change link now lives in Edit game, going to the same page Modify court did.
+      await menu.getByRole('menuitem', { name: 'Edit game' }).click();
+      const modify = admin.locator('dialog[open]').getByRole('link', { name: /^Change court on CourtReserve/ });
+      assert((await modify.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1' && (await modify.getAttribute('target')) === '_blank', 'Change court link');
+      await admin.locator('dialog[open]').getByRole('button', { name: 'Close' }).click();
+      await admin.locator('dialog[open]').waitFor({ state: 'detached' });
     });
 
     await check('Share the game: the same words for every game, the plain site address, and opens with no numbers (pick the chat)', async () => {
@@ -2059,24 +2057,23 @@ async function main() {
     console.log('Court waitlist');
     await check('court waitlist: players tap the join button and read it as a normal game (the organizer sees standby); the share text is the usual one; Court opened moves them in', async () => {
       const card = sessionCards(admin).nth(3);
-      const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
-      await more(card);
-      await card.getByRole('button', { name: 'On court waitlist' }).click();
-      const banner = card.locator('.court-banner');
-      await banner.getByRole('button', { name: 'Court opened' }).waitFor();
-      await banner.getByRole('button', { name: "Didn't open" }).waitFor();
-      await banner.getByText('Court waitlist', { exact: true }).waitFor();
+      const day = (await card.locator('h2').innerText()).trim().replace(/, \d{1,2}:\d{2} (AM|PM)$/, ''); // e.g. "Thu, Nov 5"
+      const cardId = (await card.getAttribute('id')).replace('session-', '');
+      await card.getByRole('button', { name: 'Waitlist', exact: true }).click();
+      await admin.waitForFunction((id) => document.querySelector(`#session-${id}`)?.getAttribute('data-court') === 'waitlist', `${cardId}`);
+      assert((await card.getAttribute('data-switch')) === 'waitlist', 'the switch should rest on Waitlist');
+      assert((await card.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Waitlist', 'Waitlist is the chosen segment');
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
-      assert((await card.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist card should not offer I booked it');
-      // Words and both buttons on a single row inside the banner.
-      const words = await banner.locator('.court-status').boundingBox();
-      const opened = await banner.getByRole('button', { name: 'Court opened' }).boundingBox();
-      const didnt = await banner.getByRole('button', { name: "Didn't open" }).boundingBox();
-      // The two buttons stay together; the words never run under them.
-      const hit = (a, b) => a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+      assert((await card.locator('.court-banner').count()) === 0, 'the old waitlist banner is gone from the card');
+      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0, 'the card itself has no court buttons; they live on Do this now');
+      // "Court opened" and "Didn't open" now sit on the Do this now card, one per waitlisted game.
+      const task = admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`);
+      await task.waitFor();
+      const opened = await task.getByRole('button', { name: 'Court opened' }).boundingBox();
+      const didnt = await task.getByRole('button', { name: "Didn't open" }).boundingBox();
       assert(Math.abs(opened.y - didnt.y) < 4, 'the two buttons should sit side by side');
-      assert(!hit(words, opened) && !hit(words, didnt), 'banner words should not overlap the buttons');
-      await card.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
+      assert((await task.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist task should not offer I booked it');
+      await task.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
@@ -2102,10 +2099,11 @@ async function main() {
       // Everyone on standby, by name, on a line of its own.
       await c2.locator('.players-line .waitlist-line', { hasText: /^Standby: \w+, \w+$/ }).waitFor();
       assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
-      await c2.getByRole('button', { name: 'Court opened' }).click();
+      await admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`).getByRole('button', { name: 'Court opened' }).click();
       await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
       assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
-      await c2.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
+      await c2.locator('.court-switch button[aria-pressed="true"]', { hasText: 'Booked' }).waitFor();
+      assert((await admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`).count()) === 0, 'the Do this now card goes away once the court opens');
       await admin.reload();
       if (await admin.locator('.sg-more').count()) await admin.locator('.sg-more').click();
       const tell = admin.getByRole('article', { name: new RegExp(`^Spot opened: ${day}`) });
@@ -2119,7 +2117,6 @@ async function main() {
       await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
       await row.getByText("Good news, the court opened, so you're in.").waitFor();
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
-      // The court-waitlist banner keeps its words and buttons on one row (checked before it opened).
     });
 
     await check('check-in the night before: the Do this now card opens the Check-in text with no numbers, hides after the tap; never "sent"', async () => {
@@ -2173,18 +2170,17 @@ async function main() {
     await check('organizer can move a session to a new time', async () => {
       const card = sessionCards(admin).first();
       await more(card);
-      assert((await card.getByRole('button', { name: 'Reschedule' }).count()) === 0, 'no separate Reschedule button');
-      await card.getByRole('button', { name: 'Edit booking' }).click();
+      assert((await card.getByRole('menuitem', { name: 'Reschedule' }).count()) === 0, 'no separate Reschedule row');
+      await card.getByRole('menuitem', { name: 'Edit game' }).click();
       const sheet = admin.locator('dialog[open]');
-      // Moving lives inside Edit booking, tucked away until needed.
-      assert(!(await sheet.getByLabel('Start', { exact: true }).isVisible()), 'Move this session should start closed');
-      await sheet.getByText('Move this session').click();
+      // Moving is part of the one Edit game sheet now (no tucked-away "Move this session" or "Move session" button).
+      assert((await sheet.getByText('Move this session').count()) === 0 && (await sheet.getByRole('button', { name: 'Move session' }).count()) === 0, 'the old move controls are back');
       const change = sheet.getByRole('link', { name: /^Change court on CourtReserve/ });
       assert((await change.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1', 'reschedule should link to the modify/cancel page');
       await sheet.getByLabel('Start', { exact: true }).fill('19:30');
       // The end moves with the start (the game keeps its 2 hours).
       await sheet.getByText(/New time: .*7:30 to 9:30 PM$/).waitFor();
-      await sheet.getByRole('button', { name: 'Move session' }).click();
+      await sheet.getByRole('button', { name: 'Save', exact: true }).click();
       // Straight to a ready text for the group, with an optional reason.
       const moved = admin.locator('dialog[open]');
       await moved.getByText(/^Moved · /).waitFor();
@@ -2200,17 +2196,23 @@ async function main() {
       await moved.getByRole('button', { name: 'Yes', pressed: true }).waitFor();
       await admin.keyboard.press('Escape');
       await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
-      await card.getByText('7:30 to 9:30 PM', { exact: true }).waitFor();
+      // The card's date tile now has the new start time under it (the end time is not on the card).
+      await admin.waitForFunction(() => document.querySelector('section[aria-labelledby="sessions-title"] article [data-card-time]')?.textContent.trim() === '7:30 PM');
+      assert(!/9:30/.test(await card.locator('.scard-tilecol').innerText()), 'no end time on the card');
     });
 
-    await check('a booked session links to the CourtReserve modify/cancel page from More and from Cancel session', async () => {
+    await check('a booked session links to the CourtReserve modify/cancel page from Edit game and from Cancel session', async () => {
       const CANCEL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
       const card = sessionCards(admin).first();
       assert((await card.getAttribute('data-court')) === 'booked', 'first card should be booked here');
       await more(card);
-      const link = card.getByRole('link', { name: /^Modify court/ });
-      assert((await link.getAttribute('href')) === CANCEL && (await link.getAttribute('target')) === '_blank', 'More should link to the modify/cancel page');
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Edit game' }).click();
+      const link = admin.locator('dialog[open]').getByRole('link', { name: /^Change court on CourtReserve/ });
+      assert((await link.getAttribute('href')) === CANCEL && (await link.getAttribute('target')) === '_blank', 'Edit game should link to the modify/cancel page');
+      await admin.keyboard.press('Escape');
+      await admin.locator('dialog[open]').waitFor({ state: 'detached' });
+      await more(card);
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       const dlg = admin.locator('dialog[open]');
       const inDialog = dlg.getByRole('link', { name: /^Cancel court on CourtReserve/ });
       assert((await inDialog.getAttribute('href')) === CANCEL, 'cancel dialog should link to the modify/cancel page');
@@ -2222,11 +2224,14 @@ async function main() {
     await check('canceling needs confirmation and warns it does not cancel the court', async () => {
       const card = sessionCards(admin).nth(1);
       await more(card);
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       const dlg = admin.locator('dialog[open]');
       await dlg.getByText('This does not cancel your court').waitFor();
       await dlg.getByRole('button', { name: 'Go back' }).click();
-      await card.getByRole('button', { name: 'Cancel session' }).waitFor();
+      await dlg.waitFor({ state: 'detached' });
+      await more(card);
+      await card.getByRole('menuitem', { name: 'Cancel session' }).waitFor();
+      await closeOptions(card);
       assert((await card.getByText('Canceled', { exact: true }).count()) === 0, 'canceled without confirming');
       // Someone pays first (on the Money tab), so there's someone to pay back.
       const moneySheet = await moneyFor(admin, card);
@@ -2235,7 +2240,7 @@ async function main() {
       await admin.locator('.toast', { hasText: 'marked paid' }).waitFor();
       await tab(admin, 'Home').click();
       await more(card);
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
       const after = admin.locator('dialog[open]');
       await after.getByText(/^Canceled · /).waitFor();
@@ -2397,9 +2402,11 @@ async function main() {
         await row.getByRole('button', { name: 'Show this session' }).click();
         await admin.locator('.toast', { hasText: 'is showing' }).waitFor();
         const shown = sessionCards(admin).filter({ hasText: 'Tue, Nov 3' }).first();
-        await more(shown);
-        await shown.getByRole('button', { name: 'On court waitlist' }).click();
-        await shown.getByRole('button', { name: "Didn't open" }).click();
+        const shownId = (await shown.getAttribute('id')).replace('session-', '');
+        await shown.getByRole('button', { name: 'Waitlist', exact: true }).click();
+        // "Didn't open" lives on the Do this now card for the waitlisted game.
+        const waitTask = admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${shownId}"]`);
+        await waitTask.getByRole('button', { name: "Didn't open" }).click();
         await admin.locator('dialog[open]').getByRole('button', { name: 'Mark it off' }).click();
         await shown.getByText("Court didn't open").first().waitFor();
         await players.Alex.reload();
@@ -2569,20 +2576,20 @@ async function main() {
       await row.getByRole('button', { name: 'Drop out' }).click();
       await confirmDrop(p);
       await row.getByRole('link', { name: /to calendar$/ }).waitFor({ state: 'detached' });
-      // The organizer: inside the gear panel of a booked card, never floating under the gear.
+      // The organizer: inside the gear pop-up of a booked card, never floating under the gear.
       await tab(admin, 'Home').click();
       await showAll(admin);
-      const amber = sessionCards(admin).filter({ has: admin.locator('.court-banner') }).filter({ hasText: 'Court not booked' }).first();
+      const amber = admin.locator('section[aria-labelledby="sessions-title"] article[data-court="needs"][data-switch="not_booked"]').first();
       const id = await amber.getAttribute('id');
       assert((await amber.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar link before booking');
-      await amber.getByRole('button', { name: 'I booked it' }).click();
+      await amber.getByRole('button', { name: 'Booked', exact: true }).click();
       const booked = admin.locator(`#${id}`);
-      await booked.locator('.court-line').getByText('Court booked', { exact: true }).waitFor();
+      await booked.locator('.court-switch button[aria-pressed="true"]', { hasText: 'Booked' }).waitFor();
       await closeOptions(booked);
       assert((await booked.getByRole('link', { name: /to calendar$/ }).count()) === 0, 'no calendar icon under the gear');
       assert((await booked.locator('.cal-btn').count()) === 0, 'the floating calendar icon is gone');
       await more(booked);
-      const orgCal = booked.locator('.options .opt-grid').getByRole('link', { name: /to calendar$/ });
+      const orgCal = booked.locator('[role="menu"]').getByRole('menuitem', { name: /to calendar$/ });
       await orgCal.waitFor();
       assert((await orgCal.innerText()).trim() === 'Add to calendar', 'says Add to calendar');
       await icsOk(admin, await orgCal.getAttribute('href'));
@@ -2805,7 +2812,7 @@ async function main() {
     }
 
     for (const [width, scheme] of [[360, 'light'], [375, 'dark'], [390, 'dark'], [430, 'light']]) {
-      await check(`booking form, reschedule and Settings date fields fit at ${width}px (${scheme})`, async () => {
+      await check(`Edit game form (court switch, date and times) and Settings date fields fit at ${width}px (${scheme})`, async () => {
         const p = await admin.context().newPage();
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
@@ -2823,17 +2830,13 @@ async function main() {
         await p.goto(`${BASE}/admin`);
         const card = sessionCards(p).first();
         await more(card);
-        await card.getByRole('button', { name: 'Edit booking' }).click();
-        await p.locator('dialog[open]').getByLabel(/Cancellation deadline/).waitFor();
-        await fits('booking form');
+        await card.getByRole('menuitem', { name: 'Edit game' }).click();
+        await p.locator('dialog[open]').locator('[data-cancel-by]').waitFor();
+        await p.locator('dialog[open]').getByLabel('Date').waitFor();
+        await fits('Edit game form');
         await p.screenshot({ path: path.join(SHOTS, `booking-${width}-${scheme}.png`) });
         await p.keyboard.press('Escape');
-        await more(card);
-        await card.getByRole('button', { name: 'Edit booking' }).click();
-        await p.locator('dialog[open]').getByText('Move this session').click();
-        await p.locator('dialog[open]').getByLabel('Date').waitFor();
-        await fits('move-this-session form');
-        await p.keyboard.press('Escape');
+        await p.locator('dialog[open]').waitFor({ state: 'detached' });
         await tab(p, 'Settings').click();
         await openSections(p);
         await p.getByLabel('First session').waitFor();
@@ -2864,12 +2867,28 @@ async function main() {
         const kinds = await sessionCards(p).evaluateAll((cs) => [...new Set(cs.map((c) => c.dataset.court))]);
         for (const k of ['needs', 'later', 'waitlist', 'booked']) assert(kinds.includes(k), `no ${k} card to check (${kinds})`);
         assert(await p.locator('.holiday-actions .link-btn', { hasText: 'Undo' }).count(), 'no holiday card with Undo to check');
-        // Open the gear on two cards too, so the options grid is checked.
-        await more(sessionCards(p).first());
-        await more(sessionCards(p).nth(2));
         const home = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
         assert(home.problems.length === 0, `Home: ${home.problems.slice(0, 4).join(' | ')}`);
         assert(home.checked > 40, `only ${home.checked} things checked`);
+        // The gear pop-up floats over the card (it is not part of the card's own layout): it must stay on screen,
+        // its rows must not overlap or be cut off, and it must not make the page scroll sideways. Open it on two cards.
+        for (const i of [0, 2]) {
+          const c = sessionCards(p).nth(i);
+          await more(c);
+          const pop = await c.locator('[role="menu"]').evaluate((m) => {
+            const vw = window.innerWidth;
+            const b = m.getBoundingClientRect();
+            const rows = [...m.querySelectorAll('[role="menuitem"]')].map((r) => r.getBoundingClientRect());
+            return {
+              onScreen: b.left >= 0 && b.right <= vw + 0.5,
+              overlap: rows.some((r, k) => rows.slice(k + 1).some((q) => r.left < q.right - 1 && r.right > q.left + 1 && r.top < q.bottom - 1 && r.bottom > q.top + 1)),
+              cut: [...m.querySelectorAll('[role="menuitem"]')].some((r) => r.scrollWidth > r.clientWidth + 1),
+              sideways: document.documentElement.scrollWidth > vw + 1,
+            };
+          });
+          assert(pop.onScreen && !pop.overlap && !pop.cut && !pop.sideways, `gear pop-up on card ${i + 1} is off screen, overlapping or cut off: ${JSON.stringify(pop)}`);
+          await closeOptions(c);
+        }
         const covered = await p.evaluate(lastNotCovered);
         assert(!covered, `Home: ${covered}`);
         await tab(p, 'Settings').click();
@@ -3132,89 +3151,68 @@ async function main() {
       assert((await p.request.get(`${BASE}/api/admin/activity`)).status() === 401, 'players can read the activity log');
     });
 
-    // ---------- Court strips: one row when it fits, else label then two equal halves ----------
+    // ---------- Court switch: three equal segments on one row, in every width and theme ----------
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`court strips at ${width}px (${scheme}): one row if it fits, else label above two equal-half buttons; no gaps, overlaps or cut-off text`, async () => {
+      await check(`court switch at ${width}px (${scheme}): Not booked | Waitlist | Booked in three equal segments on one row; no gaps, overlaps or cut-off text`, async () => {
         const p = await admin.context().newPage();
         await p.setViewportSize({ width, height: 844 });
         await p.emulateMedia({ colorScheme: scheme });
         await p.goto(`${BASE}/admin`);
         await sessionCards(p).first().waitFor();
         await showAll(p);
-        const kinds = await p.locator('.court-banner').evaluateAll((bs) => bs.map((b) => b.closest('article').dataset.court));
-        assert(kinds.includes('needs') && kinds.includes('waitlist'), `need both strips, got ${kinds}`);
+        const kinds = await p.locator('.court-switch').evaluateAll((bs) => bs.map((b) => b.closest('article').dataset.court));
+        assert(kinds.includes('needs') && kinds.includes('waitlist'), `need both a not-booked and a waitlist game, got ${kinds}`);
         const report = await p.evaluate(() =>
-          [...document.querySelectorAll('.court-banner')].map((b) => {
-            const cs = getComputedStyle(b);
-            const padL = parseFloat(cs.paddingLeft);
-            const padR = parseFloat(cs.paddingRight);
-            const box = b.getBoundingClientRect();
-            const left = box.left + padL;
-            const right = box.right - padR;
-            const label = b.querySelector('.court-status').getBoundingClientRect();
-            const btns = [...b.querySelectorAll('.banner-btns > .btn')].map((x) => x.getBoundingClientRect());
-            // How wide one row would need to be: a hidden copy that never wraps.
-            const copy = b.cloneNode(true);
-            copy.querySelectorAll('dialog').forEach((d) => d.remove());
-            Object.assign(copy.style, { position: 'absolute', visibility: 'hidden', width: 'max-content', flexWrap: 'nowrap', left: '0', top: '0' });
-            b.parentElement.appendChild(copy);
-            const need = copy.getBoundingClientRect().width;
-            copy.remove();
-            const oneRow = btns.every((x) => Math.abs(x.top - btns[0].top) < 1) && btns[0].top < label.bottom - 2;
-            const btnStyle = getComputedStyle(b.querySelector('.banner-btns > .btn'));
-            const body = b.closest('article').querySelector('.scard-main').getBoundingClientRect();
+          [...document.querySelectorAll('section[aria-labelledby="sessions-title"] article .court-switch')].map((sw) => {
+            const art = sw.closest('article');
+            const box = sw.getBoundingClientRect();
+            const segs = [...sw.querySelectorAll('button')];
+            const r = segs.map((x) => x.getBoundingClientRect());
+            const gear = art.querySelector('.card-icons button').getBoundingClientRect();
+            const tile = art.querySelector('.tile').getBoundingClientRect();
+            const time = art.querySelector('[data-card-time]').getBoundingClientRect();
+            const cardBox = art.getBoundingClientRect();
+            const on = sw.querySelector('button[aria-pressed="true"]');
             return {
-              kind: b.closest('article').dataset.court,
-              label: b.querySelector('.court-status').innerText.trim(),
-              oneRow,
-              fits: need <= box.width + 0.5,
-              need: Math.round(need),
-              have: Math.round(box.width),
-              halves: btns.length === 2 && Math.abs(btns[0].width - btns[1].width) <= 1 && Math.abs(btns[0].left - left) <= 1 && Math.abs(btns[1].right - right) <= 1,
-              below: btns.every((x) => x.top >= label.bottom - 1),
-              sideBySide: btns.length === 2 && Math.abs(btns[0].top - btns[1].top) < 1 && btns[0].right <= btns[1].left,
-              overlap: btns.some((x) => x.left < label.right - 1 && x.top < label.bottom - 1 && x.bottom > label.top + 1),
-              inside: btns.every((x) => x.left >= box.left && x.right <= box.right + 0.5) && label.right <= box.right + 0.5,
-              cut: [...b.querySelectorAll('.banner-btns > .btn')].some((x) => x.scrollWidth > x.clientWidth + 1),
-              btnH: Math.round(btns[0].height),
-              font: parseFloat(btnStyle.fontSize),
-              padTop: Math.round(parseFloat(cs.paddingTop)),
-              padBottom: Math.round(parseFloat(cs.paddingBottom)),
-              gapBelow: Math.round(body.top - box.bottom),
+              kind: art.dataset.court,
+              labels: segs.map((x) => x.textContent.trim()).join('|'),
+              on: on.textContent.trim(),
+              onOk: art.dataset.switch === on.dataset.seg,
+              oneRow: r.every((x) => Math.abs(x.top - r[0].top) < 1),
+              equal: Math.abs(r[0].width - r[1].width) <= 1 && Math.abs(r[1].width - r[2].width) <= 1,
+              ordered: r[0].right <= r[1].left + 0.5 && r[1].right <= r[2].left + 0.5,
+              inside: box.left >= cardBox.left - 0.5 && box.right <= cardBox.right + 0.5 && r.every((x) => x.left >= box.left - 0.5 && x.right <= box.right + 0.5),
+              apartFromGear: box.right <= gear.left + 1 && !(box.left < gear.right && box.right > gear.left && box.top < gear.bottom && box.bottom > gear.top),
+              cut: segs.some((x) => x.scrollWidth > x.clientWidth + 1),
+              tall: Math.min(...r.map((x) => x.height)) >= 43.5,
+              // The date tile and its time sit just beside the switch, never under it.
+              beside: tile.right <= box.left + 1 && time.right <= box.left + 1,
+              sideways: document.documentElement.scrollWidth > window.innerWidth + 1,
             };
           }),
         );
         for (const r of report) {
-          const where = `${r.kind} strip "${r.label}"`;
-          assert(r.label === (r.kind === 'waitlist' ? 'Court waitlist' : 'Court not booked'), `${where}: label`);
-          assert(r.oneRow === r.fits, `${where}: ${r.oneRow ? 'one row but it does not fit' : 'two rows but one would fit'} (needs ${r.need}px, has ${r.have}px)`);
-          if (!r.oneRow) assert(r.halves && r.below && r.sideBySide, `${where}: buttons should be equal halves under the label ${JSON.stringify(r)}`);
-          assert(!r.overlap && r.inside && !r.cut, `${where}: overlap or cut off ${JSON.stringify(r)}`);
-          assert(r.btnH >= 34 && r.btnH <= 38 && Math.abs(r.font - 15) < 0.5, `${where}: buttons ${r.btnH}px tall, ${r.font}px text`);
-          assert(r.padTop >= 10 && r.padTop <= 12 && r.padTop === r.padBottom, `${where}: padding ${r.padTop}/${r.padBottom}`);
-          assert(Math.abs(r.gapBelow - r.padTop) <= 2, `${where}: ${r.gapBelow}px between strip and card body, padding is ${r.padTop}px`);
+          const where = `${r.kind} switch "${r.on}"`;
+          assert(r.labels === 'Not booked|Waitlist|Booked', `${where}: labels ${r.labels}`);
+          assert(r.onOk, `${where}: the chosen segment does not match the card`);
+          assert(r.oneRow && r.equal && r.ordered, `${where}: segments should be three equal ones on a row ${JSON.stringify(r)}`);
+          assert(r.inside && r.apartFromGear && !r.cut && !r.sideways && r.beside, `${where}: overlap or cut off ${JSON.stringify(r)}`);
+          assert(r.tall, `${where}: segments under 44px tall`);
         }
-        // The card Book link sits on the same row as I booked it and goes to CourtReserve.
-        const amber = p.locator('article[data-court="needs"] .court-banner').first();
-        const book = amber.getByRole('link', { name: /^Book/ });
-        assert((await book.getAttribute('href')) === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442' && (await book.getAttribute('target')) === '_blank', 'card Book link');
-        const bb = await book.boundingBox();
-        const ib = await amber.getByRole('button', { name: 'I booked it' }).boundingBox();
-        assert(Math.abs(bb.y - ib.y) < 1 && bb.x < ib.x, 'Book and I booked it on one row');
-        // Date tile and time line up under every strip.
+        // Date tile and time line up under each other, beside the switch.
         const aligned = await p.evaluate(() =>
-          [...document.querySelectorAll('.court-banner')].every((b) => {
-            const a = b.closest('article');
+          [...document.querySelectorAll('section[aria-labelledby="sessions-title"] article .court-switch')].every((sw) => {
+            const a = sw.closest('article');
             const tile = a.querySelector('.tile').getBoundingClientRect();
-            const time = a.querySelector('.sched-time').getBoundingClientRect();
-            return tile.top >= b.getBoundingClientRect().bottom && time.top >= b.getBoundingClientRect().bottom && Math.abs(tile.top - (time.top - 6)) < 14;
+            const time = a.querySelector('[data-card-time]').getBoundingClientRect();
+            return time.top >= tile.bottom - 1 && Math.abs(tile.left + tile.width / 2 - (time.left + time.width / 2)) < 6;
           }),
         );
-        assert(aligned, 'date tile and time should sit just under the strip');
+        assert(aligned, 'the time should sit centered right under the date tile');
         const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS });
         assert(rep.problems.length === 0, `Home: ${rep.problems.slice(0, 3).join(' | ')}`);
         await p.locator('article[data-court="waitlist"]').first().screenshot({ path: path.join(SHOTS, `strip-waitlist-${width}-${scheme}.png`) });
-        await amber.locator('xpath=ancestor::article[1]').screenshot({ path: path.join(SHOTS, `strip-needs-${width}-${scheme}.png`) });
+        await p.locator('article[data-court="needs"]').first().screenshot({ path: path.join(SHOTS, `strip-needs-${width}-${scheme}.png`) });
         await p.close();
       });
     }
@@ -3531,7 +3529,7 @@ async function main() {
       await showAll(admin);
       const cardId = await sessionCards(admin).filter({ has: admin.getByRole('button', { name: /^I'm in for / }) }).nth(2).getAttribute('id');
       const card = admin.locator(`#${cardId}`);
-      const day = (await card.locator('h2').innerText()).trim();
+      const day = (await card.locator('h2').innerText()).trim().replace(/, \d{1,2}:\d{2} (AM|PM)$/, '');
       await card.getByRole('button', { name: /^I'm in for / }).click();
       await card.locator('.me-in-text', { hasText: "You're in" }).waitFor();
       const id = (await card.getAttribute('id')).replace('session-', '');
@@ -3740,7 +3738,7 @@ async function main() {
 
     // ---------- Cards: gear only, one "Text" button, no Copy anywhere ----------
     for (const [width, scheme] of [[360, 'light'], [360, 'dark'], [375, 'light'], [375, 'dark'], [390, 'light'], [390, 'dark'], [430, 'light'], [430, 'dark']]) {
-      await check(`cards at ${width}px (${scheme}): gear only; "Text" opens the choices with who they go to; no Copy or Other texts anywhere but the Settings Player link`, async () => {
+      await check(`cards at ${width}px (${scheme}): gear only; "Text the group" opens the choices with who they go to; no Copy or Other texts anywhere but the Settings Player link`, async () => {
         const p = await admin.context().newPage();
         p.setDefaultTimeout(10000);
         await p.setViewportSize({ width, height: 844 });
@@ -3760,8 +3758,8 @@ async function main() {
           }
         }
         const menu = await textMenu(card);
-        const order = await card.locator('.options').evaluate((o) => ({ text: o.querySelector('.text-btn').getBoundingClientRect().top, grid: o.querySelector('.opt-grid').getBoundingClientRect().top }));
-        assert(order.text < order.grid, 'Text comes before the grid');
+        const order = await card.locator('[role="menu"]').evaluate((o) => ({ text: o.querySelector('[role="menuitem"]').textContent.trim(), textTop: o.querySelector('[role="menuitem"]').getBoundingClientRect().top, rowsTops: [...o.querySelectorAll(':scope > [role="menuitem"]')].map((r) => r.getBoundingClientRect().top) }));
+        assert(order.text === 'Text the group' && order.rowsTops.every((t) => t >= order.textTop), 'Text the group comes first in the pop-up');
         for (const row of await menu.locator('.text-row').all()) {
           const link = row.locator('a.text-choice');
           assert((await link.getAttribute('href')).startsWith('sms:'), 'each choice opens Messages');
@@ -3774,10 +3772,14 @@ async function main() {
           else assert(to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).replace(/^Missing numbers:/, '').split(',').filter((x) => x.trim()).length) === (who.match(/(\d+)$/) ? Number(who.match(/(\d+)$/)[1]) : to.length + ((await row.locator('.missing-numbers').innerText().catch(() => '')).replace(/^Missing numbers:/, '').split(',').filter((x) => x.trim()).length)), `${tid}: numbers plus missing should match "${who}"`);
           assert(tid !== 'poll', 'no Poll');
         }
-        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
-        assert(rep.problems.length === 0, `cards: ${rep.problems.slice(0, 3).join(' | ')}`);
+        // The open pop-up (with the text choices) is judged on its own; the card under it is judged once it is closed.
+        const pop = await p.evaluate(layoutReport, { roots: '.menu-pop', items: '[role="menuitem"], .text-name, .text-who, .missing-numbers, .message-ready' });
+        assert(pop.problems.length === 0 && pop.checked > 3, `pop-up: ${pop.problems.slice(0, 3).join(' | ')} (${pop.checked} checked)`);
         assert(!/\bsent\b/i.test(await p.locator('main').innerText()), 'never say sent');
         await p.screenshot({ path: path.join(SHOTS, `text-menu-${width}-${scheme}.png`) });
+        await closeOptions(card);
+        const rep = await p.evaluate(layoutReport, { roots: 'main article', items: CARD_ITEMS + ', .text-name, .text-who' });
+        assert(rep.problems.length === 0, `cards: ${rep.problems.slice(0, 3).join(' | ')}`);
         // No Copy or Other texts on any tab, except the Settings Player link.
         for (const t of ['Home', 'Players', 'Money', 'History']) {
           await tab(p, t).click();
@@ -3827,7 +3829,7 @@ async function main() {
             await waitTop();
           }
         }
-        // Home: an open gear panel closes and the page goes back to the top.
+        // Home: an open gear pop-up closes and the page goes back to the top.
         await tab(p, 'Home').click();
         await showAll(p);
         const card = sessionCards(p).nth(2);
@@ -3835,7 +3837,7 @@ async function main() {
         await scrollDown();
         await tab(p, 'Home').click();
         await waitTop();
-        assert((await p.locator('.options').count()) === 0, 'the gear panel should close');
+        assert((await p.locator('[role="menu"]').count()) === 0, 'the gear pop-up should close');
         assert((await p.getByRole('button', { name: /^Show all \d+$/ }).count()) === 1, 'the expanded list should fold back');
         // Players: a person's page is open; tapping Players goes back to the list.
         await tab(p, 'Players').click();
@@ -3846,10 +3848,10 @@ async function main() {
         await p.locator('dialog[open]').waitFor({ state: 'detached' });
         await p.getByRole('button', { name: 'Edit Alex' }).waitFor();
         await waitTop();
-        // Edit booking open on Home: tapping Home closes it.
+        // Edit game open on Home: tapping Home closes it.
         await tab(p, 'Home').click();
         await more(sessionCards(p).first());
-        await sessionCards(p).first().getByRole('button', { name: 'Edit booking' }).click();
+        await sessionCards(p).first().getByRole('menuitem', { name: 'Edit game' }).click();
         await p.locator('dialog[open]').waitFor();
         const hb = await tab(p, 'Home').boundingBox();
         await p.mouse.click(hb.x + hb.width / 2, hb.y + hb.height / 2);
@@ -3899,9 +3901,10 @@ async function main() {
           await p.setViewportSize({ width, height: 844 });
           await p.emulateMedia({ colorScheme: scheme });
           const issues = [];
-          const look = async (where) => {
-            const roots = 'main article, main .card, main .sched, dialog[open] .sheet-body, header.topbar, nav.tabbar';
-            const lay = await p.evaluate(layoutReport, { roots, items: CARD_ITEMS + ', .me-in-text, .names-line, .chip, .p-pill, .owes-tag, h2, h3, .set-label, summary > span' });
+          const look = async (where, popup = false) => {
+            // The gear pop-up floats over its card: while it is open it is judged on its own (rows, text, on screen), the card under it is judged when it is closed.
+            const roots = popup ? '.menu-pop' : 'main article, main .card, main .sched, dialog[open] .sheet-body, header.topbar, nav.tabbar';
+            const lay = await p.evaluate(layoutReport, { roots, items: popup ? '[role="menuitem"], .text-name, .text-who, .missing-numbers, .message-ready' : CARD_ITEMS + ', .me-in-text, .names-line, .chip, .p-pill, .owes-tag, h2, h3, .set-label, summary > span' });
             issues.push(...lay.problems.map((x) => `${where}: ${x}`));
             const gr = await p.evaluate(greenReport);
             issues.push(...gr.problems.map((x) => `${where}: ${x}`));
@@ -3925,8 +3928,8 @@ async function main() {
           if (tile.bg === tile.green || tile.border < 1) issues.push(`date tile should be outlined, not green: ${JSON.stringify(tile)}`);
           const first = sessionCards(p).first();
           await more(first);
-          await first.getByRole('button', { name: 'Text', exact: true }).click();
-          await look('Home, gear panel and Text open');
+          await first.getByRole('menuitem', { name: 'Text the group', exact: true }).click();
+          await look('Home, gear pop-up and Text the group open', true);
           await closeOptions(first);
           await p.locator('.week-break').first().getByRole('button', { name: '+ Add game' }).click();
           await p.locator('dialog[open]').waitFor();
@@ -3934,9 +3937,9 @@ async function main() {
           await p.keyboard.press('Escape');
           await p.locator('dialog[open]').waitFor({ state: 'detached' });
           await more(first);
-          await first.locator('.options').getByRole('button', { name: 'Edit booking' }).click();
+          await first.getByRole('menuitem', { name: 'Edit game' }).click();
           await p.locator('dialog[open]').waitFor();
-          await look('Edit booking sheet');
+          await look('Edit game sheet');
           await p.keyboard.press('Escape');
           await p.locator('dialog[open]').waitFor({ state: 'detached' });
           await tab(p, 'Players').click();

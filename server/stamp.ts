@@ -92,8 +92,8 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
          WHERE s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id, sp.player_id`,
       )
       .bind(group.id, pastFrom),
-    ctx.db.prepare('SELECT id, player_id, kind, amount_cents, ended_at FROM credit_ledger WHERE group_id = ? ORDER BY created_at, id').bind(group.id),
-    ctx.db.prepare('SELECT id, status, amount_cents, resolved_at FROM refund_requests WHERE group_id = ? ORDER BY created_at, id').bind(group.id),
+    ctx.db.prepare('SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(ended_at) AS e, MAX(ended_at) AS m FROM credit_ledger WHERE group_id = ?').bind(group.id),
+    ctx.db.prepare('SELECT COUNT(*) AS n, MAX(created_at) AS c, COUNT(resolved_at) AS r, MAX(resolved_at) AS m FROM refund_requests WHERE group_id = ?').bind(group.id),
     ctx.db.prepare('SELECT id, display_name, is_active, is_regular, usual_days FROM players WHERE group_id = ? ORDER BY id').bind(group.id),
     ctx.db.prepare('SELECT MAX(created_at) AS last FROM admin_audit_log WHERE group_id = ?').bind(group.id),
     // The "Do this now" taps. Everything else still works if that table is missing.

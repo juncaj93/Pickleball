@@ -90,8 +90,8 @@ async function main() {
   };
   // Open the card's options menu (it may still be open from before), then pick an item.
   const pick = async (card, name) => {
-    const item = card.getByRole('button', { name, exact: true });
-    if (!(await item.isVisible())) await card.getByRole('button', { name: /^Session options/ }).click();
+    const item = card.getByRole('menuitem', { name, exact: true });
+    if (!(await item.isVisible())) await card.getByRole('button', { name: /^Game menu for/ }).click();
     await item.click();
   };
   const playerCard = async () => {

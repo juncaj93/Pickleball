@@ -630,8 +630,8 @@ async function main() {
     const { ctx, page } = await open('light', 390);
     await check(`Cancel session ${label}: ${asked ? 'asks' : 'does not ask'} "Were you charged for this court?"`, async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
-      await card.getByRole('button', { name: /^Session options/ }).click();
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('button', { name: /^Game menu for/ }).click();
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.getByRole('button', { name: 'Cancel session' }).waitFor();
       const q = dlg.getByText('Were you charged for this court?');
@@ -657,8 +657,8 @@ async function main() {
     let afterCancel = null;
     await check('answering Yes with an amount counts it as that canceled game\'s court cost in Money; the cash payer is listed as "Now their credit" and gets the credit', async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
-      await card.getByRole('button', { name: /^Session options/ }).click();
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('button', { name: /^Game menu for/ }).click();
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.getByRole('button', { name: 'Yes', exact: true }).click();
       await dlg.getByLabel('Amount charged').fill('35');
