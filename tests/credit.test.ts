@@ -487,10 +487,11 @@ describe('credit goes back to the player', () => {
   it('dropping out of a game paid with credit restores the credit; nothing new is created', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', [MITCH]);
-    await cancel(ctx, a.id);
     const b = await on(ctx, '2026-11-03');
     await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, b.id, MITCH);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await cancel(ctx, a.id);
+    expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
     expect(await pot(ctx, MITCH)).toBe(0);
     const res = await out(ctx, b.id, MITCH);
     expect(res.status).toBe(200);
@@ -509,12 +510,13 @@ describe('credit goes back to the player', () => {
   it('dropping after paying part with credit and part in cash: both come back, $14 in the pot', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', []);
+    const b = await on(ctx, '2026-11-03');
+    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
     ctx.app.db.raw.exec(
       `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) SELECT 'k1', id, '${ctx.byName[MITCH]}', 'kept', 500, '${a.id}', '2026-10-26T12:00:00.000Z' FROM groups`,
     );
-    const b = await on(ctx, '2026-11-03');
-    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, b.id, MITCH);
+    expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 500, paid: false });
     await pay(ctx, b.id, [MITCH]);
     expect(seat(await dash(ctx), b.id, MITCH).paymentAmountCents).toBe(1400);
     ctx.app.now = Date.parse(b.startsAt) - 20 * HOUR; // early
@@ -529,10 +531,11 @@ describe('credit goes back to the player', () => {
   it('a game canceled after credit was used on it gives the credit back', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', [MITCH]);
-    await cancel(ctx, a.id);
     const b = await on(ctx, '2026-11-03');
     await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, b.id, MITCH);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await cancel(ctx, a.id);
+    expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
     await cancel(ctx, b.id);
     expect(await pot(ctx, MITCH)).toBe(1400);
     const d = await dash(ctx);
@@ -547,10 +550,11 @@ describe('credit goes back to the player', () => {
   it('the organizer can Unmark a credit use; the player cannot undo it themselves', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', [MITCH]);
-    await cancel(ctx, a.id);
     const b = await on(ctx, '2026-11-03');
     await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, b.id, MITCH);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await cancel(ctx, a.id);
+    expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
     const phone = await playerPhone(ctx, MITCH);
     expect((await phone.call('POST', `/api/sessions/${b.id}/paid`, { paid: false })).status).toBe(409);
     expect(await pot(ctx, MITCH)).toBe(0);
@@ -633,10 +637,11 @@ describe('credit is private and the numbers agree', () => {
   it('nobody sees anyone else’s credit, and players never see phone numbers or money details', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', [MITCH]);
-    await cancel(ctx, a.id);
     const b = await on(ctx, '2026-11-03');
     await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, b.id, MITCH);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await cancel(ctx, a.id);
+    expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
     for (const n of PLAYER_NAMES.filter((x) => x !== MITCH)) {
       const text = (await (await playerPhone(ctx, n)).call('GET', '/api/group')).text;
       expect(text, n).not.toMatch(/creditLedger|refundRequests|credit_ledger|555-01/i);
@@ -661,14 +666,15 @@ describe('credit is private and the numbers agree', () => {
     await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: ME });
     const a = await game(ctx, '2026-11-03', [MITCH, 'Blair']);
     const b = await game(ctx, '2026-11-05', [MITCH, 'Blair', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const c = await on(ctx, '2026-11-10');
+    await join(ctx, c.id, [MITCH, 'Blair', 'Devon', 'Emery']);
     await cancel(ctx, a.id); // $14 credit each for Mitch and Blair
     // Blair asks for hers back and gets it: no credit, no held money.
     expect((await requestRefund(ctx, 'Blair', 1400)).status).toBe(200);
     const reqs = (await dash(ctx)).refundRequests;
     expect((await resolveRequest(ctx, reqs[0].id, 'refunded')).status).toBe(200);
-    const c = await on(ctx, '2026-11-10');
-    await join(ctx, c.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, c.id, MITCH); // $14 into game c
+    expect((await useCredit(ctx, c.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true }); // $14 into game c
     let d = await dash(ctx);
     let m = await money(ctx, '2026-11');
     // Held = b (3 paid) + c (credit used) = $56; no credit left anywhere (spent or refunded).
@@ -695,12 +701,13 @@ describe('credit is private and the numbers agree', () => {
   it('credit from a cancel in October and used in November follows the right months', async () => {
     const ctx = await setupGroup();
     const oct = await game(ctx, '2026-10-29', [MITCH]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const nov = await on(ctx, '2026-11-03');
+    await join(ctx, nov.id, [MITCH, 'Blair', 'Devon', 'Emery']);
     await cancel(ctx, oct.id);
     expect(await money(ctx, '2026-10')).toMatchObject({ creditsOwedCents: 1400, heldCents: 0 });
     expect(await money(ctx, '2026-11')).toMatchObject({ creditsOwedCents: 0 });
-    const nov = await on(ctx, '2026-11-03');
-    await join(ctx, nov.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    await useCredit(ctx, nov.id, MITCH);
+    expect((await useCredit(ctx, nov.id, MITCH)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
     // Spent: October no longer owes it. November has it as held until finalized, then collected.
     expect((await money(ctx, '2026-10')).creditsOwedCents).toBe(0);
     expect(await money(ctx, '2026-11')).toMatchObject({ heldCents: 1400, collectedCents: 0 });

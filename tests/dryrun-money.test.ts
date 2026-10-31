@@ -198,18 +198,20 @@ describe('dry run: edge cases', () => {
     const d = await dry();
     await d.ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 6 } });
     const [g1, g2] = await games(d);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await join(d, g2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale']);
     // Blair gets $14 credit from a canceled game.
     await join(d, g1.id, ['Blair']);
     await venmoAndMark(d, 'Blair', g1.id);
     await d.ctx.organizer.call('POST', `/api/admin/sessions/${g1.id}/decision`, { decision: 'cancel', confirm: true });
 
-    await join(d, g2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale']);
     let v = await view(d, g2.id);
     expect(v.confirmedCount).toBe(6);
     expect(row(v, 'Gale').status).toBe('waitlisted');
     expect(await owes(d, 'Gale', g2.id)).toBe(0);
     for (const x of ['Alex', 'Casey', 'Devon', 'Emery']) await venmoAndMark(d, x, g2.id);
-    await useCredit(d, 'Blair', g2.id);
+    expect(await useCredit(d, 'Blair', g2.id)).toMatchObject({ ok: true, usedCents: 1400, paid: true });
+    expect((await view(d, g2.id)).roster.find((r: any) => r.name === 'Blair')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400, creditCents: 1400 });
     await balanced(d, 'all paid but Frankie');
 
     // Early drop, cash paid: Alex. Gale moves in owing $14.
@@ -311,13 +313,19 @@ describe('dry run: edge cases', () => {
   it('double taps never double charge or double credit', async () => {
     const d = await dry();
     const [g1, g2] = await games(d);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await join(d, g2.id, EVERYONE.slice(0, 6));
     await join(d, g1.id, ['Alex']);
     await venmoAndMark(d, 'Alex', g1.id);
     await d.ctx.organizer.call('POST', `/api/admin/sessions/${g1.id}/decision`, { decision: 'cancel', confirm: true });
-    await join(d, g2.id, EVERYONE.slice(0, 6));
-    // Two Use credit taps at once.
+    // Two Use credit taps at once over his real $14: one spends it, the other is refused, one ledger entry.
     const alex = await d.phone('Alex');
-    await Promise.all([alex.call('POST', `/api/sessions/${g2.id}/use-credit`, {}), alex.call('POST', `/api/sessions/${g2.id}/use-credit`, {})]);
+    const taps = await Promise.all([alex.call('POST', `/api/sessions/${g2.id}/use-credit`, {}), alex.call('POST', `/api/sessions/${g2.id}/use-credit`, {})]);
+    expect(taps.map((t) => t.status).sort()).toEqual([200, 409]);
+    expect(taps.find((t) => t.status === 200)!.data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
+    expect((await dash(d)).creditLedger.find((l: any) => l.playerId === d.ctx.byName.Alex).entries.filter((e: any) => e.kind === 'used' && !e.endedAt)).toEqual([
+      expect.objectContaining({ cents: 1400, sessionId: g2.id }),
+    ]);
     expect((await alex.call('GET', '/api/group')).data.credit.balanceCents).toBe(0);
     // Two Mark paid taps at once (Venmo was sent once).
     const amount = await owes(d, 'Blair', g2.id);

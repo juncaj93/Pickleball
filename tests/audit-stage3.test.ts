@@ -711,7 +711,7 @@ describe('privacy of every player-facing answer', () => {
     await alex.call('POST', '/api/me', { playerId: ctx.byName.Alex });
     await alex.call('GET', '/api/group');
     await alex.call('POST', `/api/sessions/${s.id}/join`, {});
-    await alex.call('POST', `/api/sessions/${s.id}/use-credit`, {});
+    expect((await alex.call('POST', `/api/sessions/${s.id}/use-credit`, {})).data).toMatchObject({ ok: true, usedCents: 500, paid: false });
     await alex.call('POST', `/api/sessions/${s.id}/undo-credit`, {});
     await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: true });
     await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: false });

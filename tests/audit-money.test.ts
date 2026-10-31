@@ -1306,10 +1306,14 @@ describe('double taps and racing taps never double-spend', () => {
 
   it('Use credit racing a refund request for the same $14: never both, and never a request above the pot', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    const s = await nextSession(ctx, [s0.id]);
-    await alex.call('POST', `/api/sessions/${s.id}/join`, {});
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+    await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/join`, {});
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
+    expect((await groupOf(alex)).sessions.find((x: any) => x.id === s.id).mine).toMatchObject({ paymentStatus: 'unpaid', useCreditCents: 1400 });
     const [use, req] = await Promise.all([useCredit(alex, s.id), requestRefund(alex, 1400)]);
+    // Exactly one of them gets the $14.
+    expect([use.status, req.status].sort()).toEqual([200, 409]);
     const l = await ledgerOf(ctx, 'Alex');
     const g = await groupOf(alex);
     // Whatever won, the request can never be for more than the pot holds.
