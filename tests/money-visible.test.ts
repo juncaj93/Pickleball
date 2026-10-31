@@ -14,7 +14,7 @@ import { cashOutUsedMessage, refundRequestMessage } from '../shared/alerts';
 import type { CreditEntryView } from '../shared/api';
 // @ts-ignore (the player screen is checked by the app's own typecheck; this file only needs joinedText)
 import { joinedText } from '../src/pages/PlayerHome';
-import { playerPhone, setupGroup, TestApp } from './harness';
+import { playerPhone, setupGroup, TestApp, withoutIds } from './harness';
 
 const TZ = 'America/Detroit';
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
@@ -178,6 +178,7 @@ describe('the data behind the words', () => {
     ]);
     // Only Casey's entries: nothing of Devon's $9.
     expect(view.credit.history.every((h: any) => h.cents === 1400)).toBe(true);
-    expect(JSON.stringify(view.credit)).not.toContain('900');
+    expect(view.credit.history.some((h: any) => h.cents === 900)).toBe(false);
+    expect(withoutIds(JSON.stringify(view.credit))).not.toMatch(/\b900\b/);
   });
 });
