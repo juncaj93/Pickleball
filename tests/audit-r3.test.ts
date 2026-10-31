@@ -481,7 +481,10 @@ describe('fuzz: claims, Unmark, drops, cancels, finalize in random order, books 
         if (x) {
           const before = seatRow(ctx, g.id, n);
           const owe = x.owesCents;
-          const res = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName[n], paid: true, seen: x.moneySeen });
+          // As the screens send it (Who paid / Players tab / Home): what it showed, and the amount owed.
+          const res = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName[n], paid: true, seen: x.moneySeen, ...(x.owesCents > 0 ? { cents: x.owesCents } : {}) });
+          // A screen read just now is never refused as stale (moneySeen and the amount agree with the server's).
+          expect(['changed', 'amount_changed'], `seed ${seed} [${log.join(' ')}]: fresh Mark paid refused: ${res.text}`).not.toContain(res.data?.error);
           if (res.status === 200 && res.data.changed && before.payment_status === 'unpaid') money += owe;
         }
       } else if (a === 'unmark') {
@@ -489,6 +492,7 @@ describe('fuzz: claims, Unmark, drops, cancels, finalize in random order, books 
         if (x) {
           const cash = cashOn(g.id, n);
           const res = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName[n], paid: false, seen: x.moneySeen });
+          expect(res.data?.error, `seed ${seed} [${log.join(' ')}]: fresh Unmark refused as changed: ${res.text}`).not.toBe('changed');
           if (res.status === 200 && res.data.changed) money -= cash;
         }
       } else if (a === 'remove') await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName[n], action: 'withdraw' });
@@ -826,5 +830,129 @@ describe('sound: credit always has a way on, and standby + Court opened uses it 
       const st = seatRow(ctx, g.id, 'Casey').status;
       expect(st === 'confirmed' ? [potOf(ctx, 'Casey'), usedOnSeat(ctx, g.id, 'Casey')] : [potOf(ctx, 'Casey'), usedOnSeat(ctx, g.id, 'Casey')], `${first} ${st}`).toEqual(st === 'confirmed' ? [0, 1400] : [1400, 0]);
     }
+  });
+});
+
+// ================================================================= second pass (fixes in bcd4e40)
+
+/** A confirmed finding: `it.fails` while the bug is there. R3_SHOW=1 runs them as plain tests to see each failure. */
+
+describe('second pass: the fixes do not refuse normal taps or promote twice', () => {
+  // S1 (low, new in bcd4e40): the guarded confirm answers 409 "payment just changed" to the second of two
+  // simultaneous taps, though the seat is exactly what both wanted (cash Mark paid answers changed:false there).
+  it('Mark paid (confirm an I paid) from two devices at once: both answer 200, confirmed once', async () => {
+    const { ctx } = await group();
+    const { g } = await claimed(ctx);
+    const r = await rowOf(ctx, g.id, 'Blair');
+    const tap = () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true, seen: r.moneySeen });
+    const [a, b] = await Promise.all([tap(), tap()]);
+    expect(seatRow(ctx, g.id, 'Blair')).toMatchObject({ payment_status: 'paid', self_paid_at: null, payment_amount_cents: 1400 });
+    // The second device's answer: already done is "nothing changed", not an error.
+    expect([a.status, b.status], `${a.text} / ${b.text}`).toEqual([200, 200]);
+  });
+
+  // S2 (low, UI, from round 2): Who paid lists a dropped player's claim with a Mark paid that can never work; the
+  // Home claim card is the way. Fix: hide Mark paid when the row is not confirmed (or treat it as the claim's Paid);
+  // this test then needs updating.
+  it("Who paid shows no Mark paid on a dropped player's unconfirmed I paid (it is a claim, answered on Home)", async () => {
+    const { ctx } = await group();
+    const { g, blair } = await claimed(ctx);
+    await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {});
+    const r = await rowOf(ctx, g.id, 'Blair');
+    // Sessions.tsx PaymentsManager since the fix: Mark paid on a self-marked row only while they are in (and the game on).
+    const shown = r.paymentStatus === 'paid' && !r.refundedAt && r.selfPaid && r.status === 'confirmed';
+    expect(shown).toBe(false); // no dead button; the Home claim card answers it
+    expect((await dash(ctx)).paymentClaims).toEqual([expect.objectContaining({ name: 'Blair' })]);
+  });
+
+  it("join on a waitlisted court that turned Not booked meanwhile goes straight in with credit; a full game answers waitlisted", async () => {
+    for (const to of ['not_booked', 'booked'] as const) {
+      const { ctx, db } = await group();
+      const old = await on(ctx, '2026-10-29');
+      givePot(ctx, 'Casey', 1400, old.id);
+      const g = await on(ctx, '2026-11-05');
+      await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' });
+      const casey = await playerPhone(ctx, 'Casey');
+      db.pauseBefore(/VALUES \(\?3, \?1, \?4, 'waitlisted'/, async () => {
+        expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: to })).status).toBe(200);
+      });
+      const res = (await casey.call('POST', `/api/sessions/${g.id}/join`, {})).data;
+      expect(res, to).toMatchObject({ result: 'confirmed', creditCents: 1400 });
+      expect([seatRow(ctx, g.id, 'Casey').status, potOf(ctx, 'Casey'), usedOnSeat(ctx, g.id, 'Casey')]).toEqual(['confirmed', 0, 1400]);
+    }
+    // Full (max 4) when the court opens mid-tap: waitlisted, nothing used.
+    const { ctx, db } = await group();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
+    const old = await on(ctx, '2026-10-29');
+    givePot(ctx, 'Frankie', 1400, old.id);
+    const g = await on(ctx, '2026-11-05');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' });
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {});
+    db.pauseBefore(/VALUES \(\?3, \?1, \?4, 'waitlisted'/, async () => void (await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {})));
+    expect((await (await playerPhone(ctx, 'Frankie')).call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'waitlisted', position: 1 });
+    expect(potOf(ctx, 'Frankie')).toBe(1400);
+  });
+
+  it('two standby joins racing Court opened: each in once, credit once each', async () => {
+    const { ctx, db } = await group();
+    const old = await on(ctx, '2026-10-29');
+    for (const n of ['Casey', 'Devon']) givePot(ctx, n, 1400, old.id);
+    const g = await on(ctx, '2026-11-05');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' });
+    const [c, d] = [await playerPhone(ctx, 'Casey'), await playerPhone(ctx, 'Devon')];
+    db.pauseBefore(/VALUES \(\?3, \?1, \?4, 'waitlisted'/, async () => void (await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {})));
+    await Promise.all([c.call('POST', `/api/sessions/${g.id}/join`, {}), d.call('POST', `/api/sessions/${g.id}/join`, {})]);
+    for (const n of ['Casey', 'Devon']) expect([n, seatRow(ctx, g.id, n).status, potOf(ctx, n), usedOnSeat(ctx, g.id, n)]).toEqual([n, 'confirmed', 0, 1400]);
+    expect((raw(ctx).prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND ended_at IS NULL").get(g.id) as any).n).toBe(2);
+  });
+
+  it("Unmark on an organizer-paid seat moved to the waitlist: the payment goes and the credit on it comes back (nothing left on the seat)", async () => {
+    const { ctx } = await group();
+    const old = await on(ctx, '2026-10-29');
+    givePot(ctx, 'Blair', 300, old.id);
+    const g = await on(ctx, '2026-11-05');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', `/api/sessions/${g.id}/join`, {});
+    let r = await rowOf(ctx, g.id, 'Blair');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true, seen: r.moneySeen, cents: r.owesCents });
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Blair, action: 'waitlist' });
+    r = await rowOf(ctx, g.id, 'Blair');
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: false, seen: r.moneySeen })).status).toBe(200);
+    expect({ pot: potOf(ctx, 'Blair'), onSeat: usedOnSeat(ctx, g.id, 'Blair'), ps: seatRow(ctx, g.id, 'Blair').payment_status }).toEqual({ pot: 300, onSeat: 0, ps: 'not_applicable' });
+    // Moved back in: owes the full $14 again, and auto credit does not re-apply on a promotion back in (Use credit shows).
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Blair, action: 'confirm' });
+    const mine = (await blair.call('GET', '/api/group')).data.sessions.find((s: any) => s.id === g.id).mine;
+    expect(mine.oweCents + mine.creditCents).toBe(1400);
+    expect(mine.oweCents === 1400 ? mine.useCreditCents : 0).toBe(mine.oweCents === 1400 ? 300 : 0);
+  });
+
+  it('dashboard moneySeen equals the server for every seat across finalize, reopen, redo, a price change and a cancel', async () => {
+    const { ctx } = await group();
+    const old = await on(ctx, '2026-10-29');
+    givePot(ctx, 'Blair', 300, old.id);
+    const g = await on(ctx, '2026-11-03');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {});
+    const probe = async (why: string) => {
+      // A seen from a fresh dashboard is accepted: Unmark with paid=false on an unpaid seat with no credit is a no-op "changed: false".
+      const d = (await dash(ctx)).sessions.find((s: any) => s.id === g.id);
+      for (const r of d.roster.filter((x: any) => !x.isOrganizer)) {
+        const res = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: r.playerId, paid: r.paymentStatus === 'paid', seen: r.moneySeen });
+        expect(res.data?.error, `${why} ${r.name}: ${res.text}`).not.toBe('changed');
+      }
+    };
+    await probe('open');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Casey, paid: true });
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { pricePerPlayerCents: 1600 } });
+    await probe('price changed');
+    ctx.app.now = Date.parse(g.endsAt) + HOUR;
+    const all = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie'].map((n) => ctx.byName[n]);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { played: all.slice(0, 4) });
+    await probe('finalized');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/reopen`, {});
+    await probe('reopened');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { played: all });
+    await probe('redo');
   });
 });

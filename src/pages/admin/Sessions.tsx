@@ -701,7 +701,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               <div className="pay-btns">
                 {r.paymentStatus === 'paid' && !r.refundedAt ? (
                   <>
-                    {r.selfPaid && (
+                    {/* Confirm an I paid while they are in; one on a seat that left is a claim, answered on Home. */}
+                    {r.selfPaid && r.status === 'confirmed' && !s.state.flags.canceled && (
                       <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
                         Mark paid
                       </button>

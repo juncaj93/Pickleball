@@ -686,7 +686,11 @@ export async function applyPayment(
       priceCents: sharesFor(session, roster, settingsOf(group)).get(playerId) ?? null,
       finalizedAt: session.finalized_at ?? null,
     });
-    if (current !== seen) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+    if (current !== seen) {
+      // A second device (or a retry) already did exactly this: confirmed paid. Nothing to change, not an error.
+      if (paid && row.status === 'confirmed' && row.payment_status === 'paid' && !row.refunded_at && !row.self_paid_at) return { ok: true, changed: false };
+      throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+    }
   }
 
   if (paid) {
@@ -706,7 +710,15 @@ export async function applyPayment(
         )
         .bind(ctx.nowIso, session.id, playerId)
         .run();
-      if (res.meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+      if (res.meta.changes !== 1) {
+        // A second device confirmed it first: already as wanted.
+        const now = await ctx.db
+          .prepare('SELECT status, payment_status, refunded_at, self_paid_at FROM session_players WHERE session_id = ? AND player_id = ?')
+          .bind(session.id, playerId)
+          .first<{ status: string; payment_status: string; refunded_at: string | null; self_paid_at: string | null }>();
+        if (now?.status === 'confirmed' && now.payment_status === 'paid' && !now.refunded_at && !now.self_paid_at) return { ok: true, changed: false };
+        throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
+      }
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
       return { ok: true, changed: true };
     }
