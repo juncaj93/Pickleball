@@ -596,3 +596,20 @@ is used automatically at sign-up. Everything else about money is unchanged.
 ### Database
 No change, no migration. The existing `credit_ledger` already records credit used on a
 game (kind `used` with the game's id).
+
+### Deploy (Fri Oct 30, 2026, about 11:16 PM Eastern)
+- Merged as #50 (main a46cf0f, after merging the alert clock channel's latest main).
+  Pages deployment `f92365f0-f23c-4cbc-ba28-37fdc5e82fa8`, Production, branch main. No migration.
+- Read-only look right before (11:05 PM) and after: credit only Mitchel at $0, no
+  cash-out requests, unpaid sign-ups Nathan and Julian (Tue Nov 3) and Brandon (Thu Nov 5),
+  2 ledger rows, 16 seats, nothing changed by the deploy.
+- After: backup address 200 with the new bundle, `/api/status`, `/api/group`,
+  `/api/group/version` and `/admin` 200 (pickleball.juncaj.net can't be reached from the
+  build sandbox). Clock Worker: every run 0 errors. Tick CPU after the deploy: 10.9 ms on
+  the first tick (fresh server), then 6.6 and under 9.5 ms.
+- Restore points: Time Travel bookmark `0000018b-00000000-00005115-998001d3f534101cf4926f1d1e7d3585`
+  (11:08 PM); SQL export `live-before-auto-credit-2026-10-30.sql` (169 rows, has phone
+  numbers, in that session's scratch folder, not committed). Code rollback: Pages
+  deployment `6721fb3d` (commit 6d35cb0). The deploy changed no data, so rolling the code
+  back is enough.
+- Tests: 828 unit (52 files), 938 browser checks in 23 files, all green.
