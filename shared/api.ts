@@ -325,6 +325,8 @@ export interface RefundRequestView {
 }
 
 export interface AdminDashboard {
+  /** The "did anything change?" stamp this load was drawn from (see /api/admin/version). */
+  version: string;
   group: {
     name: string;
     timezone: string;

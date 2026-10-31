@@ -18,7 +18,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 5197;
+const PORT = Number(process.env.E2E_PORT) || 5197;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'gallery-setup-token-0123456789';
 const PIN = '482913';

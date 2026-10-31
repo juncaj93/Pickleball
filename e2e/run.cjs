@@ -17,7 +17,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 5199;
+const PORT = Number(process.env.E2E_PORT) || 5199;
 const REMOTE = process.env.E2E_BASE_URL ? process.env.E2E_BASE_URL.replace(/\/$/, '') : null;
 const BASE = REMOTE ?? `http://localhost:${PORT}`;
 const SETUP_TOKEN = process.env.E2E_SETUP_TOKEN ?? 'e2e-setup-token-0123456789';
@@ -384,7 +384,7 @@ function headerReport() {
 }
 
 async function waitForServer() {
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 240; i++) {
     try {
       const res = await fetch(`${BASE}/api/status`);
       if (res.ok) return;

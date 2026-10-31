@@ -42,7 +42,7 @@ export const STATUS_TEXT: Record<StatusLabel, string> = {
   deadline_passed: 'Deadline passed',
   short_on_players: 'Short on players',
   needs_booking: 'Needs booking',
-  court_unavailable: 'Court not available',
+  court_unavailable: 'Waitlist',
   needs_players: 'Needs players',
   on_track: 'On track',
 };
@@ -119,9 +119,11 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
   const inCheckIn = live && nowMs >= start - settings.checkInHours * HOUR;
   const deadlinePassed = live && deadline !== null && nowMs >= deadline;
-  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep' && s.courtState !== 'waitlist';
+  // The court's third value (once "Not available", now Waitlist) acts like the venue's court waitlist.
+  const waiting = s.courtState === 'waitlist' || s.bookingStatus === 'unavailable';
+  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep' && !waiting;
 
-  const needsBooking = live && s.bookingStatus === 'needs_booking' && s.courtState !== 'waitlist' && bookingWindowOpen;
+  const needsBooking = live && s.bookingStatus === 'needs_booking' && !waiting && bookingWindowOpen;
   const flags: SessionFlags = {
     canceled,
     past,
@@ -129,7 +131,7 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
     needsBooking,
     bookingWindowOpen,
     bookingPromptDue: needsBooking && nowMs >= bookingOpensMs(s.startsAt, settings.bookingLeadDays, tz, BOOKING_PROMPT_HOUR),
-    courtUnavailable: live && s.bookingStatus === 'unavailable',
+    courtUnavailable: false,
     underfilled,
     openSpots: live ? openSpots : 0,
     playersNeeded: live ? playersNeeded(s.confirmedCount) : 0,
@@ -145,7 +147,7 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   else if (canceled) label = 'canceled';
   else if (past) label = 'completed';
   else if (started) label = 'in_progress';
-  else if (s.courtState === 'waitlist') label = 'court_waitlist';
+  else if (waiting) label = 'court_waitlist';
   else if (shortOnPlayers && deadlinePassed) label = 'deadline_passed';
   else if (shortOnPlayers) label = 'short_on_players';
   else if (flags.needsBooking) label = 'needs_booking';

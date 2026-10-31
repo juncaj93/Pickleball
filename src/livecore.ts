@@ -38,6 +38,8 @@ export interface LiveEnv {
   /** The stamp differs from the one the screen was drawn from. */
   onChange(stamp: string): void;
   isVisible(): boolean;
+  /** Optional: the check itself worked (changed or not). Lets a screen say when it last looked. */
+  onChecked?(): void;
 }
 
 /** Trouble worth backing off for: offline, rate limit, server errors. */
@@ -143,6 +145,7 @@ export class LivePoller {
     try {
       const stamp = await this.env.fetchStamp();
       this.backoff = 0;
+      this.env.onChecked?.();
       if (this.known !== null && stamp !== this.known) this.env.onChange(stamp);
       else if (this.known === null) this.known = stamp;
     } catch (err) {

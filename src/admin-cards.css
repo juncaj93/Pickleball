@@ -1,0 +1,284 @@
+/* Organizer game cards, April-style cleanup (Nov 2026): the date tile with the start time under it, the
+   Not booked | Waitlist | Booked switch, the gear's small pop-up, the paid pill and the quiet "Updated" note. */
+
+/* ---- Tile column: the tile and the start time under it, like the player cards ---- */
+.scard-main {
+  grid-template-columns: 56px minmax(0, 1fr);
+}
+.scard-tilecol {
+  width: 56px;
+  /* The time sizes itself to this column (cqw), so "10:30 AM" can never run past the tile. */
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.scard .scard-tilecol .tile {
+  width: 100%;
+  box-sizing: border-box;
+}
+.scard-time {
+  text-align: center;
+  font-family: var(--display);
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: min(0.9rem, 21cqw);
+  line-height: 1.1;
+}
+
+/* ---- The court switch ---- */
+.court-switch {
+  --sw-notbooked-bg: #eaa31a;
+  --sw-notbooked-fg: #2a1a00;
+  --sw-wait-bg: #1c4f94;
+  --sw-wait-fg: #ffffff;
+  --sw-booked-bg: #1e6a48;
+  --sw-booked-fg: #ffffff;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--fill);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+:root[data-theme='dark'] .court-switch {
+  --sw-notbooked-bg: #e0a83e;
+  --sw-notbooked-fg: #1c1300;
+  --sw-wait-bg: #6fa3ea;
+  --sw-wait-fg: #0a1424;
+  --sw-booked-bg: #4cc27a;
+  --sw-booked-fg: #06200f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .court-switch {
+    --sw-notbooked-bg: #e0a83e;
+    --sw-notbooked-fg: #1c1300;
+    --sw-wait-bg: #6fa3ea;
+    --sw-wait-fg: #0a1424;
+    --sw-booked-bg: #4cc27a;
+    --sw-booked-fg: #06200f;
+  }
+}
+.court-switch button {
+  min-height: 44px;
+  min-width: 0;
+  padding: 4px 2px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.15;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color var(--fast), color var(--fast);
+}
+.court-switch button:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+.court-switch button:disabled {
+  cursor: progress;
+}
+.court-switch button[aria-pressed='true'] {
+  font-weight: 800;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+}
+.court-switch button[data-seg='not_booked'][aria-pressed='true'] {
+  background: var(--sw-notbooked-bg);
+  color: var(--sw-notbooked-fg);
+}
+.court-switch button[data-seg='waitlist'][aria-pressed='true'] {
+  background: var(--sw-wait-bg);
+  color: var(--sw-wait-fg);
+}
+.court-switch button[data-seg='booked'][aria-pressed='true'] {
+  background: var(--sw-booked-bg);
+  color: var(--sw-booked-fg);
+}
+.scard-top .court-line.top-line {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 34px;
+  justify-content: center;
+}
+.scard-top {
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.court-sub {
+  margin: 0;
+}
+.scard .game-note .extra-tag {
+  margin: 0 6px 0 0;
+}
+
+/* ---- The gear's pop-up ---- */
+.game-menu {
+  position: relative;
+}
+.scard:has(.menu-pop) {
+  /* The card keeps the pop-up above the cards that follow it. */
+  z-index: 30;
+}
+.menu-pop {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  z-index: 40;
+  width: 252px;
+  max-width: calc(100vw - 32px);
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 22%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: fade-in var(--fast) var(--ease);
+}
+.menu-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.menu-row svg {
+  flex: none;
+  width: 20px;
+  height: 20px;
+}
+.menu-row:hover,
+.menu-row:focus-visible {
+  background: var(--fill);
+}
+.menu-row:focus-visible,
+.menu-pop .text-choice:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -2px;
+}
+.menu-row.danger {
+  color: var(--danger-fg);
+  /* Cancel sits last and apart from the rest. */
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 10px 10px;
+  padding-top: 2px;
+}
+.menu-row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.menu-pop .menu-texts {
+  list-style: none;
+  margin: 0 0 4px 12px;
+  padding: 0 0 0 8px;
+  border-left: 2px solid var(--line);
+}
+.menu-pop .menu-texts .text-choice {
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 8px;
+  border-radius: 8px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.menu-pop .menu-texts .text-choice:hover {
+  background: var(--fill);
+}
+
+/* ---- Paid pill and the cancel-by warning ---- */
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+.paid-pill {
+  /* 44 px to tap, a small pill to look at. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin: -8px 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.paid-pill > span {
+  padding: 3px 11px;
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.paid-pill[data-all-paid='yes'] > span {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+.paid-pill:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 999px;
+}
+.cancel-by-soon {
+  color: var(--danger-fg);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+/* ---- Edit game sheet ---- */
+.edit-game .cancel-by-line {
+  margin: 0;
+  color: var(--ink-2);
+}
+.edit-game .time-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+/* ---- "Updated just now" ---- */
+.updated-line {
+  /* Just under the title bar, above the page. */
+  margin: 0 auto;
+  padding: 4px var(--gutter) 0;
+  max-width: 640px;
+  box-sizing: border-box;
+  min-height: 1.1em;
+  font-size: 0.75rem;
+  line-height: 1.1;
+  color: var(--ink-2);
+  text-align: right;
+}
+/* Hidden (not removed, so nothing shifts) while any sheet or dialog is open. */
+body:has(dialog[open]) .updated-line {
+  visibility: hidden;
+}

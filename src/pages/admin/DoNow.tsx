@@ -3,6 +3,9 @@ import type { MarkName, Task, TaskButton, TaskStep } from '../../../shared/tasks
 import { api, ApiError, isIOS } from '../../lib';
 import { MessageIcon, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import { CourtWaitButtons } from './Sessions';
+import { courtSwitchOf } from '../../../shared/court';
+import { formatShortDate } from '../../../shared/time';
 import { dashboardTasks, textHref } from './doNow';
 import '../../do-now.css';
 
@@ -45,15 +48,24 @@ export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useServerNow(ctx.d.now);
   const [more, setMore] = useState(false);
   const tasks = dashboardTasks(ctx.d, nowMs, `${window.location.origin}/admin`);
-  if (tasks.length === 0) return null;
+  // Games waiting on the venue's court list: "Court opened" or "Didn't open?" lives here, not on the game card.
+  const waiting = ctx.d.sessions.filter((s) => !s.state.flags.canceled && !s.state.flags.started && courtSwitchOf(s) === 'waitlist');
+  if (tasks.length === 0 && waiting.length === 0) return null;
   const [first, ...rest] = tasks;
   return (
     <section className="do-now" aria-labelledby="do-now-title">
       <h2 id="do-now-title" className="sr-only">
         Do this now
       </h2>
-      <TaskCard ctx={ctx} task={first} nowMs={nowMs} lead />
-      {rest.length > 0 && (
+      {waiting.map((s) => (
+        <article key={s.id} className="card dn-card" data-task="court_waitlist" data-session={s.id} aria-label={`Court waitlist: ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}>
+          <div className="dn-eyebrow">Waitlist</div>
+          <p className="dn-text">{formatShortDate(s.startsAt, ctx.d.group.timezone)}: did the court open?</p>
+          <CourtWaitButtons ctx={ctx} s={s} />
+        </article>
+      ))}
+      {first && <TaskCard ctx={ctx} task={first} nowMs={nowMs} lead={waiting.length === 0} />}
+      {first && rest.length > 0 && (
         <button type="button" className="link-btn dn-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>
           {more ? 'Show less' : `+${rest.length} more`}
         </button>
