@@ -159,7 +159,8 @@ export function seatMoneyBackStatements(
   const { groupId, sessionId, playerId, organizerId, reason, nowIso, when, entryId } = args;
   // ?1 now, ?2 reason, ?3 session, ?4 organizer ('' for none), ?5 player (NULL for every seat), ?6 group, ?7 entry id.
   const seat = (sp: string) => `${sp}.session_id = ?3 AND (?5 IS NULL OR ${sp}.player_id = ?5)`;
-  const notOrganizer = (sp: string) => `${sp}.player_id <> ?4`;
+  // Never the organizer, and never a court-payment row (status 'declined' and paid: only the organizer has those).
+  const notOrganizer = (sp: string) => `${sp}.player_id <> ?4 AND ${sp}.status <> 'declined'`;
   const values = [nowIso, reason, sessionId, organizerId ?? '', playerId, groupId, entryId ?? null];
   // Each statement gets values up to the highest ?N it uses (SQLite refuses extra ones).
   const bind = (sql: string) => db.prepare(sql).bind(...values.slice(0, Math.max(...[...sql.matchAll(/\?(\d+)/g)].map((m) => Number(m[1])))));
@@ -249,7 +250,7 @@ export function returnSeatCreditStatements(
            self_paid_at = CASE WHEN ${gone} THEN NULL ELSE self_paid_at END,
            payment_amount_cents = CASE WHEN ${gone} THEN NULL ELSE payment_amount_cents - ${taken} END,
            payment_updated_at = ?1, updated_at = ?1
-         WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND ${taken} > 0${open}`,
+         WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND refunded_at IS NULL AND ${taken} > 0${open}`,
       )
       .bind(nowIso, reason, sessionId, playerId),
     db
@@ -426,10 +427,12 @@ export async function spendCredit(
     alreadyUsed: number;
     /** Set when this use pays the seat in full: the seat's payment. */
     payInFull: { paidCents: number } | null;
+    /** The game's final price as read (null: not finalized); a Finalize or Reopen since means look again. */
+    finalPriceCents: number | null;
     nowIso: string;
   },
 ): Promise<boolean> {
-  const { groupId, sessionId, playerId, cents, alreadyUsed, payInFull, nowIso } = args;
+  const { groupId, sessionId, playerId, cents, alreadyUsed, payInFull, finalPriceCents, nowIso } = args;
   const entry = newId();
   const there = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?1 AND ended_at IS NULL)';
   const out = await db.batch([
@@ -440,9 +443,10 @@ export async function spendCredit(
          WHERE ${POT('?3')} - ${RESERVED('?3')} >= ?4
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?5 AND player_id = ?3 AND ended_at IS NULL) = ?7
            AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'unpaid')
-           AND (SELECT status FROM sessions WHERE id = ?5) <> 'canceled'`,
+           AND (SELECT status FROM sessions WHERE id = ?5) <> 'canceled'
+           AND (SELECT COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?5) = ?8`,
       )
-      .bind(entry, groupId, playerId, cents, sessionId, nowIso, alreadyUsed),
+      .bind(entry, groupId, playerId, cents, sessionId, nowIso, alreadyUsed, finalPriceCents ?? -1),
     ...(payInFull
       ? [
           db
@@ -598,7 +602,7 @@ export function autoCreditStatements(db: D1Database, auto: AutoCredit, sessionId
       .prepare(
         `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
          SELECT ?1, ?2, ?3, 'used', MIN(?4, ${usable}), ?5, ?6, 'auto'
-         WHERE ${usable} > 0
+         WHERE ${usable} > 0 AND ?4 > 0
            AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'unpaid' AND confirmed_at = ?6)
            AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE kind = 'used' AND session_id = ?5 AND player_id = ?3 AND ended_at IS NULL)
            AND EXISTS (SELECT 1 FROM sessions WHERE id = ?5 AND status <> 'canceled' AND finalized_at IS NULL)`,

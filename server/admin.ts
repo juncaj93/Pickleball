@@ -204,11 +204,11 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
   }
   if (Object.keys(changes).length === 0) return { ok: true, changed: false };
   const status = session.status === 'canceled' ? 'canceled' : next.booking_status === 'booked' ? 'booked' : 'planned';
-  await ctx.db
+  const upd = await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = ?, venue_name = ?, venue_booking_url = ?, reservation_reference = ?,
          court_cost_cents = ?, cancellation_deadline_at = ?, status = ?, updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND (status = 'canceled') = (? = 'canceled')`,
     )
     .bind(
       next.booking_status,
@@ -220,8 +220,11 @@ export async function updateBooking(ctx: Ctx, body: Record<string, unknown>) {
       status,
       ctx.nowIso,
       session.id,
+      session.status,
     )
     .run();
+  // A cancel landed in between: never bring a canceled game back from here.
+  if (upd.meta.changes !== 1) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   await audit(ctx.db, group.id, session.id, 'booking_updated', changes, ctx.nowIso);
   if (changes.booking_status) await recordCourtBooked(ctx.db, group.id, session.id, next.booking_status === 'booked', ctx.nowIso);
   return { ok: true, changed: true };
@@ -335,17 +338,19 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   const reference = body.reservationReference === undefined ? session.reservation_reference : v.optionalText(body.reservationReference, 'reservationReference', 80);
   const cost = body.courtCostCents === undefined ? session.court_cost_cents : v.cents(body.courtCostCents, 'courtCostCents');
   const wasWaiting = session.court_state === 'waitlist';
-  await ctx.db
+  const booked = await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = 'booked', status = 'booked',
          venue_name = COALESCE(venue_name, ?), reservation_reference = ?, court_cost_cents = ?,
          cancellation_deadline_at = COALESCE(cancellation_deadline_at, ?),
          court_state = CASE WHEN court_state = 'waitlist' THEN 'opened' ELSE court_state END,
          updated_at = ?
-       WHERE id = ?`,
+       WHERE id = ? AND status <> 'canceled'`,
     )
     .bind(group.venue_name || DEFAULT_VENUE_NAME, reference, cost, defaultDeadline(session.starts_at, settingsOf(group)), ctx.nowIso, session.id)
     .run();
+  // A cancel landed in between: a canceled game stays canceled (everyone's money is already credit).
+  if (booked.meta.changes !== 1) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   let promoted: { playerId: string }[] = [];
   if (wasWaiting && ctx.nowMs < Date.parse(session.starts_at)) {
     promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso, settingsOf(group).maxPlayers);
@@ -367,7 +372,7 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   await ctx.db
-    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
+    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
     .bind(ctx.nowIso, session.id)
     .run();
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
@@ -803,6 +808,12 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const name = body.name === undefined ? group.name : v.text(body.name, 'name', { max: 60 });
   const venmoUrl = body.venmoUrl === undefined ? group.venmo_url : v.optionalUrl(body.venmoUrl, 'venmoUrl');
   const organizerName = body.organizerName === undefined ? group.organizer_name : v.optionalText(body.organizerName, 'organizerName', 40);
+  // The organizer is found by name until their id is saved. Save it before a rename, so their own row (the court
+  // payment) is never taken for a player's.
+  if (!group.organizer_player_id && organizerName !== group.organizer_name) {
+    const current = await organizerIdOf(ctx.db, group);
+    if (current) await ctx.db.prepare('UPDATE groups SET organizer_player_id = ? WHERE id = ? AND organizer_player_id IS NULL').bind(current, group.id).run();
+  }
   const venueName = body.venueName === undefined ? group.venue_name : v.optionalText(body.venueName, 'venueName', 80);
   const venueAddress = body.venueAddress === undefined ? group.venue_address : v.optionalText(body.venueAddress, 'venueAddress', 160);
   const firstSessionDate = body.firstSessionDate === undefined ? group.first_session_date : v.optionalDate(body.firstSessionDate, 'firstSessionDate');

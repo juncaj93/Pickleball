@@ -50,6 +50,7 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
     alreadyUsed,
     // The payment is the whole price (cash plus credit), so credit used for a game is collected in the month it is played.
     payInFull: full ? { paidCents: price.cents } : null,
+    finalPriceCents: session.final_price_cents ?? null,
     nowIso: ctx.nowIso,
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again and tap Use credit.');
@@ -215,7 +216,9 @@ export async function refundCreditBalance(ctx: Ctx, body: Record<string, unknown
   if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You have no credit to pay back.');
   if (!v.bool(body.refunded, 'refunded')) {
-    const undone = await undoRefund(ctx.db, playerId, ctx.nowIso);
+    // With the id of the refund the screen showed, only that one is taken back (a repeat finds it undone already).
+    const ledgerId = body.ledgerId === undefined ? null : v.id(body.ledgerId, 'ledgerId');
+    const undone = await undoRefund(ctx.db, playerId, ctx.nowIso, ledgerId);
     if (undone) await audit(ctx.db, group.id, null, 'credit_refund_undone', { player: p.display_name, playerId }, ctx.nowIso);
     return { ok: true, changed: undone };
   }
