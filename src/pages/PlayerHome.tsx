@@ -248,19 +248,38 @@ export function PlayerHome({
           note = {};
         }
       }
-      // Whether they are still in comes from the server as it is now, not from this page's older copy.
-      const fresh = note?.sessionId ? await api<GroupView>('GET', '/api/group').catch(() => null) : null;
-      const next = pendingDropAction(note, Date.now(), (id) => fresh?.sessions.find((x) => x.id === id)?.mine?.status === 'confirmed', holdPending);
+      // Whether they are still in comes from the server as it is now, not from this page's older copy. No answer
+      // (no signal): decide nothing, keep the note, and look again.
+      let fresh: GroupView | null = null;
+      if (note?.sessionId) {
+        fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
+        if (!fresh) {
+          timer = setTimeout(() => void look(), 15_000);
+          return;
+        }
+      }
+      const stillIn = (id: string) => ['confirmed', 'waitlisted'].includes(fresh?.sessions.find((x) => x.id === id)?.mine?.status ?? '');
+      const next = pendingDropAction(note, Date.now(), stillIn, holdPending);
       if (next.do === 'wait') timer = setTimeout(() => void look(), next.ms);
-      else if (next.do === 'forget') storageRemove(PENDING_DROP_KEY);
-      else if (next.do === 'send') {
+      else if (next.do === 'forget') {
+        storageRemove(PENDING_DROP_KEY);
+        // The screen stops drawing that drop (and its credit); the real data shows.
+        if (note?.sessionId) setOverlay(note.sessionId, null);
+        await load.quiet();
+      } else if (next.do === 'send') {
         try {
           await api('POST', `/api/sessions/${next.sessionId}/withdraw`, {});
           storageRemove(PENDING_DROP_KEY);
+          setOverlay(next.sessionId, null);
           await load.quiet();
-        } catch {
-          // No signal again: the note stays and the next look (or visit) tries again.
-          timer = setTimeout(() => void look(), 15_000);
+        } catch (err) {
+          // No signal again: the note stays and the next look (or visit) tries again. Refused (the game started,
+          // or was canceled): nothing more to send, and the screen shows the real data.
+          if (err instanceof ApiError && err.code !== 'offline') {
+            storageRemove(PENDING_DROP_KEY);
+            setOverlay(next.sessionId, null);
+            await load.quiet();
+          } else timer = setTimeout(() => void look(), 15_000);
         }
       }
     };

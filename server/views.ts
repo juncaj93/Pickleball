@@ -220,7 +220,16 @@ export function adminSessionView(
             dropClaimCents: me || !claimed ? 0 : Math.max(0, paidNow - seat.usedCents - seat.cashCents),
           };
         })(),
-        moneySeen: moneySeen({ paymentStatus: r.payment_status, paymentAmountCents: r.payment_amount_cents, refunded: !!r.refunded_at, selfPaid: !!r.self_paid_at, creditCents: seat.usedCents, cashCents: seat.cashCents }),
+        moneySeen: moneySeen({
+          paymentStatus: r.payment_status,
+          paymentAmountCents: r.payment_amount_cents,
+          refunded: !!r.refunded_at,
+          selfPaid: !!r.self_paid_at,
+          creditCents: seat.usedCents,
+          cashCents: seat.cashCents,
+          priceCents: share,
+          finalizedAt: session.finalized_at ?? null,
+        }),
         played: r.played === null || r.played === undefined ? null : r.played === 1,
         isOrganizer: me,
         waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,

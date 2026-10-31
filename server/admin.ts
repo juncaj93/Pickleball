@@ -365,7 +365,8 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   const reference = body.reservationReference === undefined ? session.reservation_reference : v.optionalText(body.reservationReference, 'reservationReference', 80);
   const cost = body.courtCostCents === undefined ? session.court_cost_cents : v.cents(body.courtCostCents, 'courtCostCents');
-  const wasWaiting = session.court_state === 'waitlist';
+  // Standby players move in when a court opens, whichever way the game was on the venue's waitlist.
+  const wasWaiting = isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state });
   const booked = await ctx.db
     .prepare(
       `UPDATE sessions SET booking_status = 'booked', status = 'booked',
@@ -403,6 +404,10 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
     .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ? WHERE id = ? AND status <> 'canceled'")
     .bind(ctx.nowIso, session.id)
     .run();
+  // Standby players on a game that was on the venue's waitlist are an ordinary game's players again (as setCourtStatus).
+  if (isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state }) && ctx.nowMs < Date.parse(session.starts_at)) {
+    await settle(ctx.db, { ...session, booking_status: 'needs_booking', court_state: null }, ctx.nowIso, settingsOf(group).maxPlayers);
+  }
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
   return { ok: true };
@@ -614,7 +619,7 @@ export async function answerClaim(ctx: Ctx, body: Record<string, unknown>) {
       ? ctx.db.prepare(`UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`).bind(ctx.nowIso, session.id, playerId)
       : ctx.db
           .prepare(
-            `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled' THEN 'unpaid' ELSE 'not_applicable' END,
+            `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
                paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`,
           )
           .bind(ctx.nowIso, session.id, playerId),
@@ -671,7 +676,16 @@ export async function applyPayment(
   if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
   if (seen !== null) {
     const now = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
-    const current = moneySeen({ paymentStatus: row.payment_status, paymentAmountCents: row.payment_amount_cents, refunded: !!row.refunded_at, selfPaid: !!row.self_paid_at, creditCents: now.usedCents, cashCents: now.cashCents });
+    const current = moneySeen({
+      paymentStatus: row.payment_status,
+      paymentAmountCents: row.payment_amount_cents,
+      refunded: !!row.refunded_at,
+      selfPaid: !!row.self_paid_at,
+      creditCents: now.usedCents,
+      cashCents: now.cashCents,
+      priceCents: sharesFor(session, roster, settingsOf(group)).get(playerId) ?? null,
+      finalizedAt: session.finalized_at ?? null,
+    });
     if (current !== seen) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
   }
 
@@ -682,10 +696,17 @@ export async function applyPayment(
     if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
     if (row.payment_status === 'paid') {
       if (self || !row.self_paid_at) return { ok: true, changed: false };
-      await ctx.db
-        .prepare('UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?, updated_at = ? WHERE session_id = ? AND player_id = ?')
-        .bind(ctx.nowIso, ctx.nowIso, session.id, playerId)
+      // Only while the seat is still in, paid and self-marked in a game that is on: a cancel or a drop at the same
+      // moment made it a claim, which the claim card answers (confirming it here would leave the money nowhere).
+      const res = await ctx.db
+        .prepare(
+          `UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+           WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
+             AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'`,
+        )
+        .bind(ctx.nowIso, session.id, playerId)
         .run();
+      if (res.meta.changes !== 1) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
       return { ok: true, changed: true };
     }
@@ -767,7 +788,8 @@ export async function applyPayment(
         organizerId: await organizerIdOf(ctx.db, group),
         reason: session.status === 'canceled' ? 'canceled' : 'dropped',
         nowIso: ctx.nowIso,
-        when: (sp) => `(${sp}.status = 'withdrawn' OR (SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled')`,
+        // Any seat that is not in (withdrawn, waitlisted, declined) or a canceled game: the same seats as a claim.
+        when: (sp) => `(${sp}.status <> 'confirmed' OR (SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled')`,
       }),
     ]);
     if (unpaid.meta.changes !== 1) {

@@ -227,6 +227,15 @@ export async function joinSession(
   if (isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state }) && mode !== 'organizer') {
     if (mode === 'claim_only') return { result: 'spot_taken' };
     await addToWaitlist(db, session, playerId, nowIso);
+    // The court may have opened while this tap was on its way (Court opened moved the standby list in already):
+    // look again, and if it is no longer waiting on the venue, move people in now like Court opened does.
+    const fresh = await db.prepare('SELECT * FROM sessions WHERE id = ?').bind(session.id).first<SessionRow>();
+    if (fresh && fresh.status !== 'canceled' && !isCourtWaitlist({ bookingStatus: fresh.booking_status, courtState: fresh.court_state })) {
+      const promoted = await settle(db, fresh, nowIso, maxPlayers);
+      const mine = promoted.find((p) => p.playerId === playerId);
+      if (mine) return mine.creditCents > 0 ? { result: 'confirmed', creditCents: mine.creditCents, paidWithCredit: mine.paidWithCredit } : { result: 'confirmed' };
+      return { result: 'waitlisted', position: await waitlistPosition(db, session.id, playerId) };
+    }
     return { result: 'standby', position: await waitlistPosition(db, session.id, playerId) };
   }
 

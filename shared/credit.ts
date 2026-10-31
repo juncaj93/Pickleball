@@ -349,6 +349,16 @@ export function paymentClaimText(name: string, cents: number, why: 'dropped' | '
  * and the server refuses the tap when the seat changed since (a stale screen, a second device, a retry of a
  * tap that already went in), so a tap never acts on money the organizer did not see.
  */
-export function moneySeen(seat: { paymentStatus: string; paymentAmountCents: number | null; refunded: boolean; selfPaid: boolean; creditCents: number; cashCents: number }): string {
-  return [seat.paymentStatus, seat.paymentAmountCents ?? '', seat.refunded ? 'settled' : '', seat.selfPaid ? 'self' : '', seat.creditCents, seat.cashCents].join('|');
+export function moneySeen(seat: {
+  paymentStatus: string;
+  paymentAmountCents: number | null;
+  refunded: boolean;
+  selfPaid: boolean;
+  creditCents: number;
+  cashCents: number;
+  /** The seat's price as shown (null: none), and the game's finalize (null: not finalized): a Finalize or redo changes them. */
+  priceCents: number | null;
+  finalizedAt: string | null;
+}): string {
+  return [seat.paymentStatus, seat.paymentAmountCents ?? '', seat.refunded ? 'settled' : '', seat.selfPaid ? 'self' : '', seat.creditCents, seat.cashCents, seat.priceCents ?? '', seat.finalizedAt ?? ''].join('|');
 }

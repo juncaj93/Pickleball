@@ -197,8 +197,10 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
   async function setPaid(s: AdminSessionView, paid: boolean) {
     setBusy(true);
     try {
-      const seen = s.roster.find((r) => r.playerId === player.id)?.moneySeen;
-      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid, ...(seen ? { seen } : {}) });
+      const row = s.roster.find((r) => r.playerId === player.id);
+      const seen = row?.moneySeen;
+      // With what this screen showed (the seat, and the amount owed for Mark paid): refused if it changed since.
+      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid, ...(seen ? { seen } : {}), ...(paid && row && row.owesCents > 0 ? { cents: row.owesCents } : {}) });
       await ctx.reload();
       toast(paid ? `${player.name} marked paid` : `${player.name} marked unpaid`);
     } catch (err) {

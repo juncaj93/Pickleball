@@ -91,6 +91,8 @@ async function runSequence(seed: number) {
   const look = async (): Promise<void> => {
     const raw = storage.get('note');
     const note = raw ? JSON.parse(raw) : null;
+    // As PlayerHome: no signal to ask the server whether they are still in, so decide nothing and keep the note.
+    if (note && !signal) return;
     const next = pendingDropAction(note, app.now, () => serverIn(), holdPending);
     if (next.do === 'forget') storage.delete('note');
     else if (next.do === 'wait') {

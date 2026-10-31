@@ -588,7 +588,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   // The organizer is not a row of their own money: they pay the venue (the court row below).
   const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
+    // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
   const price = ctx.d.group.settings.pricePerPlayerCents;
   const played = isPlayed(s);
   const fin = s.finalized;
