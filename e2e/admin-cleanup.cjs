@@ -16,7 +16,7 @@ const PORT = Number(process.env.E2E_PORT) || 5270;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'admincleanup-setup-token-0123456789';
 const PIN = '482913';
-const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon', 'Christopher'];
+const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon', 'Christopher', 'Bartholomew', 'Maximilian', 'Wilhelmina', 'Anastasia'];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const SHOTS = path.join(__dirname, 'screenshots');
 
@@ -140,6 +140,13 @@ async function main() {
   for (const n of ['Alex', 'Ryan']) await post(phones[n], `/api/sessions/${roles.waitA}/join`, {});
   await court(roles.waitB, 'waitlist');
   await court(roles.redLine, 'booked');
+  // A booked game with long names, so the names line wraps to two or three lines.
+  await court(roles.spare, 'booked');
+  for (const n of ['Bartholomew', 'Maximilian', 'Wilhelmina', 'Anastasia', 'Christopher']) {
+    const c = await browser.newContext();
+    await post(c.request, '/api/me', { playerId: idOf(n) });
+    await post(c.request, `/api/sessions/${roles.spare}/join`, {});
+  }
 
   const phone = (width, colorScheme) => ({ viewport: { width, height: 852 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, colorScheme, userAgent: UA });
   async function openAdmin(width = 393, scheme = 'light') {
@@ -178,7 +185,7 @@ async function main() {
         const clipped = segs.filter((b) => b.scrollWidth > b.clientWidth + 1).map((b) => b.textContent);
         const small = [...c.querySelectorAll('button, a')]
           .filter((e) => e.getBoundingClientRect().width > 0 && !e.closest('.game-note') && !e.matches('.icon-round, .me-in'))
-          .filter((e) => e.getBoundingClientRect().height < 43.5)
+          .filter((e) => !e.closest('.paid-pill') && e.getBoundingClientRect().height < 43.5)
           .map((e) => `${e.textContent.trim().slice(0, 18)} ${Math.round(e.getBoundingClientRect().height)}px`);
         return {
           id: c.id,
@@ -227,7 +234,7 @@ async function main() {
     const n = await page.locator(CARDS).count();
     assert((await page.locator(`${CARDS} .court-switch`).count()) === n, 'a card has no switch');
     for (const id of [roles.paid, roles.notBooked, roles.waitA]) {
-      const segs = await card(page, id).locator('.court-switch button').allInnerTexts();
+      const segs = (await card(page, id).locator('.court-switch button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim());
       assert(JSON.stringify(segs) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `segments ${segs}`);
     }
     assert((await page.locator('.court-banner').count()) === 0, 'the old court banner is still on a card');
@@ -237,7 +244,7 @@ async function main() {
 
   await check('the right segment is on for booked, not booked and waitlist games (old third value reads as Waitlist)', async () => {
     const { ctx, page } = await openAdmin();
-    const on = async (id) => card(page, id).locator('.court-switch button[aria-pressed="true"]').innerText();
+    const on = async (id) => (await card(page, id).locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim();
     assert((await on(roles.paid)) === 'Booked', 'booked');
     assert((await on(roles.notBooked)) === 'Not booked', 'not booked');
     assert((await on(roles.waitA)) === 'Waitlist', 'waitlist');
@@ -248,7 +255,7 @@ async function main() {
     const { ctx, page } = await openAdmin();
     const c = card(page, roles.notBooked);
     await c.getByRole('button', { name: 'Waitlist', exact: true }).click();
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Waitlist', roles.notBooked);
+    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Waitlist', roles.notBooked);
     await page.reload();
     await page.locator(CARDS).first().waitFor();
     assert((await card(page, roles.notBooked).locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Waitlist', 'waitlist did not survive a reload');
@@ -259,7 +266,7 @@ async function main() {
     await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Not booked', roles.notBooked);
     await page.reload();
     await page.locator(CARDS).first().waitFor();
-    assert((await card(page, roles.notBooked).locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Not booked', 'not booked did not survive a reload');
+    assert((await card(page, roles.notBooked).locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', 'not booked did not survive a reload');
     await ctx.close();
   });
 
@@ -364,6 +371,40 @@ async function main() {
     assert(title2 === title1, `pill opened "${title2}", menu opened "${title1}"`);
     await ctx.close();
   });
+
+  // ---------- even spacing on the cards, and one look for the switch ----------
+  // Measures the visible rows of every card: top padding, gap count row to names, gap names to pill, bottom padding.
+  const SPACING = (page, sel) =>
+    page.evaluate((cardsSel) => {
+      const r = (e) => e.getBoundingClientRect();
+      return [...document.querySelectorAll(cardsSel)].map((c) => {
+        const cb = r(c);
+        const count = c.querySelector('.players-count');
+        const names = c.querySelector('.names-line, .waitlist-line');
+        const wait = c.querySelector('.waitlist-line');
+        const pill = c.querySelector('.paid-pill > span');
+        const sw = c.querySelector('.court-switch');
+        const tile = c.querySelector('.scard-tilecol');
+        const me = c.querySelector('.players-after .btn, .players-after .me-state');
+        const top = Math.min(...[sw, c.querySelector('.court-line')].filter(Boolean).map((e) => r(e).top), r(tile).top);
+        const bottoms = [pill, wait, names, count, me, c.querySelector('.cancel-by-soon')].filter(Boolean).map((e) => r(e).bottom);
+        const lineH = names ? parseFloat(getComputedStyle(names).lineHeight) : 0;
+        const rows = {
+          topPad: top - cb.top,
+          switchToCount: count ? r(count).top - (sw ? r(sw).bottom : r(c.querySelector('.court-line')).bottom) : null,
+          countToNames: names && count ? r(names).top - r(count).bottom : null,
+          namesToPill: names && pill ? r(pill).top - (wait ? r(wait).bottom : r(names).bottom) : null,
+          bottomPad: cb.bottom - Math.max(...bottoms),
+        };
+        return {
+          id: c.id,
+          switch: c.dataset.switch,
+          nameLines: names ? Math.round(r(names).height / lineH) : 0,
+          pill: !!pill,
+          ...Object.fromEntries(Object.entries(rows).map(([k, v]) => [k, v === null ? null : Math.round(v * 10) / 10])),
+        };
+      });
+    }, sel);
 
   // ---------- the pop-up never hides behind the bottom bar ----------
   for (const [height, label] of [[664, 'with Safari\'s bottom bar showing'], [560, 'on a short phone'], [420, 'on a very short screen']]) {
@@ -507,6 +548,96 @@ async function main() {
     await ctx.close();
   });
 
+  const SHAPE = (page, sel) =>
+    page.evaluate((cardsSel) => {
+      const lines = (btn) => {
+        const spans = [...btn.querySelectorAll('.seg-line')];
+        return spans.length ? new Set(spans.map((e) => Math.round(e.getBoundingClientRect().top))).size : 1;
+      };
+      return [...document.querySelectorAll(cardsSel)].map((sw) => {
+        const b = [...sw.querySelectorAll('button')];
+        return { notBookedLines: lines(b[0]), heights: b.map((x) => Math.round(x.getBoundingClientRect().height * 10) / 10), pressed: b.findIndex((x) => x.getAttribute('aria-pressed') === 'true'), text: b.map((x) => x.textContent.replace(/\s+/g, ' ').trim()).join('|') };
+      });
+    }, sel);
+
+  for (const width of [360, 393, 430]) {
+    await check(`${width}px: "Not booked" is always on two lines, and the three segments are the same height on every card and in Edit game`, async () => {
+      const { ctx, page } = await openAdmin(width, 'light');
+      const shapes = await SHAPE(page, `${CARDS} .court-switch`);
+      assert(shapes.length >= 8, `${shapes.length} switches`);
+      shapes.forEach((r, i) => {
+        assert(r.text === 'Not booked|Waitlist|Booked', `switch ${i + 1}: ${r.text}`);
+        assert(r.notBookedLines === 2, `switch ${i + 1}: "Not booked" is on ${r.notBookedLines} line(s)`);
+        assert(new Set(r.heights).size === 1, `switch ${i + 1}: segment heights differ ${r.heights}`);
+      });
+      assert(new Set(shapes.map((r) => r.heights[0])).size === 1, `heights differ between cards: ${[...new Set(shapes.map((r) => r.heights[0]))]}`);
+      // Every segment selected in turn on one card: nothing changes height or width of the switch.
+      const c = card(page, roles.spare);
+      const sw = c.locator('.court-switch');
+      const before = await sw.boundingBox();
+      const cardBefore = await c.boundingBox();
+      for (const v of ['not_booked', 'waitlist', 'booked']) {
+        await c.getByRole('button', { name: /Not\s*booked|Waitlist|Booked/ }).first().evaluate(() => {});
+        await c.locator(`.court-switch button[data-seg="${v}"]`).click();
+        await page.waitForFunction(([id, vv]) => document.querySelector(`#session-${id} .court-switch button[data-seg="${vv}"]`)?.getAttribute('aria-pressed') === 'true', [roles.spare, v]);
+        const after = await sw.boundingBox();
+        // (The card's own border is 1 to 2 px wider for Not booked and Waitlist, so only the height and the equal thirds are exact.)
+        assert(Math.abs(after.height - before.height) < 0.5 && Math.abs(after.width - before.width) <= 3, `switch changed size when ${v} was picked: ${JSON.stringify(before)} vs ${JSON.stringify(after)}`);
+        const seg = await sw.locator('button').evaluateAll((bs) => bs.map((b) => [Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height * 10) / 10]));
+        assert(new Set(seg.map((x) => x[0])).size === 1 && new Set(seg.map((x) => x[1])).size === 1, `segments are not equal after picking ${v}: ${JSON.stringify(seg)}`);
+      }
+      void cardBefore;
+      await c.getByRole('button', { name: /^Game menu for/ }).click();
+      await page.getByRole('menuitem', { name: 'Edit game' }).click();
+      const sheet = await SHAPE(page, 'dialog[open] .court-switch');
+      assert(sheet.length === 1 && sheet[0].notBookedLines === 2 && new Set(sheet[0].heights).size === 1, `Edit game switch: ${JSON.stringify(sheet)}`);
+      assert(sheet[0].heights[0] === shapes[0].heights[0], `Edit game segments are ${sheet[0].heights[0]}px, cards ${shapes[0].heights[0]}px: not one shared look`);
+      await ctx.close();
+    });
+  }
+
+  const evenly = (rows, where) => {
+    for (const r of rows) {
+      const w = `${where}, ${r.switch} card, ${r.nameLines} name line(s), ${r.pill ? 'pill' : 'no pill'}`;
+      if (r.id === rows[0].id && r.bottomPad > 60) continue; // the short-on-players panel adds its own space below
+      assert(Math.abs(r.topPad - 12) <= 0.6, `${w}: top padding ${r.topPad}px, want 12`);
+      if (r.bottomPad <= 60) assert(Math.abs(r.bottomPad - 12) <= 0.6, `${w}: bottom padding ${r.bottomPad}px, want 12`);
+      if (r.countToNames !== null) assert(Math.abs(r.countToNames - 6) <= 0.6, `${w}: count row to names ${r.countToNames}px, want 6`);
+      if (r.namesToPill !== null) assert(Math.abs(r.namesToPill - 6) <= 0.6, `${w}: names to pill ${r.namesToPill}px, want 6`);
+    }
+  };
+  for (const [width, scheme] of [[360, 'light'], [393, 'light'], [393, 'dark'], [430, 'light']]) {
+    await check(`${width}px (${scheme}): the count row, names and paid pill sit 6px apart, with 12px above and below, on every kind of card`, async () => {
+      const { ctx, page } = await openAdmin(width, scheme);
+      const rows = await SPACING(page, CARDS);
+      const kinds = new Set(rows.map((r) => `${r.switch}/${r.nameLines}/${r.pill}`));
+      for (const want of ['booked/1/true', 'not_booked/1/true']) assert([...kinds].some((k) => k === want), `no card of kind ${want}; have ${[...kinds]}`);
+      assert(rows.some((r) => r.nameLines >= 2), 'no card with a names line that wraps');
+      assert(rows.some((r) => !r.pill && r.countToNames === null), 'no card without a pill');
+      assert(rows.some((r) => r.switch === 'waitlist'), 'no waitlist card');
+      assert(rows.some((r) => r.nameLines === 1 && r.pill), 'no one-name card');
+      assert(rows.some((r) => r.nameLines === 1 && r.pill && r.countToNames !== null), 'no three-name card');
+      if (process.env.SHOW_SPACING) console.log(JSON.stringify(rows));
+      evenly(rows, `${width}px ${scheme}`);
+      await ctx.close();
+    });
+  }
+
+  await check('the spacing does not move when the live refresh redraws the cards', async () => {
+    const { ctx, page } = await openAdmin(390, 'light');
+    const before = JSON.stringify(await SPACING(page, CARDS));
+    const topBefore = await page.locator(CARDS).first().evaluate((e) => Math.round(e.getBoundingClientRect().top + window.scrollY));
+    // A change somewhere else on the screen forces a full redraw of every card.
+    await post(areq, `/api/admin/sessions/${roles.bookedEmpty}/court-status`, { status: 'booked' });
+    await page.waitForFunction((id) => document.querySelector(`#session-${id}`)?.dataset.switch === 'booked', roles.bookedEmpty, { timeout: 15000 });
+    await sleep(600);
+    const after = JSON.stringify(await SPACING(page, CARDS));
+    assert(before === after, `spacing changed on refresh:\n${before}\n${after}`);
+    const topAfter = await page.locator(CARDS).first().evaluate((e) => Math.round(e.getBoundingClientRect().top + window.scrollY));
+    assert(topBefore === topAfter, `the first card moved from ${topBefore} to ${topAfter}`);
+    await ctx.close();
+  });
+
   await check('Edit game on a short phone (390 x 560): Save can be scrolled to and tapped, and the sheet stays above the tab bar', async () => {
     const ctx = await browser.newContext({ ...phone(390, 'light'), viewport: { width: 390, height: 560 } });
     await post(ctx.request, '/api/admin/login', { pin: PIN });
@@ -539,7 +670,7 @@ async function main() {
     const sheet = page.locator('dialog[open]');
     const title = await sheet.locator('h2').innerText();
     assert(/^Edit game · (Mon|Tue|Wed|Thu|Fri|Sat|Sun) [A-Z][a-z]{2} \d{1,2}$/.test(title), `title "${title}"`);
-    assert((await sheet.locator('.court-switch button').allInnerTexts()).join('|') === 'Not booked|Waitlist|Booked', 'switch');
+    assert((await sheet.locator('.court-switch button').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ').trim()).join('|') === 'Not booked|Waitlist|Booked', 'switch');
     const line = (await sheet.locator('[data-cancel-by]').innerText()).trim();
     assert(/^Cancel by (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2}:\d{2} (AM|PM), set automatically\.$/.test(line), `cancel-by line "${line}"`);
     assert((await sheet.locator('[data-cancel-by] input, input[type="datetime-local"]').count()) === 0, 'the cancel-by should not be editable');
@@ -564,7 +695,7 @@ async function main() {
     assert((await (await dash()).sessions.find((s) => s.id === roles.bookedEmpty).bookingStatus) === 'booked', 'saved before Save');
     await sheet.getByRole('button', { name: 'Save', exact: true }).click();
     await page.locator('dialog[open]').waitFor({ state: 'detached' });
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Waitlist', roles.bookedEmpty);
+    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Waitlist', roles.bookedEmpty);
     const after = (await dash()).sessions.find((s) => s.id === roles.bookedEmpty);
     assert(after.startsAt === startBefore, 'the time moved');
     assert(after.bookingStatus === 'unavailable', 'waitlist should store the existing third value');
@@ -599,8 +730,14 @@ async function main() {
     const { ctx, page } = await openAdmin();
     const pill = card(page, roles.paid).locator('.paid-pill');
     assert((await pill.innerText()).trim() === '2 of 3 paid', `pill "${await pill.innerText()}"`);
-    const box = await pill.boundingBox();
-    assert(box.height >= 43.5, `pill tap target ${box.height}px`);
+    // The pill looks 26px tall; its tap area reaches 44px (like the gear). A tap 8px above and below its edge still lands on it.
+    const reach = await pill.evaluate((e) => {
+      const b = e.getBoundingClientRect();
+      const x = b.left + b.width / 2;
+      const hit = (y) => { const h = document.elementFromPoint(x, y); return !!h && (h === e || e.contains(h) || h.closest('.paid-pill') === e.closest('.paid-pill')); };
+      return { up: hit(b.top - 8), down: hit(b.bottom + 8), mid: hit(b.top + b.height / 2) };
+    });
+    assert(reach.up && reach.down && reach.mid, `pill tap area too small: ${JSON.stringify(reach)}`);
     assert((await card(page, roles.bookedEmpty).locator('.paid-pill').count()) === 0, 'pill shows with nobody in');
     assert((await card(page, roles.noRed).locator('.paid-pill').count()) === 0, 'pill on an empty game');
     assert((await card(page, roles.notBooked).locator('.paid-pill').innerText()).trim() === '0 of 1 paid', 'not booked game with one in');
@@ -683,7 +820,7 @@ async function main() {
     await post(areq, `/api/admin/sessions/${roles.notBooked}/court-status`, { status: 'booked' });
     await sleep(8000);
     assert((await page.getByRole('menu').count()) === 1, 'the pop-up closed by itself');
-    assert((await c.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Not booked', 'the card changed under an open pop-up');
+    assert((await c.locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', 'the card changed under an open pop-up');
     await page.keyboard.press('Escape');
     await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Booked', roles.notBooked, { timeout: 15000 });
     // A sheet: open Edit game, change something, hold, and the sheet and the typing stay.
@@ -697,7 +834,7 @@ async function main() {
     assert((await page.locator('dialog[open]').count()) === 1, 'the sheet closed by itself');
     assert((await sheet.getByLabel('Start', { exact: true }).inputValue()) === '18:15', 'typing was overwritten');
     await sheet.getByRole('button', { name: 'Close' }).click();
-    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent === 'Waitlist', roles.notBooked, { timeout: 15000 });
+    await page.waitForFunction((id) => document.querySelector(`#session-${id} .court-switch button[aria-pressed="true"]`)?.textContent.trim() === 'Waitlist', roles.notBooked, { timeout: 15000 });
     assert((await page.locator('[data-updated]').evaluate((e) => getComputedStyle(e).visibility)) === 'visible', '"Updated" should come back');
     await ctx.close();
   });

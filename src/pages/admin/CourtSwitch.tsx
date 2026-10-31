@@ -1,7 +1,7 @@
 import type { CourtSwitch as CourtSwitchValue } from '../../../shared/court';
 
-const OPTIONS: { value: CourtSwitchValue; label: string }[] = [
-  { value: 'not_booked', label: 'Not booked' },
+const OPTIONS: { value: CourtSwitchValue; label: string; lines?: [string, string] }[] = [
+  { value: 'not_booked', label: 'Not booked', lines: ['Not', 'booked'] },
   { value: 'waitlist', label: 'Waitlist' },
   { value: 'booked', label: 'Booked' },
 ];
@@ -36,7 +36,13 @@ export function CourtSwitch({
             if (o.value !== value) onPick(o.value);
           }}
         >
-          {o.label}
+          {o.lines ? (
+            <>
+              <span className="seg-line">{o.lines[0]}</span> <span className="seg-line">{o.lines[1]}</span>
+            </>
+          ) : (
+            o.label
+          )}
         </button>
       ))}
     </div>

@@ -310,3 +310,62 @@ body:has(dialog[open]) .updated-line {
 .page.has-tabs.admin-page {
   padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 150px);
 }
+
+/* ---- Two lines for "Not booked", one look for the switch everywhere (cards and Edit game) ---- */
+.court-switch button {
+  /* All three segments are as tall as the tallest (two lines), selected or not, so nothing shifts. */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  white-space: nowrap;
+}
+.court-switch button .seg-line {
+  display: block;
+}
+
+/* ---- Even vertical rhythm on the game cards ----
+   Before (390 px): top 9 to 10, count row to names 8.2, names to pill 4, bottom 9 to 12 (pill cards 11 to 12).
+   After: top 12, count row to names 6, names to pill 6, bottom 12, on every card. The three rows
+   (count, names, pill) sit 6 px apart; border and padding always add up to 12 at the top and bottom. */
+.scard {
+  padding-block: 11px;
+}
+.scard.court-needs,
+.scard.court-waitlist {
+  padding-block: 10px;
+}
+.scard .players-line {
+  gap: 0;
+}
+/* The count row is always as tall as the I'm in button (34 px), whether or not the button is there. */
+.scard .players-top {
+  min-height: 34px;
+}
+.scard .players-line .names-line,
+.scard .players-line .waitlist-line {
+  /* 7.2 px of space under the count text and above the names; pull it to 6. */
+  margin-top: -1.2px;
+}
+.scard .players-line .names-line + .waitlist-line {
+  margin-top: 0;
+}
+.card-meta {
+  margin-top: 4px;
+}
+.paid-pill {
+  /* The pill's box is its looks (26 px); the 44 px tap area hangs outside it, so spacing is exact. */
+  position: relative;
+  min-height: 0;
+  margin: 0;
+}
+.paid-pill::before {
+  content: '';
+  position: absolute;
+  inset: -9px -4px;
+}
+.paid-pill > span {
+  display: block;
+  line-height: 20px;
+}
