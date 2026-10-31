@@ -7,7 +7,7 @@
 import { holidayFor } from '../shared/holidays';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { dueAlerts, MARK_NAMES, markKey, mayAlertSoon, nextTasks, type TaskOptions, type TaskSession } from '../shared/tasks';
-import { connected, deliver, PAUSED_PREFIX, prefsOfGroup, TIMEOUT_ERROR } from './alerts';
+import { type AlertRow, connected, deliver, PAUSED_PREFIX, prefsOf, TIMEOUT_ERROR } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
@@ -15,7 +15,7 @@ import type { D1Database } from './db';
 import { makeGoToken } from './go';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
-import { getGroup, getSession, type GroupRow, loadSessions, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { getSession, type GroupRow, type SessionRow, settingsOf, visibleFrom } from './repo';
 import * as v from './validate';
 
 const DAY_MS = 86_400_000;
@@ -203,18 +203,26 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   const secret = ctx.env.CRON_SECRET ?? '';
   if (!secret || !sameSecret(ctx.req.headers.get('X-Cron-Secret') ?? '', secret)) throw new HttpError(404, 'not_found', 'Not found.');
   if (ctx.env.SANDBOX || isPretend(ctx.db)) return { ok: true, sent: 0, failed: 0, skipped: 'demo' };
-  const group = await getGroup(ctx.db);
+  // One trip to the database for the group, both switches and the games: each separate call costs CPU on Cloudflare.
+  // Each query finds the group the way getGroup does; the checks run in the same order as before.
+  const theGroup = '(SELECT id FROM groups ORDER BY created_at LIMIT 1)';
+  const [groupRows, alertRows, offRows, sessionRows] = await ctx.db.batch([
+    ctx.db.prepare('SELECT * FROM groups ORDER BY created_at LIMIT 1'),
+    ctx.db.prepare(`SELECT * FROM organizer_alerts WHERE group_id = ${theGroup}`),
+    ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND kind = 'off' LIMIT 1`),
+    // Every game ending after the look-back; the first-date rule is applied below, only to games that pass the quick check.
+    ctx.db.prepare(`SELECT * FROM sessions WHERE group_id = ${theGroup} AND ends_at > ? ORDER BY starts_at`).bind(new Date(ctx.nowMs - LOOK_BACK_MS).toISOString()),
+  ]);
+  const group = (groupRows.results[0] as unknown as GroupRow | undefined) ?? null;
   if (!group) return { ok: true, sent: 0, failed: 0, skipped: 'no_group' };
   if (!connected(ctx.env)) return { ok: true, sent: 0, failed: 0, skipped: 'not_connected' };
-  if (!(await prefsOfGroup(ctx.db, group.id)).enabled) return { ok: true, sent: 0, failed: 0, skipped: 'alerts_off' };
-  if (!(await smartAlertsOn(ctx.db, group.id))) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
+  if (!prefsOf((alertRows.results[0] as unknown as AlertRow | undefined) ?? null).enabled) return { ok: true, sent: 0, failed: 0, skipped: 'alerts_off' };
+  if (offRows.results.length > 0) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
 
   const settings = settingsOf(group);
   const o = { tz: group.timezone, bookingLeadDays: settings.bookingLeadDays, defaultDeadlineHours: settings.defaultDeadlineHours };
   // Quick check first (plain arithmetic, see mayAlertSoon): only games that could have an alert due now go on.
-  // Read with an early-enough start (12:00 AM on the first date in any US zone); the exact first-date rule is applied below.
-  const looseFrom = /^\d{4}-\d{2}-\d{2}$/.test(group.first_session_date ?? '') ? `${group.first_session_date}T00:00:00.000Z` : '0000';
-  const rows = (await loadSessions(ctx.db, group.id, new Date(ctx.nowMs - LOOK_BACK_MS).toISOString(), looseFrom)).filter(
+  const rows = (sessionRows.results as unknown as SessionRow[]).filter(
     (s) => Date.parse(s.starts_at) <= ctx.nowMs + (settings.bookingLeadDays + 1) * DAY_MS && mayAlertSoon(rowFacts(s), null, ctx.nowMs, o),
   );
   if (rows.length === 0) return { ok: true, sent: 0, failed: 0 };

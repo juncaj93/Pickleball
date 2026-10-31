@@ -27,7 +27,7 @@ export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
 export const PAUSED_PREFIX = 'Paused:';
 const HOUR_MS = 3600_000;
 
-interface AlertRow {
+export interface AlertRow {
   enabled: number;
   drop_36h: number;
   below_min: number;
@@ -47,7 +47,7 @@ export async function prefsOfGroup(db: D1Database, groupId: string): Promise<Ale
   return prefsOf(await alertRow(db, groupId));
 }
 
-function prefsOf(row: AlertRow | null): AlertPrefs {
+export function prefsOf(row: AlertRow | null): AlertPrefs {
   if (!row) return { ...DEFAULT_ALERT_PREFS };
   return {
     enabled: !!row.enabled,

@@ -567,9 +567,22 @@ describe('the tick endpoint', () => {
     expect((await g.tick()).data.skipped).toBe('smart_off');
     await g.ctx.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: true, enabled: false });
     expect((await g.tick()).data.skipped).toBe('alerts_off');
-    await g.ctx.organizer.call('PUT', '/api/admin/alerts', { enabled: true });
+    // Both off: the main switch is checked first, as always.
+    await g.ctx.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: false });
+    expect((await g.tick()).data.skipped).toBe('alerts_off');
+    await g.ctx.organizer.call('PUT', '/api/admin/alerts', { smartAlerts: true, enabled: true });
     await g.tick();
     expect(g.sent).toEqual([`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`]);
+  });
+
+  it('the tick stops early with no group yet, or with Telegram not connected', async () => {
+    const empty = new TestApp();
+    empty.env = { ...empty.env, CRON_SECRET: SECRET, TELEGRAM_BOT_TOKEN: TOKEN, TELEGRAM_CHAT_ID: CHAT };
+    const r = await empty.client().call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': SECRET });
+    expect(r.data).toEqual({ ok: true, sent: 0, failed: 0, skipped: 'no_group' });
+    const g = await smartGroup();
+    g.app.env = { ...g.app.env, TELEGRAM_CHAT_ID: undefined };
+    expect((await g.tick()).data).toEqual({ ok: true, sent: 0, failed: 0, skipped: 'not_connected' });
   });
 
   it('a failed Telegram send is written down and retried on the next tick, and the site keeps working', async () => {
