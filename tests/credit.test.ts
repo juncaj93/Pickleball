@@ -105,15 +105,16 @@ describe("Mitchell's case: paid ahead for two games, the first is canceled", () 
     expect((await view(ctx, MITCH)).credit).toMatchObject({ balanceCents: 2800, usableCents: 2800, pending: null });
     expect((await view(ctx, 'Blair')).credit.balanceCents).toBe(0);
 
-    // He signs up for a later $14 game and taps Use credit: Paid with credit, credit drops by $14.
+    // He signs up for a later $14 game: his credit is used as he joins. Paid with credit, credit drops by $14.
     const later = await on(ctx, '2026-11-10');
-    await join(ctx, later.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    let mine = await mineOn(ctx, MITCH, later.id);
-    expect(mine).toMatchObject({ oweCents: 1400, useCreditCents: 1400, paymentStatus: 'unpaid', paidWithCredit: false });
-    const res = await useCredit(ctx, later.id, MITCH);
-    expect(res.data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
-    mine = await mineOn(ctx, MITCH, later.id);
+    const res = await (await playerPhone(ctx, MITCH)).call('POST', `/api/sessions/${later.id}/join`, {});
+    expect(res.status).toBe(200);
+    expect(res.data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    await join(ctx, later.id, ['Blair', 'Devon', 'Emery']);
+    const mine = await mineOn(ctx, MITCH, later.id);
     expect(mine).toMatchObject({ paymentStatus: 'paid', oweCents: 0, useCreditCents: 0, paidWithCredit: true, creditCents: 0 });
+    // Nothing is left to tap: Use credit on the same game spends nothing more.
+    expect((await useCredit(ctx, later.id, MITCH)).status).toBe(409);
     expect(await pot(ctx, MITCH)).toBe(1400);
     expect((await view(ctx, MITCH)).credit.balanceCents).toBe(1400);
     d = await dash(ctx);
@@ -238,10 +239,11 @@ describe('a paid player leaves a game', () => {
     expect(await mineOn(ctx, MITCH, s.id)).toMatchObject({ status: 'withdrawn', creditBackCents: 1400 });
     expect((await view(ctx, MITCH)).credit).toMatchObject({ balanceCents: 1400, usableCents: 1400 });
     expect(await money(ctx, '2026-11')).toMatchObject({ heldCents: 0, creditsOwedCents: 1400 });
-    // Back in: they owe again and can use that credit.
-    await join(ctx, s.id, [MITCH]);
-    expect(await mineOn(ctx, MITCH, s.id)).toMatchObject({ paymentStatus: 'unpaid', oweCents: 1400, useCreditCents: 1400 });
-    expect((await useCredit(ctx, s.id, MITCH)).data).toMatchObject({ paid: true });
+    // Back in: the seat is new and owes again, and that credit pays it as they join (credit at sign-up is automatic).
+    const back = await (await playerPhone(ctx, MITCH)).call('POST', `/api/sessions/${s.id}/join`, {});
+    expect(back.data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect(await mineOn(ctx, MITCH, s.id)).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, oweCents: 0, useCreditCents: 0, creditCents: 0 });
+    expect((await useCredit(ctx, s.id, MITCH)).status).toBe(409); // nothing left to tap
     expect(await pot(ctx, MITCH)).toBe(0);
     d = await dash(ctx);
     expect(heldCents(d, ctx.byName[MITCH])).toBe(1400);
@@ -279,6 +281,8 @@ describe('a paid player leaves a game', () => {
   it('credit from a payment is taken back by unmarking it only while all of it is still there; a settled seat cannot be unmarked', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', [MITCH]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await join(ctx, (await on(ctx, '2026-11-03')).id, [MITCH, 'Blair', 'Devon', 'Emery', 'Frankie', 'Alex']);
     await cancel(ctx, a.id);
     expect(await pot(ctx, MITCH)).toBe(1400);
     expect((await unmark(ctx, a.id, MITCH)).status).toBe(409); // it is credit now
@@ -296,10 +300,13 @@ describe('a paid player leaves a game', () => {
     d = await dash(ctx);
     expect(seat(d, b.id, MITCH)).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 900, creditBackCents: 0 });
     expect(await pot(ctx, MITCH)).toBe(1400);
-    // Blair spends her $5 from that game: her payment can no longer be unmarked.
+    // Blair spends her $5 from that game (used by itself as she joins the next one): her payment can no longer be unmarked.
     const c = await on(ctx, '2026-11-05');
-    await join(ctx, c.id, ['Blair', 'Devon', 'Emery', 'Frankie']);
-    expect((await useCredit(ctx, c.id, 'Blair')).data).toMatchObject({ usedCents: 500, paid: false });
+    const joined = await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${c.id}/join`, {});
+    expect(joined.data).toEqual({ result: 'confirmed', creditCents: 500, paidWithCredit: false });
+    expect(await mineOn(ctx, 'Blair', c.id)).toMatchObject({ paymentStatus: 'unpaid', creditCents: 500, oweCents: 900, useCreditCents: 0 });
+    expect(await pot(ctx, 'Blair')).toBe(0);
+    await join(ctx, c.id, ['Devon', 'Emery', 'Frankie']);
     expect((await unmark(ctx, b.id, 'Blair')).status).toBe(409);
     expect(seat(await dash(ctx), b.id, 'Blair')).toMatchObject({ paymentStatus: 'paid', creditBackCents: 500 });
   });
@@ -319,12 +326,13 @@ describe('Use credit', () => {
   it('credit that covers only part: use the smaller of the two, then pay the rest as usual', async () => {
     const ctx = await setupGroup();
     const a = await game(ctx, '2026-10-29', []);
+    const b = await on(ctx, '2026-11-03');
+    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
     // $5 of credit in the pot (a small payment that came back).
     ctx.app.db.raw.exec(
       `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) SELECT 'k1', id, '${ctx.byName[MITCH]}', 'kept', 500, '${a.id}', '2026-10-26T12:00:00.000Z' FROM groups`,
     );
-    const b = await on(ctx, '2026-11-03');
-    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
     expect(await mineOn(ctx, MITCH, b.id)).toMatchObject({ oweCents: 1400, useCreditCents: 500 });
     const res = await useCredit(ctx, b.id, MITCH);
     expect(res.data).toMatchObject({ usedCents: 500, paid: false });
@@ -352,6 +360,9 @@ describe('Use credit', () => {
 
   it('credit from a finalized game ($5 back when 6 played) joins the pot and is spent like any other', async () => {
     const ctx = await setupGroup();
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const b = await on(ctx, '2026-11-05');
+    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
     // Six play Oct 27 at $9 each: everyone who paid $14 gets $5 back.
     const a = await sixPlayed(ctx, '2026-10-27');
     expect(await liveEntries(ctx, MITCH)).toEqual([expect.objectContaining({ kind: 'kept', cents: 500, reason: 'finalized', playedCount: 6, sessionId: a.id })]);
@@ -362,8 +373,6 @@ describe('Use credit', () => {
       `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) SELECT 'k1', id, '${ctx.byName[MITCH]}', 'kept', 2000, '${c.id}', '2026-10-26T12:00:00.000Z' FROM groups`,
     );
     expect((await view(ctx, MITCH)).credit.balanceCents).toBe(2500);
-    const b = await on(ctx, '2026-11-05');
-    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
     // Owes the flat $14; the pot covers it.
     expect(await mineOn(ctx, MITCH, b.id)).toMatchObject({ oweCents: 1400, creditCents: 0, useCreditCents: 1400 });
     expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ usedCents: 1400, paid: true });
@@ -376,11 +385,12 @@ describe('Use credit', () => {
   it('part credit, part cash, then finalized at a lower price: the extra comes back as credit', async () => {
     const ctx = await setupGroup();
     const c = await on(ctx, '2026-10-29');
+    const b = await on(ctx, '2026-11-05');
+    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
     ctx.app.db.raw.exec(
       `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) SELECT 'k1', id, '${ctx.byName[MITCH]}', 'kept', 300, '${c.id}', '2026-10-26T12:00:00.000Z' FROM groups`,
     );
-    const b = await on(ctx, '2026-11-05');
-    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
     expect((await useCredit(ctx, b.id, MITCH)).data).toMatchObject({ usedCents: 300, paid: false });
     // 14 - 3 (pot) = 11 left to pay.
     expect(await mineOn(ctx, MITCH, b.id)).toMatchObject({ paymentStatus: 'unpaid', oweCents: 1100, creditCents: 300 });
@@ -397,28 +407,63 @@ describe('Use credit', () => {
     expect((await money(ctx, '2026-11')).collectedCents).toBe(6 * 900);
   });
 
-  it('is never automatic, never for someone else, a canceled game, a game they are not in, or with no credit', async () => {
+  it('is automatic and exact at sign-up, and never for someone else, a canceled game, a game they are not in, the organizer, or with no credit', async () => {
     const ctx = await setupGroup();
+    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: ME });
     const a = await game(ctx, '2026-10-29', [MITCH]);
     await cancel(ctx, a.id);
     const b = await on(ctx, '2026-11-03');
     // Not in the game: nothing happens by itself, and the tap is refused.
     expect((await useCredit(ctx, b.id, MITCH)).status).toBe(409);
     expect(await pot(ctx, MITCH)).toBe(1400);
-    // In the game: still nothing happens until the tap.
-    await join(ctx, b.id, [MITCH, 'Blair', 'Devon', 'Emery']);
+    // Blair (no credit) joins first: nothing is used, least of all his credit.
+    const blair = await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${b.id}/join`, {});
+    expect(blair.data).toEqual({ result: 'confirmed' });
     expect(await pot(ctx, MITCH)).toBe(1400);
-    expect(await mineOn(ctx, MITCH, b.id)).toMatchObject({ paymentStatus: 'unpaid' });
+    // He joins: his credit pays the seat in the same step, exactly $14, once.
+    const joined = await (await playerPhone(ctx, MITCH)).call('POST', `/api/sessions/${b.id}/join`, {});
+    expect(joined.data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect(await pot(ctx, MITCH)).toBe(0);
+    expect(await mineOn(ctx, MITCH, b.id)).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, oweCents: 0, useCreditCents: 0, creditCents: 0 });
+    expect(seat(await dash(ctx), b.id, MITCH)).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400, creditCents: 1400 });
+    expect((await liveEntries(ctx, MITCH)).filter((e: any) => e.kind === 'used')).toEqual([expect.objectContaining({ cents: 1400, sessionId: b.id })]);
+    await join(ctx, b.id, ['Devon', 'Emery']);
     // Blair has no credit.
     expect((await useCredit(ctx, b.id, 'Blair')).status).toBe(409);
     expect(await mineOn(ctx, 'Blair', b.id)).toMatchObject({ useCreditCents: 0, paymentStatus: 'unpaid' });
-    // A canceled game.
+    expect(await ledgerOf(ctx, 'Blair')).toBeUndefined();
+    // A canceled game: the credit used on it comes back, and it can't be used there again.
     await cancel(ctx, b.id);
+    expect(await pot(ctx, MITCH)).toBe(1400);
     expect((await useCredit(ctx, b.id, MITCH)).status).toBe(409);
-    // Two taps at once spend once.
+    expect(await pot(ctx, MITCH)).toBe(1400);
+    // The organizer never uses credit, even with some in the pot.
+    ctx.app.db.raw.exec(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) SELECT 'org1', id, '${ctx.byName[ME]}', 'kept', 1400, '${a.id}', '2026-10-26T12:00:00.000Z' FROM groups`,
+    );
     const c = await on(ctx, '2026-11-05');
-    await join(ctx, c.id, [MITCH, 'Blair', 'Devon', 'Emery']);
-    const both = await Promise.all([useCredit(ctx, c.id, MITCH), useCredit(ctx, c.id, MITCH)]);
+    const org = await (await playerPhone(ctx, ME)).call('POST', `/api/sessions/${c.id}/join`, {});
+    expect(org.data).toEqual({ result: 'confirmed' });
+    const orgUsed = ctx.app.db.raw.prepare(`SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'used' AND player_id = ?`).get(ctx.byName[ME]) as { n: number };
+    expect(orgUsed.n).toBe(0);
+    expect(seat(await dash(ctx), c.id, ME)).toMatchObject({ isOrganizer: true, paymentStatus: 'unpaid', creditCents: 0 });
+    // Two taps of I'm in at once spend once: one $14 entry, the pot is $0, never below.
+    await join(ctx, c.id, ['Blair', 'Devon']);
+    const taps = await Promise.all([1, 2].map(async () => (await playerPhone(ctx, MITCH)).call('POST', `/api/sessions/${c.id}/join`, {})));
+    expect(taps.map((r) => r.status)).toEqual([200, 200]);
+    expect(await pot(ctx, MITCH)).toBe(0);
+    expect((await liveEntries(ctx, MITCH)).filter((e: any) => e.kind === 'used')).toEqual([expect.objectContaining({ cents: 1400, sessionId: c.id })]);
+    expect(seat(await dash(ctx), c.id, MITCH)).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400, creditCents: 1400 });
+    // Two Use credit taps at once spend once: credit that arrives after he joined is his to tap.
+    const d = await on(ctx, '2026-11-10');
+    await join(ctx, d.id, [MITCH, 'Blair', 'Devon', 'Emery']);
+    expect(await mineOn(ctx, MITCH, d.id)).toMatchObject({ paymentStatus: 'unpaid', oweCents: 1400, useCreditCents: 0 });
+    ctx.app.db.raw.exec(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at) SELECT 'k2', id, '${ctx.byName[MITCH]}', 'kept', 1400, '${a.id}', '2026-10-26T12:00:00.000Z' FROM groups`,
+    );
+    // Arriving later, it is not used by itself: the seat still owes until the tap.
+    expect(await mineOn(ctx, MITCH, d.id)).toMatchObject({ paymentStatus: 'unpaid', oweCents: 1400, useCreditCents: 1400 });
+    const both = await Promise.all([useCredit(ctx, d.id, MITCH), useCredit(ctx, d.id, MITCH)]);
     expect(both.map((r) => r.status).sort()).toEqual([200, 409]);
     expect(await pot(ctx, MITCH)).toBe(0);
   });
@@ -556,8 +601,9 @@ describe('Refund credit balance', () => {
 
   it('pays back the credit from a finalized game together with the rest, and undo restores it', async () => {
     const ctx = await setupGroup();
-    await sixPlayed(ctx, '2026-10-27'); // $5 back
+    // He joined (and paid) Nov 3 before the $5 came back, so nothing of it went on that seat (credit at sign-up is automatic now).
     const a = await game(ctx, '2026-11-03', [MITCH]);
+    await sixPlayed(ctx, '2026-10-27'); // $5 back
     await cancel(ctx, a.id); // $14 back
     const d0 = await dash(ctx);
     expect(d0.creditLedger.find((p: any) => p.playerId === ctx.byName[MITCH])).toMatchObject({ balanceCents: 1900, refundCents: 1900 });

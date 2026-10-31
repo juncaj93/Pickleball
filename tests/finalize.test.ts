@@ -209,14 +209,15 @@ describe('who did not play', () => {
   it('a no-show who paid with credit gets the credit back; a no-show who paid nothing owes nothing', async () => {
     const ctx = await group();
     const s1 = await session(ctx);
+    const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
+    const s2 = dash.data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now && s.id !== s1.id);
     // Give Alex $14 credit: pay for a game, then it is canceled.
     const phones = await joinAll(ctx, s1.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await joinAll(ctx, s2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']);
     await pay(ctx, s1.id, 'Alex');
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s1.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
     expect(await creditOf(ctx, 'Alex')).toBe(1400);
-    const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
-    const s2 = dash.data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now && s.id !== s1.id);
-    await joinAll(ctx, s2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']);
     expect((await phones.Alex.call('POST', `/api/sessions/${s2.id}/use-credit`, {})).data).toMatchObject({ paid: true, usedCents: 1400 });
     expect(await creditOf(ctx, 'Alex')).toBe(0);
     for (const name of ['Blair', 'Casey', 'Devon']) await pay(ctx, s2.id, name);
@@ -241,7 +242,10 @@ describe('credit and unpaid players at finalize', () => {
   it('partial credit then a lower final price: used $5, owes $6 at $11; used $5 at $5 (10 play) is paid with nothing back', async () => {
     const ctx = await group();
     const s1 = await session(ctx);
+    const s2 = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now && s.id !== s1.id);
     const phones = await joinAll(ctx, s1.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await joinAll(ctx, s2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']);
     await pay(ctx, s1.id, 'Alex');
     // Alex drops: the $14 is credit. Then he spends $9 of it elsewhere to leave $5.
     expect((await phones.Alex.call('POST', `/api/sessions/${s1.id}/withdraw`, {})).data).toMatchObject({ result: 'withdrawn', creditBackCents: 1400 });
@@ -251,8 +255,6 @@ describe('credit and unpaid players at finalize', () => {
     const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
     expect((await ctx.organizer.call('POST', `/api/admin/refund-requests/${dash.data.refundRequests[0].id}`, { action: 'refunded' })).status).toBe(200);
     expect(await creditOf(ctx, 'Alex')).toBe(500);
-    const s2 = dash.data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now && s.id !== s1.id);
-    await joinAll(ctx, s2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery']);
     expect((await phones.Alex.call('POST', `/api/sessions/${s2.id}/use-credit`, {})).data).toMatchObject({ paid: false, usedCents: 500 });
     for (const name of ['Blair', 'Casey', 'Devon', 'Emery']) await pay(ctx, s2.id, name);
     await endGame(ctx, s2);
@@ -274,16 +276,17 @@ describe('credit and unpaid players at finalize', () => {
   it('used $9 credit on a $14 seat, 10 play ($5): paid with credit and $4 comes back', async () => {
     const ctx = await group();
     const s1 = await session(ctx);
+    const s2 = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now && s.id !== s1.id);
+    const names = [...PLAYER_NAMES, ...MORE].slice(0, 10);
     const phones = await joinAll(ctx, s1.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await joinAll(ctx, s2.id, names);
     await pay(ctx, s1.id, 'Alex');
     await phones.Alex.call('POST', `/api/sessions/${s1.id}/withdraw`, {});
     await phones.Alex.call('POST', '/api/me/refund-request', { cents: 500 });
     const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
     await ctx.organizer.call('POST', `/api/admin/refund-requests/${dash.data.refundRequests[0].id}`, { action: 'refunded' });
     expect(await creditOf(ctx, 'Alex')).toBe(900);
-    const s2 = dash.data.sessions.find((s: any) => Date.parse(s.startsAt) > ctx.app.now && s.id !== s1.id);
-    const names = [...PLAYER_NAMES, ...MORE].slice(0, 10);
-    await joinAll(ctx, s2.id, names);
     expect((await phones.Alex.call('POST', `/api/sessions/${s2.id}/use-credit`, {})).data).toMatchObject({ paid: false, usedCents: 900 });
     for (const name of names.slice(1)) await pay(ctx, s2.id, name);
     await endGame(ctx, s2);
@@ -337,7 +340,7 @@ describe('credit and unpaid players at finalize', () => {
 });
 
 describe('money coming back becomes credit automatically', () => {
-  it('a paid player taps I\'m out: credit right away, the seat is settled, held drops, rejoining owes again', async () => {
+  it('a paid player taps I\'m out: credit right away, the seat is settled, held drops, rejoining is a new seat that the credit pays', async () => {
     const ctx = await group();
     const s = await session(ctx);
     const phones = await joinAll(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
@@ -350,15 +353,21 @@ describe('money coming back becomes credit automatically', () => {
     let g = (await phones.Alex.call('GET', '/api/group')).data;
     expect(g.credit.balanceCents).toBe(1400);
     expect(g.sessions.find((x: any) => x.id === s.id).mine).toMatchObject({ status: 'withdrawn', creditBackCents: 1400 });
-    // Back in: owes $14 again (the money is credit now) and Use credit is offered.
-    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/join`, {})).data.result).toBe('confirmed');
+    // Back in: the new seat owes $14 (the old money is credit now), and that credit pays it as he joins (credit at sign-up is automatic).
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
     g = (await phones.Alex.call('GET', '/api/group')).data;
-    expect(g.sessions.find((x: any) => x.id === s.id).mine).toMatchObject({ paymentStatus: 'unpaid', oweCents: 1400, useCreditCents: 1400, creditBackCents: 1400 });
+    expect(g.sessions.find((x: any) => x.id === s.id).mine).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true, oweCents: 0, useCreditCents: 0, creditCents: 0 });
+    expect(g.credit.balanceCents).toBe(0);
+    expect(await creditOf(ctx, 'Alex')).toBe(0);
+    expect((await month(ctx, s)).heldCents).toBe(1400);
     // No refund card anywhere: nothing on Home for it.
     const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
     expect(dash.data.refundRequests).toEqual([]);
     const history = dash.data.creditLedger.find((l: any) => l.playerId === ctx.byName.Alex).entries;
-    expect(history).toEqual([expect.objectContaining({ kind: 'kept', cents: 1400, reason: 'dropped', sessionId: s.id })]);
+    expect(history).toEqual([
+      expect.objectContaining({ kind: 'kept', cents: 1400, reason: 'dropped', sessionId: s.id }),
+      expect.objectContaining({ kind: 'used', cents: 1400, sessionId: s.id, endedAt: null }),
+    ]);
   });
 
   it('an unpaid player who drops creates nothing; a drop of a credit-paid seat returns the credit', async () => {
@@ -367,11 +376,11 @@ describe('money coming back becomes credit automatically', () => {
     const phones = await joinAll(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     expect((await phones.Blair.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data.creditBackCents).toBe(0);
     expect(await creditOf(ctx, 'Blair')).toBe(0);
-    // Alex: paid, out (credit $14), in, Use credit (paid with credit), out again: the credit comes back, no second entry.
+    // Alex: paid, out (credit $14), in (the credit pays the new seat as he joins), out again: the credit comes back, no second entry.
     await pay(ctx, s.id, 'Alex');
     await phones.Alex.call('POST', `/api/sessions/${s.id}/withdraw`, {});
-    await phones.Alex.call('POST', `/api/sessions/${s.id}/join`, {});
-    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/use-credit`, {})).data.paid).toBe(true);
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/use-credit`, {})).status).toBe(409); // nothing left to tap
     expect(await creditOf(ctx, 'Alex')).toBe(0);
     expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data.creditBackCents).toBe(0);
     expect(await creditOf(ctx, 'Alex')).toBe(1400);
@@ -483,11 +492,11 @@ describe('reopen', () => {
     view = await adminSession(ctx, s.id);
     expect(view.finalized).toMatchObject({ playedCount: 5, priceCents: 1100 });
     expect(row(view, 'Frankie').creditBackCents).toBe(1400);
-    // Frankie spends some credit on the next game: reopen is blocked, with a plain reason.
+    // Frankie spends some credit on the next game (used as she joins): reopen is blocked, with a plain reason.
     const dash = await ctx.organizer.call('GET', '/api/admin/dashboard');
     const s2 = dash.data.sessions.find((x: any) => Date.parse(x.startsAt) > ctx.app.now && x.id !== s.id);
-    await phones.Frankie.call('POST', `/api/sessions/${s2.id}/join`, {});
-    expect((await phones.Frankie.call('POST', `/api/sessions/${s2.id}/use-credit`, {})).status).toBe(200);
+    expect((await phones.Frankie.call('POST', `/api/sessions/${s2.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect(await creditOf(ctx, 'Frankie')).toBe(0);
     view = await adminSession(ctx, s.id);
     expect(view.reopenBlockedBy).toEqual(['Frankie']);
     const blocked = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/reopen`, {});

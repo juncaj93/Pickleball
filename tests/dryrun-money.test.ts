@@ -102,19 +102,26 @@ describe('dry run: 4 to 10 play, the organizer among them, mixed ways of paying'
     it(`${n} play (organizer + ${n - 1}): price, credit back, Money, court row, post-game text, player screens`, async () => {
       const d = await dry();
       const [g1, g2] = await games(d);
-      // Give Blair $14 credit from a game that gets canceled, so she can pay with credit later.
+      // Give Blair $14 credit from a game that gets canceled, so her credit pays the next game she joins.
       await join(d, g1.id, ['Blair']);
       await venmoAndMark(d, 'Blair', g1.id);
       expect((await d.ctx.organizer.call('POST', `/api/admin/sessions/${g1.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
       await balanced(d, 'after cancel');
 
       const others = EVERYONE.filter((x) => x !== 'Robin').slice(0, n - 1);
-      await join(d, g2.id, others);
+      // Blair's credit is used as she joins (credit at sign-up is automatic): exactly $14, Paid with credit. Nobody else has any.
+      for (const x of others) {
+        const r = await (await d.phone(x)).call('POST', `/api/sessions/${g2.id}/join`, {});
+        expect(r.status, `${x} join: ${r.text}`).toBe(200);
+        expect(r.data, x).toEqual(x === 'Blair' ? { result: 'confirmed', creditCents: 1400, paidWithCredit: true } : { result: 'confirmed' });
+      }
       expect((await d.ctx.organizer.call('POST', `/api/admin/sessions/${g2.id}/me`, { in: true })).status).toBe(200);
       let v = await view(d, g2.id);
       expect(v.confirmedCount).toBe(n);
-      // Ways of paying: Alex never pays, Blair pays with credit, Casey taps "I paid" (organizer confirms), the rest Venmo + Mark paid.
-      expect(await useCredit(d, 'Blair', g2.id)).toMatchObject({ paid: true, usedCents: 1400 });
+      // Ways of paying: Alex never pays, Blair paid with credit, Casey taps "I paid" (organizer confirms), the rest Venmo + Mark paid.
+      expect(row(v, 'Blair')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400, creditCents: 1400 });
+      expect((await dash(d)).creditLedger.find((l: any) => l.playerId === d.ctx.byName.Blair).balanceCents).toBe(0);
+      expect(await useCredit(d, 'Blair', g2.id)).toMatchObject({ error: 'nothing_owed' }); // nothing left to tap
       if (others.includes('Casey')) {
         expect(await owes(d, 'Casey', g2.id)).toBe(1400);
         d.book.cashIn += 1400;
@@ -235,6 +242,9 @@ describe('dry run: edge cases', () => {
   it('partial credit, someone who owes nothing, Reopen, Undo, and a pending cash out during finalize', async () => {
     const d = await dry();
     const [g1, g2, g3] = await games(d);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await join(d, g2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await join(d, g3.id, ['Frankie', 'Casey', 'Devon', 'Emery']);
     // Alex ends with $5 credit: $14 back from a cancel, cashes out $9.
     await join(d, g1.id, ['Alex', 'Blair']);
     await venmoAndMark(d, 'Alex', g1.id);
@@ -248,7 +258,6 @@ describe('dry run: edge cases', () => {
     // Blair asks to cash out all $14 and it is still pending during the next finalize.
     expect((await (await d.phone('Blair')).call('POST', '/api/me/refund-request', { cents: 1400 })).status).toBe(200);
     // Pending amount can't be spent.
-    await join(d, g2.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
     const blocked = await useCredit(d, 'Blair', g2.id);
     expect(blocked.usedCents ?? 0).toBe(0);
     // Alex uses $5, owes $9.
@@ -285,7 +294,6 @@ describe('dry run: edge cases', () => {
     d.book.cashedOut += 1400;
     await balanced(d, 'Blair refunded');
     // Frankie owes nothing on g3 if they use credit: $14 covers it.
-    await join(d, g3.id, ['Frankie', 'Casey', 'Devon', 'Emery']);
     expect(await useCredit(d, 'Frankie', g3.id)).toMatchObject({ paid: true, usedCents: 1400 });
     expect(await owes(d, 'Frankie', g3.id)).toBe(0);
     // Undo "Paid with credit", then use it again.
@@ -431,6 +439,8 @@ describe('dry run: edge cases', () => {
   it('credit used on a seat that still owes the rest is Held right away, and Players cover counts it ($54, not $51)', async () => {
     const d = await dry();
     const [g1, g2] = await games(d);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await join(d, g2.id, PLAYER_NAMES);
     await join(d, g1.id, ['Alex']);
     await venmoAndMark(d, 'Alex', g1.id);
     await d.ctx.organizer.call('POST', `/api/admin/sessions/${g1.id}/decision`, { decision: 'cancel', confirm: true });
@@ -438,7 +448,6 @@ describe('dry run: edge cases', () => {
     const req = (await dash(d)).refundRequests[0];
     await d.ctx.organizer.call('POST', `/api/admin/refund-requests/${req.id}`, { action: 'refunded' });
     d.book.cashedOut += 1100;
-    await join(d, g2.id, PLAYER_NAMES);
     expect(await useCredit(d, 'Alex', g2.id)).toMatchObject({ usedCents: 300 });
     expect((await balanced(d, 'credit on an unpaid seat, before the game')).held).toBe(300);
     for (const x of PLAYER_NAMES.slice(1)) await venmoAndMark(d, x, g2.id);
