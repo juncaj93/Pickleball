@@ -86,6 +86,11 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
 - Drop out, Remove player, cancel and the organizer's **Unmark** (on Money >
   Who paid: "Paid with credit" or "Credit $3") put the credit back at once.
   The 5-second Undo for Drop out sends nothing, so the credit never moves.
+- Every one of those saves in ONE all-or-nothing step (since Oct 31): the
+  seat leaving (or the game being canceled, finalized, reopened, unmarked)
+  and the money moving happen together or not at all, so a request cut off
+  halfway can't leave money half-moved, and tapping again finishes or
+  changes nothing.
 - A pending cash out is never used by itself. When it would help pay a game
   just joined, a small question at the bottom asks "Use the $10 you asked to
   cash out for this game?" **Use it** puts it on the game and shrinks the
@@ -93,9 +98,18 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
   Telegram gets one line ("Mitchel withdrew the $10 cash out request (using
   it for Thu Nov 5)"). **No, keep cash out**: they are in and pay as usual.
 - Players see their credit as a small **CREDIT $14** chip in the header, next
-  to the date tile. Tapping it opens a sheet with the balance, the history
-  ("+$5 Thu, Oct 29 (6 played)", "-$14 used for Tue, Nov 3"), and **Request
-  refund**.
+  to the date tile (only when they have some, or a cash out is waiting).
+  Tapping it opens a sheet with the balance, **Request cash out**, and the
+  last 10 changes in plain words, newest first, returns included:
+  "Oct 31: $14 used for Nov 10", "Oct 31: $14 returned from Nov 5 (you
+  dropped)", "Nov 3: $5 back from Nov 3 (6 played)", "Nov 4: $14 cashed out".
+- The banners say what happened to their money: "You're in. $14 credit
+  used." (part cover on a booked court: "You're in. $3 credit used, $11
+  due."; no court booked yet: no amount due), and "You dropped out. $14
+  credit returned." ("$14 back as credit." when it was cash; just "You
+  dropped out." when nothing was paid), with Undo.
+  (Banners and the 10-change list: built Oct 31 on a preview, live after Alex's
+  "ship it". Until then the sheet shows the older history lines.)
 - Nobody ever sees anyone else's credit.
 
 ## Refund requests
