@@ -89,7 +89,21 @@ async function main() {
     await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/roster`, { playerId: id[n], action: 'confirm' });
     await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/payment`, { playerId: id[n], paid: true });
   }
+  // Thursday: 6 in and paid, Ryan's seat left unpaid (he taps "I paid" himself below). They are added before Tuesday
+  // is canceled, so no credit pays a Thursday seat by itself (credit at sign-up is automatic now) and the $14 stays.
+  for (const n of ['Mitchel', 'Brandon', 'Julian', 'Christopher', 'Maximiliana']) {
+    await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/roster`, { playerId: id[n], action: 'confirm' });
+    await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/payment`, { playerId: id[n], paid: true });
+  }
+  await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/roster`, { playerId: id.Ryan, action: 'confirm' });
   await call(admin.request, 'POST', `/api/admin/sessions/${tue.id}/decision`, { decision: 'cancel', confirm: true });
+  {
+    const d1 = await call(admin.request, 'GET', '/api/admin/dashboard');
+    for (const n of others) {
+      const l = d1.creditLedger.find((x) => x.playerId === id[n]);
+      if (!l || l.balanceCents !== 1400) throw new Error(`${n} credit after the cancel: ${JSON.stringify(l)}`);
+    }
+  }
 
   const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
   for (const name of ['Brandon', 'Christopher', 'Maximiliana']) {
@@ -132,12 +146,7 @@ async function main() {
     });
   }
 
-  // Thursday: 6 in and paid, Ryan only tapped "I paid", nobody confirmed it.
-  for (const n of ['Mitchel', 'Brandon', 'Julian', 'Christopher', 'Maximiliana']) {
-    await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/roster`, { playerId: id[n], action: 'confirm' });
-    await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/payment`, { playerId: id[n], paid: true });
-  }
-  await call(admin.request, 'POST', `/api/admin/sessions/${thu.id}/roster`, { playerId: id.Ryan, action: 'confirm' });
+  // Thursday: Ryan only tapped "I paid", nobody confirmed it (the six were added before the credit; see above).
   const ryan = await browser.newContext();
   await ryan.request.post(BASE + '/api/me', { data: { playerId: id.Ryan }, headers: { Origin: BASE } });
   await call(ryan.request, 'POST', `/api/sessions/${thu.id}/paid`, { paid: true });

@@ -107,18 +107,29 @@ async function main() {
   for (const i of [3, 6]) await post(who.Ryan, `/api/sessions/${games[i].id}/paid`, { paid: true });
   // More states for the "right column is centered" check (later rows):
   //   Wren: $14 credit unused, owing on game 4 (Use credit + Pay)
-  //   Zed: part credit on game 5 ("$5 left to pay" + Pay $5)
+  //   Zed: part credit on game 5 ("Credit $9 used" + "$5 due" + Pay $5)
   //   game 7 is full (10 in): Pia is on its waitlist (Leave waitlist), everyone else sees Join waitlist
   //   game 8 is canceled
+  // Wren and Zed sign up for games 4 and 5 before their credit comes back, so the credit is not used by itself at
+  // sign-up (credit at sign-up is automatic now) and Use credit is still theirs to tap.
+  const okJoin = async (n, i) => {
+    const r = await join(n, i);
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok() || body.result !== 'confirmed' || body.creditCents) throw new Error(`${n} joining game ${i}: ${r.status()} ${JSON.stringify(body)}`);
+  };
+  await okJoin('Wren', 4);
+  await okJoin('Zed', 5);
   for (const n of ['Wren', 'Zed']) {
     await join(n, 1);
     await post(who[n], `/api/sessions/${games[1].id}/paid`, { paid: true });
     await post(who[n], `/api/sessions/${games[1].id}/withdraw`, {});
   }
-  await join('Wren', 4);
   await post(who.Zed, '/api/me/refund-request', { cents: 500 });
-  await join('Zed', 5);
-  await post(who.Zed, `/api/sessions/${games[5].id}/use-credit`, {});
+  {
+    const r = await post(who.Zed, `/api/sessions/${games[5].id}/use-credit`, {});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok() || body.usedCents !== 900 || body.paid !== false) throw new Error(`Zed's Use credit: ${r.status()} ${JSON.stringify(body)}`);
+  }
   await post(who.Zed, '/api/me/refund-request/cancel', {});
   for (const n of [...FILLERS, 'Nathan', 'Mitchel', 'Brandon']) await join(n, 7);
   await join('Pia', 7);
@@ -267,7 +278,7 @@ async function main() {
             const row = (c.box.t + c.box.b) / 2;
             const col = (c.right.t + c.right.b) / 2;
             assert(Math.abs(col - row) <= 2, `${name} later row "${c.money}" (${c.label.slice(0, 30)}): right column center is ${col.toFixed(1)}, row center ${row.toFixed(1)}`);
-            const kind = /left to pay/.test(c.money) ? 'part credit' : /Use credit/.test(c.money) ? 'use credit' : /due/.test(c.money) ? 'due + Pay' : /^Paid/.test(c.money) ? 'paid' : /Leave/.test(c.money) ? 'leave waitlist' : /Join/.test(c.money) ? 'join waitlist' : /I'm in/.test(c.money) ? "I'm in" : c.money;
+            const kind = /Credit \$\d+ used \$\d+ due/.test(c.money) ? 'part credit' : /Use credit/.test(c.money) ? 'use credit' : /due/.test(c.money) ? 'due + Pay' : /^Paid/.test(c.money) ? 'paid' : /Leave/.test(c.money) ? 'leave waitlist' : /Join/.test(c.money) ? 'join waitlist' : /I'm in/.test(c.money) ? "I'm in" : c.money;
             seen.add(kind);
           }
           if (name === 'Sam') {

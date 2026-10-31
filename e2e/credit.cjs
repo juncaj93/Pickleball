@@ -207,8 +207,20 @@ async function main() {
     await page.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
   };
 
+  // Thu Nov 5 (unpaid, for section 3): they are added before Thursday is canceled, so Mitchel's credit does not pay it
+  // by itself (credit at sign-up is automatic now) and Use credit is still his to tap.
+  await join(nov5, ['Mitchel', 'Ryan', 'Brandon', 'Julian']);
+
   // ---- 1. Thu Oct 29 is canceled: Mitchel's $14 becomes credit by itself.
   await call(api.request, 'POST', `/api/admin/sessions/${thu.id}/decision`, { decision: 'cancel', confirm: true });
+  {
+    const d1 = await dash();
+    const l = d1.creditLedger.find((x) => x.playerId === id.Mitchel);
+    const s5 = d1.sessions.find((x) => x.id === nov5.id);
+    const seat = s5.roster.find((r) => r.playerId === id.Mitchel);
+    if (!l || l.balanceCents !== 1400) throw new Error(`Mitchel's credit after the cancel: ${JSON.stringify(l)}`);
+    if (!seat || seat.paymentStatus !== 'unpaid' || seat.creditCents !== 0) throw new Error(`Mitchel's Nov 5 seat: ${JSON.stringify(seat)}`);
+  }
   for (const scheme of ['light', 'dark']) {
     for (const width of WIDTHS) {
       const tag = `${width}px ${scheme}`;
@@ -273,8 +285,7 @@ async function main() {
     }
   }
 
-  // ---- 3. The player: the CREDIT chip, the credit sheet, Use credit; only their own credit.
-  await join(nov5, ['Mitchel', 'Ryan', 'Brandon', 'Julian']);
+  // ---- 3. The player: the CREDIT chip, the credit sheet, Use credit; only their own credit (Nov 5 joined above, before the credit).
   for (const scheme of ['light', 'dark']) {
     for (const width of WIDTHS) {
       const tag = `${width}px ${scheme}`;
@@ -513,11 +524,13 @@ async function main() {
 
   // ---- 6. Part of the amount: $5 credit against a $14 game, then Pay for the rest.
   {
+    // Nov 10 first, then Julian's $5: credit that arrives after the sign-up is not used by itself (credit at sign-up is
+    // automatic now), so Use credit is still his to tap.
+    await join(nov10, ['Julian', 'Ryan', 'Brandon', 'Mitchel']);
     const db = new DatabaseSync(dbFile);
     const group = db.prepare('SELECT id FROM groups').get().id;
     db.prepare("INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason, played_count) VALUES ('e2e-k', ?, ?, 'kept', 500, ?, ?, 'finalized', 6)").run(group, id.Julian, thu.id, '2026-10-26T15:00:00.000Z');
     db.close();
-    await join(nov10, ['Julian', 'Ryan', 'Brandon', 'Mitchel']);
     for (const scheme of ['light', 'dark']) {
       for (const width of WIDTHS) {
         const tag = `${width}px ${scheme}`;
@@ -562,8 +575,11 @@ async function main() {
       await foot.waitFor();
       assert((await foot.locator('[data-use-credit]').count()) === 0, 'Use credit still shows');
       assert((await foot.getByRole('button', { name: 'I paid' }).count()) === 1, 'Pay and I paid after the credit is used');
-      const after = await page.locator('article.sched', { hasText: 'Pay $9' }).first().innerText();
-      assert(/\$9 left to pay/.test(after) && /\$5 credit used/.test(after), 'after-credit chip and line');
+      // The credit on the seat has its own chip ("Credit $5 used"), and what is left is the amber "$9 due" chip.
+      const card = page.locator('article.sched', { hasText: 'Pay $9' }).first();
+      const used = squash(await card.locator('[data-credit-used]').innerText());
+      const owe = squash(await card.locator('[data-owe]').innerText());
+      assert(used === 'Credit $5 used' && owe === '$9 due', `after-credit chips: "${used}", "${owe}"`);
     });
     await ctx.close();
   }
