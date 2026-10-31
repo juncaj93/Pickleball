@@ -111,15 +111,20 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
 - **Changing the $14 setting** (Alex, Oct 31: existing sign-ups keep the price
   they signed at; only new sign-ups use the new price). NOT built yet: the site
   does not store the price each seat signed at, so it needs one new additive
-  table, which waits for Alex's OK. Until then a change applies to every game
-  not yet finalized (paid seats keep what they paid). Don't change it before
-  that is built.
+  table; Alex chose to build it as a small separate job after Tue Nov 3 (plan:
+  docs/PRICE_SNAPSHOT.md). Until then a change applies to every game not yet
+  finalized (paid seats keep what they paid). The $14 setting stays frozen.
 - A pending cash out is never used by itself. When it would help pay a game
   just joined, a small question at the bottom asks "Use the $10 you asked to
   cash out for this game?" **Use it** puts it on the game and shrinks the
   request (or withdraws it); the organizer's Home card shrinks or goes and
   Telegram gets one line ("Mitchel withdrew the $10 cash out request (using
   it for Thu Nov 5)"). **No, keep cash out**: they are in and pay as usual.
+- **Drop out shows the money at once**: the drop is held on the phone for 5
+  seconds for Undo and sent after; the screen draws the credit in right away
+  (chip, balance, credit sheet) with "You dropped out. $14 credit returned.",
+  and Undo takes it away. If the page closes or loses signal first, a note on
+  the phone finishes the drop on return or the next open (up to 2 minutes).
 - Players see their credit as a small **CREDIT $14** chip in the header, next
   to the date tile (only when they have some, or a cash out is waiting).
   Tapping it opens a sheet with the balance, **Request cash out**, and the
