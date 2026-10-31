@@ -539,3 +539,13 @@ Three front-end fixes, one deploy. No database change, no money logic touched.
 - Browser: 22 suites, 916 checks, 0 failed (new: `e2e/banner.cjs` 11,
   `e2e/card-times.cjs` 13, `e2e/no-court.cjs` 10). Each new suite was shown to
   fail on the old code.
+
+
+### Smart alerts tick CPU trim and tappable alert links (Fri Oct 30, 2026, 8:37 and 9:25 PM Eastern)
+- Why: the tick measured 12.2 to 32.4 ms CPU; the free plan allows 10 ms.
+- Cause: the date library's first use on a fresh server, the task list redoing the same time zone lookups about 75 times per game, and four separate database calls.
+- Fix: a quick arithmetic check (`mayAlertSoon`) so most ticks build no task list; reused formatters and remembered time zone lookups; one database batch. Live after: 4.2 to 8.6 ms (middle 6.8); floor 3.4 to 4.3 ms. Details: `docs/SMART_ALERTS.md`, "Tick CPU".
+- Telegram: "words: https://..." shows as tappable words with the same link (`server/telegram-links.ts`). Same wording, send times, /go/ link, GO_LINKS switch and Open site button.
+- Proof: `tests/fixtures/tick-golden.json`, written by the old code, matches the new code at every 5-minute tick Oct 14 to Nov 27 (Sun Nov 1 clock change, 7:00, 7:30, 8:00 PM games, no-court game); 150 random games in every zone across four clock changes never lose a due alert. 766 unit tests, 893 browser checks in 22 files, all green.
+- Deploys: Pages `d087f6ce` (commit dcafc3a, 8:37 PM) and `3748190d` (commit 483e2ce, 9:25 PM). No database change. Clock Worker untouched: runs every 5 minutes, 0 errors.
+- Restore points: Time Travel bookmarks `0000014a-00000004-00005114-0a7d95b6118acbc8ec7497c655eab182` (6:40 PM), `00000167-00000000-00005115-a33828fd3013708f9198136a4f522f26` (before 8:37 PM), `00000172-00000000-00005115-f4eb03de0b830c0eb270f9ea479b1da4` (before 9:25 PM). SQL exports (165 rows, phone numbers, not committed) in that session's scratch folder. Code rollback: Pages `16bdf705` (polish deploy, commit 4508b42).
