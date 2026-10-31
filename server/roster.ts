@@ -65,14 +65,16 @@ async function existingRow(db: D1Database, sessionId: string, playerId: string) 
 }
 
 /**
- * Give the player a confirmed spot if the guard allows it. Returns false if it
- * didn't. With `auto`, their credit goes on the new seat in the same batch.
+ * Give the player a confirmed spot if the guard allows it: 'new' when this
+ * call gave it, 'already' when they had it (or a second tap racing this one
+ * gave it), false when it didn't. With `auto`, their credit goes on the new
+ * seat in the same batch.
  */
 async function tryConfirm(db: D1Database, session: SessionRow, playerId: string, nowIso: string, maxPlayers: number, auto: AutoCredit | null) {
   const withCredit = auto ? autoCreditStatements(db, auto, session.id, playerId, nowIso) : [];
   try {
     const existing = await existingRow(db, session.id, playerId);
-    if (existing?.status === 'confirmed') return true;
+    if (existing?.status === 'confirmed') return 'already';
     if (existing) {
       const [res] = await db.batch([
         db
@@ -92,7 +94,7 @@ async function tryConfirm(db: D1Database, session: SessionRow, playerId: string,
           .bind(session.id, playerId, nowIso, existing.id, maxPlayers),
         ...withCredit,
       ]);
-      return res.meta.changes === 1;
+      return res.meta.changes === 1 ? 'new' : false;
     }
     const [res] = await db.batch([
       db
@@ -105,13 +107,13 @@ async function tryConfirm(db: D1Database, session: SessionRow, playerId: string,
         .bind(session.id, playerId, nowIso, newId(), maxPlayers),
       ...withCredit,
     ]);
-    return res.meta.changes === 1;
+    return res.meta.changes === 1 ? 'new' : false;
   } catch (err) {
     if (isTriggerError(err, 'session_full')) return false;
     if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
     // A second tap racing the first can hit the unique (session, player) key.
     if (err instanceof Error && /UNIQUE/i.test(err.message)) {
-      return (await existingRow(db, session.id, playerId))?.status === 'confirmed';
+      return (await existingRow(db, session.id, playerId))?.status === 'confirmed' ? 'already' : false;
     }
     throw err;
   }
@@ -227,9 +229,10 @@ export async function joinSession(
 
   // Their credit goes on the seat in the same step as the seat itself (never for the organizer).
   const auto = await autoCreditFor(db, session);
-  if (await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto)) {
-    // A second tap or device that found the seat already taken by the first gets nothing new.
-    const credit = auto ? await auditAutoCredit(db, auto.groupId, session.id, playerId, nowIso) : { cents: 0, paid: false };
+  const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto);
+  if (got) {
+    // A second tap or device that found the seat already taken by the first reports (and logs) nothing new.
+    const credit = auto && got === 'new' ? await auditAutoCredit(db, auto.groupId, session.id, playerId, nowIso) : { cents: 0, paid: false };
     return credit.cents > 0 ? { result: 'confirmed', creditCents: credit.cents, paidWithCredit: credit.paid } : { result: 'confirmed' };
   }
   if (mode !== 'auto') return { result: 'spot_taken' };
@@ -301,7 +304,8 @@ export async function keepPaymentAsCredit(db: D1Database, groupId: string, sessi
     .first<{ payment_amount_cents: number | null }>();
   const cents = row?.payment_amount_cents ?? 0;
   if (cents <= 0) return 0;
-  const ok = await creditBack(db, { groupId, sessionId, playerId, cents, reason, nowIso, settle: true });
+  // A drop only while they are still out: an I'm in from a second phone in between keeps the payment on the seat.
+  const ok = await creditBack(db, { groupId, sessionId, playerId, cents, reason, nowIso, settle: true, ...(reason === 'dropped' ? { seatStatus: 'withdrawn' as const } : {}) });
   return ok ? cents : 0;
 }
 

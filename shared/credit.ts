@@ -125,7 +125,12 @@ export function seatCredit(rows: CreditRow[], sessionId: string, playerId: strin
   const current = seat.paymentStatus === 'paid' && !seat.refundedAt;
   const backs = mine.filter((r) => r.kind === 'kept' && r.reason !== 'cash' && (!current || r.reason === 'finalized'));
   // Credit used on the seat that went back to the player (they dropped out, or the game was canceled) came back too.
-  const returned = current ? [] : all.filter((r) => r.kind === 'used' && r.reason !== 'cash' && (r.endedReason === 'dropped' || r.endedReason === 'canceled'));
+  // A return no longer counts once that credit went on the seat again (a rejoin used it): after drop, rejoin and
+  // drop it is the same money, so it counts once. Rows are in the order they were written, so ties in time are safe.
+  const isReturn = (r: CreditRow) => r.kind === 'used' && r.reason !== 'cash' && (r.endedReason === 'dropped' || r.endedReason === 'canceled') && !!r.endedAt;
+  const returned = current
+    ? []
+    : all.filter((r, i) => isReturn(r) && !all.some((x, j) => j > i && x.kind === 'used' && x.reason !== 'cash' && x.createdAt >= r.endedAt!));
   const backReason = backs[0]?.reason ?? (returned[0]?.endedReason as CreditReason | undefined) ?? null;
   return {
     usedCents: used,

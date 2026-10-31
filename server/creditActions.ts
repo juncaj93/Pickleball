@@ -8,7 +8,7 @@ import { notifyCashOutUsed, notifyRefundRequest } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
-import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, useCashOutOnSeat } from './credit';
+import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat } from './credit';
 import { HttpError } from './http';
 import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
@@ -134,10 +134,15 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
   if (cents > usableCents) throw new HttpError(409, 'not_enough_credit', `You have ${Math.floor(usableCents / 100)} dollars of credit.`);
   const id = newId();
   try {
-    await ctx.db
-      .prepare('INSERT INTO refund_requests (id, group_id, player_id, amount_cents, status, created_at) VALUES (?, ?, ?, ?, \'pending\', ?)')
+    // Saved only while the credit is still there: an I'm in at the same moment may have just used it.
+    const res = await ctx.db
+      .prepare(
+        `INSERT INTO refund_requests (id, group_id, player_id, amount_cents, status, created_at)
+         SELECT ?1, ?2, ?3, ?4, 'pending', ?5 WHERE ${USABLE('?3')} >= ?4`,
+      )
       .bind(id, group.id, playerId, cents, ctx.nowIso)
       .run();
+    if (res.meta.changes !== 1) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');
   } catch (err) {
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
     throw err;

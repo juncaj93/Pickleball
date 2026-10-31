@@ -103,6 +103,8 @@ const POT = (player: string) =>
     FROM credit_ledger WHERE player_id = ${player} AND ended_at IS NULL)`;
 /** SQL for what a pending refund request holds back. */
 const RESERVED = (player: string) => `(SELECT COALESCE(SUM(amount_cents), 0) FROM refund_requests WHERE player_id = ${player} AND status = 'pending')`;
+/** SQL for what a player can spend or ask back right now: the pot minus a pending request. */
+export const USABLE = (player: string) => `(${POT(player)} - ${RESERVED(player)})`;
 
 /**
  * Credit used on a game goes back to the player: they dropped out of it, it
@@ -235,16 +237,27 @@ export async function returnSessionCredit(db: D1Database, sessionId: string, now
  */
 export async function creditBack(
   db: D1Database,
-  args: { groupId: string; sessionId: string; playerId: string; cents: number; reason: CreditReason; playedCount?: number | null; nowIso: string; settle: boolean },
+  args: {
+    groupId: string;
+    sessionId: string;
+    playerId: string;
+    cents: number;
+    reason: CreditReason;
+    playedCount?: number | null;
+    nowIso: string;
+    settle: boolean;
+    /** Only while the seat still has this status (a drop: still out, not back in from a second phone). */
+    seatStatus?: 'withdrawn';
+  },
 ): Promise<boolean> {
-  const { groupId, sessionId, playerId, cents, reason, playedCount, nowIso, settle } = args;
+  const { groupId, sessionId, playerId, cents, reason, playedCount, nowIso, settle, seatStatus } = args;
   if (cents <= 0) return false;
   const entry = newId();
   const there = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?1 AND ended_at IS NULL)';
   // The seat must still carry a live payment. Settling guards itself (an unsettled seat has exactly one live
   // payment); a part-back entry (the part above the final price) must not already exist for it.
   const seatOk = settle
-    ? "EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL)"
+    ? `EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL${seatStatus ? ` AND status = '${seatStatus}'` : ''})`
     : `EXISTS (SELECT 1 FROM session_players sp WHERE sp.session_id = ?5 AND sp.player_id = ?3 AND sp.payment_status = 'paid' AND sp.refunded_at IS NULL)
        AND NOT EXISTS (SELECT 1 FROM credit_ledger l WHERE l.session_id = ?5 AND l.player_id = ?3 AND l.kind = 'kept' AND l.reason = ?7 AND l.ended_at IS NULL)`;
   const out = await db.batch([
