@@ -318,7 +318,7 @@ body:has(dialog[open]) .updated-line {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
+  min-height: 44px;
   white-space: nowrap;
 }
 .court-switch button .seg-line {
@@ -327,8 +327,8 @@ body:has(dialog[open]) .updated-line {
 
 /* ---- Even vertical rhythm on the game cards ----
    Before (390 px): top 9 to 10, count row to names 8.2, names to pill 4, bottom 9 to 12 (pill cards 11 to 12).
-   After: top 12, count row to names 6, names to pill 6, bottom 12, on every card. The three rows
-   (count, names, pill) sit 6 px apart; border and padding always add up to 12 at the top and bottom. */
+   After: top 12, count row to names 7.2, names to pill 7.2, bottom 12, on every card. The three rows
+   (count, names, pill) sit the same distance apart; border and padding always add up to 12 at the top and bottom. */
 .scard {
   padding-block: 11px;
 }
@@ -339,20 +339,20 @@ body:has(dialog[open]) .updated-line {
 .scard .players-line {
   gap: 0;
 }
-/* The count row is always as tall as the I'm in button (34 px), whether or not the button is there. */
+/* The count row keeps the I'm in button's height (34 px) whether or not the button is there. */
 .scard .players-top {
   min-height: 34px;
 }
 .scard .players-line .names-line,
 .scard .players-line .waitlist-line {
-  /* 7.2 px of space under the count text and above the names; pull it to 6. */
-  margin-top: -1.2px;
+  margin-top: 0;
 }
 .scard .players-line .names-line + .waitlist-line {
   margin-top: 0;
 }
 .card-meta {
-  margin-top: 4px;
+  /* Same 7.2 px under the names as the names sit under the count row. */
+  margin-top: 5.2px;
 }
 .paid-pill {
   /* The pill's box is its looks (26 px); the 44 px tap area hangs outside it, so spacing is exact. */

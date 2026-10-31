@@ -577,7 +577,7 @@ async function main() {
           amber++;
           // The old amber banner is gone: an open, unbooked game shows the always-on switch resting on Not booked.
           assert((await c.getAttribute('data-switch')) === 'not_booked', 'an open, unbooked game should rest on Not booked');
-          assert((await c.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Not booked', 'the switch should rest on Not booked');
+          assert((await c.locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', 'the switch should rest on Not booked');
         }
         if (kind === 'later') {
           gray++;
@@ -603,7 +603,7 @@ async function main() {
         assert((await card14.getAttribute('data-court')) === 'needs', `${in14} is 14 days out and should be open to book`);
         // The old banner's "I booked it" is now one tap on the card's own Booked segment.
         await card14.locator('.court-switch').getByRole('button', { name: 'Booked', exact: true }).waitFor();
-        assert((await card14.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Not booked', `${in14} should be waiting to be booked`);
+        assert((await card14.locator('.court-switch button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', `${in14} should be waiting to be booked`);
       }
       // The badge reminds from 7:00 AM on the day booking opens (the test clock is 12:30 AM).
       const reminded = await sessionCards(admin).locator('xpath=self::*[@data-remind="true"]').count();
@@ -1069,7 +1069,7 @@ async function main() {
       assert((await card.getAttribute('data-court')) === 'needs', 'first card should need a court');
       assert((await card.getAttribute('data-switch')) === 'not_booked', 'the card should say not_booked');
       const sw = card.locator('.court-switch');
-      assert((await sw.locator('button[aria-pressed="true"]').innerText()) === 'Not booked', 'the switch should rest on Not booked');
+      assert((await sw.locator('button[aria-pressed="true"]').innerText()).replace(/\s+/g, ' ').trim() === 'Not booked', 'the switch should rest on Not booked');
       assert((await sw.getByRole('button').count()) === 3, 'three segments');
       // The old banner and its buttons are gone from the card.
       assert((await card.locator('.court-banner').count()) === 0, 'the old banner is still on the card');
@@ -1145,7 +1145,7 @@ async function main() {
       const tapArea = { w: gb.width, h: Math.max(gb.height, await gear.evaluate((b) => parseFloat(getComputedStyle(b, '::before').height) || 0)) };
       assert(tapArea.w >= 44 && tapArea.h >= 44, `icon tap area ${tapArea.w}x${tapArea.h}`);
       // Collapsed: only the one-tap court switch (and the paid pill); no main button, the poll lives in Texts.
-      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x) && !/ of \d+ paid$/.test(x));
+      const visible = async () => (await card.locator('button:visible, a.btn:visible').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').trim()).filter((x) => x && !/^(Undo|Hours OK|I'm in|Out)$/.test(x) && !/ of \d+ paid$/.test(x));
       assert(JSON.stringify(await visible()) === JSON.stringify(['Not booked', 'Waitlist', 'Booked']), `collapsed card buttons were ${await visible()}`);
       await gear.click();
       assert((await gear.getAttribute('aria-expanded')) === 'true', 'gear should say it is open');
