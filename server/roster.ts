@@ -1,7 +1,7 @@
 import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import type { GroupSettings } from '../shared/settings';
-import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, creditBack, returnSeatCredit } from './credit';
+import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, seatMoneyBackStatements } from './credit';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
@@ -251,6 +251,11 @@ export async function joinSession(
  * moves. Money comes back as credit right away: credit they used on this
  * game goes back to their pot, and what they paid in cash becomes a new
  * credit entry (the organizer's own court payment never does).
+ *
+ * The seat leaving and the money coming back are ONE batch, so a request cut
+ * off halfway can't leave a player out with their money still on the game.
+ * Tapping again on a seat that is already out finishes any money still on it
+ * (older drops did this in steps) and changes nothing else.
  */
 export async function withdraw(
   db: D1Database,
@@ -258,29 +263,59 @@ export async function withdraw(
   session: SessionRow,
   playerId: string,
   nowMs: number,
-): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number }> {
+): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
-  if (!existing || (existing.status !== 'confirmed' && existing.status !== 'waitlisted')) {
-    return { freedSpot: false, changed: false, promoted: [], creditBackCents: 0 };
-  }
+  const nothing = { freedSpot: false, changed: false, promoted: [], creditBackCents: 0, creditReturnedCents: 0 };
+  if (!existing || (existing.status !== 'confirmed' && existing.status !== 'waitlisted' && existing.status !== 'withdrawn')) return nothing;
   const nowIso = new Date(nowMs).toISOString();
-  const res = await db
-    .prepare(
-      `UPDATE session_players SET status = 'withdrawn', attendance_confirmed_at = NULL,
-         promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
-         payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
-         updated_at = ?
-       WHERE id = ? AND status = ?`,
-    )
-    .bind(nowIso, existing.id, existing.status)
-    .run();
-  const changed = res.meta.changes === 1;
-  let creditBackCents = 0;
-  if (changed) {
-    await returnSeatCredit(db, session.id, playerId, nowIso, 'dropped');
-    if (playerId !== (await organizerIdOf(db, group))) creditBackCents = await keepPaymentAsCredit(db, group.id, session.id, playerId, 'dropped', nowIso);
+  const leaving = existing.status !== 'withdrawn';
+  // Read first, for the answer only: the credit on the seat now, and the id the cash-back entry will get.
+  const { results: onSeat } = await db
+    .prepare("SELECT id, amount_cents FROM credit_ledger WHERE kind = 'used' AND COALESCE(reason, '') <> 'cash' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+    .bind(session.id, playerId)
+    .all<{ id: string; amount_cents: number }>();
+  const entryId = newId();
+  const money = seatMoneyBackStatements(db, {
+    entryId,
+    groupId: group.id,
+    sessionId: session.id,
+    playerId,
+    organizerId: await organizerIdOf(db, group),
+    reason: 'dropped',
+    nowIso,
+    when: (sp) => `${sp}.status = 'withdrawn'`,
+  });
+  const out = await db.batch([
+    ...(leaving
+      ? [
+          db
+            .prepare(
+              `UPDATE session_players SET status = 'withdrawn', attendance_confirmed_at = NULL,
+                 promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
+                 payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
+                 updated_at = ?
+               WHERE id = ? AND status = ?`,
+            )
+            .bind(nowIso, existing.id, existing.status),
+        ]
+      : []),
+    ...money,
+  ]);
+  const changed = leaving && out[0].meta.changes === 1;
+  const [kept, , ended] = out.slice(leaving ? 1 : 0);
+  // What THIS batch moved (a second tap at the same moment moved nothing): the cash that became credit, and the credit that went back.
+  const cash = kept.meta.changes === 1 ? ((await db.prepare('SELECT amount_cents AS c FROM credit_ledger WHERE id = ?').bind(entryId).first<{ c: number }>())?.c ?? 0) : 0;
+  let credit = 0;
+  if (ended.meta.changes > 0) {
+    const { results: now } = await db
+      .prepare("SELECT id FROM credit_ledger WHERE session_id = ? AND player_id = ? AND ended_at = ? AND ended_reason = 'dropped'")
+      .bind(session.id, playerId, nowIso)
+      .all<{ id: string }>();
+    const endedNow = new Set(now.map((r) => r.id));
+    credit = onSeat.filter((r) => endedNow.has(r.id)).reduce((sum, r) => sum + r.amount_cents, 0);
   }
+  if (!changed && cash === 0 && credit === 0) return nothing;
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
     await db
@@ -290,23 +325,7 @@ export async function withdraw(
   }
   // While waiting on a court nobody moves in; that happens on "Court opened".
   const promoted = changed && session.court_state !== 'waitlist' ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
-  return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents };
-}
-
-/**
- * What a seat still holds in cash (paid, not settled) becomes credit with the
- * given reason. Returns the cents, or 0 when there was nothing.
- */
-export async function keepPaymentAsCredit(db: D1Database, groupId: string, sessionId: string, playerId: string, reason: 'dropped' | 'canceled', nowIso: string): Promise<number> {
-  const row = await db
-    .prepare("SELECT payment_amount_cents FROM session_players WHERE session_id = ? AND player_id = ? AND payment_status = 'paid' AND refunded_at IS NULL")
-    .bind(sessionId, playerId)
-    .first<{ payment_amount_cents: number | null }>();
-  const cents = row?.payment_amount_cents ?? 0;
-  if (cents <= 0) return 0;
-  // A drop only while they are still out: an I'm in from a second phone in between keeps the payment on the seat.
-  const ok = await creditBack(db, { groupId, sessionId, playerId, cents, reason, nowIso, settle: true, ...(reason === 'dropped' ? { seatStatus: 'withdrawn' as const } : {}) });
-  return ok ? cents : 0;
+  return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents: cash, creditReturnedCents: credit };
 }
 
 /**
@@ -417,16 +436,38 @@ export async function confirmAttendance(db: D1Database, session: SessionRow, pla
 /**
  * Organizer correction: put a player at the back of the waitlist. Doesn't
  * trigger automatic moves, or the player would bounce straight back in.
+ * Credit on a seat that still owed would sit on a waitlist spot that owes
+ * nothing: it goes back to them in the same batch. (A seat paid in full,
+ * with credit or cash, stays paid, as before.)
  */
 export async function moveToWaitlist(db: D1Database, session: SessionRow, playerId: string, nowMs: number): Promise<void> {
   assertOpen(session, nowMs);
   const nowIso = new Date(nowMs).toISOString();
-  await addToWaitlist(db, session, playerId, nowIso);
-  // Credit on a seat that still owed would sit on a waitlist spot that owes nothing: it goes back to them.
-  // (A seat paid in full, with credit or cash, stays paid, as before.)
-  await db
-    .prepare("SELECT 1 FROM session_players WHERE session_id = ? AND player_id = ? AND status = 'waitlisted' AND payment_status <> 'paid'")
-    .bind(session.id, playerId)
-    .first()
-    .then((r) => (r ? returnSeatCredit(db, session.id, playerId, nowIso, 'unmarked', { creditOnly: true }) : 0));
+  const existing = await existingRow(db, session.id, playerId);
+  if (!existing) return addToWaitlist(db, session, playerId, nowIso);
+  if (existing.status === 'waitlisted') return;
+  try {
+    await db.batch([
+      db
+        .prepare(
+          `UPDATE session_players SET status = 'waitlisted', claimed_at = ?2, claim_seq = ${NEXT_CLAIM_SEQ}, confirmed_at = NULL, confirm_seq = NULL,
+             attendance_confirmed_at = NULL, promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
+             payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
+             updated_at = ?2
+           WHERE id = ?3 AND status <> 'waitlisted'`,
+        )
+        .bind(session.id, nowIso, existing.id),
+      // Only while the seat is on the waitlist and not paid; a repeat finds nothing live and does nothing.
+      db
+        .prepare(
+          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'unmarked'
+           WHERE kind = 'used' AND COALESCE(reason, '') <> 'cash' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL
+             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = 'waitlisted' AND payment_status <> 'paid')`,
+        )
+        .bind(nowIso, session.id, playerId),
+    ]);
+  } catch (err) {
+    if (isTriggerError(err, 'session_canceled')) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    throw err;
+  }
 }

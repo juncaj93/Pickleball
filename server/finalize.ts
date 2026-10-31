@@ -9,9 +9,9 @@ import { reopenRequestedReason } from '../shared/credit';
 import { creditBack as creditBackCents, finalPrice } from '../shared/pricing';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
-import { creditBack, holdCashAgainstSeat, repriceCreditSeats, undoCreditBack } from './credit';
+import { creditBackStatements, holdCashStatements, repriceStatements, USABLE } from './credit';
 import { HttpError } from './http';
-import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
+import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
@@ -45,24 +45,60 @@ export async function finalizeSession(ctx: Ctx, body: Record<string, unknown>) {
   return applyFinalize(ctx, group, session, playedIds);
 }
 
+/** A value put straight into SQL text (an id or a time this server made), refused if it could break out of quotes. */
+export function sqlText(value: string): string {
+  if (!/^[0-9A-Za-z:.\-]+$/.test(value)) throw new Error('unsafe sql text');
+  return `'${value}'`;
+}
+
+/** The seats and the credit on them, as one string: finalize and reopen only go ahead if nothing changed since they looked. */
+const MONEY_STATE = (sessionId: string) =>
+  `(SELECT COALESCE(group_concat(x, '|'), '') FROM (SELECT id || ':' || status || ':' || payment_status || ':' || COALESCE(payment_amount_cents, '') || ':' || COALESCE(refunded_at, '') AS x
+      FROM session_players WHERE session_id = ${sqlText(sessionId)} ORDER BY id))
+   || '#' || (SELECT COUNT(*) || ':' || COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE session_id = ${sqlText(sessionId)} AND ended_at IS NULL)`;
+
+async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
+  return (await ctx.db.prepare(`SELECT ${MONEY_STATE(sessionId)} AS s`).first<{ s: string }>())?.s ?? '';
+}
+
+/**
+ * Everything finalizing does happens in ONE batch: the game is marked
+ * finalized only if no seat or credit changed since it was read, and every
+ * other statement only runs if that mark went in. So a double tap, a player
+ * paying at the same moment, or a request cut off halfway can never leave a
+ * game half-finalized.
+ */
 export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>) {
   const settings = settingsOf(group);
+  const state = await moneyState(ctx, session.id);
   const roster = await loadRoster(ctx.db, session.id);
   const confirmed = confirmedOf(roster);
   const organizerId = await organizerIdOf(ctx.db, group);
   const n = playedIds.size;
   const price = finalPrice(settings.pricePerPlayerCents, n);
-  const res = await ctx.db
-    .prepare('UPDATE sessions SET finalized_at = ?1, final_price_cents = ?2, final_played_count = ?3, updated_at = ?1 WHERE id = ?4 AND finalized_at IS NULL')
-    .bind(ctx.nowIso, price, n, session.id)
-    .run();
-  if (res.meta.changes !== 1) throw new HttpError(409, 'already_finalized', 'This game is already finalized.');
-  await ctx.db.batch(
-    confirmed.map((r) =>
-      ctx.db.prepare('UPDATE session_players SET played = ?, updated_at = ? WHERE id = ?').bind(playedIds.has(r.player_id) ? 1 : 0, ctx.nowIso, r.id),
+  const now = ctx.nowIso;
+  const claimed = `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND finalized_at = ${sqlText(now)})`;
+  const statements = [
+    ctx.db
+      .prepare(
+        `UPDATE sessions SET finalized_at = ?1, final_price_cents = ?2, final_played_count = ?3, updated_at = ?1
+         WHERE id = ?4 AND finalized_at IS NULL AND status <> 'canceled' AND ${MONEY_STATE(session.id)} = ?5`,
+      )
+      .bind(now, price, n, session.id, state),
+    ...confirmed.map((r) =>
+      ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
     ),
-  );
+  ];
   const backs: { player: string; playerId: string; cents: number; reason: 'finalized' | 'not_played' }[] = [];
+  const base = { groupId: group.id, sessionId: session.id, nowIso: now, guard: claimed };
+  /** Mark an unpaid seat paid with the credit on it (what they put in), so money above the price can come back. */
+  const payWithCredit = (r: RosterRow, used: number) =>
+    ctx.db
+      .prepare(
+        `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+         WHERE id = ?3 AND payment_status = 'unpaid' AND ${claimed}`,
+      )
+      .bind(now, used, r.id);
   for (const r of roster) {
     if (r.player_id === organizerId) continue;
     const paid = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;
@@ -73,45 +109,37 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       const back = paid > 0 ? paid - price : used - price;
       if (paid > 0 && paid < price) {
         // Paid the earlier (lower) price, or the flat price went up: the cash stays against the seat, the rest is owed.
-        await holdCashAgainstSeat(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: paid, nowIso: ctx.nowIso });
+        statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: paid }));
       } else if (back > 0) {
-        if (paid === 0) {
-          // Mark it paid with the credit (what they put in), then the overflow comes back.
-          await ctx.db
-            .prepare(
-              `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
-               WHERE id = ?3 AND payment_status = 'unpaid'`,
-            )
-            .bind(ctx.nowIso, used, r.id)
-            .run();
-        }
-        const ok = await creditBack(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: back, reason: 'finalized', playedCount: n, nowIso: ctx.nowIso, settle: false });
-        if (ok) backs.push({ player: r.display_name, playerId: r.player_id, cents: back, reason: 'finalized' });
+        if (paid === 0) statements.push(payWithCredit(r, used));
+        statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: back, reason: 'finalized', playedCount: n, settle: false }));
+        backs.push({ player: r.display_name, playerId: r.player_id, cents: back, reason: 'finalized' });
       }
     } else if (paid > 0) {
-      const ok = await creditBack(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: paid, reason: 'not_played', nowIso: ctx.nowIso, settle: true });
-      if (ok) backs.push({ player: r.display_name, playerId: r.player_id, cents: paid, reason: 'not_played' });
+      statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: paid, reason: 'not_played', settle: true }));
+      backs.push({ player: r.display_name, playerId: r.player_id, cents: paid, reason: 'not_played' });
     } else if (r.status === 'confirmed' && r.payment_status === 'unpaid') {
       // Did not play with credit on a seat that still owed the rest (credit used at sign-up): that credit comes back.
       // The seat is marked paid with it first, the same way a played seat is, so Reopen can take it back the same way.
       const used = await usedOn(ctx, session.id, r.player_id);
       if (used > 0) {
-        await ctx.db
-          .prepare(
-            `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
-             WHERE id = ?3 AND payment_status = 'unpaid'`,
-          )
-          .bind(ctx.nowIso, used, r.id)
-          .run();
-        const ok = await creditBack(ctx.db, { groupId: group.id, sessionId: session.id, playerId: r.player_id, cents: used, reason: 'not_played', nowIso: ctx.nowIso, settle: true });
-        if (ok) backs.push({ player: r.display_name, playerId: r.player_id, cents: used, reason: 'not_played' });
+        statements.push(payWithCredit(r, used));
+        statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: used, reason: 'not_played', settle: true }));
+        backs.push({ player: r.display_name, playerId: r.player_id, cents: used, reason: 'not_played' });
       }
     }
   }
   // Unpaid seats whose used credit now covers the final price are paid.
-  await repriceCreditSeats(ctx.db, session.id, ctx.nowIso);
-  await audit(ctx.db, group.id, session.id, 'session_finalized', { played: n, priceCents: price, creditBackCents: backs.reduce((s, b) => s + b.cents, 0) }, ctx.nowIso);
-  for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, ctx.nowIso);
+  statements.push(...repriceStatements(ctx.db, session.id, settings.pricePerPlayerCents, now));
+  const [claim] = await ctx.db.batch(statements);
+  if (claim.meta.changes !== 1) {
+    const fresh = await getSession(ctx.db, group.id, session.id);
+    if (fresh?.finalized_at) throw new HttpError(409, 'already_finalized', 'This game is already finalized.');
+    if (fresh?.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled, so there is nothing to finalize.');
+    throw new HttpError(409, 'changed', 'Someone just changed this game. Look again and finalize.');
+  }
+  await audit(ctx.db, group.id, session.id, 'session_finalized', { played: n, priceCents: price, creditBackCents: backs.reduce((s, b) => s + b.cents, 0) }, now);
+  for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, now);
   return { ok: true, played: n, priceCents: price, creditBack: backs.map((b) => ({ playerId: b.playerId, cents: b.cents })) };
 }
 
@@ -162,17 +190,40 @@ export async function reopenFinalize(ctx: Ctx) {
     throw new HttpError(409, 'credit_spent', `Can't reopen: ${blockers.spent.join(' and ')} already used or got back credit from this game.`);
   }
   if (blockers.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(blockers.requested));
-  const roster = await loadRoster(ctx.db, session.id);
-  for (const r of roster) {
-    const res = await undoCreditBack(ctx.db, session.id, r.player_id, ['finalized', 'not_played'], ctx.nowIso);
-    if (res.blocked) throw new HttpError(409, 'credit_spent', `Can't reopen: ${r.display_name} already used or got back credit from this game.`);
-  }
-  await ctx.db.batch([
-    ctx.db.prepare('UPDATE sessions SET finalized_at = NULL, final_price_cents = NULL, final_played_count = NULL, updated_at = ? WHERE id = ?').bind(ctx.nowIso, session.id),
-    ctx.db.prepare('UPDATE session_players SET played = NULL, updated_at = ? WHERE session_id = ? AND played IS NOT NULL').bind(ctx.nowIso, session.id),
+  // One batch, all or nothing. The credit this game gave back is taken back only while every player still has
+  // all of theirs (beyond a pending cash out); the game is unfinalized only once none of it is left; seats paid
+  // with credit at the final price are short of the flat price again.
+  const now = ctx.nowIso;
+  const backRows = `credit_ledger.kind = 'kept' AND credit_ledger.session_id = ?2 AND credit_ledger.ended_at IS NULL AND credit_ledger.reason IN ('finalized', 'not_played')`;
+  const allThere = `NOT EXISTS (SELECT 1 FROM (SELECT player_id, SUM(amount_cents) AS back FROM credit_ledger
+      WHERE kind = 'kept' AND session_id = ?2 AND ended_at IS NULL AND reason IN ('finalized', 'not_played') GROUP BY player_id) b
+    WHERE ${USABLE('b.player_id')} < b.back)`;
+  const [taken, , unfinalized] = await ctx.db.batch([
+    ctx.db.prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${backRows} AND ${allThere}`).bind(now, session.id),
+    ctx.db
+      .prepare(
+        `UPDATE session_players SET refunded_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND refunded_at IS NOT NULL
+           AND EXISTS (SELECT 1 FROM credit_ledger l WHERE l.kind = 'kept' AND l.session_id = ?2 AND l.player_id = session_players.player_id
+                         AND l.reason = 'not_played' AND l.ended_at = ?1 AND l.ended_reason = 'undone')`,
+      )
+      .bind(now, session.id),
+    ctx.db
+      .prepare(
+        `UPDATE sessions SET finalized_at = NULL, final_price_cents = NULL, final_played_count = NULL, updated_at = ?1
+         WHERE id = ?2 AND finalized_at = ?3 AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE ${backRows})`,
+      )
+      .bind(now, session.id, session.finalized_at),
+    ctx.db.prepare('UPDATE session_players SET played = NULL, updated_at = ?1 WHERE session_id = ?2 AND played IS NOT NULL AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL').bind(now, session.id),
+    ...repriceStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, now),
   ]);
-  // Seats paid with credit at the final price are short of the flat price again.
-  await repriceCreditSeats(ctx.db, session.id, ctx.nowIso);
+  if (unfinalized.meta.changes !== 1) {
+    if (taken.meta.changes === 0) {
+      const late = await reopenBlockers(ctx, session.id);
+      if (late.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(late.requested));
+      if (late.spent.length) throw new HttpError(409, 'credit_spent', `Can't reopen: ${late.spent.join(' and ')} already used or got back credit from this game.`);
+    }
+    throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+  }
   await audit(ctx.db, group.id, session.id, 'finalize_reopened', {}, ctx.nowIso);
   return { ok: true };
 }

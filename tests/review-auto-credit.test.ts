@@ -502,7 +502,8 @@ describe('1b. exact interleavings (a pause point inside one call while the other
     await join(ctx, g.id, 'Blair');
     await markPaid(ctx, g.id, 'Blair');
     const [p1, p2] = [await playerPhone(ctx, 'Blair'), await playerPhone(ctx, 'Blair')];
-    const pause = pauseOn(ctx, /SELECT payment_amount_cents FROM session_players/, () => p2.call('POST', `/api/sessions/${g.id}/join`, {}));
+    // The drop is one batch now; the nearest point inside it is its read of the seat's credit, right before the batch.
+    const pause = pauseOn(ctx, /SELECT id, amount_cents FROM credit_ledger WHERE kind = 'used'/, () => p2.call('POST', `/api/sessions/${g.id}/join`, {}));
     await p1.call('POST', `/api/sessions/${g.id}/withdraw`, {});
     pause.restore();
     expect(pause.fired()).toBe(true);
@@ -510,7 +511,8 @@ describe('1b. exact interleavings (a pause point inside one call while the other
     const potc = potOf(ctx, ctx.byName.Blair);
     // In and paid with the $14 still on the seat, or in and owing with $14 credit: never in, "paid", AND $14 credit.
     expect({ status: row.status, paid: row.payment_status === 'paid' && !row.refunded_at, pot: potc }).toEqual(
-      row.payment_status === 'paid' ? { status: 'confirmed', paid: true, pot: 0 } : { status: row.status, paid: false, pot: 1400 },
+      // (A settled seat, refunded_at set, keeps payment_status 'paid' as the record of what was paid; it is not paid now.)
+      row.payment_status === 'paid' && !row.refunded_at ? { status: 'confirmed', paid: true, pot: 0 } : { status: row.status, paid: false, pot: 1400 },
     );
     inv(ctx);
   });
@@ -521,7 +523,8 @@ describe('1b. exact interleavings (a pause point inside one call while the other
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, 'Casey');
     const [p1, p2] = [await playerPhone(ctx, 'Casey'), await playerPhone(ctx, 'Casey')];
-    const pause = pauseOn(ctx, /UPDATE credit_ledger SET ended_at = \?1, ended_reason = \?2 WHERE id IN/, () => p2.call('POST', `/api/sessions/${g.id}/join`, {}));
+    // The credit going back is a statement inside the drop's one batch now; the pause lands right before that batch.
+    const pause = pauseOn(ctx, /UPDATE credit_ledger SET ended_at = \?1, ended_reason = \?2\s+WHERE session_id = \?3/, () => p2.call('POST', `/api/sessions/${g.id}/join`, {}));
     await p1.call('POST', `/api/sessions/${g.id}/withdraw`, {});
     pause.restore();
     expect(pause.fired()).toBe(true);
@@ -540,7 +543,7 @@ describe('1b. exact interleavings (a pause point inside one call while the other
       const phone = await playerPhone(ctx, 'Devon');
       const doDrop = () => phone.call('POST', `/api/sessions/${g.id}/withdraw`, {});
       const doCancel = () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true });
-      const pause = pauseOn(ctx, /UPDATE credit_ledger SET ended_at = \?1, ended_reason = \?2 WHERE id IN/, first === 'drop' ? doCancel : doDrop);
+      const pause = pauseOn(ctx, /UPDATE credit_ledger SET ended_at = \?1, ended_reason = \?2\s+WHERE session_id = \?3/, first === 'drop' ? doCancel : doDrop);
       await (first === 'drop' ? doDrop() : doCancel());
       pause.restore();
       expect(pause.fired()).toBe(true);
