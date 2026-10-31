@@ -171,6 +171,26 @@ export function formatTimeShort(startIso: string, endIso: string, tz: string): s
   return `${left}\u2013${end}`;
 }
 
+/** How long a regular game runs when nothing says otherwise (8 to 10 PM): 2 hours. The group's own usual length comes from Settings. */
+export const USUAL_GAME_MINUTES = 120;
+
+/**
+ * The time on a game card. Just the start ("8 PM", "7:30 PM", "10:30 AM") when
+ * the game runs the usual length, so it always fits under the date tile. When
+ * the game is a different length, `end` is set too ("9:30 PM") so nobody is
+ * misled about when it finishes; the card then shows it on a second short line.
+ */
+export function cardTime(startIso: string, endIso: string, tz: string, usualMinutes: number = USUAL_GAME_MINUTES): { start: string; end: string | null } {
+  const hm = (iso: string) => formatTime(iso, tz).replace(/[\u202f\u00a0]/g, ' ').replace(':00', '');
+  const minutes = Math.round((Date.parse(endIso) - Date.parse(startIso)) / 60_000);
+  return { start: hm(startIso), end: minutes === usualMinutes ? null : hm(endIso) };
+}
+
+/** The same on one line, for the wide cards that aren't under a tile: "8 PM", or "7:30\u20139:30 PM" for a game of another length. */
+export function cardTimeText(startIso: string, endIso: string, tz: string, usualMinutes: number = USUAL_GAME_MINUTES): string {
+  return cardTime(startIso, endIso, tz, usualMinutes).end === null ? cardTime(startIso, endIso, tz, usualMinutes).start : formatTimeShort(startIso, endIso, tz);
+}
+
 /** "Tue, Oct 28, 8:00 AM" */
 export function formatDateTime(iso: string, tz: string): string {
   return `${formatShortDate(iso, tz)}, ${formatTime(iso, tz)}`;

@@ -75,7 +75,10 @@ async function main() {
   });
   await call(admin.request, 'PUT', '/api/admin/group', { organizerName: 'Alex' });
   const dash = () => call(admin.request, 'GET', '/api/admin/dashboard');
+  // Pay prompts and Use credit only show once a court is booked (a game with no court reads like a normal game; see e2e/no-court.cjs),
+  // so the games in this fixture have a court.
   let d = await dash();
+  for (const s of d.sessions.filter((x) => !x.state.flags.past)) await call(admin.request, 'POST', `/api/admin/sessions/${s.id}/booked`, {});
   const id = Object.fromEntries(d.players.map((p) => [p.name, p.id]));
   const [tue, thu] = d.sessions; // Tue Oct 27 and Thu Oct 29
   // Mitchel and Ryan get $14 credit each from a canceled Tuesday.

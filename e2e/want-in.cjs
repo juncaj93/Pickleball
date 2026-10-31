@@ -116,13 +116,13 @@ async function main() {
       drop: !!el.querySelector('.drop-link'),
     }));
 
-  await check('the prompt says "Want in Thursday?" (6 days away, no "next"), with the short time 8–10 PM', async () => {
+  await check('the prompt says "Want in Thursday?" (6 days away, no "next"), with just the start time, 8 PM', async () => {
     const { ctx, page } = await open('Nathan');
     const card = page.getByRole('region', { name: /^Want in / });
     await card.waitFor();
     assert((await card.getByRole('heading').innerText()).trim() === 'Want in Thursday?', `title: ${await card.getByRole('heading').innerText()}`);
     const t = squash(await card.innerText());
-    assert(/Thu, Nov 5 · 8–10 PM/.test(t), `time line: ${t}`);
+    assert(/Thu, Nov 5 · 8 PM(?!.*\u2013)/.test(t), `time line: ${t}`);
     assert(!/8:00|10:00/.test(t), `long time still shown: ${t}`);
     await ctx.close();
   });
@@ -142,7 +142,7 @@ async function main() {
     const answer = page.getByRole('region', { name: 'Your answer' });
     await answer.getByRole('heading', { name: "You're in" }).waitFor();
     const at = squash(await answer.innerText());
-    assert(/Thu, Nov 5 · 8–10 PM/.test(at) && !/8:00|10:00/.test(at), `answer time: ${at}`);
+    assert(/Thu, Nov 5 · 8 PM(?!.*\u2013)/.test(at) && !/8:00|10:00/.test(at), `answer time: ${at}`);
     // The game card below changed already.
     await card.locator('.tile-check').waitFor();
     const after = await readCard(card);

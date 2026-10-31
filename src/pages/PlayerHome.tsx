@@ -3,7 +3,7 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { creditBackNote } from '../../shared/pricing';
-import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, formatTimeRange, formatTimeShort, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
+import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CreditChip, CreditSheet } from './CreditSheet';
@@ -12,6 +12,7 @@ import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
+import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
@@ -80,7 +81,9 @@ const GOOD_NEWS = {
   court_opened: "Good news, the court opened, so you're in.",
 };
 
-function joinedText(d: JoinResponse): string {
+/** What the banner says after I'm in. With no court booked everyone who taps I'm in is simply in. */
+export function joinedText(d: JoinResponse, noCourt = false): string {
+  if (noCourt) return "You're in";
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
   if (d.result === 'standby') return `You're on standby, #${d.position}`;
   return "You're in";
@@ -160,7 +163,8 @@ export function PlayerHome({
       return { ...o, [id]: kind };
     });
   }, []);
-  const view = useMemo(() => (g ? applyOverlay(g, overlay) : null), [g, overlay]);
+  // Games with no court booked are drawn like normal games (src/courtDisplay.ts), after the taps still waiting on the server.
+  const view = useMemo(() => (g ? courtDisplay(applyOverlay(g, overlay)) : null), [g, overlay]);
 
   // All games / My games, remembered on this phone (not in the organizer's "View as...").
   const [filter, setFilterState] = useState<GameFilter>(() => (!viewAs && storageGet(FILTER_KEY) === 'mine' ? 'mine' : 'all'));
@@ -200,13 +204,13 @@ export function PlayerHome({
   }, [g, switching, viewAs, toast]);
   /** My own tap on I'm in / Yes: "Game on!" when it completed the 4th player, else "You're in". */
   const joinToast = useCallback(
-    (sessionId: string, before: number, res: JoinResponse) => {
+    (sessionId: string, before: number, res: JoinResponse, noCourt = false) => {
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
         if (before + 1 === MIN_PLAYERS) return toast('Game on!', 'ok', { ball: true });
       }
-      toast(joinedText(res));
+      toast(joinedText(res, noCourt));
     },
     [toast, markCelebrated],
   );
@@ -338,7 +342,7 @@ export function PlayerHome({
               <section className="card stack suggest" aria-label="Your answer">
                 <h2>{answered.text}</h2>
                 <p className="muted small">
-                  {formatShortDate(answered.startsAt, tz)} · {formatTimeShort(answered.startsAt, answered.endsAt, tz)}
+                  {formatShortDate(answered.startsAt, tz)} · {cardTimeText(answered.startsAt, answered.endsAt, tz, g.group.usualMinutes)}
                 </p>
                 <button className="btn secondary block" onClick={() => setAnswered(null)}>
                   Done
@@ -828,16 +832,17 @@ function SuggestionCard({
   g: GroupView;
   onChanged: () => Promise<void>;
   onJoined: (a: { sessionId: string; text: string; startsAt: string; endsAt: string }) => void;
-  joinToast: (sessionId: string, before: number, res: JoinResponse) => void;
+  joinToast: (sessionId: string, before: number, res: JoinResponse, noCourt?: boolean) => void;
 }) {
   const toast = useToast();
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
+  // With no court booked the game reads like a normal one and never says waitlist.
   const standby = s.courtState === 'waitlist';
-  const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
-  const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
+  const waitlistForm = !standby && !s.noCourt && s.confirmedCount >= g.group.maxPlayers;
+  const subline = standby || (s.noCourt && s.confirmedCount >= g.group.maxPlayers) ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -846,8 +851,8 @@ function SuggestionCard({
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
-        joinToast(s.sessionId, s.confirmedCount, res);
-        onJoined({ sessionId: s.sessionId, text: joinedText(res), startsAt: s.startsAt, endsAt: s.endsAt });
+        joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
+        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
       } else {
         await api('POST', `/api/sessions/${s.sessionId}/decline`, {});
@@ -868,7 +873,7 @@ function SuggestionCard({
       {/* Line 1: date and time. Line 2: spots left, or where they would be. */}
       <div className="suggest-when">
         <span className="muted small">
-          {formatShortDate(s.startsAt, tz)} · {formatTimeShort(s.startsAt, s.endsAt, tz)}
+          {formatShortDate(s.startsAt, tz)} · {cardTimeText(s.startsAt, s.endsAt, tz, g.group.usualMinutes)}
         </span>
       </div>
       {subline && <p className="muted small suggest-sub">{subline}</p>}
@@ -1086,7 +1091,7 @@ function RowPay({
  * and a check when you're in; the short time sits under it. No green tint for
  * joined. The calendar icon sits at the right end of the status line.
  */
-function ScheduleRow({
+export function ScheduleRow({
   s,
   g,
   tier,
@@ -1105,7 +1110,7 @@ function ScheduleRow({
   highlight?: boolean;
   /** Draw a tap at once (I'm in, a held Drop out) until the server answers, or take it back off. */
   setOverlay: (id: string, kind: 'join' | 'drop' | null) => void;
-  joinToast: (sessionId: string, before: number, res: JoinResponse) => void;
+  joinToast: (sessionId: string, before: number, res: JoinResponse, noCourt?: boolean) => void;
   /** The pickleballs ripple once: this game just reached 4 and this device had not seen it. */
   celebrating?: boolean;
   /** Fading out of the list. */
@@ -1164,7 +1169,7 @@ function ScheduleRow({
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
     try {
-      joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}));
+      joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
       await onChanged();
     } catch (err) {
       setOverlay(s.id, null);
@@ -1299,11 +1304,13 @@ function ScheduleRow({
       <div className="sched-tilecol">
         <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} />
         {(() => {
-          const short = formatTimeShort(s.startsAt, s.endsAt, tz);
-          // Half-hour games ("7:30–9:30 PM") are wider: a touch smaller so they stay under the tile.
+          // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
+          // where it ends, on a second short line, so nobody is misled.
+          const t = cardTime(s.startsAt, s.endsAt, tz, g.group.usualMinutes);
           return (
-            <div className={`sched-time${short.length > 10 ? ' long' : ''}`}>
-              <span aria-hidden="true">{short}</span>
+            <div className={`sched-time${t.end ? ' range' : ''}`} data-sched-time>
+              <span aria-hidden="true">{t.start}</span>
+              {t.end && <span aria-hidden="true">{'\u2013'}{t.end}</span>}
             </div>
           );
         })()}

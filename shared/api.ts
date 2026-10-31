@@ -99,7 +99,7 @@ export interface CreditView {
 }
 
 export interface GroupView {
-  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; maxPlayers: number };
+  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; maxPlayers: number; usualMinutes: number };
   players: { id: string; name: string }[];
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */
@@ -138,6 +138,8 @@ export interface GroupView {
     confirmedCount: number;
     /** The venue's court waitlist: players go on standby. */
     courtState: 'waitlist' | 'opened' | 'not_opened' | null;
+    /** Screen only (set by src/courtDisplay.ts): the court is not booked, so the prompt reads like a normal game. */
+    noCourt?: boolean;
   } | null;
   /** The "did anything change?" code this data was read at (see server/stamp.ts). */
   version: string;

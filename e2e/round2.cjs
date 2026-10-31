@@ -384,20 +384,21 @@ async function main() {
     await rm.ctx.close();
   });
 
-  await check('one banner for every pop-up: bottom center above the Safari bar, a check icon, stays about 1.5 s then goes, tap closes it early, a new message replaces the old one', async () => {
+  await check('one banner for every pop-up: bottom center, 16 to 24 px above the bottom edge, a check icon, stays about 1.5 s then goes, tap closes it early, a new message replaces the old one', async () => {
     const { ctx, page } = await open('Brandon', 390, 'light');
     const card = page.locator('.schedule article').nth(4);
     await card.getByRole('button', { name: "I'm in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
     assert(squash(await pop.innerText()) === "You're in", `banner said "${await pop.innerText()}"`);
-    const info = await pop.evaluate((el) => {
+    const info = await pop.evaluate(async (el) => {
+      await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))); // it slides up the last 8px while fading in
       const r = el.getBoundingClientRect();
       return { l: r.left, r: r.right, b: r.bottom, w: r.width, vw: innerWidth, vh: innerHeight, pos: getComputedStyle(el).position, open: el.matches(':popover-open'), icon: !!el.querySelector('.toast-icon svg') };
     });
     assert(info.pos === 'fixed' && info.open && info.icon, JSON.stringify(info));
     assert(Math.abs((info.l + info.r) / 2 - info.vw / 2) < 3 && info.w <= 342, `banner is not centered or too wide: ${JSON.stringify(info)}`);
-    assert(info.vh - info.b >= 85 && info.vh - info.b <= 125, `banner is ${info.vh - info.b}px above the bottom`);
+    assert(info.vh - info.b >= 16 && info.vh - info.b <= 24, `banner is ${info.vh - info.b}px above the bottom, want 16 to 24px (see e2e/banner.cjs)`);
     const t0 = Date.now();
     await page.waitForTimeout(900);
     assert((await page.locator('.pop').count()) === 1, 'banner left too early');

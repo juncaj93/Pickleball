@@ -901,8 +901,15 @@ async function main() {
       assert((await p.getByRole('heading', { name: 'Who are you?' }).count()) === 0, 'asked for the name again');
     });
 
+    // Pay prompts only show once a court is booked (a game with no court reads like a normal game and asks for nothing).
+    // The checks up to "someone drops out of 6" are about the flat $14, so they run on a game with a booked court; it is put
+    // back afterwards so the later "not booked" checks still start from a game that needs a court. See e2e/no-court.cjs.
+    const courtGame = (await (await admin.request.get(`${BASE}/api/admin/dashboard`)).json()).sessions.find((x) => !x.state.flags.past).id;
+    assert((await admin.request.post(`${BASE}/api/admin/sessions/${courtGame}/booked`, { data: {}, headers: { Origin: BASE } })).ok(), 'could not book the first game');
     await check('player Home is one button per session, no extra screens', async () => {
+      await players.Alex.reload(); // the court was just booked: draw the card as it is now
       const card = firstCard(players.Alex);
+      await card.locator('.btn:not(.outline)').first().waitFor();
       const buttons = (await card.getByRole('button').allInnerTexts()).map((t) => t.trim());
       // One filled green button per card; "Drop out" is a quiet link, not a button look.
       const filled = await card.locator('.btn:not(.outline)').allInnerTexts();
@@ -986,6 +993,10 @@ async function main() {
       }
       await admin.screenshot({ path: path.join(SHOTS, 'admin-five-in.png'), fullPage: true });
     });
+    assert(
+      (await admin.request.put(`${BASE}/api/admin/sessions/${courtGame}/booking`, { data: { bookingStatus: 'needs_booking', courtCostCents: null }, headers: { Origin: BASE } })).ok(),
+      'could not put the first game back to not booked',
+    );
 
     console.log('Booking & payments');
     await check('Home: court and players are separate lines; no chip; no duplicate court cards', async () => {
@@ -1470,8 +1481,8 @@ async function main() {
       const row = firstCard(players.Blair);
       const tile = (await row.locator('.tile').innerText()).replace(/\s+/g, ' ').trim();
       assert(/^(TUE|THU|TONIGHT) \d{1,2} [A-Z]{3}$/.test(tile), `date tile was "${tile}"`);
-      // The short time sits under the tile ("8\u201310 PM", en dash); the long "8:00 to 10:00 PM" line is gone.
-      const timeEl = row.locator('.sched-time', { hasText: /^8\u201310 PM$|^7:30\u20139:30 PM$|^7:30\u201310 PM$/ });
+      // Only the start time sits under the tile ("8 PM"); the end is left off for a usual-length game (see e2e/card-times.cjs).
+      const timeEl = row.locator('.sched-time', { hasText: /^8 PM$|^7:30 PM$/ });
       await timeEl.waitFor();
       const tb = await row.locator('.tile').boundingBox();
       const mb = await timeEl.boundingBox();
@@ -1704,13 +1715,14 @@ async function main() {
       await pop.waitFor();
       // The tapped button turns into a Drop out link, so the bubble is checked against where the button was just before the tap.
       assert((await pop.innerText()).trim() === "You're in", `banner said ${await pop.innerText()}`);
-      // The new banner: bottom center of the screen, clear of the Safari bar, never next to the tapped button.
+      // The banner: bottom center of the screen, just above the bottom edge, never next to the tapped button.
+      await pop.evaluate((el) => Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {})))); // it slides up the last 8px while fading in
       const pb = await pop.boundingBox();
       const vw = p.viewportSize().width;
       const vh = p.viewportSize().height;
       assert(pb.x >= 0 && pb.x + pb.width <= vw && pb.y >= 0 && pb.width <= 342, `banner must stay on screen and at most about 340px wide: ${JSON.stringify(pb)}`);
       assert(Math.abs(pb.x + pb.width / 2 - vw / 2) < 3, 'banner is centered');
-      assert(vh - (pb.y + pb.height) >= 85 && vh - (pb.y + pb.height) <= 125, `banner sits about 96px above the bottom, it is ${vh - (pb.y + pb.height)}px`);
+      assert(vh - (pb.y + pb.height) >= 16 && vh - (pb.y + pb.height) <= 24, `banner sits 16 to 24px above the bottom, it is ${vh - (pb.y + pb.height)}px (see e2e/banner.cjs)`);
       const style = await pop.evaluate((el) => ({ size: parseFloat(getComputedStyle(el).fontSize), hidden: el.getAttribute('aria-hidden'), pos: getComputedStyle(el).position, icon: !!el.querySelector('.toast-icon') }));
       assert(style.size >= 13 && style.hidden === 'true' && style.pos === 'fixed' && style.icon, `banner style: ${JSON.stringify(style)}`);
       await p.locator('[aria-live="polite"]', { hasText: "You're in" }).waitFor({ state: 'attached' });
@@ -2045,7 +2057,7 @@ async function main() {
     });
 
     console.log('Court waitlist');
-    await check('court waitlist: players go on standby; the share text is the usual one; Court opened moves them in', async () => {
+    await check('court waitlist: players tap the join button and read it as a normal game (the organizer sees standby); the share text is the usual one; Court opened moves them in', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim(); // e.g. "Thu, Nov 5"
       await more(card);
@@ -2076,10 +2088,12 @@ async function main() {
         const p = players[name];
         await p.reload();
         const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
-        await row.locator('.sched-status').getByText('Waiting on the court', { exact: true }).waitFor();
-        await row.getByRole('button', { name: 'Join standby' }).click();
-        await row.locator('.sched-status', { hasText: /^Standby, \d+(st|nd|rd|th) in line$/ }).waitFor();
-        assert((await row.getByLabel('Money for this session').count()) === 0, 'standby players owe nothing');
+        // With no court booked the game reads like a normal one: Court not booked, I'm in, You're in. Never waiting or standby words.
+        await row.locator('.sched-status').getByText('Court not booked', { exact: true }).waitFor();
+        await row.getByRole('button', { name: "I'm in" }).click();
+        await row.locator('.sched-status').getByText("You're in", { exact: true }).waitFor();
+        assert(!/waitlist|waiting|standby/i.test(await row.innerText()), `no waiting words on a game without a court: ${await row.innerText()}`);
+        assert((await row.getByLabel('Money for this session').count()) === 0, 'players owe nothing before a court is booked');
       }
       await players.Casey.screenshot({ path: path.join(SHOTS, 'player-standby.png'), fullPage: true });
 
