@@ -91,6 +91,29 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
   and the money moving happen together or not at all, so a request cut off
   halfway can't leave money half-moved, and tapping again finishes or
   changes nothing.
+- **An unconfirmed "I paid" is a claim, not money** (Alex, Oct 31). If the player
+  drops out (or is removed) or the game is canceled before the organizer
+  confirms it, nothing on that seat moves: no credit, and any credit on the
+  seat stays on it. Home shows "Ryan tapped I paid ($14), not confirmed.
+  Dropped out of Tue, Nov 3." with **Paid** (the money on the seat becomes
+  their credit) and **Didn't pay** (the claim is cleared; credit on the seat
+  goes back to them). Until then it counts as Held, never Collected. Their drop
+  banner says "Your $14 comes back as credit once Alex confirms your payment."
+  A rejoin finds the seat as it was. Confirmed payments turn into credit as
+  before.
+- **Unmark undoes only the latest payment** (Alex, Oct 31): cash paid on top of
+  credit goes, and the credit stays on the seat ("Credit $5", $9 due); a second
+  Unmark on "Credit $5" puts the credit back. Cash paid earlier toward the seat
+  (after a reopen and a redo) always stays.
+- The organizer's Mark paid and Unmark carry what the screen showed: if the
+  seat changed since (a second device, an old screen, a retried tap), the tap
+  is refused with "Ryan's payment just changed. Look again."
+- **Changing the $14 setting** (Alex, Oct 31: existing sign-ups keep the price
+  they signed at; only new sign-ups use the new price). NOT built yet: the site
+  does not store the price each seat signed at, so it needs one new additive
+  table, which waits for Alex's OK. Until then a change applies to every game
+  not yet finalized (paid seats keep what they paid). Don't change it before
+  that is built.
 - A pending cash out is never used by itself. When it would help pay a game
   just joined, a small question at the bottom asks "Use the $10 you asked to
   cash out for this game?" **Use it** puts it on the game and shrinks the
