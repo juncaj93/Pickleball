@@ -1,3 +1,4 @@
+import { isPaymentClaim } from '../../../shared/credit';
 // What the organizer's Home counts and lists. No React here, so tests can use it.
 import type { AdminDashboard, AdminSessionView, RefundRequestView } from '../../../shared/api';
 import { localParts } from '../../../shared/time';
@@ -5,6 +6,7 @@ import { localParts } from '../../../shared/time';
 export type TodoItem =
   | { kind: 'finalize' | 'latedrop'; session: AdminSessionView }
   | { kind: 'refund_request'; request: RefundRequestView }
+  | { kind: 'payment_claim'; claim: AdminDashboard['paymentClaims'][number] }
   | { kind: 'owed'; rows: OwedRow[] }
   | { kind: 'tonight'; rows: OwedRow[] };
 
@@ -12,6 +14,8 @@ export interface OwedRow {
   session: AdminSessionView;
   playerId: string;
   name: string;
+  /** The seat's money as shown (sent back with Mark paid, so a changed seat is refused). */
+  seen: string;
   cents: number;
 }
 
@@ -33,11 +37,17 @@ export const isPlayed = (s: AdminSessionView) => !s.state.flags.canceled && !!s.
 export function heldCents(d: AdminDashboard, playerId?: string): number {
   let total = 0;
   for (const s of d.sessions) {
-    if (s.state.flags.canceled) continue;
     for (const r of s.roster) {
       if (r.isOrganizer || (playerId && r.playerId !== playerId)) continue;
-      // Credit put on a seat that still owes the rest is held until it is paid, finalized or not (as on Money).
-      if (r.status === 'confirmed' && r.paymentStatus === 'unpaid') total += r.creditCents;
+      // An unconfirmed "I paid" on a seat that left, or in a canceled game: held until the organizer decides (as on Money).
+      if (isPaymentClaim(r, s.state.flags.canceled)) {
+        total += r.paymentAmountCents ?? 0;
+        continue;
+      }
+      if (s.state.flags.canceled) continue;
+      // Credit on a seat that still owes the rest is held until it is paid, finalized or not; cash paid earlier toward
+      // it is held until the game is finalized (then Money counts it as collected).
+      if (r.status === 'confirmed' && r.paymentStatus === 'unpaid') total += r.creditCents + (isPlayed(s) ? 0 : r.paidEarlierCents);
       else if (!isPlayed(s) && r.paymentStatus === 'paid' && !r.refundedAt) total += r.paymentAmountCents ?? 0;
     }
   }
@@ -54,6 +64,8 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
   const nowMs = Date.parse(d.now);
   const s = d.sessions;
   for (const r of d.refundRequests) items.push({ kind: 'refund_request', request: r });
+  // An unconfirmed I paid on a seat that left, or a canceled game: the organizer decides (paid: credit; not: cleared).
+  for (const c of d.paymentClaims ?? []) items.push({ kind: 'payment_claim', claim: c });
   for (const x of s) if (x.needsFinalize) items.push({ kind: 'finalize', session: x });
   // Late drops not yet looked at, while the session is still ahead.
   for (const x of s) if (upcoming(x) && lateDrops(x).length) items.push({ kind: 'latedrop', session: x });
@@ -72,7 +84,7 @@ export function buildTodo(d: AdminDashboard): TodoItem[] {
     if (x.state.flags.canceled || nowMs < Date.parse(x.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
     for (const r of x.roster) {
       if (!r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null && r.owesCents > 0) {
-        (isToday(x.startsAt) ? tonight : owed).push({ session: x, playerId: r.playerId, name: r.name, cents: r.owesCents });
+        (isToday(x.startsAt) ? tonight : owed).push({ session: x, playerId: r.playerId, name: r.name, cents: r.owesCents, seen: r.moneySeen });
       }
     }
   }

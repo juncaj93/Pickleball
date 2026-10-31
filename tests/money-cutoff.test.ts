@@ -261,7 +261,9 @@ describe('a money tap cut off halfway and retried ends exactly like a clean one'
         ctx.app.now = Date.parse(g.endsAt) + HOUR;
         expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true })).status).toBe(200);
         ctx.app.now += HOUR;
-        return { ctx, act: () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Devon, paid: false }) };
+        // The screen's view of the seat goes with the tap (and with its retry), as the app sends it.
+        const seen = (await dash(ctx)).sessions.find((x: any) => x.id === g.id).roster.find((r: any) => r.name === 'Devon').moneySeen;
+        return { ctx, act: () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Devon, paid: false, seen }) };
       },
     });
   });

@@ -117,6 +117,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
         statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: back, reason: 'finalized', playedCount: n, settle: false }));
         backs.push({ player: r.display_name, playerId: r.player_id, cents: back, reason: 'finalized' });
       }
+    } else if (paid > 0 && r.self_paid_at && r.status !== 'confirmed') {
+      // An unconfirmed "I paid" on a seat that left the game: a claim, not money. It waits for the organizer.
     } else if (paid > 0) {
       statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: paid, reason: 'not_played', settle: true }));
       backs.push({ player: r.display_name, playerId: r.player_id, cents: paid, reason: 'not_played' });

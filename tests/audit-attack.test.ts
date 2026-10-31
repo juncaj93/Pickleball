@@ -208,6 +208,13 @@ async function iPaid(w: World, name: string, sid: string, device = 0, shown?: nu
   return res;
 }
 
+/** "I paid", then the organizer confirms it (only a confirmed payment turns into credit on a drop or cancel). */
+async function iPaidConfirmed(w: World, name: string, sid: string) {
+  const res = await iPaid(w, name, sid);
+  if (res.status === 200) expect((await w.org.call('POST', `/api/admin/sessions/${sid}/payment`, { playerId: w.ids[name], paid: true })).status).toBe(200);
+  return res;
+}
+
 /** "Didn't pay?" right after their own I paid: the cash they said they sent did not go. */
 async function iDidNotPay(w: World, name: string, sid: string, lastShown: number) {
   const res = await (await phone(w, name)).call('POST', `/api/sessions/${sid}/paid`, { paid: false });
@@ -279,6 +286,8 @@ async function earnCredit(w: World, name: string, times = 1) {
     expect((await join(w, name, sid)).status).toBe(200);
     const owe = await shownOwe(w, name, sid);
     if (owe > 0) expect((await iPaid(w, name, sid, 0, owe)).status).toBe(200);
+    // Confirmed by the organizer: only a confirmed payment turns into credit (Alex, Oct 31; an unconfirmed I paid stays a claim).
+    if (owe > 0) expect((await w.org.call('POST', `/api/admin/sessions/${sid}/payment`, { playerId: w.ids[name], paid: true })).status).toBe(200);
   }
   for (const sid of w.bank.slice(0, times)) expect((await drop(w, name, sid)).status).toBe(200);
 }
@@ -342,10 +351,12 @@ async function books(w: World, label = '') {
     const backFin = seatSum(sp, (r) => r.kind === 'kept' && r.reason === 'finalized');
     const backNP = seatSum(sp, (r) => r.kind === 'kept' && r.reason === 'not_played');
     const unsettledPaid = sp.payment_status === 'paid' && !sp.refunded_at;
-    if (sp.s_status === 'canceled' || sp.status === 'withdrawn') {
+    // A claimed seat (unconfirmed I paid) is frozen as it was until the organizer answers (Alex, Oct 31).
+    if ((sp.s_status === 'canceled' || sp.status === 'withdrawn') && !(unsettledPaid && sp.self_paid_at)) {
       expect(usedNC, at(`credit left on ${who}`)).toBe(0);
       expect(held, at(`cash held on ${who}`)).toBe(0);
-      expect(unsettledPaid, at(`unsettled cash on ${who}`)).toBe(false);
+      // An unconfirmed I paid on a seat that left (or a canceled game) is a claim the organizer decides: allowed.
+      expect(unsettledPaid && !sp.self_paid_at, at(`unsettled cash on ${who}`)).toBe(false);
       expect(backFin, at(`finalized credit back on ${who}`)).toBe(0);
       continue;
     }
@@ -625,7 +636,7 @@ describe('double taps and two devices', () => {
         expect((await join(w, 'Devon', await on(w, NOV5))).status).toBe(200);
       }
       expect((await join(w, 'Devon', a)).status).toBe(200);
-      if (paidCash) expect((await iPaid(w, 'Devon', a)).status).toBe(200);
+      if (paidCash) expect((await iPaidConfirmed(w, 'Devon', a)).status).toBe(200);
       await books(w, 'before drops');
       const before = potOf(w, 'Devon');
       await Promise.all([drop(w, 'Devon', a), drop(w, 'Devon', a), drop(w, 'Devon', a, 1)]);
@@ -645,7 +656,7 @@ describe('double taps and two devices', () => {
         expect((await join(w, 'Emery', a)).status).toBe(200);
         await books(w, `start=${start} join #${i}`);
         if (i % 2 === 1 && (await shownOwe(w, 'Emery', a)) > 0) {
-          expect((await iPaid(w, 'Emery', a)).status).toBe(200);
+          expect((await iPaidConfirmed(w, 'Emery', a)).status).toBe(200);
           await books(w, `start=${start} paid #${i}`);
         }
         expect((await drop(w, 'Emery', a)).status).toBe(200);
@@ -946,7 +957,7 @@ describe('races: Cancel against joins and drops', () => {
 // regression suite and flips red the day a fix lands (then turn it.fails back into it).
 
 describe('confirmed failures', () => {
-  it.fails('BUG 1: cash held against a seat that then did not play is counted as Collected on the Money tab (and is also back in the pot)', async () => {
+  it('BUG 1: cash held against a seat that then did not play is counted as Collected on the Money tab (and is also back in the pot)', async () => {
     const w = await world();
     const sid = await on(w, OCT27);
     await givePot(w, 'Blair', 500);
@@ -1210,8 +1221,8 @@ describe('the clock', () => {
       await givePot(w, 'Blair', 1400);
       await givePot(w, 'Casey', 500);
       for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale']) expect((await join(w, n, sid)).status).toBe(200);
-      expect((await iPaid(w, 'Devon', sid)).status).toBe(200);
-      expect((await iPaid(w, 'Emery', sid)).status).toBe(200);
+      expect((await iPaidConfirmed(w, 'Devon', sid)).status).toBe(200);
+      expect((await iPaidConfirmed(w, 'Emery', sid)).status).toBe(200);
       const tries: [string, number][] = [
         ['Blair', deadline - 1],
         ['Casey', deadline],
@@ -1691,8 +1702,8 @@ describe('fewer than 4 when the game ended', () => {
       await givePot(w, 'Blair', 1400);
       await givePot(w, 'Casey', 500);
       for (const n of ['Blair', 'Casey', 'Devon']) expect((await join(w, n, sid)).status).toBe(200);
-      expect((await iPaid(w, 'Devon', sid)).status).toBe(200);
-      expect((await iPaid(w, 'Casey', sid)).status).toBe(200);
+      expect((await iPaidConfirmed(w, 'Devon', sid)).status).toBe(200);
+      expect((await iPaidConfirmed(w, 'Casey', sid)).status).toBe(200);
       atIso(w, AFTER_OCT27);
       const pots = ['Blair', 'Casey', 'Devon'].map((n) => potOf(w, n));
       if (choice === 'cancel') {

@@ -87,6 +87,7 @@ route('PUT', '/api/admin/sessions/:id/time', admin.reschedule);
 route('POST', '/api/admin/sessions/:id/decision', admin.decide);
 route('POST', '/api/admin/sessions/:id/roster', admin.editRoster);
 route('POST', '/api/admin/sessions/:id/payment', admin.setPayment);
+route('POST', '/api/admin/sessions/:id/claim', admin.answerClaim);
 route('POST', '/api/admin/sessions/:id/finalize', finalizeSession);
 route('POST', '/api/admin/sessions/:id/reopen', (ctx) => reopenFinalize(ctx));
 route('POST', '/api/admin/refund-requests/:id', resolveRefundRequest);

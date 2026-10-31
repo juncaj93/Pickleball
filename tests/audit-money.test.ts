@@ -1203,6 +1203,11 @@ describe('mark paid and unmark around finalize', () => {
     expect((await useCredit(alex, s.id)).data).toMatchObject({ paid: false, usedCents: 500 });
     expect((await pay(ctx, s.id, 'Alex')).status).toBe(200);
     expect((await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: false })).status).toBe(409);
+    // Unmark undoes only the latest payment (Alex, Oct 31): the $9 cash goes, the $5 credit stays on the seat...
+    expect((await pay(ctx, s.id, 'Alex', false)).status).toBe(200);
+    expect(row(await adminSession(ctx, s.id), 'Alex')).toMatchObject({ paymentStatus: 'unpaid', creditCents: 500, owesCents: 900 });
+    expect(await creditOf(ctx, 'Alex')).toBe(0);
+    // ...and Unmark on "Credit $5" returns the credit.
     expect((await pay(ctx, s.id, 'Alex', false)).status).toBe(200);
     expect(row(await adminSession(ctx, s.id), 'Alex')).toMatchObject({ paymentStatus: 'unpaid', creditCents: 0, owesCents: 1400 });
     expect(await creditOf(ctx, 'Alex')).toBe(500);

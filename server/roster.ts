@@ -25,7 +25,9 @@ const GUARD = `${CONFIRMED} < ?5`;
 
 /**
  * Getting a spot back keeps a payment already made, unless it was refunded:
- * then the money went back, so they owe again like anyone new.
+ * then the money went back, so they owe again like anyone new. (An
+ * unconfirmed "I paid" on a seat that left is a claim the drop did not touch,
+ * so it comes back exactly as it was.)
  */
 const KEEP_PAYMENT_UNLESS_REFUNDED = `payment_status = CASE WHEN payment_status = 'paid' AND refunded_at IS NULL THEN 'paid' ELSE 'unpaid' END,
   paid_at = CASE WHEN refunded_at IS NULL THEN paid_at ELSE NULL END,

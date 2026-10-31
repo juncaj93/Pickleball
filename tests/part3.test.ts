@@ -180,7 +180,12 @@ describe('credit after the game', () => {
       creditCents: 500,
     });
     expect(potOf(after, ctx.byName.Alex).balanceCents).toBe(0);
-    // Unmarking gives the credit back.
+    // Unmark undoes only the latest payment (Alex, Oct 31): the $9 cash goes, the $5 credit stays on the seat...
+    await ctx.organizer.call('POST', `/api/admin/sessions/${next.id}/payment`, { playerId: ctx.byName.Alex, paid: false });
+    after = await dash(ctx);
+    expect(after.sessions.find((v: any) => v.id === next.id).roster.find((r: any) => r.name === 'Alex')).toMatchObject({ paymentStatus: 'unpaid', creditCents: 500, owesCents: 900 });
+    expect(potOf(after, ctx.byName.Alex).balanceCents).toBe(0);
+    // ...and Unmark on "Credit $5" gives the credit back.
     await ctx.organizer.call('POST', `/api/admin/sessions/${next.id}/payment`, { playerId: ctx.byName.Alex, paid: false });
     after = await dash(ctx);
     expect(potOf(after, ctx.byName.Alex).balanceCents).toBe(500);

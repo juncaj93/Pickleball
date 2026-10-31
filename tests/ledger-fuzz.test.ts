@@ -855,8 +855,10 @@ function checkDb(w: World, out: Violation[]): Snapshot {
     // 6. A withdrawn or declined seat, or any seat in a canceled game, holds nothing.
     if (canceled || sp.status === 'withdrawn' || sp.status === 'declined') {
       const where = canceled ? 'canceled game' : sp.status;
-      if (x.usedAll > 0 && !settled) add('I6.credit-on-dead-seat', `${who} (${where}): ${x.usedAll} credit still used on it`);
-      if (live) add('I6.cash-on-dead-seat', `${who} (${where}): payment ${pay} still held (not settled)`);
+      // A claimed seat (unconfirmed I paid) is frozen as it was until the organizer answers (Alex, Oct 31).
+      if (x.usedAll > 0 && !settled && !(live && sp.self_paid_at)) add('I6.credit-on-dead-seat', `${who} (${where}): ${x.usedAll} credit still used on it`);
+      // An unconfirmed I paid stays as a claim for the organizer (Alex, Oct 31); anything else must be settled.
+      if (live && !sp.self_paid_at) add('I6.cash-on-dead-seat', `${who} (${where}): payment ${pay} still held (not settled)`);
       continue;
     }
     if (sp.status === 'waitlisted') {
@@ -924,7 +926,9 @@ async function checkScreens(w: World, snap: Snapshot, out: Violation[], full = t
     const others = s.roster.filter((r: any) => !r.isOrganizer);
     for (const r of others) dashSeat.set(`${s.id}:${r.playerId}`, r);
     if (s.status === 'canceled') continue;
-    const kept = others.reduce((sum: number, r: any) => sum + (r.paymentStatus === 'paid' && !r.refundedAt ? Math.max(0, r.paymentAmountCents - r.creditBackCents) : (r.paidEarlierCents ?? 0)), 0);
+    // An unconfirmed I paid on a seat that left is a claim (held, never kept or covering the court).
+    const claim = (r: any) => r.paymentStatus === 'paid' && !r.refundedAt && r.selfPaid && r.status !== 'confirmed';
+    const kept = others.reduce((sum: number, r: any) => sum + (claim(r) ? 0 : r.paymentStatus === 'paid' && !r.refundedAt ? Math.max(0, r.paymentAmountCents - r.creditBackCents) : (r.paidEarlierCents ?? 0)), 0);
     const unpaidOwes = others.reduce((sum: number, r: any) => sum + r.owesCents, 0);
     const creditOnUnpaid = others.reduce((sum: number, r: any) => sum + (r.status === 'confirmed' && r.paymentStatus === 'unpaid' ? r.creditCents : 0), 0);
     const row = rows.find((x: any) => x.id === s.id);
@@ -978,8 +982,6 @@ interface Failure {
 const KNOWN: { code: string; test: string; at?: Action['t'][]; match?: RegExp; line?: RegExp; priceChanged?: true }[] = [
   // The price changed under a payment tap that carries no amount (Reopen, Finalize, un-cancel at the same moment).
   { code: 'I2.books', at: ['price'], match: /created|lost/, line: / \|\| /, test: 'D. "I paid" or Mark paid at the same moment as Reopen or Finalize records the new price' },
-  // Shows at whichever step the screens are next compared.
-  { code: 'I5.players-held', test: 'H. Players tab Held leaves out cash held against an unpaid seat' },
   // Only with FUZZ_PRICE (the flat price changed in the sequence).
   ...(['I3.credit-above-price', 'I3.unpaid-but-covered', 'I3.seat-pieces-shown', 'I5.court-row', 'I3.credit-above-payment'] as const).map((code) => ({
     code,
@@ -1252,7 +1254,7 @@ describe('ledger fuzz: regression cases', () => {
   // Finalize holds her $11 against the seat (a 'cash' pair) and she owes $3; Reopen again. Money says $11 held
   // for that game (seatCredit cashCents, server/money.ts), the Players tab says $0 held: heldCents in
   // src/pages/admin/todo.ts adds only creditCents for an unpaid seat, not paidEarlierCents.
-  it.fails('H. Players tab Held leaves out cash held against an unpaid seat in a reopened game', async () => {
+  it('H. Players tab Held leaves out cash held against an unpaid seat in a reopened game', async () => {
     await expectClean([
       { t: 'join', p: 'Blair', g: 0 },
       { t: 'join', p: 'Devon', g: 0 },

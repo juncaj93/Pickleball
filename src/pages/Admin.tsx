@@ -12,7 +12,7 @@ import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
-import { FinalizeCard, RefundRequestCard } from './admin/HomeCards';
+import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { DoNowCard } from './admin/DoNow';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
@@ -252,10 +252,12 @@ function UpdatedLine({ at }: { at: number }) {
 function HomeTab({ ctx }: { ctx: AdminCtx }) {
   const items = buildTodo(ctx.d);
   // Order: refund requests, then "Do this now", then games to finalize, then the text cards, then the rest.
-  const refunds: TodoItem[] = items.filter((i) => i.kind === 'refund_request');
+  // Money that waits on the organizer's answer: cash-out requests and unconfirmed I paid on seats that left.
+  const refunds: TodoItem[] = items.filter((i) => i.kind === 'refund_request' || i.kind === 'payment_claim');
   const first: TodoItem[] = items.filter((i) => i.kind === 'finalize');
   const rest = items.filter((i) => !first.includes(i) && !refunds.includes(i));
-  const key = (item: TodoItem) => item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : '');
+  const key = (item: TodoItem) =>
+    item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');
   return (
     <>
       {refunds.length > 0 && (
@@ -332,7 +334,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 disabled={busy}
                 aria-label={`Mark ${r.name} paid for ${formatShortDate(r.session.startsAt, tz)}`}
                 onClick={() =>
-                  act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true }), `${r.name} marked paid`)
+                  act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true, seen: r.seen }), `${r.name} marked paid`)
                 }
               >
                 Mark paid
@@ -345,6 +347,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   }
 
   if (item.kind === 'refund_request') return <RefundRequestCard ctx={ctx} r={item.request} />;
+  if (item.kind === 'payment_claim') return <PaymentClaimCard ctx={ctx} c={item.claim} />;
   if (item.kind === 'finalize') return <FinalizeCard ctx={ctx} s={item.session} />;
 
   const s = item.session;

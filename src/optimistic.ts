@@ -37,6 +37,7 @@ function joined(s: PlayerSessionView, name: string, max: number): PlayerSessionV
       creditCents: 0,
       dropCreditCents: 0,
       dropCashCents: 0,
+      dropClaimCents: 0,
       paidEarlierCents: 0,
       paidWithCredit: false,
       useCreditCents: 0,

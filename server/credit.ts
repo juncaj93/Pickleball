@@ -132,6 +132,12 @@ const SEAT_CASH = (sp: string) =>
 /** SQL for the cash in the seat's payment beyond the credit and held cash on it (0 when not paid, or settled). */
 const SEAT_LEFTOVER = (sp: string) =>
   `MAX(0, (CASE WHEN ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL THEN COALESCE(${sp}.payment_amount_cents, 0) ELSE 0 END) - ${SEAT_USED(sp)} - ${SEAT_CASH(sp)})`;
+/**
+ * SQL: the seat carries an "I paid" the organizer never confirmed. Only confirmed payments turn into credit
+ * (Alex, Oct 31), so such a seat is a claim: on a drop or cancel nothing on it moves (not its cash, not the
+ * credit on it) until the organizer answers (admin.ts answerClaim). A rejoin finds it exactly as it was.
+ */
+const SEAT_CLAIMED = (sp: string) => `(${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL AND ${sp}.self_paid_at IS NOT NULL)`;
 /** A new random id made by SQLite itself (same shape as newId()), for rows inserted from a SELECT over several seats. */
 const SQL_ID = `lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2) || '-'
   || substr('89ab', (abs(random()) % 4) + 1, 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6)))`;
@@ -162,7 +168,9 @@ export function seatMoneyBackStatements(
     entryId?: string;
   },
 ): D1PreparedStatement[] {
-  const { groupId, sessionId, playerId, organizerId, reason, nowIso, when, entryId } = args;
+  const { groupId, sessionId, playerId, organizerId, reason, nowIso, entryId } = args;
+  // A claimed seat (unconfirmed I paid) is left as it is until the organizer answers.
+  const when = (sp: string) => `(${args.when(sp)}) AND NOT ${SEAT_CLAIMED(sp)}`;
   // ?1 now, ?2 reason, ?3 session, ?4 organizer ('' for none), ?5 player (NULL for every seat), ?6 group, ?7 entry id.
   const seat = (sp: string) => `${sp}.session_id = ?3 AND (?5 IS NULL OR ${sp}.player_id = ?5)`;
   // Never the organizer, and never a court-payment row (status 'declined' and paid: only the organizer has those).

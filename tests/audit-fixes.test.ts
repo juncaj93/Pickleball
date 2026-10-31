@@ -77,6 +77,8 @@ describe('audit fixes', () => {
     expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).status).toBe(409); // nothing left to tap
     expect(await credit()).toBe(0);
     await phones.Alex.call('POST', `/api/sessions/${next.id}/paid`, { paid: true }); // the other $9 in cash
+    // Confirmed by the organizer (since Oct 31 only a confirmed payment turns into credit on a drop).
+    await ctx.organizer.call('POST', `/api/admin/sessions/${next.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
     // I'm out: the $5 credit goes back and the $9 cash becomes credit too.
     expect((await phones.Alex.call('POST', `/api/sessions/${next.id}/withdraw`, {})).data.creditBackCents).toBe(900);
     expect(await credit()).toBe(1400);

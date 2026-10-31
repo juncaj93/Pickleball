@@ -61,6 +61,8 @@ export interface PlayerSessionView {
     /** What Drop out would give back right now: credit used on this seat (back to the pot) and cash paid toward it (becomes credit). */
     dropCreditCents: number;
     dropCashCents: number;
+    /** An unconfirmed "I paid" a drop would leave for the organizer to confirm (it becomes credit only then). */
+    dropClaimCents: number;
     creditCents: number;
     /** Cash they paid toward this session before its price went up (a redo with fewer players). */
     paidEarlierCents: number;
@@ -181,6 +183,8 @@ export interface AdminRosterEntry {
   /** Money from this seat that went back to them as credit, and why. */
   creditBackCents: number;
   creditBackReason: CreditReason | null;
+  /** The seat's money as this screen shows it (shared/credit.ts moneySeen): sent back with Mark paid / Unmark. */
+  moneySeen: string;
   /** Set once the game is finalized: did they play. */
   played: boolean | null;
   /**
@@ -358,6 +362,8 @@ export interface AdminDashboard {
   creditLedger: { playerId: string; balanceCents: number; reservedCents: number; refundCents: number; entries: CreditEntryView[] }[];
   /** Refund requests waiting on the organizer, oldest first. */
   refundRequests: RefundRequestView[];
+  /** Unconfirmed "I paid" on a seat that left or a canceled game: the organizer decides (shared/credit.ts isPaymentClaim). */
+  paymentClaims: { sessionId: string; startsAt: string; playerId: string; name: string; cents: number; why: 'dropped' | 'canceled' }[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
   /** "Do this now" taps saved on the server, as "sessionId:mark". */

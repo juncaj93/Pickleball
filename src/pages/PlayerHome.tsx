@@ -1255,7 +1255,7 @@ export function ScheduleRow({
       },
     });
     // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
-    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, undefined, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);

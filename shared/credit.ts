@@ -253,7 +253,9 @@ export const reopenRequestedReason = (names: string[]) =>
  * paid becomes credit (or part of each), plain "You dropped out." when
  * nothing was paid. `creditCents` and `cashCents` are what the seat holds now.
  */
-export function droppedText(creditCents: number, cashCents: number, lead = 'You dropped out.'): string {
+export function droppedText(creditCents: number, cashCents: number, lead = 'You dropped out.', claimCents = 0, organizerName: string | null = null): string {
+  // An "I paid" the organizer has not confirmed: it becomes credit once they do.
+  if (claimCents > 0) return `${lead} Your ${formatPrice(claimCents)} comes back as credit once ${organizerName ?? 'the organizer'} confirms your payment.`;
   const total = creditCents + cashCents;
   if (total <= 0) return lead;
   return cashCents > 0 ? `${lead} ${formatPrice(total)} back as credit.` : `${lead} ${formatPrice(total)} credit returned.`;
@@ -324,4 +326,29 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     .sort((a, b) => b.at.localeCompare(a.at) || b.order - a.order)
     .slice(0, limit)
     .map(({ key, at, text }) => ({ key, at, text }));
+}
+
+/**
+ * An unconfirmed "I paid" on a seat that left the game (dropped, removed) or
+ * a game that was canceled: a claim, not money. It never turns into credit by
+ * itself; the organizer confirms it (then it becomes credit) or clears it
+ * (Alex, Oct 31). Counted as held until then, never as collected.
+ */
+export function isPaymentClaim(seat: { status: string; paymentStatus: string; selfPaid: boolean; refundedAt: string | null; isOrganizer?: boolean }, canceled: boolean): boolean {
+  return !seat.isOrganizer && seat.paymentStatus === 'paid' && !seat.refundedAt && seat.selfPaid && (seat.status !== 'confirmed' || canceled);
+}
+
+/** The organizer's note for a claim: "Ryan tapped I paid ($14), not confirmed. Dropped out of Tue, Nov 3." */
+export function paymentClaimText(name: string, cents: number, why: 'dropped' | 'canceled', startsAt: string, tz: string): string {
+  const day = formatShortDate(startsAt, tz);
+  return `${name} tapped I paid (${formatPrice(cents)}), not confirmed. ${why === 'canceled' ? `${day} was canceled.` : `Dropped out of ${day}.`}`;
+}
+
+/**
+ * A short summary of a seat's money as a screen shows it. The organizer's Mark paid and Unmark send it back,
+ * and the server refuses the tap when the seat changed since (a stale screen, a second device, a retry of a
+ * tap that already went in), so a tap never acts on money the organizer did not see.
+ */
+export function moneySeen(seat: { paymentStatus: string; paymentAmountCents: number | null; refunded: boolean; selfPaid: boolean; creditCents: number; cashCents: number }): string {
+  return [seat.paymentStatus, seat.paymentAmountCents ?? '', seat.refunded ? 'settled' : '', seat.selfPaid ? 'self' : '', seat.creditCents, seat.cashCents].join('|');
 }

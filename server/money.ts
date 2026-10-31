@@ -14,7 +14,7 @@ import { localParts, zonedTimeToUtc } from '../shared/time';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { HttpError } from './http';
-import { keptRemaining, seatCredit } from '../shared/credit';
+import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 
@@ -83,13 +83,19 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
       s.status === 'canceled' ? 'canceled' : !over ? 'upcoming' : s.finalized_at ? 'played' : s.booking_status === 'booked' || confirmed > 0 ? 'not_finalized' : 'not_played';
     // What other players paid and have not been given back as credit (settled seats gave it all back), plus cash
     // paid earlier toward a seat whose price went up.
+    // An unconfirmed "I paid" on a seat that left (or a canceled game) is a claim: held until the organizer decides.
+    const claim = (r: (typeof roster)[number]) =>
+      isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at }, s.status === 'canceled');
+    const claims = roster.filter((r) => r.player_id !== organizerId && claim(r)).reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
     const kept = roster
-      .filter((r) => r.player_id !== organizerId)
+      .filter((r) => r.player_id !== organizerId && !claim(r))
       .reduce((sum, r) => {
         const seat = seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
         if (r.payment_status === 'paid' && !r.refunded_at) return sum + Math.max(0, (r.payment_amount_cents ?? 0) - seat.backCents);
-        return sum + seat.cashCents;
+        // Cash held against a seat counts while the seat holds it; a settled seat gave it back as credit already.
+        return sum + (r.refunded_at ? 0 : seat.cashCents);
       }, 0);
+    held += claims;
     const cost = courtCostOf(s, settings);
     const charged = state === 'canceled' ? (charges.get(s.id) ?? 0) : 0;
     creditsOwed += owedBySession.get(s.id) ?? 0;
