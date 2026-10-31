@@ -10,6 +10,7 @@ vi.hoisted(() => {
 });
 
 import { creditChanges, droppedText, joinedCreditText } from '../shared/credit';
+import { cashOutUsedMessage, refundRequestMessage } from '../shared/alerts';
 import type { CreditEntryView } from '../shared/api';
 import { joinedText } from '../src/pages/PlayerHome';
 import { playerPhone, setupGroup, TestApp } from './harness';
@@ -113,6 +114,14 @@ describe('the words', () => {
       expect(texts).toContain(want);
     expect(creditChanges(more, TZ, 'Alex')).toHaveLength(10);
     expect(texts.join(' ')).not.toMatch(/—/);
+  });
+});
+
+describe('Telegram money lines', () => {
+  it('carry only a first name and an amount', () => {
+    expect(refundRequestMessage('Ryan S.', 1400)).toBe('Refund requested: Ryan wants $14 back.');
+    expect(refundRequestMessage('Mitchel', 500)).toBe('Refund requested: Mitchel wants $5 back.');
+    expect(cashOutUsedMessage('Ryan S.', 1000, 1000, '2026-11-06T01:00:00.000Z', TZ)).toBe('Ryan withdrew the $10 cash out request (using it for Thu Nov 5)');
   });
 });
 
