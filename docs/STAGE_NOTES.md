@@ -613,3 +613,71 @@ game (kind `used` with the game's id).
   deployment `6721fb3d` (commit 6d35cb0). The deploy changed no data, so rolling the code
   back is enough.
 - Tests: 828 unit (52 files), 938 browser checks in 23 files, all green.
+
+## Money audit: correct in every case, and visible (Sat Oct 31, 2026)
+
+Spec: AUDIT_SPEC.md and START_HERE.md from Alex. No money rule changed, no
+database change, no migration.
+
+### What was wrong and is fixed (server; each has a test that fails on the old code)
+- **Half-moved money.** Drop out, Remove player, cancel, "Didn't open", un-cancel,
+  Finalize, Reopen and Unmark each saved in several steps. A request cut off between
+  them (the free plan's time limit, lost signal) could leave a player out with their
+  credit still on the game, a canceled game still holding credit, or a half-finalized
+  game, and a retry did not fix it. Each is now ONE batch with every amount worked out
+  inside the database (`seatMoneyBackStatements`, `returnSeatCreditStatements`,
+  `repriceStatements`, `creditBackStatements`, `holdCashStatements` in server/credit.ts);
+  a retry finishes or changes nothing. Finalize also refuses if any seat or credit
+  changed since it looked (`MONEY_STATE` in server/finalize.ts).
+- Mark paid / I paid could land on a player who had just dropped out (paid, out).
+- Undo of "Paid with credit" after Finalize gave back all the credit while the money
+  back from it stayed ($3 made). Refused once finalized.
+- Reopen unpaid a seat paid part credit, part cash and dropped the cash ($4 lost). The
+  cash is held against the seat, as Finalize does.
+- A refused Unmark (credit from the game already spent) still shrank the payment ($7 lost).
+- Finalize after the flat price went up held a seat's credit as cash too ($5 made).
+- I paid / Mark paid / Use credit landing just after a Finalize or Reopen (even a redo
+  at the same price) used the new price, or spent credit on a did-not-play seat. They
+  now check the exact finalize they read. I paid also sends the amount the screen showed.
+- A Reopen from a second device wiped a newer Finalize's credit back ($15 lost).
+- Unmark of "Credit $3" racing Finalize gave the $3 back twice.
+- Renaming the organizer in Settings could turn their court payment into a player's
+  credit on cancel; the organizer's id is saved before a rename, and a court-payment
+  row never becomes credit.
+- "I booked it" (or a booking edit) just after a cancel brought the canceled game back.
+- Price set to $0: anyone with credit got an error on I'm in.
+- The cash-out request Telegram line used the full saved name; now the first name.
+- A double-tapped Cancel answers "nothing changed" instead of an error.
+
+### Players see what happens to their money (player screens; preview, waits for "ship it")
+- Drop out: "You dropped out. $14 credit returned." ("$14 back as credit." for cash,
+  just "You dropped out." when nothing was paid), with Undo.
+- I'm in: "You're in. $14 credit used." / "You're in. $3 credit used, $11 due."
+  (no amount due before Court booked; same after "Game on!").
+- The CREDIT chip's sheet lists the last 10 changes in plain words, newest first,
+  returns included ("Oct 31: $14 returned from Nov 5 (you dropped)"). Kept the
+  existing chip instead of adding a second "Credit $14" line under the name (the
+  chip already shows only when there is credit or a pending cash out).
+- New card fields `dropCreditCents` / `dropCashCents`; the player's own credit history
+  now includes ended entries (their own only).
+
+### Not fixed (and why)
+- Organizer screens wait for the admin cleanup (not merged): Players-tab Held leaves
+  out cash held against an unpaid seat (`heldCents`); Money tab counts a held cash pair
+  on a settled did-not-play seat as Collected; Mark paid and Unmark don't send the
+  amount the screen showed (a stale organizer screen); the Players-tab Undo of a
+  refund should send the refund id (server accepts `ledgerId` now).
+- Decisions for Alex: an unconfirmed "I paid" becomes credit on drop or cancel and
+  Unmark can't take it back; Unmark ends cash held against a seat; seats are not
+  repriced when the flat price setting changes.
+
+### Tests
+- `tests/money-cutoff.test.ts`: every money action cut off at every write and retried
+  ends like a clean run; exact races.
+- `tests/ledger-fuzz.test.ts`: random sequences of every money action (double taps,
+  two at once, clock moves) with the books checked after every step. Default 360
+  sequences (~9,800 steps, ~50 s); `FUZZ_SEQS` / `FUZZ_PAR_SEQS` for long runs (6,000
+  run clean).
+- `tests/audit-attack.test.ts`: the independent attack suite (exact interleavings,
+  cut-offs on 21 actions, random sequences with full books).
+- `tests/audit-oct31.test.ts`, `tests/money-visible.test.ts`, `e2e/money-visible.cjs`.
