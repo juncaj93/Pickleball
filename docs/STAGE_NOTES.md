@@ -721,3 +721,22 @@ database change, no migration.
   `00000218-00000004-00005115-0636e0716ea7288a3b03715050d8c00f` (10:22 AM Eastern);
   SQL export `live-before-money-audit-preview-2026-10-31.sql` (185 rows, has phone
   numbers, not committed) in this session's scratch folder.
+
+### Round 3 (Sat Oct 31, 2026, evening)
+- Drop out shows the money at once: the drop stays held on the phone for Undo (5 s), and
+  the screen draws in its credit with the banner (src/optimistic.ts). Kept the client
+  hold instead of a server-side drop + reversal: a real reversal would have to undo a
+  waitlist promotion and Telegram drop alerts made in those 5 seconds. Safe because
+  nothing is saved until the send, the send is idempotent (a seat can only leave once),
+  and a note on the phone finishes a drop the page could not send (closed, no signal),
+  up to 2 minutes. Two gaps there were fixed (a failed send while leaving lost the note;
+  a too-young note was ignored for the whole visit). tests/held-drop-fuzz.test.ts.
+- Live Mitchel (read-only, 6:00 PM): Thu Nov 5 is on the venue's court Waitlist, so his
+  I'm in is standby (owes nothing; the credit waits for Court opened, by rule). Pot $14 =
+  history. Nothing inconsistent; no fix needed. The card now says "Your $14 credit goes
+  on this game once the court is booked."; a player in and owing on a no-court game with
+  credit now sees "Use $14 credit" (Pay still waits for Court booked).
+- Third fresh audit: 7 findings, all fixed (tests/audit-r3.test.ts).
+- Price-at-sign-up plan: docs/PRICE_SNAPSHOT.md (after Tue Nov 3). $14 setting frozen.
+- Preview redeployed 6:55 PM (same link), commit bc2d4c5. Bookmark right before:
+  `00000280-00000000-00005115-946ddeaca1c4ff680436a4e361d1811e`.
