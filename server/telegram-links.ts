@@ -5,6 +5,10 @@
 // the address become the link: the phrase after the last ". ", "? ", "! ",
 // ": " or line break. Only the ": " and the address leave the visible text;
 // every other word stays the same. Text with no address is sent as is.
+// Addresses `plain` picks (the organizer's /admin page, which the Open site
+// button already opens) are dropped and their words left as plain text, so
+// a message links only where a tap does the job: the direct text, or
+// CourtReserve.
 
 export interface TextLink {
   type: 'text_link';
@@ -14,10 +18,19 @@ export interface TextLink {
   url: string;
 }
 
+/** The organizer's page: the Open site button under every message already goes there. */
+export function isAdminPage(url: string): boolean {
+  try {
+    return new URL(url).pathname.replace(/\/$/, '') === '/admin';
+  } catch {
+    return false;
+  }
+}
+
 const LINKED = /: (https?:\/\/[^\s"]+)/g;
 const BOUNDARY = /(?:[.?!:] |\n)/g;
 
-export function linkText(text: string): { text: string; entities: TextLink[] } {
+export function linkText(text: string, plain: (url: string) => boolean = () => false): { text: string; entities: TextLink[] } {
   const entities: TextLink[] = [];
   let out = '';
   let from = 0;
@@ -29,9 +42,9 @@ export function linkText(text: string): { text: string; entities: TextLink[] } {
     for (const b of before.matchAll(BOUNDARY)) phraseStart = b.index + b[0].length;
     if (phraseStart >= before.length) continue; // no words to link: leave the address as it is
     out += before;
-    entities.push({ type: 'text_link', offset: out.length - (before.length - phraseStart), length: before.length - phraseStart, url: m[1] });
     from = at + m[0].length;
+    if (plain(m[1])) continue;
+    entities.push({ type: 'text_link', offset: out.length - (before.length - phraseStart), length: before.length - phraseStart, url: m[1] });
   }
-  if (entities.length === 0) return { text, entities };
   return { text: out + text.slice(from), entities };
 }
