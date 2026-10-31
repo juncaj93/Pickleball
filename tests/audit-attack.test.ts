@@ -351,7 +351,9 @@ async function books(w: World, label = '') {
     }
     if (sp.status !== 'confirmed') {
       // Waitlisted: a paid seat stays paid (documented); an unpaid one carries no credit.
-      if (!unsettledPaid) expect(usedNC + held, at(`credit on unpaid ${who}`)).toBe(0);
+      // (A paid waitlist seat when the game is finalized comes back in full as 'not_played' and is settled; the
+      // credit row stays live, matched by the money back, like a confirmed seat that did not play.)
+      if (!unsettledPaid && !(sp.refunded_at && backNP >= usedNC + held)) expect(usedNC + held, at(`credit on unpaid ${who}`)).toBe(0);
       continue;
     }
     const price = !sp.finalized_at ? FLAT : sp.played === 1 ? sp.final_price_cents : null;
