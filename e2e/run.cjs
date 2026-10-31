@@ -3417,7 +3417,15 @@ async function main() {
       await showAll(admin);
       const card = sessionCards(admin).filter({ has: admin.locator('h2', { hasText: label }) }).first();
       await card.locator('.extra-tag', { hasText: 'Extra game' }).waitFor();
-      await card.getByText('10:00 AM to 12:00 PM').waitFor();
+      // The card shows only the start under the date tile; the end (12:00 PM) is kept and shows in Edit game.
+      await card.locator('[data-card-time]', { hasText: /^10 AM$/ }).waitFor();
+      assert(!/12:00 PM|12 PM/.test(await card.locator('.scard-tilecol').innerText()), 'the card should not print the end time');
+      await more(card);
+      await card.getByRole('menuitem', { name: 'Edit game' }).click();
+      const editSheet = admin.locator('dialog[open]');
+      assert((await editSheet.getByLabel('Start', { exact: true }).inputValue()) === '10:00' && (await editSheet.getByLabel('End', { exact: true }).inputValue()) === '12:00', 'the stored times should be 10:00 AM to 12:00 PM');
+      await editSheet.getByRole('button', { name: 'Close' }).click();
+      await editSheet.waitFor({ state: 'detached' });
       await card.getByText('Court 3').waitFor();
       assert((await card.getAttribute('data-court')) === 'later', 'three weeks out: booking not open yet');
       const opens = new Date(Date.parse(`${iso}T12:00:00Z`) - 14 * 24 * 3600_000).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });

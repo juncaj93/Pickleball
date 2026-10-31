@@ -214,7 +214,7 @@ async function main() {
   await setClock('2026-11-02 20:00');
   for (const t of themes()) {
     const { ctx, page } = await open('organizer', t.width, t.scheme);
-    const db = page.locator('main article.card[aria-label]:not([aria-label^="Last call"])').filter({ has: page.getByRole('button', { name: 'Done', exact: true }) }).first();
+    const db = page.locator('.do-now article.dn-card').first();
     await db.waitFor();
     await snap(db, 'organizer', '01-day-before-missing-number', 'Day-before card (24 hours before), with "Missing numbers" for Nathan', t);
     await ctx.close();
@@ -224,7 +224,7 @@ async function main() {
   await setClock('2026-11-03 07:00');
   for (const t of themes()) {
     const { ctx, page } = await open('organizer', t.width, t.scheme);
-    const lc = page.locator('article[aria-label^="Last call"]').first();
+    const lc = page.locator('.do-now article.dn-card').first();
     await lc.waitFor();
     await snap(lc, 'organizer', '02-last-call', 'Last-call card (13 hours before)', t);
     await page.evaluate(() => window.scrollTo(0, 0));
@@ -237,7 +237,7 @@ async function main() {
   await call(await phone('Mitchel'), 'POST', `/api/sessions/${C.id}/withdraw`, {});
   await call(await phone('Julian'), 'POST', `/api/sessions/${E.id}/withdraw`, {}); // E: 6 down to 5
   await call(api.request, 'POST', `/api/admin/sessions/${B.id}/decision`, { decision: 'cancel', confirm: true });
-  await call(api.request, 'POST', `/api/admin/sessions/${B.id}/refund`, { playerId: id.Mitchel, refunded: true });
+  // (The old per-game refund call is gone: a canceled game's money now stays as credit, so there is nothing to mark.)
 
   for (const t of themes([390, 360])) {
     const busy = t.width === 360;
@@ -265,19 +265,19 @@ async function main() {
       if (await later.count()) await snap(later, 'organizer', '13-card-booking-opens', 'Further out: "Booking opens [date]" in quiet gray', t);
       // Gear panel and its Text choices.
       const c = card(page, C);
-      await c.getByRole('button', { name: /^Session options/ }).click();
-      await c.locator('.options').waitFor();
-      await snap(c, 'organizer', '14-gear-panel', 'Gear panel on a booked game', t);
-      await c.getByRole('button', { name: 'Text', exact: true }).click();
+      await c.getByRole('button', { name: /^Game menu for/ }).click();
+      await c.getByRole('menu').waitFor();
+      await snap(c, 'organizer', '14-gear-panel', 'Gear pop-up on a booked game', t);
+      await c.getByRole('menuitem', { name: 'Text the group', exact: true }).click();
       await page.waitForTimeout(200);
       await snap(c, 'organizer', '15-text-menu', 'Text: the message choices (Day before shows "Missing numbers")', t);
       await page.keyboard.press('Escape');
       await page.goto(`${BASE}/admin`);
       await card(page, C).waitFor();
-      await card(page, C).getByRole('button', { name: /^Session options/ }).click();
-      await card(page, C).locator('.options').getByRole('button', { name: 'Edit booking' }).click();
+      await card(page, C).getByRole('button', { name: /^Game menu for/ }).click();
+      await card(page, C).getByRole('menuitem', { name: 'Edit game', exact: true }).click();
       await page.locator('dialog[open]').waitFor();
-      await snap(page, 'organizer', '16-edit-booking', 'Edit booking sheet', t);
+      await snap(page, 'organizer', '16-edit-game', 'Edit game sheet', t);
       await page.keyboard.press('Escape');
       await page.getByRole('button', { name: '+ Add game' }).click();
       await page.locator('dialog[open]').waitFor();
@@ -392,7 +392,7 @@ async function main() {
   await setClock('2026-11-09 20:00');
   for (const t of themes()) {
     const { ctx, page } = await open('organizer', t.width, t.scheme);
-    const db = page.locator('main article.card[aria-label]:not([aria-label^="Last call"])').filter({ has: page.getByRole('button', { name: 'Done', exact: true }) }).first();
+    const db = page.locator('.do-now article.dn-card').first();
     await db.waitFor();
     await snap(db, 'organizer', '24-day-before-all-numbers', 'Day-before card when 5 are in: "need more players" leads; everyone who is in has a number', t);
     await ctx.close();
