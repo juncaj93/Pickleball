@@ -600,7 +600,8 @@ export async function applyPayment(
     if (row.payment_status !== 'paid') {
       // "Credit $3" on a seat that still owes: the organizer's Unmark puts that credit back in the player's pot.
       if (self || row.status !== 'confirmed') return { ok: true, changed: false };
-      const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true });
+      // Only while the game is the one this tap read (a Finalize at the same moment may have paid the seat with it).
+      const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true, finalizedAsRead: session.finalized_at ?? null });
       if (back <= 0) return { ok: true, changed: false };
       await audit(ctx.db, group.id, session.id, 'marked_unpaid', { player: row.display_name, creditReturnedCents: back }, ctx.nowIso, actor ?? 'organizer');
       return { ok: true, changed: true };
@@ -650,6 +651,11 @@ export async function applyPayment(
 async function applyCourtPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean) {
   if (paid && session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   const amountCents = courtCostOf(session, settingsOf(group));
+  // The organizer is found by name until their id is saved. A court payment ties money to that person, so their
+  // id is saved now: a later rename can never turn this row into a player's.
+  if (paid && !group.organizer_player_id) {
+    await ctx.db.prepare('UPDATE groups SET organizer_player_id = ? WHERE id = ? AND organizer_player_id IS NULL').bind(playerId, group.id).run();
+  }
   const changed = await setCourtPaid(ctx.db, session, playerId, paid, amountCents, ctx.nowIso);
   if (changed) await audit(ctx.db, group.id, session.id, paid ? 'court_paid' : 'court_unpaid', paid ? { amountCents } : {}, ctx.nowIso);
   return { ok: true, changed };
@@ -809,12 +815,6 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   const name = body.name === undefined ? group.name : v.text(body.name, 'name', { max: 60 });
   const venmoUrl = body.venmoUrl === undefined ? group.venmo_url : v.optionalUrl(body.venmoUrl, 'venmoUrl');
   const organizerName = body.organizerName === undefined ? group.organizer_name : v.optionalText(body.organizerName, 'organizerName', 40);
-  // The organizer is found by name until their id is saved. Save it before a rename, so their own row (the court
-  // payment) is never taken for a player's.
-  if (!group.organizer_player_id && organizerName !== group.organizer_name) {
-    const current = await organizerIdOf(ctx.db, group);
-    if (current) await ctx.db.prepare('UPDATE groups SET organizer_player_id = ? WHERE id = ? AND organizer_player_id IS NULL').bind(current, group.id).run();
-  }
   const venueName = body.venueName === undefined ? group.venue_name : v.optionalText(body.venueName, 'venueName', 80);
   const venueAddress = body.venueAddress === undefined ? group.venue_address : v.optionalText(body.venueAddress, 'venueAddress', 160);
   const firstSessionDate = body.firstSessionDate === undefined ? group.first_session_date : v.optionalDate(body.firstSessionDate, 'firstSessionDate');

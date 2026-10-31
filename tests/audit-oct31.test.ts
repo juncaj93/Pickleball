@@ -156,4 +156,35 @@ describe('fresh code audit, Oct 31', () => {
     expect((raw(ctx).prepare('SELECT status FROM sessions WHERE id = ?').get(g.id) as any).status).toBe('canceled');
     expect(seat(ctx, g.id, 'Blair').status).toBe('confirmed');
   });
+
+  it('a mistyped organizer name corrected in Settings leaves that player a normal player (second pass)', async () => {
+    const ctx = await group('Casey'); // a mistake: matches the player Casey
+    expect((await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Robin' })).status).toBe(200);
+    const g = await on(ctx, '2026-11-03');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    const casey = await playerPhone(ctx, 'Casey');
+    await casey.call('POST', `/api/sessions/${g.id}/join`, {});
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Casey, paid: true })).status).toBe(200);
+    expect(seat(ctx, g.id, 'Casey').payment_amount_cents).toBe(1400); // a player's $14, not a court payment
+    expect((await casey.call('POST', `/api/sessions/${g.id}/withdraw`, {})).data).toMatchObject({ creditBackCents: 1400 });
+    expect(potOf(ctx, 'Casey')).toBe(1400);
+  });
+
+  it('Unmark of part credit racing Finalize on a seat that played makes no credit (second pass)', async () => {
+    const ctx = await group();
+    const old = await on(ctx, '2026-10-29');
+    const g = await on(ctx, '2026-11-03');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    givePot(ctx, 'Blair', 1000, old.id);
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {});
+    ctx.app.now = Date.parse(g.endsAt) + HOUR;
+    const pause = pauseOn(ctx, /UPDATE credit_ledger SET ended_at = \?1, ended_reason = \?2/, () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true }));
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: false });
+    pause.restore();
+    expect(pause.fired()).toBe(true);
+    // 5 played at $11: the $10 credit stays on the seat, Blair owes $1, nothing made.
+    expect(potOf(ctx, 'Blair')).toBe(0);
+    const mine = (await (await playerPhone(ctx, 'Blair')).call('GET', '/api/group')).data.owed.find((o: any) => o.sessionId === g.id);
+    expect(mine?.amountCents).toBe(100);
+  });
 });

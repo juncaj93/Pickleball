@@ -106,6 +106,12 @@ const RESERVED = (player: string) => `(SELECT COALESCE(SUM(amount_cents), 0) FRO
 /** SQL for what a player can spend or ask back right now: the pot minus a pending request. */
 export const USABLE = (player: string) => `(${POT(player)} - ${RESERVED(player)})`;
 
+/** A time or id this server made, put straight into SQL text; refused if it could break out of quotes. */
+function sqlText(value: string): string {
+  if (!/^[0-9A-Za-z:.\-]*$/.test(value)) throw new Error('unsafe sql text');
+  return `'${value}'`;
+}
+
 // ---------- Money coming back from a seat ----------
 //
 // Every amount below is worked out INSIDE the database, from the rows as they
@@ -234,10 +240,12 @@ export function returnSeatCreditStatements(
   nowIso: string,
   reason: 'unmarked' | 'undone',
   /** `notFinalized`: only while the game is not finalized (checked in the same statements, so a Finalize at the same moment wins cleanly). */
-  opts: { creditOnly?: boolean; notFinalized?: boolean } = {},
+  /** `finalizedAsRead`: only while the game's finalize is the one read (null: not finalized). */
+  opts: { creditOnly?: boolean; notFinalized?: boolean; finalizedAsRead?: string | null } = {},
 ): D1PreparedStatement[] {
   const withCash = reason === 'unmarked' && !opts.creditOnly;
-  const open = opts.notFinalized ? ' AND (SELECT finalized_at FROM sessions WHERE id = ?3) IS NULL' : '';
+  const asRead = opts.finalizedAsRead !== undefined ? ` AND COALESCE((SELECT finalized_at FROM sessions WHERE id = ?3), '') = ${sqlText(opts.finalizedAsRead ?? '')}` : '';
+  const open = (opts.notFinalized ? ' AND (SELECT finalized_at FROM sessions WHERE id = ?3) IS NULL' : '') + asRead;
   const taken = withCash ? `(${SEAT_USED('session_players')} + ${SEAT_CASH('session_players')})` : SEAT_USED('session_players');
   const gone = `COALESCE(payment_amount_cents, 0) - ${taken} <= 0`;
   return [
@@ -283,7 +291,7 @@ export async function returnSeatCredit(
   playerId: string,
   nowIso: string,
   reason: 'unmarked' | 'undone',
-  opts: { creditOnly?: boolean; notFinalized?: boolean } = {},
+  opts: { creditOnly?: boolean; notFinalized?: boolean; finalizedAsRead?: string | null } = {},
 ): Promise<number> {
   const before = await creditReturnedAt(db, sessionId, playerId, reason, nowIso);
   await db.batch(returnSeatCreditStatements(db, sessionId, playerId, nowIso, reason, opts));
