@@ -51,6 +51,7 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
     // The payment is the whole price (cash plus credit), so credit used for a game is collected in the month it is played.
     payInFull: full ? { paidCents: price.cents } : null,
     finalPriceCents: session.final_price_cents ?? null,
+    finalizedAt: session.finalized_at ?? null,
     nowIso: ctx.nowIso,
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again and tap Use credit.');

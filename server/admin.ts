@@ -575,11 +575,12 @@ export async function applyPayment(
         `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = ?3,
            payment_updated_at = ?1, updated_at = ?1
          WHERE session_id = ?4 AND player_id = ?5 AND status = 'confirmed' AND payment_status = 'unpaid'
-           AND (SELECT COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?4) = ?7
+           AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?4) = ?7
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?4 AND player_id = ?5 AND ended_at IS NULL) = ?6
            AND (SELECT status FROM sessions WHERE id = ?4) <> 'canceled'`,
       )
-      .bind(ctx.nowIso, price, self ? ctx.nowIso : null, session.id, playerId, used, session.final_price_cents ?? -1)
+      // The finalize as read (when and at what price): a Reopen or a redo since, even at the same price, means look again.
+      .bind(ctx.nowIso, price, self ? ctx.nowIso : null, session.id, playerId, used, `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`)
       .run();
     if (res.meta.changes !== 1) {
       const now = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);

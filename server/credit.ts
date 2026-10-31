@@ -427,12 +427,13 @@ export async function spendCredit(
     alreadyUsed: number;
     /** Set when this use pays the seat in full: the seat's payment. */
     payInFull: { paidCents: number } | null;
-    /** The game's final price as read (null: not finalized); a Finalize or Reopen since means look again. */
+    /** The game's finalize as read (null: not finalized); a Finalize, Reopen or redo since means look again. */
     finalPriceCents: number | null;
+    finalizedAt: string | null;
     nowIso: string;
   },
 ): Promise<boolean> {
-  const { groupId, sessionId, playerId, cents, alreadyUsed, payInFull, finalPriceCents, nowIso } = args;
+  const { groupId, sessionId, playerId, cents, alreadyUsed, payInFull, finalPriceCents, finalizedAt, nowIso } = args;
   const entry = newId();
   const there = 'EXISTS (SELECT 1 FROM credit_ledger WHERE id = ?1 AND ended_at IS NULL)';
   const out = await db.batch([
@@ -444,9 +445,9 @@ export async function spendCredit(
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?5 AND player_id = ?3 AND ended_at IS NULL) = ?7
            AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'unpaid')
            AND (SELECT status FROM sessions WHERE id = ?5) <> 'canceled'
-           AND (SELECT COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?5) = ?8`,
+           AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?5) = ?8`,
       )
-      .bind(entry, groupId, playerId, cents, sessionId, nowIso, alreadyUsed, finalPriceCents ?? -1),
+      .bind(entry, groupId, playerId, cents, sessionId, nowIso, alreadyUsed, `${finalizedAt ?? ''}:${finalPriceCents ?? -1}`),
     ...(payInFull
       ? [
           db

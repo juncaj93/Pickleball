@@ -201,7 +201,10 @@ export async function reopenFinalize(ctx: Ctx) {
       WHERE kind = 'kept' AND session_id = ?2 AND ended_at IS NULL AND reason IN ('finalized', 'not_played') GROUP BY player_id) b
     WHERE ${USABLE('b.player_id')} < b.back)`;
   const [taken, , unfinalized] = await ctx.db.batch([
-    ctx.db.prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${backRows} AND ${allThere}`).bind(now, session.id),
+    // Only while the game is still the finalize this Reopen looked at (a newer Finalize from another device keeps its credit).
+    ctx.db
+      .prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${backRows} AND ${allThere} AND (SELECT finalized_at FROM sessions WHERE id = ?2) = ?3`)
+      .bind(now, session.id, session.finalized_at),
     ctx.db
       .prepare(
         `UPDATE session_players SET refunded_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND refunded_at IS NOT NULL
