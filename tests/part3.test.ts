@@ -243,10 +243,12 @@ describe('credit after the game', () => {
     // Nothing for the organizer to sort out: no card, no refund request.
     expect(d.refundRequests).toEqual([]);
 
-    // Back in: 6 again, and Alex owes $14 with the $14 credit ready to use.
-    await join(ctx, 'Alex', s.id);
+    // Back in: 6 again, and Alex's new $14 seat is paid with the $14 credit as he joins (credit at sign-up is automatic).
+    expect(await join(ctx, 'Alex', s.id)).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
     const alex = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data;
-    expect(alex.sessions.find((v: any) => v.id === s.id).mine).toMatchObject({ status: 'confirmed', paymentStatus: 'unpaid', oweCents: 1400, useCreditCents: 1400 });
+    expect(alex.sessions.find((v: any) => v.id === s.id).mine).toMatchObject({ status: 'confirmed', paymentStatus: 'paid', paidWithCredit: true, shareCents: 1400, oweCents: 0, useCreditCents: 0 });
+    expect(alex.credit.balanceCents).toBe(0);
+    expect(potOf(await dash(ctx), ctx.byName.Alex).balanceCents).toBe(0);
     expect((await dash(ctx)).sessions.find((v: any) => v.id === s.id).confirmedCount).toBe(6);
   });
 

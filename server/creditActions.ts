@@ -4,11 +4,11 @@
 // the rules (who may, how much) are here.
 
 import { potBalance, seatKey, usableCredit } from '../shared/credit';
-import { notifyRefundRequest } from './alerts';
+import { notifyCashOutUsed, notifyRefundRequest } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
-import { loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund } from './credit';
+import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat } from './credit';
 import { HttpError } from './http';
 import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
@@ -77,6 +77,47 @@ export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionR
   return { ok: true, returnedCents: back };
 }
 
+/**
+ * POST /api/sessions/:id/use-cash-out { cents }: "Use it" on the prompt after
+ * I'm in ("Use the $10 you asked to cash out for this game?"). Their usable
+ * credit and `cents` of the pending cash out go on this game; the request
+ * shrinks by that much, or is withdrawn when all of it is used. `cents` is
+ * what the prompt showed: if anything changed since, nothing happens and they
+ * are asked to look again. The organizer gets one short Telegram line.
+ */
+export async function useCashOutOn(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string, body: Record<string, unknown>) {
+  const shown = v.cents(body.cents, 'cents');
+  const offer = await cashOutOffer(ctx.db, session, playerId);
+  if (!offer) throw new HttpError(409, 'nothing_to_use', 'There is nothing to use on this game now.');
+  if (shown !== offer.cents) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');
+  const done = await useCashOutOnSeat(ctx.db, {
+    groupId: group.id,
+    sessionId: session.id,
+    playerId,
+    requestId: offer.requestId,
+    requestCents: offer.requestCents,
+    usableCents: offer.usableCents,
+    fromRequest: offer.cents,
+    alreadyUsed: settingsOf(group).pricePerPlayerCents - offer.owedCents,
+    priceCents: settingsOf(group).pricePerPlayerCents,
+    nowIso: ctx.nowIso,
+  });
+  if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');
+  const usedCents = offer.usableCents + offer.cents;
+  const paid = usedCents >= offer.owedCents;
+  await audit(
+    ctx.db,
+    group.id,
+    session.id,
+    'cash_out_used',
+    { player: name, playerId, amountCents: usedCents, fromRequestCents: offer.cents, requestCents: offer.requestCents, paidInFull: paid },
+    ctx.nowIso,
+    name,
+  );
+  await notifyCashOutUsed(ctx, group, name, offer.cents, offer.requestCents, session.starts_at);
+  return { ok: true, usedCents, paid, requestLeftCents: offer.requestCents - offer.cents };
+}
+
 // ---------- Refund requests (the player asks for cash back) ----------
 
 /**
@@ -93,10 +134,15 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
   if (cents > usableCents) throw new HttpError(409, 'not_enough_credit', `You have ${Math.floor(usableCents / 100)} dollars of credit.`);
   const id = newId();
   try {
-    await ctx.db
-      .prepare('INSERT INTO refund_requests (id, group_id, player_id, amount_cents, status, created_at) VALUES (?, ?, ?, ?, \'pending\', ?)')
+    // Saved only while the credit is still there: an I'm in at the same moment may have just used it.
+    const res = await ctx.db
+      .prepare(
+        `INSERT INTO refund_requests (id, group_id, player_id, amount_cents, status, created_at)
+         SELECT ?1, ?2, ?3, ?4, 'pending', ?5 WHERE ${USABLE('?3')} >= ?4`,
+      )
       .bind(id, group.id, playerId, cents, ctx.nowIso)
       .run();
+    if (res.meta.changes !== 1) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');
   } catch (err) {
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
     throw err;
@@ -142,6 +188,10 @@ export async function resolveRefundRequest(ctx: Ctx, body: Record<string, unknow
     await ctx.db.prepare("UPDATE refund_requests SET status = 'declined', resolved_at = ? WHERE id = ? AND status = 'pending'").bind(ctx.nowIso, id).run();
     await audit(ctx.db, group.id, null, 'refund_request_declined', { player: req.display_name, playerId: req.player_id }, ctx.nowIso);
     return { ok: true, changed: true };
+  }
+  // The card showed an amount; the player may have put part of it toward a game since.
+  if (body.cents !== undefined && v.cents(body.cents, 'cents') !== req.amount_cents) {
+    throw new HttpError(409, 'request_changed', `${req.display_name} now asks for ${Math.floor(req.amount_cents / 100)} dollars. Look again.`);
   }
   const done = await refundCredit(ctx.db, { groupId: group.id, playerId: req.player_id, cents: req.amount_cents, requestId: id, nowIso: ctx.nowIso });
   if (!done) throw new HttpError(409, 'credit_changed', 'Their credit changed. Look again.');

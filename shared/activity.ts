@@ -49,7 +49,9 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'marked_paid':
       return d.confirmed ? `${who} confirmed ${player}'s payment${forDay}` : `${who} marked ${player} paid${forDay}`;
     case 'marked_unpaid':
-      return `${who} marked ${player} unpaid${forDay}`;
+      return d.previousAmountCents === undefined && typeof d.creditReturnedCents === 'number'
+        ? `${who} took ${player}'s ${formatPrice(d.creditReturnedCents)} credit off the game${forDay}`
+        : `${who} marked ${player} unpaid${forDay}`;
     case 'court_paid':
       return `${who} marked the court paid${forDay}`;
     case 'court_unpaid':
@@ -118,7 +120,9 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'credit_kept_undone':
       return `${who} undid keeping ${player}'s payment as credit${forDay}`;
     case 'credit_used':
-      return typeof d.amountCents === 'number' ? `${player} used ${formatPrice(d.amountCents)} credit${forDay}` : `${player} used credit${forDay}`;
+      return `${typeof d.amountCents === 'number' ? `${player} used ${formatPrice(d.amountCents)} credit${forDay}` : `${player} used credit${forDay}`}${d.auto === true ? ' (automatic at sign-up)' : ''}`;
+    case 'cash_out_used':
+      return `${player} put ${typeof d.fromRequestCents === 'number' ? formatPrice(d.fromRequestCents) : 'part'} of their cash out request toward the game${forDay}`;
     case 'credit_undone':
       return `${player} took back the credit they used${forDay}`;
     case 'credit_refund_marked':

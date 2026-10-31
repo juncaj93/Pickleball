@@ -184,15 +184,12 @@ describe('credit shows once, where it applies', () => {
     expect(g.sessions.every((x: any) => !x.mine || x.mine.creditCents === 0)).toBe(true);
     let d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     expect(balanceOf(d, ctx.byName.Alex)).toEqual({ owedCents: 0, creditCents: 500 });
-    // He joins a game: he owes $14 and Use credit offers the $5; nothing moves by itself.
+    // He joins a game: the $5 is used on it as he joins (credit at sign-up is automatic). It sits on that game only, $9 left to pay.
     const next = g.sessions.find((x: any) => !x.mine && !x.past);
-    await alex.call('POST', `/api/sessions/${next.id}/join`, {});
+    expect((await alex.call('POST', `/api/sessions/${next.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 500, paidWithCredit: false });
     g = (await alex.call('GET', '/api/group')).data;
-    expect(g.sessions.find((x: any) => x.id === next.id).mine).toMatchObject({ oweCents: 1400, creditCents: 0, useCreditCents: 500, shareCents: 1400 });
-    expect(g.sessions.filter((x: any) => x.mine?.creditCents > 0)).toEqual([]);
-    // Use credit: the $5 sits on that game only, $9 left to pay.
-    expect((await alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).data).toMatchObject({ paid: false, usedCents: 500 });
-    g = (await alex.call('GET', '/api/group')).data;
+    expect(g.sessions.find((x: any) => x.id === next.id).mine).toMatchObject({ oweCents: 900, creditCents: 500, useCreditCents: 0, shareCents: 1400, paymentStatus: 'unpaid' });
+    expect((await alex.call('POST', `/api/sessions/${next.id}/use-credit`, {})).status).toBe(409); // nothing left to tap
     expect(g.credit.balanceCents).toBe(0);
     expect(g.sessions.filter((x: any) => x.mine?.creditCents > 0).map((x: any) => [x.id, x.mine.oweCents, x.mine.creditCents])).toEqual([[next.id, 900, 500]]);
     // From the day before: Players tab says owes $9, and no extra credit.

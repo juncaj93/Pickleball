@@ -66,9 +66,10 @@ async function agree(ctx: Ctx) {
 describe('1. credit $14, game owes $14', () => {
   it('Use credit gives Paid with credit and the credit is $0', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Casey', 1400);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Casey', 1400);
     const before = await mine(ctx, 'Casey', g.id);
     expect(before).toMatchObject({ oweCents: 1400, useCreditCents: 1400 });
     expect(creditHintText(before.useCreditCents, (await view(ctx, 'Casey')).credit.usableCents, before.oweCents)).toBe('Uses your $14 credit');
@@ -85,9 +86,10 @@ describe('1. credit $14, game owes $14', () => {
 describe('2. credit $14, 6 in: owes the flat $14, and $5 comes back once 6 played at $9', () => {
   it('Use credit takes $14; after finalizing the credit is $5 again', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Emery', 1400);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, SIX);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Emery', 1400);
     // No special price for the 5th or 6th: $14 like everyone.
     const before = await mine(ctx, 'Emery', g.id);
     expect(before).toMatchObject({ shareCents: 1400, oweCents: 1400, useCreditCents: 1400 });
@@ -114,9 +116,10 @@ describe('2. credit $14, 6 in: owes the flat $14, and $5 comes back once 6 playe
 describe('3. credit $14, 5 in: paid with credit, finalized at $11', () => {
   it('ends with $3 credit, and Money counts his $14 as $11 collected and $3 owed', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Alex', 1400);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, SIX.slice(0, 5));
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Alex', 1400);
     const before = await mine(ctx, 'Alex', g.id);
     expect(before).toMatchObject({ shareCents: 1400, oweCents: 1400, creditBackCents: 0 });
     const res = (await use(ctx, 'Alex', g.id)).data;
@@ -144,9 +147,10 @@ describe('3. credit $14, 5 in: paid with credit, finalized at $11', () => {
 describe('4. credit $5, game owes $14', () => {
   it('Use credit applies $5, $9 is left to pay, and Venmo is for exactly $9 with the right note', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Casey', 500);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Casey', 500);
     const before = await mine(ctx, 'Casey', g.id);
     expect(creditHintText(before.useCreditCents, (await view(ctx, 'Casey')).credit.usableCents, before.oweCents)).toBe('Uses your $5 credit. $9 left to pay');
     const res = (await use(ctx, 'Casey', g.id)).data;
@@ -169,14 +173,15 @@ describe('4. credit $5, game owes $14', () => {
 describe('5. credit $14, two games owed at $14 each', () => {
   it('using it on one leaves the other owed with no credit button', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Casey', 1400);
     const a = await on(ctx, '2026-11-03');
     const b = await on(ctx, '2026-11-05');
     await join(ctx, a.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     await join(ctx, b.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Casey', 1400);
     expect(await mine(ctx, 'Casey', a.id)).toMatchObject({ useCreditCents: 1400 });
     expect(await mine(ctx, 'Casey', b.id)).toMatchObject({ useCreditCents: 1400 });
-    await use(ctx, 'Casey', a.id);
+    expect((await use(ctx, 'Casey', a.id)).data).toMatchObject({ usedCents: 1400, paid: true });
     expect(await mine(ctx, 'Casey', a.id)).toMatchObject({ paymentStatus: 'paid', paidWithCredit: true });
     expect(await mine(ctx, 'Casey', b.id)).toMatchObject({ paymentStatus: 'unpaid', oweCents: 1400, useCreditCents: 0, creditCents: 0 });
     expect((await view(ctx, 'Casey')).credit.usableCents).toBe(0);
@@ -188,9 +193,10 @@ describe('5. credit $14, two games owed at $14 each', () => {
 describe('6. used $9 credit on a $14 seat, then the game is finalized', () => {
   it('5 played ($11): he sees $2 more to pay (not Paid), and Venmo is for $2', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Emery', 900);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, SIX);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Emery', 900);
     expect((await use(ctx, 'Emery', g.id)).data).toMatchObject({ usedCents: 900, paid: false }); // $9 of $14
     expect(await mine(ctx, 'Emery', g.id)).toMatchObject({ paymentStatus: 'unpaid', oweCents: 500, creditCents: 900 });
     await pay(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
@@ -214,10 +220,11 @@ describe('6. used $9 credit on a $14 seat, then the game is finalized', () => {
   });
   it('6 played ($9): the $9 credit covers it, he is paid with nothing more to pay and nothing back', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Emery', 900);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, SIX);
-    await use(ctx, 'Emery', g.id);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Emery', 900);
+    expect((await use(ctx, 'Emery', g.id)).data).toMatchObject({ usedCents: 900, paid: false });
     expect((await mine(ctx, 'Emery', g.id)).oweCents).toBe(500);
     await pay(ctx, g.id, SIX.filter((n) => n !== 'Emery'));
     await finalize(ctx, g);
@@ -235,10 +242,11 @@ describe('6. used $9 credit on a $14 seat, then the game is finalized', () => {
 describe('7. drops out of a game he paid for with credit', () => {
   it('the credit comes back in full and Players and Money agree', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Casey', 1400);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
-    await use(ctx, 'Casey', g.id);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Casey', 1400);
+    expect((await use(ctx, 'Casey', g.id)).data).toMatchObject({ usedCents: 1400, paid: true });
     expect((await view(ctx, 'Casey')).credit.balanceCents).toBe(0);
     expect((await out(ctx, g.id, 'Casey')).data).toMatchObject({ result: 'withdrawn', creditBackCents: 0 }); // nothing new: the credit just comes back
     expect((await view(ctx, 'Casey')).credit.balanceCents).toBe(1400);
@@ -280,10 +288,11 @@ describe('wording', () => {
 describe('Undo under "Paid with credit"', () => {
   it('puts the full credit back and the game is owed again; no cash moves', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Casey', 1400);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
-    await use(ctx, 'Casey', g.id);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    await givePot(ctx, 'Casey', 1400);
+    expect((await use(ctx, 'Casey', g.id)).data).toMatchObject({ usedCents: 1400, paid: true });
     expect(await pot(ctx, 'Casey')).toBe(0);
     const res = await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/undo-credit`, {});
     expect(res.data).toMatchObject({ ok: true, returnedCents: 1400 });
@@ -300,9 +309,11 @@ describe('Undo under "Paid with credit"', () => {
   });
   it('is refused when the player paid with "I paid" instead', async () => {
     const ctx = await setupGroup();
-    await givePot(ctx, 'Casey', 500);
     const g = await on(ctx, '2026-11-03');
     await join(ctx, g.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // Credit arrives after she joined, so none of it is on the seat: she pays with "I paid" alone (credit at sign-up is automatic now).
+    await givePot(ctx, 'Casey', 500);
+    expect(await mine(ctx, 'Casey', g.id)).toMatchObject({ paymentStatus: 'unpaid', creditCents: 0, useCreditCents: 500 });
     await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/paid`, { paid: true });
     const res = await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/undo-credit`, {});
     expect(res.status).toBe(409);

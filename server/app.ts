@@ -56,6 +56,7 @@ route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));
 route('POST', '/api/sessions/:id/paid', player.playerPaid);
 route('POST', '/api/sessions/:id/use-credit', (ctx) => player.playerUseCredit(ctx));
 route('POST', '/api/sessions/:id/undo-credit', (ctx) => player.playerUndoCredit(ctx));
+route('POST', '/api/sessions/:id/use-cash-out', player.playerUseCashOut);
 route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
 route('POST', '/api/me/refund-request', player.playerRequestRefund);
 route('POST', '/api/me/refund-request/cancel', (ctx) => player.playerCancelRefundRequest(ctx));

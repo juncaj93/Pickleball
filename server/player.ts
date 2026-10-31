@@ -24,8 +24,8 @@ import { newId } from './crypto';
 import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { loadPendingRequests, moneyPicture } from './credit';
-import { cancelRefundRequest, requestRefund, undoCreditUse, useCreditOn } from './creditActions';
+import { cashOutOffer, loadPendingRequests, moneyPicture } from './credit';
+import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
 import * as v from './validate';
@@ -335,7 +335,9 @@ export async function playerJoin(ctx: Ctx) {
   await clearLateDrop(ctx.db, who.session.id, who.playerId);
   if (res.result !== 'already_confirmed') await logAction(ctx, who, 'join', res.result);
   await afterTap(ctx, watch);
-  return res;
+  // Their credit was used on the seat already; a pending cash out that could cover the rest is offered next.
+  const offer = res.result === 'confirmed' ? await cashOutOffer(ctx.db, who.session, who.playerId) : null;
+  return offer ? { ...res, cashOutOffer: { cents: offer.cents, requestCents: offer.requestCents } } : res;
 }
 
 export async function playerWithdraw(ctx: Ctx) {
@@ -366,11 +368,18 @@ export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
   return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name);
 }
 
-/** POST /api/sessions/:id/use-credit: "Use credit" on a game they owe for. Never automatic. */
+/** POST /api/sessions/:id/use-credit: "Use credit" on a game they already owe for (credit that arrived after they signed up). */
 export async function playerUseCredit(ctx: Ctx) {
   const who = await actingOn(ctx);
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   return useCreditOn(ctx, who.group, who.session, who.playerId, p?.display_name ?? 'A player');
+}
+
+/** POST /api/sessions/:id/use-cash-out { cents }: "Use it" on the cash-out prompt after I'm in. */
+export async function playerUseCashOut(ctx: Ctx, body: Record<string, unknown>) {
+  const who = await actingOn(ctx);
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  return useCashOutOn(ctx, who.group, who.session, who.playerId, p?.display_name ?? 'A player', body);
 }
 
 /** POST /api/sessions/:id/undo-credit: takes back "Use credit" on a game paid with credit. */

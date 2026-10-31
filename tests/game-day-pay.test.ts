@@ -72,6 +72,9 @@ describe('payment waits for game day', () => {
     const ctx = await setupGroup();
     const tue = await on(ctx, '2026-10-27');
     await join(ctx, tue.id, PLAYER_NAMES);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const thu = await on(ctx, '2026-10-29');
+    await join(ctx, thu.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     ctx.app.now = Date.parse('2026-10-27T12:00:00.000Z');
     // Six in: the 5th and 6th pay the same $14 as the first four.
     expect((await view(ctx, 'Emery')).payDue[0]).toMatchObject({ amountCents: 1400, finalized: false, creditCents: 0 });
@@ -82,9 +85,7 @@ describe('payment waits for game day', () => {
     ctx.app.now = Date.parse(tue.endsAt) + 3600_000;
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${tue.id}/finalize`, { everyone: true })).status).toBe(200);
     expect((await view(ctx, 'Frankie')).payDue).toEqual([expect.objectContaining({ sessionId: tue.id, amountCents: 900, finalized: true, creditCents: 0 })]);
-    // The five who paid $14 each have $5 credit; it comes off the next session only when they use it.
-    const thu = await on(ctx, '2026-10-29');
-    await join(ctx, thu.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    // The five who paid $14 each have $5 credit; it comes off the next session (joined before it came back) only when they use it.
     ctx.app.now = Date.parse('2026-10-29T12:00:00.000Z');
     let alex = await view(ctx, 'Alex');
     expect(alex.credit.balanceCents).toBe(500);

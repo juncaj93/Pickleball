@@ -319,11 +319,12 @@ describe('no-shows', () => {
 
   it('credit no-show: the credit comes back; credit + cash no-show: both come back; unpaid no-show owes nothing', async () => {
     const ctx = await group();
-    const { session: s0 } = await giveCredit(ctx, 'Alex');
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+    const phones = await joinAll(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await giveCredit(ctx, 'Alex');
     const { phone: blair } = await giveCredit(ctx, 'Blair', []);
     // Blair's $14 credit, then they will pay $5 credit + $9 cash on the next game.
-    const s = await nextSession(ctx, [s0.id]);
-    const phones = await joinAll(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
     expect((await useCredit(phones.Alex, s.id)).data).toMatchObject({ paid: true, usedCents: 1400 });
     // Blair: request $9 back first so only $5 is usable, use it, then pay the $9 cash.
     expect((await requestRefund(blair, 900)).status).toBe(200);
@@ -370,14 +371,15 @@ describe('no-shows', () => {
 describe('credit at finalize', () => {
   it('partial credit then a lower price: used $5 on $14, 7 play ($8): owes $3, Venmo is for $3, reminder says $3', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+    const names = ALL.slice(0, 7);
+    await joinAll(ctx, s.id, names);
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     expect((await requestRefund(alex, 900)).status).toBe(200);
     const d = await dashboard(ctx);
     expect((await resolveRequest(ctx, d.refundRequests[0].id, 'refunded')).status).toBe(200);
     expect(await creditOf(ctx, 'Alex')).toBe(500);
-    const s = await nextSession(ctx, [s0.id]);
-    const names = ALL.slice(0, 7);
-    await joinAll(ctx, s.id, names);
     expect((await useCredit(alex, s.id)).data).toMatchObject({ paid: false, usedCents: 500 });
     await payAll(ctx, s.id, names.slice(1));
     await endGame(ctx, s);
@@ -405,14 +407,15 @@ describe('credit at finalize', () => {
       [6, 0],
     ] as const) {
       const ctx = await group();
-      const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
+      // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+      const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+      const names = ALL.slice(0, n);
+      await joinAll(ctx, s.id, names);
+      const { phone: alex } = await giveCredit(ctx, 'Alex');
       expect((await requestRefund(alex, 500)).status).toBe(200);
       const d = await dashboard(ctx);
       expect((await resolveRequest(ctx, d.refundRequests[0].id, 'refunded')).status).toBe(200);
       expect(await creditOf(ctx, 'Alex')).toBe(900);
-      const s = await nextSession(ctx, [s0.id]);
-      const names = ALL.slice(0, n);
-      await joinAll(ctx, s.id, names);
       expect((await useCredit(alex, s.id)).data).toMatchObject({ paid: false, usedCents: 900 });
       await payAll(ctx, s.id, names.slice(1));
       await endGame(ctx, s);
@@ -459,13 +462,14 @@ describe('credit at finalize', () => {
 
   it('paid, used nothing, then "I paid" with partial credit: payment is cash plus credit and the credit back is the same $3', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+    const names = ALL.slice(0, 5);
+    await joinAll(ctx, s.id, names);
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     expect((await requestRefund(alex, 900)).status).toBe(200);
     const d = await dashboard(ctx);
     await resolveRequest(ctx, d.refundRequests[0].id, 'refunded');
-    const s = await nextSession(ctx, [s0.id]);
-    const names = ALL.slice(0, 5);
-    await joinAll(ctx, s.id, names);
     expect((await useCredit(alex, s.id)).data).toMatchObject({ paid: false, usedCents: 500 });
     // The player marks the $9 cash paid themselves.
     expect((await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: true })).status).toBe(200);
@@ -499,9 +503,10 @@ describe('drops before the game', () => {
       const p = ctx.players.find((x: any) => x.name === name)!;
       await ctx.organizer.call('PUT', `/api/admin/players/${p.id}`, { name, phone: `(313) 555-09${String(ALL.indexOf(name)).padStart(2, '0')}`, venmo: `@${name}VenmoSecret` });
     }
-    const { session: s0, phone: casey } = await giveCredit(ctx, 'Casey');
-    const s = await nextSession(ctx, [s0.id]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
     const phones = await joinAll(ctx, s.id, ALL.slice(0, 6));
+    const { phone: casey } = await giveCredit(ctx, 'Casey');
     await payAll(ctx, s.id, ['Alex', 'Blair']);
     expect((await useCredit(casey, s.id)).data).toMatchObject({ paid: true, usedCents: 1400 });
     expect((await monthFor(ctx, s)).heldCents).toBe(3 * B);
@@ -565,8 +570,14 @@ describe('drops before the game', () => {
     const phones = await joinAll(ctx, s.id, ALL.slice(0, 5));
     await payAll(ctx, s.id, ['Alex']);
     expect((await withdraw(phones.Alex, s.id)).data.creditBackCents).toBe(1400);
-    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/join`, {})).data.result).toBe('confirmed');
+    // Back in: the $14 credit pays the new seat as he joins (credit at sign-up is automatic).
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect(row(await adminSession(ctx, s.id), 'Alex')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400, creditCents: 1400, owesCents: 0 });
+    expect(await creditOf(ctx, 'Alex')).toBe(0);
+    // He taps Undo to keep the credit: the seat owes $14 again and the $14 is back in his pot.
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/undo-credit`, {})).data).toMatchObject({ ok: true, returnedCents: 1400 });
     expect(row(await adminSession(ctx, s.id), 'Alex')).toMatchObject({ paymentStatus: 'unpaid', owesCents: 1400 });
+    expect(await creditOf(ctx, 'Alex')).toBe(1400);
     // Alex pays cash again (did not use the credit).
     expect((await pay(ctx, s.id, 'Alex')).status).toBe(200);
     expect((await monthFor(ctx, s)).heldCents).toBe(1400);
@@ -581,10 +592,11 @@ describe('drops before the game', () => {
 describe('organizer cancels', () => {
   it('several paid players (cash, credit, credit + cash): credit appears, credit used returns first, no refund card', async () => {
     const ctx = await group();
-    const { session: s0, phone: casey } = await giveCredit(ctx, 'Casey');
-    const { phone: devon } = await giveCredit(ctx, 'Devon', []);
-    const s = await nextSession(ctx, [s0.id]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
     const phones = await joinAll(ctx, s.id, ALL.slice(0, 5));
+    const { phone: casey } = await giveCredit(ctx, 'Casey');
+    const { phone: devon } = await giveCredit(ctx, 'Devon', []);
     await payAll(ctx, s.id, ['Alex', 'Blair']);
     expect((await useCredit(casey, s.id)).data).toMatchObject({ paid: true, usedCents: 1400 });
     // Devon: $9 reserved for a refund request, $5 credit used, $9 cash.
@@ -821,11 +833,12 @@ describe('refund requests', () => {
 
   it('request while credit is also used on a game: the usable part pays the game, the rest is refunded, a cancel returns the used part', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    expect((await requestRefund(alex, 900)).status).toBe(200);
-    const s = await nextSession(ctx, [s0.id]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
     await joinAll(ctx, s.id, ['Blair', 'Casey', 'Devon']);
-    await alex.call('POST', `/api/sessions/${s.id}/join`, {});
+    await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/join`, {});
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
+    expect((await requestRefund(alex, 900)).status).toBe(200);
     let g = await groupOf(alex);
     expect(g.sessions.find((x: any) => x.id === s.id).mine.useCreditCents).toBe(500);
     expect((await useCredit(alex, s.id)).data).toMatchObject({ paid: false, usedCents: 500, potBeforeCents: 500, owedBeforeCents: 1400 });
@@ -891,10 +904,11 @@ describe('refund requests', () => {
 describe('reopen', () => {
   it('reverses everything including seats settled by "did not play" and credit-paid repricing, then a redo with a different set', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    const s = await nextSession(ctx, [s0.id]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
     const names = ALL.slice(0, 6);
     const phones = await joinAll(ctx, s.id, names);
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     // Alex pays with $14 credit; Frankie pays cash and will be a no-show; Emery never pays.
     expect((await useCredit(alex, s.id)).data.paid).toBe(true);
     await payAll(ctx, s.id, ['Blair', 'Casey', 'Devon', 'Frankie']);
@@ -950,12 +964,13 @@ describe('reopen', () => {
       const s = await nextSession(ctx);
       const phones = await joinAll(ctx, s.id, ALL.slice(0, 6));
       await payAll(ctx, s.id, ALL.slice(0, 6));
+      // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+      const s2 = await nextSession(ctx, [s.id]);
+      if (how === 'used') await phones.Alex.call('POST', `/api/sessions/${s2.id}/join`, {});
       await endGame(ctx, s);
       expect((await finalize(ctx, s.id)).status).toBe(200);
       expect(await creditOf(ctx, 'Alex')).toBe(500);
       if (how === 'used') {
-        const s2 = await nextSession(ctx, [s.id]);
-        await phones.Alex.call('POST', `/api/sessions/${s2.id}/join`, {});
         expect((await useCredit(phones.Alex, s2.id)).data).toMatchObject({ paid: false, usedCents: 500 });
       } else if (how === 'request') {
         expect((await requestRefund(phones.Alex, 200)).status).toBe(200);
@@ -999,9 +1014,11 @@ describe('reopen', () => {
     await endGame(ctx, s);
     expect((await finalize(ctx, s.id, { played: ALL.slice(0, 4).map((n) => ctx.byName[n]) })).status).toBe(200);
     expect(await creditOf(ctx, 'Emery')).toBe(1400);
+    // Emery joins the next game: the $14 she got back pays it as she joins (credit at sign-up is automatic).
     const s2 = await nextSession(ctx, [s.id]);
-    await phones.Emery.call('POST', `/api/sessions/${s2.id}/join`, {});
-    expect((await useCredit(phones.Emery, s2.id)).data.paid).toBe(true);
+    expect((await phones.Emery.call('POST', `/api/sessions/${s2.id}/join`, {})).data).toEqual({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect(await creditOf(ctx, 'Emery')).toBe(0);
+    expect(row(await adminSession(ctx, s2.id), 'Emery')).toMatchObject({ paymentStatus: 'paid', paymentAmountCents: 1400, creditCents: 1400 });
     expect((await adminSession(ctx, s.id)).reopenBlockedBy).toEqual(['Emery']);
     expect((await reopen(ctx, s.id)).status).toBe(409);
     await agree(ctx);
@@ -1140,6 +1157,11 @@ describe('mark paid and unmark around finalize', () => {
     const s = await nextSession(ctx);
     const phones = await joinAll(ctx, s.id, ALL.slice(0, 6));
     await payAll(ctx, s.id, ALL.slice(0, 6));
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s2 = await nextSession(ctx, [s.id]);
+    const s3 = await nextSession(ctx, [s.id, s2.id]);
+    await phones.Alex.call('POST', `/api/sessions/${s2.id}/join`, {});
+    await joinAll(ctx, s3.id, ['Casey', 'Devon', 'Emery']);
     await endGame(ctx, s);
     expect((await finalize(ctx, s.id)).status).toBe(200);
     // Blair: untouched credit, unmark works and the $5 goes; marking paid again records $9 at the final price.
@@ -1150,8 +1172,6 @@ describe('mark paid and unmark around finalize', () => {
     expect((await pay(ctx, s.id, 'Blair')).status).toBe(200);
     expect(row(await adminSession(ctx, s.id), 'Blair')).toMatchObject({ paymentAmountCents: 900, creditBackCents: 0, owesCents: 0 });
     // Alex spends the $5 credit elsewhere: unmarking Alex is refused with a plain reason, nothing changes.
-    const s2 = await nextSession(ctx, [s.id]);
-    await phones.Alex.call('POST', `/api/sessions/${s2.id}/join`, {});
     expect((await useCredit(phones.Alex, s2.id)).data).toMatchObject({ paid: false, usedCents: 500 });
     const res = await pay(ctx, s.id, 'Alex', false);
     expect(res.status).toBe(409);
@@ -1163,8 +1183,7 @@ describe('mark paid and unmark around finalize', () => {
     await resolveRequest(ctx, d.refundRequests[0].id, 'refunded');
     expect((await pay(ctx, s.id, 'Casey', false)).status).toBe(409);
     // A settled no-show seat can't be unmarked either.
-    const s3 = await nextSession(ctx, [s.id, s2.id]);
-    await joinAll(ctx, s3.id, ALL.slice(0, 5));
+    await joinAll(ctx, s3.id, ['Alex', 'Blair']);
     await payAll(ctx, s3.id, ALL.slice(0, 5));
     await endGame(ctx, s3);
     expect((await finalize(ctx, s3.id, { played: ALL.slice(0, 4).map((n) => ctx.byName[n]) })).status).toBe(200);
@@ -1175,11 +1194,12 @@ describe('mark paid and unmark around finalize', () => {
 
   it('a player cannot "Didn\'t pay?" an organizer-marked payment, and the organizer\'s unmark of a credit+cash seat returns the credit', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+    await joinAll(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     await requestRefund(alex, 900);
     await resolveRequest(ctx, (await dashboard(ctx)).refundRequests[0].id, 'refunded');
-    const s = await nextSession(ctx, [s0.id]);
-    await joinAll(ctx, s.id, ['Alex', 'Blair', 'Casey', 'Devon']);
     expect((await useCredit(alex, s.id)).data).toMatchObject({ paid: false, usedCents: 500 });
     expect((await pay(ctx, s.id, 'Alex')).status).toBe(200);
     expect((await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: false })).status).toBe(409);
@@ -1193,10 +1213,11 @@ describe('mark paid and unmark around finalize', () => {
 describe('double taps and racing taps never double-spend', () => {
   it('two Use credit at once: one $14 entry, one 409', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    const s = await nextSession(ctx, [s0.id]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
     await joinAll(ctx, s.id, ['Blair', 'Casey', 'Devon']);
-    await alex.call('POST', `/api/sessions/${s.id}/join`, {});
+    await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/join`, {});
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     const [a, b] = await Promise.all([useCredit(alex, s.id), useCredit(alex, s.id)]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect(await creditOf(ctx, 'Alex')).toBe(0);
@@ -1207,11 +1228,14 @@ describe('double taps and racing taps never double-spend', () => {
 
   it('two Use credit at once on two different games with $14 of credit: only one game gets it', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    const s1 = await nextSession(ctx, [s0.id]);
-    const s2 = await nextSession(ctx, [s0.id, s1.id]);
-    await alex.call('POST', `/api/sessions/${s1.id}/join`, {});
-    await alex.call('POST', `/api/sessions/${s2.id}/join`, {});
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const first = await nextSession(ctx);
+    const s1 = await nextSession(ctx, [first.id]);
+    const s2 = await nextSession(ctx, [first.id, s1.id]);
+    const early = await playerPhone(ctx, 'Alex');
+    await early.call('POST', `/api/sessions/${s1.id}/join`, {});
+    await early.call('POST', `/api/sessions/${s2.id}/join`, {});
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     const [a, b] = await Promise.all([useCredit(alex, s1.id), useCredit(alex, s2.id)]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect(await creditOf(ctx, 'Alex')).toBe(0);
@@ -1282,10 +1306,14 @@ describe('double taps and racing taps never double-spend', () => {
 
   it('Use credit racing a refund request for the same $14: never both, and never a request above the pot', async () => {
     const ctx = await group();
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    const s = await nextSession(ctx, [s0.id]);
-    await alex.call('POST', `/api/sessions/${s.id}/join`, {});
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
+    await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/join`, {});
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
+    expect((await groupOf(alex)).sessions.find((x: any) => x.id === s.id).mine).toMatchObject({ paymentStatus: 'unpaid', useCreditCents: 1400 });
     const [use, req] = await Promise.all([useCredit(alex, s.id), requestRefund(alex, 1400)]);
+    // Exactly one of them gets the $14.
+    expect([use.status, req.status].sort()).toEqual([200, 409]);
     const l = await ledgerOf(ctx, 'Alex');
     const g = await groupOf(alex);
     // Whatever won, the request can never be for more than the pot holds.
@@ -1352,6 +1380,9 @@ describe('Money, Players and per-session numbers agree across months', () => {
     // Thu Oct 29: 7 in plus the organizer, Alex drops (paid), Frankie no-show (paid), Gale unpaid plays, 6 play at $9.
     const oct = await on(ctx, '2026-10-29');
     const phones = await joinAll(ctx, oct.id, ALL.slice(0, 7));
+    // Tue Nov 3 sign-ups come first: Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const nov = await on(ctx, '2026-11-03');
+    const novPhones = await joinAll(ctx, nov.id, ['Alex', 'Blair', 'Frankie', 'Harper', 'Indy']);
     await payAll(ctx, oct.id, ALL.slice(0, 6));
     await organizerIn(ctx, oct.id);
     await refresh(ctx);
@@ -1372,8 +1403,6 @@ describe('Money, Players and per-session numbers agree across months', () => {
     expect(a.months[0]).toMatchObject({ collectedCents: 4 * 900, heldCents: 0, creditsOwedCents: 4 * 500 + 1400 + 1400 });
     expect(view.court.playersCoverCents).toBe(4 * 900 + 900);
     // Tue Nov 3: Blair uses the $5 credit, Alex uses $14, Frankie requests $10 back and uses the other $4, Gale pays the $9 for October.
-    const nov = await on(ctx, '2026-11-03');
-    const novPhones = await joinAll(ctx, nov.id, ['Alex', 'Blair', 'Frankie', 'Harper', 'Indy']);
     expect((await useCredit(phones.Blair, nov.id)).data).toMatchObject({ paid: false, usedCents: 500 });
     expect((await useCredit(phones.Alex, nov.id)).data).toMatchObject({ paid: true, usedCents: 1400 });
     expect((await requestRefund(phones.Frankie, 1000)).status).toBe(200);
@@ -1444,9 +1473,10 @@ describe('privacy', () => {
       expect((await ctx.organizer.call('PUT', `/api/admin/players/${p.id}`, { name, phone: `(313) 555-07${String(ALL.indexOf(name)).padStart(2, '0')}`, venmo: `@${name}VenmoSecret` })).status).toBe(200);
     }
     await ctx.organizer.call('PUT', '/api/admin/group', { settings: { typicalCourtCostCents: 4321, monthlyMembershipCents: 3579 } });
-    const { session: s0, phone: alex } = await giveCredit(ctx, 'Alex');
-    const s = await nextSession(ctx, [s0.id]);
+    // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
+    const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
     const phones = await joinAll(ctx, s.id, ALL.slice(0, 6));
+    const { phone: alex } = await giveCredit(ctx, 'Alex');
     await organizerIn(ctx, s.id);
     await refresh(ctx);
     await payAll(ctx, s.id, ['Blair', 'Casey']);
