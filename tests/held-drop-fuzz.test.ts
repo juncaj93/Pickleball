@@ -70,9 +70,16 @@ async function runSequence(seed: number) {
   const serverIn = () => seatOf(ctx, g.id).status === 'confirmed';
   let shownIn = true;
   const log: string[] = [];
+  // Requests on their way: a reloaded page reads the server once they have landed (its live refresh, every 5 s).
+  const inflight: Promise<unknown>[] = [];
+  const landed = async () => {
+    while (inflight.length) await Promise.allSettled(inflight.splice(0));
+  };
   const post = async (path: string) => {
     if (!signal) throw new Offline('No signal, try again');
-    const res = await phone.call('POST', `/api/sessions/${g.id}/${path}`, {});
+    const call = phone.call('POST', `/api/sessions/${g.id}/${path}`, {});
+    inflight.push(call);
+    const res = await call;
     if (res.status !== 200) throw Object.assign(new Error(res.text), { code: 'server' });
     return res;
   };
@@ -125,6 +132,7 @@ async function runSequence(seed: number) {
   for (let i = 0; i < steps; i++) {
     const a = r.pick(['drop', 'drop', 'undo', 'in', 'wait', 'wait', 'close', 'reload', 'offline', 'online']);
     log.push(a);
+    if (process.env.HELD_DEBUG) console.log(seed, a, { shownIn, serverIn: serverIn(), held: holdPending(g.id), note: storage.get('note'), signal, alive, now: app.now });
     if (a === 'drop' && alive && shownIn && serverIn()) drop();
     else if (a === 'undo' && alive) undoHold(g.id);
     else if (a === 'in' && alive && !shownIn) {
@@ -149,6 +157,7 @@ async function runSequence(seed: number) {
         flushHold(true);
       }
       await vi.advanceTimersByTimeAsync(0);
+      await landed();
       alive = true;
       shownIn = serverIn();
       await look();
@@ -158,6 +167,7 @@ async function runSequence(seed: number) {
   }
   // The end: let the hold run out, signal comes back, the phone is opened (again), the left-over note is finished.
   await advance(UNDO_MS + 100);
+  await landed();
   signal = true;
   alive = true;
   await look();
@@ -180,7 +190,8 @@ describe('held drop: close, reload, signal and Undo in any order', () => {
     vi.useFakeTimers();
     try {
       const n = Number(process.env.HELD_SEQS ?? 2000);
-      for (let seed = 1; seed <= n; seed++) await runSequence(seed);
+      const from = Number(process.env.HELD_FROM ?? 1);
+      for (let seed = from; seed < from + n; seed++) await runSequence(seed);
     } finally {
       vi.useRealTimers();
     }
