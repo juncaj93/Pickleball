@@ -154,16 +154,28 @@ due in the last hour.
 | D1 rows written | 100,000 a day | Only when something sends or a button is tapped: a few dozen a day |
 | D1 storage | 500 MB per database, 5 GB per account | `task_log` grows by roughly 10 small rows per game |
 
+### Tick CPU (measured live, Fri Oct 30, 2026, Eastern)
+
+| | CPU per tick |
+| --- | --- |
+| Before (6:00 to 8:05 PM) | 12.2 to 32.4 ms, middle 18 |
+| Quick check and reused formatters (8:40 to 9:20 PM) | 6.2 to 10.6 ms, middle 8.1 |
+| Plus one database trip (9:30 to 9:55 PM) | 4.2 to 8.6 ms, middle 6.8 |
+| Floor: a request that stops at the secret check | 3.4 to 4.3 ms |
+
+Most of what's left is the start-up of a fresh server, which every request
+pays. A tick that sends (a few per game) still builds the alert text and
+signs the direct text link, which costs more the first time on a fresh
+server; Cloudflare allows occasional overruns. Read the numbers with Account
+Analytics (`pagesFunctionsInvocationsAdaptiveGroups`, cpuTimeP50 per second;
+ticks land about 36 seconds past every 5th minute).
+
 Rows read per tick, with about 15 games in range and 6 players each:
 
 | Read | Rows |
 | --- | --- |
-| Group | 1 |
-| Alert switches | 1 |
-| Smart alerts switch (indexed) | 0 to 1 |
-| Games (the sessions table holds about 100 rows a year) | up to about 100 |
-| Who's in (indexed by game) | about 90 |
-| Marks and sent rows (indexed by game) | a few dozen |
+| Group, alert switches, Smart alerts switch, games (one batch) | 1 + 1 + 0 to 1 + up to about 100 |
+| Who's in and marks (only games that pass the quick check, most ticks none) | 0 to a few dozen |
 
 The tick stops early when Telegram isn't connected or either switch is off.
 
