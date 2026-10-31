@@ -13,7 +13,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 5262;
+const PORT = Number(process.env.E2E_PORT) || 5262;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'nocourt-setup-token-0123456789';
 const PIN = '482913';

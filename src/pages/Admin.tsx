@@ -1,9 +1,10 @@
-import { Fragment, type FormEvent, type ReactElement, useLayoutEffect, useRef, useState } from 'react';
+import { Fragment, type FormEvent, type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
 import { formatPrice } from '../../shared/money';
-import { formatDateTime, formatRelative, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
+import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
@@ -50,7 +51,7 @@ export function AdminApp() {
       </>
     );
   }
-  return <Dashboard d={load.data!} reload={load.reload} />;
+  return <Dashboard d={load.data!} reload={load.reload} quiet={load.quiet} live={!pretend} />;
 }
 
 function Login({ onDone }: { onDone: () => Promise<void> }) {
@@ -107,13 +108,19 @@ const TABS: { id: Tab; label: string; Icon: () => ReactElement }[] = [
   { id: 'settings', label: 'Settings', Icon: GearIcon },
 ];
 
-function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<void> }) {
+function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () => Promise<void>; quiet: () => Promise<boolean>; live: boolean }) {
   const [tab, setTab] = useState<Tab>('home');
   const [sheet, setSheet] = useState<{ kind: SheetKind; sessionId: string } | null>(null);
   const [viewing, setViewing] = useState<{ id: string; name: string } | null>(null);
   const [pickViewAs, setPickViewAs] = useState(false);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
   const todoCount = homeBadgeCount(d);
+  // The organizer screens keep themselves fresh like the player side: one tiny "did anything change?" check every
+  // few seconds, the full load only when it did, and never while a sheet or pop-up is open or something is being typed.
+  // Settings is left out (it holds fields being edited); coming back to the tab refreshes it the usual way.
+  const [checkedAt, setCheckedAt] = useState(() => Date.now());
+  const onChecked = useCallback(() => setCheckedAt(Date.now()), []);
+  useLiveUpdates({ enabled: live && !viewing && tab !== 'settings', version: d.version, reload: quiet, path: '/api/admin/version', onChecked });
   // Each tab keeps its own scroll spot. Tapping the tab you're on starts it
   // fresh instead: closed panels and sheets, back at the top. The data and
   // Settings (with anything typed there) are kept.
@@ -168,7 +175,8 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
           </button>
         }
       />
-      <main className="page has-tabs stack-lg">
+      {tab !== 'settings' && <UpdatedLine at={checkedAt} />}
+      <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}`}>
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
@@ -221,6 +229,21 @@ function Dashboard({ d, reload }: { d: AdminDashboard; reload: () => Promise<voi
         </div>
       </Sheet>
     </>
+  );
+}
+
+/** "Updated just now": a tiny quiet note near the top. Hidden by the page's CSS while a sheet is open. */
+function UpdatedLine({ at }: { at: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(t);
+  }, []);
+  const mins = Math.floor((now - at) / 60_000);
+  return (
+    <p className="updated-line" data-updated>
+      {mins < 1 ? 'Updated just now' : `Updated ${mins} min ago`}
+    </p>
   );
 }
 
@@ -458,13 +481,6 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
       </Sheet>
     </section>
   );
-}
-
-export function deadlineLine(s: AdminSessionView, tz: string, nowMs: number): string {
-  if (!s.cancellationDeadlineAt) return 'No deadline saved';
-  const when = formatDateTime(s.cancellationDeadlineAt, tz);
-  const passed = Date.parse(s.cancellationDeadlineAt) <= nowMs;
-  return passed ? `${when} (passed)` : `${when} (${formatRelative(s.cancellationDeadlineAt, nowMs)})`;
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');

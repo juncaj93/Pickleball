@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   canceledMessage,
@@ -7,35 +7,28 @@ import {
   siteAddress,
 } from '../../../shared/messages';
 import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit';
-import { formatCents, formatPrice, parseDollars } from '../../../shared/money';
+import { formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
-import type { BookingStatus } from '../../../shared/status';
-import {
-  formatDateTime,
-  formatMonthDay,
-  formatTime,
-  formatShortDate,
-  formatTimeRange,
-  fromLocalInputValue,
-  toLocalInputValue,
-  weekFade,
-} from '../../../shared/time';
+import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
 import { startHold, undoHold, UNDO_MS } from '../../hold';
-import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, CalendarPlusIcon, GearIcon, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
-import { courtStatus } from '../../../shared/court';
-import { type AdminCtx, deadlineLine } from '../Admin';
+import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
+import { type AdminCtx } from '../Admin';
+import { CourtSwitch } from './CourtSwitch';
+import { EditGameForm } from './EditGame';
+import { GameMenu } from './GameMenu';
 import { reach, reminderText } from './textMenu';
 import { markTask } from './DoNow';
 import { isPlayed, lateDropsAll } from './todo';
-import { TextButton } from './Texts';
 import '../../credit-session.css';
+import '../../admin-cards.css';
 
-export type SheetKind = 'booking' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved';
+export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set';
 
-function useAction(ctx: AdminCtx) {
+export function useAction(ctx: AdminCtx) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
@@ -64,7 +57,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const tz = ctx.d.group.timezone;
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
-  const [more, setMore] = useState(false);
   const court = courtStatus(
     { ...s, canceled: s.state.flags.canceled, started: s.state.flags.started, past: s.state.flags.past, bookingOpen: s.state.flags.bookingWindowOpen },
     tz,
@@ -73,83 +65,42 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   if (s.state.flags.canceled && s.cancelReason && s.courtState !== 'not_opened') court.text = `Canceled - ${s.cancelReason}`;
   const later = court.kind === 'later';
   const courtWait = court.kind === 'waitlist';
-  const needsCourt = court.kind === 'needs';
-  const details = [
-    s.reservationReference ? `Reservation #${s.reservationReference}` : null,
-    s.courtCostCents !== null ? `${formatCents(s.courtCostCents)} (only you see this)` : null,
-  ].filter(Boolean);
+  const switchValue = courtSwitchOf(s);
+  // The switch shows until the game is over. Canceled, started and played games show the gray reason line instead.
+  const showSwitch = !s.state.flags.canceled && !s.state.flags.past && !s.state.flags.started;
+  const start = cardTime(s.startsAt, s.endsAt, tz).start;
+  const cancelBy = live ? cancelByCardLine(s.startsAt, now, tz) : null;
+  const inCount = s.payableCount;
   return (
-    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
-      {needsCourt && (
-        <div className="court-banner" role="group" aria-label="Court">
-          <div className="court-status">
-            <CourtIcon kind="needs" />
-            <span>{court.text}</span>
-          </div>
-          <div className="banner-btns">
-            <CourtReserveLink href={COURTRESERVE_BOOKING_URL}>Book</CourtReserveLink>
-            <BookedButton ctx={ctx} s={s} />
-          </div>
-        </div>
-      )}
-      {courtWait && (
-        <div className="court-banner" role="group" aria-label="Court">
-          <div className="court-status">
-            <CourtIcon kind="waitlist" />
-            <span>{court.text}</span>
-          </div>
-          {live && <CourtWaitButtons ctx={ctx} s={s} />}
-        </div>
-      )}
+    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-switch={switchValue} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       <div className="scard-main">
-        <DateTile iso={s.startsAt} tz={tz} />
+        <div className="scard-tilecol">
+          <DateTile iso={s.startsAt} tz={tz} />
+          <div className="scard-time" data-card-time aria-hidden="true">
+            {start}
+          </div>
+        </div>
         <div className="scard-body">
+          <h2 id={`as-${s.id}`} className="sr-only">
+            {formatShortDate(s.startsAt, tz)}, {formatTime(s.startsAt, tz)}
+          </h2>
           <div className="scard-top">
-            <h2 id={`as-${s.id}`} className="sr-only">
-              {formatShortDate(s.startsAt, tz)}
-            </h2>
-            <div className="top-left">
-              <span className="sched-time">
-                <span className="nowrap">{formatTimeRange(s.startsAt, s.endsAt, tz)}</span>
-                {s.extra && <span className="extra-tag">Extra game</span>}
-              </span>
-            </div>
+            {showSwitch ? <CardSwitch ctx={ctx} s={s} value={switchValue} /> : <div className="court-line top-line">{courtLine(court)}</div>}
             <div className="card-icons">
-              <button
-                className="icon-round"
-                aria-label={`Session options for ${formatShortDate(s.startsAt, tz)}`}
-                aria-expanded={more}
-                aria-controls={`opts-${s.id}`}
-                onClick={() => setMore((v) => !v)}
-              >
-                <GearIcon />
-              </button>
+              <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />
             </div>
           </div>
-          {s.note && <div className="game-note">{s.note}</div>}
+          {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}
+          {(s.extra || s.note) && (
+            <div className="game-note">
+              {s.extra && <span className="extra-tag">Extra game</span>}
+              {s.note}
+            </div>
+          )}
           {s.holiday && <HolidayControl ctx={ctx} s={s} />}
           {lateDropsAll(s).length > 0 && (
             <div className="late-line">
               <span className="late-tag">Late drop</span> {lateDropsAll(s).map((r) => `${r.name} ${formatTime(r.lateDropAt!, tz)}`).join(', ')}
-            </div>
-          )}
-          {court.kind === 'booked' && (
-            <div className="court-line">
-              <div className="pc-top">
-                <div className="court-status">
-                  <CourtIcon kind="booked" />
-                  <span>{court.text}</span>
-                </div>
-              </div>
-              {!s.state.flags.past && <div className="pc-sub">Cancel by {shortDeadline(s, tz, now)}</div>}
-            </div>
-          )}
-          {(court.kind === 'off' || later) && (
-            <div className="court-line">
-              <div className="court-status">
-                <CourtIcon kind={court.kind} />
-                <span>{court.text}</span>
-              </div>
             </div>
           )}
           {!s.state.flags.canceled && (
@@ -162,53 +113,56 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}
             />
           )}
-        </div>
-      </div>
-      {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
-
-      {/* Options, from the gear: the Text button, then a 2 by 2 grid. */}
-      {more && (
-        <div className="options" id={`opts-${s.id}`}>
-          {details.length > 0 && <p className="small muted court-details">{details.join(' · ')}</p>}
-          {/* One "Text" button: Share the game, Day before, Last call, and the rest. */}
-          <TextButton ctx={ctx} s={s} />
-          <div className="opt-grid">
-            <button className="btn secondary" onClick={() => ctx.open('booking', s.id)}>
-              Edit booking
-            </button>
-            <button className="btn secondary" onClick={() => ctx.open('roster', s.id)}>
-              Players
-            </button>
-            <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Modify court</CourtReserveLink>
-            {/* Once the court is booked, Add to calendar sits here with the other options. */}
-            {court.kind === 'booked' && live && (
-              <a className="btn secondary cal-opt" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
-                <CalendarPlusIcon />
-                Add to calendar
-              </a>
-            )}
-            <button className="btn danger" disabled={s.state.flags.started || s.courtState === 'not_opened'} onClick={() => ctx.open('cancel', s.id)}>
-              {s.state.flags.canceled ? 'Reopen session' : 'Cancel session'}
-            </button>
-          </div>
-          {(later || needsCourt || s.shownEarly) && (
-            <div className="opt-extra">
-              {later && <BookedButton ctx={ctx} s={s} small />}
-              {(needsCourt || later) && <CourtWaitlistStart ctx={ctx} s={s} />}
-              {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
+          {(inCount > 0 || cancelBy) && !s.state.flags.canceled && (
+            <div className="card-meta">
+              {inCount > 0 && (
+                <button
+                  type="button"
+                  className="paid-pill"
+                  data-all-paid={s.paidCount === inCount ? 'yes' : undefined}
+                  aria-label={`${s.paidCount} of ${inCount} paid. Open the players list.`}
+                  onClick={() => ctx.open('roster', s.id)}
+                >
+                  <span>{s.paidCount} of {inCount} paid</span>
+                </button>
+              )}
+              {cancelBy && <span className="cancel-by-soon">{cancelBy}</span>}
             </div>
           )}
         </div>
-      )}
+      </div>
+      {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
     </article>
   );
 }
 
-/** "Oct 27, 7:30 AM", plus "(passed)" once it's gone. Short enough for one line on the card. */
-function shortDeadline(s: AdminSessionView, tz: string, nowMs: number): string {
-  if (!s.cancellationDeadlineAt) return 'not set';
-  const when = `${formatMonthDay(s.cancellationDeadlineAt, tz)}, ${formatTime(s.cancellationDeadlineAt, tz)}`;
-  return Date.parse(s.cancellationDeadlineAt) <= nowMs ? `${when} (passed)` : when;
+/** The gray reason line for a game that is canceled, played or already started. */
+function courtLine(court: { kind: string; text: string }) {
+  return (
+    <div className="court-status">
+      <CourtIcon kind={court.kind as CourtKind} />
+      <span>{court.text}</span>
+    </div>
+  );
+}
+
+/** The card's one-tap switch. Shows the tap at once, saves it, and puts it back if the save fails. */
+function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue }) {
+  const { busy, run } = useAction(ctx);
+  const [picked, setPicked] = useState<CourtSwitchValue | null>(null);
+  const shown = picked ?? value;
+  return (
+    <CourtSwitch
+      value={shown}
+      disabled={busy}
+      label={`Court status for ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}
+      onPick={async (to) => {
+        setPicked(to);
+        await run(() => api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to }), to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked');
+        setPicked(null);
+      }}
+    />
+  );
 }
 
 /**
@@ -245,18 +199,6 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   );
 }
 
-/** "I booked it": one tap, no questions. The deadline starts at 12 hours before play. */
-function BookedButton({ ctx, s, small }: { ctx: AdminCtx; s: AdminSessionView; small?: boolean }) {
-  const { busy, run } = useAction(ctx);
-  return (
-    <>
-      <button className={small ? 'btn small secondary' : 'btn'} disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court booked')}>
-        {busy ? 'Saving…' : 'I booked it'}
-      </button>
-    </>
-  );
-}
-
 /** "Court opened" / "Didn't open" while on the venue's court waitlist. Both one tap, "Didn't open" asks first. */
 export function CourtWaitButtons({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
@@ -290,20 +232,7 @@ export function CourtWaitButtons({ ctx, s }: { ctx: AdminCtx; s: AdminSessionVie
   );
 }
 
-function CourtWaitlistStart({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const { busy, run } = useAction(ctx);
-  return (
-    <button
-      className="btn small secondary"
-      disabled={busy}
-      onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' }), "On the court waitlist")}
-    >
-      On court waitlist
-    </button>
-  );
-}
-
-function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+export function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   return (
     <button className="btn small secondary" disabled={busy} onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/show`, { shown: false }), 'Hidden again')}>
@@ -347,22 +276,21 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const now = useNow();
   const { busy, run } = useAction(ctx);
-  const passed = s.state.flags.deadlinePassed;
+  const passed = Date.parse(cancelByIso(s.startsAt)) <= now;
   const booked = s.bookingStatus === 'booked';
   return (
     <div className="stack">
       <p className="small">
         <strong>{s.confirmedCount} going.</strong> {s.state.flags.playersNeeded} more needed.{' '}
-        {s.cancellationDeadlineAt &&
-          (passed
-            ? booked
-              ? 'The cancellation deadline passed, so canceling the court may not be free.'
-              : 'The cancellation deadline passed.'
-            : `Reschedule or cancel by ${deadlineLine(s, tz, now)}.`)}
+        {passed
+          ? booked
+            ? 'The cancellation deadline passed, so canceling the court may not be free.'
+            : 'The cancellation deadline passed.'
+          : `Reschedule or cancel by ${cancelByShort(s.startsAt, tz)}.`}
       </p>
       <div className="action-strip">
-        <button className="btn small secondary" disabled={busy} onClick={() => ctx.open('booking', s.id)}>
-          Edit booking
+        <button className="btn small secondary" disabled={busy} onClick={() => ctx.open('edit', s.id)}>
+          Edit game
         </button>
         <button className="btn small danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
           Cancel session
@@ -380,12 +308,12 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
           Keep as is
         </button>
       </div>
-      {s.cancellationDeadlineAt && !passed && (
+      {!passed && (
         <details>
           <summary className="small" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>
             Text this alert to yourself
           </summary>
-          <SmsDraft to="You" phone={null} body={deadlineAlertMessage(s, tz, s.cancellationDeadlineAt)} />
+          <SmsDraft to="You" phone={null} body={deadlineAlertMessage(s, tz, cancelByIso(s.startsAt))} />
         </details>
       )}
     </div>
@@ -407,28 +335,26 @@ export function SessionSheets({
   const kind = s ? sheet!.kind : null;
   if (kind === 'cancel' && s) return <CancelSheet ctx={ctx} s={s} onClose={onClose} />;
   const titles: Record<Exclude<SheetKind, 'cancel'>, string> = {
-    booking: `Booking · ${title}`,
+    edit: s ? `Edit game · ${formatShortDate(s.startsAt, tz).replace(',', '')}` : '',
     roster: `Players · ${title}`,
     payments: `Money · ${title}`,
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
+    moved_set: `Moved · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
-      {s && kind === 'booking' && (
-        <div className="stack">
-          <BookingForm ctx={ctx} s={s} onDone={onClose} />
-          {!s.state.flags.started && (
-            <details className="advanced move-session">
-              <summary>Change time or date (move this session)</summary>
-              <RescheduleForm ctx={ctx} s={s} onDone={() => ctx.open('moved', s.id)} />
-            </details>
-          )}
-        </div>
+      {s && kind === 'edit' && (
+        <EditGameForm
+          ctx={ctx}
+          s={s}
+          // A real move opens the Moved text (and, unless the switch was just set, "Is the court booked for the new time?").
+          onDone={(moved, statusChanged) => (moved ? ctx.open(statusChanged ? 'moved_set' : 'moved', s.id) : onClose())}
+        />
       )}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
-      {s && (kind === 'canceled' || kind === 'moved') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} />}
+      {s && (kind === 'canceled' || kind === 'moved' || kind === 'moved_set') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} askCourt={kind === 'moved'} />}
     </Sheet>
   );
 }
@@ -440,7 +366,7 @@ export function SessionSheets({
  * optional one-line reason. After a cancel, everyone who paid already has
  * their money as credit. Opening Messages never counts as sending.
  */
-function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; canceled: boolean }) {
+function ChangeText({ ctx, s, canceled, askCourt }: { ctx: AdminCtx; s: AdminSessionView; canceled: boolean; askCourt: boolean }) {
   const tz = ctx.d.group.timezone;
   const [reason, setReason] = useState('');
   const link = siteAddress(ctx.d.group.playerLink);
@@ -462,7 +388,7 @@ function ChangeText({ ctx, s, canceled }: { ctx: AdminCtx; s: AdminSessionView; 
         body={body}
         onOpen={canceled ? () => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {}) : undefined}
       />
-      {!canceled && <CourtForNewTime ctx={ctx} s={s} />}
+      {!canceled && askCourt && <CourtForNewTime ctx={ctx} s={s} />}
       {canceled && <CreditBackList s={s} />}
     </div>
   );
@@ -514,91 +440,6 @@ function CreditBackList({ s }: { s: AdminSessionView }) {
         ))}
       </ul>
     </section>
-  );
-}
-
-// ---------- Booking ----------
-
-function BookingForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; onDone: () => void }) {
-  const tz = ctx.d.group.timezone;
-  const [status, setStatus] = useState<BookingStatus>(s.bookingStatus === 'needs_booking' ? 'booked' : s.bookingStatus);
-  const [ref, setRef] = useState(s.reservationReference ?? '');
-  const [cost, setCost] = useState(s.courtCostCents !== null ? (s.courtCostCents / 100).toFixed(2) : '');
-  const [costError, setCostError] = useState<string | null>(null);
-  const [deadline, setDeadline] = useState(s.cancellationDeadlineAt ? toLocalInputValue(s.cancellationDeadlineAt, tz) : '');
-  const { busy, run } = useAction(ctx);
-  const deadlineIso = deadline ? fromLocalInputValue(deadline, tz) : null;
-  const defaultHours = ctx.d.group.settings.defaultDeadlineHours;
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const cents = cost.trim() === '' ? null : parseDollars(cost);
-    setCostError(cost.trim() !== '' && cents === null ? 'Enter an amount like 48 or 48.50.' : null);
-    if (cost.trim() !== '' && cents === null) return;
-    const ok = await run(
-      () =>
-        api('PUT', `/api/admin/sessions/${s.id}/booking`, {
-          bookingStatus: status,
-          venueName: s.venueName,
-          venueBookingUrl: s.venueBookingUrl,
-          reservationReference: ref || null,
-          courtCostCents: cents,
-          cancellationDeadlineAt: deadlineIso,
-        }),
-      'Booking saved',
-    );
-    if (ok) onDone();
-  }
-
-  return (
-    <form className="stack" onSubmit={submit}>
-      <div className="segmented" role="group" aria-label="Court status">
-        {(
-          [
-            ['needs_booking', 'Not booked'],
-            ['booked', 'Booked'],
-            ['unavailable', 'Not available'],
-          ] as const
-        ).map(([v, label]) => (
-          <button type="button" key={v} aria-pressed={status === v} onClick={() => setStatus(v)}>
-            {label}
-          </button>
-        ))}
-      </div>
-      <label className="field">
-        Cancellation deadline
-        <input type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} />
-      </label>
-      <button
-        type="button"
-        className="btn small ghost"
-        onClick={() => setDeadline(toLocalInputValue(new Date(Date.parse(s.startsAt) - defaultHours * 3600_000).toISOString(), tz))}
-      >
-        Fill in {defaultHours} hours before start
-      </button>
-      {deadlineIso && (
-        <p className="small">
-          Deadline: <strong>{formatDateTime(deadlineIso, tz)}</strong>
-        </p>
-      )}
-      <details className="advanced" open={!!(ref || cost)}>
-        <summary>More details</summary>
-        <div className="stack">
-          <label className="field">
-            Reservation number (optional)
-            <input type="text" value={ref} onChange={(e) => setRef(e.target.value)} maxLength={80} />
-          </label>
-          <label className="field">
-            Court cost (only you see this)
-            <input type="text" inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="48.00" aria-invalid={costError ? true : undefined} />
-            {costError && <span className="field-error">{costError}</span>}
-          </label>
-        </div>
-      </details>
-      <button className="btn" type="submit" disabled={busy}>
-        {busy ? 'Saving…' : 'Save booking'}
-      </button>
-    </form>
   );
 }
 
@@ -912,75 +753,10 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   );
 }
 
-// ---------- Reschedule ----------
-
-function RescheduleForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; onDone: () => void }) {
-  const tz = ctx.d.group.timezone;
-  const startLocal = toLocalInputValue(s.startsAt, tz);
-  const [date, setDate] = useState(startLocal.slice(0, 10));
-  const [start, setStart] = useState(startLocal.slice(11));
-  const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
-  // The game's length (2 hours usually): a new start moves the end with it, unless the end is changed by hand.
-  const lengthMin = Math.max(30, Math.round((Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 60_000));
-  const pickStart = (v: string) => {
-    setStart(v);
-    const m = /^(\d{2}):(\d{2})$/.exec(v);
-    if (!m) return;
-    const total = Math.min(Number(m[1]) * 60 + Number(m[2]) + lengthMin, 23 * 60 + 59);
-    setEnd(`${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`);
-  };
-  const { busy, run } = useAction(ctx);
-  const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
-  const endsAt = date && end ? fromLocalInputValue(`${date}T${end}`, tz) : null;
-
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    let changed = false;
-    const ok = await run(async () => {
-      changed = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
-    }, 'Session moved');
-    // Then the Moved text and "Is the court booked for the new time?" (only when the time really changed).
-    if (ok && changed) onDone();
-  }
-
-  return (
-    <form className="stack" onSubmit={submit}>
-      {s.bookingStatus === 'booked' && (
-        <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
-          Change court on CourtReserve
-        </CourtReserveLink>
-      )}
-      <label className="field">
-        Date
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-      </label>
-      <div className="row" style={{ flexWrap: 'nowrap' }}>
-        <label className="field" style={{ flex: 1 }}>
-          Start
-          <input type="time" value={start} onChange={(e) => pickStart(e.target.value)} required />
-        </label>
-        <label className="field" style={{ flex: 1 }}>
-          End
-          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
-        </label>
-      </div>
-      {startsAt && endsAt && (
-        <p className="small">
-          New time: <strong>{formatShortDate(startsAt, tz)}, {formatTimeRange(startsAt, endsAt, tz)}</strong>
-        </p>
-      )}
-      <button className="btn" type="submit" disabled={busy || !startsAt || !endsAt}>
-        {busy ? 'Saving…' : 'Move session'}
-      </button>
-    </form>
-  );
-}
-
 // ---------- Cancel ----------
 
 function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; onClose: () => void }) {
   const tz = ctx.d.group.timezone;
-  const now = useNow();
   const { busy, run } = useAction(ctx);
   const reopening = s.state.flags.canceled;
   // "Were you charged for this court?" is only asked within 12 hours of the start. No is the default.
@@ -1004,7 +780,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
               <p>Players will see it as canceled, and reminders and payments stop for it.</p>
               <Notice tone="warn" title="This does not cancel your court">
                 Cancel the reservation with the venue yourself.
-                {s.cancellationDeadlineAt ? ` Venue deadline: ${deadlineLine(s, tz, now)}.` : ''}
+                {` Cancel by ${cancelByShort(s.startsAt, tz)}.`}
               </Notice>
               {s.bookingStatus === 'booked' && (
                 <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>

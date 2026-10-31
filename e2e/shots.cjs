@@ -13,7 +13,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 5198;
+const PORT = Number(process.env.E2E_PORT) || 5198;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'shots-setup-token-0123456789';
 const PIN = '482913';
@@ -119,23 +119,23 @@ async function main() {
       await cards.first().waitFor();
       await snap('01-organizer-home');
       // Gear panel and the Text choices on the first booked card.
-      const booked = cards.filter({ has: page.locator('.court-line') }).first();
-      await booked.getByRole('button', { name: /^Session options/ }).click();
-      await booked.getByRole('button', { name: 'Text', exact: true }).click();
+      const booked = cards.filter({ has: page.locator('.court-switch') }).first();
+      await booked.getByRole('button', { name: /^Game menu for/ }).click();
+      await booked.getByRole('menuitem', { name: 'Text the group', exact: true }).click();
       await booked.scrollIntoViewIfNeeded();
       await page.evaluate(() => window.scrollBy(0, -80));
       await snap('02-organizer-gear-panel');
-      await booked.getByRole('button', { name: /^Session options/ }).click();
+      await page.keyboard.press('Escape');
       // Add game sheet.
       await page.getByRole('button', { name: '+ Add game' }).click();
       await page.locator('dialog[open]').waitFor();
       await snap('03-add-game-sheet');
       await page.keyboard.press('Escape');
       // Edit booking sheet.
-      await booked.getByRole('button', { name: /^Session options/ }).click();
-      await booked.locator('.options').getByRole('button', { name: 'Edit booking' }).click();
+      await booked.getByRole('button', { name: /^Game menu for/ }).click();
+      await booked.getByRole('menuitem', { name: 'Edit game', exact: true }).click();
       await page.locator('dialog[open]').waitFor();
-      await snap('04-edit-booking-sheet');
+      await snap('04-edit-game-sheet');
       await page.keyboard.press('Escape');
       const tab = (n) => page.getByRole('navigation', { name: 'Organizer sections' }).getByRole('button', { name: new RegExp(`^${n}`) });
       await tab('Players').click();

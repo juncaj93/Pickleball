@@ -13,7 +13,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 5193;
+const PORT = Number(process.env.E2E_PORT) || 5193;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'texts-setup-token-0123456789';
 const PIN = '482913';
@@ -120,9 +120,14 @@ async function main() {
       await page.screenshot({ path: path.join(SHOTS, 'texts-debug.png'), fullPage: true });
       throw e;
     });
-    const gear = card.getByRole('button', { name: /^Session options/ });
+    // Only one pop-up at a time: close any other game's menu first (Escape), as a person would.
+    if ((await page.getByRole('menu').count()) && !(await card.getByRole('menu').count())) {
+      await page.keyboard.press('Escape');
+      await page.getByRole('menu').waitFor({ state: 'detached' });
+    }
+    const gear = card.getByRole('button', { name: /^Game menu for/ });
     if ((await gear.getAttribute('aria-expanded')) !== 'true') await gear.click();
-    const btn = card.getByRole('button', { name: 'Text', exact: true });
+    const btn = card.getByRole('menuitem', { name: 'Text the group', exact: true });
     if ((await btn.getAttribute('aria-expanded')) !== 'true') await btn.click();
     const menu = card.locator('.text-menu');
     await menu.locator('.text-row').first().waitFor();

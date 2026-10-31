@@ -40,6 +40,8 @@ import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
+import { adminChangeStamp } from './stamp';
+import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -53,8 +55,18 @@ export async function logout(ctx: Ctx) {
   return { ok: true };
 }
 
+/** GET /api/admin/version: the tiny "did anything change?" answer an open organizer screen asks every few seconds. */
+export async function adminVersion(ctx: Ctx): Promise<Response> {
+  const group = await requireAdmin(ctx);
+  return new Response(JSON.stringify({ v: await adminChangeStamp(ctx, group) }), {
+    headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
+}
+
 export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const group = await requireAdmin(ctx);
+  // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
+  const version = await adminChangeStamp(ctx, group);
   await ensureSessions(ctx.db, group, ctx.nowMs);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
@@ -154,6 +166,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(await loadMarks(ctx.db, group.id, ctx.nowMs).then((m) => ({ taskMarks: m.marks, courtBookedAt: m.courtBookedAt }))),
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
+    version,
   };
 }
 
@@ -372,12 +385,57 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
   await ctx.db
-    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
+    .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ? WHERE id = ? AND status <> 'canceled'")
     .bind(ctx.nowIso, session.id)
     .run();
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
   return { ok: true };
+}
+
+/**
+ * The Not booked | Waitlist | Booked switch: one tap, one write, so a game can
+ * never end up half-way between two states. Waitlist keeps the old third
+ * booking value ("unavailable", once labeled Not available) AND the venue
+ * waitlist flag, so everything that already understands the court waitlist
+ * (standby order, "Court opened") works unchanged. Booked is the same as
+ * "I booked it"; Not booked is the same as answering No after a move.
+ * Nothing here touches money.
+ */
+export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const to = v.oneOf(body.status, 'status', ['not_booked', 'waitlist', 'booked'] as const);
+  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
+  const from = courtSwitchOf({ bookingStatus: session.booking_status, courtState: session.court_state });
+  if (from === to) return { ok: true, changed: false, status: to };
+  if (to === 'booked') {
+    await markBooked(ctx, {});
+    return { ok: true, changed: true, status: to };
+  }
+  if (to === 'waitlist') {
+    await ctx.db
+      .prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
+      .bind(ctx.nowIso, session.id)
+      .run();
+    await audit(ctx.db, group.id, session.id, 'court_waitlist', {}, ctx.nowIso);
+  } else {
+    await ctx.db
+      .prepare(
+        `UPDATE sessions SET booking_status = 'needs_booking', status = 'planned',
+           court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ?
+         WHERE id = ? AND status <> 'canceled'`,
+      )
+      .bind(ctx.nowIso, session.id)
+      .run();
+    // Standby players on a waitlisted game are an ordinary game's players again.
+    if (from === 'waitlist' && ctx.nowMs < Date.parse(session.starts_at)) {
+      await settle(ctx.db, { ...session, booking_status: 'needs_booking', court_state: null }, ctx.nowIso, settingsOf(group).maxPlayers);
+    }
+    await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
+  }
+  await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
+  return { ok: true, changed: true, status: to };
 }
 
 /** The venue's court waitlist: start waiting, give up ("Didn't open"), or go back to not booked. */
@@ -394,7 +452,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
   } else if (action === 'clear') {
     await ctx.db.prepare('UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = \'waitlist\'').bind(ctx.nowIso, session.id).run();
   } else {
-    if (session.court_state !== 'waitlist') throw new HttpError(409, 'not_waiting', 'This session is not on the court waitlist.');
+    if (!isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state })) throw new HttpError(409, 'not_waiting', 'This session is not on the court waitlist.');
     await cancelWithMoney(
       ctx,
       group,
@@ -402,7 +460,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
       ctx.db
         .prepare(
           `UPDATE sessions SET court_state = 'not_opened', status = 'canceled', canceled_at = ?, canceled_by = 'court_not_opened', updated_at = ?
-           WHERE id = ? AND court_state = 'waitlist' AND finalized_at IS NULL`,
+           WHERE id = ? AND status <> 'canceled' AND finalized_at IS NULL`,
         )
         .bind(ctx.nowIso, ctx.nowIso, session.id),
     );

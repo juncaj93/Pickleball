@@ -4,6 +4,7 @@ import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { nextTasks, type Task, type TaskAction, type TaskSession } from '../../../shared/tasks';
+import { courtSwitchOf } from '../../../shared/court';
 import { checkInOpensMs, type Suggestion } from './suggestions';
 import { sessionTexts } from './textMenu';
 
@@ -58,4 +59,24 @@ export function coveredByDoNow(c: Suggestion, d: AdminDashboard, nowMs: number):
   // Only booked games get the night-before card; others keep their suggestion card as before.
   if (c.kind === 'need' || c.kind === 'checkin') return s.bookingStatus === 'booked' && nowMs >= checkInOpensMs(s.startsAt, d.group.timezone);
   return false;
+}
+
+/** The "no court yet" family of cards: all say the same thing (nothing is booked), so a game gets at most one. */
+const NO_COURT_KINDS: ReadonlySet<Task['kind']> = new Set(['book', 'nocourt', 'nocourt_later']);
+
+/**
+ * What the "Do this now" card shows: the task list, one card per game for the court question.
+ * A game on Waitlist is asked "did the court open?" (its own card), so the "No court yet" cards for
+ * it are dropped; a Not booked game keeps its "No court yet" card; a Booked game has none.
+ * The Telegram alerts come from the full list and are not affected.
+ */
+export function visibleTasks(d: AdminDashboard, nowMs: number, adminUrl: string): Task[] {
+  const waiting = new Set(d.sessions.filter((s) => courtSwitchOf(s) === 'waitlist').map((s) => s.id));
+  const seen = new Set<string>();
+  return dashboardTasks(d, nowMs, adminUrl).filter((t) => {
+    if (!NO_COURT_KINDS.has(t.kind)) return true;
+    if (waiting.has(t.sessionId) || seen.has(t.sessionId)) return false;
+    seen.add(t.sessionId);
+    return true;
+  });
 }

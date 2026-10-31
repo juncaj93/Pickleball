@@ -348,3 +348,36 @@ export function wantInSubline(confirmedCount: number, maxPlayers: number): strin
   if (confirmedCount >= maxPlayers) return `${confirmedCount} are in. You'd be on the waitlist.`;
   return `${confirmedCount} are in. You'd make it ${confirmedCount + 1}.`;
 }
+
+// ---------- Cancel-by (organizer screens) ----------
+
+/** The cancel-by time is always this many hours before the start. Nobody types or saves it. */
+export const CANCEL_BY_HOURS = 12;
+
+/** Exactly 12 hours before the start, worked out from the start every time it is shown. */
+export function cancelByIso(startsAtIso: string): string {
+  return new Date(Date.parse(startsAtIso) - CANCEL_BY_HOURS * 3_600_000).toISOString();
+}
+
+/** "Tue 8:00 AM": when to cancel the court by. */
+export function cancelByShort(startsAtIso: string, tz: string): string {
+  const at = cancelByIso(startsAtIso);
+  return `${fmt(tz, { weekday: 'short' }).format(new Date(at))} ${formatTime(at, tz)}`;
+}
+
+/**
+ * The red line on a game card: "Cancel by 8:00 AM today". Only in the last 24
+ * hours before the cancel-by time; before that (and after it passes) the card
+ * says nothing.
+ */
+export function cancelByCardLine(startsAtIso: string, nowMs: number, tz: string): string | null {
+  const at = Date.parse(cancelByIso(startsAtIso));
+  if (nowMs >= at || nowMs < at - 24 * 3_600_000) return null;
+  const day = (ms: number) => {
+    const p = localParts(ms, tz);
+    return Date.UTC(p.year, p.month - 1, p.day);
+  };
+  const ahead = Math.round((day(at) - day(nowMs)) / 86_400_000);
+  const word = ahead <= 0 ? 'today' : ahead === 1 ? 'tomorrow' : fmt(tz, { weekday: 'long' }).format(new Date(at));
+  return `Cancel by ${formatTime(cancelByIso(startsAtIso), tz)} ${word}`;
+}
