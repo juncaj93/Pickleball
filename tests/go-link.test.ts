@@ -83,20 +83,20 @@ describe('the /api/go endpoint', () => {
     expect((await g.dash()).taskMarks).toContain(`${g.tue.id}:night_text`);
   });
 
-  it('with the direct link switched off, the night alert uses the admin link', async () => {
+  it('with the direct link switched off, the night alert has no link in its words (Open site is the way in)', async () => {
     const g = await group();
     g.app.env = { ...g.app.env, GO_LINKS: 'off' };
     g.app.now = at('2026-11-03T00:00:00Z');
     await g.ctx.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': SECRET });
     await g.app.settle();
-    expect(g.sent).toEqual(['Tuesday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/admin']);
+    expect(g.sent).toEqual(['Tuesday: 3 players in, need a 4th. Text the group']);
   });
 
   it('the TEST smart alert carries a TEST direct link that opens the text but never marks it done', async () => {
     const g = await group();
     expect((await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {})).status).toBe(200);
     await g.app.settle();
-    const m = /TEST direct text link: https:\/\/pickleball\.juncaj\.net\/go\/([A-Za-z0-9_.-]+)$/.exec(g.sent[0]);
+    const m = /^TEST smart alert from Pickleball Bros\. Nothing to do\. Real ones look like: "Tuesday: 3 players in, need a 4th\. Text the group: https:\/\/pickleball\.juncaj\.net\/go\/([A-Za-z0-9_.-]+)"$/.exec(g.sent[0]);
     expect(m).not.toBeNull();
     const r = await g.open(m![1]);
     expect(r.status).toBe(200);
@@ -108,6 +108,7 @@ describe('the /api/go endpoint', () => {
     await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {});
     await g.app.settle();
     expect(g.sent[0]).not.toMatch(/\/go\//);
+    expect(g.sent[0]).toBe('TEST smart alert from Pickleball Bros. Nothing to do. Real ones look like: "Tuesday: 3 players in, need a 4th. Text the group"');
   });
 
   it('4 or more: the Check-in text', async () => {

@@ -486,10 +486,10 @@ describe('the tick endpoint', () => {
     expect(g.sent).toEqual([
       `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
-      `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
+      `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
+      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it`,
       `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`,
+      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it`,
     ]);
     for (const t of g.sent) {
       expect(t).not.toMatch(/555|\(313\)|\$|venmo/i);
@@ -690,7 +690,7 @@ describe('the tick endpoint', () => {
     // New deadline 8:30 AM: cancel warning 10:30 PM, follow-up 11:00 PM, game-day check 7:45 AM.
     expect(g.sent.filter((t) => !t.includes('Nov 17'))).toEqual([
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
-      `Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`,
+      `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
       `Tonight: only 3 players in. Cancel court before 8:30 AM: ${COURTRESERVE_CANCEL_URL}`,
     ]);
     const card = (await import('../src/pages/admin/doNow')).dashboardTasks(await g.dash(), at('2026-11-03T12:50:00Z'), ADMIN);
