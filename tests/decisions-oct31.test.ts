@@ -7,7 +7,7 @@
 //  Players-tab Undo of a refund names the refund.
 import { describe, expect, it } from 'vitest';
 import { potEffect } from '../shared/credit';
-import { HOUR, playerPhone, setupGroup, TestApp } from './harness';
+import { HOUR, PIN, playerPhone, setupGroup, TestApp } from './harness';
 
 const TZ = 'America/Detroit';
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
@@ -198,4 +198,24 @@ describe('organizer screens carry what they showed', () => {
     await refund({ refunded: false, ledgerId: latest.id });
     expect(potOf(ctx, 'Blair')).toBe(1400);
   });
+
+describe('claims: fourth audit pass', () => {
+  it('a stale "Want in?" No on a claimed seat changes nothing; Paid still gives all of it back', async () => {
+    const ctx = await group();
+    const { g, blair } = await claimed(ctx, { credit: 300 });
+    await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {});
+    await blair.call('POST', `/api/sessions/${g.id}/decline`, {});
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/claim`, { playerId: ctx.byName.Blair, paid: true });
+    expect(potOf(ctx, 'Blair')).toBe(1400);
+  });
+
+  it('an unanswered claim stays on Home after 90 days', async () => {
+    const ctx = await group();
+    const { g, blair } = await claimed(ctx);
+    await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {});
+    ctx.app.now = Date.parse(g.endsAt) + 120 * 24 * HOUR; // well past the 90-day window
+    expect((await ctx.organizer.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200); // the sign-in ran out meanwhile
+    expect((await dash(ctx)).paymentClaims).toEqual([expect.objectContaining({ sessionId: g.id, name: 'Blair' })]);
+  });
+});
 });

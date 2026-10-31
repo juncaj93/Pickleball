@@ -364,7 +364,11 @@ export async function decline(db: D1Database, session: SessionRow, playerId: str
   const existing = await existingRow(db, session.id, playerId);
   if (existing?.status === 'confirmed' || existing?.status === 'waitlisted' || existing?.status === 'declined') return;
   if (existing) {
-    await db.prepare("UPDATE session_players SET status = 'declined', updated_at = ? WHERE id = ?").bind(nowIso, existing.id).run();
+    // A seat that still holds money (an unanswered I paid claim) stays as it is: "No" changes nothing about money.
+    await db
+      .prepare("UPDATE session_players SET status = 'declined', updated_at = ? WHERE id = ? AND NOT (payment_status = 'paid' AND refunded_at IS NULL)")
+      .bind(nowIso, existing.id)
+      .run();
     return;
   }
   await db

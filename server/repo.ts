@@ -374,14 +374,18 @@ export async function loadHiddenSessions(db: D1Database, group: GroupRow, nowMs:
 
 /**
  * How far back to load sessions: `defaultMs` ago, or further back if
- * someone still owes for an older game, so unpaid amounts never drop off.
+ * someone still owes for an older game or an "I paid" claim is unanswered,
+ * so neither ever drops off.
  */
 export async function lookbackIso(db: D1Database, groupId: string, nowMs: number, defaultMs: number): Promise<string> {
   const usual = new Date(nowMs - defaultMs).toISOString();
   const row = await db
     .prepare(
       `SELECT MIN(s.ends_at) AS oldest FROM session_players sp JOIN sessions s ON s.id = sp.session_id
-       WHERE s.group_id = ? AND s.status <> 'canceled' AND sp.status = 'confirmed' AND sp.payment_status = 'unpaid' AND s.ends_at <= ?`,
+       WHERE s.group_id = ? AND s.ends_at <= ?
+         AND ((s.status <> 'canceled' AND sp.status = 'confirmed' AND sp.payment_status = 'unpaid')
+           -- an unanswered "I paid" claim (seat that left, or a canceled game) stays on the organizer's Home
+           OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL AND (sp.status <> 'confirmed' OR s.status = 'canceled')))`,
     )
     .bind(groupId, usual)
     .first<{ oldest: string | null }>();

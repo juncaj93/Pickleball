@@ -174,7 +174,7 @@ export function seatMoneyBackStatements(
   // ?1 now, ?2 reason, ?3 session, ?4 organizer ('' for none), ?5 player (NULL for every seat), ?6 group, ?7 entry id.
   const seat = (sp: string) => `${sp}.session_id = ?3 AND (?5 IS NULL OR ${sp}.player_id = ?5)`;
   // Never the organizer, and never a court-payment row (status 'declined' and paid: only the organizer has those).
-  const notOrganizer = (sp: string) => `${sp}.player_id <> ?4 AND ${sp}.status <> 'declined'`;
+  const notOrganizer = (sp: string) => `${sp}.player_id <> ?4 AND NOT (${sp}.status = 'declined' AND ${sp}.self_paid_at IS NULL)`;
   const values = [nowIso, reason, sessionId, organizerId ?? '', playerId, groupId, entryId ?? null];
   // Each statement gets values up to the highest ?N it uses (SQLite refuses extra ones).
   const bind = (sql: string) => db.prepare(sql).bind(...values.slice(0, Math.max(...[...sql.matchAll(/\?(\d+)/g)].map((m) => Number(m[1])))));

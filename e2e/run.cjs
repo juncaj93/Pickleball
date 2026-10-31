@@ -3594,6 +3594,17 @@ async function main() {
       await row.getByRole('button', { name: 'I paid' }).click();
       await row.locator('.paid-tag', { hasText: /^Paid/  }).waitFor();
       await row.getByRole('button', { name: "Didn't pay?" }).waitFor();
+      // The organizer confirms it (since Oct 31 only a confirmed payment turns into credit on a drop; an
+      // unconfirmed I paid stays a claim for the organizer).
+      {
+        const api = (method, url, data) => admin.request.fetch(`${BASE}${url}`, { method, data, headers: { Origin: BASE } });
+        const d = await (await api('GET', '/api/admin/dashboard')).json();
+        const frankie = d.players.find((x) => x.name === 'Frankie').id;
+        const sid = id.replace(/^row-/, '');
+        assert((await api('POST', `/api/admin/sessions/${sid}/payment`, { playerId: frankie, paid: true })).ok(), 'organizer confirms the I paid');
+        await p.reload();
+        await row.locator('.paid-tag', { hasText: /^Paid/ }).waitFor();
+      }
       // Already paid, then out: the $14 is credit now (the chip appears); in again, that credit is used by itself: Paid with credit at once.
       await row.getByRole('button', { name: 'Drop out' }).click();
       await confirmDrop(p);
