@@ -128,7 +128,7 @@ async function main() {
       if (sub) assert(squash(await subEl.innerText()) === sub, `second line: ${await subEl.innerText()}`);
       else assert((await subEl.count()) === 0, 'there should be no second line');
       const when = card.locator('.suggest-when');
-      assert(squash(await when.innerText()) === 'Tue, Nov 3 · 8–10 PM', `line 1: ${await when.innerText()}`);
+      assert(squash(await when.innerText()) === 'Tue, Nov 3 · 8 PM', `line 1: ${await when.innerText()}`);
       assert((await when.locator('.holiday').count()) === 0 && !/Election Day/.test(await card.innerText()), 'the popup has no holiday pill any more');
       const ys = await when.evaluate((el) => [...el.children].map((c) => Math.round(c.getBoundingClientRect().height)));
       assert(ys.length === 1 && ys[0] <= 24, `date and time are not on one line: ${ys}`);

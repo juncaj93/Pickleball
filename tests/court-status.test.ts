@@ -16,7 +16,7 @@ describe('court status words', () => {
     expect(courtStatus({ ...base, courtState: 'waitlist' })).toEqual({
       kind: 'waitlist',
       text: 'Court waitlist',
-      playerText: 'Waiting on the court',
+      playerText: 'Court not booked', // players never read waiting or standby words (src/courtDisplay.ts)
     });
   });
 
@@ -147,7 +147,7 @@ describe('player wording', () => {
     const g = (await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data;
     const words = (id: string) => courtStatus(g.sessions.find((x: any) => x.id === id)).playerText;
     expect(words(a.id)).toBe('Court booked');
-    expect(words(b.id)).toBe('Waiting on the court');
+    expect(words(b.id)).toBe('Court not booked');
     const other = g.sessions.find((x: any) => x.id !== a.id && x.id !== b.id);
     expect(courtStatus(other).playerText).toBe('Court not booked');
   });

@@ -48,6 +48,8 @@ function dropped(s: PlayerSessionView, name: string, max: number): PlayerSession
   return {
     ...s,
     confirmed,
+    // Also off the waiting list (a game with no court booked shows those people as in).
+    waitlist: s.waitlist.filter((c) => c.name !== name),
     countText: countText(confirmed.length, max),
     full: confirmed.length >= max,
     joinAs: joinOutcome(confirmed.length, max),

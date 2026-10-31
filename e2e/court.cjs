@@ -228,6 +228,9 @@ async function main() {
     await ctx.close();
   });
 
+  // Pay prompts only show once a court is booked (a game with no court reads like a normal game and asks for nothing; see e2e/no-court.cjs),
+  // so this check books the game's court, then puts it back.
+  await call(api.request, 'POST', `/api/admin/sessions/${four.id}/booked`, {});
   await check('player screen, Ryan: still sees Pay $14 and I paid, and no court words', async () => {
     const { ctx, page } = await phone('Ryan');
     await page.locator('.schedule article').first().waitFor({ timeout: 8000 });
@@ -236,6 +239,7 @@ async function main() {
     assert(!COURT_WORDS.test(t.replace(/Northville Pickleball Club/g, '')), `court words on a player screen: ${t.slice(0, 300)}`);
     await ctx.close();
   });
+  await call(api.request, 'PUT', `/api/admin/sessions/${four.id}/booking`, { bookingStatus: 'needs_booking', courtCostCents: null });
 
   await check('View as Alex in the demo: still no Pay and no court words', async () => {
     const ctx = await browser.newContext({ viewport: { width: 390, height: 860 }, isMobile: true, hasTouch: true });

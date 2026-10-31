@@ -159,6 +159,8 @@
 .sched-tilecol {
   flex: none;
   width: 84px;
+  /* The time under the tile sizes itself to this column (cqw below), so it can never run past the tile. */
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -341,16 +343,29 @@
   font-weight: 700;
   color: var(--pc-muted);
 }
-/* Half-hour ranges like "7:30–9:30 PM": smaller and a little tighter so they fit under the tile. */
-.schedule .sched-time.long {
-  font-size: 0.74rem;
-  letter-spacing: -0.02em;
+/* Never wider than the tile's column: the widest start ("10:30 AM", 8 characters) takes about 4.7em, so the
+   text is at most 21% of the column's width tall. Phones that don't know cqw keep the sizes above. */
+.schedule .sched-time {
+  font-size: min(0.95rem, 21cqw);
 }
-.tier-next .sched-time.long {
-  font-size: 0.68rem;
+.tier-next .sched-time {
+  font-size: min(0.82rem, 21cqw);
 }
-.tier-later .sched-time.long {
-  font-size: 0.64rem;
+.tier-later .sched-time {
+  font-size: min(0.74rem, 21cqw);
+}
+/* Just the start time, so it always fits under the tile. A game that is not the usual length adds
+   where it ends on a second short line (a touch smaller), still inside the tile's column. */
+.schedule .sched-time span {
+  display: block;
+}
+.schedule .sched-time.range {
+  line-height: 1.2;
+}
+.schedule .sched-time.range span + span {
+  font-size: 0.8em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 /* ---- Body: head (status + calendar), main (count, names), money line, links ---- */

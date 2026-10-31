@@ -146,7 +146,10 @@ async function main() {
     name: 'Mitchel', isRegular: true, isActive: true, canReceiveSubstituteInvites: true, venmo: '@Mitchel-K',
   });
   const dash = () => call(api.request, 'GET', '/api/admin/dashboard');
+  // Pay prompts and Use credit only show once a court is booked (a game with no court reads like a normal game; see e2e/no-court.cjs),
+  // so the games in this fixture have a court.
   const d0 = await dash();
+  for (const s of d0.sessions.filter((x) => !x.state.flags.past)) await call(api.request, 'POST', `/api/admin/sessions/${s.id}/booked`, {});
   const id = Object.fromEntries(d0.players.map((p) => [p.name, p.id]));
   const byDate = (d, date) => d.sessions.find((s) => new Date(s.startsAt).toLocaleDateString('en-CA', { timeZone: 'America/Detroit' }) === date);
   const tue = byDate(d0, '2026-10-27');
