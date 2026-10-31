@@ -217,7 +217,8 @@ function layoutReport({ roots, items }) {
   const problems = [];
   let checked = 0;
   for (const root of document.querySelectorAll(roots)) {
-    if (!root.offsetParent) continue;
+    // (A fixed panel, like the gear pop-up that opens above the tab bar, has no offsetParent but is on screen.)
+    if (!root.offsetParent && getComputedStyle(root).position !== 'fixed') continue;
     const card = root.getBoundingClientRect();
     const els = [...root.querySelectorAll(items)].filter((e) => e.offsetParent !== null && e.getClientRects().length && e.checkVisibility() && !e.closest('[hidden], dialog:not([open]), .sr-only'));
     const boxes = els.map((e) => ({ e, b: visual(e), label: (e.getAttribute('aria-label') || e.innerText || e.className || e.tagName).trim().slice(0, 30) }));

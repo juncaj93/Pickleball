@@ -600,15 +600,15 @@ async function main() {
     for (const r of rows) {
       const w = `${where}, ${r.switch} card, ${r.nameLines} name line(s), ${r.pill ? 'pill' : 'no pill'}`;
       if (r.id === rows[0].id && r.bottomPad > 60) continue; // the short-on-players panel adds its own space below
-      assert(Math.abs(r.topPad - 12) <= 0.6, `${w}: top padding ${r.topPad}px, want 12`);
-      if (r.bottomPad <= 60) assert(Math.abs(r.bottomPad - 12) <= 0.6, `${w}: bottom padding ${r.bottomPad}px, want 12`);
+      assert(Math.abs(r.topPad - 10) <= 0.6, `${w}: top padding ${r.topPad}px, want 10`);
+      if (r.bottomPad <= 60) assert(Math.abs(r.bottomPad - 10) <= 0.6, `${w}: bottom padding ${r.bottomPad}px, want 10`);
       if (r.countToNames !== null) assert(Math.abs(r.countToNames - 7.2) <= 0.6, `${w}: count row to names ${r.countToNames}px, want 7.2`);
       if (r.namesToPill !== null) assert(Math.abs(r.namesToPill - 7.2) <= 0.6, `${w}: names to pill ${r.namesToPill}px, want 7.2`);
       if (r.countToNames !== null && r.namesToPill !== null) assert(Math.abs(r.countToNames - r.namesToPill) <= 0.6, `${w}: the gap above the names (${r.countToNames}px) and below it (${r.namesToPill}px) differ`);
     }
   };
   for (const [width, scheme] of [[360, 'light'], [393, 'light'], [393, 'dark'], [430, 'light']]) {
-    await check(`${width}px (${scheme}): the count row, names and paid pill sit the same distance apart (7.2px), with 12px above and below, on every kind of card`, async () => {
+    await check(`${width}px (${scheme}): the count row, names and paid pill sit the same distance apart (7.2px), with 10px above and below, on every kind of card`, async () => {
       const { ctx, page } = await openAdmin(width, scheme);
       const rows = await SPACING(page, CARDS);
       const kinds = new Set(rows.map((r) => `${r.switch}/${r.nameLines}/${r.pill}`));

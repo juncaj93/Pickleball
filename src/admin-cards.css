@@ -327,14 +327,14 @@ body:has(dialog[open]) .updated-line {
 
 /* ---- Even vertical rhythm on the game cards ----
    Before (390 px): top 9 to 10, count row to names 8.2, names to pill 4, bottom 9 to 12 (pill cards 11 to 12).
-   After: top 12, count row to names 7.2, names to pill 7.2, bottom 12, on every card. The three rows
-   (count, names, pill) sit the same distance apart; border and padding always add up to 12 at the top and bottom. */
+   After: top 10, count row to names 7.2, names to pill 7.2, bottom 10, on every card. The three rows
+   (count, names, pill) sit the same distance apart; border and padding always add up to 10 at the top and bottom. */
 .scard {
-  padding-block: 11px;
+  padding-block: 9px;
 }
 .scard.court-needs,
 .scard.court-waitlist {
-  padding-block: 10px;
+  padding-block: 8px;
 }
 .scard .players-line {
   gap: 0;
