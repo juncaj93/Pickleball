@@ -63,6 +63,9 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
  * game is owed again. Only for a game paid entirely with credit; no cash moves.
  */
 export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string) {
+  // After Finalize the credit on the seat is part of the final price and may have money back from it: only the
+  // organizer's Unmark (which takes that back too) can change it now.
+  if (session.finalized_at) throw new HttpError(409, 'finalized', 'This game is finalized. Ask the organizer to change it.');
   const roster = await loadRoster(ctx.db, session.id);
   const row = roster.find((r) => r.player_id === playerId);
   if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
@@ -72,7 +75,7 @@ export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionR
     .first<{ c: number }>();
   const cents = used?.c ?? 0;
   if (cents <= 0 || cents < (row.payment_amount_cents ?? 0)) throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
-  const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'undone');
+  const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'undone', { notFinalized: true });
   await audit(ctx.db, group.id, session.id, 'credit_undone', { player: name, amountCents: back }, ctx.nowIso, name);
   return { ok: true, returnedCents: back };
 }

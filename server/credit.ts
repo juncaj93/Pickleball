@@ -232,9 +232,11 @@ export function returnSeatCreditStatements(
   playerId: string,
   nowIso: string,
   reason: 'unmarked' | 'undone',
-  opts: { creditOnly?: boolean } = {},
+  /** `notFinalized`: only while the game is not finalized (checked in the same statements, so a Finalize at the same moment wins cleanly). */
+  opts: { creditOnly?: boolean; notFinalized?: boolean } = {},
 ): D1PreparedStatement[] {
   const withCash = reason === 'unmarked' && !opts.creditOnly;
+  const open = opts.notFinalized ? ' AND (SELECT finalized_at FROM sessions WHERE id = ?3) IS NULL' : '';
   const taken = withCash ? `(${SEAT_USED('session_players')} + ${SEAT_CASH('session_players')})` : SEAT_USED('session_players');
   const gone = `COALESCE(payment_amount_cents, 0) - ${taken} <= 0`;
   return [
@@ -247,7 +249,7 @@ export function returnSeatCreditStatements(
            self_paid_at = CASE WHEN ${gone} THEN NULL ELSE self_paid_at END,
            payment_amount_cents = CASE WHEN ${gone} THEN NULL ELSE payment_amount_cents - ${taken} END,
            payment_updated_at = ?1, updated_at = ?1
-         WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND ${taken} > 0`,
+         WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid' AND ${taken} > 0${open}`,
       )
       .bind(nowIso, reason, sessionId, playerId),
     db
@@ -255,7 +257,7 @@ export function returnSeatCreditStatements(
         `UPDATE credit_ledger SET ended_at = ?1, ended_reason = ?2
          WHERE session_id = ?3 AND player_id = ?4 AND ended_at IS NULL
            AND ${withCash ? "(kind = 'used' OR (kind = 'kept' AND reason = 'cash'))" : "kind = 'used' AND COALESCE(reason, '') <> 'cash'"}
-           AND NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid')`,
+           AND NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'paid')${open}`,
       )
       .bind(nowIso, reason, sessionId, playerId),
   ];
@@ -280,7 +282,7 @@ export async function returnSeatCredit(
   playerId: string,
   nowIso: string,
   reason: 'unmarked' | 'undone',
-  opts: { creditOnly?: boolean } = {},
+  opts: { creditOnly?: boolean; notFinalized?: boolean } = {},
 ): Promise<number> {
   const before = await creditReturnedAt(db, sessionId, playerId, reason, nowIso);
   await db.batch(returnSeatCreditStatements(db, sessionId, playerId, nowIso, reason, opts));
@@ -301,7 +303,25 @@ export function repriceStatements(db: D1Database, sessionId: string, flatCents: 
   const price = `(SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN session_players.played = 1 THEN s.final_price_cents ELSE NULL END
                   FROM sessions s WHERE s.id = session_players.session_id)`;
   const used = `(${SEAT_USED('session_players')} + ${SEAT_CASH('session_players')})`;
+  // A paid seat that is now short goes back to unpaid; the cash in its payment (beyond the credit on it) is held
+  // against it as a 'cash' pair first, the same way Finalize does, so it still counts and the seat owes only the rest.
+  const short = (sp: string) =>
+    `${sp}.session_id = ?2 AND ${sp}.status = 'confirmed' AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL
+     AND (${SEAT_USED(sp)} + ${SEAT_CASH(sp)}) > 0
+     AND (SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN ${sp}.played = 1 THEN s.final_price_cents ELSE NULL END FROM sessions s WHERE s.id = ${sp}.session_id) > COALESCE(${sp}.payment_amount_cents, 0)`;
+  const cash = (sp: string) => `(COALESCE(${sp}.payment_amount_cents, 0) - ${SEAT_USED(sp)} - ${SEAT_CASH(sp)})`;
+  const hold = (kind: 'kept' | 'used') =>
+    db
+      .prepare(
+        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+         SELECT ${SQL_ID}, s.group_id, sp.player_id, '${kind}', ${cash('sp')}, sp.session_id, ?1, 'cash'
+         FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+         WHERE ${short('sp')} AND ${cash('sp')} > 0`,
+      )
+      .bind(nowIso, sessionId, flatCents);
   return [
+    hold('kept'),
+    hold('used'),
     db
       .prepare(
         `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
@@ -483,14 +503,17 @@ export async function refundCredit(
  * nothing is held twice and nothing is held that was never paid.
  * Statements only, for the caller's batch; `guard` as in creditBackStatements.
  */
-export function holdCashStatements(db: D1Database, args: { groupId: string; sessionId: string; playerId: string; cents: number; nowIso: string; guard?: string }): D1PreparedStatement[] {
-  const { groupId, sessionId, playerId, cents, nowIso, guard } = args;
-  if (cents <= 0) return [];
-  const seatHolds = `EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND payment_amount_cents = ?4)${guard ? ` AND ${guard}` : ''}`;
+export function holdCashStatements(
+  db: D1Database,
+  args: { groupId: string; sessionId: string; playerId: string; cents: number; paymentCents: number; nowIso: string; guard?: string },
+): D1PreparedStatement[] {
+  const { groupId, sessionId, playerId, cents, paymentCents, nowIso, guard } = args;
+  // `cents` is the cash part of the payment (`paymentCents`); credit already on the seat stays where it is.
+  const seatHolds = `EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND payment_amount_cents = ?7)${guard ? ` AND ${guard}` : ''}`;
   const pair = (kind: 'kept' | 'used') =>
     db
-      .prepare(`INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason) SELECT ?1, ?2, ?3, '${kind}', ?4, ?5, ?6, 'cash' WHERE ${seatHolds}`)
-      .bind(newId(), groupId, playerId, cents, sessionId, nowIso);
+      .prepare(`INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason) SELECT ?1, ?2, ?3, '${kind}', ?4, ?5, ?6, 'cash' WHERE ?4 > 0 AND ${seatHolds}`)
+      .bind(newId(), groupId, playerId, cents, sessionId, nowIso, paymentCents);
   return [
     pair('kept'),
     pair('used'),
@@ -499,7 +522,7 @@ export function holdCashStatements(db: D1Database, args: { groupId: string; sess
         `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
          WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND payment_amount_cents = ?4${guard ? ` AND ${guard}` : ''}`,
       )
-      .bind(nowIso, sessionId, playerId, cents),
+      .bind(nowIso, sessionId, playerId, paymentCents),
   ];
 }
 

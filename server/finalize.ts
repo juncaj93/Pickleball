@@ -109,7 +109,9 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       const back = paid > 0 ? paid - price : used - price;
       if (paid > 0 && paid < price) {
         // Paid the earlier (lower) price, or the flat price went up: the cash stays against the seat, the rest is owed.
-        statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: paid }));
+        // Only the cash part: credit (and cash already held) on the seat stays on it as it is.
+        const onSeat = await usedOn(ctx, session.id, r.player_id);
+        statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paid - onSeat), paymentCents: paid }));
       } else if (back > 0) {
         if (paid === 0) statements.push(payWithCredit(r, used));
         statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: back, reason: 'finalized', playedCount: n, settle: false }));

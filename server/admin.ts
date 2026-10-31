@@ -512,7 +512,7 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
   const paid = v.bool(body.paid, 'paid');
-  return applyPayment(ctx, group, session, playerId, paid, null);
+  return applyPayment(ctx, group, session, playerId, paid, null, undefined, body.cents === undefined ? null : v.cents(body.cents, 'cents'));
 }
 
 /**
@@ -521,7 +521,17 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
  * seat uses up any credit planned for it; unmarking gives the credit back.
  * The organizer marking a self-marked seat paid confirms it (the tag goes).
  */
-export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean, self: string | null, actor?: string) {
+export async function applyPayment(
+  ctx: Ctx,
+  group: GroupRow,
+  session: SessionRow,
+  playerId: string,
+  paid: boolean,
+  self: string | null,
+  actor?: string,
+  /** The amount the screen showed as owed when the tap was made (optional): refused if it is not what is owed now. */
+  shownCents: number | null = null,
+) {
   const roster = await loadRoster(ctx.db, session.id);
   // The organizer pays the venue, not the other players. Their Mark paid / Unmark mean "Court paid" / "Court due".
   if (playerId === (await organizerIdOf(ctx.db, group))) {
@@ -548,6 +558,11 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
     // The payment is the whole price: cash now, plus credit and cash already on this seat.
     const seat = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
     const used = seat.usedCents + seat.cashCents;
+    // The screen said one amount and the price has changed since (a Finalize or Reopen at that moment, or an old
+    // screen): recording the new price would not match what they sent.
+    if (shownCents !== null && shownCents !== price - used) {
+      throw new HttpError(409, 'amount_changed', `The amount changed to ${formatCents(price - used).replace('.00', '')}. Look again.`);
+    }
     // Only while the seat is still in and unpaid with exactly that credit on it: a drop, a double tap or a
     // Use credit at the same moment can't record a payment on a seat that left or changed.
     const res = await ctx.db
@@ -555,10 +570,11 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
         `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = ?3,
            payment_updated_at = ?1, updated_at = ?1
          WHERE session_id = ?4 AND player_id = ?5 AND status = 'confirmed' AND payment_status = 'unpaid'
+           AND (SELECT COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?4) = ?7
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?4 AND player_id = ?5 AND ended_at IS NULL) = ?6
            AND (SELECT status FROM sessions WHERE id = ?4) <> 'canceled'`,
       )
-      .bind(ctx.nowIso, price, self ? ctx.nowIso : null, session.id, playerId, used)
+      .bind(ctx.nowIso, price, self ? ctx.nowIso : null, session.id, playerId, used, session.final_price_cents ?? -1)
       .run();
     if (res.meta.changes !== 1) {
       const now = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
@@ -599,7 +615,8 @@ export async function applyPayment(ctx: Ctx, group: GroupRow, session: SessionRo
              AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')`,
         )
         .bind(ctx.nowIso, session.id, playerId),
-      ...(self ? [] : returnSeatCreditStatements(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked')),
+      // Only its ledger statement: that one moves credit only once the seat is unpaid, so a blocked Unmark moves nothing.
+      ...(self ? [] : returnSeatCreditStatements(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked').slice(1)),
     ]);
     if (unpaid.meta.changes !== 1) {
       if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0) {

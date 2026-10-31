@@ -368,7 +368,7 @@ export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
   const paid = v.bool(body.paid, 'paid');
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
-  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name);
+  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name, body.cents === undefined ? null : v.cents(body.cents, 'cents'));
 }
 
 /** POST /api/sessions/:id/use-credit: "Use credit" on a game they already owe for (credit that arrived after they signed up). */
