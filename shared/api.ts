@@ -63,6 +63,8 @@ export interface PlayerSessionView {
     dropCashCents: number;
     /** An unconfirmed "I paid" a drop would leave for the organizer to confirm (it becomes credit only then). */
     dropClaimCents: number;
+    /** Set by the player screen only (src/courtDisplay.ts): on standby for a court the venue has not given yet. */
+    standby?: boolean;
     creditCents: number;
     /** Cash they paid toward this session before its price went up (a redo with fewer players). */
     paidEarlierCents: number;

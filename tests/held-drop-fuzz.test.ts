@@ -24,14 +24,15 @@ class Offline extends Error {
 }
 
 /** One phone: its storage (the drop note survives a reload or a closed app), its signal, and what its screen shows. */
-async function world(seed: number, credit: number, paidCash: boolean) {
+async function world(seed: number, credit: number, paidCash: boolean, court: 'booked' | 'not_booked' | 'waitlist') {
   const app = new TestApp();
   const ctx: Ctx = await setupGroup(app);
   await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex' });
   const d = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
   const old = d.sessions.find((x: any) => dayOf(x.startsAt) === '2026-10-29');
   const g = d.sessions.find((x: any) => dayOf(x.startsAt) === '2026-11-05');
-  await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+  if (court === 'booked') await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+  if (court === 'waitlist') await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' });
   if (credit)
     app.db.raw.exec(
       `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
@@ -39,7 +40,8 @@ async function world(seed: number, credit: number, paidCash: boolean) {
     );
   const phone = await playerPhone(ctx, 'Blair');
   expect((await phone.call('POST', `/api/sessions/${g.id}/join`, {})).status).toBe(200);
-  if (paidCash) await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
+  // (On a waitlist court the join is standby: nothing to pay yet.)
+  if (paidCash && court !== 'waitlist') await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
   return { app, ctx, g, phone };
 }
 
@@ -61,13 +63,15 @@ async function runSequence(seed: number) {
   const r = prng(seed);
   const credit = r.pick([0, 300, 1400]);
   const paidCash = credit < 1400 && r.next() < 0.5;
-  const { app, ctx, g, phone } = await world(seed, credit, paidCash);
+  const court = r.pick(['booked', 'booked', 'not_booked', 'waitlist'] as const);
+  const { app, ctx, g, phone } = await world(seed, credit, paidCash, court);
   const before = worth(ctx, g.id);
   const storage = new Map<string, string>();
   let signal = true;
   let alive = true; // the page is open (not closed)
   // What the screen shows: in (true) or out (false), and whether the credit overlay is drawn.
-  const serverIn = () => seatOf(ctx, g.id).status === 'confirmed';
+  // On a court the venue has not given yet, standby (waitlisted) is shown as in.
+  const serverIn = () => ['confirmed', 'waitlisted'].includes(seatOf(ctx, g.id).status);
   let shownIn = true;
   const log: string[] = [];
   // Requests on their way: a reloaded page reads the server once they have landed (its live refresh, every 5 s).
@@ -130,7 +134,7 @@ async function runSequence(seed: number) {
   };
   const steps = r.int(2, 9);
   for (let i = 0; i < steps; i++) {
-    const a = r.pick(['drop', 'drop', 'undo', 'in', 'wait', 'wait', 'close', 'reload', 'offline', 'online']);
+    const a = r.pick(['drop', 'drop', 'undo', 'in', 'wait', 'wait', 'close', 'reload', 'offline', 'online', 'book']);
     log.push(a);
     if (process.env.HELD_DEBUG) console.log(seed, a, { shownIn, serverIn: serverIn(), held: holdPending(g.id), note: storage.get('note'), signal, alive, now: app.now });
     if (a === 'drop' && alive && shownIn && serverIn()) drop();
@@ -162,6 +166,10 @@ async function runSequence(seed: number) {
       shownIn = serverIn();
       await look();
       shownIn = serverIn();
+    } else if (a === 'book') {
+      // The organizer marks the court booked (on a waitlist court: "Court opened", standby moves in).
+      await landed();
+      await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
     } else if (a === 'offline') signal = false;
     else if (a === 'online') signal = true;
   }
@@ -182,6 +190,9 @@ async function runSequence(seed: number) {
   const liveUsed = (ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'used' AND ended_at IS NULL AND player_id = ?").get(ctx.byName.Blair) as any).n;
   expect(liveUsed, `seed ${seed}: credit used at most once`).toBeLessThanOrEqual(1);
   if (out) expect(potOf(ctx), `seed ${seed}: all money back`).toBe(before);
+  // In and owing on a game that has its seat (booked or not booked yet): their credit is on it, never left unused.
+  const seat = seatOf(ctx, g.id);
+  if (seat.status === 'confirmed' && seat.payment_status === 'unpaid') expect(potOf(ctx), `seed ${seed} [${log.join(' ')}]: credit left unused on an owing seat`).toBe(0);
   flushHold(false);
 }
 

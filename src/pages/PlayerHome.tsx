@@ -1057,9 +1057,16 @@ function RowPay({
     </span>
   );
   if (mine.oweCents <= 0) {
+    // No court booked yet: no Pay, but credit they can use is always offered ("Use $14 credit").
+    const useNow = mine.useCreditCents > 0 && (
+      <button className="btn pay-btn" data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.useCreditCents, mine.useCreditCents)}>
+        Use {formatPrice(mine.useCreditCents)} credit
+      </button>
+    );
     return (
       <div className="sched-money stacked">
         {creditChip}
+        {useNow}
         <span className="inline-links">{drop}</span>
       </div>
     );
@@ -1307,7 +1314,7 @@ export function ScheduleRow({
       Drop out
     </button>
   );
-  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || onTop);
+  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || mine.useCreditCents > 0 || onTop);
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
   const notIn = open && !(inSession || waiting);
@@ -1401,6 +1408,12 @@ export function ScheduleRow({
             <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
           {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
+          {/* On standby for a court the venue has not given yet: nothing is owed, and their credit is not used until it is. */}
+          {isIn && mine?.standby && open && g.credit.usableCents > 0 && (
+            <p className="sched-sub" data-credit-waits>
+              Your {formatPrice(Math.min(g.credit.usableCents, g.group.priceCents))} credit goes on this game once the court is booked.
+            </p>
+          )}
           {s.canceled && <p className="sched-sub">If you paid, it's now your credit.</p>}
 
           {s.extra && <span className="sr-only">Extra game</span>}

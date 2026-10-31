@@ -31,10 +31,12 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
   const mine = s.mine
     ? {
         ...s.mine,
-        ...(s.mine.status === 'waitlisted' ? { status: 'confirmed' as const, waitlistPosition: null } : {}),
-        // No money prompts before a court is booked. A payment that is already recorded stays and shows, and so
-        // does credit already used on the seat ("Credit $3 used"); what is left to pay waits for the court.
-        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0, useCreditCents: 0 }),
+        // On standby while the venue's court waitlist decides: shown as in; their credit goes on when the court opens.
+        ...(s.mine.status === 'waitlisted' ? { status: 'confirmed' as const, waitlistPosition: null, standby: true } : {}),
+        // No Pay before a court is booked. A payment that is already recorded stays and shows, and so does credit
+        // already used on the seat ("Credit $3 used"). Credit they can still use stays usable (Alex, Oct 31: a
+        // player with an unpaid seat and credit always has a way to use it): "Use $14 credit".
+        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0 }),
       }
     : s.mine;
   return {

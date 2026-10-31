@@ -186,3 +186,63 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     expect(text).toMatch(/Join waitlist/);
   });
 });
+
+// Alex, Oct 31 (Mitchel on the live site): drop a game paid with credit, then I'm in again. And: a player with an
+// unpaid seat and credit available always sees a way to use it, even before the court is booked.
+describe('drop and rejoin with credit, on every kind of court', () => {
+  const pot = async (ctx: Ctx, n: string) => (await raw(ctx, n)).credit.balanceCents;
+  const mineOn = async (ctx: Ctx, n: string, id: string) => (await raw(ctx, n)).sessions.find((s) => s.id === id)!.mine!;
+  async function withCredit() {
+    const s = await scene();
+    const old = (await s.ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions[0];
+    s.ctx.app.db.raw.exec(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+       SELECT 'pot-devon', id, '${s.ctx.byName.Devon}', 'kept', 1400, '${old.id}', '2026-10-26T13:00:00.000Z', 'canceled' FROM groups`,
+    );
+    return s;
+  }
+
+  for (const kind of ['booked', 'noCourt'] as const) {
+    it(`${kind === 'booked' ? 'court booked' : 'court not booked'}: Paid with credit, Drop out, I'm in again: the credit goes on again, Paid with credit`, async () => {
+      const s = await withCredit();
+      const id = s[kind].id;
+      expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+      expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/withdraw`)).data).toMatchObject({ creditReturnedCents: 1400 });
+      expect(await pot(s.ctx, 'Devon')).toBe(1400);
+      expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+      expect(await pot(s.ctx, 'Devon')).toBe(0);
+      expect(card(await shown(s.ctx, 'Devon'), id)).toContain('Paid with credit');
+    });
+  }
+
+  it("court on the venue's waitlist (Mitchel's Nov 5): standby owes nothing and keeps the credit, the card says it goes on once booked; Court opened puts it on", async () => {
+    const s = await withCredit();
+    const id = s.waitlisted.id;
+    expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'standby' });
+    expect(await pot(s.ctx, 'Devon')).toBe(1400);
+    const text = card(await shown(s.ctx, 'Devon'), id);
+    expect(text).toContain("You're in");
+    expect(text).toContain('Your $14 credit goes on this game once the court is booked.');
+    expect(text).not.toMatch(FORBIDDEN);
+    // The organizer marks the court booked ("Court opened"): the standby players move in and the credit goes on.
+    expect((await s.ctx.organizer.call('POST', `/api/admin/sessions/${id}/booked`, {})).status).toBe(200);
+    expect(await mineOn(s.ctx, 'Devon', id)).toMatchObject({ status: 'confirmed', paymentStatus: 'paid', paidWithCredit: true });
+    expect(await pot(s.ctx, 'Devon')).toBe(0);
+  });
+
+  it('court not booked, in and unpaid, credit arrives later: "Use $14 credit" shows (no Pay), and it works', async () => {
+    const s = await scene();
+    const id = s.noCourt.id;
+    await post(s.ctx, 'Devon', `/api/sessions/${id}/join`);
+    const old = (await s.ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions[0];
+    s.ctx.app.db.raw.exec(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+       SELECT 'later-devon', id, '${s.ctx.byName.Devon}', 'kept', 1400, '${old.id}', '2026-10-26T13:00:00.000Z', 'canceled' FROM groups`,
+    );
+    const text = card(await shown(s.ctx, 'Devon'), id);
+    expect(text).toContain('Use $14 credit');
+    expect(text).not.toMatch(/\bPay\b|\bdue\b|I paid/);
+    expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/use-credit`)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
+    expect(card(await shown(s.ctx, 'Devon'), id)).toContain('Paid with credit');
+  });
+});
