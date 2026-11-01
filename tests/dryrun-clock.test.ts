@@ -210,18 +210,19 @@ describe('day words computed from the API on each day', () => {
   const thu12 = '2026-11-13T01:00:00.000Z';
 
   // [clock, game, playerDay, suggestDay ("Want in"), week tier, admin week label, text dayWord]
+  // Week tier: the player screen's weeks start on Sunday (Alex, Nov 1, 2026); the admin label keeps Monday weeks.
   const cases: [keyof typeof T, string, string, string, string, string, string][] = [
     ['satNoon', tue3, 'next Tuesday', 'Tuesday', 'next', 'Next week', 'Tue Nov 3'],
     ['satNoon', thu5, 'next Thursday', 'Thursday', 'next', 'Next week', 'Thu Nov 5'],
     ['satNoon', tue10, 'Tue, Nov 10', 'next Tuesday', 'later', 'Week of Nov 9', 'Tue Nov 10'],
     ['sat9pm', tue3, 'next Tuesday', 'Tuesday', 'next', 'Next week', 'Tue Nov 3'],
-    ['sun1230', tue3, 'next Tuesday', 'Tuesday', 'next', 'Next week', 'Tue Nov 3'],
-    ['sun130edt', tue3, 'next Tuesday', 'Tuesday', 'next', 'Next week', 'Tue Nov 3'],
-    ['sun130est', tue3, 'next Tuesday', 'Tuesday', 'next', 'Next week', 'Tue Nov 3'],
-    ['sun3am', thu5, 'next Thursday', 'Thursday', 'next', 'Next week', 'Thu Nov 5'],
-    ['sun9pm', tue3, 'next Tuesday', 'Tuesday', 'next', 'Next week', 'Tue Nov 3'],
-    ['sun9pm', thu5, 'next Thursday', 'Thursday', 'next', 'Next week', 'Thu Nov 5'],
-    ['sun9pm', tue10, 'Tue, Nov 10', 'next Tuesday', 'later', 'Week of Nov 9', 'Tue Nov 10'],
+    ['sun1230', tue3, 'next Tuesday', 'Tuesday', 'this', 'Next week', 'Tue Nov 3'],
+    ['sun130edt', tue3, 'next Tuesday', 'Tuesday', 'this', 'Next week', 'Tue Nov 3'],
+    ['sun130est', tue3, 'next Tuesday', 'Tuesday', 'this', 'Next week', 'Tue Nov 3'],
+    ['sun3am', thu5, 'next Thursday', 'Thursday', 'this', 'Next week', 'Thu Nov 5'],
+    ['sun9pm', tue3, 'next Tuesday', 'Tuesday', 'this', 'Next week', 'Tue Nov 3'],
+    ['sun9pm', thu5, 'next Thursday', 'Thursday', 'this', 'Next week', 'Thu Nov 5'],
+    ['sun9pm', tue10, 'Tue, Nov 10', 'next Tuesday', 'next', 'Week of Nov 9', 'Tue Nov 10'],
     ['mon11pm', tue3, 'tomorrow', 'tomorrow', 'this', 'This week', 'tomorrow'],
     ['tue9am', tue3, 'tonight', 'tonight', 'this', 'This week', 'tonight'],
     ['tue9am', thu5, 'this Thursday', 'Thursday', 'this', 'This week', 'Thu Nov 5'],

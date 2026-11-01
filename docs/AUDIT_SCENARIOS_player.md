@@ -45,7 +45,7 @@ Where the tests live:
 | Game night 11:59 PM | "tonight" | PASS |
 | Thanksgiving Thu Nov 26 morning | "tonight" for that night's game | PASS |
 | Sunday, game on Tuesday | Drop question said "Out for next Tuesday?" for a game 2 days away | FIXED (now "Out for Tuesday?", same words as the Want in card) |
-| Sunday, Tuesday's game sits under NEXT WEEK | Weeks start Monday | ASK |
+| Sunday, Tuesday's game sits under NEXT WEEK | Weeks start Sunday on the player screen (Alex, Nov 1) | FIXED (`weekTier` in shared/time.ts; organizer screens keep Monday weeks) |
 
 ## Totals
 
@@ -146,7 +146,7 @@ Where the tests live:
 | Game-day Pay card (several games, tonight, with credit) | From 8:00 AM, one Pay button | PASS |
 | No Venmo link | I paid button, "Pay Alex however you usually do." | PASS |
 | Every owing card on a booked court has Pay or Use credit (random sweep, 6 seeds) | Always a way forward | PASS |
-| Game started without ever being marked Court booked | Shows $14 due and Pay | ASK |
+| Game started without ever being marked Court booked | Shows $14 due and Pay | Kept on purpose (Alex, Nov 1: he marks courts booked) |
 
 ## 6. Credit
 
@@ -166,7 +166,7 @@ Where the tests live:
 |---|---|---|
 | Order; promotion on a drop; two drops at once | First in line first | PASS |
 | Credit on promotion ($14, $3, $20) | Goes on like I'm in | PASS |
-| Promoted with a pending cash out | No "use your cash out" prompt (only after I'm in) | ASK |
+| Promoted with a pending cash out | No "use your cash out" prompt (only after I'm in) | Kept on purpose (Alex, Nov 1) |
 | Max players raised | Waiters move in | FIXED |
 | Max players lowered below who is in | Nobody bumped, new taps wait | PASS |
 
@@ -193,7 +193,7 @@ See the table at the top, plus: cancel-by on Election Day Nov 3, start and end e
 | Organizer link, back button, shared ?s= link | Right | PASS |
 | Reload keeps name, My games, theme | Right | PASS |
 | First load offline / 500 / bad link | Friendly text | PASS |
-| Text the group | Organizer only; players have no such button | Note (spec lists it for players; code is organizer-only) |
+| Text the group | Organizer only; players have no such button | Kept on purpose (Alex, Nov 1); spec corrected in docs/PLAYER_SPEC.md |
 
 ## 11. Look and access (320 and 390 px, light and dark)
 
@@ -237,6 +237,19 @@ See the table at the top, plus: cancel-by on Election Day Nov 3, start and end e
 ## Live vs preview
 
 - Live on their own (bug fixes with no visible change): every FIXED row above except the five below.
-- On the preview, waiting for Alex's "ship it" (visible): the Good news note shows once; "Out for Tuesday?";
-  canceled cards no longer see-through; "If you paid, it's now your credit." only for players who were in;
-  the CREDIT word's color in dark mode.
+- Visible changes (Alex said "ship it" from before/after pictures, Nov 1; no preview because previews use the live
+  database): the Good news note shows once; "Out for Tuesday?"; canceled cards no longer see-through; "If you paid,
+  it's now your credit." only for players who were in; the CREDIT word's color in dark mode; weeks start on Sunday.
+
+## Later cleanup batch (not now: Alex, Nov 1)
+
+Left alone until after Tuesday's game. Each has a check in `e2e/audit-player-look.cjs` marked OPEN (reported, never
+failing the run), or a note in `tests/fresh-e-nov1.test.ts`.
+
+| # | Item | Where | Idea |
+|---|---|---|---|
+| L1 | Very big text (150% to 200%): LATER rows beside a wide button squeeze names to a few letters a line | `.tier-later` grid in src/player-cards.css | Drop the button under the middle block when the text is large (container query) |
+| L2 | Very big text: header name, CREDIT chip and date square overflow their boxes | `.topbar` in src/styles.css | Let the header wrap to two rows at large text |
+| L3 | Very big text: the "Court not booked" + calendar line runs past the card at 320 px / 200% | `.st-tail` in src/player-cards.css | Wrap it only at large text (normal sizes must stay one line) |
+| L4 | A 29-letter made-up name with the CREDIT chip breaks mid-word in the header | src/styles.css `.topbar h1` | Show the first name only when the chip is there |
+| L5 | Shared phone, no signal: a name switched within about 7 s of a drop that failed can lose that drop | src/pages/PlayerHome.tsx `finishNotes` | Keep another name's note until that name opens the page again |
