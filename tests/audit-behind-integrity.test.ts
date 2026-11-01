@@ -30,7 +30,7 @@ async function busyCopy(seed: number) {
     const dash = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
     const games = dash.sessions.filter((s: any) => Date.parse(s.endsAt) > ctx.app.now - 2 * DAY).slice(0, 4);
     if (!games.length) break;
-    const s = pick(games);
+    const s: any = pick(games);
     const who = pick(names);
     const p = phones[who];
     const r = rand();
