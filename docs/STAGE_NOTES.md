@@ -986,3 +986,12 @@ No money rule, price rule, schema or migration change.
 - 4: Waitlist games follow the Not booked rule for "Court still needs to be booked": booking day,
   the morning of, or the next 2 games open to book; gone at the start. Tests: C1, C1b.
 
+### Preview (Sun Nov 1, 2026, about 10:20 AM Eastern)
+- https://preview-admin-audit.pickleball-club-9h0.pages.dev (deployment f0eae118), branch
+  claude/new-session-kccop2 at 81952dd. Organizer PIN 135790.
+- Database: the shared throwaway `pickleball-preview`, refilled with fresh fake games (backup file
+  from a local seeded copy, via scripts/restore-backup.mjs). PROVEN not live: its
+  /api/group/version differs from the live site's, the fake PIN signs in, and the dashboard reads
+  "Pickleball Bros (PREVIEW, fake data)". So the `[env.preview]` wiring in wrangler.toml works for
+  a fresh preview deploy. No Telegram or clock secrets on previews.
+
