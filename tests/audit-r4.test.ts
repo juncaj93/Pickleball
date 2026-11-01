@@ -644,7 +644,8 @@ describe('random sequences: every step checked from scratch', () => {
         await runSeq(seed, stats, 'finalize');
       } catch (e: any) {
         const k = knownFinding(e.message);
-        if (k) KNOWN.set(k, (KNOWN.get(k) ?? 0) + 1);
+        // F1 / F2 are fixed: a sequence that hits their shape again is a failure (R4_ALLOW_KNOWN=1 only counts them).
+        if (k && process.env.R4_ALLOW_KNOWN) KNOWN.set(k, (KNOWN.get(k) ?? 0) + 1);
         else failures.push(e.message.split('\n')[0]);
         if (process.env.FUZZ_SHOW) console.log(e.message);
       }
@@ -666,7 +667,8 @@ describe('random sequences: every step checked from scratch', () => {
         await runSeq(seed, stats);
       } catch (e: any) {
         const k = knownFinding(e.message);
-        if (k) KNOWN.set(k, (KNOWN.get(k) ?? 0) + 1);
+        // F1 / F2 are fixed: a sequence that hits their shape again is a failure (R4_ALLOW_KNOWN=1 only counts them).
+        if (k && process.env.R4_ALLOW_KNOWN) KNOWN.set(k, (KNOWN.get(k) ?? 0) + 1);
         else failures.push(e.message.split('\n')[0]);
         if (process.env.FUZZ_SHOW) console.log(e.message);
       }
@@ -1329,4 +1331,187 @@ describe("held drop, then I'm in on another game", () => {
       vi.useRealTimers();
     }
   });
+});
+
+// ================================================================= second pass (HEAD 5259075): the fixes under attack
+
+/** Ten in, Blair with `credit` pays the rest (confirmed unless `unconfirmed`), the other nine pay; the game is over. */
+async function tenOver(credit: number, unconfirmed = false) {
+  const w = await world();
+  const ten = PLAYERS.slice(0, 10);
+  const g = await gameWith(w, ten, credit);
+  await iPaid(w, 'Blair', g.id);
+  if (!unconfirmed) await markPaid(w, 'Blair', g.id);
+  after(w, g);
+  return { w, g, ten };
+}
+const UNMARK_BATCH = /UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid'[\s\S]*INSERT INTO credit_ledger/;
+
+describe('second pass: Unmark / Mark paid / Unmark cycles after Finalize, credit covering the price', () => {
+  for (const credit of [500, 800, 900, 1000, 1300])
+    for (const n of [6, 7, 8, 9, 10])
+      it(`credit $${credit / 100}, ${n} played: Unmark, Mark paid, Unmark, player's Didn't pay?, I paid, Reopen, redo`, async () => {
+        for (const unconfirmed of [false, true]) {
+          const { w, g, ten } = await tenOver(credit, unconfirmed);
+          const price = finalPrice(FLAT, n);
+          expect((await finalize(w, g.id, ten.slice(0, n))).status).toBe(200);
+          await books(w, 'final');
+          const expectBack = () => {
+            const sp = seatRow(w, g.id, 'Blair');
+            // Whatever the seat holds, what came back is exactly what it holds above the final price (or nothing yet).
+            return sp;
+          };
+          for (const [i, tap] of [
+            () => unmark(w, 'Blair', g.id),
+            () => markPaid(w, 'Blair', g.id),
+            () => unmark(w, 'Blair', g.id),
+            () => unmark(w, 'Blair', g.id),
+            () => markPaid(w, 'Blair', g.id),
+            () => didntPay(w, 'Blair', g.id),
+            () => iPaid(w, 'Blair', g.id),
+            () => unmark(w, 'Blair', g.id, w.org2, false),
+            () => markPaid(w, 'Blair', g.id, w.org2, false),
+          ].entries()) {
+            const res = await tap();
+            expect(res.status, `tap ${i}: ${res.text}`).toBeLessThan(500);
+            await books(w, `${unconfirmed ? 'unconf' : 'conf'} credit ${credit} n ${n} tap ${i}`);
+            expectBack();
+          }
+          // The pot never holds more than her credit above the price plus... : at most credit + cash she paid minus price.
+          expect(potOf(w, 'Blair')).toBeLessThanOrEqual(Math.max(0, credit - price) + FLAT);
+          const ro = await reopen(w, g.id);
+          expect([200, 409], ro.text).toContain(ro.status);
+          await books(w, 'reopen');
+          if (ro.status === 200) {
+            expect((await finalize(w, g.id, ten.slice(0, n === 10 ? 6 : n + 1))).status).toBeLessThan(500);
+            await books(w, 'redo');
+          }
+        }
+      });
+});
+
+/** Second-pass findings: `it.fails` while the bug is there (R4_SHOW=1 runs them as plain tests). */
+const finding2 = process.env.R4_SHOW ? it : it.fails;
+const RACE_FINDINGS = new Set(['1000:finalize10', '1000:finalize6', '1000:reopen+finalize7']);
+
+describe('second pass: Unmark racing Finalize / Reopen (two organizer devices)', () => {
+  for (const credit of [0, 300, 1000])
+    for (const other of ['finalize10', 'finalize6', 'reopen', 'reopen+finalize7', 'reopen+finalize5'] as const)
+      (RACE_FINDINGS.has(`${credit}:${other}`) ? finding2 : it)(`${RACE_FINDINGS.has(`${credit}:${other}`) ? 'G1 ' : ''}credit $${credit / 100}: Unmark paused just before its batch while the other device does ${other}`, async () => {
+        const { w, g, ten } = await tenOver(credit);
+        const preFinal = other.startsWith('reopen');
+        if (preFinal) expect((await finalize(w, g.id, ten)).status).toBe(200); // 10 played: $5
+        await books(w, 'before');
+        let otherRes: any[] = [];
+        w.db.pauseBefore(UNMARK_BATCH, async () => {
+          if (other === 'finalize10') otherRes = [await finalize(w, g.id, ten, w.org2)];
+          if (other === 'finalize6') otherRes = [await finalize(w, g.id, ten.slice(0, 6), w.org2)];
+          if (other.startsWith('reopen')) {
+            otherRes = [await reopen(w, g.id, w.org2)];
+            if (other === 'reopen+finalize7') otherRes.push(await finalize(w, g.id, ten.slice(0, 7), w.org2));
+            if (other === 'reopen+finalize5') otherRes.push(await finalize(w, g.id, ten.slice(0, 5), w.org2));
+          }
+        });
+        const m0 = totalMoney(w).total;
+        const cash = seatCash(w, g.id, 'Blair');
+        const u = await w.org.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids.Blair, paid: false });
+        const dM = totalMoney(w).total - m0;
+        expect([0, -cash], `money moved by ${dM}`).toContain(dM);
+        w.cash += dM;
+        expect([u.status, ...otherRes.map((x) => x.status)].every((x) => x < 500), `${u.text} ${otherRes.map((x) => x.text)}`).toBe(true);
+        await books(w, `unmark raced ${other}: ${u.status} ${otherRes.map((x) => x.status)}`);
+      });
+});
+
+describe('second pass: Reopen with self-marked seats', () => {
+  it('withheld (unconfirmed, paid the flat price) seats reopen and redo at every N; short unconfirmed seats block Reopen and Finalize; answers unblock', async () => {
+    for (const n of [4, 5, 6, 8, 10]) {
+      const { w, g, ten } = await tenOver(300, true);
+      expect((await finalize(w, g.id, ten.slice(0, n))).status).toBe(200);
+      await books(w, `final ${n}`);
+      // Casey unmarked then pays the final price herself, unconfirmed (below the flat price): Reopen must refuse.
+      await unmark(w, 'Casey', g.id);
+      await iPaid(w, 'Casey', g.id);
+      await books(w, 'casey short unconfirmed');
+      const ro = await reopen(w, g.id);
+      if (n > 4) expect(ro.status, ro.text).toBe(409);
+      await books(w, 'reopen refused');
+      // Answer it (Mark paid), then Reopen goes; Blair's withheld seat comes back as a flat-price I paid.
+      await markPaid(w, 'Casey', g.id);
+      if (ro.status !== 200) expect((await reopen(w, g.id)).status).toBe(200);
+      await books(w, 'reopened');
+      expect(seatRow(w, g.id, 'Blair')).toMatchObject({ payment_status: 'paid', payment_amount_cents: 1400 });
+      expect(seatRow(w, g.id, 'Blair').self_paid_at).not.toBeNull();
+      expect((await finalize(w, g.id, ten.slice(1, 6))).status).toBe(200); // Blair did not play: claim
+      await books(w, 'blair not played');
+      expect((await dash(w)).paymentClaims).toEqual([expect.objectContaining({ playerId: w.ids.Blair, why: 'not_played' })]);
+      expect(potOf(w, 'Blair')).toBe(0);
+    }
+  });
+
+  it("an I paid landing while Reopen runs (paused inside): Reopen refuses, nothing half-done", async () => {
+    const { w, g, ten } = await tenOver(0);
+    expect((await finalize(w, g.id, ten.slice(0, 5))).status).toBe(200); // $11
+    await unmark(w, 'Casey', g.id);
+    await books(w, 'casey unpaid');
+    let paid: any;
+    w.db.pauseBefore(/UPDATE credit_ledger SET ended_at = \?1, ended_reason = 'undone'/, async () => {
+      paid = await iPaid(w, 'Casey', g.id);
+    });
+    const ro = await reopen(w, g.id);
+    expect(paid.status).toBe(200);
+    expect([200, 409]).toContain(ro.status);
+    await books(w, `reopen ${ro.status} with an I paid inside`);
+    if (ro.status === 200) expect(seatRow(w, g.id, 'Casey').self_paid_at, 'unconfirmed seat kept its mark').not.toBeNull();
+  });
+});
+
+describe('G1: Unmark of the cash on top of credit that covers the price, racing a Finalize (or a Reopen + redo) from another device', () => {
+  finding2('Finalize (10 played, $5) lands while the Unmark is on its way: the seat ends paid with $10 credit and no money back ($5 stuck)', async () => {
+    const { w, g, ten } = await tenOver(1000);
+    w.db.pauseBefore(UNMARK_BATCH, async () => {
+      expect((await finalize(w, g.id, ten, w.org2)).status).toBe(200);
+    });
+    expect((await w.org.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids.Blair, paid: false })).status).toBeLessThan(500);
+    // Either the Unmark is refused ("look again": she keeps $9 back) or it went in and her $5 above the price came back.
+    expect([900, 500], 'money back after Unmark racing Finalize').toContain(potOf(w, 'Blair'));
+  });
+  finding2('Reopen + redo at 7 ($8) lands while the Unmark (read at 10 played, $5) is on its way: $5 comes back instead of $2 ($3 made)', async () => {
+    const { w, g, ten } = await tenOver(1000);
+    expect((await finalize(w, g.id, ten)).status).toBe(200);
+    w.db.pauseBefore(UNMARK_BATCH, async () => {
+      expect((await reopen(w, g.id, w.org2)).status).toBe(200);
+      expect((await finalize(w, g.id, ten.slice(0, 7), w.org2)).status).toBe(200);
+    });
+    expect((await w.org.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids.Blair, paid: false })).status).toBeLessThan(500);
+    // Refused: she keeps $6 back from the redo; went in: $10 credit on an $8 seat, $2 back.
+    expect([600, 200], 'money back after Unmark racing Reopen + redo').toContain(potOf(w, 'Blair'));
+  });
+});
+
+describe('second pass: two devices at once on a finalized seat whose credit covers the price', () => {
+  const taps = {
+    unmark: (w: World, g: any, dev: 0 | 1) => (dev ? w.org2 : w.org).call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids.Blair, paid: false }),
+    mark: (w: World, g: any, dev: 0 | 1) => (dev ? w.org2 : w.org).call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids.Blair, paid: true }),
+    didntpay: async (w: World, g: any, dev: 0 | 1) => (await phone(w, 'Blair', dev)).call('POST', `/api/sessions/${g.id}/paid`, { paid: false }),
+    reopen: (w: World, g: any, dev: 0 | 1) => reopen(w, g.id, dev ? w.org2 : w.org),
+  };
+  type T = keyof typeof taps;
+  const pairs: [T, T][] = [['unmark', 'unmark'], ['unmark', 'mark'], ['unmark', 'didntpay'], ['mark', 'didntpay'], ['unmark', 'reopen'], ['didntpay', 'reopen'], ['mark', 'reopen']];
+  for (const unconfirmed of [false, true])
+    for (const [a, b] of pairs)
+      it(`${unconfirmed ? 'unconfirmed' : 'confirmed'} $4 on $10 credit, 10 played: ${a} || ${b}`, async () => {
+        const { w, g, ten } = await tenOver(1000, unconfirmed);
+        expect((await finalize(w, g.id, ten)).status).toBe(200);
+        await books(w, 'final');
+        const cash = seatCash(w, g.id, 'Blair');
+        const rs = await together(w, [0, -cash], [() => taps[a](w, g, 0), () => taps[b](w, g, 1)]);
+        expect(rs.every((x) => x.status < 500), rs.map((x) => x.text).join(' ')).toBe(true);
+        await books(w, `${a} || ${b}`);
+        // and then the rest, in order: every answer still consistent
+        await unmark(w, 'Blair', g.id);
+        await books(w, 'then unmark');
+        await markPaid(w, 'Blair', g.id);
+        await books(w, 'then mark paid');
+      });
 });
