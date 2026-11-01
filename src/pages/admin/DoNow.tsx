@@ -132,11 +132,13 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
     if (working.current || tapsHeld()) return;
     working.current = true;
     const tappedFrom = document.activeElement;
+    let saved = false;
     // Until the cards stop moving, no guarded button (next game's Yes, Everyone played) takes a tap.
     settleTaps(60_000);
     setBusy(true);
     try {
       await markTask(s.id, 'played');
+      saved = true;
       await ctx.reload();
       toast('Saved');
       // The Finalize card for this game, if there is one, shows now: bring it into view once it is drawn.
@@ -168,7 +170,8 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
     } finally {
       working.current = false;
       setBusy(false);
-      settleTaps(SETTLE_MS);
+      // Cards moved only when it saved; after a failure nothing moved, so a retry works at once.
+      settleTaps(saved ? SETTLE_MS : 0);
     }
   };
   return (
