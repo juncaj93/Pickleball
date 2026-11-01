@@ -218,3 +218,25 @@ See the table at the top, plus: cancel-by on Election Day Nov 3, start and end e
 | 15 impersonation attempts (ids in body, path, headers, forged cookies, View as and pretend headers) | All refused | PASS |
 | 18 bad requests | Status plus a plain message, no stack trace or SQL | PASS |
 | Anyone with the plain address can pick any name | By design (a picked name, no password) | Note |
+
+## Fresh auditors (they wrote no fix)
+
+| Round | Method | Found | Status |
+|---|---|---|---|
+| 1 | Code read | Old drop note re-sent after a rejoin; note sent as another name on a shared phone; Add my name skipped the held drop; non-Latin names all "already used" | FIXED (`tests/fresh-a-nov1.test.ts`, flows check) |
+| 1 | Hostile random sequences (`e2e/fresh-attack.cjs`, 10 seeds, 500 steps, about 54,000 checks) | Nothing | Clean |
+| 2 | Code read | Drop note checked against the screen's copy (a real drop forgotten); View as + Exit within 5 s sent a real drop; Hindi vowel signs stripped; Good news note kept showing in a tab left open | FIXED (`tests/fresh-c-nov1.test.ts`, flows checks fail on the old code) |
+| 3 | Code read | A View as drop wrote the real drop note; I'm in inside View as could clear a real note; two quick drops then closing the page | FIXED (`tests/fresh-d-nov1.test.ts`, flows check fails on the old code) |
+| 3 | Hostile sequences again, plus View as exit and reload-then-rejoin steps | Nothing | Clean |
+| 4 | Code read | Note read before a server check and sent after it, undoing an I'm in tapped meanwhile | FIXED (flows check fails on the old code) |
+| 4 | Code read | Shared phone: name switched within about 7 s of a drop that failed with no signal can lose that drop | OPEN (theoretical: needs no signal plus a name switch within seconds) |
+
+`e2e/fresh-attack.cjs` is not in `npm run test:e2e` (it takes about 20 minutes). Run it with
+`SEEDS=<seed> STEPS=<n> node e2e/fresh-attack.cjs`, or `FOCUS=1` for the View as and reload steps.
+
+## Live vs preview
+
+- Live on their own (bug fixes with no visible change): every FIXED row above except the five below.
+- On the preview, waiting for Alex's "ship it" (visible): the Good news note shows once; "Out for Tuesday?";
+  canceled cards no longer see-through; "If you paid, it's now your credit." only for players who were in;
+  the CREDIT word's color in dark mode.
