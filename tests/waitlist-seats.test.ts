@@ -286,6 +286,7 @@ describe('the one-time repair of old standby seats', () => {
     const ctx = await setupGroup(app);
     await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', settings: { maxPlayers: 4 } });
     const g = await on(ctx as Ctx, '2026-11-05');
+    await setCourt(ctx as Ctx, g.id, 'waitlist');
     for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await join(ctx as Ctx, g.id, n);
     await givePot(ctx as Ctx, 'Frankie', 1400);
     await join(ctx as Ctx, g.id, 'Frankie'); // really waiting (full)
@@ -311,5 +312,47 @@ describe('the one-time repair of old standby seats', () => {
     expect((await call('/api/internal/fix-standby', TOKEN)).data.games).toEqual([]);
     expect(seatsAndMoney(ctx as Ctx)).toBe(after);
     await inv(ctx as Ctx);
+  });
+});
+
+describe('leftover standby seats (before the repair) and the repair\'s limits', () => {
+  it('the screen draws old standby people as in while there is room, renumbers the rest, and a game that is then full says waitlist', async () => {
+    const ctx = await group({ maxPlayers: 4 });
+    const g = await on(ctx, '2026-11-05');
+    await setCourt(ctx, g.id, 'waitlist');
+    await join(ctx, g.id, 'Blair');
+    await join(ctx, g.id, 'Casey');
+    // Three people left on standby by the old rule, with room for two (the data as the server would send it).
+    const raw = await view(ctx, 'Frankie');
+    const row = raw.sessions.find((x: any) => x.id === g.id);
+    row.waitlist = ['Devon', 'Emery', 'Frankie'].map((name) => ({ name }));
+    row.mine = { ...row.mine, status: 'waitlisted', waitlistPosition: 3 };
+    row.countText = '2 of 4 in';
+    const frankie = courtDisplay(raw).sessions.find((x: any) => x.id === g.id)!;
+    expect(frankie.mine).toMatchObject({ status: 'waitlisted', waitlistPosition: 1 });
+    expect(frankie.waitlist.map((w: any) => w.name)).toEqual(['Frankie']);
+    expect(frankie).toMatchObject({ full: true, joinAs: 'waitlist' });
+    expect(frankie.confirmed.map((c: any) => c.name)).toEqual(['Blair', 'Casey', 'Devon', 'Emery']);
+  });
+
+  it('the repair leaves alone a game that is not on Waitlist, a game that has started, and a person the organizer parked on purpose elsewhere', async () => {
+    const TOKEN = 'one-time-fix-token-0123456789-abcdef';
+    const app = new TestApp();
+    app.env = { ...app.env, FIX_TOKEN: TOKEN };
+    const ctx = (await setupGroup(app)) as unknown as Ctx;
+    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', settings: { maxPlayers: 4 } });
+    const g = await on(ctx, '2026-11-05');
+    for (const n of ['Blair', 'Casey']) await join(ctx, g.id, n);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Devon, action: 'waitlist' });
+    const before = seatsAndMoney(ctx);
+    const fix = (q = '') => app.client().call('POST', `/api/internal/fix-standby${q}`, {}, { 'X-Fix-Token': TOKEN });
+    // Not on Waitlist: untouched.
+    expect((await fix()).data.games).toEqual([]);
+    expect(seatsAndMoney(ctx)).toBe(before);
+    // Started game on Waitlist: untouched.
+    await setCourt(ctx, g.id, 'waitlist');
+    ctx.app.now = Date.parse(g.startsAt) + 10 * 60_000;
+    expect((await fix()).data.games).toEqual([]);
+    expect(seatsAndMoney(ctx)).toBe(before);
   });
 });

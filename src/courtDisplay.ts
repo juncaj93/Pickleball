@@ -5,9 +5,11 @@
 // other game: "Court not booked", "3 of 4 in", "I'm in" / "You're in" with Drop
 // out, and no money prompts (nobody pays before a court is booked; credit used at
 // sign-up still shows as "Paid with credit" or "Credit $3 used"). The words
-// waitlist, waiting and standby are not used for it. (Behind the scenes the
-// server still keeps people who tap I'm in on a game that is waiting on the
-// venue's court list in order; the screen simply calls them in.) Once the court
+// waitlist, waiting and standby are not used for it, unless the game is really
+// full beyond the max (then it has a real waitlist, like a booked game). A court
+// set to Waitlist is the same as Not booked here: the server gives normal seats.
+// (An old standby seat left over from before that rule is drawn as in while there
+// is room, until the one-time repair moves it in.) Once the court
 // is booked the game shows its normal look, pay prompts included; booked and
 // later changed back to not booked, they go away again. Someone who already
 // paid stays paid and still sees it. A game with a booked court that is full
@@ -35,7 +37,11 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
   const mine = s.mine
     ? {
         ...s.mine,
-        ...(s.mine.status === 'waitlisted' && (s.mine.waitlistPosition ?? Infinity) <= room ? { status: 'confirmed' as const, waitlistPosition: null } : {}),
+        ...(s.mine.status === 'waitlisted'
+          ? (s.mine.waitlistPosition ?? Infinity) <= room
+            ? { status: 'confirmed' as const, waitlistPosition: null }
+            : { waitlistPosition: (s.mine.waitlistPosition ?? room + 1) - lifted.length }
+          : {}),
         // No money prompts before a court is booked. A payment that is already recorded stays and shows, and so
         // does credit already used on the seat ("Credit $3 used"); what is left to pay waits for the court.
         ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0, useCreditCents: 0 }),
@@ -48,7 +54,7 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
     countText: countText(confirmed.length, maxPlayers),
     full: confirmed.length >= maxPlayers,
     // Only a game that is really full beyond the max sends people to the waitlist, same as a booked one.
-    joinAs: confirmed.length >= maxPlayers ? s.joinAs : 'in',
+    joinAs: confirmed.length >= maxPlayers ? 'waitlist' : 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
     courtState: s.courtState === 'waitlist' ? null : s.courtState,
     // The old third value must not leave a different look (blue) behind: to players it is plain Not booked.

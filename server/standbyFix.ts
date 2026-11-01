@@ -9,6 +9,7 @@
 // Only a caller that knows FIX_TOKEN (a one-off wrangler.toml var, never committed) gets anything but "Not found".
 import { type Ctx } from './context';
 import { HttpError } from './http';
+import { isCourtWaitlist } from '../shared/court';
 import { audit, getGroup, loadRoster, settingsOf, type SessionRow, waitlistOf, confirmedOf } from './repo';
 import { settle } from './roster';
 
@@ -36,7 +37,8 @@ export async function fixStandby(ctx: Ctx) {
     const roster = await loadRoster(ctx.db, s.id);
     const waiting = waitlistOf(roster);
     const confirmed = confirmedOf(roster).length;
-    if (waiting.length === 0 || confirmed >= max) continue;
+    // Only games that have not started and whose court is on Waitlist right now (where the old rule made standby seats).
+    if (waiting.length === 0 || confirmed >= max || Date.parse(s.starts_at) <= ctx.nowMs || !isCourtWaitlist({ bookingStatus: s.booking_status, courtState: s.court_state })) continue;
     const entry: Record<string, unknown> = { id: s.id, startsAt: s.starts_at, confirmedBefore: confirmed, waiting: waiting.map((w) => names.get(w.player_id) ?? w.player_id) };
     if (!dry) {
       const promoted = await settle(ctx.db, s, ctx.nowIso, max);
