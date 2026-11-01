@@ -921,7 +921,8 @@ async function main() {
       });
       await card(page, G[5]).getByRole('button', { name: "I'm in" }).click();
       await page.waitForFunction((id) => document.getElementById(`row-${id}`).dataset.mine === 'in', G[5].id, { timeout: 600 });
-      await waitBanner(page, /You're in/, 6000);
+      // "Game on!" instead when this tap made the 4th (it depends on what ran before in a full run).
+      await waitBanner(page, /You're in|Game on!/, 6000);
       await card(page, G[5]).getByText('$14 due').waitFor({ timeout: 3000 });
       await sleep(500);
       assert(!/Saving/.test(await page.locator('main').innerText()), 'Saving… still on screen');
