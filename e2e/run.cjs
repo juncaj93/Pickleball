@@ -2412,6 +2412,10 @@ async function main() {
         await admin.getByRole('menuitem', { name: 'Cancel session' }).click();
         await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
         await admin.locator('.toast', { hasText: 'Session canceled' }).waitFor();
+        // A cancel opens the "text the group" sheet next; close it.
+        await admin.locator('dialog[open]').waitFor();
+        await admin.keyboard.press('Escape');
+        await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
         await players.Alex.reload();
         await players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' }).getByText('Canceled', { exact: true }).waitFor();
       }
