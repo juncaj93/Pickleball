@@ -53,6 +53,7 @@ route('PUT', '/api/me/days', player.setMyDays);
 route('POST', '/api/sessions/:id/join', (ctx) => player.playerJoin(ctx));
 route('POST', '/api/sessions/:id/withdraw', (ctx) => player.playerWithdraw(ctx));
 route('POST', '/api/sessions/:id/confirm', (ctx) => player.playerConfirm(ctx));
+route('POST', '/api/sessions/:id/still-in', player.playerStillIn);
 route('POST', '/api/sessions/:id/paid', player.playerPaid);
 route('POST', '/api/sessions/:id/use-credit', (ctx) => player.playerUseCredit(ctx));
 route('POST', '/api/sessions/:id/undo-credit', (ctx) => player.playerUndoCredit(ctx));

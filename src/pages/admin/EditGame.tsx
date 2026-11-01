@@ -92,6 +92,12 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
               New time: <strong>{formatShortDate(startsAt, tz)}, {formatTimeRange(startsAt, endsAt, tz)}</strong>
             </p>
           )}
+          {/* "Time may shift": a new start on a game with players in asks them on their Home. Nothing is sent. */}
+          {ctx.d.timeShift !== false && timeChanged && startsAt && minute(startsAt) !== minute(s.startsAt) && s.roster.some((r) => r.status === 'confirmed' && r.playerId !== (ctx.d.me?.id ?? null)) && (
+            <p className="small ts-note" data-ts-note>
+              Players who are in will be asked to confirm the new time.
+            </p>
+          )}
         </>
       )}
       {error && <p className="field-error">{error}</p>}

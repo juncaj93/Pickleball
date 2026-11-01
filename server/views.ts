@@ -24,6 +24,7 @@ import {
   waitlistOf,
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
+import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
 
 /** The organizer pays the venue, so their own player screen carries no share, Pay, credit or "paid". */
 const NO_MONEY = {
@@ -55,6 +56,8 @@ export function playerSessionView(
   isOrganizer = false,
   /** This player's own credit: what they can spend now, whether any is left (or a refund request is open), and this seat's part of their pot. */
   pot: { usableCents: number; hasCredit?: boolean; seat: SeatCredit } = { usableCents: 0, seat: NO_SEAT_CREDIT },
+  /** The TIME_SHIFT switch: ask a player who is in to confirm a start time that changed after they agreed to one. */
+  timeShift = false,
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -119,6 +122,12 @@ export function playerSessionView(
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
     mine: ownRow && isOrganizer ? { ...ownRow, ...NO_MONEY } : ownRow,
+    // Only a player who is in, on a game still ahead: never the organizer (confirmed automatically), a dropped
+    // player or a real standby seat.
+    timeAsk:
+      timeShift && mine && !isOrganizer && mine.status === 'confirmed' && !canceled && !started && !session.finalized_at && isWaitingOnTime(mine.time_confirmed, session.starts_at)
+        ? { wasStartsAt: agreedStart(mine.time_confirmed)! }
+        : null,
   };
 }
 
@@ -175,6 +184,8 @@ export function adminSessionView(
   chargedCents: number | null = null,
   /** Who blocks a reopen: credit from this game already used or refunded, or held by a pending refund request. */
   reopen: { spent: string[]; requested: string[] } = { spent: [], requested: [] },
+  /** The TIME_SHIFT switch: "Confirmed 2 of 3 · Waiting on Dan". */
+  timeShift = false,
 ): AdminSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -333,5 +344,22 @@ export function adminSessionView(
     reopenBlockedBy: reopen.spent,
     reopenRequestedBy: reopen.requested,
     eligibleSubstitutes: state.flags.openSpots > 0 ? eligibleSubstitutes(roster, players) : [],
+    timeCheck: timeShift ? timeCheckOf(session, confirmed, organizerId, nowMs) : null,
+  };
+}
+
+/**
+ * "Confirmed 2 of 3 · Waiting on Dan" for a game whose start time changed after someone in had agreed to one.
+ * Everyone in counts, the organizer as confirmed. Null when nobody in was there for a change (or the game is over).
+ */
+export function timeCheckOf(session: SessionRow, confirmed: RosterRow[], organizerId: string | null, nowMs: number): AdminSessionView['timeCheck'] {
+  if (session.status === 'canceled' || session.finalized_at || nowMs >= Date.parse(session.starts_at)) return null;
+  const others = confirmed.filter((r) => r.player_id !== organizerId);
+  if (!others.some((r) => agreedStart(r.time_confirmed) !== null)) return null;
+  const waiting = others.filter((r) => isWaitingOnTime(r.time_confirmed, session.starts_at));
+  return {
+    confirmedCount: confirmed.length - waiting.length,
+    inCount: confirmed.length,
+    waiting: waiting.map((r) => ({ playerId: r.player_id, name: r.display_name, phone: r.phone_number, wasStartsAt: agreedStart(r.time_confirmed)! })),
   };
 }

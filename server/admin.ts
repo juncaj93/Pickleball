@@ -9,6 +9,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '..
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
+import { timeShiftOn } from '../shared/timeShift';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
 import {
@@ -156,7 +157,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) =>
-      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }),
+      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShiftOn(ctx.env.TIME_SHIFT)),
     ),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
@@ -190,6 +191,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
     version,
+    timeShift: timeShiftOn(ctx.env.TIME_SHIFT),
   };
 }
 
@@ -541,14 +543,26 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
   const deadline = defaultDeadline(startsAt, settingsOf(group));
+  const move = ctx.db
+    .prepare(
+      `UPDATE sessions SET starts_at = ?, ends_at = ?, cancellation_deadline_at = ?, admin_decision = NULL, decision_at = NULL, updated_at = ?
+       WHERE id = ?`,
+    )
+    .bind(startsAt, endsAt, deadline, ctx.nowIso, session.id);
   try {
-    await ctx.db
-      .prepare(
-        `UPDATE sessions SET starts_at = ?, ends_at = ?, cancellation_deadline_at = ?, admin_decision = NULL, decision_at = NULL, updated_at = ?
-         WHERE id = ?`,
-      )
-      .bind(startsAt, endsAt, deadline, ctx.nowIso, session.id)
-      .run();
+    if (startsAt !== session.starts_at) {
+      // "Time may shift": everyone in (or on the real waitlist) who had agreed to the old start time, by joining at
+      // it, keeps that as the time they agreed to, in the same step as the move. Anyone who already said Still in
+      // to some time keeps that answer: a change back to it asks them nothing. Never touches money or a seat.
+      await ctx.db.batch([
+        ctx.db
+          .prepare("UPDATE session_players SET time_confirmed = ? WHERE session_id = ? AND time_confirmed IS NULL AND status IN ('confirmed', 'waitlisted')")
+          .bind(session.starts_at, session.id),
+        move,
+      ]);
+    } else {
+      await move.run();
+    }
   } catch (err) {
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'time_taken', "There's already a session at that time.");
     throw err;

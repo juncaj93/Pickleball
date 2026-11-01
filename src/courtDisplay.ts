@@ -16,7 +16,7 @@
 // keeps its waitlist wording.
 
 import type { GroupView, PlayerSessionView } from '../shared/api';
-import { courtStatus } from '../shared/court';
+import { courtStatus, isCourtWaitlist } from '../shared/court';
 import { countText } from '../shared/spots';
 
 /** The court is not booked (and the game is still on): not yet, booking not open, or on the venue's waiting list. */
@@ -58,6 +58,8 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
     joinAs: confirmed.length >= maxPlayers ? 'waitlist' : 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
     courtState: s.courtState === 'waitlist' ? null : s.courtState,
+    // Kept for the tile only ("time may shift": dashed border and "~7 PM"); the words stay Court not booked.
+    venueWaitlist: isCourtWaitlist(s),
     // The old third value must not leave a different look (blue) behind: to players it is plain Not booked.
     bookingStatus: s.bookingStatus === 'unavailable' ? 'needs_booking' : s.bookingStatus,
     mine,

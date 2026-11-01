@@ -1092,3 +1092,55 @@ Later cleanup batch (big text, a 29-letter name, one rare shared-phone case): do
 - After deploy, read-only: new bundle served; /api/status, /api/group, /api/group/version, /admin 200; the 20-column
   health check (scripts/integrity-checks.sql) all 0; row counts (seats 17, credit entries 5, cash-out requests 0,
   players 10, games 8) match the export.
+
+## "Time may shift" package (Sun Nov 1, 2026)
+
+Started from main 5abaa38 (same code as the live deployment `071a533a`, plus a docs note). SPEC items 1 to 9.
+No money rule or price change.
+
+### What changed on screen
+- Tilde on Waitlist games: the time under the tile reads "~7 PM" in the muted gray of "Court not booked"; Not
+  booked games show a plain muted time; Booked games a bright bold time. Waitlist to Booked while the page is open:
+  the tilde goes and the time pops once (transform and opacity, 420 ms; 100 ms fade with Reduce Motion).
+- Date tile border shows the court (player and organizer cards): Booked solid bright (dark mode green #8BD9A3),
+  Waitlist dashed, Not booked solid dim. Two border layers cross-fade; border-style never animates.
+  Colors: light #18241d / #5f665d / #878e85, dark #8bd9a3 / #a3ab9f / #6b786f (all 3:1 or better on the card).
+- "Time changed" notice at the top of the player Home (`src/timeShift.tsx`): clock icon, "Thu Nov 5 moved to
+  7:30 PM", "Was 7:00 PM", then Still in and Can't make it at equal widths. Thin green outline on that game's card.
+  Raised dark card in dark mode. Stays until answered (server data, so reloads and the 5-second refresh keep it);
+  two at most, then "N more". Still in: "Confirmed" check, the bar folds away (about 220 ms). Can't make it: the
+  game card's own drop question (its button says "Can't make it"), then the same 5-second Undo and credit banner.
+  Offline or a failed call: the bar stays and the usual red banner shows.
+- Organizer card: "Confirmed 2 of 3" (everyone in, the organizer counted as confirmed) and "Waiting on Dan" with a
+  small Text button that opens Messages with "Thu Nov 5 is now 7:30 PM. Still in? Open the site and tap Still in."
+  plus the site address. Edit game shows "Players who are in will be asked to confirm the new time." before Save
+  when the start changes on a game with players in. Nothing is sent automatically.
+- Dark mode raised cards on toasts, sheets (every pop-up) and the gear menu (`--raised`, `--raised-line`,
+  `--raised-shadow` in `src/styles.css`). Light mode unchanged.
+- Header: new logo (`public/logo.png`) on a rounded tile (light green-gray with a 2px #17231C outline; dark #17211D
+  with a 2px #2E8B5E outline). `public/logo-xmas.png` is staged and unused. The logo was never a button (the sun
+  button switches the theme), so it still is not.
+- Credit in the header: plain text, a small green letterspaced CREDIT over the bold amount, between the sun button
+  and the date tile, hidden at $0; the name shortens first.
+
+### The rules (Alex's)
+- A player who is in is asked when the start time changed after they agreed to one. Joining agrees to the time
+  at that moment; Still in agrees to the current time. Every time they agreed to is kept, so a change back to any
+  of them asks nothing; any other time asks again ("Was" shows the last time they said yes to).
+- Never asked: the organizer, a dropped player, a real standby seat, a canceled, started or finalized game.
+  A standby who moves in later is asked about the time they joined at.
+- The organizer's In or To waitlist keeps a pending ask; the organizer adding someone new counts as confirmed.
+- Changing only the end time asks nobody.
+
+### Database
+Migration `0016_time_confirmed.sql`: one new nullable column, `session_players.time_confirmed`
+("<start agreed>[,<another>] <when>"). No rows are filled by the migration. Edit game fills it for the seats that
+are in (with the old start) in the same batch that moves the game. Rollback of the column:
+`ALTER TABLE session_players DROP COLUMN time_confirmed;` (old code ignores the column, so rolling back the code
+alone is enough). The migration MUST go on before this code is deployed: without the column, I'm in on an existing
+seat row and moving a game fail with an error (no money moves; proven in `tests/review-time-shift.test.ts`).
+
+### Switch
+`TIME_SHIFT = "on"` in wrangler.toml (also for previews). "off" hides the tilde, the borders, the notice, Confirmed
+x of y and the Edit game note, and refuses Still in; answers already saved stay right for later. The View as demo
+does not read it (it always shows the feature).

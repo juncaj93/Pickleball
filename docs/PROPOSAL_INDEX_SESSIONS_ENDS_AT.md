@@ -23,7 +23,7 @@ One new index on the existing `sessions` table. Additive only: no column, no
 row and no money record changes, and code that does not know about it keeps
 working. Nothing players or the organizer see changes.
 
-New file `migrations/0016_sessions_ends_at_index.sql`:
+New file `migrations/0017_sessions_ends_at_index.sql`:
 
 ```sql
 -- The "games not ended yet" lookup (5-second checks, the alert tick, Home)
@@ -40,7 +40,7 @@ rollback.
 ## How to run it (about 5 minutes, in a quiet window: not 5:00 to 10:30 PM on a game day)
 
 1. Make sure nothing else is pending: `npx wrangler d1 migrations list pickleball --remote`
-   must show only `0016_sessions_ends_at_index.sql`. If anything else is
+   must show only `0017_sessions_ends_at_index.sql`. If anything else is
    listed, stop: it would be applied too.
 2. Restore point: `npx wrangler d1 time-travel info pickleball` (write down the
    bookmark) and `npx wrangler d1 export pickleball --remote --output before-0016.sql`
@@ -63,7 +63,7 @@ npx wrangler d1 execute pickleball --remote --command "DROP INDEX IF EXISTS idx_
 
 The site keeps working the same way without it, just reading more rows. The
 migration stays listed as applied, which is harmless. If you also want the
-file gone, delete `migrations/0016_sessions_ends_at_index.sql` in the same
+file gone, delete `migrations/0017_sessions_ends_at_index.sql` in the same
 change. The Time Travel bookmark from step 2 is a last resort only: it would
 also undo every sign-up and payment made after it.
 

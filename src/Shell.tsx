@@ -47,7 +47,10 @@ export function TopBar({
   return (
     <header className="topbar">
       <div className="topbar-inner topbar-row">
-        <img className="brand-logo" src="/logo-header.png" alt="" width="32" height="32" />
+        {/* The logo on a rounded tile with an outline (green in dark mode, black in light). public/logo-xmas.png is staged for later, unused. */}
+        <span className="brand-tile" aria-hidden="true">
+          <img className="brand-logo" src="/logo.png" alt="" width="24" height="24" />
+        </span>
         <div className="topbar-text">
           <div className="eyebrow">{eyebrow}</div>
           {titleExtra ? (

@@ -75,6 +75,13 @@ export interface PlayerSessionView {
     /** Money from this session that came back to them as credit (they dropped out, it was canceled, they did not play, or they paid more than the final price). 0 once they have no credit left. */
     creditBackCents: number;
   };
+  /**
+   * "Time may shift": the organizer moved this game's start after this player (who is in) agreed to a time.
+   * `wasStartsAt` is the time they last agreed to. Null when there is nothing to ask (or TIME_SHIFT is off).
+   */
+  timeAsk: { wasStartsAt: string } | null;
+  /** Set by the player screen only (src/courtDisplay.ts): the court is on the venue's waitlist (players see Court not booked). */
+  venueWaitlist?: boolean;
 }
 
 /** One line of a player's credit history. */
@@ -111,6 +118,8 @@ export interface GroupView {
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */
   viewingAs: boolean;
+  /** The TIME_SHIFT switch (tilde times, court borders, the time changed notice). */
+  timeShift?: boolean;
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -277,6 +286,11 @@ export interface AdminSessionView {
   /** Reopen waits because a pending refund request is holding credit from this game: who. */
   reopenRequestedBy: string[];
   eligibleSubstitutes: EligibleSubstitute[];
+  /**
+   * "Time may shift": the start time changed after someone in agreed to one. Everyone in counts (the organizer as
+   * confirmed); `waiting` is who has not said Still in to the current time yet. Null otherwise, or with TIME_SHIFT off.
+   */
+  timeCheck: { confirmedCount: number; inCount: number; waiting: { playerId: string; name: string; phone: string | null; wasStartsAt: string }[] } | null;
 }
 
 export interface AdminPlayer {
@@ -340,6 +354,8 @@ export interface RefundRequestView {
 export interface AdminDashboard {
   /** The "did anything change?" stamp this load was drawn from (see /api/admin/version). */
   version: string;
+  /** The TIME_SHIFT switch: Confirmed x of y, Waiting on, the Edit game note, tilde times and court borders. */
+  timeShift?: boolean;
   group: {
     name: string;
     timezone: string;

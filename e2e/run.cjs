@@ -674,21 +674,24 @@ async function main() {
       assert(alpha >= 0.95, `pill should be solid, background was ${pillBg}`);
       const pad = await admin.evaluate(() => parseFloat(getComputedStyle(document.querySelector('main.page')).paddingBottom));
       assert(pad >= box.height + 24, `not enough room under the last card for the pill (${pad}px)`);
-      await admin.locator('header img.brand-logo').waitFor();
+      await admin.locator('header .brand-tile img.brand-logo').waitFor();
       for (const scheme of ['light', 'dark']) {
         await admin.emulateMedia({ colorScheme: scheme });
-        const logo = await admin.locator('header img.brand-logo').evaluate((img) => ({
-          loaded: img.complete && img.naturalWidth === 128,
-          backing: getComputedStyle(img).backgroundColor,
-          width: img.getBoundingClientRect().width,
-        }));
-        assert(logo.loaded, `header logo did not load in ${scheme} mode`);
-        assert(logo.backing === 'rgb(255, 255, 255)', `logo should sit on a light backing in ${scheme} mode`);
-        assert(logo.width === 32, `header logo should be 32px, was ${logo.width}`);
+        // The logo sits on a rounded tile with a 2px outline (no white box): light green-gray with a black
+        // outline in light mode, the raised card color with a green outline in dark mode. Same 32px as before.
+        const logo = await admin.locator('header .brand-tile').evaluate((tile) => {
+          const img = tile.querySelector('img');
+          const cs = getComputedStyle(tile);
+          return { loaded: img.complete && img.naturalWidth > 0, src: img.getAttribute('src'), backing: cs.backgroundColor, line: cs.borderTopColor, lineW: cs.borderTopWidth, width: tile.getBoundingClientRect().width };
+        });
+        assert(logo.loaded && logo.src === '/logo.png', `header logo did not load in ${scheme} mode`);
+        const want = scheme === 'dark' ? ['rgb(23, 33, 29)', 'rgb(46, 139, 94)'] : ['rgb(230, 238, 228)', 'rgb(23, 35, 28)'];
+        assert(logo.backing === want[0] && logo.line === want[1] && logo.lineW === '2px', `logo tile in ${scheme} mode: ${logo.backing} / ${logo.line} ${logo.lineW}`);
+        assert(logo.width === 32, `header logo tile should be 32px, was ${logo.width}`);
       }
       await admin.emulateMedia({ colorScheme: 'light' });
       assert((await admin.locator('link[rel="icon"]').getAttribute('href')) === '/favicon-32.png', 'tab icon should be the logo');
-      for (const f of ['/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/favicon-32.png', '/logo-header.png']) {
+      for (const f of ['/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/favicon-32.png', '/logo-header.png', '/logo.png', '/logo-xmas.png']) {
         const r = await admin.request.get(BASE + f);
         assert(r.ok() && r.headers()['content-type'].includes('image/png'), `${f} missing`);
       }

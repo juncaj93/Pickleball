@@ -72,7 +72,16 @@ async function existingRow(db: D1Database, sessionId: string, playerId: string) 
  * gave it), false when it didn't. With `auto`, their credit goes on the new
  * seat in the same batch.
  */
-async function tryConfirm(db: D1Database, session: SessionRow, playerId: string, nowIso: string, maxPlayers: number, auto: AutoCredit | null) {
+async function tryConfirm(
+  db: D1Database,
+  session: SessionRow,
+  playerId: string,
+  nowIso: string,
+  maxPlayers: number,
+  auto: AutoCredit | null,
+  /** The player's own I'm in (or claim link): they agree to the current start time. The organizer's In keeps their answer as it was. */
+  ownTap = true,
+) {
   const withCredit = auto ? autoCreditStatements(db, auto, session.id, playerId, nowIso) : [];
   try {
     const existing = await existingRow(db, session.id, playerId);
@@ -89,6 +98,7 @@ async function tryConfirm(db: D1Database, session: SessionRow, playerId: string,
                  claim_seq = CASE WHEN status = 'waitlisted' THEN claim_seq ELSE ${NEXT_CLAIM_SEQ} END,
                  attendance_confirmed_at = NULL,
                  promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
+                 ${ownTap ? 'time_confirmed = NULL,' : ''}
                  ${KEEP_PAYMENT_UNLESS_REFUNDED},
                  updated_at = ?3
              WHERE id = ?4 AND status <> 'confirmed' AND ${GUARD}`,
@@ -131,6 +141,7 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
         .prepare(
           `UPDATE session_players SET status = 'waitlisted', claimed_at = ?2, claim_seq = ${NEXT_CLAIM_SEQ}, confirmed_at = NULL, confirm_seq = NULL,
              attendance_confirmed_at = NULL, promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL,
+             time_confirmed = NULL,
              payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
              updated_at = ?2
            WHERE id = ?3 AND status <> 'waitlisted'`,
@@ -225,7 +236,7 @@ export async function joinSession(
   // and the real waitlist only when the game is full beyond the max.
   // Their credit goes on the seat in the same step as the seat itself (never for the organizer).
   const auto = await autoCreditFor(db, session);
-  const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto);
+  const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto, mode !== 'organizer');
   if (got) {
     // A second tap or device that found the seat already taken by the first reports (and logs) nothing new.
     const credit = auto && got === 'new' ? await auditAutoCredit(db, auto.groupId, session.id, playerId, nowIso) : { cents: 0, paid: false };
