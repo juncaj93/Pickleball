@@ -2059,7 +2059,7 @@ async function main() {
     });
 
     console.log('Court waitlist');
-    await check('court waitlist: players tap the join button and read it as a normal game (the organizer sees standby); the share text is the usual one; Court opened moves them in', async () => {
+    await check('court waitlist: players tap the join button, get real seats and read it as a normal game; the share text is the usual one; Court opened changes no seat and the pay prompts appear', async () => {
       const card = sessionCards(admin).nth(3);
       const day = (await card.locator('h2').innerText()).trim().replace(/, \d{1,2}:\d{2} (AM|PM)$/, ''); // e.g. "Thu, Nov 5"
       const cardId = (await card.getAttribute('id')).replace('session-', '');
@@ -2100,8 +2100,9 @@ async function main() {
 
       await admin.reload();
       const c2 = sessionCards(admin).nth(3);
-      // Everyone on standby, by name, on a line of its own.
-      await c2.locator('.players-line .waitlist-line', { hasText: /^Standby: \w+, \w+$/ }).waitFor();
+      // A court on Waitlist is just Not booked: they are real seats, named on the usual names line, never "Standby".
+      await c2.locator('.players-line .names-line', { hasText: /Casey.*Devon|Devon.*Casey/ }).waitFor();
+      assert((await c2.locator('.players-line .waitlist-line').count()) === 0, 'a standby line on a game that is not full');
       assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
       await admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`).getByRole('button', { name: 'Court opened' }).click();
       await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
@@ -2110,16 +2111,14 @@ async function main() {
       assert((await admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`).count()) === 0, 'the Do this now card goes away once the court opens');
       await admin.reload();
       if (await admin.locator('.sg-more').count()) await admin.locator('.sg-more').click();
-      const tell = admin.getByRole('article', { name: new RegExp(`^Spot opened: ${day}`) });
-      await tell.locator('.sg-preview').first().waitFor();
-      assert(/A spot opened and you're in for pickleball (tonight|tomorrow|today|(Tue|Thu) [A-Z][a-z]{2} \d{1,2}), \d{1,2}:\d{2} PM\. \S+$/.test(await tell.first().getByRole('link', { name: /^Text/ }).getAttribute('aria-label')), 'spot opened text');
+      // Nobody's seat moved when the court opened, so there is no "Spot opened" text to send.
+      assert((await admin.getByRole('article', { name: new RegExp(`^Spot opened: ${day}`) }).count()) === 0, 'a Spot opened text for people who already had seats');
       assert((await admin.getByRole('article', { name: /^Now 6/ }).count()) === 0, 'Now 6 is gone');
 
       const p = players.Casey;
       await p.reload();
       const row = p.locator('article', { hasText: day.replace(/^(Tue|Thu), /, (m) => (m.startsWith('Tue') ? 'Tuesday, ' : 'Thursday, ')) });
       await row.locator('.sched-status').getByText('Court booked', { exact: true }).waitFor();
-      await row.getByText("Good news, the court opened, so you're in.").waitFor();
       await row.getByRole('link', { name: 'Pay $14 with Venmo' }).waitFor();
     });
 
@@ -2687,7 +2686,10 @@ async function main() {
     await check('times show in Eastern 12-hour format, never UTC', async () => {
       await tab(admin, 'Home').click();
       const text = await admin.locator('main').innerText();
-      assert(/8:00 to 10:00 PM/.test(text), 'missing time range');
+      // The cards show only the start under the date tile (the end lives in Edit game), always 12-hour with AM or PM.
+      assert(/\b\d{1,2}(:\d{2})? (AM|PM)\b/.test(text), 'missing a 12-hour start time');
+      const range = await admin.evaluate(async () => (await (await fetch('/api/admin/dashboard')).json()).sessions[0]);
+      assert(/^\d{4}-\d{2}-\d{2}T/.test(range.startsAt), 'the data still carries real timestamps');
       assert(!/\b(EDT|EST)\b/.test(text), 'EDT/EST should be gone from screens');
       assert(!/UTC|GMT|\d{2}:\d{2}:\d{2}/.test(text), 'found UTC or 24h time');
     });

@@ -89,7 +89,7 @@ async function main() {
     phones[n] = c.request;
   }
   const join = (n, s) => post(phones[n], `/api/sessions/${s.id}/join`, {});
-  // C has a court. B: two in, then the organizer puts it on the court waitlist and a third taps I'm in (kept as standby behind the scenes).
+  // C has a court. B: two in, then the organizer puts it on the court waitlist and a third taps I'm in (a real seat).
   await post(areq, `/api/admin/sessions/${C.id}/booked`, {});
   await join('Ryan', B);
   await join('Julian', B);
@@ -149,7 +149,9 @@ async function main() {
     const pop = page.locator('.pop');
     await row(page, B).getByRole('button', { name: "I'm in" }).click();
     await pop.waitFor();
-    assert(squash(await pop.innerText()) === "You're in", `banner after I'm in: "${await pop.innerText()}"`);
+    // The 4th real seat on any game says "Game on!" (a court on Waitlist is just Not booked: Nathan's tap counted); never a waiting word.
+    const bannerText = squash(await pop.innerText());
+    assert(/^(You're in|Game on!)/.test(bannerText) && !FORBIDDEN.test(bannerText), `banner after I'm in: "${bannerText}"`);
     await row(page, B).locator('.st-in', { hasText: "You're in" }).waitFor();
     let t = await text(page, B);
     assert(/4 in/.test(t) && /Drop out/.test(t) && !FORBIDDEN.test(t), `joined: ${t}`);
@@ -170,7 +172,7 @@ async function main() {
     await page.waitForTimeout(500);
     // Join again.
     await row(page, B).getByRole('button', { name: "I'm in" }).click();
-    await page.locator('.pop', { hasText: "You're in" }).waitFor();
+    await page.locator('.pop', { hasText: /You're in|Game on!/ }).waitFor();
     t = await text(page, B);
     assert(/You're in/.test(t) && /Drop out/.test(t) && !FORBIDDEN.test(t), `joined again: ${t}`);
     assert(!FORBIDDEN.test(await page.locator('main').innerText()), 'the page says a waiting word');
@@ -180,7 +182,7 @@ async function main() {
   await check('an Undo straight after dropping out takes the player back in with the normal "You\'re back in"', async () => {
     const { ctx, page } = await open('Mitchel');
     await row(page, B).getByRole('button', { name: "I'm in" }).click();
-    await page.locator('.pop', { hasText: "You're in" }).waitFor();
+    await page.locator('.pop', { hasText: /You're in|Game on!/ }).waitFor();
     await page.locator('.pop').waitFor({ state: 'detached', timeout: 5000 });
     await row(page, B).getByRole('button', { name: 'Drop out' }).click();
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
@@ -192,9 +194,9 @@ async function main() {
     await ctx.close();
   });
 
-  await check('the records behind the screen are unchanged: someone who tapped I\'m in is still on the list server-side, and a payment stays a payment', async () => {
+  await check('the records behind the screen: someone who tapped I\'m in on a court set to Waitlist has a real seat, and a payment stays a payment', async () => {
     const nathan = await record('Nathan', B);
-    assert(nathan.status === 'waitlisted', `Nathan's record is "${nathan.status}"; only the screen should change`);
+    assert(nathan.status === 'confirmed', `Nathan's record is "${nathan.status}"; a court on Waitlist gives a real seat`);
     const devon = await record('Devon', A);
     assert(devon.oweCents === 1400 && devon.paymentStatus === 'unpaid', `Devon's record: ${JSON.stringify({ owe: devon.oweCents, pay: devon.paymentStatus })}`);
     const casey = await record('Casey', A);
