@@ -105,9 +105,9 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(t[0].text).toBe('Tue Nov 17 opens at 7:00 AM.');
     expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
     expect(t[0].alerts[0]).toMatchObject({ id: 'book', dueMs: at('2026-11-03T11:45:00Z') });
-    expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
     expect(t[0].alerts[1]).toMatchObject({ id: 'book_followup', dueMs: at('2026-11-03T12:30:00Z') }); // 7:30 AM
-    expect(t[0].alerts[1].text).toBe(`Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(t[0].alerts[1].text).toBe(`Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
     expect(tasksAt('2026-11-03T12:30:00Z', [nov17])[0].text).toBe('Tue Nov 17 opened at 7:00 AM.');
     expect(tasksAt('2026-11-03T11:45:00Z', [{ ...nov17, booked: true }])).toEqual([]);
     // The next day it is just one of the games with no court yet (no alert).
@@ -119,7 +119,7 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     const nov26 = game('2026-11-26', { booked: false, confirmedCount: 0, holiday: 'Thanksgiving' });
     const t = tasksAt('2026-11-12T11:45:00Z', [nov26]); // Thu Nov 12, 6:45 AM
     expect(t[0].text).toBe('Thu Nov 26 opens at 7:00 AM (Thanksgiving).');
-    expect(t[0].alerts[0].text).toBe(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`);
+    expect(t[0].alerts[0].text).toBe(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
   });
 
   it('no booking alert for any other unbooked game: only the one 14 days out', () => {
@@ -487,9 +487,9 @@ describe('the tick endpoint', () => {
       `Tuesday: 3 players in, need a 4th. Text the group: ${GO}`,
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
-      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it`,
+      `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
       `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
-      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it`,
+      `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
     for (const t of g.sent) {
       expect(t).not.toMatch(/555|\(313\)|\$|venmo/i);

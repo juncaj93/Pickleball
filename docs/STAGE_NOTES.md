@@ -974,3 +974,15 @@ No money rule, price rule, schema or migration change.
   banner 11, no-court 10, cancel-reason 8, dryrun-screens 6, admin-sweep 6, want-in 4,
   double-tap 4, audit-stage3 3). Run one at a time: run.cjs fails in bulk when the machine is
   also running the unit tests.
+
+### Alex's answers (Sun Nov 1, 2026, afternoon)
+- 1, 2, 5: kept as built (the question starts at midnight after the game date; no X on money or
+  decision cards; no question for empty games, and none after 28 days).
+- 3: Telegram booking alerts now end "Then set it to Booked" (was "Then tap I booked it"; there is
+  no such button any more). `tests/golden-wording.test.ts` proves this wording is the only change
+  to every card and alert from Oct 14 to Nov 27 (old words put back give the old fingerprint);
+  the fingerprints in `tests/fixtures/tick-golden.json` were updated. SMART_ALERTS.md updated.
+  The task brain's hidden button labels were left as they were (never drawn).
+- 4: Waitlist games follow the Not booked rule for "Court still needs to be booked": booking day,
+  the morning of, or the next 2 games open to book; gone at the start. Tests: C1, C1b.
+

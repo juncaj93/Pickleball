@@ -227,6 +227,8 @@ interface Built extends Task {
   rank: number;
 }
 
+// Not drawn on Home any more (the court card replaced these task buttons); the labels stay as they were so
+// the alert brain's golden file (tests/fixtures/tick-golden.json) keeps proving nothing else moved.
 const bookedButton: TaskButton = { id: 'booked', label: 'I booked it', action: { type: 'booked' } };
 const bookLink = (o: TaskOptions): TaskButton => ({ id: 'book-link', label: 'Book on CourtReserve', action: { type: 'link', href: o.links.book } });
 
@@ -337,7 +339,8 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | null {
   const holiday = s.holiday ? ` (${s.holiday})` : '';
   const opensAt = timeOf(t.courtOpens, o.tz);
   const text = `${date} ${nowMs < t.courtOpens ? 'opens' : 'opened'} at ${opensAt}${holiday}.`;
-  const tail = `Book: ${o.links.book}\nThen tap I booked it: ${o.links.admin}`;
+  // There is no "I booked it" button any more: the organizer moves the game's court switch to Booked.
+  const tail = `Book: ${o.links.book}\nThen set it to Booked: ${o.links.admin}`;
   const alerts: TaskAlert[] = [];
   alertIf(alerts, s, 'book', t.bookingHeadsUp, `${date} opens at ${opensAt}${holiday}. ${tail}`);
   alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: ${date} opened at ${opensAt}${holiday}. ${tail}`);

@@ -783,19 +783,20 @@ async function main() {
   });
 
   // ---------- Do this now ----------
-  await check('Do this now: one plain "Court still needs to be booked" card per waitlisted game; no Court opened / Didn\'t open anywhere', async () => {
+  await check('Do this now: at most one plain "Court still needs to be booked" card per game, for the next 2 games with no court (Waitlist or Not booked); no Court opened / Didn\'t open anywhere', async () => {
     const { ctx, page } = await openAdmin();
-    const card1 = page.locator('.do-now [data-task="court_book"]').first();
-    await card1.waitFor();
-    assert((await page.getByRole('button', { name: /^(Court opened|Didn't open)$/ }).count()) === 0, 'Court opened / Didn\'t open still shown');
-    // One court card per game: a waitlisted game never also gets "No court yet / I booked it".
+    await page.locator('.do-now [data-task="court_book"]').first().waitFor();
+    assert((await page.getByRole('button', { name: /^(Court opened|Didn't open|I booked it)$/ }).count()) === 0, 'Court opened / Didn\'t open / I booked it still shown');
     await page.getByRole('button', { name: /^\+\d+ more/ }).click().catch(() => {});
-    for (const id of [roles.waitA, roles.waitB]) {
-      const cards = await page.locator(`.do-now article[data-session="${id}"]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-task')));
-      assert(cards.length === 1 && cards[0] === 'court_book', `waitlisted game has Do this now cards: ${cards}`);
-    }
-    for (const kind of ['nocourt', 'nocourt_later', 'book']) {
-      for (const id of [roles.waitA, roles.waitB]) assert((await page.locator(`.do-now [data-task="${kind}"][data-session="${id}"]`).count()) === 0, `${kind} card on a waitlisted game`);
+    const books = await page.locator('.do-now article[data-task="court_book"]').evaluateAll((els) => els.map((e) => e.getAttribute('data-session')));
+    assert(books.length >= 1 && books.length <= 2, `court cards: ${books.length}`);
+    assert(new Set(books).size === books.length, 'two court cards for one game');
+    for (const kind of ['nocourt', 'nocourt_later', 'book']) assert((await page.locator(`.do-now [data-task="${kind}"]`).count()) === 0, `${kind} task card drawn`);
+    // Every game with a card is upcoming and has no court booked.
+    const d = await (await ctx.request.get(`${BASE}/api/admin/dashboard`)).json();
+    for (const id of books) {
+      const s = d.sessions.find((x) => x.id === id);
+      assert(s && s.bookingStatus !== 'booked' && !s.state.flags.canceled, `card on a booked or canceled game ${id}`);
     }
     await ctx.close();
   });

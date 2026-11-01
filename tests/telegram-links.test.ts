@@ -32,8 +32,8 @@ describe('tappable words in Telegram alerts', () => {
     expect(shown(`Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`)).toBe(`Tuesday: only 3 players in. [Cancel court](${COURTRESERVE_CANCEL_URL})`);
     expect(shown(`Tuesday: court canceled? Now cancel the session and text everyone: ${ADMIN}`)).toBe('Tuesday: court canceled? Now cancel the session and text everyone');
     expect(shown(`Tonight: only 3 players in. Cancel court before 7:00 AM: ${COURTRESERVE_CANCEL_URL}`)).toBe(`Tonight: only 3 players in. [Cancel court before 7:00 AM](${COURTRESERVE_CANCEL_URL})`);
-    expect(shown(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen tap I booked it: ${ADMIN}`)).toBe(
-      `Thu Nov 26 opens at 7:00 AM (Thanksgiving). [Book](${COURTRESERVE_BOOKING_URL})\nThen tap I booked it`,
+    expect(shown(`Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`)).toBe(
+      `Thu Nov 26 opens at 7:00 AM (Thanksgiving). [Book](${COURTRESERVE_BOOKING_URL})\nThen set it to Booked`,
     );
     expect(shown(`Tonight: 5 in, no court yet. Check CourtReserve for an opening: ${COURTRESERVE_BOOKING_URL}`)).toBe(`Tonight: 5 in, no court yet. [Check CourtReserve for an opening](${COURTRESERVE_BOOKING_URL})`);
     expect(shown(`Thursday: finalize who played: ${ADMIN}`)).toBe('Thursday: finalize who played');

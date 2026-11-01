@@ -51,11 +51,22 @@ describe('16: the court card for a game never marked Booked', () => {
     // No "no court yet" task card for it as well: one court card per game.
     const tasks = visibleTasks(await dash(ctx), ctx.app.now, ADMIN);
     expect(tasks.filter((t) => t.sessionId === g.id && ['book', 'nocourt', 'nocourt_later'].includes(t.kind))).toEqual([]);
-    // Still there during the game, gone once it is over (and its date has not passed yet).
+    // Gone once the game starts, like a Not booked game (Alex, Nov 1), and no "did you play" before its date passes.
     at(ctx, g.startsAt, HOUR);
-    expect(await cards(ctx)).toContain(`book:${g.id}`);
+    expect(await cards(ctx)).not.toContain(`book:${g.id}`);
     at(ctx, g.endsAt, 5 * 60_000);
     expect(await cards(ctx)).not.toContain(`book:${g.id}`);
+  });
+
+  it('C1b (Alex, Nov 1): Waitlist games follow the Not booked rule: only the next 2 games open to book get the card', async () => {
+    const ctx = await setupGroup();
+    const list = await games(ctx);
+    for (const g of list.slice(0, 6)) await setCourt(ctx, g.id, 'waitlist');
+    const got = courtCards(await dash(ctx), ctx.app.now, ADMIN).filter((c) => c.kind === 'book').map((c) => c.session.id);
+    expect(got.length).toBeGreaterThan(0);
+    expect(got.length).toBeLessThanOrEqual(2);
+    expect(got).toEqual(list.slice(0, got.length).map((g: any) => g.id));
+    for (const g of list.slice(2, 6)) expect(got).not.toContain(g.id);
   });
 
   it('C2: a Not booked game gets the same card when the task list asks about its court (next 2 open to book)', async () => {

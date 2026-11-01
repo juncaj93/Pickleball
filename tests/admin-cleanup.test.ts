@@ -353,7 +353,8 @@ describe('Do this now: one court card per game', () => {
         const cards = courtCards(d, now, 'https://x/admin');
         for (const s of d.sessions) expect(cards.filter((c) => c.session.id === s.id).length).toBeLessThanOrEqual(1);
         const mine = cards.filter((c) => c.session.id === first.id);
-        if (to === 'waitlist' && now < Date.parse(first.endsAt)) expect(mine.map((c) => c.kind)).toEqual(['book']);
+        // The next game, on Waitlist, gets the card whenever a Not booked one would: before its start once booking opened.
+        if (to !== 'booked' && now < Date.parse(first.startsAt) && now >= Date.parse(first.startsAt) - 13 * 24 * HOUR) expect(mine.map((c) => c.kind)).toEqual(['book']);
         seen[to] += mine.length;
         const kinds = tasks.map((t: any) => `${t.sessionId}:${t.kind}`);
         expect(new Set(kinds).size).toBe(kinds.length);

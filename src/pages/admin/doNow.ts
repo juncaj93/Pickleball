@@ -4,7 +4,6 @@ import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { markKey, nextTasks, type Task, type TaskAction, type TaskSession } from '../../../shared/tasks';
-import { courtSwitchOf } from '../../../shared/court';
 import { checkInOpensMs, daysSince, type Suggestion } from './suggestions';
 import { sessionTexts } from './textMenu';
 
@@ -78,9 +77,9 @@ export function visibleTasks(d: AdminDashboard, nowMs: number, adminUrl: string)
 
 /**
  * The court card for a game that is not canceled and was never marked Booked (Waitlist or Not booked):
- * - 'book': before the game is over, "Court still needs to be booked" with the CourtReserve link.
- *   Waitlist games get it until they end; Not booked games when the task list asks about their court
- *   (booking day, the morning of, or the next 2 games open to book), as before.
+ * - 'book': "Court still needs to be booked" with the CourtReserve link, when the task list asks about the
+ *   court (booking day, the morning of, or the next 2 games open to book), for Waitlist and Not booked
+ *   alike (Alex, Nov 1: the next 2 only, not every Waitlist game however far ahead).
  * - 'played': once the game's date has passed (Eastern calendar day), with someone in and not finalized,
  *   "Did you guys play?" (Yes, we played / Cancel game), until answered.
  * One card per game at most. A canceled, Booked or finalized game gets none.
@@ -103,7 +102,8 @@ function courtCardsFrom(d: AdminDashboard, nowMs: number, tasks: Task[]): CourtC
   for (const s of d.sessions) {
     if (s.state.flags.canceled || s.bookingStatus === 'booked' || s.finalized) continue;
     if (nowMs < Date.parse(s.endsAt)) {
-      if (courtSwitchOf(s) === 'waitlist' || asked.has(s.id)) book.push({ kind: 'book', session: s });
+      // Waitlist and Not booked follow one rule: the card shows when the task list asks about the court.
+      if (asked.has(s.id)) book.push({ kind: 'book', session: s });
     } else if (daysSince(s.startsAt, nowMs, tz) >= 1 && daysSince(s.startsAt, nowMs, tz) <= PLAYED_ASK_DAYS && s.confirmedCount > 0 && !marks.has(markKey(s.id, 'played'))) {
       played.push({ kind: 'played', session: s });
     }
