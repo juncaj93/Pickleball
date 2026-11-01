@@ -4121,6 +4121,8 @@ async function main() {
       // Games never marked Booked are asked "Did you guys play?" first, and their Finalize card follows the
       // answer (Nov 1 admin audit, item 16). Answer Yes for each, as the organizer would.
       const asked = admin.locator('.do-now article[data-task="court_played"]');
+      await admin.waitForFunction(() => document.querySelector('[data-finalize], .do-now article[data-task="court_played"]'));
+      await new Promise((r) => setTimeout(r, 300));
       for (let k = 0; k < 6 && (await asked.count()) > 0; k++) {
         const n = await asked.count();
         await asked.first().getByRole('button', { name: 'Yes, we played' }).click();
