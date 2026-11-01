@@ -415,7 +415,8 @@ async function main() {
     await card.getByRole('button', { name: "I'm in" }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
-    assert(squash(await pop.innerText()) === "You're in", `banner said "${await pop.innerText()}"`);
+    // (The 4th real seat says "Game on!": a court on Waitlist gives real seats, so Brandon's tap is the 4th.)
+    assert(/^(You're in|Game on! 4 in)$/.test(squash(await pop.innerText())), `banner said "${await pop.innerText()}"`);
     const info = await pop.evaluate(async (el) => {
       await Promise.all(el.getAnimations().map((a) => a.finished.catch(() => {}))); // it slides up the last 8px while fading in
       const r = el.getBoundingClientRect();
