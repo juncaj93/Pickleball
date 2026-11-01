@@ -454,6 +454,10 @@
   margin: -3px 0 -3px 0;
   color: var(--pc-muted);
 }
+/* The icon is 24 px wide: the tap area reaches 10 px each side so it is a full 44 px. */
+.schedule .sched-status .cal-icon-link::before {
+  inset: -7px -10px;
+}
 .court-dot {
   width: 10px;
   height: 10px;
@@ -580,7 +584,8 @@
   gap: 0 16px;
 }
 .schedule .sched-links {
-  margin-top: 4px;
+  /* 6 px, so the 44 px tap area of I paid / Drop out stops below Pay, Use credit and I paid above it. */
+  margin-top: 6px;
 }
 .schedule .sched-links:empty {
   display: none;
@@ -947,4 +952,11 @@ a[href] {
   65% {
     transform: scale(0.92);
   }
+}
+
+/* Big text (iPhone Larger Text): the money chip wraps inside the card instead of running past its edge. At normal
+   sizes it fits on one line, so nothing changes there. */
+.schedule .pchip {
+  max-width: 100%;
+  white-space: normal;
 }
