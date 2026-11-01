@@ -176,6 +176,8 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     expect(joinedText({ result: 'confirmed' }, true)).toBe("You're in");
     expect(joinedText({ result: 'standby', position: 2 }, false)).toBe("You're on standby, #2");
     expect(joinedText({ result: 'waitlisted', position: 1 }, false)).toBe("You're #1 on the waitlist");
+    // A really full game with no court booked has a real waitlist too: the banner says so, not "You're in".
+    expect(joinedText({ result: 'waitlisted', position: 1 }, true)).toBe("You're #1 on the waitlist");
     expect(card(await shown(ctx, 'Devon'), noCourt.id)).toMatch(/I'm in/);
     // A booked game that is full still says waitlist.
     const max = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.group.settings.maxPlayers;

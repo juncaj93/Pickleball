@@ -126,7 +126,8 @@ const GOOD_NEWS = {
  * booked court, "You're in. $3 credit used, $11 due." (`priceCents` is the flat price.)
  */
 export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0): string {
-  if (!noCourt && d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
+  // A really full game has a real waitlist, court or no court: say so.
+  if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
   if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
   return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, !noCourt);
 }

@@ -77,7 +77,7 @@ export function courtDisplay(g: GroupView): GroupView {
     owed: g.owed.filter((o) => !noCourt.has(o.sessionId)),
     suggestion:
       g.suggestion && suggested
-        ? { ...g.suggestion, joinAs: 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
+        ? { ...g.suggestion, joinAs: suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
         : g.suggestion,
   };
 }
