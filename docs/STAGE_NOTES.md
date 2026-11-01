@@ -1144,3 +1144,33 @@ seat row and moving a game fail with an error (no money moves; proven in `tests/
 `TIME_SHIFT = "on"` in wrangler.toml (also for previews). "off" hides the tilde, the borders, the notice, Confirmed
 x of y and the Edit game note, and refuses Still in; answers already saved stay right for later. The View as demo
 does not read it (it always shows the feature).
+
+### Fresh checks (helpers that did not write the code)
+- Money paths: no path changes money, credit, payment or a seat. Found and fixed: the organizer's In / To waitlist
+  cleared a pending ask; a change back to the time a player joined at asked again after a Still in (now every
+  agreed time is kept). Accepted: deploying before migration 0016 breaks I'm in again and moving a game (the ship
+  order puts the migration first; `tests/review-time-shift.test.ts` documents it). Accepted: a player who loaded the
+  old time and taps I'm in a second after a move counts as confirmed for the new time (narrow race).
+- Screens (320 and 390 px, light and dark): fixed the "You dropped out." banner after Can't make it (now "You're out."
+  with the same money words), Reduce Motion (100 ms fades instead of a cut), gray buttons on dark sheets (thin
+  outline), the Not booked border on the page background (now 3.5:1), and the Waiting on rows (one compact row of
+  "Text Name" buttons when several are waiting).
+- Already there before this package, left alone: the drop question's Go back and confirm buttons look alike inside
+  the game list; Edit game's End time is clipped at 320 px; some old tap targets under 44 px (not you?, All games,
+  calendar icon, I paid / Drop out links, + Add game, Book a court, paid pill, gear 44x34).
+
+### Preview (Sun Nov 1, 2026, 4:18 PM Eastern)
+- https://preview-time-shift.pickleball-club-9h0.pages.dev (deployment 79178936), branch claude/new-session-qrwtfr.
+  Database: the fake `pickleball-preview` (group "Pickleball Bros (PREVIEW, fake data)"; PIN in docs/PREVIEW_FAKE_DB.md
+  on its branch). Migration 0016 is NOT on the fake database (this session's permissions refused it), so test in View
+  as demo only: real taps there that rejoin a game or move a game would fail. The demo copy builds its own tables.
+- Demo walk (scripted, light and dark): View as, Pretend it's now, Edit game on Tue Nov 3 to 8:30 PM (note shows),
+  Confirmed 1 of 5 with Text buttons, View as Indy, the notice, Still in folds it away; zero requests left the browser.
+
+### To ship (after Alex's "ship it", before 8:00 PM, never Tue/Thu evening)
+1. Merge this branch into main, pull main, run the unit tests.
+2. Time Travel bookmark (`npx wrangler d1 time-travel info pickleball`) and SQL export
+   (`npx wrangler d1 export pickleball --remote --output live-before-time-shift-2026-11-01.sql`, kept out of git).
+3. `npx wrangler d1 migrations apply pickleball --remote` (only 0016 pending), then check the column exists and the
+   integrity checks read 0.
+4. `npm run deploy` from main. Read-only live check: /, /admin, /api/status, /api/group/version 200; row counts match.
