@@ -8,11 +8,12 @@ import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
-import { flushHold, holdPending, noteStillApplies, type NoteView, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
+import { flushHold, holdPending, noteStillApplies, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
+import { addNote, forgetGame, readNotes, removeNote, sameNote } from '../dropNotes';
 import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
@@ -26,24 +27,61 @@ import '../player-cards.css';
 const SHOW_FIRST = 6;
 
 const FILTER_KEY = 'pb_games_filter';
-/** A drop that was held for Undo and may not have reached the server yet (page closed first). */
-const PENDING_DROP_KEY = 'pb_pending_drop';
 type GameFilter = 'all' | 'mine';
 /** In the game or waiting for a spot. */
 const isMineGame = (s: PlayerSessionView) => !!s.mine && (s.mine.status === 'confirmed' || s.mine.status === 'waitlisted');
 const NOTICE_GAP_MS = 2400;
-/** Only the note of this drop is removed (a second hold may have written its own). */
-function forgetPendingDrop(sessionId: string) {
-  try {
-    if (JSON.parse(storageGet(PENDING_DROP_KEY) ?? '{}').sessionId === sessionId) storageRemove(PENDING_DROP_KEY);
-  } catch {
-    storageRemove(PENDING_DROP_KEY);
+/**
+ * Finish the left-over drop notes that are due. Per note: younger than the hold, another tab may still be holding it
+ * (its Undo must work), so wait; older than 2 minutes, too late to be sure, so forget. Otherwise it is sent, but only
+ * for the same name and the same seat as the server has it now (never for another name on this phone, or a seat
+ * taken again since); a note that changed during a wait is left for the next look. `ok` says whether to go on (the
+ * page is still open and not in a demo); `done` hears every game whose note was settled. Answers when to look again.
+ */
+async function finishNotes(ok: () => boolean, done: (sessionId: string) => void = () => {}): Promise<number | null> {
+  let again: number | null = null;
+  const soon = (ms: number) => {
+    again = again === null ? ms : Math.min(again, ms);
+  };
+  let fresh: GroupView | null | undefined;
+  for (const note of readNotes()) {
+    if (!ok()) return null;
+    const due = pendingDropAction(note, Date.now(), () => true, holdPending);
+    if (due.do === 'wait') soon(due.ms);
+    if (due.do === 'forget') {
+      removeNote(note);
+      if (note.sessionId) done(note.sessionId);
+    }
+    if (due.do !== 'send') continue;
+    // Whether they are still in comes from the server as it is now (the screen's copy hides a seat whose drop it is drawing).
+    if (fresh === undefined) fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
+    if (!ok()) return null;
+    if (!fresh) {
+      soon(15_000); // no signal: keep the note and look again
+      continue;
+    }
+    if (!readNotes().some((x) => sameNote(x, note))) continue; // changed during the wait
+    if (!noteStillApplies(note, fresh)) {
+      removeNote(note);
+      done(due.sessionId);
+      continue;
+    }
+    try {
+      await api('POST', `/api/sessions/${due.sessionId}/withdraw`, {});
+      removeNote(note);
+      done(due.sessionId);
+    } catch (err) {
+      // Refused (game started, already out...): nothing left to send. No signal: the note stays for later.
+      if (err instanceof ApiError && err.code !== 'offline') {
+        removeNote(note);
+        done(due.sessionId);
+      } else soon(15_000);
+    }
+    fresh = undefined; // the server changed: ask again for the next note
   }
+  return again;
 }
-/** Remove the drop note only if it is still the one this code read (a tap in the meantime may have changed it). */
-function removeNoteIf(raw: string | null) {
-  if (storageGet(PENDING_DROP_KEY) === raw) storageRemove(PENDING_DROP_KEY);
-}
+
 /**
  * Before I'm in on a game: a drop held on this phone (or left over from a page that closed before sending it)
  * goes to the server FIRST, and the join waits for it. The credit that drop gives back is then there for the
@@ -51,47 +89,11 @@ function removeNoteIf(raw: string | null) {
  */
 async function sendDropsBeforeJoin(joiningId: string) {
   await settleHolds();
-  // View as (a demo copy) never reads, sends or clears the phone's real drop note: that note belongs to the live site.
+  // View as (a demo copy) never reads, sends or clears the phone's real drop notes: they belong to the live site.
   if (demoOn()) return;
-  let note: PendingDropNote | null = null;
-  const raw = storageGet(PENDING_DROP_KEY);
-  try {
-    note = JSON.parse(raw ?? 'null');
-  } catch {
-    note = null;
-  }
-  if (!note?.sessionId) return;
-  // I'm in on the very game the note is about: they want in, so the old drop must never be sent after this.
-  if (note.sessionId === joiningId) {
-    storageRemove(PENDING_DROP_KEY);
-    return;
-  }
-  // The same age rules as a left-over note: younger than the hold, another tab may still be holding it (its Undo
-  // must work), so leave it; older than 2 minutes, too late to be sure. The server's drop is safe to repeat, but only
-  // for the same name and the same seat (never for another name on this phone, or a seat taken again since). That is
-  // checked against the server's data as it is now (the screen's copy hides a seat whose drop it is drawing).
-  let fresh: NoteView | null = null;
-  const due = pendingDropAction(note, Date.now(), () => true, holdPending);
-  if (due.do === 'send') {
-    fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
-    // No answer (no signal): keep the note for later and let the join go ahead.
-    if (!fresh) return;
-    // Changed while we waited (an I'm in on that game cleared it, or a new drop wrote its own): decide nothing here.
-    if (storageGet(PENDING_DROP_KEY) !== raw) return;
-  }
-  const next = due.do === 'send' ? pendingDropAction(note, Date.now(), () => noteStillApplies(note!, fresh), holdPending) : due;
-  if (next.do === 'forget') {
-    removeNoteIf(raw);
-    return;
-  }
-  if (next.do !== 'send') return;
-  try {
-    await api('POST', `/api/sessions/${note.sessionId}/withdraw`, {});
-    removeNoteIf(raw);
-  } catch (err) {
-    // Refused (game started, already out...): nothing left to send. No signal: the note stays for later.
-    if (err instanceof ApiError && err.code !== 'offline') removeNoteIf(raw);
-  }
+  // I'm in on the very game a note is about: they want in, so that old drop must never be sent after this.
+  forgetGame(joiningId);
+  await finishNotes(() => !demoOn());
 }
 const CELEBRATE_MS = 1600;
 const FADE_OUT_MS = 220;
@@ -293,50 +295,32 @@ export function PlayerHome({
   useEffect(() => {
     if (!g || !g.me || switching || viewAs || demoOn()) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // One look at a time, and none after this page (or this name) is gone or a demo started.
+    let alive = true;
+    let running = false;
+    let rerun = false;
+    const ok = () => alive && !demoOn();
     const look = async () => {
-      let note: PendingDropNote | null = null;
-      const raw = storageGet(PENDING_DROP_KEY);
-      if (raw) {
-        try {
-          note = JSON.parse(raw);
-        } catch {
-          note = {};
-        }
+      if (!ok()) return;
+      if (running) {
+        rerun = true;
+        return;
       }
-      // Whether they are still in comes from the server as it is now, not from this page's older copy. No answer
-      // (no signal): decide nothing, keep the note, and look again.
-      let fresh: GroupView | null = null;
-      if (note?.sessionId) {
-        fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
-        if (!fresh) {
-          timer = setTimeout(() => void look(), 15_000);
-          return;
-        }
-        // Changed while we waited (an I'm in on that game cleared it, or a new drop wrote its own): look again.
-        if (storageGet(PENDING_DROP_KEY) !== raw) return void look();
-      }
-      // Still the same name and the same seat (not joined again since): only then is the drop sent.
-      const next = pendingDropAction(note, Date.now(), () => noteStillApplies(note!, fresh), holdPending);
-      if (next.do === 'wait') timer = setTimeout(() => void look(), next.ms);
-      else if (next.do === 'forget') {
-        removeNoteIf(raw);
-        // The screen stops drawing that drop (and its credit); the real data shows.
-        if (note?.sessionId) setOverlay(note.sessionId, null);
-        await load.quiet();
-      } else if (next.do === 'send') {
-        try {
-          await api('POST', `/api/sessions/${next.sessionId}/withdraw`, {});
-          removeNoteIf(raw);
-          setOverlay(next.sessionId, null);
-          await load.quiet();
-        } catch (err) {
-          // No signal again: the note stays and the next look (or visit) tries again. Refused (the game started,
-          // or was canceled): nothing more to send, and the screen shows the real data.
-          if (err instanceof ApiError && err.code !== 'offline') {
-            removeNoteIf(raw);
-            setOverlay(next.sessionId, null);
-            await load.quiet();
-          } else timer = setTimeout(() => void look(), 15_000);
+      running = true;
+      clearTimeout(timer);
+      try {
+        const settled: string[] = [];
+        const next = await finishNotes(ok, (id) => settled.push(id));
+        if (!ok()) return;
+        // The screen stops drawing those drops (and their credit); the real data shows.
+        for (const id of settled) setOverlay(id, null);
+        if (settled.length) await load.quiet();
+        if (next !== null && ok()) timer = setTimeout(() => void look(), next);
+      } finally {
+        running = false;
+        if (rerun && ok()) {
+          rerun = false;
+          void look();
         }
       }
     };
@@ -347,6 +331,7 @@ export function PlayerHome({
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      alive = false;
       clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };
@@ -1357,10 +1342,11 @@ export function ScheduleRow({
     // 5 seconds), there is nothing to send: it must never reach the live site as a real drop.
     const inDemo = demoOn();
     const viewedAt = viewingAs();
+    const myNote: PendingDropNote = { sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt };
     const forget = () => {
-      if (!inDemo) forgetPendingDrop(id);
+      if (!inDemo) removeNote(myNote);
     };
-    if (!inDemo) storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt }));
+    if (!inDemo) addNote(myNote);
     // Sent because the page was going away (closed, hidden, switched app): a failure then is most likely no
     // signal while leaving, so the note stays and the drop is finished on return or the next open.
     let leavingSend = false;

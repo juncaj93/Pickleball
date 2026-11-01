@@ -804,6 +804,37 @@ async function main() {
       assert((await st()) === 'confirmed', `tapped I'm in last but the old drop went out: ${await st()}`);
       await ctx.close();
     });
+    await check('FIXED (Nov 1): Drop out on A fails with no signal (app put away), then Drop out on B: both drops land (one note per game)', async () => {
+      // The group is at its player limit by now: Xan (from the check above, still in G[7]) plays again.
+      const yid = (await dash()).players.find((p) => p.name === 'Xan Race').id;
+      const ctx = await browser.newContext(phone(390, 'light'));
+      await post(ctx.request, '/api/me', { playerId: yid });
+      for (const s of [G[7], G[9]]) assert((await post(ctx.request, `/api/sessions/${s.id}/join`, {})).ok(), 'join');
+      const st = async (s) => (await (await ctx.request.get(`${BASE}/api/group`)).json()).sessions.find((x) => x.id === s.id).mine?.status;
+      const page = await ctx.newPage();
+      await page.goto(BASE);
+      await page.locator('.schedule article').first().waitFor();
+      const more = page.getByRole('button', { name: /^More sessions/ });
+      if (await more.count()) await more.click();
+      await card(page, G[9]).waitFor();
+      await tapDrop(page, G[7]);
+      await page.locator('[data-banner]').getByText(/You dropped out/).waitFor();
+      await ctx.setOffline(true);
+      await setHidden(page, true);
+      await sleep(1200);
+      await ctx.setOffline(false);
+      await setHidden(page, false);
+      assert((await st(G[7])) === 'confirmed', 'A should not have landed yet');
+      await sleep(600);
+      await tapDrop(page, G[9]);
+      await page.locator('[data-banner]').getByText(/You dropped out/).waitFor();
+      await until(async () => (await st(G[7])) === 'withdrawn' && (await st(G[9])) === 'withdrawn', 20_000, 500);
+      assert((await st(G[9])) === 'withdrawn', `B: ${await st(G[9])}`);
+      assert((await st(G[7])) === 'withdrawn', `A was lost: ${await st(G[7])}`);
+      await sleep(1500);
+      assert(await page.evaluate(() => localStorage.getItem('pb_pending_drop') === null), 'notes left behind');
+      await ctx.close();
+    });
     await check('two drops within 5 s on two games: the first is sent at once, the second keeps its own Undo; both end right', async () => {
       await join('Kai', G[5]);
       const { ctx, page, seen } = await open('Kai');
