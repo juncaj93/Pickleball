@@ -150,19 +150,31 @@ function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const c = s.timeCheck!;
   const body = stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
+  const one = c.waiting.length === 1 ? c.waiting[0] : null;
   return (
     <div className="ts-check" data-time-check>
       <span className="ts-count">
         Confirmed {c.confirmedCount} of {c.inCount}
       </span>
-      {c.waiting.map((w) => (
-        <div className="ts-waiting" key={w.playerId}>
-          <span className="ts-name">Waiting on {w.name}</span>
-          <a className="btn small secondary" href={smsHref(w.phone, body, isIOS)} aria-label={`Text ${w.name}: ${body}`}>
+      {one && (
+        <div className="ts-waiting">
+          <span className="ts-name">Waiting on {one.name}</span>
+          <a className="btn small secondary" href={smsHref(one.phone, body, isIOS)} aria-label={`Text ${one.name}: ${body}`}>
             Text
           </a>
         </div>
-      ))}
+      )}
+      {/* Several waiting: one compact row, a small Text button per person (it names them). */}
+      {c.waiting.length > 1 && (
+        <div className="ts-waiting-many">
+          <span className="ts-name">Waiting on</span>
+          {c.waiting.map((w) => (
+            <a key={w.playerId} className="btn small secondary ts-pill" href={smsHref(w.phone, body, isIOS)} aria-label={`Text ${w.name}: ${body}`}>
+              Text {w.name}
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

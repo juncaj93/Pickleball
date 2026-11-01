@@ -316,8 +316,10 @@ function designReport() {
   const byTier = {};
   for (const card of cards) {
     const t = card.querySelector('.tile');
-    const cs = getComputedStyle(t);
-    (byTier[card.dataset.tier || 'this'] ??= []).push({ w: parseFloat(cs.borderTopWidth), c: contrast(cs.borderTopColor, cs.backgroundColor), size: t.getBoundingClientRect().width });
+    // Time may shift (Nov 2026): the outline is drawn by the visible border layer on top of the tile.
+    const layer = [...t.querySelectorAll('.tb')].find((l) => parseFloat(getComputedStyle(l).opacity) > 0.5);
+    const cs = getComputedStyle(layer || t);
+    (byTier[card.dataset.tier || 'this'] ??= []).push({ w: parseFloat(cs.borderTopWidth), c: contrast(cs.borderTopColor, getComputedStyle(t).backgroundColor), size: t.getBoundingClientRect().width });
   }
   const avgOf = (rows, k) => rows.reduce((s, v) => s + v[k], 0) / rows.length;
   const present = order.filter((t) => byTier[t]);
@@ -2722,6 +2724,9 @@ async function main() {
         await sessionCards(p).first().waitFor();
         await sessionCards(p).first().evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 8));
         const fitAdmin = await p.evaluate(() => {
+          // A moved game's "Confirmed x of y / Waiting on" lines (time may shift) are a passing to-do, not the
+          // everyday card: measured without them.
+          for (const el of document.querySelectorAll('[data-time-check]')) el.style.display = 'none';
           const limit = document.querySelector('.tabbar').getBoundingClientRect().top;
           return [...document.querySelectorAll('section[aria-labelledby="sessions-title"] article')].filter((a) => {
             const r = a.getBoundingClientRect();

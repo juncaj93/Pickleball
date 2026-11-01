@@ -73,9 +73,13 @@
 .schedule .tile.ptile {
   --tb-w: 2px;
 }
-.tier-next .tile.ptile,
-.tier-later .tile.ptile {
+.tier-next .tile.ptile {
   --tb-w: 1.5px;
+}
+/* LATER rows: a thinner outline, so each tier still steps down (this 2px, next 1.5px, later 1px). */
+.tier-later .tile.ptile.ts {
+  --tb-w: 1px;
+  border-width: 1px;
 }
 .tile .tile-check,
 .tile .tonight-tag {
@@ -240,9 +244,28 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.ts-waiting .btn.small {
+.ts-waiting .btn.small,
+.ts-waiting-many .btn.small {
   min-height: 44px;
   padding: 6px 14px;
+}
+.ts-waiting-many {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ts-waiting-many .ts-name {
+  color: var(--muted);
+  margin-right: 2px;
+}
+.ts-waiting-many .ts-pill {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ts-note {
   font-size: 0.9rem;
