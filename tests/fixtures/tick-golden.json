@@ -1,8 +1,8 @@
 {
   "noMarks": {
     "alerts": [
-      "Tue, Oct 27, 6:45 AM | s-2026-11-10-200:book | Tue Nov 10 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
-      "Tue, Oct 27, 7:30 AM | s-2026-11-10-200:book_followup | Reminder: Tue Nov 10 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
+      "Tue, Oct 27, 6:45 AM | s-2026-11-10-200:book | Tue Nov 10 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
+      "Tue, Oct 27, 7:30 AM | s-2026-11-10-200:book_followup | Reminder: Tue Nov 10 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
       "Wed, Oct 28, 7:00 PM | s-2026-10-29-200:night | Thursday: 6 players in. Text the group to confirm: https://pickleball.juncaj.net/go/s-2026-10-29-200",
       "Thu, Oct 29, 10:05 PM | s-2026-10-29-200:finalize | Thursday: finalize who played: https://pickleball.juncaj.net/admin",
       "Sat, Oct 31, 6:00 PM | s-2026-11-01-190:night | Sunday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/go/s-2026-11-01-190",
@@ -13,8 +13,8 @@
       "Mon, Nov 2, 9:00 PM | s-2026-11-03-190:cancel | Tuesday: only 3 players in. Cancel court: https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1",
       "Mon, Nov 2, 9:30 PM | s-2026-11-03-190:cancel_followup | Tuesday: court canceled? Now cancel the session and text everyone: https://pickleball.juncaj.net/admin",
       "Tue, Nov 3, 6:15 AM | s-2026-11-03-190:gameday | Tonight: only 3 players in. Cancel court before 7:00 AM: https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1",
-      "Tue, Nov 3, 6:45 AM | s-2026-11-17-200:book | Tue Nov 17 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
-      "Tue, Nov 3, 7:30 AM | s-2026-11-17-200:book_followup | Reminder: Tue Nov 17 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
+      "Tue, Nov 3, 6:45 AM | s-2026-11-17-200:book | Tue Nov 17 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
+      "Tue, Nov 3, 7:30 AM | s-2026-11-17-200:book_followup | Reminder: Tue Nov 17 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
       "Wed, Nov 4, 6:30 PM | s-2026-11-05-1930:night | Thursday: 5 players in. Text the group to confirm: https://pickleball.juncaj.net/go/s-2026-11-05-1930",
       "Thu, Nov 5, 9:35 PM | s-2026-11-05-1930:finalize | Thursday: finalize who played: https://pickleball.juncaj.net/admin",
       "Fri, Nov 6, 9:00 AM | s-2026-11-07-100:night | Saturday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/go/s-2026-11-07-100",
@@ -30,17 +30,17 @@
       "Wed, Nov 11, 10:30 AM | s-2026-11-12-200:cancel_followup | Thursday: court canceled? Now cancel the session and text everyone: https://pickleball.juncaj.net/admin",
       "Wed, Nov 11, 7:00 PM | s-2026-11-12-200:night | Thursday: 2 players in, need 2 more. Text the group: https://pickleball.juncaj.net/go/s-2026-11-12-200",
       "Wed, Nov 11, 7:15 PM | s-2026-11-12-200:gameday | Thursday: only 2 players in: https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1",
-      "Thu, Nov 12, 6:45 AM | s-2026-11-26-190:book | Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
-      "Thu, Nov 12, 7:30 AM | s-2026-11-26-190:book_followup | Reminder: Thu Nov 26 opened at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
+      "Thu, Nov 12, 6:45 AM | s-2026-11-26-190:book | Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
+      "Thu, Nov 12, 7:30 AM | s-2026-11-26-190:book_followup | Reminder: Thu Nov 26 opened at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
       "Thu, Nov 26, 7:15 AM | s-2026-11-26-190:nocourt | Tonight: 4 in, no court yet. Check CourtReserve for an opening: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442",
       "Thu, Nov 26, 9:05 PM | s-2026-11-26-190:finalize | Thursday: finalize who played: https://pickleball.juncaj.net/admin"
     ],
-    "cards": "cdec146b4aeb0e8f274eaa06726b8b48ba59ec014ac08024202467109700208a"
+    "cards": "774effa97a7e125fde57f3873d16a554d3d175c8f716cfe11bf031d81763a367"
   },
   "withMarks": {
     "alerts": [
-      "Tue, Oct 27, 6:45 AM | s-2026-11-10-200:book | Tue Nov 10 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
-      "Tue, Oct 27, 7:30 AM | s-2026-11-10-200:book_followup | Reminder: Tue Nov 10 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
+      "Tue, Oct 27, 6:45 AM | s-2026-11-10-200:book | Tue Nov 10 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
+      "Tue, Oct 27, 7:30 AM | s-2026-11-10-200:book_followup | Reminder: Tue Nov 10 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
       "Wed, Oct 28, 7:00 PM | s-2026-10-29-200:night | Thursday: 6 players in. Text the group to confirm: https://pickleball.juncaj.net/go/s-2026-10-29-200",
       "Thu, Oct 29, 10:05 PM | s-2026-10-29-200:finalize | Thursday: finalize who played: https://pickleball.juncaj.net/admin",
       "Sat, Oct 31, 6:00 PM | s-2026-11-01-190:night | Sunday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/go/s-2026-11-01-190",
@@ -51,8 +51,8 @@
       "Mon, Nov 2, 9:00 PM | s-2026-11-03-190:cancel | Tuesday: only 3 players in. Cancel court: https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1",
       "Mon, Nov 2, 9:30 PM | s-2026-11-03-190:cancel_followup | Tuesday: court canceled? Now cancel the session and text everyone: https://pickleball.juncaj.net/admin",
       "Tue, Nov 3, 6:15 AM | s-2026-11-03-190:gameday | Tonight: only 3 players in. Cancel court before 7:00 AM: https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1",
-      "Tue, Nov 3, 6:45 AM | s-2026-11-17-200:book | Tue Nov 17 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
-      "Tue, Nov 3, 7:30 AM | s-2026-11-17-200:book_followup | Reminder: Tue Nov 17 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
+      "Tue, Nov 3, 6:45 AM | s-2026-11-17-200:book | Tue Nov 17 opens at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
+      "Tue, Nov 3, 7:30 AM | s-2026-11-17-200:book_followup | Reminder: Tue Nov 17 opened at 7:00 AM. Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
       "Thu, Nov 5, 9:35 PM | s-2026-11-05-1930:finalize | Thursday: finalize who played: https://pickleball.juncaj.net/admin",
       "Fri, Nov 6, 9:00 AM | s-2026-11-07-100:night | Saturday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/go/s-2026-11-07-100",
       "Fri, Nov 6, 12:00 PM | s-2026-11-07-100:cancel | Saturday: only 3 players in. Cancel court: https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1",
@@ -65,11 +65,11 @@
       "Tue, Nov 10, 10:05 PM | s-2026-11-10-200:finalize | Tuesday: finalize who played: https://pickleball.juncaj.net/admin",
       "Wed, Nov 11, 10:30 AM | s-2026-11-12-200:cancel_followup | Thursday: court canceled? Now cancel the session and text everyone: https://pickleball.juncaj.net/admin",
       "Wed, Nov 11, 7:00 PM | s-2026-11-12-200:night | Thursday: 2 players in, need 2 more. Text the group: https://pickleball.juncaj.net/go/s-2026-11-12-200",
-      "Thu, Nov 12, 6:45 AM | s-2026-11-26-190:book | Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
-      "Thu, Nov 12, 7:30 AM | s-2026-11-26-190:book_followup | Reminder: Thu Nov 26 opened at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then tap I booked it: https://pickleball.juncaj.net/admin",
+      "Thu, Nov 12, 6:45 AM | s-2026-11-26-190:book | Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
+      "Thu, Nov 12, 7:30 AM | s-2026-11-26-190:book_followup | Reminder: Thu Nov 26 opened at 7:00 AM (Thanksgiving). Book: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442 ↵ Then set it to Booked: https://pickleball.juncaj.net/admin",
       "Thu, Nov 26, 7:15 AM | s-2026-11-26-190:nocourt | Tonight: 4 in, no court yet. Check CourtReserve for an opening: https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442",
       "Thu, Nov 26, 9:05 PM | s-2026-11-26-190:finalize | Thursday: finalize who played: https://pickleball.juncaj.net/admin"
     ],
-    "cards": "d4cad9c04d0de51a05ce3eaf3f2d07d1eec4d1e95471320679f68f040c726fb2"
+    "cards": "cefe6ac7782368f578d7648bf1c8c422f3fa7cc6a31695cb3fee046bd32fc25d"
   }
 }

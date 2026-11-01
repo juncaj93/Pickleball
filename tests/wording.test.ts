@@ -34,7 +34,8 @@ describe('fewer words on screen', () => {
       'Cancel the reservation with the venue yourself.',
       'If they never signed up or paid, the name is deleted.',
       'The old link stops working right away.',
-      'Mark it off',
+      // "Mark it off" (the old Didn't open confirmation) went with that button (Nov 1 admin audit, item 16); the card's Cancel game uses the Cancel session dialog above.
+      'Did you guys play?',
       "Couldn't save. Tap to retry.",
       'back as credit.',
       'Cancel by',

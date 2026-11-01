@@ -7,6 +7,7 @@ import { formatShortDate } from '../../../shared/time';
 import { api, ApiError, openVenmo, storageGet, storageSet } from '../../lib';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import { tapsHeld, useTapsHeld } from './tapGuard';
 import '../../finalize.css';
 
 const CREDIT_NOTE = 'Pickleball credit refund';
@@ -44,17 +45,21 @@ function useRun(ctx: AdminCtx) {
 export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const price = ctx.d.group.settings.pricePerPlayerCents;
-  const { busy, run } = useRun(ctx);
+  const { busy: saving, run } = useRun(ctx);
+  // Dimmed for a moment right after "Yes, we played" brings this card in under the finger.
+  const held = useTapsHeld();
+  const busy = saving || held;
   const [changing, setChanging] = useState(false);
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const n = inNow.length;
   const under = n < 4;
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   const day = formatShortDate(s.startsAt, tz);
+  // Right after "Yes, we played" this card scrolls in under the finger: taps wait until the screen settles.
   const finalize = (played: string[]) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played }), `${day} is final`);
+    tapsHeld() ? Promise.resolve(false) : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played }), `${day} is final`);
   return (
-    <article className="card stack finalize-card" aria-label={`Finalize ${day}`} data-finalize={s.id}>
+    <article className="card stack finalize-card" aria-label={`Finalize ${day}`} data-finalize={s.id} tabIndex={-1}>
       <div>
         <h3>
           {day} · {n} in
@@ -67,7 +72,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       <div className="finalize-btns">
         {under ? (
           <>
-            <button className="btn danger" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
+            <button className="btn danger" disabled={busy} onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
               Cancel session
             </button>
             <button className="btn secondary" disabled={busy} onClick={() => finalize(inNow.map((r) => r.playerId))}>
@@ -77,9 +82,9 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         ) : (
           <>
             <button className="btn" disabled={busy} data-everyone-played onClick={() => finalize(inNow.map((r) => r.playerId))}>
-              {busy ? 'Saving…' : 'Everyone played'}
+              {saving ? 'Saving…' : 'Everyone played'}
             </button>
-            <button className="btn secondary" disabled={busy} data-change-played onClick={() => setChanging(true)}>
+            <button className="btn secondary" disabled={busy} data-change-played onClick={() => !tapsHeld() && setChanging(true)}>
               Change who played
             </button>
           </>

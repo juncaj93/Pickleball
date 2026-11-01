@@ -2069,15 +2069,18 @@ async function main() {
       assert((await card.locator('.court-switch button[aria-pressed="true"]').innerText()) === 'Waitlist', 'Waitlist is the chosen segment');
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
       assert((await card.locator('.court-banner').count()) === 0, 'the old waitlist banner is gone from the card');
-      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0, 'the card itself has no court buttons; they live on Do this now');
-      // "Court opened" and "Didn't open" now sit on the Do this now card, one per waitlisted game.
-      const task = admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`);
-      await task.waitFor();
-      const opened = await task.getByRole('button', { name: 'Court opened' }).boundingBox();
-      const didnt = await task.getByRole('button', { name: "Didn't open" }).boundingBox();
-      assert(Math.abs(opened.y - didnt.y) < 4, 'the two buttons should sit side by side');
-      assert((await task.getByRole('button', { name: 'I booked it' }).count()) === 0, 'waitlist task should not offer I booked it');
-      await task.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
+      assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0, 'the card itself has no court buttons');
+      // A waitlisted game follows the Not booked rule (Alex, Nov 1): the plain "Court still needs to be booked" card
+      // only for the next 2 games with no court. This is the 4th game, so no card; never a second one.
+      const task = admin.locator(`.do-now article[data-session="${cardId}"]`);
+      await admin.waitForTimeout(500);
+      assert((await task.count()) === 0, `the 4th game should have no Do this now card: ${await task.count()}`);
+      const plain = admin.locator('.do-now article[data-task="court_book"]').first();
+      if (await plain.count()) {
+        assert((await plain.locator('.dn-text').innerText()) === 'Court still needs to be booked', 'the plain court card');
+        assert((await plain.getByRole('button').count()) === 0 && (await plain.getByRole('link').count()) === 1, 'only the CourtReserve link on it');
+      }
+      assert((await admin.getByRole('button', { name: /^(Court opened|Didn't open)$/ }).count()) === 0, 'the old Court opened / Didn\'t open buttons are gone');
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
@@ -2104,11 +2107,12 @@ async function main() {
       await c2.locator('.players-line .names-line', { hasText: /Casey.*Devon|Devon.*Casey/ }).waitFor();
       assert((await c2.locator('.players-line .waitlist-line').count()) === 0, 'a standby line on a game that is not full');
       assert((await admin.getByRole('article', { name: /^Waiting on the court/ }).count()) === 0, 'no separate waiting card');
-      await admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`).getByRole('button', { name: 'Court opened' }).click();
-      await admin.locator('.toast', { hasText: 'Court opened' }).waitFor();
-      assert((await admin.locator('dialog[open]').count()) === 0, 'Court opened should not ask anything');
+      // The court opened: the organizer moves the switch to Booked (the card's old Court opened button is gone).
+      await c2.getByRole('button', { name: 'Booked', exact: true }).click();
       await c2.locator('.court-switch button[aria-pressed="true"]', { hasText: 'Booked' }).waitFor();
-      assert((await admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${cardId}"]`).count()) === 0, 'the Do this now card goes away once the court opens');
+      assert((await admin.locator('dialog[open]').count()) === 0, 'Booked should not ask anything');
+      // Still no court card once Booked.
+      await admin.waitForFunction((id) => !document.querySelector(`.do-now article[data-session="${id}"][data-task="court_book"]`), cardId);
       await admin.reload();
       if (await admin.locator('.sg-more').count()) await admin.locator('.sg-more').click();
       // Nobody's seat moved when the court opened, so there is no "Spot opened" text to send.
@@ -2407,13 +2411,18 @@ async function main() {
         const shown = sessionCards(admin).filter({ hasText: 'Tue, Nov 3' }).first();
         const shownId = (await shown.getAttribute('id')).replace('session-', '');
         await shown.getByRole('button', { name: 'Waitlist', exact: true }).click();
-        // "Didn't open" lives on the Do this now card for the waitlisted game.
-        const waitTask = admin.locator(`.do-now article[data-task="court_waitlist"][data-session="${shownId}"]`);
-        await waitTask.getByRole('button', { name: "Didn't open" }).click();
-        await admin.locator('dialog[open]').getByRole('button', { name: 'Mark it off' }).click();
-        await shown.getByText("Court didn't open").first().waitFor();
+        // The court never opened: no "Didn't open" button any more; the organizer cancels the session as usual.
+        await admin.locator(`.do-now article[data-task="court_book"][data-session="${shownId}"]`).waitFor();
+        await shown.getByRole('button', { name: /^Game menu/ }).click();
+        await admin.getByRole('menuitem', { name: 'Cancel session' }).click();
+        await admin.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+        await admin.locator('.toast', { hasText: 'Session canceled' }).waitFor();
+        // A cancel opens the "text the group" sheet next; close it.
+        await admin.locator('dialog[open]').waitFor();
+        await admin.keyboard.press('Escape');
+        await admin.locator('dialog[open]').waitFor({ state: 'detached' }).catch(() => {});
         await players.Alex.reload();
-        await players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' }).getByText("Court didn't open").waitFor();
+        await players.Alex.locator('article', { hasText: 'Tuesday, Nov 3' }).getByText('Canceled', { exact: true }).waitFor();
       }
       // Put it back for the rest of the checks.
       await tab(admin, 'Settings').click();
@@ -4114,7 +4123,18 @@ async function main() {
       // Thu Oct 29, 10:30 PM Eastern: Tue and both Wed games are over.
       await clockTo(Date.parse('2026-10-29T22:30:00-04:00'));
       await admin.reload();
+      // Games never marked Booked are asked "Did you guys play?" first, and their Finalize card follows the
+      // answer (Nov 1 admin audit, item 16). Answer Yes for each, as the organizer would.
+      const asked = admin.locator('.do-now article[data-task="court_played"]');
+      await admin.waitForFunction(() => document.querySelector('[data-finalize], .do-now article[data-task="court_played"]'));
+      await new Promise((r) => setTimeout(r, 300));
+      for (let k = 0; k < 6 && (await asked.count()) > 0; k++) {
+        const n = await asked.count();
+        await asked.first().getByRole('button', { name: 'Yes, we played' }).click();
+        await admin.waitForFunction((m) => document.querySelectorAll('.do-now article[data-task="court_played"]').length < m, n);
+      }
       await admin.locator('[data-finalize]').first().waitFor();
+      await admin.waitForFunction(() => document.querySelectorAll('[data-finalize] button:disabled').length === 0);
     });
 
     await check('Home after the games: a Finalize card per game with 4 or more in (date, count, preview, green Everyone played, Change who played), above the text cards; under 4 it offers Cancel session and Finalize anyway', async () => {

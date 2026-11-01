@@ -11,6 +11,7 @@ import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { creditBackStatements, holdCashStatements, repriceStatements, USABLE } from './credit';
 import { HttpError } from './http';
+import { writeMark } from './tasks';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 
@@ -151,6 +152,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   }
   await audit(ctx.db, group.id, session.id, 'session_finalized', { played: n, priceCents: price, creditBackCents: backs.reduce((s, b) => s + b.cents, 0) }, now);
   for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, now);
+  // Finalized means it was played: a later Reopen never asks "Did you guys play?" (a display mark, no money; never fails the tap).
+  await writeMark(ctx.db, group.id, session.id, 'played', now).catch(() => {});
   return { ok: true, played: n, priceCents: price, creditBack: backs.map((b) => ({ playerId: b.playerId, cents: b.cents })) };
 }
 

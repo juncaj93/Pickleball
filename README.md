@@ -30,24 +30,24 @@ tap their name once ("Who are you?"), and the phone remembers it. After that eve
 **The organizer** signs in at `/admin` with a PIN. A floating pill at the
 bottom has four tabs: **Home**, **Money**, **Players**, **Settings**.
 
-Every session card on Home shows the court and the players as two separate
-lines, and each session appears once:
+Every session card on Home has a court switch, **Not booked | Waitlist |
+Booked** (one tap; moving it never changes a seat, payment or credit), and
+each session appears once:
 
-- **Court booked**: solid green left edge, a check, and the cancel-by deadline
-- **Court not booked**: amber dashed border and a banner with **I booked it**
-  (one tap; the deadline starts at 12 hours before play), only once the
-  booking window is open (14 days before play)
-- further out: a quiet gray "Booking opens Tue, Nov 17" (I booked it is
-  under More if you book early)
-- **On the court waitlist**: blue banner with **Court opened** / **Didn't open**
-- canceled or no court: gray, with the reason
+- **Booked**: solid green left edge
+- **Not booked**: amber dashed border; **Waitlist** (the venue's court
+  waitlist): blue. Players read both as "Court not booked".
+- For the next 2 games with no court, "Do this now" shows **Court still needs
+  to be booked** with **Book a court**. After a never-booked game's date has
+  passed it asks **Did you guys play?** (Yes, we played / Cancel game).
+- canceled: gray, with the reason
 - players: "2 of 4 in" plus the waitlist count, over a pill per spot (6 once 5
   or more are in): names fill them in sign-up order, open spots stay blank.
   Players see the same pills, with their own name ringed
 - short on players (from the day-before check-in): Invite people / Reschedule /
   Cancel / Keep as is, right on that card
 
-**Book a court** (blue-teal, opens CourtReserve in a new tab) sits next to the Sessions title, and a **Book** link sits next to I booked it on each card that needs a court. Booked sessions link to CourtReserve's change/cancel page from More, Reschedule and Cancel session. Sessions are grouped
+**Book a court** (blue-teal, opens CourtReserve in a new tab) sits next to the Sessions title, and the same **Book a court** link is on each "Court still needs to be booked" card. Booked sessions link to CourtReserve's change/cancel page from More, Reschedule and Cancel session. Sessions are grouped
 by calendar week. The red number on the Home tab counts Needs attention items
 plus courts to book inside the booking window. Today's date and **View as…**
 sit at the top right of the green header. Reservation number and court cost are optional,
@@ -70,7 +70,7 @@ Ryan" banner and Exit.
 
 **View as… and Pretend it's… are a demo.** Taps work and show what would
 really happen (I'm in fills a dot, the 4-or-6 rule and waitlist react, Pay then
-"I paid" then Paid, Mark paid, Refunded, Add game, Cancel, Move, I booked it),
+"I paid" then Paid, Mark paid, Refunded, Add game, Cancel, Move, the court switch),
 but nothing is saved: the browser loads a copy of the data (the same
 organizer-only backup file) and runs the site's own rules on it, in that tab
 only. The live site is never asked to save anything. A dark bar says "Demo,
@@ -110,13 +110,12 @@ The status says "Draft ready" or "Composer opened", never "Sent".
 
 ## Court waitlist
 
-When the organizer is on the venue's own waitlist for a court ("On court
-waitlist" under More), players see "Waiting on the court. Join the
-standby list so we're ready if it opens." and tap **Join standby**. Standby players owe
-nothing. **Court opened** (one tap) confirms them in order by
-the 4-or-6 rules and prepares a text for each; **Didn't open** marks the
-session off as "Court didn't open". A session before the first session date
-can be shown with **Show this session**.
+When the organizer is on the venue's own waitlist for a court, the game's court
+switch is set to **Waitlist**. For sign-ups it works exactly like Not booked:
+players read "Court not booked", I'm in gives a normal seat and credit goes on
+at once. When the court opens, move the switch to **Booked**; if it never
+opens, cancel the session as usual (credit back to everyone paid). A session
+before the first session date can be shown with **Show this session**.
 
 ## Texts when a session changes
 

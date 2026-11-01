@@ -3527,7 +3527,12 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
 .btn.small.p-edit::before {
   content: '';
   position: absolute;
-  inset: -5px 0;
+  /* A 44 px tap area whatever the button's own height (it was 42 px: admin audit, Nov 1). */
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
 }
 .p-summary {
   margin: 0;
