@@ -1069,3 +1069,16 @@ No money rule, price rule, schema or migration change.
 - Deleted on Alex's OK: the unused throwaway database `pickleball-preview-admin` (fake data only;
   no code, config, commit or deployment used it). Every other database, preview and branch kept.
 
+
+### Visible changes shipped (Sun Nov 1, 2026, on Alex's "ship it")
+Alex approved from before/after pictures (no preview: previews use the live database). Display only, no server,
+money or database change:
+- "Good news, a spot opened up" shows only the first time on that phone (`src/goodNews.ts`, browser storage).
+- "Out for Tuesday?" (not "next Tuesday") two days ahead, the same words as the Want in card.
+- Canceled cards are not see-through (4.5:1); "If you paid, it's now your credit." only for players who were in.
+- The CREDIT word on the chip is readable in dark mode.
+- The player screen's weeks start on Sunday (`weekTier`): on a Sunday, Tuesday's game is THIS WEEK. Organizer screens
+  and the day words in texts keep their own rules.
+Alex's other answers: a game that starts without Court booked keeps showing $14 due (he marks courts booked); no
+"use your cash out" prompt on a waitlist move; Text the group stays organizer only (spec fixed: docs/PLAYER_SPEC.md).
+Later cleanup batch (big text, a 29-letter name, one rare shared-phone case): docs/AUDIT_SCENARIOS_player.md.

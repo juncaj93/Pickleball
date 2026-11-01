@@ -1525,6 +1525,25 @@ async function main() {
     const startT = et('2026-11-05T20:00:00-05:00');
     const cutT = et('2026-11-05T08:00:00-05:00');
     const lateDropsOf = async (n) => (await dash()).players.find((p) => p.name === n).lateDrops;
+    await check('FIXED (Nov 1): on a Sunday the drop question says "Out for Tuesday?" (2 days away), not "next Tuesday"; 3 weeks away it names the date', async () => {
+      const sun = et('2026-11-01T12:00:00-05:00');
+      await setClock(sun);
+      const { ctx, page } = await open('Pia', { clockAt: sun });
+      const ask = async (s) => {
+        await card(page, s).getByRole('button', { name: 'Drop out' }).click();
+        const d = page.locator('dialog[open]');
+        const t = (await d.getByRole('heading').first().innerText()).trim();
+        await d.getByRole('button', { name: /Go back|Cancel/ }).click();
+        await d.waitFor({ state: 'detached' }).catch(() => {});
+        return t;
+      };
+      const tue = await ask(G[0]);
+      assert(tue === 'Out for Tuesday?', `Tue Nov 3 from Sun Nov 1: "${tue}"`);
+      const later = await ask(G[6]);
+      assert(/^Out for [A-Z][a-z]{2}, Nov \d{1,2}\?$/.test(later), `three weeks out: "${later}"`);
+      assert((await statusOf('Pia', G[0])) === 'confirmed', 'asking changed the seat');
+      await ctx.close();
+    });
     await check('drop a few seconds before cancel-by: sent at once (no Undo, so the wait never makes it late), not counted as a late drop', async () => {
       await setClock(cutT - 7000);
       const { ctx, page } = await open('Max', { clockAt: cutT - 7000 });

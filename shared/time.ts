@@ -259,8 +259,18 @@ export function weekLabel(iso: string, nowMs: number, tz: string): string {
 /** The three looks on the player screen: this week, next week, everything later. */
 export type WeekTier = 'this' | 'next' | 'later';
 
+/** Day number of the Sunday that starts this calendar week (the player screen's weeks run Sunday to Saturday). */
+export function sundayWeekStart(iso: string | number, tz: string): number {
+  const p = localParts(typeof iso === 'number' ? iso : Date.parse(iso), tz);
+  return Date.UTC(p.year, p.month - 1, p.day) / DAY_MS - p.weekday;
+}
+
+/**
+ * THIS WEEK / NEXT WEEK / LATER on the player screen. Weeks start on Sunday (Alex, Nov 1, 2026): on a Sunday the
+ * coming Tuesday is this week. (Organizer screens and the day words in texts keep their own rules.)
+ */
 export function weekTier(iso: string, nowMs: number, tz: string): WeekTier {
-  const diff = weekStart(iso, tz) - weekStart(nowMs, tz);
+  const diff = sundayWeekStart(iso, tz) - sundayWeekStart(nowMs, tz);
   if (diff <= 0) return 'this';
   if (diff === 7) return 'next';
   return 'later';
