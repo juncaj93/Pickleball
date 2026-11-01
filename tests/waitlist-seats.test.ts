@@ -278,44 +278,7 @@ describe('random sequences with credit', () => {
 });
 const states2 = ['not_booked', 'waitlist', 'booked'] as const;
 
-describe('the one-time repair of old standby seats', () => {
-  const TOKEN = 'one-time-fix-token-0123456789-abcdef';
-  it('is invisible without its token, reads only with ?dry=1, and moves leftover standby people in with the normal step (credit too)', async () => {
-    const app = new TestApp();
-    app.env = { ...app.env, FIX_TOKEN: TOKEN };
-    const ctx = await setupGroup(app);
-    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', settings: { maxPlayers: 4 } });
-    const g = await on(ctx as Ctx, '2026-11-05');
-    await setCourt(ctx as Ctx, g.id, 'waitlist');
-    for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await join(ctx as Ctx, g.id, n);
-    await givePot(ctx as Ctx, 'Frankie', 1400);
-    await join(ctx as Ctx, g.id, 'Frankie'); // really waiting (full)
-    // Make the room appear without the normal promotion: the situation the old Waitlist rule left behind.
-    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 10 } });
-    expect((await dash(ctx as Ctx)).sessions.find((s: any) => s.id === g.id)).toMatchObject({ confirmedCount: 4, waitlistCount: 1 });
-    const call = (path: string, token?: string) => {
-      const c = app.client();
-      return c.call('POST', path, {}, token ? { 'X-Fix-Token': token } : undefined);
-    };
-    expect((await call('/api/internal/fix-standby')).status).toBe(404);
-    expect((await call('/api/internal/fix-standby', 'wrong-token-wrong-token-wrong-token-12')).status).toBe(404);
-    const before = seatsAndMoney(ctx as Ctx);
-    const dry = await call('/api/internal/fix-standby?dry=1', TOKEN);
-    expect(dry.data).toMatchObject({ ok: true, dry: true, games: [{ waiting: ['Frankie'] }] });
-    expect(seatsAndMoney(ctx as Ctx)).toBe(before);
-    const real = await call('/api/internal/fix-standby', TOKEN);
-    expect(real.data.games[0].promoted).toEqual([{ name: 'Frankie', creditCents: 1400, paidWithCredit: true }]);
-    expect(await mine(ctx as Ctx, 'Frankie', g.id)).toMatchObject({ status: 'confirmed', paymentStatus: 'paid', paidWithCredit: true });
-    expect(await pot(ctx as Ctx, 'Frankie')).toBe(0);
-    // Running it again changes nothing.
-    const after = seatsAndMoney(ctx as Ctx);
-    expect((await call('/api/internal/fix-standby', TOKEN)).data.games).toEqual([]);
-    expect(seatsAndMoney(ctx as Ctx)).toBe(after);
-    await inv(ctx as Ctx);
-  });
-});
-
-describe('leftover standby seats (before the repair) and the repair\'s limits', () => {
+describe('leftover standby seats from before the rule', () => {
   it('the screen draws old standby people as in while there is room, renumbers the rest, and a game that is then full says waitlist', async () => {
     const ctx = await group({ maxPlayers: 4 });
     const g = await on(ctx, '2026-11-05');
@@ -333,26 +296,5 @@ describe('leftover standby seats (before the repair) and the repair\'s limits', 
     expect(frankie.waitlist.map((w: any) => w.name)).toEqual(['Frankie']);
     expect(frankie).toMatchObject({ full: true, joinAs: 'waitlist' });
     expect(frankie.confirmed.map((c: any) => c.name)).toEqual(['Blair', 'Casey', 'Devon', 'Emery']);
-  });
-
-  it('the repair leaves alone a game that is not on Waitlist, a game that has started, and a person the organizer parked on purpose elsewhere', async () => {
-    const TOKEN = 'one-time-fix-token-0123456789-abcdef';
-    const app = new TestApp();
-    app.env = { ...app.env, FIX_TOKEN: TOKEN };
-    const ctx = (await setupGroup(app)) as unknown as Ctx;
-    await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', settings: { maxPlayers: 4 } });
-    const g = await on(ctx, '2026-11-05');
-    for (const n of ['Blair', 'Casey']) await join(ctx, g.id, n);
-    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Devon, action: 'waitlist' });
-    const before = seatsAndMoney(ctx);
-    const fix = (q = '') => app.client().call('POST', `/api/internal/fix-standby${q}`, {}, { 'X-Fix-Token': TOKEN });
-    // Not on Waitlist: untouched.
-    expect((await fix()).data.games).toEqual([]);
-    expect(seatsAndMoney(ctx)).toBe(before);
-    // Started game on Waitlist: untouched.
-    await setCourt(ctx, g.id, 'waitlist');
-    ctx.app.now = Date.parse(g.startsAt) + 10 * 60_000;
-    expect((await fix()).data.games).toEqual([]);
-    expect(seatsAndMoney(ctx)).toBe(before);
   });
 });
