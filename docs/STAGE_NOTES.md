@@ -1082,3 +1082,13 @@ money or database change:
 Alex's other answers: a game that starts without Court booked keeps showing $14 due (he marks courts booked); no
 "use your cash out" prompt on a waitlist move; Text the group stays organizer only (spec fixed: docs/PLAYER_SPEC.md).
 Later cleanup batch (big text, a 29-letter name, one rare shared-phone case): docs/AUDIT_SCENARIOS_player.md.
+- Deploy: PR #60 merged as 453a5a0; production deployment `071a533a`, Sun Nov 1, 2026, 2:00 PM Eastern. No database
+  change. Rollback: Pages deployment `30ff85a9` (the admin audit deploy, commit e48a69c); the deploy changed no data.
+- Restore points (2:00 PM): Time Travel bookmark `0000037f-00000000-00005116-bee68ff2c5b1e36d7e1b4c1c32bbc4cd`;
+  SQL export `live-before-player-ship-2026-11-01.sql` (221 rows, has phone numbers, not committed) in this session's
+  scratch folder.
+- Tests on the deployed code: 1,535 unit (84 files); every browser file green, including good-news 9,
+  audit-player-flows 93, audit-player-look 133 (+12 open, the later batch), admin-audit 11, admin-sweep 6.
+- After deploy, read-only: new bundle served; /api/status, /api/group, /api/group/version, /admin 200; the 20-column
+  health check (scripts/integrity-checks.sql) all 0; row counts (seats 17, credit entries 5, cash-out requests 0,
+  players 10, games 8) match the export.
