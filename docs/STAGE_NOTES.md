@@ -777,3 +777,15 @@ database change, no migration.
   Mark paid as usual. His Oct 29 I paid became the $14 on Oct 28, before the claim rule.
 - Rollback: Cloudflare dashboard, Pages, pickleball-club, Deployments, c1bad936,
   "Rollback to this deployment". No data change to undo.
+
+
+### Organizer cleanup, Waitlist rule, seat repair (Sat Oct 31 to Sun Nov 1, 2026)
+Screens, one seat rule, and one one-time repair. No price, amount, credit rule or Telegram word changed. No database change.
+
+- **Shipped Oct 31, 12:25 AM and later (deploys `c1bad936`, preview-checked):** court switch (Not booked | Waitlist | Booked), gear pop-up, Edit game sheet, automatic cancel-by (start minus 12 hours), paid pill, start time under the date tile, live organizer screens (`GET /api/admin/version`), one Do this now card per game, gear menu that opens down, up, or as a panel above the tab bar and never moves the page, "Not booked" on two lines, even card spacing (10 px top and bottom, 7.2 px between count row, names and pill).
+- **Seat rule, deployed Sun Nov 1, 3:15 AM Eastern (deploy `23ff4137`, then `eea78540`):** a court set to Waitlist behaves exactly like Not booked for sign-ups. I'm in gives a normal seat, credit goes on at I'm in, and Pay stays hidden until Court booked. A real waitlist exists only when the game is full beyond Max players. Moving the switch, Court opened and the old court endpoints never move a seat, payment or credit. Didn't open still cancels and every credit use comes back. Players keep seeing "Court not booked". The card line "credit goes on once the court is booked" is gone with the standby seats it described.
+- **One-time repair (ran once, then removed):** a route that ran the site's own `settle` for upcoming games on Waitlist with people waiting and room. Dry run showed only Mitchel on Thu Nov 5 (Brandon already in). The real run moved Mitchel in and put his $14 on (Paid with credit). Alex's Nov 5 seat was dropped and was not touched. The route and its token are gone (production answers "Not found", also with the old token).
+- **Live check after (read-only):** Nov 5 Brandon and Mitchel confirmed, Alex withdrawn; Mitchel's ledger: kept $14, live "used" $14 on Nov 5 (reason auto), pot $0; nobody waiting anywhere while a game has room; no pot below $0; no cash-outs pending.
+- **Restore points:** Time Travel bookmark `000002f1-00000000-00005116-9fda069f0c40099d335fc6afec7bc73b` (taken Sun Nov 1, about 3:10 AM Eastern), SQL export `live-before-waitlist-rule-2026-11-01.sql` (213 rows, phone numbers, in the session scratch folder, not committed). Code rollback: Pages deployment `5674340d-06c9-4b10-9408-55cb4a5a34d3` (commit c68fd63, the money audit).
+- **Tests:** 1,218 unit passed (1 skipped from the money audit's tests); browser suites all green (run.cjs 229, admin-cleanup 36, money-visible and the rest). Tests that assumed "a Waitlist court makes standby seats" were rewritten to the new rule, none deleted.
+- **Preview:** a separate throwaway database `pickleball-preview` (fake data) and the branch preview `preview-admin-look` were made for the look checks; they hold no real data and can be deleted.
