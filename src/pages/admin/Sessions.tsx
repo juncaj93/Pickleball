@@ -64,7 +64,6 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   // A canceled game shows why, when the organizer said: "Canceled - Thanksgiving".
   if (s.state.flags.canceled && s.cancelReason && s.courtState !== 'not_opened') court.text = `Canceled - ${s.cancelReason}`;
   const later = court.kind === 'later';
-  const courtWait = court.kind === 'waitlist';
   const switchValue = courtSwitchOf(s);
   // The switch shows until the game is over. Canceled, started and played games show the gray reason line instead.
   const showSwitch = !s.state.flags.canceled && !s.state.flags.past && !s.state.flags.started;
@@ -107,7 +106,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             <PlayersLine
               names={s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name)}
               waitlist={s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name)}
-              waitLabel={courtWait ? 'Standby' : 'Waitlist'}
+              waitLabel="Waitlist"
               everyone={ctx.d.players.map((p) => p.name)}
               maxPlayers={ctx.d.group.settings.maxPlayers}
               after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}

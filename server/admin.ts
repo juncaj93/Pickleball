@@ -34,7 +34,7 @@ import {
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { hasPendingRequest, moneyPicture, returnSeatCredit, returnSessionCredit, undoCreditBack } from './credit';
-import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
+import { clearLateDrop, confirmAttendance, joinSession, keepPaymentAsCredit, moveToWaitlist, recordLateDrop, setCourtPaid, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -339,13 +339,10 @@ export async function markBooked(ctx: Ctx, body: Record<string, unknown>) {
     )
     .bind(group.venue_name || DEFAULT_VENUE_NAME, reference, cost, defaultDeadline(session.starts_at, settingsOf(group)), ctx.nowIso, session.id)
     .run();
-  let promoted: { playerId: string }[] = [];
-  if (wasWaiting && ctx.nowMs < Date.parse(session.starts_at)) {
-    promoted = await settle(ctx.db, { ...session, court_state: 'opened' }, ctx.nowIso, settingsOf(group).maxPlayers);
-  }
-  await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: promoted.length }, ctx.nowIso);
+  // Nobody's seat changes when the court does: people signed up while it was on Waitlist already have real seats.
+  await audit(ctx.db, group.id, session.id, wasWaiting ? 'court_opened' : 'court_booked', { promoted: 0 }, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, true, ctx.nowIso);
-  return { ok: true, promoted: promoted.length };
+  return { ok: true, promoted: 0 };
 }
 
 /**
@@ -373,7 +370,8 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
  * never end up half-way between two states. Waitlist keeps the old third
  * booking value ("unavailable", once labeled Not available) AND the venue
  * waitlist flag, so everything that already understands the court waitlist
- * (standby order, "Court opened") works unchanged. Booked is the same as
+ * (the "did the court open?" card) keeps working. Waitlist is only a note for the organizer: sign-ups,
+ * seats and credit behave exactly as on Not booked. Booked is the same as
  * "I booked it"; Not booked is the same as answering No after a move.
  * Nothing here touches money.
  */
@@ -403,10 +401,6 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
       )
       .bind(ctx.nowIso, session.id)
       .run();
-    // Standby players on a waitlisted game are an ordinary game's players again.
-    if (from === 'waitlist' && ctx.nowMs < Date.parse(session.starts_at)) {
-      await settle(ctx.db, { ...session, booking_status: 'needs_booking', court_state: null }, ctx.nowIso, settingsOf(group).maxPlayers);
-    }
     await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
   }
   await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);

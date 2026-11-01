@@ -666,7 +666,7 @@ describe('3. cancel returns credit; reopen never double-credits', () => {
     await books(ctx);
   });
 
-  it('court "Didn\'t open": every credit use on the game comes back, standby players never had any taken', async () => {
+  it('court "Didn\'t open": every credit use on the game comes back, including seats taken while the court was on Waitlist', async () => {
     const ctx = await group({ noCourt: true });
     await givePot(ctx, 'Casey', 1400);
     await givePot(ctx, 'Devon', 500);
@@ -675,7 +675,8 @@ describe('3. cancel returns credit; reopen never double-credits', () => {
     await join(ctx, g.id, 'Casey');
     await join(ctx, g.id, 'Devon');
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' });
-    expect(await join(ctx, g.id, 'Emery')).toMatchObject({ result: 'standby' });
+    expect(await join(ctx, g.id, 'Emery')).toMatchObject({ result: 'confirmed' });
+    expect(await pot(ctx, 'Emery')).toBe(0);
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'not_opened' })).status).toBe(200);
     expect(await pot(ctx, 'Casey')).toBe(1400);
     expect(await pot(ctx, 'Devon')).toBe(500);

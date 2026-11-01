@@ -26,12 +26,16 @@ export function isNoCourt(s: PlayerSessionView): boolean {
 /** One game, shown the normal way when its court is not booked. Other games are returned as they are. */
 function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView {
   if (!isNoCourt(s)) return s;
-  // Everyone who tapped I'm in counts as in, in the order they did.
-  const confirmed = [...s.confirmed, ...s.waitlist.map((w) => ({ name: w.name, attendanceConfirmed: false }))];
+  // A court on Waitlist works like Not booked: real seats while there is room. The server no longer makes standby seats
+  // for it, but an old standby seat still left over counts as in as long as there is room; only a full game keeps a waitlist.
+  const room = Math.max(0, maxPlayers - s.confirmed.length);
+  const lifted = s.waitlist.slice(0, room);
+  const stays = s.waitlist.slice(room);
+  const confirmed = [...s.confirmed, ...lifted.map((w) => ({ name: w.name, attendanceConfirmed: false }))];
   const mine = s.mine
     ? {
         ...s.mine,
-        ...(s.mine.status === 'waitlisted' ? { status: 'confirmed' as const, waitlistPosition: null } : {}),
+        ...(s.mine.status === 'waitlisted' && (s.mine.waitlistPosition ?? Infinity) <= room ? { status: 'confirmed' as const, waitlistPosition: null } : {}),
         // No money prompts before a court is booked. A payment that is already recorded stays and shows, and so
         // does credit already used on the seat ("Credit $3 used"); what is left to pay waits for the court.
         ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0, useCreditCents: 0 }),
@@ -40,10 +44,11 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
   return {
     ...s,
     confirmed,
-    waitlist: [],
+    waitlist: stays,
     countText: countText(confirmed.length, maxPlayers),
     full: confirmed.length >= maxPlayers,
-    joinAs: 'in',
+    // Only a game that is really full beyond the max sends people to the waitlist, same as a booked one.
+    joinAs: confirmed.length >= maxPlayers ? s.joinAs : 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
     courtState: s.courtState === 'waitlist' ? null : s.courtState,
     // The old third value must not leave a different look (blue) behind: to players it is plain Not booked.

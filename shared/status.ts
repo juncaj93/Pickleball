@@ -121,7 +121,8 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const deadlinePassed = live && deadline !== null && nowMs >= deadline;
   // The court's third value (once "Not available", now Waitlist) acts like the venue's court waitlist.
   const waiting = s.courtState === 'waitlist' || s.bookingStatus === 'unavailable';
-  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep' && !waiting;
+  // A court on Waitlist is only a note for the organizer: sign-ups count like Not booked, so a game short on players says so.
+  const shortOnPlayers = underfilled && inCheckIn && s.adminDecision !== 'keep';
 
   const needsBooking = live && s.bookingStatus === 'needs_booking' && !waiting && bookingWindowOpen;
   const flags: SessionFlags = {

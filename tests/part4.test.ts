@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { courtDisplay } from '../src/courtDisplay';
 import { cardWindows } from '../shared/cards';
 import {
   confirmationMessage,
@@ -81,49 +82,51 @@ describe('court waitlist', () => {
     return s;
   }
 
-  it('players can only go on standby, in order, owing nothing', async () => {
+  it('a court on Waitlist works like Not booked: players get normal seats, in order, and leaving frees the seat', async () => {
     const ctx = await setupGroup();
     const s = await waiting(ctx);
-    expect(await join(ctx, 'Alex', s.id)).toEqual({ result: 'standby', position: 1 });
-    expect(await join(ctx, 'Blair', s.id)).toEqual({ result: 'standby', position: 2 });
+    expect(await join(ctx, 'Alex', s.id)).toEqual({ result: 'confirmed' });
+    expect(await join(ctx, 'Blair', s.id)).toEqual({ result: 'confirmed' });
     const x = await adminSession(ctx, s.id);
-    expect(x).toMatchObject({ courtState: 'waitlist', confirmedCount: 0, waitlistCount: 2 });
+    expect(x).toMatchObject({ courtState: 'waitlist', confirmedCount: 2, waitlistCount: 0 });
     expect(x.state).toMatchObject({ label: 'court_waitlist', text: 'Waiting on the court' });
     expect(x.state.flags.needsBooking).toBe(false);
     expect(x.state.flags.shortOnPlayers).toBe(false);
     const alex = await asPlayer(ctx, 'Alex');
     const row = alex.sessions.find((v: any) => v.id === s.id);
-    expect(row).toMatchObject({ courtState: 'waitlist', mine: { status: 'waitlisted', waitlistPosition: 1, oweCents: 0 } });
-    expect(alex.owed).toEqual([]);
-    // Leaving standby doesn't move anyone in.
+    expect(row).toMatchObject({ courtState: 'waitlist', countText: '2 of 4 in', mine: { status: 'confirmed' } });
+    // The screen draws it as any game with no court: no money prompt, no waiting words.
+    const shown = courtDisplay(alex).sessions.find((v: any) => v.id === s.id)!;
+    expect(shown).toMatchObject({ joinAs: 'in', courtState: null, waitlist: [], mine: { status: 'confirmed', oweCents: 0 } });
+    expect(courtDisplay(alex).payDue.some((o: any) => o.sessionId === s.id)).toBe(false);
+    // Leaving frees the seat: nobody else is touched.
     await (await playerPhone(ctx, 'Alex')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
-    expect((await adminSession(ctx, s.id)).confirmedCount).toBe(0);
+    expect((await adminSession(ctx, s.id)).confirmedCount).toBe(1);
   });
 
-  it('"Court opened" confirms standby players in order up to the max, with texts to send and $14 owed each', async () => {
+  it('"Court opened" changes nobody\'s seat; every seat owes the flat $14 once it is booked; only a full game has a real waitlist', async () => {
     const ctx = await withGale(await setupGroup());
     await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 6 } });
     const s = await waiting(ctx);
     for (const n of [...NAMES, 'Gale']) await join(ctx, n, s.id);
+    const before = await adminSession(ctx, s.id);
+    expect(before).toMatchObject({ confirmedCount: 6, waitlistCount: 1 });
+    expect(before.roster.find((r: any) => r.status === 'waitlisted').name).toBe('Gale');
     const res = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/booked`, {});
-    expect(res.data).toEqual({ ok: true, promoted: 6 });
+    expect(res.data).toEqual({ ok: true, promoted: 0 });
     const x = await adminSession(ctx, s.id);
     expect(x).toMatchObject({ courtState: 'opened', bookingStatus: 'booked', confirmedCount: 6, waitlistCount: 1 });
     expect(x.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.name)).toEqual(NAMES);
-    expect(x.roster.find((r: any) => r.status === 'waitlisted').name).toBe('Gale');
-    // Every one of them has a text waiting for the organizer.
-    expect(x.roster.filter((r: any) => r.promotedAt && !r.promotionNotifiedAt)).toHaveLength(6);
-    expect((await dash(ctx)).audit[0]).toMatchObject({ action: 'court_opened', details: { promoted: 6 } });
-    // Everyone in owes the flat $14, the 5th and 6th included.
+    expect(x.roster.map((r: any) => [r.name, r.status, r.confirmSeq, r.promotedAt])).toEqual(before.roster.map((r: any) => [r.name, r.status, r.confirmSeq, r.promotedAt]));
+    expect((await dash(ctx)).audit[0]).toMatchObject({ action: 'court_opened', details: { promoted: 0 } });
     const alex = await asPlayer(ctx, 'Alex');
     expect(alex.owed.find((o: any) => o.sessionId === s.id)).toMatchObject({ amountCents: 1400, finalized: false });
     expect((await asPlayer(ctx, 'Frankie')).owed.find((o: any) => o.sessionId === s.id)).toMatchObject({ amountCents: 1400, finalized: false });
     expect(x.roster.filter((r: any) => r.status === 'confirmed').every((r: any) => r.shareCents === 1400)).toBe(true);
-    // New joiners now follow the normal rules again.
     expect(await join(ctx, 'Gale', s.id)).toMatchObject({ result: 'waitlisted' });
   });
 
-  it('with 5 on standby, all 5 get in; with the max at 4, the 5th waits', async () => {
+  it('with 5 signing up on Waitlist all 5 are in; with the max at 4 the 5th waits (a real waitlist, because it is full)', async () => {
     const ctx = await setupGroup();
     const s = await waiting(ctx);
     for (const n of NAMES.slice(0, 5)) await join(ctx, n, s.id);
@@ -137,6 +140,9 @@ describe('court waitlist', () => {
     const t = (await dash(ctx)).sessions.find((v: any) => v.id !== s.id && Date.parse(v.startsAt) > ctx.app.now);
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/court`, { action: 'waitlist' })).status).toBe(200);
     for (const n of NAMES.slice(0, 5)) await join(ctx, n, t.id);
+    x = await adminSession(ctx, t.id);
+    expect(x.confirmedCount).toBe(4);
+    expect(x.roster.find((r: any) => r.status === 'waitlisted').name).toBe('Emery');
     await ctx.organizer.call('POST', `/api/admin/sessions/${t.id}/booked`, {});
     x = await adminSession(ctx, t.id);
     expect(x.confirmedCount).toBe(4);

@@ -1,4 +1,5 @@
 import * as admin from './admin';
+import { fixStandby } from './standbyFix';
 import { monthlyMoney } from './money';
 import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
@@ -114,6 +115,7 @@ route('POST', '/api/admin/sessions/:id/task-mark', tasks.taskMark);
 route('POST', '/api/go', goText);
 
 // The cron Worker's 5-minute tick (secret header; anyone else gets Not found).
+route('POST', '/api/internal/fix-standby', (ctx) => fixStandby(ctx));
 route('POST', '/api/cron/tick', (ctx) => tasks.cronTick(ctx));
 
 export async function handleApi(req: Request, env: Env, nowMs = Date.now(), waitUntil?: (work: Promise<unknown>) => void): Promise<Response> {

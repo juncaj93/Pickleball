@@ -1,6 +1,5 @@
 import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
-import { isCourtWaitlist } from '../shared/court';
 import type { GroupSettings } from '../shared/settings';
 import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, creditBack, returnSeatCredit } from './credit';
 import { newId } from './crypto';
@@ -220,14 +219,8 @@ export async function joinSession(
   const existing = await existingRow(db, session.id, playerId);
   if (existing?.status === 'confirmed') return { result: 'already_confirmed' };
 
-  // Waiting on the venue for a court: players can only go on standby, in
-  // order, owing nothing. "Court opened" confirms them up to the max.
-  if (isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state }) && mode !== 'organizer') {
-    if (mode === 'claim_only') return { result: 'spot_taken' };
-    await addToWaitlist(db, session, playerId, nowIso);
-    return { result: 'standby', position: await waitlistPosition(db, session.id, playerId) };
-  }
-
+  // A court on Waitlist works exactly like Not booked here: a normal seat while there is room (credit goes on with it),
+  // and the real waitlist only when the game is full beyond the max.
   // Their credit goes on the seat in the same step as the seat itself (never for the organizer).
   const auto = await autoCreditFor(db, session);
   const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto);
@@ -289,8 +282,7 @@ export async function withdraw(
       .bind(nowIso, session.id)
       .run();
   }
-  // While waiting on a court nobody moves in; that happens on "Court opened".
-  const promoted = changed && !isCourtWaitlist({ bookingStatus: session.booking_status, courtState: session.court_state }) ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
+  const promoted = changed ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents };
 }
 

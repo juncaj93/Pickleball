@@ -60,8 +60,8 @@ describe('which games count as having no court', () => {
 describe('(a) no words about waiting on a game with no court', () => {
   it('the card never says waitlist, waiting or standby, for someone not in, someone in, and someone put on the list', async () => {
     const { ctx, noCourt, waitlisted } = await scene();
-    for (const n of ['Emery', 'Frankie']) await post(ctx, n, `/api/sessions/${waitlisted.id}/join`); // answered "standby" behind the scenes
-    expect((await raw(ctx, 'Emery')).sessions.find((s) => s.id === waitlisted.id)!.mine!.status).toBe('waitlisted'); // the record is unchanged
+    for (const n of ['Emery', 'Frankie']) await post(ctx, n, `/api/sessions/${waitlisted.id}/join`); // a court on Waitlist gives normal seats
+    expect((await raw(ctx, 'Emery')).sessions.find((s) => s.id === waitlisted.id)!.mine!.status).toBe('confirmed');
     await post(ctx, 'Blair', `/api/sessions/${noCourt.id}/join`);
     for (const who of ['Devon', 'Alex', 'Emery', 'Frankie', 'Blair']) {
       const g = await shown(ctx, who);
@@ -157,7 +157,7 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     const id = waitlisted.id;
     const join = async () => (await post(ctx, 'Emery', `/api/sessions/${id}/join`)).data;
     const res = await join();
-    expect(res.result).toBe('standby'); // what the server calls it
+    expect(res.result).toBe('confirmed'); // a court on Waitlist is just Not booked: a real seat
     expect(joinedText(res, true)).toBe("You're in");
     expect(card(await shown(ctx, 'Emery'), id)).toMatch(/You're in.*Drop out/);
     expect((await post(ctx, 'Emery', `/api/sessions/${id}/withdraw`)).status).toBe(200);
