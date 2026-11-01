@@ -762,6 +762,48 @@ async function main() {
       assert(note === null, `a demo drop left a real drop note: ${note}`);
       await actx.close();
     });
+    await check('FIXED (Nov 1): a drop that failed with no signal, then I\'m in on that game while the page is still checking the server: they stay in', async () => {
+      const r = await post(areq, '/api/admin/players', { name: 'Xan Race', phone: '2485550904' });
+      assert(r.ok(), `add Xan: ${await r.text()}`);
+      const xid = (await dash()).players.find((p) => p.name === 'Xan Race').id;
+      const ctx = await browser.newContext(phone(390, 'light'));
+      await post(ctx.request, '/api/me', { playerId: xid });
+      assert((await post(ctx.request, `/api/sessions/${G[7].id}/join`, {})).ok(), 'join');
+      const st = async () => (await (await ctx.request.get(`${BASE}/api/group`)).json()).sessions.find((x) => x.id === G[7].id).mine?.status;
+      const page = await ctx.newPage();
+      await page.goto(BASE);
+      await page.locator('.schedule article').first().waitFor();
+      const more = page.getByRole('button', { name: /^More sessions/ });
+      if (await more.count()) await more.click();
+      await card(page, G[7]).waitFor();
+      await tapDrop(page, G[7]);
+      await page.locator('[data-banner]').getByText(/You dropped out/).waitFor();
+      // No signal while the phone is put away: the held drop's send fails and its note stays.
+      await ctx.setOffline(true);
+      await setHidden(page, true);
+      await sleep(1500);
+      assert(await page.evaluate(() => !!localStorage.getItem('pb_pending_drop')), 'note should stay after a failed send');
+      assert((await st()) === 'confirmed', 'the drop should not have landed');
+      // Signal back, but the page's check of the server is slow; wait until the note is old enough to be sent.
+      await sleep(6500);
+      let slow = true;
+      await page.route('**/api/group', async (route) => {
+        if (slow && route.request().method() === 'GET') await new Promise((res) => setTimeout(res, 3000));
+        await route.continue();
+      });
+      await ctx.setOffline(false);
+      await setHidden(page, false);
+      await sleep(300);
+      // While that check is still loading, I'm in on the same game.
+      const btn = card(page, G[7]).getByRole('button', { name: "I'm in" });
+      await btn.waitFor({ timeout: 5000 });
+      await btn.click();
+      await sleep(6000);
+      slow = false;
+      await sleep(4000);
+      assert((await st()) === 'confirmed', `tapped I'm in last but the old drop went out: ${await st()}`);
+      await ctx.close();
+    });
     await check('two drops within 5 s on two games: the first is sent at once, the second keeps its own Undo; both end right', async () => {
       await join('Kai', G[5]);
       const { ctx, page, seen } = await open('Kai');

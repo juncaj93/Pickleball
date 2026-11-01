@@ -40,6 +40,10 @@ function forgetPendingDrop(sessionId: string) {
     storageRemove(PENDING_DROP_KEY);
   }
 }
+/** Remove the drop note only if it is still the one this code read (a tap in the meantime may have changed it). */
+function removeNoteIf(raw: string | null) {
+  if (storageGet(PENDING_DROP_KEY) === raw) storageRemove(PENDING_DROP_KEY);
+}
 /**
  * Before I'm in on a game: a drop held on this phone (or left over from a page that closed before sending it)
  * goes to the server FIRST, and the join waits for it. The credit that drop gives back is then there for the
@@ -50,8 +54,9 @@ async function sendDropsBeforeJoin(joiningId: string) {
   // View as (a demo copy) never reads, sends or clears the phone's real drop note: that note belongs to the live site.
   if (demoOn()) return;
   let note: PendingDropNote | null = null;
+  const raw = storageGet(PENDING_DROP_KEY);
   try {
-    note = JSON.parse(storageGet(PENDING_DROP_KEY) ?? 'null');
+    note = JSON.parse(raw ?? 'null');
   } catch {
     note = null;
   }
@@ -71,19 +76,21 @@ async function sendDropsBeforeJoin(joiningId: string) {
     fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
     // No answer (no signal): keep the note for later and let the join go ahead.
     if (!fresh) return;
+    // Changed while we waited (an I'm in on that game cleared it, or a new drop wrote its own): decide nothing here.
+    if (storageGet(PENDING_DROP_KEY) !== raw) return;
   }
   const next = due.do === 'send' ? pendingDropAction(note, Date.now(), () => noteStillApplies(note!, fresh), holdPending) : due;
   if (next.do === 'forget') {
-    storageRemove(PENDING_DROP_KEY);
+    removeNoteIf(raw);
     return;
   }
   if (next.do !== 'send') return;
   try {
     await api('POST', `/api/sessions/${note.sessionId}/withdraw`, {});
-    storageRemove(PENDING_DROP_KEY);
+    removeNoteIf(raw);
   } catch (err) {
     // Refused (game started, already out...): nothing left to send. No signal: the note stays for later.
-    if (err instanceof ApiError && err.code !== 'offline') storageRemove(PENDING_DROP_KEY);
+    if (err instanceof ApiError && err.code !== 'offline') removeNoteIf(raw);
   }
 }
 const CELEBRATE_MS = 1600;
@@ -305,26 +312,28 @@ export function PlayerHome({
           timer = setTimeout(() => void look(), 15_000);
           return;
         }
+        // Changed while we waited (an I'm in on that game cleared it, or a new drop wrote its own): look again.
+        if (storageGet(PENDING_DROP_KEY) !== raw) return void look();
       }
       // Still the same name and the same seat (not joined again since): only then is the drop sent.
       const next = pendingDropAction(note, Date.now(), () => noteStillApplies(note!, fresh), holdPending);
       if (next.do === 'wait') timer = setTimeout(() => void look(), next.ms);
       else if (next.do === 'forget') {
-        storageRemove(PENDING_DROP_KEY);
+        removeNoteIf(raw);
         // The screen stops drawing that drop (and its credit); the real data shows.
         if (note?.sessionId) setOverlay(note.sessionId, null);
         await load.quiet();
       } else if (next.do === 'send') {
         try {
           await api('POST', `/api/sessions/${next.sessionId}/withdraw`, {});
-          storageRemove(PENDING_DROP_KEY);
+          removeNoteIf(raw);
           setOverlay(next.sessionId, null);
           await load.quiet();
         } catch (err) {
           // No signal again: the note stays and the next look (or visit) tries again. Refused (the game started,
           // or was canceled): nothing more to send, and the screen shows the real data.
           if (err instanceof ApiError && err.code !== 'offline') {
-            storageRemove(PENDING_DROP_KEY);
+            removeNoteIf(raw);
             setOverlay(next.sessionId, null);
             await load.quiet();
           } else timer = setTimeout(() => void look(), 15_000);
