@@ -14,7 +14,7 @@ import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
-import { DoNowCard } from './admin/DoNow';
+import { DoNowCard, useServerNow } from './admin/DoNow';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
@@ -251,12 +251,14 @@ function UpdatedLine({ at }: { at: number }) {
 // ---------- Needs attention ----------
 
 function HomeTab({ ctx }: { ctx: AdminCtx }) {
+  const nowMs = useServerNow(ctx.d.now);
   const items = buildTodo(ctx.d);
   // Order: refund requests, then "Do this now", then games to finalize, then the text cards, then the rest.
   // Money that waits on the organizer's answer: cash-out requests and unconfirmed I paid on seats that left.
   const refunds: TodoItem[] = items.filter((i) => i.kind === 'refund_request' || i.kind === 'payment_claim');
   // A game still asked "Did you guys play?" has only that card; its Finalize card comes after "Yes, we played".
-  const asking = new Set(courtCards(ctx.d, Date.parse(ctx.d.now), `${window.location.origin}/admin`).filter((c) => c.kind === 'played').map((c) => c.session.id));
+  // The same moving clock as the Do this now card, so the two always agree (also past midnight with no reload).
+  const asking = new Set(courtCards(ctx.d, nowMs, `${window.location.origin}/admin`).filter((c) => c.kind === 'played').map((c) => c.session.id));
   const first: TodoItem[] = items.filter((i) => i.kind === 'finalize' && !asking.has(i.session.id));
   const rest = items.filter((i) => i.kind !== 'finalize' && !refunds.includes(i));
   const key = (item: TodoItem) =>

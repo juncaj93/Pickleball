@@ -203,13 +203,31 @@ async function main() {
     const before = await moneyOf(gPlayed.id);
     const { ctx, page } = await openAdmin();
     const other = await openAdmin(320, 'dark');
-    await playedCard(page, gPlayed.id).getByRole('button', { name: 'Yes, we played' }).click();
-    await page.locator('.toast', { hasText: 'Saved' }).waitFor();
+    // The finger taps Yes, then taps the same spot again at about 0.8 s and 1.3 s (a slow double tap):
+    // the next game's card and then the Finalize card move under it. Neither may take the tap.
+    const yes = playedCard(page, gPlayed.id).getByRole('button', { name: 'Yes, we played' });
+    await yes.evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await sleep(200);
+    const yb = await yes.boundingBox();
+    const tapAt = () => page.mouse.click(yb.x + yb.width / 2, yb.y + yb.height / 2);
+    await tapAt();
+    await sleep(800);
+    await tapAt();
+    await sleep(500);
+    await tapAt();
+    await page.locator('.toast', { hasText: 'Saved' }).first().waitFor();
+    await sleep(1500);
+    const dd = await dash();
+    assert(!dd.sessions.find((x) => x.id === gPlayed.id).finalized, 'a slow double tap finalized the game');
+    assert(!dd.taskMarks.includes(`${gCancel.id}:played`), 'a slow double tap answered Yes for the next game too');
+    assert((await playedCard(page, gCancel.id).count()) === 1, 'the next game is no longer asked');
     await playedCard(page, gPlayed.id).waitFor({ state: 'detached' });
     assert((await moneyOf(gPlayed.id)) === before, 'money moved');
     const fin = page.locator(`[data-finalize="${gPlayed.id}"]`);
     await fin.waitFor();
-    await page.waitForFunction((id) => document.activeElement && document.activeElement.closest(`[data-finalize="${id}"]`), gPlayed.id);
+    // In view (focus is left alone here: the extra taps above moved it on purpose).
+    const fb = await fin.boundingBox();
+    assert(fb && fb.y >= 0 && fb.y < page.viewportSize().height, `the Finalize card is not in view: ${JSON.stringify(fb)}`);
     await other.page.reload();
     await other.page.locator('section[aria-labelledby="sessions-title"]').waitFor();
     await playedCard(other.page, gCancel.id).waitFor();

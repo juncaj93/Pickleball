@@ -405,10 +405,12 @@ export async function courtAnswer(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.ends_at)) throw new HttpError(409, 'session_over', 'This session is over.');
-  await ctx.db
+  const r = await ctx.db
     .prepare("UPDATE sessions SET booking_status = 'needs_booking', status = 'planned', court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ? WHERE id = ? AND status <> 'canceled'")
     .bind(ctx.nowIso, session.id)
     .run();
+  // A cancel that landed in between: say so, log nothing.
+  if (r.meta.changes !== 1) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   // Nobody's seat changes when the court does (a court on Waitlist gives normal seats).
   await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
   await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);

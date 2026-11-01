@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarkName, Task, TaskButton, TaskStep } from '../../../shared/tasks';
 import { api, ApiError, isIOS, storageGet, storageSet, usePretend } from '../../lib';
-import { MessageIcon, useToast } from '../../ui';
+import { CourtReserveLink, MessageIcon, useToast } from '../../ui';
+import { SETTLE_MS, settleTaps, tapsHeld } from './tapGuard';
 import type { AdminCtx } from '../Admin';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { formatShortDate, formatTime } from '../../../shared/time';
@@ -35,7 +36,7 @@ const KIND_LABEL: Record<Task['kind'], string> = {
  * Pretend it's... and test clocks agree with the server), moving forward
  * each minute while the page stays open.
  */
-function useServerNow(serverNow: string): number {
+export function useServerNow(serverNow: string): number {
   const loadedAt = useMemo(() => Date.now(), [serverNow]);
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
@@ -119,17 +120,20 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
         <div className="dn-eyebrow">{day}</div>
         <p className="dn-text">Court still needs to be booked</p>
         <div className="dn-btns">
-          <a className="btn small external" href={COURTRESERVE_BOOKING_URL} target="_blank" rel="noopener noreferrer" data-action="book-link">
-            Book on CourtReserve
-            <span className="sr-only"> (opens CourtReserve)</span>
-          </a>
+          {/* The same link, words and look as the "Book a court" pill above the games. */}
+          <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+            Book a court
+          </CourtReserveLink>
         </div>
       </article>
     );
   }
   const played = async () => {
-    if (working.current) return;
+    if (working.current || tapsHeld()) return;
     working.current = true;
+    const tappedFrom = document.activeElement;
+    // Until the cards stop moving, no guarded button (next game's Yes, Everyone played) takes a tap.
+    settleTaps(60_000);
     setBusy(true);
     try {
       await markTask(s.id, 'played');
@@ -137,14 +141,22 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
       toast('Saved');
       // The Finalize card for this game, if there is one, shows now: bring it into view once it is drawn.
       // (A fresh load can land a moment later, after the tap lets go: wait up to 3 seconds.)
+      // The organizer moved on (opened a sheet, or focus went somewhere on purpose): leave the screen alone.
+      const movedOn = () => {
+        const a = document.activeElement;
+        return !!document.querySelector('dialog[open]') || (!!a && a !== document.body && a !== tappedFrom && !a.closest('[data-finalize]'));
+      };
       for (let i = 0; i < 60; i++) {
+        if (movedOn()) break;
         const el = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"]`);
         if (el) {
           el.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
-          // Focus its first button; the card is new on screen and a redraw right after can drop focus, so check twice.
+          // Focus the card itself, never a money button (a stray Enter or tap must not finalize). A redraw right
+          // after can drop focus, so check a few times.
           for (let k = 0; k < 3; k++) {
-            const btn = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"] button`);
-            if (btn && document.activeElement !== btn) btn.focus({ preventScroll: true });
+            if (movedOn()) break;
+            const card = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"]`);
+            if (card && document.activeElement !== card) card.focus({ preventScroll: true });
             await new Promise((r) => setTimeout(r, 250));
           }
           break;
@@ -156,6 +168,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
     } finally {
       working.current = false;
       setBusy(false);
+      settleTaps(SETTLE_MS);
     }
   };
   return (
@@ -166,7 +179,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
         <button type="button" className="btn small" disabled={busy} data-action="played" onClick={() => void played()}>
           {busy ? 'Saving…' : 'Yes, we played'}
         </button>
-        <button type="button" className="btn small danger" disabled={busy} data-action="cancel-game" onClick={() => ctx.open('cancel', s.id)}>
+        <button type="button" className="btn small danger" disabled={busy} data-action="cancel-game" onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
           Cancel game
         </button>
       </div>
