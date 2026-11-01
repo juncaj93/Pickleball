@@ -39,7 +39,9 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const over = s.state.flags.past;
   const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
   const endsAt = date && end ? fromLocalInputValue(`${date}T${end}`, tz) : null;
-  const timeChanged = !started && !!startsAt && !!endsAt && (startsAt !== s.startsAt || endsAt !== s.endsAt);
+  // Compared to the minute (the boxes hold minutes): a stored time with seconds never counts as a change.
+  const minute = (iso: string) => Math.floor(Date.parse(iso) / 60_000);
+  const timeChanged = !started && !!startsAt && !!endsAt && (minute(startsAt) !== minute(s.startsAt) || minute(endsAt) !== minute(s.endsAt));
   const statusChanged = status !== current;
 
   async function submit(e: FormEvent) {

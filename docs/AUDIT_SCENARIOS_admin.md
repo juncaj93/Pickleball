@@ -206,6 +206,7 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | E17 | Edit across the clock change (Nov 1) | Eastern times right | API | pass (existing: tests/dryrun-times.test.ts, tests/dryrun-clock.test.ts) |
 | E18 | Move a finalized game | Refused or harmless | API | pass (code: a started game cannot move, server 409) |
 | E19 | Edit a canceled game | Not offered; API refuses | API | pass (new: tests/admin-audit.test.ts) |
+| E21 | Save with nothing changed on a game stored with seconds | Closes, nothing moves | UI | fixed (e2e/admin-cleanup.cjs short-phone check, failed on main at some hours) |
 | E20 | Moved text sheet opens after a move | Yes | UI | pass (existing: e2e/admin-cleanup.cjs, tests/admin-cleanup.test.ts) |
 
 ## 6. Cancel session (K)

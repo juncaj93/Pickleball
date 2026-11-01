@@ -828,6 +828,9 @@ No money rule, price rule, schema or migration change.
 - Players tab: the Edit button's tap area was 42 px tall; now 44 px (no visible change).
 - Court switch: a write that lands on a game canceled in between answers "look again" (was
   "changed"). The old `/court` route (no screen uses it now) never writes to a canceled game.
+- Edit game compares times to the minute: a game stored with seconds no longer "moves" on a Save
+  with nothing changed (only test data has seconds; found by e2e/admin-cleanup.cjs failing at some
+  times of day, also on main before this audit).
 
 ### Fresh auditors (did not write any fix)
 - A (code reading): no money bug. Found: a finalized-then-reopened game asked again; two cards

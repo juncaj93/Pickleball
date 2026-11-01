@@ -657,8 +657,14 @@ async function main() {
       return { top: b.top, bottom: b.bottom, vh: window.innerHeight, tappable: hit === e || e.contains(hit), tab: document.querySelector('.tabbar').getBoundingClientRect().top };
     });
     assert(r.top >= 0 && r.bottom <= r.vh && r.tappable, `Save is off screen or covered: ${JSON.stringify(r)}`);
+    const errs = [];
+    page.on('pageerror', (e) => errs.push(String(e)));
+    page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
     await save.click();
-    await page.locator('dialog[open]').waitFor({ state: 'detached' });
+    // Save with nothing changed just closes (a game stored with seconds, like the ones this file makes, never "moves").
+    await page.locator('dialog[open]').waitFor({ state: 'detached', timeout: 10000 }).catch(async (e) => {
+      throw new Error(`${e.message.slice(0, 80)} errors=${errs.join(' | ')} dialog=${(await page.locator('dialog[open]').innerText()).slice(0, 300)}`);
+    });
     await ctx.close();
   });
 
