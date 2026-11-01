@@ -52,7 +52,15 @@ async function sendDropsBeforeJoin(joiningId: string) {
   } catch {
     note = null;
   }
-  if (!note?.sessionId || note.sessionId === joiningId || holdPending(note.sessionId)) return;
+  if (!note?.sessionId || note.sessionId === joiningId) return;
+  // The same age rules as a left-over note: younger than the hold, another tab may still be holding it (its Undo
+  // must work), so leave it; older than 2 minutes, too late to be sure. The server's drop is safe to repeat.
+  const next = pendingDropAction(note, Date.now(), () => true, holdPending);
+  if (next.do === 'forget') {
+    storageRemove(PENDING_DROP_KEY);
+    return;
+  }
+  if (next.do !== 'send') return;
   try {
     await api('POST', `/api/sessions/${note.sessionId}/withdraw`, {});
     storageRemove(PENDING_DROP_KEY);

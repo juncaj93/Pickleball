@@ -53,7 +53,7 @@ export function sqlText(value: string): string {
 
 /** The seats and the credit on them, as one string: finalize and reopen only go ahead if nothing changed since they looked. */
 const MONEY_STATE = (sessionId: string) =>
-  `(SELECT COALESCE(group_concat(x, '|'), '') FROM (SELECT id || ':' || status || ':' || payment_status || ':' || COALESCE(payment_amount_cents, '') || ':' || COALESCE(refunded_at, '') AS x
+  `(SELECT COALESCE(group_concat(x, '|'), '') FROM (SELECT id || ':' || status || ':' || payment_status || ':' || COALESCE(payment_amount_cents, '') || ':' || COALESCE(refunded_at, '') || ':' || COALESCE(self_paid_at, '') AS x
       FROM session_players WHERE session_id = ${sqlText(sessionId)} ORDER BY id))
    || '#' || (SELECT COUNT(*) || ':' || COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE session_id = ${sqlText(sessionId)} AND ended_at IS NULL)`;
 
@@ -107,7 +107,10 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       // Credit used on an unpaid seat above the final price comes back too; the rest is settled by repricing below.
       const used = paid > 0 ? 0 : await usedOn(ctx, session.id, r.player_id);
       const back = paid > 0 ? paid - price : used - price;
-      if (paid > 0 && paid < price) {
+      if (paid > 0 && paid < price && r.self_paid_at) {
+        // Holding it as cash would make an unconfirmed I paid into money (only confirmed money becomes credit).
+        throw new HttpError(409, 'unconfirmed_paid', `${r.display_name} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+      } else if (paid > 0 && paid < price) {
         // Paid the earlier (lower) price, or the flat price went up: the cash stays against the seat, the rest is owed.
         // Only the cash part: credit (and cash already held) on the seat stays on it as it is.
         const onSeat = await usedOn(ctx, session.id, r.player_id);
@@ -198,6 +201,19 @@ export async function reopenFinalize(ctx: Ctx) {
     throw new HttpError(409, 'credit_spent', `Can't reopen: ${blockers.spent.join(' and ')} already used or got back credit from this game.`);
   }
   if (blockers.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(blockers.requested));
+  // A seat paid below the flat price with an I paid nobody confirmed would come out short and its cash would be
+  // held as real money (and later become credit): the organizer confirms or clears it first.
+  const { results: unconfirmed } = await ctx.db
+    .prepare(
+      `SELECT p.display_name AS name FROM session_players sp JOIN players p ON p.id = sp.player_id
+       WHERE sp.session_id = ? AND sp.status = 'confirmed' AND sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL
+         AND COALESCE(sp.payment_amount_cents, 0) < ? ORDER BY p.display_name`,
+    )
+    .bind(session.id, settingsOf(group).pricePerPlayerCents)
+    .all<{ name: string }>();
+  if (unconfirmed.length) {
+    throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${unconfirmed.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+  }
   // One batch, all or nothing. The credit this game gave back is taken back only while every player still has
   // all of theirs (beyond a pending cash out); the game is unfinalized only once none of it is left; seats paid
   // with credit at the final price are short of the flat price again.

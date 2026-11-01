@@ -970,12 +970,13 @@ describe('confirmed failures', () => {
     const sid = await on(w, OCT27);
     await givePot(w, 'Blair', 500);
     for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']) expect((await join(w, n, sid)).status).toBe(200);
-    for (const n of ['Casey', 'Devon', 'Emery', 'Frankie']) expect((await iPaid(w, n, sid)).status).toBe(200);
+    // Cash, confirmed (since Oct 31 Reopen waits while an unconfirmed short I paid is on a seat).
+    for (const n of ['Casey', 'Devon', 'Emery', 'Frankie']) expect((await iPaidConfirmed(w, n, sid)).status).toBe(200);
     atIso(w, AFTER_OCT27);
     // 5 played: $11 each. Blair ($5 credit at sign-up) pays the $6 his screen shows.
     expect((await finalize(w, sid, 'everyone')).status).toBe(200);
     expect(await shownOwe(w, 'Blair', sid)).toBe(600);
-    expect((await iPaid(w, 'Blair', sid)).status).toBe(200);
+    expect((await iPaidConfirmed(w, 'Blair', sid)).status).toBe(200);
     // Reopen (his $6 cash is held against the seat), then redo: Blair did not play after all.
     expect((await reopen(w, sid)).status).toBe(200);
     expect((await finalize(w, sid, ['Casey', 'Devon', 'Emery', 'Frankie'])).status).toBe(200);

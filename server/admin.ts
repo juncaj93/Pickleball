@@ -727,19 +727,22 @@ export async function applyPayment(
   if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
   if (seen !== null) {
     const now = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
-    const current = moneySeen({
-      paymentStatus: row.payment_status,
-      paymentAmountCents: row.payment_amount_cents,
-      refunded: !!row.refunded_at,
-      selfPaid: !!row.self_paid_at,
-      creditCents: now.usedCents,
-      cashCents: now.cashCents,
-      priceCents: sharesFor(session, roster, settingsOf(group)).get(playerId) ?? null,
-      finalizedAt: session.finalized_at ?? null,
-    });
-    if (current !== seen) {
-      // A second device (or a retry) already did exactly this: confirmed paid. Nothing to change, not an error.
-      if (paid && row.status === 'confirmed' && row.payment_status === 'paid' && !row.refunded_at && !row.self_paid_at) return { ok: true, changed: false };
+    const summary = (selfPaid: boolean) =>
+      moneySeen({
+        paymentStatus: row.payment_status,
+        paymentAmountCents: row.payment_amount_cents,
+        refunded: !!row.refunded_at,
+        selfPaid,
+        creditCents: now.usedCents,
+        cashCents: now.cashCents,
+        priceCents: sharesFor(session, roster, settingsOf(group)).get(playerId) ?? null,
+        finalizedAt: session.finalized_at ?? null,
+      });
+    if (summary(!!row.self_paid_at) !== seen) {
+      // A second device (or a retry) already did exactly this, confirming an I paid: the only difference from what
+      // the screen showed is the confirm itself. Nothing to change, not an error. Anything else: look again.
+      const onlyConfirmed = paid && !row.self_paid_at && row.status === 'confirmed' && row.payment_status === 'paid' && !row.refunded_at && summary(true) === seen;
+      if (onlyConfirmed) return { ok: true, changed: false };
       throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
     }
   }
@@ -766,14 +769,18 @@ export async function applyPayment(
       const finalCents = session.finalized_at && row.played === 1 ? session.final_price_cents : null;
       const back = finalCents !== null && finalCents !== undefined ? Math.max(0, (row.payment_amount_cents ?? 0) - finalCents) : 0;
       const confirmedNow = `NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NOT NULL)`;
+      // Only while the game is the one read (not finalized, reopened or redone since): the money back worked out
+      // above belongs to that finalize. A Finalize or Reopen at the same moment: look again.
+      const asRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
       const [res] = await ctx.db.batch([
         ctx.db
           .prepare(
             `UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
              WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
-               AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'`,
+               AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'
+               AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4`,
           )
-          .bind(ctx.nowIso, session.id, playerId),
+          .bind(ctx.nowIso, session.id, playerId, asRead),
         ...creditBackStatements(ctx.db, {
           groupId: group.id,
           sessionId: session.id,
