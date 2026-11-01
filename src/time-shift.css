@@ -4,7 +4,7 @@
 :root {
   --ts-booked: #18241d;
   --ts-wait: #5f665d;
-  --ts-none: #878e85;
+  --ts-none: #7c837a;
   --ts-muted: #4a4f46;
   --ts-green: #226b4b;
   --ts-green-soft: #e6f2eb;
@@ -230,13 +230,15 @@
   font-weight: 700;
 }
 .ts-waiting {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 4px 8px;
+  gap: 8px;
 }
 .ts-waiting .ts-name {
   color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .ts-waiting .btn.small {
   min-height: 44px;
@@ -247,19 +249,22 @@
   color: var(--muted);
 }
 
+/* Reduce Motion: plain 100 ms fades (the site-wide rule turns every motion off; these fades are allowed back). */
 @media (prefers-reduced-motion: reduce) {
   .tile .tb,
-  .ts-bar,
-  .sched,
-  .sched.ts-asking {
-    transition-duration: 100ms;
+  .sched.ts-asking,
+  .schedule > .sched {
+    transition: opacity 100ms linear, outline-color 100ms linear !important;
+  }
+  .ts-bar {
+    transition: opacity 100ms linear !important;
   }
   .ts-bar.ts-gone {
     transform: none;
   }
   .sched-time.ts-flip,
   .scard-time.ts-flip {
-    animation: ts-fade 100ms linear;
+    animation: ts-fade 100ms linear !important;
   }
 }
 @keyframes ts-fade {
@@ -285,4 +290,16 @@
 }
 .tier-later .sched-time.ts-wait {
   font-size: min(0.74rem, 18.5cqw);
+}
+
+/* Dark mode: gray buttons on the raised sheets keep their shape (the sheet and the gray fill are close). */
+:root[data-theme='dark'] dialog.sheet .btn.secondary,
+:root[data-theme='dark'] dialog.sheet .icon-btn {
+  border: 1px solid #6f8a7c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) dialog.sheet .btn.secondary,
+  :root:not([data-theme='light']) dialog.sheet .icon-btn {
+    border: 1px solid #6f8a7c;
+  }
 }

@@ -230,8 +230,11 @@ async function main() {
     const tt = squash(await toast.innerText());
     assert(/\$14/.test(tt) && /credit/i.test(tt), `credit message: ${tt}`);
     assert((await page.locator('[data-time-bar]').count()) === 0, 'notice hides while the drop waits');
+    assert(!/dropped out/i.test(tt), `no "dropped out" in this flow: ${tt}`);
+    await page.waitForTimeout(700); // past the double-tap guard
     await toast.getByRole('button', { name: 'Undo' }).click();
     await bar.waitFor({ timeout: 3000 });
+    await page.waitForTimeout(6000); // past the 5-second hold: Undo really kept the seat
     assert((await record('Julian', A)).mine.status === 'confirmed', 'still in after Undo');
     // Again, and let it go through.
     await bar.getByRole('button', { name: "Can't make it" }).click();
@@ -309,7 +312,7 @@ async function main() {
     const bar = page.locator(`[data-time-bar="${A.id}"]`);
     await bar.waitFor();
     const dur = await page.evaluate((id) => getComputedStyle(document.querySelector(`[data-time-bar="${id}"]`)).transitionDuration, A.id);
-    assert(dur.split(',').every((x) => parseFloat(x) <= 0.1), dur);
+    assert(dur.split(',').every((x) => parseFloat(x) <= 0.1) && dur.split(',').some((x) => parseFloat(x) > 0), `100 ms fades: ${dur}`);
     await ctx.close();
   });
 

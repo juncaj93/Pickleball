@@ -1357,7 +1357,7 @@ export function ScheduleRow({
    * Drop out: the card shows it at once, but nothing is sent for 5 seconds so Undo can take it back
    * (money is involved, so a finished drop is never reversed). Closing the page sends it right away.
    */
-  function dropOut() {
+  function dropOut(lead?: string) {
     setAskOut(false);
     if (working.current) return;
     // Too close to the start, or to the late-drop deadline, to wait: send it now, like before, so the 5 seconds never change how it counts.
@@ -1406,7 +1406,7 @@ export function ScheduleRow({
       },
     });
     // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
-    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, undefined, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, lead, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);
@@ -1563,9 +1563,11 @@ export function ScheduleRow({
         danger
         busy={busy}
         onConfirm={() => {
+          // From the notice the banner never says "dropped out": "You're out. $14 credit returned." (same money words).
+          const lead = fromNotice ? "You're out." : undefined;
           setFromNotice(false);
           if (waiting) void run('withdraw', () => "You're off the list");
-          else dropOut();
+          else dropOut(lead);
         }}
         onCancel={() => {
           setFromNotice(false);
