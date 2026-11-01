@@ -25,7 +25,8 @@ import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { cashOutOffer, loadPendingRequests, moneyPicture } from './credit';
-import { agreedValue, isWaitingOnTime, timeShiftOn } from '../shared/timeShift';
+import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
+import { timeShiftFor } from './timeShift';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -87,6 +88,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
+  const timeShift = await timeShiftFor(ctx, group.id);
 
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
@@ -184,12 +186,12 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     players: players.map((p) => ({ id: p.id, name: p.display_name })),
     me: me ? { id: me.id, name: me.display_name } : null,
     viewingAs: !!viewAsName,
-    timeShift: timeShiftOn(ctx.env.TIME_SHIFT),
+    timeShift,
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
-      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShiftOn(ctx.env.TIME_SHIFT))),
+      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift)),
     owed,
     payDue: owed.filter((o) => {
       const p = localParts(Date.parse(o.startsAt), tz);
@@ -422,7 +424,7 @@ export async function playerCancelRefundRequest(ctx: Ctx) {
 export async function playerStillIn(ctx: Ctx, body: Record<string, unknown>) {
   const who = await actingOn(ctx);
   const shown = v.isoTime(body.startsAt, 'startsAt');
-  if (!timeShiftOn(ctx.env.TIME_SHIFT)) throw new HttpError(404, 'not_found', 'Not found.');
+  if (!(await timeShiftFor(ctx, who.group.id))) throw new HttpError(404, 'not_found', 'Not found.');
   if (who.session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
   if (ctx.nowMs >= Date.parse(who.session.starts_at)) throw new HttpError(409, 'session_started', 'This game already started.');
   if (!shown || Date.parse(shown) !== Date.parse(who.session.starts_at)) throw new HttpError(409, 'time_changed', 'The time changed again. Look at the new time.');

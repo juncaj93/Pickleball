@@ -74,7 +74,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const cancelBy = live ? cancelByCardLine(s.startsAt, now, tz) : null;
   const inCount = s.payableCount;
   // "Time may shift": the court on the tile's border and the time under it (TIME_SHIFT).
-  const ts: TsKind | null = ctx.d.timeShift === false ? null : tsKind(court.kind, false);
+  const ts: TsKind | null = tsKind(court.kind, false);
   const flip = useCourtFlip(`admin-${s.id}`, ts);
   return (
     <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-switch={switchValue} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>

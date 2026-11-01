@@ -38,7 +38,10 @@ export function isWaitingOnTime(value: string | null | undefined, startsAt: stri
   return all.length > 0 && !all.includes(startsAt);
 }
 
-/** The TIME_SHIFT switch (a wrangler.toml var): on unless it says "off". */
+/** The phone-only test switch: the page sends this header when the phone opened the site with ?timeshift=on. */
+export const TIME_SHIFT_HEADER = 'X-Time-Shift';
+
+/** The TIME_SHIFT kill switch (a wrangler.toml var): allowed unless it says "off". */
 export function timeShiftOn(flag: string | undefined | null): boolean {
   return (flag ?? 'on').trim().toLowerCase() !== 'off';
 }

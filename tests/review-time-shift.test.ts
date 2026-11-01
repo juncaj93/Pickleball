@@ -17,6 +17,7 @@ async function world(maxPlayers = 4) {
   const app = new TestApp();
   const ctx = await setupGroup(app);
   await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', settings: { maxPlayers } });
+  await ctx.organizer.call('PUT', '/api/admin/time-shift', { on: true });
   const d = await dash(ctx);
   const later = d.sessions.filter((x: any) => Date.parse(x.startsAt) > app.now + 7 * DAY);
   const phones: Record<string, any> = {};

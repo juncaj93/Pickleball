@@ -1140,10 +1140,18 @@ are in (with the old start) in the same batch that moves the game. Rollback of t
 alone is enough). The migration MUST go on before this code is deployed: without the column, I'm in on an existing
 seat row and moving a game fail with an error (no money moves; proven in `tests/review-time-shift.test.ts`).
 
-### Switch
-`TIME_SHIFT = "on"` in wrangler.toml (also for previews). "off" hides the tilde, the borders, the notice, Confirmed
-x of y and the Edit game note, and refuses Still in; answers already saved stay right for later. The View as demo
-does not read it (it always shows the feature).
+### Switches (changed on Alex's "ship it": the look goes live, the notice ships off)
+- The court look (tile borders, "~7 PM"), logo tile, credit text and dark raised cards: always on.
+- The moved-game notice, Still in, "Confirmed x of y" and the Edit game note (`server/timeShift.ts`) are on when
+  the `TIME_SHIFT` var is not "off" (kill switch, needs a deploy) AND one of:
+  - Settings > Schedule > "Moved-game notice for everyone" (off at ship; Alex turns it on Monday before 6 PM). Saved as
+    one `task_log` row (kind 'mark', task 'time_shift_on', no game), so no schema change; a backup restore empties
+    task_log, so check this switch after a restore.
+  - The private test switch: open the site once with `?timeshift=on` on a phone (sends `X-Time-Shift: on`; that phone
+    only; `?timeshift=off` ends it). Works on /admin too ("Confirmed x of y").
+  - The View as demo (always on).
+- While it is off, Edit game still records who agreed to which time, so turning it on asks exactly the players who
+  were in before a move and have not answered.
 
 ### Fresh checks (helpers that did not write the code)
 - Money paths: no path changes money, credit, payment or a seat. Found and fixed: the organizer's In / To waitlist

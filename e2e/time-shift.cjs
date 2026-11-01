@@ -117,6 +117,29 @@ async function main() {
   };
   const moneyOf = async () => JSON.stringify((await (await areq.get(`${BASE}/api/admin/dashboard`)).json()).sessions.map((s) => s.roster.map((r) => [r.name, r.status, r.paymentStatus, r.paidCents ?? null])));
 
+  await check('off for everyone by default: borders and tilde show, no notice; ?timeshift=on shows it on that phone only, ?timeshift=off hides it', async () => {
+    const { ctx, page } = await open('Ryan');
+    await page.waitForTimeout(800);
+    assert((await page.locator('[data-time-bar]').count()) === 0, 'no notice by default');
+    const cls = await page.evaluate((id) => document.querySelector(`#row-${id} .tile`).className, B.id);
+    assert(/ts-wait/.test(cls), `the court look is on: ${cls}`);
+    await page.goto(`${BASE}/?timeshift=on`);
+    await page.locator(`[data-time-bar="${A.id}"]`).waitFor();
+    await page.goto(BASE);
+    await page.locator(`[data-time-bar="${A.id}"]`).waitFor();
+    const other = await open('Nathan');
+    await other.page.waitForTimeout(800);
+    assert((await other.page.locator('[data-time-bar]').count()) === 0, 'another phone still has no notice');
+    await other.ctx.close();
+    await page.goto(`${BASE}/?timeshift=off`);
+    await page.locator('.schedule article.sched').first().waitFor();
+    await page.waitForTimeout(800);
+    assert((await page.locator('[data-time-bar]').count()) === 0, 'off again');
+    await ctx.close();
+  });
+  // The rest checks the notice itself: on for everyone (Settings).
+  assert((await put(areq, '/api/admin/time-shift', { on: true })).ok(), 'switched on for everyone');
+
   for (const [width, scheme] of [
     [390, 'light'],
     [390, 'dark'],

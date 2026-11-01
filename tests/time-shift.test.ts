@@ -20,11 +20,13 @@ const move = (ctx: Ctx, s: { id: string; startsAt: string; endsAt: string }, ms:
   ctx.organizer.call('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt: plus(s.startsAt, ms), endsAt: plus(s.endsAt, ms) });
 
 /** A game two weeks out (so nothing is near a deadline), and the group's organizer as a player (Alex). */
-async function world(opts: { maxPlayers?: number; env?: Record<string, string> } = {}) {
+async function world(opts: { maxPlayers?: number; env?: Record<string, string>; forAll?: boolean } = {}) {
   const app = new TestApp();
   if (opts.env) Object.assign(app.env, opts.env);
   const ctx = await setupGroup(app);
   await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', ...(opts.maxPlayers ? { settings: { maxPlayers: opts.maxPlayers } } : {}) });
+  // Settings > "Moved-game notice for everyone" (off by default since the Nov 1 deploy).
+  if (opts.forAll !== false) await ctx.organizer.call('PUT', '/api/admin/time-shift', { on: true });
   const d = await dash(ctx);
   const s = d.sessions.find((x: any) => Date.parse(x.startsAt) > app.now + 7 * DAY);
   const phones: Record<string, any> = {};
@@ -284,6 +286,42 @@ describe('the organizer side', () => {
     expect((await phones.Blair.call('GET', '/api/group/version')).data.v).not.toBe(v1);
   });
 
+  it('off for everyone by default: no ask, but a phone with the private test switch sees it, and turning it on for everyone asks the right people', async () => {
+    const { ctx, s, phones } = await world({ forAll: false });
+    expect((await dash(ctx)).timeShiftForAll).toBe(false);
+    await phones.Blair.call('POST', `/api/sessions/${s.id}/join`, {});
+    await phones.Casey.call('POST', `/api/sessions/${s.id}/join`, {});
+    await move(ctx, s, HOUR);
+    const g = await myGame(phones.Blair, s.id);
+    expect(g.timeAsk).toBeNull();
+    expect((await phones.Blair.call('GET', '/api/group')).data.timeShift).toBe(false);
+    expect((await adminGame(ctx, s.id)).timeCheck).toBeNull();
+    expect((await phones.Blair.call('POST', `/api/sessions/${s.id}/still-in`, { startsAt: g.startsAt })).status).toBe(404);
+
+    // The private test switch (?timeshift=on sends this header): that phone only.
+    const test = { 'X-Time-Shift': 'on' };
+    const mineTest = (await phones.Blair.call('GET', '/api/group', undefined, test)).data;
+    expect(mineTest.timeShift).toBe(true);
+    expect(mineTest.sessions.find((x: any) => x.id === s.id).timeAsk).toEqual({ wasStartsAt: s.startsAt });
+    expect((await myGame(phones.Casey, s.id)).timeAsk).toBeNull();
+    const adminTest = (await ctx.organizer.call('GET', '/api/admin/dashboard', undefined, test)).data;
+    expect(adminTest.sessions.find((x: any) => x.id === s.id).timeCheck).toMatchObject({ confirmedCount: 0, inCount: 2 });
+    expect((await phones.Blair.call('POST', `/api/sessions/${s.id}/still-in`, { startsAt: g.startsAt }, test)).status).toBe(200);
+
+    // On for everyone: Casey is asked (Blair already answered); the players' refresh notices the switch.
+    const v1 = (await phones.Casey.call('GET', '/api/group/version')).data.v;
+    expect((await ctx.organizer.call('PUT', '/api/admin/time-shift', { on: true })).data).toEqual({ ok: true, on: true });
+    expect((await phones.Casey.call('GET', '/api/group/version')).data.v).not.toBe(v1);
+    expect((await dash(ctx)).timeShiftForAll).toBe(true);
+    expect((await myGame(phones.Casey, s.id)).timeAsk).toEqual({ wasStartsAt: s.startsAt });
+    expect((await myGame(phones.Blair, s.id)).timeAsk).toBeNull();
+    // Off again.
+    await ctx.organizer.call('PUT', '/api/admin/time-shift', { on: false });
+    expect((await myGame(phones.Casey, s.id)).timeAsk).toBeNull();
+    // Players can't flip it.
+    expect((await phones.Casey.call('PUT', '/api/admin/time-shift', { on: true })).status).toBe(401);
+  });
+
   it('TIME_SHIFT off: nothing asked, nothing shown, Still in refused, but answers stay right for later', async () => {
     const { ctx, s, phones } = await world({ env: { TIME_SHIFT: 'off' } });
     await phones.Blair.call('POST', `/api/sessions/${s.id}/join`, {});
@@ -294,6 +332,7 @@ describe('the organizer side', () => {
     expect((await adminGame(ctx, s.id)).timeCheck).toBeNull();
     expect((await dash(ctx)).timeShift).toBe(false);
     expect((await phones.Blair.call('POST', `/api/sessions/${s.id}/still-in`, { startsAt: g.startsAt })).status).toBe(404);
+    expect((await phones.Blair.call('GET', '/api/group', undefined, { 'X-Time-Shift': 'on' })).data.timeShift).toBe(false);
     (ctx.app.env as any).TIME_SHIFT = 'on';
     expect((await myGame(phones.Blair, s.id)).timeAsk).toEqual({ wasStartsAt: s.startsAt });
   });

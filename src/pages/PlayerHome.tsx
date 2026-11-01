@@ -1410,10 +1410,10 @@ export function ScheduleRow({
   }
 
   const court = courtStatus(s, tz);
-  // "Time may shift": the court on the tile's border and the time under it (TIME_SHIFT).
-  const ts: TsKind | null = g.timeShift === false ? null : tsKind(court.kind, !!s.venueWaitlist);
+  // The court on the tile's border and the time under it (always on; only the moved-game notice has a switch).
+  const ts: TsKind | null = tsKind(court.kind, !!s.venueWaitlist);
   const flip = useCourtFlip(s.id, ts);
-  const asking = !!s.timeAsk && inSession && open;
+  const asking = !!s.timeAsk && g.timeShift !== false && inSession && open;
   useEffect(() => {
     if (!asking) return undefined;
     return registerCant(s.id, () => {

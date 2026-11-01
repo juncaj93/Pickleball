@@ -141,6 +141,8 @@ export const OFFLINE_MESSAGE = 'No signal, try again';
 export async function api<T>(method: string, path: string, body?: unknown, opts: { keepalive?: boolean } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // The moved-game notice's private test switch for this phone (?timeshift=on, see server/timeShift.ts).
+  if (timeShiftTest()) headers['X-Time-Shift'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
   // Demo: the throwaway copy answers. Signing out always goes to the live site.
@@ -386,4 +388,18 @@ export function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: st
   if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
   e.preventDefault();
   window.location.href = pay.appUrl;
+}
+
+/**
+ * The moved-game notice on this phone only, before it is on for everyone: open the site once with ?timeshift=on
+ * (?timeshift=off turns it back off). Remembered in this browser; nothing else changes.
+ */
+const TIME_SHIFT_KEY = 'pb_time_shift';
+export function timeShiftTest(): boolean {
+  return storageGet(TIME_SHIFT_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('timeshift');
+  if (want === 'on') storageSet(TIME_SHIFT_KEY, 'on');
+  else if (want === 'off') storageRemove(TIME_SHIFT_KEY);
 }

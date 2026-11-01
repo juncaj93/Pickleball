@@ -9,7 +9,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '..
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
-import { timeShiftOn } from '../shared/timeShift';
+import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
 import {
@@ -73,6 +73,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const players = await getPlayers(ctx.db, group.id);
   const { sessions, rosters, ledger, reserved } = await moneyPictureOf(ctx, group);
   const organizerId = await organizerIdOf(ctx.db, group);
+  const timeShift = await timeShiftFor(ctx, group.id);
   // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
   const potFor = (sessionId: string) => (r: RosterRow) =>
     seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
@@ -157,7 +158,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
     sessions: sessions.map((s) =>
-      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShiftOn(ctx.env.TIME_SHIFT)),
+      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
     ),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
@@ -191,7 +192,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     alerts: await alertsView(ctx, group.id),
     now: ctx.nowIso,
     version,
-    timeShift: timeShiftOn(ctx.env.TIME_SHIFT),
+    timeShift,
+    timeShiftForAll: await timeShiftForAll(ctx.db, group.id),
   };
 }
 
@@ -1415,4 +1417,13 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
   const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group)) : false;
   if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
   return { result: res.changed ? 'withdrawn' : 'not_in_session' };
+}
+
+/** PUT /api/admin/time-shift { on }: Settings > "Moved-game notice for everyone". Changes no money and no seat. */
+export async function setTimeShift(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTimeShiftForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'time_shift_on' : 'time_shift_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }

@@ -65,9 +65,11 @@ The notice asks players who are in to confirm a moved start time. It never moves
 
 - Quick fix with no deploy: none needed for money. If players are confused, text them with the card's
   Text button or Text the group.
-- To switch it off: in `wrangler.toml`, change `TIME_SHIFT = "on"` to `TIME_SHIFT = "off"`, then deploy from main
-  (`npm run deploy`). The tilde times, tile borders, the notice, "Confirmed 2 of 3" and the Edit game note all go
-  away. Answers already given are kept for when it comes back on.
+- To switch it off for everyone (no deploy): /admin, Settings, Schedule, turn off **Moved-game notice for everyone**.
+  The notice, "Confirmed 2 of 3" and the Edit game note go away; tile borders and "~" times stay (they are just looks).
+- To test it on one phone only while it is off: open pickleball.juncaj.net/?timeshift=on on that phone
+  (?timeshift=off ends it).
+- Last resort kill switch: in `wrangler.toml`, `TIME_SHIFT = "off"`, then deploy from main. Answers are kept.
 - Never deploy this code to a database without migration 0016 (`npx wrangler d1 migrations list pickleball --remote`
   must show nothing to apply). Without it, I'm in again and moving a game fail.
 

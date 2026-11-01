@@ -118,7 +118,7 @@ export interface GroupView {
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */
   viewingAs: boolean;
-  /** The TIME_SHIFT switch (tilde times, court borders, the time changed notice). */
+  /** The moved-game notice is on for this screen (server/timeShift.ts). The court look does not depend on it. */
   timeShift?: boolean;
   now: string;
   sessions: PlayerSessionView[];
@@ -354,8 +354,10 @@ export interface RefundRequestView {
 export interface AdminDashboard {
   /** The "did anything change?" stamp this load was drawn from (see /api/admin/version). */
   version: string;
-  /** The TIME_SHIFT switch: Confirmed x of y, Waiting on, the Edit game note, tilde times and court borders. */
+  /** The moved-game notice is on for this screen: Confirmed x of y, Waiting on, the Edit game note (server/timeShift.ts). */
   timeShift?: boolean;
+  /** Settings > "Moved-game notice for everyone" is on. */
+  timeShiftForAll?: boolean;
   group: {
     name: string;
     timezone: string;

@@ -108,6 +108,7 @@ route('POST', '/api/admin/sessions/:id/links', admin.prepareLinks);
 route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
 route('PUT', '/api/admin/alerts', alerts.updateAlerts);
+route('PUT', '/api/admin/time-shift', admin.setTimeShift);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
 route('POST', '/api/admin/alerts/smart-test', (ctx) => tasks.smartTestAlert(ctx));
 route('POST', '/api/admin/sessions/:id/task-mark', tasks.taskMark);
