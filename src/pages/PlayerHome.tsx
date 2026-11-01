@@ -38,6 +38,23 @@ const NOTICE_GAP_MS = 2400;
  * taken again since); a note that changed during a wait is left for the next look. `ok` says whether to go on (the
  * page is still open and not in a demo); `done` hears every game whose note was settled. Answers when to look again.
  */
+/** A call that hangs (a stale connection on flaky mobile data) counts as no signal after this, so it never blocks later checks. */
+const NOTE_CALL_LIMIT_MS = 12_000;
+function limited<T>(p: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const t = setTimeout(() => reject(new ApiError(0, 'offline', 'No signal')), NOTE_CALL_LIMIT_MS);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
 async function finishNotes(ok: () => boolean, done: (sessionId: string) => void = () => {}): Promise<number | null> {
   let again: number | null = null;
   const soon = (ms: number) => {
@@ -54,7 +71,7 @@ async function finishNotes(ok: () => boolean, done: (sessionId: string) => void 
     }
     if (due.do !== 'send') continue;
     // Whether they are still in comes from the server as it is now (the screen's copy hides a seat whose drop it is drawing).
-    if (fresh === undefined) fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
+    if (fresh === undefined) fresh = await limited(api<GroupView>('GET', '/api/group')).catch(() => null);
     if (!ok()) return null;
     if (!fresh) {
       soon(15_000); // no signal: keep the note and look again
@@ -67,7 +84,8 @@ async function finishNotes(ok: () => boolean, done: (sessionId: string) => void 
       continue;
     }
     try {
-      await api('POST', `/api/sessions/${due.sessionId}/withdraw`, {});
+      // If this times out but lands anyway, the next look finds them out and simply forgets the note.
+      await limited(api('POST', `/api/sessions/${due.sessionId}/withdraw`, {}));
       removeNote(note);
       done(due.sessionId);
     } catch (err) {
