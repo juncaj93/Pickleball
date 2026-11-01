@@ -728,6 +728,40 @@ async function main() {
       await una.close();
       await vic.close();
     });
+    await check('FIXED (Nov 1): View as yourself, Drop out, close the tab within 5 s, then open your real page: you are NOT dropped for real', async () => {
+      const r = await post(areq, '/api/admin/players', { name: 'Wes Viewas', phone: '2485550903' });
+      assert(r.ok(), `add Wes: ${await r.text()}`);
+      const wid = (await dash()).players.find((p) => p.name === 'Wes Viewas').id;
+      const actx = await browser.newContext(phone(390, 'light'));
+      await post(actx.request, '/api/admin/login', { pin: PIN });
+      await post(actx.request, '/api/me', { playerId: wid });
+      assert((await post(actx.request, `/api/sessions/${G[7].id}/join`, {})).ok(), 'join');
+      const page = await actx.newPage();
+      await page.goto(`${BASE}/admin`);
+      await page.getByRole('button', { name: 'View as…' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Wes Viewas', exact: true }).click();
+      await page.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
+      await page.locator('.schedule article').first().waitFor();
+      const more = page.getByRole('button', { name: /^More sessions/ });
+      if (await more.count()) await more.click();
+      await card(page, G[7]).waitFor();
+      await tapDrop(page, G[7]);
+      await page.locator('[data-banner]').getByText(/You dropped out/).waitFor();
+      // The root of it: a demo drop must not leave a note on the phone that the live page would finish later
+      // (a phone killed in the 5 seconds never gets to clear it).
+      const during = await page.evaluate(() => localStorage.getItem('pb_pending_drop'));
+      assert(during === null, `View as wrote a real drop note: ${during}`);
+      await page.close({ runBeforeUnload: true });
+      const real = await actx.newPage();
+      await real.goto(BASE);
+      await real.locator('.schedule article').first().waitFor();
+      await sleep(10_000);
+      const st = (await (await actx.request.get(`${BASE}/api/group`)).json()).sessions.find((x) => x.id === G[7].id).mine?.status;
+      assert(st === 'confirmed', `the demo drop finished on the live site: ${st}`);
+      const note = await real.evaluate(() => localStorage.getItem('pb_pending_drop'));
+      assert(note === null, `a demo drop left a real drop note: ${note}`);
+      await actx.close();
+    });
     await check('two drops within 5 s on two games: the first is sent at once, the second keeps its own Undo; both end right', async () => {
       await join('Kai', G[5]);
       const { ctx, page, seen } = await open('Kai');

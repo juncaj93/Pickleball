@@ -8,7 +8,7 @@ import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, noteStillApplies, type NoteView, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
@@ -47,6 +47,8 @@ function forgetPendingDrop(sessionId: string) {
  */
 async function sendDropsBeforeJoin(joiningId: string) {
   await settleHolds();
+  // View as (a demo copy) never reads, sends or clears the phone's real drop note: that note belongs to the live site.
+  if (demoOn()) return;
   let note: PendingDropNote | null = null;
   try {
     note = JSON.parse(storageGet(PENDING_DROP_KEY) ?? 'null');
@@ -282,7 +284,7 @@ export function PlayerHome({
   // may belong to another tab still holding it, so this page looks again once it is old enough, instead of
   // leaving it for a later visit (where it could have run out).
   useEffect(() => {
-    if (!g || !g.me || switching || viewAs) return;
+    if (!g || !g.me || switching || viewAs || demoOn()) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const look = async () => {
       let note: PendingDropNote | null = null;
@@ -1341,22 +1343,28 @@ export function ScheduleRow({
     }
     const id = s.id;
     setOverlay(id, 'drop');
-    storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt }));
+    // Tapped in the organizer's View as (a demo copy): nothing about it is written to, or cleared from, the phone's
+    // real drop note, and if the demo has ended or moved to another player by the time it is sent (Exit within the
+    // 5 seconds), there is nothing to send: it must never reach the live site as a real drop.
+    const inDemo = demoOn();
+    const viewedAt = viewingAs();
+    const forget = () => {
+      if (!inDemo) forgetPendingDrop(id);
+    };
+    if (!inDemo) storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt }));
     // Sent because the page was going away (closed, hidden, switched app): a failure then is most likely no
     // signal while leaving, so the note stays and the drop is finished on return or the next open.
     let leavingSend = false;
-    // Tapped in the organizer's View as (a demo copy): if the demo has ended by the time it is sent (Exit within the
-    // 5 seconds), there is nothing to send; it must never go to the live site as a real drop.
-    const inDemo = demoOn();
     startHold(id, {
       send: async (leaving) => {
         leavingSend = leaving;
-        if (inDemo && !demoOn()) return;
-        await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: leaving && !demoOn() });
+        if (inDemo && (!demoOn() || viewingAs() !== viewedAt)) return;
+        // keepalive on every real drop: a second Drop out sends this one at once, and the page may close right after.
+        await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: !inDemo });
       },
       settled: async (err) => {
         if (err && leavingSend && err instanceof ApiError && err.code === 'offline') return;
-        forgetPendingDrop(id);
+        forget();
         if (err) {
           setOverlay(id, null);
           if (isDemo(err)) toast(err.message);
@@ -1366,7 +1374,7 @@ export function ScheduleRow({
         setOverlay(id, null);
       },
       undone: () => {
-        forgetPendingDrop(id);
+        forget();
         setOverlay(id, null);
       },
     });
