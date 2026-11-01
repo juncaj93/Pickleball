@@ -789,3 +789,68 @@ Screens, one seat rule, and one one-time repair. No price, amount, credit rule o
 - **Restore points:** Time Travel bookmark `000002f1-00000000-00005116-9fda069f0c40099d335fc6afec7bc73b` (taken Sun Nov 1, about 3:10 AM Eastern), SQL export `live-before-waitlist-rule-2026-11-01.sql` (213 rows, phone numbers, in the session scratch folder, not committed). Code rollback: Pages deployment `5674340d-06c9-4b10-9408-55cb4a5a34d3` (commit c68fd63, the money audit).
 - **Tests:** 1,218 unit passed (1 skipped from the money audit's tests); browser suites all green (run.cjs 229, admin-cleanup 36, money-visible and the rest). Tests that assumed "a Waitlist court makes standby seats" were rewritten to the new rule, none deleted.
 - **Preview:** a separate throwaway database `pickleball-preview` (fake data) and the branch preview `preview-admin-look` were made for the look checks; they hold no real data and can be deleted.
+
+
+## Admin audit: organizer screens (Sun Nov 1, 2026)
+
+Audit 2 of 3 (player screens and behind the scenes run in their own channels). Started from main
+8d8ed0c (main caught up to the live site: money audit, organizer cleanup, Waitlist rule).
+Scenario list with a status for each: `docs/AUDIT_SCENARIOS_admin.md` (224 scenarios).
+No money rule, price rule, schema or migration change.
+
+### Requested change 16: the court card for a game never marked Booked
+- A game that is not canceled and was never marked Booked (Waitlist or Not booked) gets one card
+  in Do this now (`courtCards` in `src/pages/admin/doNow.ts`, `CourtCardView` in `DoNow.tsx`).
+- Before the game is over: "Court still needs to be booked" with "Book a court" (the same link,
+  words and look as the "Book a court" pill), nothing else. Date and start time on top. Waitlist games get it until they end; Not booked games
+  when the task list already asked about their court (booking day, the morning of, the next 2
+  games open to book), as before.
+- After the game's date has passed (Eastern calendar day, not the start time), with someone in and
+  not finalized, for up to 28 days: "Did you guys play?" with "Yes, we played" and "Cancel game".
+  - "Yes, we played" saves a server mark (`task_log`, mark `played`; no new table, the task name
+    is free text), changes no money, then the game's Finalize card shows and gets focus. Until it
+    is answered, that game's Finalize card and "finalize who played" task wait: one question at a
+    time. Finalize itself also leaves the mark, so a game reopened later is never asked again.
+  - "Cancel game" opens the usual Cancel session dialog (credit back to each paid player once).
+    That dialog no longer shows "This does not cancel your court" once the game has started.
+- "Court opened" / "Didn't open" are gone; the Booked switch does that job. Telegram alerts are
+  unchanged (the 5-minute tick's golden file still matches).
+
+### Requested change 15: an X on notice cards
+- X (44 px, top-right, labeled "Dismiss: ...") on Spot opened, Need players, Check-in, Final price
+  and the night-before text card. Hidden on this phone only (`pb_card_dismissed` and the existing
+  `pb_text_tapped` in browser storage) until the situation changes (a different player, a new
+  count, a new game). With storage blocked it hides for the visit.
+- No X on anything that needs an answer or money: cash-out requests, unconfirmed I paid claims,
+  Finalize, Who owes / Mark paid tonight, Payment reminder, court cards, cancel checklist.
+
+### Fixed
+- Players tab: the Edit button's tap area was 42 px tall; now 44 px (no visible change).
+- Court switch: a write that lands on a game canceled in between answers "look again" (was
+  "changed"). The old `/court` route (no screen uses it now) never writes to a canceled game.
+
+### Fresh auditors (did not write any fix)
+- A (code reading): no money bug. Found: a finalized-then-reopened game asked again; two cards
+  for one past game; same-day games looked alike; switch said "changed" after a cancel race; the
+  old /court route unguarded; Pretend wiped dismissals. All fixed with tests.
+- B (hostile browser, about 55 attacks on local copies: double taps, two phones, stale screens,
+  dropped and delayed requests, midnight and the Nov 1 clock change, View as, Pretend): money held
+  every time, no errors. Found three X problems: a double tap hid the next card too, Pretend changed
+  the real dismissals, a moved game's night card stayed hidden. All fixed; B's script passes.
+
+### Tests
+- New: `tests/admin-audit.test.ts` (court card, X, every admin route refuses strangers, forged and
+  player cookies, unknown ids, sign-in and lockout, edit/cancel/players/settings edge cases),
+  `e2e/admin-audit.cjs` (the two changes at 390 and 320 px, light and dark),
+  `e2e/admin-sweep.cjs` (every tab at 320 and 390 px, light and dark: sideways scroll, 44 px
+  taps, 4.5:1 text, tab bar; the gear menu at many scroll positions; the View as demo).
+- Changed on purpose: the old checks that pressed Court opened / Didn't open (`e2e/run.cjs`,
+  `e2e/admin-cleanup.cjs`) and the kept-words list in `tests/wording.test.ts` ("Mark it off").
+
+### Not deployed
+- Nothing from this audit is live and there is no preview link yet: this session's permission
+  settings refused the Cloudflare deploy (even a preview). A throwaway database
+  `pickleball-preview-admin` (fake data, PIN 135790) is ready for the preview. Steps once allowed:
+  add a temporary `[env.preview]` block binding DB to it, `npm run build`,
+  `npx wrangler pages deploy dist --project-name pickleball-club --branch preview-admin-audit`,
+  then restore wrangler.toml. Production: merge to main, pull, test, back up, deploy from main.

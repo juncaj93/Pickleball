@@ -102,6 +102,10 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | C18 | Moving the switch never changes a seat, payment or credit (all 6 directions) | Unchanged | API | built (tests/admin-audit.test.ts, e2e/admin-audit.cjs) |
 | C19 | Telegram alerts unchanged by the card change | Same alert list | API | built (Telegram list unchanged: tests/tick-fast.test.ts golden file passes) |
 | C20 | View as demo: the cards do nothing real | Demo only | UI | built (demo saves nothing: e2e/admin-sweep.cjs) |
+| C21 | Finalized the same evening, reopened the next day | Never asked "Did you guys play?"; finalize task shows | API | fixed (auditor A; tests/admin-audit.test.ts C15b) |
+| C22 | Past game still asked | Only "Did you guys play?"; its Finalize card waits for the answer, then shows with focus | UI | fixed (auditor A; e2e/admin-audit.cjs) |
+| C23 | Two games on one date | Court cards show date and start time | UI | fixed (auditor A) |
+| C24 | Book link wording | "Book a court", same link and look as the pill | UI | built (e2e/run.cjs kept-words check) |
 
 ## 2c. Requested: dismiss X on notice cards (item 15) (X)
 
@@ -119,6 +123,9 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | X10 | X at 320 px does not cover the card's words | No overlap | UI | built (tests/admin-audit.test.ts, e2e/admin-audit.cjs) |
 | X11 | Live refresh after X | Stays hidden | UI | built (tests/admin-audit.test.ts, e2e/admin-audit.cjs) |
 | X12 | No database change | Only browser storage | Code | built (browser storage only, key pb_card_dismissed) |
+| X13 | Quick double tap on an X | Hides one card, not the one that slides up | UI | fixed (auditor B; e2e/admin-audit.cjs, fails without the fix) |
+| X14 | X or Text inside Pretend it's... | Demo only; the phone's real list unchanged after End | UI | fixed (auditors A and B; auditB/a15.cjs) |
+| X15 | Night card dismissed, game moved to another day | Card comes back on the new night | UI | fixed (auditor B; auditB/a15.cjs) |
 
 ## 3. Game cards and the court switch (G)
 
@@ -147,6 +154,7 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | G21 | Telegram text after switching | Booked gates the night alert; not booked gets no last call | API | pass (existing: tests/admin-cleanup.test.ts, tests/waitlist-seats.test.ts; new: C18 in tests/admin-audit.test.ts) |
 | G22 | Players screen after each of the 6 moves | Status words right, no "waitlist", "waiting", "standby" | API | pass (existing: tests/admin-cleanup.test.ts, tests/waitlist-seats.test.ts; new: C18 in tests/admin-audit.test.ts) |
 | G23 | Waitlist flag (court_state) after each move | Waitlist sets it; others clear it | API | pass (existing: tests/admin-cleanup.test.ts, tests/waitlist-seats.test.ts; new: C18 in tests/admin-audit.test.ts) |
+| G25 | Switch tap lands on a game canceled in between | 409 "look again", nothing written | API | fixed (auditor A; tests/admin-audit.test.ts G16b) |
 | G24 | Switch colors and contrast light/dark | 4.5:1 text | UI | pass (existing: e2e/admin-cleanup.cjs; new: e2e/admin-sweep.cjs) |
 
 ## 4. Gear menu (M)
