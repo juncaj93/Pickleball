@@ -5,40 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { noteStillApplies, pendingDropAction, type PendingDropNote } from '../src/hold';
 import { firstSession, playerPhone, setupGroup, TestApp } from './harness';
 
-async function fullGame(maxPlayers: number) {
-  const ctx = await setupGroup(new TestApp());
-  expect((await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex', settings: { maxPlayers } })).status).toBe(200);
-  const s = await firstSession(ctx);
-  return { ctx, s };
-}
-
-describe('fresh E: a Leave waitlist note is thrown away once the player is moved in', () => {
-  it('Frankie leaves the waitlist with no signal (note kept), a spot opens, Frankie reopens: the note is forgotten and Frankie is in and owes', async () => {
-    const { ctx, s } = await fullGame(4);
-    for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) {
-      expect((await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {})).status).toBe(200);
-    }
-    const frankie = await playerPhone(ctx, 'Frankie');
-    expect((await frankie.call('POST', `/api/sessions/${s.id}/join`, {})).status).toBe(200);
-    const before = (await frankie.call('GET', '/api/group')).data;
-    const seat = before.sessions.find((x: any) => x.id === s.id).mine;
-    expect(seat.status).toBe('waitlisted');
-    // Exactly what dropOut writes on "Leave waitlist"; the leaving send failed (no signal), so the note stays.
-    const note: PendingDropNote = { sessionId: s.id, at: Date.now() - 30_000, playerId: before.me.id, signupAt: seat.signupAt };
-    ctx.app.advance(60_000);
-    // Within the 2 minutes, Blair drops: Frankie is moved in (settle sets confirmed_at, so signupAt changes).
-    expect((await (await playerPhone(ctx, 'Blair')).call('POST', `/api/sessions/${s.id}/withdraw`, {})).status).toBe(200);
-    const fresh = (await frankie.call('GET', '/api/group')).data;
-    const now = fresh.sessions.find((x: any) => x.id === s.id).mine;
-    expect(now.status).toBe('confirmed');
-    expect(now.signupAt).not.toBe(seat.signupAt);
-    // look() on reopen: the note no longer "applies", so it is forgotten; the leave is never sent.
-    expect(noteStillApplies(note, fresh)).toBe(false);
-    expect(pendingDropAction(note, Date.now(), () => noteStillApplies(note, fresh), () => false)).toEqual({ do: 'forget' });
-    // Frankie, who asked to leave, now holds a seat in the game (and owes once the court is booked).
-    expect(now.status).toBe('confirmed');
-  });
-});
+// Checked and NOT a finding: a waitlisted seat's signupAt changes when it is moved in, but "Leave waitlist" is sent at
+// once (run('withdraw'), PlayerHome.tsx ~1527), never held, so it never leaves a note.
 
 describe('fresh E: the note is checked before an await and sent after it', () => {
   it('look() reads the note and GETs; meanwhile I\'m in on the same game clears the note; look() still sends the drop', async () => {
