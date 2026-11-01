@@ -760,3 +760,20 @@ database change, no migration.
   moves. Old test BUG 5 rewritten for decision 3 (Unmark undoes only the latest payment).
 - Still open, cannot happen while $14 is frozen: lowering the price below credit already
   on an unpaid seat leaves that seat unpaid until Finalize (ledger-fuzz case G).
+
+### Deploy (Sun Nov 1, 2026, 12:05 AM Eastern)
+- Gates: unit 1,203 passed (1 replay helper skipped by design), browser 25 files all
+  green (run.cjs 229/229 and admin-cleanup 26/26 rerun on a quiet machine), audit A clean
+  (b77e3c1, code unchanged since), audit B clean (1627848, 72 more race variants).
+- Production deployment 5674340d, commit c68fd63. Previous: c1bad936 (commit 41dea7a).
+- Restore points: Time Travel bookmark
+  `000002bf-00000000-00005116-9c9ae9bcc6928f296fc5f46421b048ca` (12:05 AM); SQL export
+  `live-before-round4-deploy-2026-11-01.sql` (213 rows, phone numbers, not committed) in
+  this session's scratch folder.
+- Read-only live check after: no pot below $0, no credit or cash stuck on a left seat or
+  canceled game, no cash out above a pot, no pending cash outs. Only pot: Mitchel $14 =
+  his history (kept $14 from canceled Thu Oct 29; three later uses all ended). One open
+  unconfirmed I paid: Mitchel, Tue Nov 3 (booked, still in): not a claim, it waits for
+  Mark paid as usual. His Oct 29 I paid became the $14 on Oct 28, before the claim rule.
+- Rollback: Cloudflare dashboard, Pages, pickleball-club, Deployments, c1bad936,
+  "Rollback to this deployment". No data change to undo.
