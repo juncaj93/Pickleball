@@ -668,35 +668,40 @@ describe('F6: Court opened racing an I\'m in on a waitlisted court', () => {
   });
 });
 
-describe('F7: a waitlisted court answered "No" after a move: the standby list is never promoted', () => {
-  it('standby players stay a hidden waitlist; others join ahead of them, and Booked later does not move them in (credit never goes on)', async () => {
+describe('F7: a waitlisted court answered "No" after a move: nobody\'s seat or credit changes', () => {
+  it('a Waitlist sign-up has a normal seat with credit on from I\'m in; the move, the No answer, a later sign-up and Booked change no seat, payment or credit (credit on once)', async () => {
     const { ctx } = await group();
     const old = await on(ctx, '2026-10-29');
     givePot(ctx, 'Casey', 1400, old.id);
     const g = await on(ctx, '2026-11-05');
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' })).status).toBe(200);
     const casey = await playerPhone(ctx, 'Casey');
-    expect((await casey.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'standby' });
+    expect((await casey.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'confirmed', creditCents: 1400 });
+    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey'), onSeat: usedOnSeat(ctx, g.id, 'Casey') }).toEqual({ status: 'confirmed', pot: 0, onSeat: 1400 });
     // Edit game: moved an hour later; "Is the court booked for the new time?" No.
     const startsAt = new Date(Date.parse(g.startsAt) + HOUR).toISOString();
     const endsAt = new Date(Date.parse(g.endsAt) + HOUR).toISOString();
     expect((await ctx.organizer.call('PUT', `/api/admin/sessions/${g.id}/time`, { startsAt, endsAt })).status).toBe(200);
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-answer`, { booked: false })).status).toBe(200);
-    await (await playerPhone(ctx, 'Devon')).call('POST', `/api/sessions/${g.id}/join`, {}); // goes straight in, ahead of Casey
+    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey'), onSeat: usedOnSeat(ctx, g.id, 'Casey') }).toEqual({ status: 'confirmed', pot: 0, onSeat: 1400 });
+    await (await playerPhone(ctx, 'Devon')).call('POST', `/api/sessions/${g.id}/join`, {}); // a normal seat too
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {})).status).toBe(200);
-    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey') }).toEqual({ status: 'confirmed', pot: 0 });
+    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey'), onSeat: usedOnSeat(ctx, g.id, 'Casey') }).toEqual({ status: 'confirmed', pot: 0, onSeat: 1400 });
+    expect(seatRow(ctx, g.id, 'Devon').status).toBe('confirmed');
+    expect((raw(ctx).prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND ended_at IS NULL").get(g.id) as any).n).toBe(1);
   });
 
-  it('a game holding only the old third value ("unavailable", no venue-waitlist flag): Booked does not move standby players in', async () => {
+  it('a game holding only the old third value ("unavailable", no venue-waitlist flag): sign-up gives a normal seat with credit, and Booked changes nothing', async () => {
     const { ctx } = await group();
     const old = await on(ctx, '2026-10-29');
     givePot(ctx, 'Casey', 1400, old.id);
     const g = await on(ctx, '2026-11-05');
     raw(ctx).prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = NULL WHERE id = ?").run(g.id); // an old row
     const casey = await playerPhone(ctx, 'Casey');
-    expect((await casey.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'standby' });
+    expect((await casey.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'confirmed', creditCents: 1400 });
+    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey'), onSeat: usedOnSeat(ctx, g.id, 'Casey') }).toEqual({ status: 'confirmed', pot: 0, onSeat: 1400 });
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'booked' })).status).toBe(200);
-    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey') }).toEqual({ status: 'confirmed', pot: 0 });
+    expect({ status: seatRow(ctx, g.id, 'Casey').status, pot: potOf(ctx, 'Casey'), onSeat: usedOnSeat(ctx, g.id, 'Casey') }).toEqual({ status: 'confirmed', pot: 0, onSeat: 1400 });
   });
 });
 
@@ -741,19 +746,23 @@ describe('sound: credit always has a way on, and standby + Court opened uses it 
     });
   }
 
-  it('Use credit is refused on standby, canceled, the organizer, and a did-not-play seat', async () => {
+  it('Use credit is refused on a real waitlist seat (full game, Waitlist court), canceled, the organizer, and a did-not-play seat', async () => {
     const { ctx } = await group();
+    await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers: 4 } });
     const old = await on(ctx, '2026-10-29');
     for (const n of ['Blair', 'Alex', 'Casey']) givePot(ctx, n, 1400, old.id);
     const g = await on(ctx, '2026-11-05');
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' });
+    // The organizer holds a seat and three others fill the game (max 4); Blair is the first real waiter.
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Alex, action: 'confirm' });
+    for (const n of ['Devon', 'Emery', 'Frankie']) expect((await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'confirmed' });
     const blair = await playerPhone(ctx, 'Blair');
-    expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'standby' });
+    expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'waitlisted', position: 1 });
+    expect(seatRow(ctx, g.id, 'Blair').status).toBe('waitlisted');
     const mine = (await blair.call('GET', '/api/group')).data.sessions.find((x: any) => x.id === g.id).mine;
     expect(mine.useCreditCents).toBe(0);
     expect((await blair.call('POST', `/api/sessions/${g.id}/use-credit`, {})).status).toBe(409);
     const alex = await playerPhone(ctx, 'Alex');
-    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Alex, action: 'confirm' });
     expect((await alex.call('POST', `/api/sessions/${g.id}/use-credit`, {})).status).toBe(409);
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true });
     expect((await blair.call('POST', `/api/sessions/${g.id}/use-credit`, {})).status).toBe(409);
@@ -791,7 +800,7 @@ describe('sound: credit always has a way on, and standby + Court opened uses it 
     for (const n of ['Blair', 'Casey']) await wayOn(ctx, phones[n], g.id);
   });
 
-  it('standby players get their credit once on Court opened: double tap, two devices at once, Waitlist → Not booked', async () => {
+  it('Waitlist sign-ups get their credit once, at I\'m in; Court opened (double tap, two devices at once) and Waitlist → Not booked change no seat, payment or credit', async () => {
     for (const how of ['twice', 'together', 'not_booked'] as const) {
       const { ctx } = await group();
       const old = await on(ctx, '2026-10-29');
@@ -799,14 +808,23 @@ describe('sound: credit always has a way on, and standby + Court opened uses it 
       givePot(ctx, 'Devon', 300, old.id);
       const g = await on(ctx, '2026-11-05');
       await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' });
-      for (const n of ['Casey', 'Devon']) expect((await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'standby' });
-      expect([potOf(ctx, 'Casey'), potOf(ctx, 'Devon')]).toEqual([1400, 300]);
+      const cents: Record<string, number> = { Casey: 1400, Devon: 300 };
+      for (const n of ['Casey', 'Devon']) expect((await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'confirmed', creditCents: cents[n] });
+      // Credit is on at I'm in already, once each.
+      expect([seatRow(ctx, g.id, 'Casey').status, seatRow(ctx, g.id, 'Devon').status]).toEqual(['confirmed', 'confirmed']);
+      expect([potOf(ctx, 'Casey'), potOf(ctx, 'Devon'), usedOnSeat(ctx, g.id, 'Casey'), usedOnSeat(ctx, g.id, 'Devon')]).toEqual([0, 0, 1400, 300]);
+      const before = raw(ctx).prepare('SELECT player_id, status, payment_status, payment_amount_cents FROM session_players WHERE session_id = ? ORDER BY player_id').all(g.id);
+      const ledgerBefore = raw(ctx).prepare('SELECT id, kind, amount_cents, ended_at FROM credit_ledger ORDER BY id').all();
       const open = () => ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
       if (how === 'twice') {
         await open();
         await open();
       } else if (how === 'together') await Promise.all([open(), open()]);
       else await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'not_booked' });
+      // A second I'm in tap afterwards adds nothing.
+      expect((await (await playerPhone(ctx, 'Casey')).call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'already_confirmed' });
+      expect(raw(ctx).prepare('SELECT player_id, status, payment_status, payment_amount_cents FROM session_players WHERE session_id = ? ORDER BY player_id').all(g.id), how).toEqual(before);
+      expect(raw(ctx).prepare('SELECT id, kind, amount_cents, ended_at FROM credit_ledger ORDER BY id').all(), how).toEqual(ledgerBefore);
       expect([seatRow(ctx, g.id, 'Casey').status, seatRow(ctx, g.id, 'Devon').status]).toEqual(['confirmed', 'confirmed']);
       expect([potOf(ctx, 'Casey'), potOf(ctx, 'Devon'), usedOnSeat(ctx, g.id, 'Casey'), usedOnSeat(ctx, g.id, 'Devon')], how).toEqual([0, 0, 1400, 300]);
       const nUsed = (raw(ctx).prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND ended_at IS NULL").get(g.id) as any).n;

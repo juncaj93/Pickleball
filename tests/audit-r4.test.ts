@@ -834,25 +834,26 @@ describe('claims, then the game changes', () => {
       }
   });
 
-  it('waitlist claim: a spot opens and she moves in, Court opened on a venue-waitlist game', async () => {
+  it('waitlist claim: a spot opens and she moves in; on a Waitlist-court game I\'m in is a normal seat with credit on, and Court opened changes nothing', async () => {
     const { w, g } = await claimBy('waitlist', 300);
     expect((await drop(w, 'Casey', g.id)).status).toBe(200); // a spot opens; Blair moves in
     await books(w, 'moved in');
     expect(seatRow(w, g.id, 'Blair')).toMatchObject({ status: 'confirmed', payment_status: 'paid' });
-    // venue waitlist game: standby I'm in owes nothing; Court opened moves in and uses credit
+    // Waitlist court game: I'm in is a normal seat, credit goes on at I'm in; Court opened moves nobody and touches no credit
     const g2 = await on(w, '2026-11-05');
     expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' })).status).toBe(200);
     givePot(w, 'Devon', 500);
-    expect((await join(w, 'Devon', g2.id)).data).toMatchObject({ result: 'standby' });
-    await books(w, 'standby');
-    expect(potOf(w, 'Devon')).toBe(500 + 0);
+    expect((await join(w, 'Devon', g2.id)).data).toMatchObject({ result: 'confirmed', creditCents: 500 });
+    await books(w, 'waitlist-court seat');
+    expect([seatRow(w, g2.id, 'Devon').status, potOf(w, 'Devon'), usedOn(w, g2.id, 'Devon')]).toEqual(['confirmed', 0, 500]);
     expect((await orgRemove(w, 'Devon', g2.id)).status).toBe(200);
-    await books(w, 'standby removed');
-    expect(potOf(w, 'Devon')).toBe(500);
-    expect((await join(w, 'Devon', g2.id)).data).toMatchObject({ result: 'standby' });
+    await books(w, 'seat removed');
+    expect([seatRow(w, g2.id, 'Devon').status, potOf(w, 'Devon'), usedOn(w, g2.id, 'Devon')]).toEqual(['withdrawn', 500, 0]);
+    expect((await join(w, 'Devon', g2.id)).data).toMatchObject({ result: 'confirmed', creditCents: 500 });
     expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/booked`, {})).status).toBe(200);
     await books(w, 'court opened');
-    expect(potOf(w, 'Devon')).toBe(0);
+    // Court opened moved nobody and used nothing more: the credit went on once, at I'm in.
+    expect([seatRow(w, g2.id, 'Devon').status, potOf(w, 'Devon'), usedOn(w, g2.id, 'Devon')]).toEqual(['confirmed', 0, 500]);
     await iPaid(w, 'Devon', g2.id);
     expect((await w.org.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' })).status).toBe(200);
     await books(w, 'back to venue waitlist with a paid seat');
@@ -1175,8 +1176,8 @@ describe('claims on seats that left, then Finalize / Reopen around the answer', 
       });
 });
 
-describe('Remove player on a standby seat', () => {
-  it('standby with credit; standby carrying a frozen claim; then Court opened and the answers', async () => {
+describe('Remove player on a seat signed up while the court is on Waitlist', () => {
+  it('Waitlist-court seat with credit on; a seat carrying a frozen claim; removed, then Court opened and the answers', async () => {
     const w = await world();
     const g = await on(w, '2026-11-05');
     givePot(w, 'Casey', 500);
@@ -1186,11 +1187,12 @@ describe('Remove player on a standby seat', () => {
     await books(w, 'venue waitlist');
     expect((await drop(w, 'Blair', g.id)).status).toBe(200); // claim
     await books(w, 'claim');
-    expect((await join(w, 'Blair', g.id)).data).toMatchObject({ result: 'standby' });
-    await books(w, 'standby carrying the claim');
-    expect((await join(w, 'Casey', g.id)).data).toMatchObject({ result: 'standby' });
-    expect(potOf(w, 'Casey')).toBe(500);
-    await books(w, 'casey standby');
+    expect((await join(w, 'Blair', g.id)).data).toMatchObject({ result: 'confirmed' }); // a Waitlist court gives a normal seat, never standby
+    expect(seatRow(w, g.id, 'Blair').status).toBe('confirmed');
+    await books(w, 'seat carrying the claim');
+    expect((await join(w, 'Casey', g.id)).data).toMatchObject({ result: 'confirmed', creditCents: 500 });
+    expect([seatRow(w, g.id, 'Casey').status, potOf(w, 'Casey'), usedOn(w, g.id, 'Casey')]).toEqual(['confirmed', 0, 500]);
+    await books(w, 'casey seat with credit on');
     for (const n of ['Blair', 'Casey']) {
       expect((await orgRemove(w, n, g.id)).data).toMatchObject({ result: 'withdrawn' });
       await books(w, `removed ${n}`);
@@ -1268,8 +1270,11 @@ describe("held drop, then I'm in on another game", () => {
               // a claim: nothing moved, Nov 5 owes in full (court booked) or nothing yet
               expect(pot, `${variant}: no credit from an unconfirmed I paid`).toBe(0);
               expect((await dash(w)).paymentClaims).toEqual([expect.objectContaining({ playerId: w.ids.Blair, sessionId: a.id })]);
-            } else if (court === 'waitlist') expect(pot, `${variant}: standby owes nothing, credit waits`).toBe(1400);
-            else expect(pot, `${variant}: the drop's credit went on Nov 5`).toBe(0);
+            } else {
+              // A Waitlist court is a normal seat like Not booked: the drop's credit goes on at I'm in.
+              if (court === 'waitlist') expect(sb.status, `${variant}: a Waitlist court gives a normal seat`).toBe('confirmed');
+              expect(pot, `${variant}: the drop's credit went on Nov 5`).toBe(0);
+            }
           }
         } finally {
           flushHold(false);

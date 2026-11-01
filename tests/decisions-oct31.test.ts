@@ -290,20 +290,33 @@ describe('2b. Finalize and an unconfirmed I paid', () => {
   });
 });
 
-describe('4. Remove player on a standby seat', () => {
-  it('a standby seat (court on the venue waitlist) removed by the organizer: no credit made, none lost', async () => {
+describe('4. Remove player on a seat signed up on a Waitlist court (and on a left-over old standby seat)', () => {
+  it('a seat taken while the court is on the venue waitlist, then removed by the organizer (and a left-over old standby seat removed the same way): no credit made, none lost', async () => {
     const ctx = await group();
     const old = await on(ctx, '2026-10-29');
     givePot(ctx, 'Blair', 1400, old.id);
     const g = await on(ctx, '2026-11-05');
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
     const blair = await playerPhone(ctx, 'Blair');
-    // Mitchel's path: paid with credit, the game goes on the venue's Waitlist, drop, I'm in again (standby).
+    // Mitchel's path: paid with credit, the game goes on the venue's Waitlist, drop, I'm in again (a normal seat, credit on again).
     expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ paidWithCredit: true });
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' })).status).toBe(200);
+    expect(potOf(ctx, 'Blair')).toBe(0); // moving the switch changed nothing
     await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {});
-    expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'standby' });
     expect(potOf(ctx, 'Blair')).toBe(1400);
+    expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'confirmed', paidWithCredit: true });
+    expect(potOf(ctx, 'Blair')).toBe(0);
+    const used = () => (raw(ctx).prepare("SELECT COALESCE(SUM(amount_cents), 0) AS n FROM credit_ledger WHERE kind = 'used' AND ended_at IS NULL AND session_id = ? AND player_id = ?").get(g.id, ctx.byName.Blair) as any).n;
+    const kept = () => (raw(ctx).prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'kept' AND player_id = ?").get(ctx.byName.Blair) as any).n;
+    expect(used()).toBe(1400);
+    const keptBefore = kept();
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Blair, action: 'withdraw' })).data).toMatchObject({ result: 'withdrawn' });
+    expect(potOf(ctx, 'Blair')).toBe(1400); // her credit came back, once
+    expect(used()).toBe(0);
+    expect(kept()).toBe(keptBefore); // and no new credit was made from cash
+    expect((raw(ctx).prepare('SELECT status, payment_status FROM session_players WHERE session_id = ? AND player_id = ?').get(g.id, ctx.byName.Blair) as any)).toMatchObject({ status: 'withdrawn', payment_status: 'not_applicable' });
+    // A left-over old standby seat (still in the live database until the one-time repair): removing it makes and loses no credit either.
+    raw(ctx).prepare("UPDATE session_players SET status = 'waitlisted', payment_status = 'not_applicable' WHERE session_id = ? AND player_id = ?").run(g.id, ctx.byName.Blair);
     const rows = () => (raw(ctx).prepare('SELECT COUNT(*) AS n FROM credit_ledger WHERE player_id = ?').get(ctx.byName.Blair) as any).n;
     const before = rows();
     expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Blair, action: 'withdraw' })).data).toMatchObject({ result: 'withdrawn' });
