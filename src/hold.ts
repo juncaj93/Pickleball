@@ -95,6 +95,28 @@ if (typeof document !== 'undefined') {
 export interface PendingDropNote {
   sessionId?: string;
   at?: number;
+  /** Who tapped Drop out, and the seat they dropped (its sign-up time): the note is only ever sent for that seat. */
+  playerId?: string;
+  signupAt?: string;
+}
+
+/** The parts of the player's data a left-over note is checked against. */
+export interface NoteView {
+  me: { id: string } | null;
+  sessions: { id: string; mine: { status: string; signupAt: string } | null }[];
+}
+
+/**
+ * Is the seat this note was written for still there, in or waiting, for the same name? Not when the phone now shows
+ * another name (the send would go out as them), and not when they joined again since (a new seat, a new sign-up time):
+ * sending then would drop someone who did not ask. Notes from before these fields were added are checked as before.
+ */
+export function noteStillApplies(note: PendingDropNote, view: NoteView | null): boolean {
+  if (!view || !note.sessionId) return false;
+  if (note.playerId && view.me?.id !== note.playerId) return false;
+  const mine = view.sessions.find((x) => x.id === note.sessionId)?.mine;
+  if (!mine || (mine.status !== 'confirmed' && mine.status !== 'waitlisted')) return false;
+  return !note.signupAt || mine.signupAt === note.signupAt;
 }
 
 /** How long after the tap a left-over note is still finished (older ones are dropped: too late to be sure). */

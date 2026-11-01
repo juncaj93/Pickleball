@@ -11,7 +11,7 @@ import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
-import { flushHold, holdPending, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
+import { flushHold, holdPending, noteStillApplies, type NoteView, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
 import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
@@ -45,7 +45,7 @@ function forgetPendingDrop(sessionId: string) {
  * goes to the server FIRST, and the join waits for it. The credit that drop gives back is then there for the
  * new seat (it goes on at I'm in), instead of the new seat owing money while that credit sits unused.
  */
-async function sendDropsBeforeJoin(joiningId: string) {
+async function sendDropsBeforeJoin(joiningId: string, view: NoteView | null) {
   await settleHolds();
   let note: PendingDropNote | null = null;
   try {
@@ -53,10 +53,16 @@ async function sendDropsBeforeJoin(joiningId: string) {
   } catch {
     note = null;
   }
-  if (!note?.sessionId || note.sessionId === joiningId) return;
+  if (!note?.sessionId) return;
+  // I'm in on the very game the note is about: they want in, so the old drop must never be sent after this.
+  if (note.sessionId === joiningId) {
+    storageRemove(PENDING_DROP_KEY);
+    return;
+  }
   // The same age rules as a left-over note: younger than the hold, another tab may still be holding it (its Undo
-  // must work), so leave it; older than 2 minutes, too late to be sure. The server's drop is safe to repeat.
-  const next = pendingDropAction(note, Date.now(), () => true, holdPending);
+  // must work), so leave it; older than 2 minutes, too late to be sure. The server's drop is safe to repeat, but only
+  // for the same name and the same seat (never for another name on this phone, or a seat taken again since).
+  const next = pendingDropAction(note, Date.now(), () => noteStillApplies(note!, view), holdPending);
   if (next.do === 'forget') {
     storageRemove(PENDING_DROP_KEY);
     return;
@@ -290,8 +296,8 @@ export function PlayerHome({
           return;
         }
       }
-      const stillIn = (id: string) => ['confirmed', 'waitlisted'].includes(fresh?.sessions.find((x) => x.id === id)?.mine?.status ?? '');
-      const next = pendingDropAction(note, Date.now(), stillIn, holdPending);
+      // Still the same name and the same seat (not joined again since): only then is the drop sent.
+      const next = pendingDropAction(note, Date.now(), () => noteStillApplies(note!, fresh), holdPending);
       if (next.do === 'wait') timer = setTimeout(() => void look(), next.ms);
       else if (next.do === 'forget') {
         storageRemove(PENDING_DROP_KEY);
@@ -404,7 +410,7 @@ export function PlayerHome({
       />
       <main className="page stack-lg">
         {load.loading && !g && !load.error && <ScheduleSkeleton />}
-        {load.error && load.error.status !== 404 && !g && <ErrorState error={load.error} onRetry={load.reload} />}
+        {load.error && load.error.status !== 404 && (!g || !!viewAs) && <ErrorState error={load.error} onRetry={load.reload} />}
 
         {g && pickName && (
           <NamePicker
@@ -593,6 +599,8 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
     setBusy(true);
     setError(null);
     try {
+      // Adding a name switches this phone to it: a drop still waiting for Undo goes first, as the name that tapped it.
+      await settleHolds();
       const res = await api<{ result: 'added' | 'looks_like'; matches?: { id: string; name: string }[] }>('POST', '/api/players/self', {
         name,
         confirmNew,
@@ -950,7 +958,7 @@ function SuggestionCard({
     try {
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
-        await sendDropsBeforeJoin(s.sessionId);
+        await sendDropsBeforeJoin(s.sessionId, g);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
         onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
@@ -1290,7 +1298,7 @@ export function ScheduleRow({
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
     try {
-      await sendDropsBeforeJoin(s.id);
+      await sendDropsBeforeJoin(s.id, g);
       joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
       await onChanged();
     } catch (err) {
@@ -1322,7 +1330,7 @@ export function ScheduleRow({
     }
     const id = s.id;
     setOverlay(id, 'drop');
-    storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now() }));
+    storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now(), playerId: g.me?.id, signupAt: mine?.signupAt }));
     // Sent because the page was going away (closed, hidden, switched app): a failure then is most likely no
     // signal while leaving, so the note stays and the drop is finished on return or the next open.
     let leavingSend = false;
@@ -1468,7 +1476,7 @@ export function ScheduleRow({
           )}
           {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
-          {s.canceled && (inSession || waiting) && <p className="sched-sub">If you paid, it's now your credit.</p>}
+          {s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>}
 
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && <p className="game-note">{s.note}</p>}

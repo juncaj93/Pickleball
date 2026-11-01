@@ -674,6 +674,24 @@ async function main() {
       await card(page, G[5]).getByText('Paid with credit').waitFor({ timeout: 3000 });
       await ctx.close();
     });
+    await check('FIXED (Nov 1): Drop out, reload within 5 s, then I\'m in on the same game: still in 10 s later (the old drop note is never sent again)', async () => {
+      await join('Lee', G[1]);
+      const { ctx, page } = await open('Lee');
+      await tapDrop(page, G[1]);
+      await waitBanner(page, /You dropped out/);
+      await sleep(1200);
+      await page.reload();
+      await card(page, G[1]).waitFor();
+      await until(async () => (await statusOf('Lee', G[1])) === 'withdrawn', 4000);
+      const btn = card(page, G[1]).getByRole('button', { name: "I'm in" });
+      await btn.waitFor({ timeout: 8000 });
+      await btn.click();
+      await until(async () => (await statusOf('Lee', G[1])) === 'confirmed', 4000);
+      await sleep(10_000);
+      assert((await statusOf('Lee', G[1])) === 'confirmed', `dropped again by the old note: ${await statusOf('Lee', G[1])}`);
+      assert(await isIn(page, G[1]), 'screen says out');
+      await ctx.close();
+    });
     await check('two drops within 5 s on two games: the first is sent at once, the second keeps its own Undo; both end right', async () => {
       await join('Kai', G[5]);
       const { ctx, page, seen } = await open('Kai');
