@@ -227,3 +227,106 @@ describe('15: the X on notice cards', () => {
     expect(() => writeDismissed({ a: 'b' }, () => { throw new Error('full'); })).not.toThrow();
   });
 });
+
+// ---------- 14: security (every admin route, read from the router itself) ----------
+import { readFileSync } from 'node:fs';
+import { join as joinPath } from 'node:path';
+
+/** Every admin route in server/app.ts, so a new one is checked without editing this test. */
+const ADMIN_ROUTES: [string, string][] = [...readFileSync(joinPath(__dirname, '..', 'server', 'app.ts'), 'utf8').matchAll(/route\('(GET|POST|PUT|DELETE)', '(\/api\/admin\/[^']+)'/g)]
+  .map((m) => [m[1], m[2]] as [string, string])
+  .filter(([, p]) => p !== '/api/admin/login' && p !== '/api/admin/logout');
+
+describe('14: every admin route refuses anyone but the signed-in organizer', () => {
+  it('Z1 / Z2: no cookie, a forged cookie, or a player\'s own cookie: 401 on every admin route, nothing changes', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    expect(ADMIN_ROUTES.length).toBeGreaterThan(35);
+    const playerPhoneClient = await playerPhone(ctx, 'Alex');
+    const forged = ctx.app.client();
+    forged.cookies.set('pb_admin', 'forged-token');
+    const before = JSON.stringify(ctx.app.db.raw.prepare('SELECT * FROM sessions ORDER BY id').all()) + JSON.stringify(seats(ctx)) + JSON.stringify(ledger(ctx));
+    for (const who of [ctx.app.client(), forged, playerPhoneClient]) {
+      for (const [method, p] of ADMIN_ROUTES) {
+        const path = p.replace(':id', p.includes('/players/') ? ctx.byName.Alex : g.id);
+        const res = await who.call(method, path, method === 'GET' || method === 'DELETE' ? undefined : { playerId: ctx.byName.Alex, paid: true, booked: true, decision: 'cancel', confirm: true, status: 'booked', mark: 'played', everyone: true });
+        expect(res.status, `${method} ${path}`).toBe(401);
+      }
+    }
+    const after = JSON.stringify(ctx.app.db.raw.prepare('SELECT * FROM sessions ORDER BY id').all()) + JSON.stringify(seats(ctx)) + JSON.stringify(ledger(ctx));
+    expect(after).toBe(before);
+  });
+
+  it('Z3: the organizer acting on a game or player id that does not exist gets a clean 4xx, never a 500', async () => {
+    const ctx = await setupGroup();
+    for (const [method, p] of ADMIN_ROUTES.filter(([, x]) => x.includes(':id'))) {
+      for (const id of ['00000000-0000-0000-0000-000000000000', 'nope', '%E0%A4%A']) {
+        const res = await ctx.organizer.call(method, p.replace(':id', id), method === 'GET' || method === 'DELETE' ? undefined : { playerId: ctx.byName.Alex, paid: true, decision: 'cancel', confirm: true, status: 'booked', mark: 'played', everyone: true, action: 'waitlist', shown: true, ok: true, kind: 'attendance' });
+        expect(res.status, `${method} ${p} ${id}: ${res.text}`).toBeGreaterThanOrEqual(400);
+        expect(res.status, `${method} ${p} ${id}: ${res.text}`).toBeLessThan(500);
+      }
+    }
+  });
+
+  it('Z4: a player id that is not on this game changes nothing (payment, claim)', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    await setCourt(ctx, g.id, 'booked');
+    await join(ctx, 'Alex', g.id);
+    const before = JSON.stringify(seats(ctx)) + JSON.stringify(ledger(ctx));
+    const r1 = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
+    const r2 = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/claim`, { playerId: ctx.byName.Blair, paid: true });
+    // Refused, or answered "nothing changed": either way no money or seat moves.
+    for (const r of [r1, r2]) {
+      expect(r.status, r.text).toBeLessThan(500);
+      if (r.status === 200) expect(r.data.changed, r.text).toBe(false);
+    }
+    expect(JSON.stringify(seats(ctx)) + JSON.stringify(ledger(ctx))).toBe(before);
+  });
+
+  it('Z5: a cross-site write with the organizer cookie is blocked', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    const res = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'booked' }, { Origin: 'https://evil.example' });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('1: sign in', () => {
+  it('S2 / S6: wrong, empty, letters and very long PINs are refused without a crash and without a cookie', async () => {
+    const ctx = await setupGroup();
+    for (const pin of ['000000', '', 'abcdef', '9'.repeat(50), 123456 as unknown as string, null as unknown as string]) {
+      const c = ctx.app.client();
+      const r = await c.call('POST', '/api/admin/login', { pin });
+      expect(r.status, String(pin)).toBe(401);
+      expect(c.cookies.has('pb_admin')).toBe(false);
+    }
+  });
+
+  it('S7 / S8 / S9: two phones signed in; one signs out, the other keeps working; an expired sign-in is refused', async () => {
+    const ctx = await setupGroup();
+    const a = ctx.app.client();
+    const b = ctx.app.client();
+    expect((await a.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200);
+    expect((await b.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200);
+    const token = a.cookies.get('pb_admin')!;
+    expect((await a.call('POST', '/api/admin/logout', {})).status).toBe(200);
+    expect((await a.call('GET', '/api/admin/dashboard')).status).toBe(401);
+    // The signed-out token is dead even if replayed.
+    const replay = ctx.app.client();
+    replay.cookies.set('pb_admin', token);
+    expect((await replay.call('GET', '/api/admin/dashboard')).status).toBe(401);
+    expect((await b.call('GET', '/api/admin/dashboard')).status).toBe(200);
+    ctx.app.advance(31 * DAY);
+    expect((await b.call('GET', '/api/admin/dashboard')).status).toBe(401);
+  });
+
+  it('S3 / S4 / S5: five wrong PINs lock this phone for 15 minutes, even with the right PIN; then it works', async () => {
+    const ctx = await setupGroup();
+    const c = ctx.app.client();
+    for (let i = 0; i < 5; i++) expect((await c.call('POST', '/api/admin/login', { pin: '111111' })).status).toBe(401);
+    expect((await c.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(429);
+    ctx.app.advance(16 * 60_000);
+    expect((await c.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200);
+  });
+});
