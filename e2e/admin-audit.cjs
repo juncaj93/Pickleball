@@ -156,6 +156,8 @@ async function main() {
       for (const g of [gPlayed, gCancel]) {
         const c = playedCard(page, g.id);
         await c.waitFor();
+        // One question at a time: the game's Finalize card waits for the answer.
+        assert((await page.locator(`[data-finalize="${g.id}"]`).count()) === 0, 'Finalize card shown before "Did you guys play?" was answered');
         assert((await c.locator('.dn-text').innerText()) === 'Did you guys play?', 'wording');
         const buttons = await c.getByRole('button').allInnerTexts();
         assert(JSON.stringify(buttons) === JSON.stringify(['Yes, we played', 'Cancel game']), `buttons: ${buttons}`);

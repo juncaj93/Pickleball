@@ -122,7 +122,7 @@ describe('16: the court card for a game never marked Booked', () => {
     expect(await cards(ctx)).not.toContain(`played:${g.id}`);
   });
 
-  it('C9 / C11: "Yes, we played" changes no money and clears the card on every phone; the Finalize card stays', async () => {
+  it('C9 / C11: "Yes, we played" changes no money and clears the card on every phone; then the game waits to be finalized', async () => {
     const ctx = await setupGroup();
     const [g] = await games(ctx);
     await setCourt(ctx, g.id, 'booked');
@@ -172,6 +172,39 @@ describe('16: the court card for a game never marked Booked', () => {
     const me = await playerPhone(ctx, 'Alex');
     const card = (await me.call('GET', '/api/group')).data.sessions.find((s: any) => s.id === g.id);
     expect(card?.canceled ?? card?.state?.flags?.canceled ?? true).toBe(true);
+  });
+
+  it('C15b (auditor A): a game finalized the same evening and reopened later is never asked "Did you guys play?"; its finalize task shows', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await join(ctx, n, g.id);
+    at(ctx, g.endsAt, 10 * 60_000);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true })).status).toBe(200);
+    at(ctx, g.startsAt, DAY);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/reopen`, {})).status).toBe(200);
+    const d = await dash(ctx);
+    expect(courtCards(d, ctx.app.now, ADMIN).map((c) => c.session.id)).not.toContain(g.id);
+    expect(visibleTasks(d, ctx.app.now, ADMIN).some((t) => t.kind === 'finalize' && t.sessionId === g.id)).toBe(true);
+  });
+
+  it('G16b (auditor A): a court switch landing on a game canceled in between says "look again", never "changed"', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    // The switch read the game before the cancel: simulate by canceling straight in the database between read and write.
+    const db = ctx.app.db;
+    const orig = db.prepare.bind(db);
+    let armed = true;
+    (db as any).prepare = (sql: string) => {
+      if (armed && /UPDATE sessions SET booking_status = 'unavailable'/.test(sql)) {
+        armed = false;
+        db.raw.prepare("UPDATE sessions SET status = 'canceled' WHERE id = ?").run(g.id);
+      }
+      return orig(sql);
+    };
+    const r = await setCourt(ctx, g.id, 'waitlist');
+    (db as any).prepare = orig;
+    expect(r.status).toBe(409);
+    expect((ctx.app.db.raw.prepare('SELECT status, booking_status FROM sessions WHERE id = ?').get(g.id) as any)).toEqual({ status: 'canceled', booking_status: 'needs_booking' });
   });
 
   it('C18: every one of the 6 switch moves leaves seats, payments and credit as they were', async () => {

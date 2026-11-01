@@ -1,6 +1,7 @@
 import { Fragment, type FormEvent, type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
+import { courtCards } from './admin/doNow';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
@@ -254,7 +255,9 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   // Order: refund requests, then "Do this now", then games to finalize, then the text cards, then the rest.
   // Money that waits on the organizer's answer: cash-out requests and unconfirmed I paid on seats that left.
   const refunds: TodoItem[] = items.filter((i) => i.kind === 'refund_request' || i.kind === 'payment_claim');
-  const first: TodoItem[] = items.filter((i) => i.kind === 'finalize');
+  // A game still asked "Did you guys play?" has only that card; its Finalize card comes after "Yes, we played".
+  const asking = new Set(courtCards(ctx.d, Date.parse(ctx.d.now), `${window.location.origin}/admin`).filter((c) => c.kind === 'played').map((c) => c.session.id));
+  const first: TodoItem[] = items.filter((i) => i.kind === 'finalize' && !asking.has(i.session.id));
   const rest = items.filter((i) => !first.includes(i) && !refunds.includes(i));
   const key = (item: TodoItem) =>
     item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');

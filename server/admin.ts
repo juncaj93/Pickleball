@@ -436,14 +436,17 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
     await markBooked(ctx, {});
     return { ok: true, changed: true, status: to };
   }
+  // A cancel that lands between the read and the write leaves the game alone: say so instead of "changed".
+  const gone = () => new HttpError(409, 'changed', 'This game just changed. Look again.');
   if (to === 'waitlist') {
-    await ctx.db
+    const r = await ctx.db
       .prepare("UPDATE sessions SET booking_status = 'unavailable', court_state = 'waitlist', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
       .bind(ctx.nowIso, session.id)
       .run();
+    if (r.meta.changes !== 1) throw gone();
     await audit(ctx.db, group.id, session.id, 'court_waitlist', {}, ctx.nowIso);
   } else {
-    await ctx.db
+    const r = await ctx.db
       .prepare(
         `UPDATE sessions SET booking_status = 'needs_booking', status = 'planned',
            court_state = CASE WHEN court_state IN ('waitlist', 'opened') THEN NULL ELSE court_state END, updated_at = ?
@@ -451,6 +454,7 @@ export async function setCourtStatus(ctx: Ctx, body: Record<string, unknown>) {
       )
       .bind(ctx.nowIso, session.id)
       .run();
+    if (r.meta.changes !== 1) throw gone();
     await audit(ctx.db, group.id, session.id, 'court_not_booked', {}, ctx.nowIso);
   }
   await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
@@ -464,7 +468,7 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
   if (action === 'waitlist') {
     if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
     await ctx.db
-      .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ?")
+      .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled'")
       .bind(ctx.nowIso, session.id)
       .run();
     await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);

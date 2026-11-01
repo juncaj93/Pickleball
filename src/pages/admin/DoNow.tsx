@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarkName, Task, TaskButton, TaskStep } from '../../../shared/tasks';
-import { api, ApiError, isIOS, storageGet, storageSet } from '../../lib';
+import { api, ApiError, isIOS, storageGet, storageSet, usePretend } from '../../lib';
 import { MessageIcon, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
-import { formatShortDate } from '../../../shared/time';
+import { formatShortDate, formatTime } from '../../../shared/time';
 import { courtCards, type CourtCard, textHref, visibleTasks } from './doNow';
 import { type Dismissed, pruneDismissed, readDismissed, writeDismissed } from './dismiss';
 import { DismissX } from './DismissX';
@@ -53,13 +53,16 @@ export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   // The night-before text card has an X: hidden on this phone until the count changes (see dismiss.tsx).
   const nights = all.filter((t) => t.kind === 'night').map((t) => ({ key: t.id, token: nightToken(ctx, t) }));
   const [dismissed, setDismissed] = useState<Dismissed>(() => readDismissed(storageGet));
+  const pretending = usePretend() !== null;
   useEffect(() => {
+    // While pretending it's another time the cards differ; keep the real dismissals.
+    if (pretending) return;
     const next = pruneDismissed(nights, dismissed);
     if (Object.keys(next).length !== Object.keys(dismissed).length) {
       setDismissed(next);
       writeDismissed(next, storageSet);
     }
-  }, [nights.map((n) => `${n.key}=${n.token}`).join('|'), dismissed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [nights.map((n) => `${n.key}=${n.token}`).join('|'), dismissed, pretending]); // eslint-disable-line react-hooks/exhaustive-deps
   const dismiss = (t: Task) => {
     const next = { ...dismissed, [t.id]: nightToken(ctx, t) };
     setDismissed(next);
@@ -100,7 +103,8 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
   const s = card.session;
-  const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  // Date and start time: two games on one day (an extra game) never look the same.
+  const day = `${formatShortDate(s.startsAt, ctx.d.group.timezone)} · ${formatTime(s.startsAt, ctx.d.group.timezone)}`;
   if (card.kind === 'book') {
     return (
       <article className="card dn-card" data-task="court_book" data-session={s.id} aria-label={`${day}: court still needs to be booked`}>
@@ -123,10 +127,22 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
       await markTask(s.id, 'played');
       await ctx.reload();
       toast('Saved');
-      // The Finalize card for this game, if there is one, is next: bring it into view.
-      const el = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"]`);
-      el?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
-      el?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
+      // The Finalize card for this game, if there is one, shows now: bring it into view once it is drawn.
+      // (A fresh load can land a moment later, after the tap lets go: wait up to 3 seconds.)
+      for (let i = 0; i < 60; i++) {
+        const el = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+          // Focus its first button; the card is new on screen and a redraw right after can drop focus, so check twice.
+          for (let k = 0; k < 3; k++) {
+            const btn = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"] button`);
+            if (btn && document.activeElement !== btn) btn.focus({ preventScroll: true });
+            await new Promise((r) => setTimeout(r, 250));
+          }
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 50));
+      }
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {

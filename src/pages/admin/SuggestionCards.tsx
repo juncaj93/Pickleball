@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { smsHref } from '../../../shared/messages';
-import { isIOS, storageGet, storageSet } from '../../lib';
+import { isIOS, storageGet, storageSet, usePretend } from '../../lib';
 import { MessageIcon } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { pruneTapped, readTapped, type Suggestion, suggestions, type SuggestionKind, type Tapped, visibleSuggestions, writeTapped } from './suggestions';
@@ -33,13 +33,16 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
   const [tapped, setTapped] = useState<Tapped>(() => readTapped(storageGet));
   const [more, setMore] = useState(false);
   // A situation that goes away and comes back is suggested again.
+  const pretending = usePretend() !== null;
   useEffect(() => {
+    // While pretending it's another time the cards differ; keep the real taps and dismissals.
+    if (pretending) return;
     const next = pruneTapped(all, tapped);
     if (Object.keys(next).length !== Object.keys(tapped).length) {
       setTapped(next);
       writeTapped(storageSet, next);
     }
-  }, [all, tapped]);
+  }, [all, tapped, pretending]);
   const shown = visibleSuggestions(all, tapped);
   if (shown.length === 0) return null;
   const list = more ? shown : shown.slice(0, SHOWN);
