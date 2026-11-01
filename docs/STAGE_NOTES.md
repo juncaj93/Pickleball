@@ -853,6 +853,7 @@ against the 10 ms limit, 0 errors so far. Clock Worker 0.6 ms.
 - Read-only checks after: home, /admin, /api/status, /api/group/version 200
   with the new bundle; a broken cookie no longer errors; the tick refuses
   without the secret; health checks 0.
+- **Until a preview is proven to use a fake database, previews are tested in View as demo mode only, never with real taps.**
 - Previews: `[env.preview]` is in wrangler.toml, but the project's stored
   preview setting still names the live database and no preview has been
   deployed since, so the new wiring is not proven yet. Until a preview is
@@ -868,6 +869,18 @@ against the 10 ms limit, 0 errors so far. Clock Worker 0.6 ms.
 - e2e/admin-cleanup.cjs "Edit game on a short phone" fails on main too
   (admin screens channel).
 
+### Follow-up (Sun Nov 1, 2026, about 9:30 AM Eastern, Alex's answers)
+- Deleted on Alex's OK, after checking no channel used them (no deploys since
+  Sat Oct 31 7:40 PM, every commit already on main, not named on any active
+  branch): the old preview links `money-audit-preview` (deployments 81b06ad0,
+  a9bc4120, 0f70f326) and `claude-new-session-5n1wup` (9314fa21). Both wrote to
+  the live database. Both addresses now answer 404. The git branch
+  `claude/new-session-5n1wup`, the `preview-admin-look` preview, every database
+  and every other branch were left alone.
+- Database index for the 5-second check: written up, not applied. Waiting for
+  Alex's OK after Tue Nov 3: `docs/PROPOSAL_INDEX_SESSIONS_ENDS_AT.md` (exact
+  change and rollback).
+- CPU and rows read: watch only. Any phone can pick any name: kept as is.
 
 ## Admin audit: organizer screens (Sun Nov 1, 2026)
 
