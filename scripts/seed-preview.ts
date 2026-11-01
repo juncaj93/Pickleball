@@ -20,7 +20,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildSeed, PREVIEW_PIN } from './seed-preview-world';
+import { buildSeed } from './seed-preview-world';
 
 // ---- the two databases, spelled out so a typo can never point this at the real one --------------------
 const PREVIEW_DB_NAME = 'pickleball-preview';
@@ -82,7 +82,7 @@ async function main() {
     "SELECT (SELECT COUNT(*) FROM players) AS players, (SELECT COUNT(*) FROM sessions) AS games, (SELECT COUNT(*) FROM session_players) AS seats, (SELECT COUNT(*) FROM credit_ledger) AS credit_entries, (SELECT COUNT(*) FROM refund_requests) AS cash_outs",
   )[0];
   console.log('Done. Preview database now holds:', JSON.stringify(counts));
-  console.log(`Organizer PIN for the preview: ${PREVIEW_PIN}`);
+  console.log('Organizer PIN for the preview: see docs/PREVIEW_FAKE_DB.md');
 }
 
 main().catch((err) => {

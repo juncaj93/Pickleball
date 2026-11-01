@@ -16,6 +16,9 @@
 //  - It never reads live data and never sends a text or Telegram (the in-memory site has no token).
 //  - Everything it writes is fake: made-up names, 313-555-01xx phone numbers, a fake PIN.
 
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { createNodeD1 } from '../dev/nodeD1';
 import { handleApi } from '../server/app';
 import type { Env } from '../server/db';
@@ -23,7 +26,16 @@ import { backupToSql } from './backup-sql.mjs';
 
 export const FAKE_GROUP_NAME = 'Pickleball Bros (PREVIEW, fake data)';
 
-export const PREVIEW_PIN = '135790';
+/**
+ * The fake organizer PIN lives in ONE place: docs/PREVIEW_FAKE_DB.md (the line "Organizer sign-in ... PIN `dddddd`").
+ * It is not written in code, tests, chat or any other file. To change it, edit that line and re-seed.
+ */
+export function previewPin(): string {
+  const doc = readFileSync(join(process.cwd(), 'docs/PREVIEW_FAKE_DB.md'), 'utf8');
+  const m = /PIN `(\d{6})`/.exec(doc);
+  if (!m) throw new Error('Could not find the preview PIN line in docs/PREVIEW_FAKE_DB.md.');
+  return m[1];
+}
 const SETUP_TOKEN = 'preview-seed-setup-token-0123456789';
 const ORIGIN = 'https://preview.example';
 const HOUR = 3_600_000;
@@ -121,7 +133,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await w.org.ok('POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
     groupName: FAKE_GROUP_NAME,
-    pin: PREVIEW_PIN,
+    pin: previewPin(),
     venmoUrl: 'https://venmo.com/u/pickleball-preview-fake',
     players,
   });

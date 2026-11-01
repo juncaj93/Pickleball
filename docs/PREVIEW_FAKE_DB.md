@@ -1,5 +1,7 @@
 # Preview with a FAKE database
 
+**Previews use the fake database `pickleball-preview`. NEVER delete it, reset it any way except the seed command below, or reuse it for anything else.**
+
 Written Sun Nov 1, 2026. Times are Eastern.
 
 **In one sentence:** every preview link (any branch that is not `main`) runs on a
@@ -31,7 +33,7 @@ Production is bound to the real database and was not changed.
 
 - Name on screen: **Pickleball Bros (PREVIEW, fake data)**. If you ever see that
   name, you are on the practice copy.
-- Organizer sign-in at `/admin` on the preview address: PIN **135790**.
+- Organizer sign-in at `/admin` on the preview address: PIN `739514` (this line is the only place the PIN is written; the seed command and its test read it from here).
 - Players: Organizer Orla (the organizer's own player) and 13 made-up players
   (Avery, Blake, Casey, Drew, Emery, Finley, Gray, Harper, Indy, Jordan, Kai, Lane, Morgan)
   with fake phone numbers (313) 555-0100 to 555-0113. Pick any name on the "Who are you?" screen.
@@ -117,15 +119,10 @@ one first, it is the practice run. `npx wrangler d1 migrations list pickleball-p
 
 ## Undo
 
-- **Put previews back the old way** (not recommended): delete the `[env.preview]` block in
+- **Put previews back the old way** (do not do this, it would point previews at real data): delete the `[env.preview]` block in
   `wrangler.toml` and the Preview database binding in the Cloudflare dashboard (Workers &
   Pages, pickleball-club, Settings, Bindings, Preview). Then previews would again share
   the live database. Do not do this.
-- **Throw the practice database away:** `npx wrangler d1 delete pickleball-preview`
-  (also remove `[env.preview]` and its binding first, or previews will fail to start). It
-  holds nothing real, so nothing is lost; recreate with `npx wrangler d1 create
-  pickleball-preview`, put the new id in `wrangler.toml` and `scripts/seed-preview.ts`,
-  run `npx wrangler d1 migrations apply pickleball-preview --remote`, then re-seed.
-- **Just wipe the taps:** re-seed.
+- **Just wipe the taps:** re-seed (`npm run db:seed:preview`). That is the only approved way to reset it. Never delete it.
 - **Delete one preview address:** Cloudflare dashboard, pickleball-club, Deployments,
   the three dots on that row, Delete.

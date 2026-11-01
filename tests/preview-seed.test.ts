@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createNodeD1 } from '../dev/nodeD1';
 import { handleApi } from '../server/app';
-import { buildSeed, FAKE_GROUP_NAME, PREVIEW_PIN } from '../scripts/seed-preview-world';
+import { buildSeed, FAKE_GROUP_NAME, previewPin } from '../scripts/seed-preview-world';
 
 const HEALTH = readFileSync(join(process.cwd(), 'scripts/integrity-checks.sql'), 'utf8');
 // A Sunday afternoon, like the day this was built: Tue Nov 3 is the next game.
@@ -24,7 +24,7 @@ async function loaded() {
     const res = await handleApi(new Request('https://preview.example' + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }), env, at, () => {});
     return { res, data: await res.json().catch(() => null) as any };
   };
-  const login = await call('POST', '/api/admin/login', '', { pin: PREVIEW_PIN });
+  const login = await call('POST', '/api/admin/login', '', { pin: previewPin() });
   const cookie = login.res.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
   const dash = (await call('GET', '/api/admin/dashboard', cookie)).data;
   return { sql, summary, db, call, cookie, dash, login };
