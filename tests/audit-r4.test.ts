@@ -1,7 +1,7 @@
 // Independent money audit, round 4 (Nov 1, 2026): only CONFIRMED money becomes credit; claims; withheld money back;
 // a held drop sent before I'm in. Each `it.fails` is a confirmed finding that still reproduces on this code (the
 // suite goes red once it is fixed: then turn it into a plain `it`). Everything else is a passing attack.
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { D1Database, D1PreparedStatement } from '../server/db';
 import { potEffect } from '../shared/credit';
 import { finalPrice } from '../shared/pricing';
@@ -1513,5 +1513,65 @@ describe('second pass: two devices at once on a finalized seat whose credit cove
         await books(w, 'then unmark');
         await markPaid(w, 'Blair', g.id);
         await books(w, 'then mark paid');
+      });
+});
+
+// ================================================================= third pass (1627848): G1 variants, no money moves on a stale read
+const STALE = new Map<string, number>();
+describe('third pass: Unmark / Didn\'t pay? read one game, another device changes it before the save', () => {
+  afterAll(() => console.log('third pass outcomes by status', JSON.stringify(Object.fromEntries(STALE))));
+  type Other = 'fin6' | 'fin7' | 'fin10' | 'reopen' | 'reopen+redo5' | 'reopen+redo7' | 'reopen+redo10' | 'fin10+reopen';
+  const others: Other[] = ['fin6', 'fin7', 'fin10', 'reopen', 'reopen+redo5', 'reopen+redo7', 'reopen+redo10', 'fin10+reopen'];
+  for (const credit of [900, 1000, 1300])
+    for (const unconfirmed of [false, true])
+      it(`credit $${credit / 100}, ${unconfirmed ? 'unconfirmed' : 'confirmed'} cash: every interleaving, Unmark and the player's Didn't pay?`, async () => {
+        for (const who of ['org', 'player'] as const)
+          for (const other of others) {
+            if (who === 'player' && !unconfirmed) continue; // Didn't pay? only on her own unconfirmed I paid
+            const { w, g, ten } = await tenOver(credit, unconfirmed);
+            const pre = other.startsWith('reopen');
+            if (pre) expect((await finalize(w, g.id, ten.slice(0, 8))).status).toBe(200); // read at 8 played ($7)
+            await books(w, 'before');
+            const run: any[] = [];
+            w.db.pauseBefore(UNMARK_BATCH, async () => {
+              w.app.now += 1000;
+              const o = w.org2;
+              if (other === 'fin6') run.push(await finalize(w, g.id, ten.slice(0, 6), o));
+              if (other === 'fin7') run.push(await finalize(w, g.id, ten.slice(0, 7), o));
+              if (other === 'fin10' || other === 'fin10+reopen') run.push(await finalize(w, g.id, ten, o));
+              if (other === 'fin10+reopen') run.push(await reopen(w, g.id, o));
+              if (pre) run.push(await reopen(w, g.id, o));
+              if (other === 'reopen+redo5') run.push(await finalize(w, g.id, ten.slice(0, 5), o));
+              if (other === 'reopen+redo7') run.push(await finalize(w, g.id, ten.slice(0, 7), o));
+              if (other === 'reopen+redo10') run.push(await finalize(w, g.id, ten, o));
+            });
+            const m0 = totalMoney(w).total;
+            const cash = seatCash(w, g.id, 'Blair');
+            const pot0 = potOf(w, 'Blair');
+            const sp0 = { ...seatRow(w, g.id, 'Blair') };
+            const res =
+              who === 'org'
+                ? await w.org.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids.Blair, paid: false })
+                : await (await phone(w, 'Blair')).call('POST', `/api/sessions/${g.id}/paid`, { paid: false });
+            const dM = totalMoney(w).total - m0;
+            const label = `${who} ${other}: ${res.status} ${res.text} / ${run.map((x) => x.status)}`;
+            expect(run.length, `${label}: the other device ran inside the window`).toBeGreaterThan(0);
+            STALE.set(`${res.status}`, (STALE.get(`${res.status}`) ?? 0) + 1);
+            expect(res.status, label).toBeLessThan(500);
+            expect([0, -cash], `${label}: money moved ${dM}`).toContain(dM);
+            w.cash += dM;
+            // A refused tap moves nothing: her pot and seat are exactly what the other device left.
+            if (res.status === 409) {
+              expect(dM, label).toBe(0);
+              void pot0;
+              void sp0;
+            }
+            await books(w, label);
+            // and the organizer, looking again, can finish: Unmark then Mark paid, books still right
+            await unmark(w, 'Blair', g.id);
+            await books(w, `${label} :: look again, unmark`);
+            await markPaid(w, 'Blair', g.id);
+            await books(w, `${label} :: mark paid`);
+          }
       });
 });
