@@ -463,12 +463,15 @@ export async function courtWaitlist(ctx: Ctx, body: Record<string, unknown>) {
   const action = v.oneOf(body.action, 'action', ['waitlist', 'not_opened', 'clear'] as const);
   if (action === 'waitlist') {
     if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-    await ctx.db
+    const moved = await ctx.db
       // Guarded in the database too: a cancel landing between the check above and this write must not bring the game back.
       .prepare("UPDATE sessions SET court_state = 'waitlist', booking_status = 'needs_booking', status = 'planned', updated_at = ? WHERE id = ? AND status <> 'canceled' AND finalized_at IS NULL")
       .bind(ctx.nowIso, session.id)
       .run();
-    if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    if (!moved.meta.changes) {
+      if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+      throw new HttpError(409, 'session_finalized', 'This session is already finalized.');
+    }
     await recordCourtBooked(ctx.db, group.id, session.id, false, ctx.nowIso);
   } else if (action === 'clear') {
     await ctx.db.prepare('UPDATE sessions SET court_state = NULL, updated_at = ? WHERE id = ? AND court_state = \'waitlist\'').bind(ctx.nowIso, session.id).run();

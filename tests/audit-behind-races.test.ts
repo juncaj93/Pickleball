@@ -56,6 +56,20 @@ describe('races between two requests', () => {
     expect(row.status).toBe('canceled');
   });
 
+  it('"court waitlist" on a finalized game is refused and changes nothing (fresh review, round 2)', async () => {
+    const ctx = await setupGroup();
+    const s = await firstSession(ctx);
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
+    for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    ctx.app.now = Date.parse(s.endsAt) + 60_000;
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true })).status).toBe(200);
+    const before = JSON.stringify(ctx.app.db.raw.prepare('SELECT * FROM sessions WHERE id = ?').get(s.id)) + JSON.stringify(ctx.app.db.raw.prepare("SELECT task FROM task_log WHERE session_id = ?").all(s.id));
+    const r = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court`, { action: 'waitlist' });
+    expect(r.status).toBe(409);
+    const after = JSON.stringify(ctx.app.db.raw.prepare('SELECT * FROM sessions WHERE id = ?').get(s.id)) + JSON.stringify(ctx.app.db.raw.prepare("SELECT task FROM task_log WHERE session_id = ?").all(s.id));
+    expect(after).toBe(before);
+  });
+
   it('500 group-word guesses sent at once: at most 10 are checked', async () => {
     const ctx = await setupGroup();
     await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', groupWord: 'dink' });
