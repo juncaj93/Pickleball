@@ -54,9 +54,16 @@ export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   const nights = all.filter((t) => t.kind === 'night').map((t) => ({ key: t.id, token: nightToken(ctx, t) }));
   const [dismissed, setDismissed] = useState<Dismissed>(() => readDismissed(storageGet));
   const pretending = usePretend() !== null;
+  // Starting or ending Pretend: back to the phone's real list (demo dismissals were kept in memory only).
+  // The data on screen when Pretend started or ended still belongs to the other time: no clean-up until fresh data lands.
+  const staleData = useRef<unknown>(null);
+  useEffect(() => {
+    staleData.current = ctx.d;
+    setDismissed(readDismissed(storageGet));
+  }, [pretending]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // While pretending it's another time the cards differ; keep the real dismissals.
-    if (pretending) return;
+    if (pretending || staleData.current === ctx.d) return;
     const next = pruneDismissed(nights, dismissed);
     if (Object.keys(next).length !== Object.keys(dismissed).length) {
       setDismissed(next);
@@ -66,7 +73,8 @@ export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   const dismiss = (t: Task) => {
     const next = { ...dismissed, [t.id]: nightToken(ctx, t) };
     setDismissed(next);
-    writeDismissed(next, storageSet);
+    // Pretend it's... is a demo: an X there hides the card for the demo only, never the phone's real list.
+    if (!pretending) writeDismissed(next, storageSet);
   };
   const tasks = all.filter((t) => !(t.kind === 'night' && dismissed[t.id] === nightToken(ctx, t)));
   // Games never marked Booked: one court card each ("Court still needs to be booked", or after the game day "Did you guys play?").
@@ -166,10 +174,10 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
   );
 }
 
-/** What the night-before card is about: the number in and which text it offers. A change shows a dismissed card again. */
+/** What the night-before card is about: the game's time, the number in and which text it offers. A change shows a dismissed card again. */
 function nightToken(ctx: AdminCtx, t: Task): string {
   const s = ctx.d.sessions.find((x) => x.id === t.sessionId);
-  return `${s?.confirmedCount ?? 0}:${t.buttons[0]?.label ?? ''}`;
+  return `${s?.startsAt ?? ''}:${s?.confirmedCount ?? 0}:${t.buttons[0]?.label ?? ''}`;
 }
 
 function TaskCard({ ctx, task, nowMs, lead, onDismiss }: { ctx: AdminCtx; task: Task; nowMs: number; lead?: boolean; onDismiss?: (t: Task) => void }) {

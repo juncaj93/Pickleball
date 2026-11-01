@@ -126,6 +126,12 @@ async function main() {
   if (!mv.ok() && mv.status() !== 409) throw new Error(`move failed: ${await mv.text()}`);
   await court(gNext.id, 'waitlist');
   for (const n of ['Mitchel', 'Brandon']) await post(phones[n], `/api/sessions/${gNext.id}/join`, {});
+  // A second game within 48 hours with 1 in: a second "Need players" card, for the double-tap check.
+  const gSecond = d.sessions.filter((x) => Date.parse(x.startsAt) > nowMs && x.id !== gNext.id)[0];
+  const in40 = nowMs + 40 * HOUR;
+  const mv2 = await put(areq, `/api/admin/sessions/${gSecond.id}/time`, { startsAt: new Date(in40).toISOString(), endsAt: new Date(in40 + 2 * HOUR).toISOString() });
+  if (!mv2.ok() && mv2.status() !== 409) throw new Error(`move 2 failed: ${await mv2.text()}`);
+  await post(phones.Brandon, `/api/sessions/${gSecond.id}/join`, {});
   const moneyOf = async (id) => {
     const s = (await dash()).sessions.find((x) => x.id === id);
     return JSON.stringify(s.roster.map((r) => [r.playerId, r.status, r.paymentStatus, r.paymentAmountCents, r.creditCents]));
@@ -286,6 +292,35 @@ async function main() {
     await post(phones.Alex, `/api/sessions/${gNext.id}/join`, {});
     await page.reload();
     await needCard(page).waitFor();
+    await ctx.close();
+  });
+
+  await check('15: a quick double tap on an X hides one card, not the one that slides up under the finger', async () => {
+    const { ctx, page } = await openAdmin(390, 'light');
+    const xs = page.locator('article[data-suggest] .card-x');
+    await xs.first().waitFor();
+    const ids = async () => page.locator('article[data-suggest]').evaluateAll((els) => els.map((e) => `${e.dataset.suggest}:${e.dataset.session}`));
+    const before = await ids();
+    assert(before.length >= 2, `need two notice cards, found ${before.length}`);
+    await xs.first().evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await sleep(200);
+    const box = await xs.first().boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await sleep(150);
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+    await sleep(400);
+    const after = await ids();
+    assert(!after.includes(before[0]), `the first card is still there: ${before} -> ${after}`);
+    assert(after.includes(before[1]), `a double tap also hid the card below: ${before} -> ${after}`);
+    // After the pause, the next X works as usual.
+    await sleep(800);
+    await xs.first().evaluate((el) => el.scrollIntoView({ block: 'center', behavior: 'instant' }));
+    await sleep(200);
+    const x2 = await xs.first().boundingBox();
+    await page.mouse.click(x2.x + x2.width / 2, x2.y + x2.height / 2);
+    await sleep(300);
+    assert(!(await ids()).includes(after[0]), 'the next X did not work after the pause');
+    await page.evaluate(() => localStorage.clear());
     await ctx.close();
   });
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { smsHref } from '../../../shared/messages';
 import { isIOS, storageGet, storageSet, usePretend } from '../../lib';
 import { MessageIcon } from '../../ui';
@@ -34,9 +34,16 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
   const [more, setMore] = useState(false);
   // A situation that goes away and comes back is suggested again.
   const pretending = usePretend() !== null;
+  // Starting or ending Pretend: back to the phone's real list (demo taps were kept in memory only).
+  // The data on screen when Pretend started or ended still belongs to the other time: no clean-up until fresh data lands.
+  const staleData = useRef<unknown>(null);
+  useEffect(() => {
+    staleData.current = ctx.d;
+    setTapped(readTapped(storageGet));
+  }, [pretending]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // While pretending it's another time the cards differ; keep the real taps and dismissals.
-    if (pretending) return;
+    if (pretending || staleData.current === ctx.d) return;
     const next = pruneTapped(all, tapped);
     if (Object.keys(next).length !== Object.keys(tapped).length) {
       setTapped(next);
@@ -49,7 +56,8 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
   const tap = (c: Suggestion) => {
     const next = { ...tapped, [c.key]: c.token };
     setTapped(next);
-    writeTapped(storageSet, next);
+    // Pretend it's... is a demo: a tap or X there never changes the phone's real list.
+    if (!pretending) writeTapped(storageSet, next);
   };
   return (
     <section className="stack suggest-cards" aria-label="Texts to send">

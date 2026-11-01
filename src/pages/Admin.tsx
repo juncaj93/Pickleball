@@ -258,7 +258,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   // A game still asked "Did you guys play?" has only that card; its Finalize card comes after "Yes, we played".
   const asking = new Set(courtCards(ctx.d, Date.parse(ctx.d.now), `${window.location.origin}/admin`).filter((c) => c.kind === 'played').map((c) => c.session.id));
   const first: TodoItem[] = items.filter((i) => i.kind === 'finalize' && !asking.has(i.session.id));
-  const rest = items.filter((i) => !first.includes(i) && !refunds.includes(i));
+  const rest = items.filter((i) => i.kind !== 'finalize' && !refunds.includes(i));
   const key = (item: TodoItem) =>
     item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');
   return (
