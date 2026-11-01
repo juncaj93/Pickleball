@@ -910,3 +910,20 @@ No database change, no money rule, price or credit rule changed.
 - New: `tests/audit-player-api.test.ts` (214), `tests/good-news.test.ts`, `tests/fresh-{a,c,d,e,f,g}-nov1.test.ts`,
   `e2e/audit-player-flows.cjs`, `e2e/audit-player-look.cjs` (12 checks marked OPEN: big text and a 29-letter name),
   `e2e/good-news.cjs`, `e2e/fresh-attack.cjs` (random hostile sequences, not in test:e2e, about 20 minutes).
+
+### Deploy (Sun Nov 1, 2026, 11:56 AM Eastern)
+- Main caught up to the live site first: PR #52 (merge commit 8d8ed0c, same code as deployment eea78540). No deploy for that.
+- PR #56 merged as e38a399 (bug fixes with no visible change). Production deployment `e8f47388`, branch main.
+  No database change, no migration.
+- Restore points: Time Travel bookmark `00000364-00000000-00005116-c7d34c5734392e7451e977f37816e8d3` (11:55 AM);
+  SQL export `live-before-player-audit-2026-11-01.sql` (221 rows, has phone numbers, not committed) in this session's
+  scratch folder. Code rollback: Pages deployment `95faf42e` (the behind-the-scenes deploy, commit 79c82ab). The deploy
+  changed no data, so rolling back the code is enough.
+- Tests on the deployed code: 1,495 unit (81 files); browser files all green (run 229, names 24, gates 32, alerts 52,
+  court 84, held 81, credit 153, suggest 35, popup 33, texts 52, circles 18, audit-stage3 3, cancel-reason 8, round2 25,
+  want-in 4, double-tap 4, dryrun-screens 6, do-now 13, live 26, banner 11, card-times 13, no-court 10, auto-credit 22,
+  money-visible 12, admin-cleanup 35, audit-player-flows 92, audit-player-look 127 + 18 open).
+- After deploy, read-only: the backup address serves the new bundle; /api/status, /api/group, /api/group/version and
+  /admin answer 200; row counts (seats 17, credit entries 5, cash-out requests 0, players 10, games 8) match the export.
+- Previews: tested in View as demo mode only (see RUNBOOK_TUESDAY.md); the preview of the visible changes uses the live
+  database, so no real taps on it.
