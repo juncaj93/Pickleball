@@ -105,6 +105,9 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | C21 | Finalized the same evening, reopened the next day | Never asked "Did you guys play?"; finalize task shows | API | fixed (auditor A; tests/admin-audit.test.ts C15b) |
 | C22 | Past game still asked | Only "Did you guys play?"; its Finalize card waits for the answer, then shows with focus | UI | fixed (auditor A; e2e/admin-audit.cjs) |
 | C23 | Two games on one date | Court cards show date and start time | UI | fixed (auditor A) |
+| C25 | Slow double tap on "Yes, we played" (second tap 0.7 to 1.4 s later) | Never answers the next game, never taps Everyone played | UI | fixed (auditor B pass 2; tapGuard.ts; auditB/a2yes.cjs fails without it) |
+| C26 | Home left open past midnight, no reload | Question and Finalize card never both show | Code | fixed (auditor A pass 2: Home uses the moving clock) |
+| C27 | After Yes, organizer opens a sheet within a second | Focus is not pulled back behind the sheet | Code | fixed (auditor A pass 2) |
 | C24 | Book link wording | "Book a court", same link and look as the pill | UI | built (e2e/run.cjs kept-words check) |
 
 ## 2c. Requested: dismiss X on notice cards (item 15) (X)
@@ -155,6 +158,7 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | G22 | Players screen after each of the 6 moves | Status words right, no "waitlist", "waiting", "standby" | API | pass (existing: tests/admin-cleanup.test.ts, tests/waitlist-seats.test.ts; new: C18 in tests/admin-audit.test.ts) |
 | G23 | Waitlist flag (court_state) after each move | Waitlist sets it; others clear it | API | pass (existing: tests/admin-cleanup.test.ts, tests/waitlist-seats.test.ts; new: C18 in tests/admin-audit.test.ts) |
 | G25 | Switch tap lands on a game canceled in between | 409 "look again", nothing written | API | fixed (auditor A; tests/admin-audit.test.ts G16b) |
+| G26 | "Court booked for the new time? No" after a move, game canceled in between | 409 "look again", nothing logged | API | fixed (auditor A pass 2) |
 | G24 | Switch colors and contrast light/dark | 4.5:1 text | UI | pass (existing: e2e/admin-cleanup.cjs; new: e2e/admin-sweep.cjs) |
 
 ## 4. Gear menu (M)

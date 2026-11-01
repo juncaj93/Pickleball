@@ -837,6 +837,12 @@ No money rule, price rule, schema or migration change.
   dropped and delayed requests, midnight and the Nov 1 clock change, View as, Pretend): money held
   every time, no errors. Found three X problems: a double tap hid the next card too, Pretend changed
   the real dismissals, a moved game's night card stayed hidden. All fixed; B's script passes.
+- Second pass. B: a slow double tap after "Yes, we played" could answer the next game's card or
+  land on "Everyone played" (money) as cards moved under the finger: those buttons now ignore taps
+  until about 1 s after the screen settles (`src/pages/admin/tapGuard.ts`), and focus goes to the
+  Finalize card, never a money button. Also caught that "Book a court" had not been saved. A: Home
+  now uses the same moving clock as Do this now; the focus after Yes stops if a sheet opens; the
+  "court booked for the new time? No" answer refuses a game canceled in between. All fixed.
 
 ### Tests
 - New: `tests/admin-audit.test.ts` (court card, X, every admin route refuses strangers, forged and
