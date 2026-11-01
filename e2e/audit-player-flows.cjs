@@ -110,6 +110,7 @@ async function main() {
     X6: '2026-11-08T10:00:00-05:00',
     X7: '2026-11-08T12:00:00-05:00',
     X8: '2026-11-08T14:00:00-05:00',
+    X9: '2026-11-08T16:00:00-05:00',
   };
   for (const at of Object.values(extras)) {
     const r = await post(areq, '/api/admin/sessions', { startsAt: new Date(et(at)).toISOString(), endsAt: new Date(et(at) + 2 * 3600_000).toISOString() });
@@ -344,7 +345,7 @@ async function main() {
       assert((await dash()).players.filter((p) => /^ryan$/i.test(p.name)).length === 1, 'a second Ryan was added');
       await ctx.close();
     });
-    await check('BUG: Add my name "Jose" when "José" is on the list asks "Is this you?" (accents are dropped, not folded)', async () => {
+    await check('FIXED (Nov 1): Add my name "Jose" when "José" is on the list asks "Is this you?" (accents are dropped, not folded)', async () => {
       const { ctx, page } = await addFlow('Jose');
       const got = await Promise.race([
         page.getByRole('heading', { name: 'Is this you?' }).waitFor().then(() => 'asked'),
@@ -487,6 +488,7 @@ async function main() {
       await sleep(2000);
       assert(seen.withdraw === 0, 'sent before 5 seconds');
       // Undo in time: nothing changes on the server, the chip goes away.
+      await sleep(650); // a person's deliberate Undo, not the second half of a double tap (src/ui.tsx DOUBLE_TAP)
       await banner(page).getByRole('button', { name: 'Undo' }).click();
       await page.waitForFunction((id) => document.getElementById(`row-${id}`).dataset.mine === 'in', G[0].id, { timeout: 2000 });
       assert((await until(async () => (await chipLabel(page)) === null, 2000)) === true, 'chip stayed after Undo');
@@ -525,6 +527,7 @@ async function main() {
       const b = await waitBanner(page, /You dropped out/);
       assert(/You dropped out\. \$14 credit returned\./.test(b), b);
       await sleep(1000);
+      await sleep(650); // a person's deliberate Undo, not the second half of a double tap (src/ui.tsx DOUBLE_TAP)
       await banner(page).getByRole('button', { name: 'Undo' }).click();
       await sleep(5500);
       assert(seen.withdraw === 0, 'sent after Undo');
@@ -596,6 +599,7 @@ async function main() {
       await until(async () => (await statusOf('Hal', G[1])) === 'withdrawn', 4000);
       await setHidden(page, false);
       assert((await statusOf('Hal', G[1])) === 'withdrawn', 'drop not sent while hidden');
+      await sleep(650); // a person's deliberate Undo, not the second half of a double tap (src/ui.tsx DOUBLE_TAP)
       await banner(page).getByRole('button', { name: 'Undo' }).click();
       const b = await waitBanner(page, /Too late/);
       assert(/Too late, you're already out\. Tap I'm in to rejoin\./.test(b), b);
@@ -680,6 +684,7 @@ async function main() {
       await waitBanner(page, /You dropped out/);
       await until(async () => (await statusOf('Kai', G[4])) === 'withdrawn', 2500);
       assert((await statusOf('Kai', G[4])) === 'withdrawn', 'first drop not sent when the second started');
+      await sleep(650); // a person's deliberate Undo, not the second half of a double tap (src/ui.tsx DOUBLE_TAP)
       await banner(page).getByRole('button', { name: 'Undo' }).click();
       await sleep(5500);
       assert((await statusOf('Kai', G[5])) === 'confirmed', 'second drop not undone');
@@ -688,7 +693,25 @@ async function main() {
       assert(!(await isIn(page, G[4])) && (await isIn(page, G[5])), 'screen');
       await ctx.close();
     });
-    await check('BUG: a quick double tap on the dialog\'s Drop out drops me (the 2nd tap must not land on the banner\'s Undo and silently keep the seat)', async () => {
+    await check('FIXED (Nov 1): Drop out, then "not you?" and another name within 5 s: the held drop is for the first name only (never sent as the new name)', async () => {
+      // Ryan and Julian are both in the full game G[2].
+      const { ctx, page } = await open('Ryan');
+      await tapDrop(page, G[2]);
+      await waitBanner(page, /You dropped out/);
+      await page.getByRole('button', { name: 'Not you?' }).click();
+      await page.getByRole('button', { name: 'Julian', exact: true }).click();
+      await page.getByRole('heading', { level: 1, name: 'Julian' }).waitFor();
+      await sleep(7000);
+      const ryan = await statusOf('Ryan', G[2]);
+      const julian = await statusOf('Julian', G[2]);
+      await ctx.close();
+      // Put things back for later checks.
+      if (julian !== 'confirmed') await join('Julian', G[2]);
+      if (ryan !== 'confirmed') await join('Ryan', G[2]);
+      assert(julian === 'confirmed', `Julian was dropped by Ryan's held Drop out (Julian ${julian}, Ryan ${ryan})`);
+      assert(ryan === 'withdrawn', `Ryan's drop was lost (Ryan ${ryan})`);
+    });
+    await check('FIXED (Nov 1): a quick double tap on the dialog\'s Drop out drops me (the 2nd tap must not land on the banner\'s Undo and silently keep the seat)', async () => {
       await join('Hal', G[5]);
       const { ctx, page, seen } = await open('Hal');
       await card(page, G[5]).getByRole('button', { name: 'Drop out' }).click();
@@ -702,7 +725,8 @@ async function main() {
         await card(page, G[5]).getByRole('button', { name: 'Drop out' }).click();
         await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
         const undo = await banner(page).getByRole('button', { name: 'Undo' }).boundingBox();
-        await banner(page).getByRole('button', { name: 'Undo' }).click();
+        await sleep(650); // a person's deliberate Undo, not the second half of a double tap (src/ui.tsx DOUBLE_TAP)
+      await banner(page).getByRole('button', { name: 'Undo' }).click();
         const hit = undo && box.x + box.width / 2 >= undo.x && box.x + box.width / 2 <= undo.x + undo.width && box.y + box.height / 2 >= undo.y && box.y + box.height / 2 <= undo.y + undo.height;
         detail = ` dialog Drop out at y=${Math.round(box.y)}..${Math.round(box.y + box.height)}, x=${Math.round(box.x)}..${Math.round(box.x + box.width)}; banner Undo at y=${Math.round(undo.y)}..${Math.round(undo.y + undo.height)}, x=${Math.round(undo.x)}..${Math.round(undo.x + undo.width)}; same spot: ${hit}`;
       }
@@ -766,22 +790,38 @@ async function main() {
     await check('429 from the server: its own words show (no raw code), card rolls back', () =>
       errorJoin('Olive', G[3], (r) => r.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: 'rate_limited', message: 'Too many taps. Try again in a minute.' }) }), /Too many taps/),
     );
-    await check('offline phone (setOffline): I\'m in says "No signal, try again"; the 5-second checks stay silent; back online it works', async () => {
+    await check('offline phone (setOffline): I\'m in says "No signal, try again", the card rolls back, the 5-second checks stay silent', async () => {
       const { ctx, page } = await open('Olive');
       await ctx.setOffline(true);
       await card(page, G[3]).getByRole('button', { name: "I'm in" }).click();
       await waitBanner(page, /No signal, try again/);
+      await page.waitForFunction((id) => document.getElementById(`row-${id}`).dataset.mine !== 'in', G[3].id, { timeout: 3000 });
       await page.waitForFunction(() => document.querySelectorAll('.pop').length === 0, null, { timeout: 7000 });
       await sleep(6000);
       assert((await banner(page).count()) === 0, `a banner popped while offline: ${await banner(page).allInnerTexts()}`);
-      assert((await page.getByRole('alert').count()) === 0, 'an error card replaced the schedule');
+      assert((await page.locator('.schedule article').count()) > 0, 'the schedule went away');
+      await ctx.close();
+    });
+    await check('FIXED (Nov 1): after a failed tap offline, the red "Something went wrong" card goes away once the signal is back (it should not sit over the schedule)', async () => {
+      const { ctx, page } = await open('Olive');
+      await ctx.setOffline(true);
+      await card(page, G[3]).getByRole('button', { name: "I'm in" }).click();
+      await waitBanner(page, /No signal, try again/);
+      await sleep(1500);
+      const alertWhileOffline = await page.getByRole('alert').count();
       await ctx.setOffline(false);
+      await sleep(12000);
+      const still = await page.getByRole('alert').count();
+      const text = still ? squash(await page.getByRole('alert').first().innerText()) : '';
+      // Back online, I'm in works.
       await card(page, G[3]).getByRole('button', { name: "I'm in" }).click();
       await waitBanner(page, /You're in/);
       assert((await statusOf('Olive', G[3])) === 'confirmed', 'server');
       await ctx.close();
+      assert(still === 0, `an error card ("${text}") still sits above the schedule 12 s after the signal came back (it appeared while offline: ${alertWhileOffline > 0})`);
     });
     await check('I\'m in on a game with no court booked: "Court not booked", "1 of 4 in", no $ due, no Pay', async () => {
+      if ((await statusOf('Olive', G[3])) !== 'confirmed') await join('Olive', G[3]);
       const { ctx, page } = await open('Olive');
       const t = squash(await card(page, G[3]).innerText());
       assert(/Court not booked/.test(t) && /1 of 4 in/.test(t), t);
@@ -850,6 +890,7 @@ async function main() {
       await card(page, X.X2).getByText(/Canceled/).waitFor({ timeout: 4000 });
       assert((await potOf('Rex')) === 1400, `pot ${await potOf('Rex')}`);
       assert(/cancel|no credit payment/i.test(b), b);
+      console.log(`      (stale Undo on a canceled game says: "${b}")`);
       await ctx.close();
     });
     await check('stale Drop out on a game canceled after the page loaded: after the hold, "This session was canceled." and the card shows Canceled; money untouched', async () => {
@@ -900,6 +941,34 @@ async function main() {
       await ctx.close();
     });
 
+    await check('stale "Didn\'t pay?" after the organizer confirmed the payment: a clear answer, still Paid', async () => {
+      const { ctx, page } = await open('Olive');
+      await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
+      const btn = card(page, X.X6).getByRole('button', { name: "Didn't pay?" });
+      await btn.waitFor();
+      await post(areq, `/api/admin/sessions/${X.X6.id}/payment`, { playerId: idOf('Olive'), paid: true });
+      await btn.click();
+      const b = await waitBanner(page, /\S/);
+      await sleep(800);
+      assert((await mineOf('Olive', X.X6)).paymentStatus === 'paid', `payment undone (banner "${b}")`);
+      assert(/organizer|Alex/i.test(b), b);
+      await ctx.close();
+    });
+    await check('stale "I paid" on a game canceled after the page loaded: "This session was canceled.", nothing recorded', async () => {
+      await join('Frankie', X.X9);
+      const { ctx, page } = await open('Frankie');
+      await page.route('**/api/group/version', (r) => r.abort('internetdisconnected'));
+      const iPaid = card(page, X.X9).getByRole('button', { name: 'I paid' });
+      await iPaid.waitFor();
+      await post(areq, `/api/admin/sessions/${X.X9.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Rain' });
+      await iPaid.click();
+      await waitBanner(page, /This session was canceled/);
+      await card(page, X.X9).getByText('Canceled - Rain').waitFor({ timeout: 4000 });
+      const m = await mineOf('Frankie', X.X9);
+      assert(!m || m.paymentStatus !== 'paid', `recorded: ${JSON.stringify(m)}`);
+      assert((await potOf('Frankie')) === 0, 'credit made from nothing');
+      await ctx.close();
+    });
     await check('refresh rhythm (pure LivePoller, fake clock): every 5 s while active, every 15 s after 2 min idle, none after 10 min, a touch wakes it', async () => {
       const esbuild = require('esbuild');
       const src = readFileSync(path.join(ROOT, 'src', 'livecore.ts'), 'utf8');
@@ -1203,6 +1272,32 @@ async function main() {
       assert(!(await creditOf('Sky')).pending, 'request still there');
       await ctx.close();
     });
+    await join('Sky', G[5]);
+    await confirmPaid('Sky', G[5]);
+    await check('FIXED (Nov 1): cash out asked for during a drop\'s 5-second Undo (the sheet already shows that credit): it works, or says clearly to wait', async () => {
+      const { ctx, page } = await open('Sky');
+      // Sky: the $14 credit went on G[5] at I'm in (Paid with credit); the drop shows it back in the chip at once.
+      await tapDrop(page, G[5]);
+      await waitBanner(page, /You dropped out/);
+      await page.locator('[data-credit-chip]').click();
+      const sheet = page.locator('dialog[open]');
+      await sheet.getByRole('button', { name: 'Request cash out from Alex' }).click();
+      const input = sheet.locator('[data-refund-ask] input');
+      const pre = await input.inputValue();
+      await sheet.getByRole('button', { name: 'Request cash out from Alex' }).click();
+      const t0 = Date.now();
+      let said = '';
+      while (Date.now() - t0 < 4000) {
+        said = squash((await sheet.innerText().catch(() => '')) + ' | ' + (await banner(page).allInnerTexts().catch(() => [])).join(' '));
+        if (/Cash out requested|You have|wait|look again/i.test(said)) break;
+        await sleep(100);
+      }
+      await sleep(6000);
+      const c = await creditOf('Sky');
+      if (c.pending) await post(who.Sky, '/api/me/refund-request/cancel', {});
+      await ctx.close();
+      assert(c.pending?.cents === Number(pre) * 100, `prefilled $${pre}; server request ${JSON.stringify(c.pending)}; the screen said: "${said.slice(0, 200)}"`);
+    });
     await giveCredit('Tess');
     await post(who.Tess, '/api/me/refund-request', { cents: 1400 });
     await check('"Use the $14 you asked to cash out for this game?" after I\'m in: Use it -> Paid with credit, the request is gone', async () => {
@@ -1262,9 +1357,31 @@ async function main() {
     await join('Ned', G[1]);
     await join('Olive', G[1]);
     await join('Pia', G[0]);
+    // A paid seat to drop on game day (the full G[2] has room once Ryan/Julian shuffle; use G[6] to be safe).
+    await join('Pia', G[6]);
+    await confirmPaid('Pia', G[6]);
     const startT = et('2026-11-05T20:00:00-05:00');
     const cutT = et('2026-11-05T08:00:00-05:00');
     const lateDropsOf = async (n) => (await dash()).players.find((p) => p.name === n).lateDrops;
+    await check('FIXED (Nov 1): on a Sunday the drop question says "Out for Tuesday?" (2 days away), not "next Tuesday"; 3 weeks away it names the date', async () => {
+      const sun = et('2026-11-01T12:00:00-05:00');
+      await setClock(sun);
+      const { ctx, page } = await open('Pia', { clockAt: sun });
+      const ask = async (s) => {
+        await card(page, s).getByRole('button', { name: 'Drop out' }).click();
+        const d = page.locator('dialog[open]');
+        const t = (await d.getByRole('heading').first().innerText()).trim();
+        await d.getByRole('button', { name: /Go back|Cancel/ }).click();
+        await d.waitFor({ state: 'detached' }).catch(() => {});
+        return t;
+      };
+      const tue = await ask(G[0]);
+      assert(tue === 'Out for Tuesday?', `Tue Nov 3 from Sun Nov 1: "${tue}"`);
+      const later = await ask(G[6]);
+      assert(/^Out for [A-Z][a-z]{2}, Nov \d{1,2}\?$/.test(later), `three weeks out: "${later}"`);
+      assert((await statusOf('Pia', G[0])) === 'confirmed', 'asking changed the seat');
+      await ctx.close();
+    });
     await check('drop a few seconds before cancel-by: sent at once (no Undo, so the wait never makes it late), not counted as a late drop', async () => {
       await setClock(cutT - 7000);
       const { ctx, page } = await open('Max', { clockAt: cutT - 7000 });
@@ -1322,13 +1439,32 @@ async function main() {
       assert((await statusOf('Rex', G[1])) === null, 'seat after start');
       await ctx.close();
     });
-    await check('game day 9 AM: TONIGHT strip on the game, the pay card on top, the first card says "8 PM" under the tile', async () => {
+    await check('FIXED (Nov 1): game day: drop a paid later game, then tap Use credit on tonight\'s pay card within 5 s: the drop goes first and the credit pays tonight', async () => {
+      await setClock(et('2026-11-03T09:00:00-05:00'));
+      const { ctx, page } = await open('Pia', { clockAt: et('2026-11-03T09:00:00-05:00') });
+      await tapDrop(page, G[6]);
+      await waitBanner(page, /You dropped out\. \$14 back as credit/);
+      const use = page.locator('section.pay-card [data-use-credit]');
+      await use.waitFor({ timeout: 2000 });
+      await use.click();
+      const b = await waitBanner(page, /credit/i, 8000);
+      await sleep(6500);
+      const tonight = await mineOf('Pia', G[0]);
+      const thu = await statusOf('Pia', G[6]);
+      const pot = await potOf('Pia');
+      await ctx.close();
+      assert(thu === 'withdrawn', `later seat ${thu}`);
+      assert(tonight.paymentStatus === 'paid' && pot === 0, `tonight ${tonight.paymentStatus}, pot ${pot}; banner "${b}"`);
+    });
+    await check('game day 9 AM: TONIGHT strip on the game, the first card says "8 PM" under the tile, tonight paid with credit so no pay card', async () => {
       await setClock(et('2026-11-03T09:00:00-05:00'));
       const { ctx, page } = await open('Pia', { clockAt: et('2026-11-03T09:00:00-05:00') });
       const c = card(page, G[0]);
       assert(/TONIGHT/.test(await c.locator('.tonight-tag').innerText()), 'no TONIGHT');
       assert(/8:00 PM|8 PM/.test(await c.locator('[data-sched-time]').innerText()), await c.locator('[data-sched-time]').innerText());
-      await page.locator('section.pay-card').getByText('Tonight: you owe $14').waitFor();
+      // The check before paid tonight with the credit from the dropped Thursday, so tonight reads paid, no pay card.
+      await c.getByText('Paid with credit').waitFor();
+      assert((await page.locator('section.pay-card').count()) === 0, 'a pay card for a game already paid');
       await ctx.close();
     });
   }

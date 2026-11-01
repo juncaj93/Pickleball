@@ -404,7 +404,7 @@ export function PlayerHome({
       />
       <main className="page stack-lg">
         {load.loading && !g && !load.error && <ScheduleSkeleton />}
-        {load.error && load.error.status !== 404 && <ErrorState error={load.error} onRetry={load.reload} />}
+        {load.error && load.error.status !== 404 && !g && <ErrorState error={load.error} onRetry={load.reload} />}
 
         {g && pickName && (
           <NamePicker
@@ -540,6 +540,8 @@ function NamePicker({
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   async function pick(playerId: string) {
+    // A drop still waiting for Undo belongs to the name that tapped it: send it before the phone switches names.
+    await settleHolds();
     if (demo) {
       const p = g.players.find((x) => x.id === playerId);
       if (p) demo({ id: p.id, name: p.name });
@@ -749,6 +751,8 @@ function useCredit(onChanged: () => Promise<void>) {
     const release = holdLive();
     let used = 0;
     try {
+      // A drop still waiting for Undo goes first, so the credit it gives back is there to use.
+      await settleHolds();
       let left = potCents;
       let potBefore = 0;
       let owedBefore = 0;
@@ -1463,7 +1467,8 @@ export function ScheduleRow({
             <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
           {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
-          {s.canceled && <p className="sched-sub">If you paid, it's now your credit.</p>}
+          {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
+          {s.canceled && (inSession || waiting) && <p className="sched-sub">If you paid, it's now your credit.</p>}
 
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && <p className="game-note">{s.note}</p>}

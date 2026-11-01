@@ -213,7 +213,8 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
 
 /** Lowercase letters and single spaces, for comparing names. */
 function nameKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
+  // "José" and "Jose" compare the same (accents folded, not dropped).
+  return name.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^a-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
 }
 
 /** Typos between two names: letters added, dropped, changed, or two swapped ("Rayn" vs "Ryan") each count as one. */

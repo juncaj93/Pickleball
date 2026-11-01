@@ -332,14 +332,15 @@ a {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
-  overflow-wrap: anywhere;
+  /* Break between words; a single word only breaks when it cannot fit at all. */
+  overflow-wrap: break-word;
 }
 
 /* Today, drawn like the session date tiles: a paper calendar, red weekday. */
 .topbar .today {
   flex: none;
   width: 42px;
-  height: 44px;
+  min-height: 44px;
   border-radius: 10px;
   background: var(--surface);
   border: 1.5px solid var(--tile-line);
@@ -498,7 +499,7 @@ a {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   white-space: normal;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
 }
 .not-you {
   position: relative;
