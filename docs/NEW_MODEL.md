@@ -91,10 +91,13 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
   and the money moving happen together or not at all, so a request cut off
   halfway can't leave money half-moved, and tapping again finishes or
   changes nothing.
-- **An unconfirmed "I paid" is a claim, not money** (Alex, Oct 31). If the player
-  drops out (or is removed) or the game is canceled before the organizer
+- **Only confirmed money becomes credit** (Alex, Oct 31). An unconfirmed "I
+  paid" is a claim, not money. If the player drops out (or is removed), the game
+  is canceled, or Finalize marks them "did not play" before the organizer
   confirms it, nothing on that seat moves: no credit, and any credit on the
-  seat stays on it. Home shows "Ryan tapped I paid ($14), not confirmed.
+  seat stays on it. A player who played with an unconfirmed I paid counts as
+  paid, but the money back above the final price waits until Mark paid
+  confirms the payment (then it comes back at once). Home shows "Ryan tapped I paid ($14), not confirmed.
   Dropped out of Tue, Nov 3." with **Paid** (the money on the seat becomes
   their credit) and **Didn't pay** (the claim is cleared; credit on the seat
   goes back to them). Until then it counts as Held, never Collected. Their drop
@@ -120,6 +123,11 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
   request (or withdraws it); the organizer's Home card shrinks or goes and
   Telegram gets one line ("Mitchel withdrew the $10 cash out request (using
   it for Thu Nov 5)"). **No, keep cash out**: they are in and pay as usual.
+- **I'm in after a Drop out**: tapping I'm in (on any game) first sends a drop
+  still held on the phone, or left over from a closed page, and waits for it,
+  so the credit it gives back goes on the new seat.
+- **Pay before Court booked** (Alex, Oct 31): Pay and I paid stay hidden until
+  the court is booked; credit can go on any time ("Use $14 credit").
 - **Drop out shows the money at once**: the drop is held on the phone for 5
   seconds for Undo and sent after; the screen draws the credit in right away
   (chip, balance, credit sheet) with "You dropped out. $14 credit returned.",
