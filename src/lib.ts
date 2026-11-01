@@ -19,6 +19,9 @@ export function setGroupKey(key: string | null) {
 }
 
 /** "View as...": the signed-in organizer sees (and, in the demo copy, taps) as this player. */
+/** Who the organizer is viewing as right now (null when not in View as). */
+export const viewingAs = () => viewAsId;
+
 export function setViewAs(playerId: string | null) {
   if (playerId === viewAsId) return;
   const was = demoOn();

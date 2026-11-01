@@ -3,6 +3,7 @@ import type { CreditView } from '../../shared/api';
 import { creditChanges } from '../../shared/credit';
 import { formatPrice, parseDollars } from '../../shared/money';
 import { api, ApiError, isDemo } from '../lib';
+import { settleHolds } from '../hold';
 import { Notice, Sheet, useToast } from '../ui';
 
 /** The credit sheet lists this many of the latest changes. */
@@ -108,6 +109,8 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
     setBusy(true);
     setError(null);
     try {
+      // A drop still waiting for Undo goes first: the credit it gives back (already drawn here) must be on the server.
+      await settleHolds();
       await fn();
       toast(done);
       await onChanged();

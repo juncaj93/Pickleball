@@ -87,6 +87,30 @@ export function Empty({ children }: { children: ReactNode }) {
 // sheet. Screen readers hear it through a live region.
 
 /** Banner timing, in milliseconds. Change these to try other feels. */
+/**
+ * A double tap: the press on a banner's button came within this long of the press that made the banner (before it
+ * appeared), at nearly the same spot. A deliberate tap on Undo is never that close in both.
+ */
+export const DOUBLE_TAP = { ms: 500, px: 24 };
+// The last two presses anywhere on the page, numbered. Times are the browser's own event times.
+let pressCount = 0;
+const presses: { x: number; y: number; t: number; n: number }[] = [];
+if (typeof window !== 'undefined') {
+  window.addEventListener(
+    'pointerdown',
+    (e) => {
+      presses.push({ x: e.clientX, y: e.clientY, t: e.timeStamp, n: ++pressCount });
+      if (presses.length > 2) presses.shift();
+    },
+    { capture: true },
+  );
+}
+/** Is the press going on now the very next one after the press that made a banner (`bornAt` = presses then), close in time and place? */
+function isSecondTap(bornAt: number): boolean {
+  if (presses.length < 2) return false;
+  const [prev, now] = presses;
+  return prev.n === bornAt && now.n === bornAt + 1 && now.t - prev.t < DOUBLE_TAP.ms && Math.hypot(now.x - prev.x, now.y - prev.y) < DOUBLE_TAP.px;
+}
 export const BANNER_TIMING = {
   /** Fade in. */
   fadeIn: 200,
@@ -143,6 +167,10 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>('');
   const swipe = useRef<{ x: number; y: number } | null>(null);
+  // When it appeared: a tap on its button that is the second half of a double tap on whatever was under it (Drop out
+  // sits right there) is not a choice, so it is ignored.
+  const bornAt = useRef(pressCount);
+  const doubleTap = useRef(false);
   useLayoutEffect(() => {
     // The top layer keeps it above an open sheet; older browsers fall back to a high z-index.
     try {
@@ -202,10 +230,14 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
       {shown.opts.action && (
         <button
           className="toast-action"
-          onPointerDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            doubleTap.current = isSecondTap(bornAt.current);
+          }}
           onPointerUp={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
+            if (doubleTap.current) return;
             shown.opts.action!.onClick();
             setLeaving((v) => v || 'down');
           }}

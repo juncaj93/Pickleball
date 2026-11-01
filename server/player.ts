@@ -213,7 +213,9 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
 
 /** Lowercase letters and single spaces, for comparing names. */
 function nameKey(name: string): string {
-  return name.toLowerCase().replace(/[^a-z\s'-]/g, '').replace(/\s+/g, ' ').trim();
+  // "José" and "Jose" compare the same (Latin accents folded, not dropped). Only the Latin accent marks go: in other
+  // scripts (Hindi vowel signs...) the marks are part of the letters, so "राम" and "रमा" stay different.
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase().replace(/[^\p{L}\p{M}\s'-]/gu, '').replace(/\s+/g, ' ').trim();
 }
 
 /** Typos between two names: letters added, dropped, changed, or two swapped ("Rayn" vs "Ryan") each count as one. */

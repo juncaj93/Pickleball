@@ -35,7 +35,7 @@ import {
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { creditBackLeft, creditBackStatements, repriceStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
-import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, withdraw } from './roster';
+import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -1121,6 +1121,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     wordHash = word === null ? null : await hashGroupWord(word);
   }
   const settings = normalizeSettings({ ...settingsOf(group), ...(body.settings as object) });
+  const oldMax = settingsOf(group).maxPlayers;
   await ctx.db
     .prepare(
       `UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ?,
@@ -1138,6 +1139,15 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     ctx.nowIso,
   );
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(settings), first_session_date: firstSessionDate }, ctx.nowMs);
+  if (settings.maxPlayers > oldMax) {
+    // More room: people already waiting move in, first in line first, exactly as after a drop (their credit goes on the
+    // same way). Without this the next new I'm in would take the seat ahead of them.
+    const { results: open } = await ctx.db
+      .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND starts_at > ? ORDER BY starts_at")
+      .bind(group.id, ctx.nowIso)
+      .all<SessionRow>();
+    for (const s of open) await settle(ctx.db, s, ctx.nowIso, settings.maxPlayers);
+  }
   return { ok: true };
 }
 

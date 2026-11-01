@@ -188,6 +188,7 @@ async function main() {
     await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
     const pop = page.locator('.pop');
     await pop.waitFor();
+    await new Promise((r) => setTimeout(r, 650)); // a person's Undo, not the 2nd tap of a double tap on Drop out (src/ui.tsx DOUBLE_TAP)
     await pop.getByRole('button', { name: 'Undo' }).click();
     await row(page, B).locator('.st-in', { hasText: "You're in" }).waitFor();
     assert(!FORBIDDEN.test(await text(page, B)), `after Undo: ${await text(page, B)}`);
