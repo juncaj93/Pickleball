@@ -1174,3 +1174,15 @@ does not read it (it always shows the feature).
 3. `npx wrangler d1 migrations apply pickleball --remote` (only 0016 pending), then check the column exists and the
    integrity checks read 0.
 4. `npm run deploy` from main. Read-only live check: /, /admin, /api/status, /api/group/version 200; row counts match.
+
+### Tests (branch claude/new-session-qrwtfr, Sun Nov 1, 4:40 PM Eastern)
+- Unit: 1,556 passed in 86 files (1 helper skipped). New: `tests/time-shift.test.ts` (who is asked, Still in,
+  Can't make it, organizer numbers, TIME_SHIFT off, and 10 random 80-step sequences with credit, cash, drops,
+  rejoins, a full game and the waitlist, checked against a model of the rules and the 20 integrity checks) and
+  `tests/review-time-shift.test.ts` (the fresh reviewer's).
+- Browser: 31 files, 1,246 checks, 0 failed (run 229, credit 153, audit-player-look 133 + 12 known open,
+  audit-player-flows 93, court 84, held 81, alerts 52, texts 52, admin-cleanup 35, suggest 35, popup 33, gates 32,
+  live 26, round2 25, names 24, auto-credit 22, circles 18, do-now 13, card-times 13, money-visible 12, admin-audit 11,
+  banner 11, no-court 10, time-shift 9, good-news 9, dryrun-screens 6, admin-sweep 6, cancel-reason 8, want-in 4,
+  double-tap 4, audit-stage3 3). Changed on purpose: admin-cleanup reads "~10:30 AM" as 10:30 AM; run.cjs reads the
+  tile outline from the new border layer and measures card density without a moved game's Waiting on lines.
