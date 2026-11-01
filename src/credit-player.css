@@ -73,7 +73,7 @@
   font-size: 0.58rem;
   font-weight: 750;
   letter-spacing: 0.08em;
-  color: var(--accent-text);
+  color: var(--primary);
 }
 .credit-chip.pending .cc-label {
   color: var(--warn-fg, #9a6700);

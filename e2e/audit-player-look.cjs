@@ -714,12 +714,12 @@ async function main() {
       const bad = each(({ contrast, facts }) => contrast.filter((p) => !known.chipLabelDark(p) && !known.canceledFaded(p, facts)).map((p) => `"${p.text}" ${p.ratio}:1 (${p.color} on ${p.bg}, ${p.px}px, opacity ${p.op}) in ${p.where === 'header' || p.where === 'page' ? p.where : lab(p.where)}`));
       assert(bad.length === 0, [...new Set(bad)].slice(0, 10).join(' | '));
     });
-    await check(`FIXED (Nov 1): ${tag}: canceled cards ("Canceled - Thanksgiving", names, "If you paid...") are readable, 4.5:1`, async () => {
+    await check(`OPEN: ${tag}: canceled cards ("Canceled - Thanksgiving", names, "If you paid...") are readable, 4.5:1`, async () => {
       const bad = each(({ contrast, facts }) => contrast.filter((p) => known.canceledFaded(p, facts)).map((p) => `"${p.text}" ${p.ratio}:1 (opacity ${p.op})`));
       const uniq = [...new Set(bad.map((b) => b.replace(/^[^:]+: /, '')))];
       assert(uniq.length === 0, uniq.slice(0, 6).join(' | '));
     });
-    await check(`${scheme === 'dark' ? 'FIXED (Nov 1): ' : ''}${tag}: the CREDIT / CASH OUT word on the header chip is readable, 4.5:1`, async () => {
+    await check(`${scheme === 'dark' ? 'OPEN: ' : ''}${tag}: the CREDIT / CASH OUT word on the header chip is readable, 4.5:1`, async () => {
       const bad = each(({ contrast }) => contrast.filter((p) => known.chipLabelDark(p)).map((p) => `"${p.text}" ${p.ratio}:1 (${p.color} on ${p.bg}, ${p.px}px)`));
       const uniq = [...new Set(bad.map((b) => b.replace(/^[^:]+: /, '')))];
       assert(uniq.length === 0, uniq.join(' | '));
