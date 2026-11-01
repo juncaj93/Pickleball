@@ -55,20 +55,14 @@ export function linkText(text: string, plain: (url: string) => boolean = () => f
   return { text: out + text.slice(from), entities };
 }
 
-/** The addresses alerts may link to: the site itself and CourtReserve. */
-export function ourAddress(siteUrl: string): (url: string) => boolean {
-  let site = '';
-  try {
-    site = new URL(siteUrl).host;
-  } catch {
-    // No site address: only CourtReserve.
-  }
-  return (url: string) => {
-    try {
-      const u = new URL(url);
-      return u.protocol === 'https:' && (u.host === site || u.host === 'mobileapp.courtreserve.com' || u.host === 'app.courtreserve.com');
-    } catch {
-      return false;
-    }
-  };
+/**
+ * The exact addresses alerts may link to, nothing looser: the site's own
+ * /go/<signed token> direct text link and the two CourtReserve pages the
+ * alerts are built with. Any other address (even one on the site, or one with
+ * a backslash or an @ that parsers read differently) is left as typed.
+ */
+export function ourAddress(siteUrl: string, courtReserve: readonly string[]): (url: string) => boolean {
+  const site = siteUrl.replace(/\/$/, '');
+  const go = new RegExp(`^${site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/go/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$`);
+  return (url: string) => courtReserve.includes(url) || (/^https:\/\//.test(site) && go.test(url));
 }

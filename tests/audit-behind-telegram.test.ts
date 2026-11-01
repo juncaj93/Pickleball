@@ -90,6 +90,46 @@ describe('player names in Telegram alerts', () => {
     expect(all).toContain('Bob: https://evil.example');
   });
 
+  it('names that copy our own addresses, or trick address parsers, never become hidden links (fresh audit A)', async () => {
+    const { ourAddress } = await import('../server/telegram-links');
+    const { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } = await import('../shared/settings');
+    const ok = ourAddress('https://pickleball.juncaj.net', [COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL]);
+    expect(ok('https://pickleball.juncaj.net/go/eyJzIjoiYSJ9.abc_DEF-1')).toBe(true);
+    expect(ok(COURTRESERVE_BOOKING_URL)).toBe(true);
+    expect(ok(COURTRESERVE_CANCEL_URL)).toBe(true);
+    for (const bad of [
+      'https://pickleball.juncaj.net\\@e.co',
+      'https://pickleball.juncaj.net@e.co/go/a.b',
+      'https://pickleball.juncaj.net/anything',
+      'https://pickleball.juncaj.net/go/a.b/../x',
+      'https://pickleball.juncaj.net.evil.co/go/a.b',
+      'https://app.courtreserve.com/evil',
+      'http://pickleball.juncaj.net/go/a.b',
+      `${COURTRESERVE_BOOKING_URL}&x=1`,
+    ]) expect(ok(bad), bad).toBe(false);
+    // Through the real alert: a self-added name copying the site address.
+    const g = await group();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    const dash = (await g.ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const s = dash.sessions.find((x: any) => x.startsAt === '2026-11-04T01:00:00.000Z');
+    const ids = [];
+    for (const name of ['P: https://pickleball.juncaj.net\\@e.co', 'P: https://pickleball.juncaj.net/go/a.b']) {
+      const made = await g.ctx.organizer.call('POST', '/api/admin/players', { name, phone: null, isRegular: true, isActive: true });
+      expect(made.status, made.text).toBe(200);
+      ids.push(made.data.id);
+    }
+    for (const id of ids) {
+      const p = g.ctx.app.client();
+      p.groupKey = g.ctx.groupKey;
+      await p.call('POST', '/api/me', { playerId: id });
+      await p.call('POST', `/api/sessions/${s.id}/join`, {});
+      await p.call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    }
+    await g.app.settle();
+    expect(g.bodies.length).toBe(2);
+    for (const b of g.bodies) expect(b.entities ?? []).toEqual([]);
+  });
+
   it('linkText only turns addresses into links when the caller allows them', () => {
     const allowed = (u: string) => new URL(u).host === 'pickleball.juncaj.net';
     const out = linkText('Bob: https://evil.example dropped out. Text the group: https://pickleball.juncaj.net/go/abc', () => false, allowed);

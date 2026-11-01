@@ -124,6 +124,14 @@ describe('requests from other sites (CSRF) and odd requests', () => {
     expect(seats.n).toBe(0);
   });
 
+  it('a cookie with a broken %-escape (say from another site on the same domain) never breaks the site (fresh audit A)', async () => {
+    const { ctx } = await world();
+    const res = await handleApi(new Request(`${ORIGIN}/api/status`, { headers: { Cookie: 'x=%E0%A4%A; pb_player=%' } }), ctx.app.env, ctx.app.now);
+    expect(res.status).toBe(200);
+    const admin = await handleApi(new Request(`${ORIGIN}/api/admin/dashboard`, { headers: { Cookie: 'pb_admin=%E0%A4%A' } }), ctx.app.env, ctx.app.now);
+    expect(admin.status).toBe(401);
+  });
+
   it('broken addresses, wrong methods and huge bodies get a plain answer, never a server error', async () => {
     const { blair } = await world();
     expect((await blair.call('POST', '/api/sessions/%E0%A4%A/join', {})).status).toBe(404);

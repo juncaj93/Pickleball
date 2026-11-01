@@ -13,6 +13,7 @@ import { newId } from './crypto';
 import type { D1Database, Env } from './db';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
 import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
@@ -139,11 +140,11 @@ function telegramProblem(status: number, description: string): string {
 /** Send one message to the organizer's chat, with an "Open site" button. */
 /** The message with each "words: address" shown as tappable words, and the /admin page (the Open site button) as plain words (see telegram-links.ts). */
 function telegramText(text: string, siteUrl: string): { text: string; entities?: TextLink[] } {
-  const linked = linkText(text, isAdminPage, ourAddress(siteUrl));
+  const linked = linkText(text, isAdminPage, ourAddress(siteUrl, [COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL]));
   return linked.entities.length ? linked : { text: linked.text };
 }
 
-async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function sendTelegram(env: Env, siteUrl: string, text: string, links: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   const doFetch = env.TELEGRAM_FETCH ?? fetch;
   let res: Response;
   try {
@@ -152,7 +153,7 @@ async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: env.TELEGRAM_CHAT_ID,
-        ...telegramText(text, siteUrl),
+        ...(links ? telegramText(text, siteUrl) : { text }),
         link_preview_options: { is_disabled: true },
         reply_markup: { inline_keyboard: [[{ text: 'Open site', url: `${siteUrl}/admin` }]] },
       }),
@@ -172,14 +173,18 @@ function siteUrl(ctx: Ctx): string {
 }
 
 /** Rate limit, send, write down how it went. Never throws. */
-export async function deliver(ctx: Ctx, groupId: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * `links: false` for messages that carry player names (drops, cash outs): they never hold a link of
+ * their own, so nothing in a name can turn into one. The clock's alerts (no names) keep their links.
+ */
+export async function deliver(ctx: Ctx, groupId: string, text: string, links = true): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     if (!(await takeSlot(ctx))) {
       const error = `${PAUSED_PREFIX} more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
       await recordResult(ctx, groupId, false, error);
       return { ok: false, error };
     }
-    const sent = await sendTelegram(ctx.env, siteUrl(ctx), text);
+    const sent = await sendTelegram(ctx.env, siteUrl(ctx), text, links);
     // Once Telegram took it, it counts as sent even if writing down the result fails (so it is never sent twice).
     await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error).catch(() => {});
     return sent;
@@ -255,7 +260,7 @@ export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: s
       .prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'refund_alert', ?, ?)")
       .bind(newId(), playerId, new Date(ctx.nowMs).toISOString())
       .run();
-    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents)));
+    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents), false));
   } catch {
     // Never worth failing the request over.
   }
@@ -271,7 +276,7 @@ export async function notifyCashOutUsed(ctx: Ctx, group: GroupRow, name: string,
     if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
     const prefs = prefsOf(await alertRow(ctx.db, group.id));
     if (!prefs.enabled || !prefs.refundRequests) return;
-    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone)));
+    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone), false));
   } catch {
     // Never worth failing the request over.
   }
@@ -292,7 +297,7 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null): Promise<void
       timezone: watch.group.timezone,
       prefs: watch.prefs,
     });
-    if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text));
+    if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text, false));
   } catch {
     // An alert is never worth failing a tap over.
   }
