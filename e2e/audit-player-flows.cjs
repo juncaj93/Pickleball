@@ -692,6 +692,42 @@ async function main() {
       assert(await isIn(page, G[1]), 'screen says out');
       await ctx.close();
     });
+    await check('FIXED (Nov 1): View as: Drop out, then Exit within 5 s: nothing real changes (the demo drop never reaches the live site)', async () => {
+      // Two fresh players in an otherwise unused game. The organizer's own browser also remembers Una's name.
+      for (const name of ['Una Viewas', 'Vic Viewas']) {
+        const r = await post(areq, '/api/admin/players', { name, phone: `2485550${name === 'Una Viewas' ? '901' : '902'}` });
+        assert(r.ok(), `add ${name}: ${await r.text()}`);
+      }
+      const dd = await dash();
+      const pid = (n) => dd.players.find((p) => p.name === n).id;
+      const una = await browser.newContext();
+      await post(una.request, '/api/me', { playerId: pid('Una Viewas') });
+      const vic = await browser.newContext();
+      await post(vic.request, '/api/me', { playerId: pid('Vic Viewas') });
+      for (const c of [una, vic]) assert((await post(c.request, `/api/sessions/${G[7].id}/join`, {})).ok(), 'join');
+      const actx = await browser.newContext(phone(390, 'light'));
+      await post(actx.request, '/api/admin/login', { pin: PIN });
+      await post(actx.request, '/api/me', { playerId: pid('Una Viewas') });
+      const page = await actx.newPage();
+      await page.goto(`${BASE}/admin`);
+      await page.getByRole('button', { name: 'View as…' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Vic Viewas', exact: true }).click();
+      await page.getByRole('region', { name: 'Viewing as a player' }).getByText('Viewing as').waitFor();
+      await page.locator('.schedule article').first().waitFor();
+      const more = page.getByRole('button', { name: /^More sessions/ });
+      if (await more.count()) await more.click();
+      await card(page, G[7]).waitFor();
+      await tapDrop(page, G[7]);
+      await page.locator('[data-banner]').getByText(/You dropped out/).waitFor();
+      await page.getByRole('region', { name: 'Viewing as a player' }).getByRole('button', { name: 'Exit' }).click();
+      await sleep(8000);
+      const st = async (c) => (await (await c.request.get(`${BASE}/api/group`)).json()).sessions.find((x) => x.id === G[7].id).mine?.status;
+      assert((await st(una)) === 'confirmed', `the organizer's own remembered player (Una) was dropped: ${await st(una)}`);
+      assert((await st(vic)) === 'confirmed', `the viewed player (Vic) was really dropped: ${await st(vic)}`);
+      await actx.close();
+      await una.close();
+      await vic.close();
+    });
     await check('two drops within 5 s on two games: the first is sent at once, the second keeps its own Undo; both end right', async () => {
       await join('Kai', G[5]);
       const { ctx, page, seen } = await open('Kai');

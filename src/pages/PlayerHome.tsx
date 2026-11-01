@@ -45,7 +45,7 @@ function forgetPendingDrop(sessionId: string) {
  * goes to the server FIRST, and the join waits for it. The credit that drop gives back is then there for the
  * new seat (it goes on at I'm in), instead of the new seat owing money while that credit sits unused.
  */
-async function sendDropsBeforeJoin(joiningId: string, view: NoteView | null) {
+async function sendDropsBeforeJoin(joiningId: string) {
   await settleHolds();
   let note: PendingDropNote | null = null;
   try {
@@ -61,8 +61,16 @@ async function sendDropsBeforeJoin(joiningId: string, view: NoteView | null) {
   }
   // The same age rules as a left-over note: younger than the hold, another tab may still be holding it (its Undo
   // must work), so leave it; older than 2 minutes, too late to be sure. The server's drop is safe to repeat, but only
-  // for the same name and the same seat (never for another name on this phone, or a seat taken again since).
-  const next = pendingDropAction(note, Date.now(), () => noteStillApplies(note!, view), holdPending);
+  // for the same name and the same seat (never for another name on this phone, or a seat taken again since). That is
+  // checked against the server's data as it is now (the screen's copy hides a seat whose drop it is drawing).
+  let fresh: NoteView | null = null;
+  const due = pendingDropAction(note, Date.now(), () => true, holdPending);
+  if (due.do === 'send') {
+    fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
+    // No answer (no signal): keep the note for later and let the join go ahead.
+    if (!fresh) return;
+  }
+  const next = due.do === 'send' ? pendingDropAction(note, Date.now(), () => noteStillApplies(note!, fresh), holdPending) : due;
   if (next.do === 'forget') {
     storageRemove(PENDING_DROP_KEY);
     return;
@@ -546,8 +554,11 @@ function NamePicker({
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   async function pick(playerId: string) {
+    if (busy) return;
+    setBusy(true);
     // A drop still waiting for Undo belongs to the name that tapped it: send it before the phone switches names.
     await settleHolds();
+    setBusy(false);
     if (demo) {
       const p = g.players.find((x) => x.id === playerId);
       if (p) demo({ id: p.id, name: p.name });
@@ -958,7 +969,7 @@ function SuggestionCard({
     try {
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
-        await sendDropsBeforeJoin(s.sessionId, g);
+        await sendDropsBeforeJoin(s.sessionId);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
         onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
@@ -1298,7 +1309,7 @@ export function ScheduleRow({
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
     try {
-      await sendDropsBeforeJoin(s.id, g);
+      await sendDropsBeforeJoin(s.id);
       joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
       await onChanged();
     } catch (err) {
@@ -1334,9 +1345,13 @@ export function ScheduleRow({
     // Sent because the page was going away (closed, hidden, switched app): a failure then is most likely no
     // signal while leaving, so the note stays and the drop is finished on return or the next open.
     let leavingSend = false;
+    // Tapped in the organizer's View as (a demo copy): if the demo has ended by the time it is sent (Exit within the
+    // 5 seconds), there is nothing to send; it must never go to the live site as a real drop.
+    const inDemo = demoOn();
     startHold(id, {
       send: async (leaving) => {
         leavingSend = leaving;
+        if (inDemo && !demoOn()) return;
         await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: leaving && !demoOn() });
       },
       settled: async (err) => {

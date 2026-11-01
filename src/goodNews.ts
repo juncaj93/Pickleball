@@ -18,8 +18,14 @@ const KEY = 'pb_good_news_seen';
 /** Plenty for a season of promotions; the oldest are forgotten first. */
 const KEEP = 60;
 
-/** Shown during this page visit: keeps showing until the page is closed or reloaded. */
+/** Shown during this page visit: keeps showing until the page is closed, reloaded, or put away (another app, locked). */
 const visit = new Set<string>();
+if (typeof document !== 'undefined') {
+  // Coming back later to a tab that stayed open is a new look: the note is gone then.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') visit.clear();
+  });
+}
 /** Fallback memory when storage is blocked (lasts until the page closes). */
 let blocked: string[] | null = null;
 /** The organizer's View as: memory per demo session, never saved. */
