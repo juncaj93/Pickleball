@@ -994,4 +994,11 @@ No money rule, price rule, schema or migration change.
   /api/group/version differs from the live site's, the fake PIN signs in, and the dashboard reads
   "Pickleball Bros (PREVIEW, fake data)". So the `[env.preview]` wiring in wrangler.toml works for
   a fresh preview deploy. No Telegram or clock secrets on previews.
+- Redeployed Sun Nov 1, about 11:05 AM Eastern: deployment 1f239094 (commit 230168f, with
+  "Book a court" after a move and the next-2 rule). Same checks: version differs from live,
+  PIN 135790 signs in, group "Pickleball Bros (PREVIEW, fake data)".
+- Fresh checker (did not write the code) on changes 3 and 4: clean; its two wording leftovers
+  (the moved-game "Book on CourtReserve" link, README/DESIGN describing the old buttons) fixed.
+- Totals at 230168f: unit 1,292 passed in 76 files (1 helper skipped); browser 27 suites,
+  1,002 checks, 0 failed.
 
