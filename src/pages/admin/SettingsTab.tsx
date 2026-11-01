@@ -295,6 +295,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <UsualTimeRow ctx={ctx} />
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
+          <TimeShiftRow ctx={ctx} auto={auto} />
         </Section>
 
         <Section id="access" title="Access" note={g.openAccess ? 'Open' : 'Link only'} sections={sections}>
@@ -617,6 +618,38 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
           </button>
         </form>
       </Sheet>
+    </div>
+  );
+}
+
+/**
+ * "Moved-game notice for everyone": players who are in confirm a moved start time (Still in / Can't make it).
+ * Off: only a phone that opened the site with ?timeshift=on sees it (a private test). Saves itself; no money moves.
+ */
+function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.timeShiftForAll);
+  return (
+    <div className="set-row-wrap" data-row="timeShiftAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Moved-game notice for everyone <SaveMark state={auto.rows.timeShiftAll} />
+          </span>
+          <span className="set-hint">Players confirm a new start time. Off: only phones opened with ?timeshift=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-time-shift-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('timeShiftAll', { on: e.target.checked }, '/api/admin/time-shift').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.timeShiftAll} />
     </div>
   );
 }

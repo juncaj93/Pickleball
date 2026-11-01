@@ -5,7 +5,9 @@ import {
   movedMessage,
   deadlineAlertMessage,
   siteAddress,
+  smsHref,
 } from '../../../shared/messages';
+import { isIOS } from '../../lib';
 import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
@@ -25,6 +27,7 @@ import { markTask } from './DoNow';
 import { isPlayed, lateDropsAll } from './todo';
 import '../../credit-session.css';
 import '../../admin-cards.css';
+import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 
 export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set';
 
@@ -70,13 +73,16 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   const start = cardTime(s.startsAt, s.endsAt, tz).start;
   const cancelBy = live ? cancelByCardLine(s.startsAt, now, tz) : null;
   const inCount = s.payableCount;
+  // "Time may shift": the court on the tile's border and the time under it (TIME_SHIFT).
+  const ts: TsKind | null = tsKind(court.kind, false);
+  const flip = useCourtFlip(`admin-${s.id}`, ts);
   return (
     <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-switch={switchValue} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       <div className="scard-main">
         <div className="scard-tilecol">
-          <DateTile iso={s.startsAt} tz={tz} />
-          <div className="scard-time" data-card-time aria-hidden="true">
-            {start}
+          <DateTile iso={s.startsAt} tz={tz} ts={tsClass(ts, flip)} />
+          <div className={`scard-time${tsClass(ts, flip)}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
+            {tsTime(start, ts)}
           </div>
         </div>
         <div className="scard-body">
@@ -112,6 +118,7 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}
             />
           )}
+          {s.timeCheck && ctx.d.timeShift !== false && <TimeCheck ctx={ctx} s={s} />}
           {(inCount > 0 || cancelBy) && !s.state.flags.canceled && (
             <div className="card-meta">
               {inCount > 0 && (
@@ -132,6 +139,43 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
       </div>
       {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
     </article>
+  );
+}
+
+/**
+ * "Confirmed 2 of 3" on a game whose start time changed after players were in, and "Waiting on Dan" with a
+ * small Text button per person: it opens Messages with the text filled in (the organizer presses send). Nothing is sent by the site.
+ */
+function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const tz = ctx.d.group.timezone;
+  const c = s.timeCheck!;
+  const body = stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
+  const one = c.waiting.length === 1 ? c.waiting[0] : null;
+  return (
+    <div className="ts-check" data-time-check>
+      <span className="ts-count">
+        Confirmed {c.confirmedCount} of {c.inCount}
+      </span>
+      {one && (
+        <div className="ts-waiting">
+          <span className="ts-name">Waiting on {one.name}</span>
+          <a className="btn small secondary" href={smsHref(one.phone, body, isIOS)} aria-label={`Text ${one.name}: ${body}`}>
+            Text
+          </a>
+        </div>
+      )}
+      {/* Several waiting: one compact row, a small Text button per person (it names them). */}
+      {c.waiting.length > 1 && (
+        <div className="ts-waiting-many">
+          <span className="ts-name">Waiting on</span>
+          {c.waiting.map((w) => (
+            <a key={w.playerId} className="btn small secondary ts-pill" href={smsHref(w.phone, body, isIOS)} aria-label={`Text ${w.name}: ${body}`}>
+              Text {w.name}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

@@ -23,6 +23,7 @@ import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 import '../credit-player.css';
 import '../player-cards.css';
+import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 
 const SHOW_FIRST = 6;
 
@@ -457,6 +458,15 @@ export function PlayerHome({
 
         {g && !pickName && (
           <>
+            <TimeBars
+              view={view!}
+              onChanged={load.reload}
+              onShowAll={() => {
+                // Can't make it on a game further down than the list shows: show it, then its drop question opens.
+                setShowAll(true);
+                setFilter('all');
+              }}
+            />
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} />}
             {answered ? (
               <section className="card stack suggest" aria-label="Your answer">
@@ -1040,11 +1050,12 @@ const TILE_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
  * calendar: red weekday, big dark day, small gray month. `mine` adds a small
  * green check in the corner (you're in).
  */
-export function DateTile({ iso, tz, mine }: { iso: string; tz: string; mine?: boolean }) {
+export function DateTile({ iso, tz, mine, ts = '' }: { iso: string; tz: string; mine?: boolean; ts?: string }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   return (
-    <div className={`tile${mine ? ' mine' : ''}`} aria-hidden="true">
+    <div className={`tile${mine ? ' mine' : ''}${ts}`} aria-hidden="true">
+      {ts && <TileBorders />}
       <span className="dow">{TILE_DOW[p.weekday]}</span>
       <span className="day">{p.day}</span>
       <span className="mon">{month}</span>
@@ -1070,12 +1081,13 @@ const CHECK = (
  * blue TONIGHT strip where the weekday would be. Extra (added by hand): an
  * ink tile (cream in dark mode). A check badge on the corner when you're in.
  */
-function PlayerTile({ iso, tz, mine, tonight, extra }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean }) {
+function PlayerTile({ iso, tz, mine, tonight, extra, ts = '' }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   return (
     <div className="tile-wrap" aria-hidden="true">
-      <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}`}>
+      <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}${ts}`}>
+        {ts && <TileBorders />}
         {tonight ? <span className="tonight-tag">TONIGHT</span> : <span className="dow">{TILE_DOW[p.weekday]}</span>}
         <span className="day">{p.day}</span>
         <span className="mon">{month}</span>
@@ -1276,6 +1288,8 @@ export function ScheduleRow({
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   const [askOut, setAskOut] = useState(false);
+  // Opened from the "time changed" notice's Can't make it: the same drop flow, in that notice's words.
+  const [fromNotice, setFromNotice] = useState(false);
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
   const waiting = mine?.status === 'waitlisted';
@@ -1343,7 +1357,7 @@ export function ScheduleRow({
    * Drop out: the card shows it at once, but nothing is sent for 5 seconds so Undo can take it back
    * (money is involved, so a finished drop is never reversed). Closing the page sends it right away.
    */
-  function dropOut() {
+  function dropOut(lead?: string) {
     setAskOut(false);
     if (working.current) return;
     // Too close to the start, or to the late-drop deadline, to wait: send it now, like before, so the 5 seconds never change how it counts.
@@ -1392,10 +1406,21 @@ export function ScheduleRow({
       },
     });
     // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
-    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, undefined, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, lead, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);
+  // The court on the tile's border and the time under it (always on; only the moved-game notice has a switch).
+  const ts: TsKind | null = tsKind(court.kind, !!s.venueWaitlist);
+  const flip = useCourtFlip(s.id, ts);
+  const asking = !!s.timeAsk && g.timeShift !== false && inSession && open;
+  useEffect(() => {
+    if (!asking) return undefined;
+    return registerCant(s.id, () => {
+      setFromNotice(true);
+      setAskOut(true);
+    });
+  }, [asking, s.id]);
   // Shown only the first time this player sees this promotion on this phone (src/goodNews.ts).
   const promoted = inSession && !!mine.promotion && !!g.me && seeGoodNews(goodNewsKey(g.me.id, s.id, mine.signupAt), demoOn() ? demoSessionNumber() : null);
   const goodNews = promoted ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion!]) : null;
@@ -1468,7 +1493,7 @@ export function ScheduleRow({
   return (
     <article
       id={`row-${s.id}`}
-      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}`}
+      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}`}
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-mine={isIn ? 'in' : undefined}
@@ -1476,14 +1501,14 @@ export function ScheduleRow({
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} ts={s.extra ? '' : tsClass(ts, flip)} />
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
           // where it ends, on a second short line, so nobody is misled.
           const t = cardTime(s.startsAt, s.endsAt, tz, g.group.usualMinutes);
           return (
-            <div className={`sched-time${t.end ? ' range' : ''}`} data-sched-time>
-              <span aria-hidden="true">{t.start}</span>
+            <div className={`sched-time${t.end ? ' range' : ''}${tsClass(ts, flip)}`} data-sched-time data-ts={ts ?? undefined}>
+              <span aria-hidden="true">{tsTime(t.start, ts)}</span>
               {t.end && <span aria-hidden="true">{'\u2013'}{t.end}</span>}
             </div>
           );
@@ -1534,11 +1559,20 @@ export function ScheduleRow({
         open={askOut}
         title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         body={waiting ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
-        confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : 'Drop out'}
+        confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
         danger
         busy={busy}
-        onConfirm={() => (waiting ? run('withdraw', () => "You're off the list") : dropOut())}
-        onCancel={() => setAskOut(false)}
+        onConfirm={() => {
+          // From the notice the banner never says "dropped out": "You're out. $14 credit returned." (same money words).
+          const lead = fromNotice ? "You're out." : undefined;
+          setFromNotice(false);
+          if (waiting) void run('withdraw', () => "You're off the list");
+          else dropOut(lead);
+        }}
+        onCancel={() => {
+          setFromNotice(false);
+          setAskOut(false);
+        }}
       />
     </article>
   );
