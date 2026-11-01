@@ -359,4 +359,21 @@ Test files new in this audit: `tests/audit-behind-clock.test.ts`,
 | 299 | TELEGRAM_FETCH | Tests only; a function can't be set from Cloudflare | Pass | code |
 | 300 | SITE_RULES vs code | Differences listed in STAGE_NOTES | Pass | review |
 
-**Total: 300 scenarios.**
+## 10. Found by the two fresh auditors (round 1)
+
+| # | Scenario | Expected by the rules | Status | Test |
+|---|---|---|---|---|
+| 301 | Name "P: https://<site>\\@evil" or one copying the site's own address drops out | No hidden link words in any alert that carries a name | Fixed | audit-behind-telegram |
+| 302 | Browser carrying a cookie with a broken %-escape (another juncaj.net site) | Site works; was a server error on every request | Fixed | audit-behind-security |
+| 303 | A cancel lands between "court waitlist" checking and writing | Game stays canceled; was un-canceled with everyone's $14 already credit (free game) | Fixed | audit-behind-races |
+| 304 | 500 group-word guesses sent at once | At most 10 checked; was all 500 (group word is off on live) | Fixed | audit-behind-races |
+| 305 | Two Finalize requests in the same millisecond with different "who played" lists | The loser writes nothing; today both partly apply | Open (not fixed: money code, needs two requests in one millisecond, plan after Nov 3) | auditor B script |
+| 306 | 40 self-adds at once from different addresses | Stops at 30 names; went to 45 | Open (minor) | auditor B script |
+| 307 | One player toggling drop/join every 3 minutes for 2 hours | Uses the 20-an-hour cap, so the 7:00 PM last call never goes | Question (cap is shared on purpose) | auditor A script |
+| 308 | Network error after Telegram already took the message | Retried, could arrive twice (a timeout keeps it as sent) | By design (low chance) | auditor A script |
+| 309 | 21 wrong PINs from 21 addresses | Locks the organizer's PIN sign-in for 15 minutes; signed-in phones keep working | By design | audit-behind-security |
+| 310 | Moved to another day and back within an hour | Its alerts can go again | By design | code |
+| 311 | Max players set below the number already in | Allowed; the health check then shows more_in_than_max | Question | integrity check |
+| 312 | A dropper re-taps I'm in before the waitlist moves up | Gets the spot back ahead of the waitlist; money stays right | Question | auditor B script |
+
+**Total: 312 scenarios.**
