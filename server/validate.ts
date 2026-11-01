@@ -8,7 +8,8 @@ function bad(field: string, message: string): never {
 }
 
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+// (C1 controls like U+0085 and the line/paragraph separators U+2028/U+2029 would break a name across lines.)
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 // Invisible marks that flip text direction or hide in a word, so a name like
 // "Ryan" could look like someone else's. Emoji joiners are still allowed.
 const HIDDEN_CHARS = /[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069\ufeff]/;
