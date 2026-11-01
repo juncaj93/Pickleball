@@ -790,8 +790,11 @@ export async function applyPayment(
           playedCount: session.final_played_count ?? null,
           nowIso: ctx.nowIso,
           settle: false,
-          // Only with the finalize it was worked out for (a Reopen or redo since gives nothing here).
-          guard: `${confirmedNow} AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ${sqlText(session.id)}) = '${asRead.replace(/'/g, '')}'`,
+          // Only with the finalize it was worked out for (a Reopen or redo since gives nothing here), and only if this
+          // batch's own confirm went in on the payment it read (a "Didn't pay?" and a new Mark paid in between: nothing).
+          guard: `${confirmedNow} AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ${sqlText(session.id)}) = '${asRead.replace(/'/g, '')}'
+            AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NULL
+              AND payment_updated_at = ${sqlText(ctx.nowIso)} AND payment_amount_cents = ${Number(row.payment_amount_cents ?? 0)})`,
         }),
       ]);
       if (res.meta.changes !== 1) {
