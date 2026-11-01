@@ -86,16 +86,66 @@ is the reminder; there is no scheduled job or Telegram nudge for it.
 - Drop out, Remove player, cancel and the organizer's **Unmark** (on Money >
   Who paid: "Paid with credit" or "Credit $3") put the credit back at once.
   The 5-second Undo for Drop out sends nothing, so the credit never moves.
+- Every one of those saves in ONE all-or-nothing step (since Oct 31): the
+  seat leaving (or the game being canceled, finalized, reopened, unmarked)
+  and the money moving happen together or not at all, so a request cut off
+  halfway can't leave money half-moved, and tapping again finishes or
+  changes nothing.
+- **Only confirmed money becomes credit** (Alex, Oct 31). An unconfirmed "I
+  paid" is a claim, not money. If the player drops out (or is removed), the game
+  is canceled, or Finalize marks them "did not play" before the organizer
+  confirms it, nothing on that seat moves: no credit, and any credit on the
+  seat stays on it. A player who played with an unconfirmed I paid counts as
+  paid, but the money back above the final price waits until Mark paid
+  confirms the payment (then it comes back at once). Home shows "Ryan tapped I paid ($14), not confirmed.
+  Dropped out of Tue, Nov 3." with **Paid** (the money on the seat becomes
+  their credit) and **Didn't pay** (the claim is cleared; credit on the seat
+  goes back to them). Until then it counts as Held, never Collected. Their drop
+  banner says "Your $14 comes back as credit once Alex confirms your payment."
+  A rejoin finds the seat as it was. Confirmed payments turn into credit as
+  before.
+- **Unmark undoes only the latest payment** (Alex, Oct 31): cash paid on top of
+  credit goes, and the credit stays on the seat ("Credit $5", $9 due); a second
+  Unmark on "Credit $5" puts the credit back. Cash paid earlier toward the seat
+  (after a reopen and a redo) always stays.
+- The organizer's Mark paid and Unmark carry what the screen showed: if the
+  seat changed since (a second device, an old screen, a retried tap), the tap
+  is refused with "Ryan's payment just changed. Look again."
+- **Changing the $14 setting** (Alex, Oct 31: existing sign-ups keep the price
+  they signed at; only new sign-ups use the new price). NOT built yet: the site
+  does not store the price each seat signed at, so it needs one new additive
+  table; Alex chose to build it as a small separate job after Tue Nov 3 (plan:
+  docs/PRICE_SNAPSHOT.md). Until then a change applies to every game not yet
+  finalized (paid seats keep what they paid). The $14 setting stays frozen.
 - A pending cash out is never used by itself. When it would help pay a game
   just joined, a small question at the bottom asks "Use the $10 you asked to
   cash out for this game?" **Use it** puts it on the game and shrinks the
   request (or withdraws it); the organizer's Home card shrinks or goes and
   Telegram gets one line ("Mitchel withdrew the $10 cash out request (using
   it for Thu Nov 5)"). **No, keep cash out**: they are in and pay as usual.
+- **I'm in after a Drop out**: tapping I'm in (on any game) first sends a drop
+  still held on the phone, or left over from a closed page, and waits for it,
+  so the credit it gives back goes on the new seat.
+- **Pay before Court booked** (Alex, Oct 31): Pay and I paid stay hidden until
+  the court is booked; credit can go on any time ("Use $14 credit").
+- **Drop out shows the money at once**: the drop is held on the phone for 5
+  seconds for Undo and sent after; the screen draws the credit in right away
+  (chip, balance, credit sheet) with "You dropped out. $14 credit returned.",
+  and Undo takes it away. If the page closes or loses signal first, a note on
+  the phone finishes the drop on return or the next open (up to 2 minutes).
 - Players see their credit as a small **CREDIT $14** chip in the header, next
-  to the date tile. Tapping it opens a sheet with the balance, the history
-  ("+$5 Thu, Oct 29 (6 played)", "-$14 used for Tue, Nov 3"), and **Request
-  refund**.
+  to the date tile (only when they have some, or a cash out is waiting).
+  Tapping it opens a sheet with the balance, **Request cash out**, and the
+  last 10 changes in plain words, newest first, returns included:
+  "Oct 31: $14 used for Nov 10", "Oct 31: $14 returned from Nov 5 (you
+  dropped)", "Nov 3: $5 back from Nov 3 (6 played)", "Nov 4: $14 cashed out".
+- The banners say what happened to their money: "You're in. $14 credit
+  used." (part cover on a booked court: "You're in. $3 credit used, $11
+  due."; no court booked yet: no amount due), and "You dropped out. $14
+  credit returned." ("$14 back as credit." when it was cash; just "You
+  dropped out." when nothing was paid), with Undo.
+  (Banners and the 10-change list: built Oct 31 on a preview, live after Alex's
+  "ship it". Until then the sheet shows the older history lines.)
 - Nobody ever sees anyone else's credit.
 
 ## Refund requests

@@ -112,7 +112,9 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
   async function mark(refunded: boolean) {
     setBusy(true);
     try {
-      await api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false });
+      // Undo names the refund this screen shows (the latest), so a second tap or a retry takes back nothing more.
+      const latest = [...ledger!.entries].reverse().find((e) => e.kind === 'refunded' && !e.endedAt);
+      await api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false, ...(latest ? { ledgerId: latest.id } : {}) });
       await ctx.reload();
       toast(refunded ? 'Credit marked refunded' : 'Credit refund undone');
     } catch (err) {
@@ -195,7 +197,10 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
   async function setPaid(s: AdminSessionView, paid: boolean) {
     setBusy(true);
     try {
-      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid });
+      const row = s.roster.find((r) => r.playerId === player.id);
+      const seen = row?.moneySeen;
+      // With what this screen showed (the seat, and the amount owed for Mark paid): refused if it changed since.
+      await api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid, ...(seen ? { seen } : {}), ...(paid && row && row.owesCents > 0 ? { cents: row.owesCents } : {}) });
       await ctx.reload();
       toast(paid ? `${player.name} marked paid` : `${player.name} marked unpaid`);
     } catch (err) {

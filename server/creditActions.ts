@@ -50,6 +50,8 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
     alreadyUsed,
     // The payment is the whole price (cash plus credit), so credit used for a game is collected in the month it is played.
     payInFull: full ? { paidCents: price.cents } : null,
+    finalPriceCents: session.final_price_cents ?? null,
+    finalizedAt: session.finalized_at ?? null,
     nowIso: ctx.nowIso,
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again and tap Use credit.');
@@ -63,6 +65,9 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
  * game is owed again. Only for a game paid entirely with credit; no cash moves.
  */
 export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string) {
+  // After Finalize the credit on the seat is part of the final price and may have money back from it: only the
+  // organizer's Unmark (which takes that back too) can change it now.
+  if (session.finalized_at) throw new HttpError(409, 'finalized', 'This game is finalized. Ask the organizer to change it.');
   const roster = await loadRoster(ctx.db, session.id);
   const row = roster.find((r) => r.player_id === playerId);
   if (!row || row.payment_status !== 'paid') throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
@@ -72,7 +77,7 @@ export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionR
     .first<{ c: number }>();
   const cents = used?.c ?? 0;
   if (cents <= 0 || cents < (row.payment_amount_cents ?? 0)) throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
-  const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'undone');
+  const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'undone', { notFinalized: true });
   await audit(ctx.db, group.id, session.id, 'credit_undone', { player: name, amountCents: back }, ctx.nowIso, name);
   return { ok: true, returnedCents: back };
 }
@@ -212,7 +217,9 @@ export async function refundCreditBalance(ctx: Ctx, body: Record<string, unknown
   if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You have no credit to pay back.');
   if (!v.bool(body.refunded, 'refunded')) {
-    const undone = await undoRefund(ctx.db, playerId, ctx.nowIso);
+    // With the id of the refund the screen showed, only that one is taken back (a repeat finds it undone already).
+    const ledgerId = body.ledgerId === undefined ? null : v.id(body.ledgerId, 'ledgerId');
+    const undone = await undoRefund(ctx.db, playerId, ctx.nowIso, ledgerId);
     if (undone) await audit(ctx.db, group.id, null, 'credit_refund_undone', { player: p.display_name, playerId }, ctx.nowIso);
     return { ok: true, changed: undone };
   }

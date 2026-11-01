@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
-import type { AdminSessionView, RefundRequestView } from '../../../shared/api';
+import type { AdminDashboard, AdminSessionView, RefundRequestView } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
-import { unconfirmedPaidWarning } from '../../../shared/credit';
+import { paymentClaimText, unconfirmedPaidWarning } from '../../../shared/credit';
 import { finalPreview } from '../../../shared/pricing';
 import { formatShortDate } from '../../../shared/time';
 import { api, ApiError, openVenmo, storageGet, storageSet } from '../../lib';
@@ -208,6 +208,29 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
         </button>
       </div>
       {!pay.addressed && <p className="small muted">No Venmo saved for {r.name}: pick them in Venmo.</p>}
+    </article>
+  );
+}
+
+/**
+ * "Ryan tapped I paid ($14), not confirmed. Dropped out of Tue, Nov 3.": an I paid the organizer never
+ * confirmed, on a seat that left the game or a canceled game. Nothing on that seat moved. "Paid" makes it
+ * their credit (with any credit still on the seat); "Didn't pay" clears it (credit on the seat goes back).
+ */
+export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard['paymentClaims'][number] }) {
+  const { busy, run } = useRun(ctx);
+  const answer = (paid: boolean, msg: string) => run(() => api('POST', `/api/admin/sessions/${c.sessionId}/claim`, { playerId: c.playerId, paid }), msg);
+  return (
+    <article className="card stack payment-claim" aria-label={`${c.name} payment not confirmed`} data-payment-claim={c.name}>
+      <h3>{paymentClaimText(c.name, c.cents, c.why, c.startsAt, ctx.d.group.timezone)}</h3>
+      <div className="finalize-btns">
+        <button className="btn secondary" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}'s ${formatPrice(c.cents)} is credit now`)}>
+          Paid
+        </button>
+        <button className="link-btn not-now" disabled={busy} data-claim-not-paid onClick={() => answer(false, 'Cleared')}>
+          Didn't pay
+        </button>
+      </div>
     </article>
   );
 }

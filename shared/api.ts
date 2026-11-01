@@ -58,6 +58,13 @@ export interface PlayerSessionView {
     /** What they still owe for this session, after credit used on it (0 when paid). */
     oweCents: number;
     /** Credit from their pot already used on this session. */
+    /** What Drop out would give back right now: credit used on this seat (back to the pot) and cash paid toward it (becomes credit). */
+    dropCreditCents: number;
+    dropCashCents: number;
+    /** An unconfirmed "I paid" a drop would leave for the organizer to confirm (it becomes credit only then). */
+    dropClaimCents: number;
+    /** Set by the player screen only (src/courtDisplay.ts): on standby for a court the venue has not given yet. */
+    standby?: boolean;
     creditCents: number;
     /** Cash they paid toward this session before its price went up (a redo with fewer players). */
     paidEarlierCents: number;
@@ -178,6 +185,12 @@ export interface AdminRosterEntry {
   /** Money from this seat that went back to them as credit, and why. */
   creditBackCents: number;
   creditBackReason: CreditReason | null;
+  /** The seat's money as this screen shows it (shared/credit.ts moneySeen): sent back with Mark paid / Unmark. */
+  moneySeen: string;
+  /** What Remove would give back now: credit back to the pot, cash that becomes credit, an unconfirmed I paid that waits. */
+  dropCreditCents: number;
+  dropCashCents: number;
+  dropClaimCents: number;
   /** Set once the game is finalized: did they play. */
   played: boolean | null;
   /**
@@ -355,6 +368,8 @@ export interface AdminDashboard {
   creditLedger: { playerId: string; balanceCents: number; reservedCents: number; refundCents: number; entries: CreditEntryView[] }[];
   /** Refund requests waiting on the organizer, oldest first. */
   refundRequests: RefundRequestView[];
+  /** Unconfirmed "I paid" on a seat that left or a canceled game: the organizer decides (shared/credit.ts isPaymentClaim). */
+  paymentClaims: { sessionId: string; startsAt: string; playerId: string; name: string; cents: number; why: 'dropped' | 'canceled' | 'not_played' }[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
   /** "Do this now" taps saved on the server, as "sessionId:mark". */

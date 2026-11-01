@@ -81,6 +81,8 @@ describe('a fresh sign-up starts the Pay steps over', () => {
     expect(again.oweCents).toBe(1400);
     // Paid, then out: the $14 is credit right away. In again: a fresh sign-up that owes $14, and the credit pays it as he joins (credit at sign-up is automatic).
     await alex.call('POST', `/api/sessions/${s.id}/paid`, { paid: true });
+    // Confirmed by the organizer (since Oct 31 only a confirmed payment turns into credit on a drop).
+    await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: ctx.byName.Alex, paid: true });
     ctx.app.now += 60_000;
     expect((await alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).data).toMatchObject({ result: 'withdrawn', creditBackCents: 1400 });
     ctx.app.now += 60_000;

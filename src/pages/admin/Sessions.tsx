@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   canceledMessage,
@@ -13,7 +13,7 @@ import { DateTile, HolidayPill } from '../PlayerHome';
 import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
-import { startHold, undoHold, UNDO_MS } from '../../hold';
+import { flushHold, startHold, undoHold, UNDO_MS } from '../../hold';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { type AdminCtx } from '../Admin';
@@ -482,8 +482,18 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       },
       undone: () => setHeldFor(r.playerId, false),
     });
-    toast(`${r.name} removed.`, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => { if (!undoHold(key)) toast(`Too late, ${r.name} was already removed.`, 'error'); } } });
+    // Says what happens to their money, at once (nothing is sent until Undo runs out).
+    const back = r.dropCreditCents + r.dropCashCents;
+    const said =
+      r.dropClaimCents > 0
+        ? `${r.name} removed. Their ${formatPrice(r.dropClaimCents)} I paid waits for your Paid or Didn't pay.`
+        : back > 0
+          ? `${r.name} removed. ${formatPrice(back)} ${r.dropCashCents > 0 ? 'back as credit' : 'credit returned'}.`
+          : `${r.name} removed.`;
+    toast(said, 'ok', { stayMs: UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => { if (!undoHold(key)) toast(`Too late, ${r.name} was already removed.`, 'error'); } } });
   }
+  // Leaving this game's screen sends a held Remove at once, so Players and Money never show the money before it moved.
+  useEffect(() => () => flushHold(), []);
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);
@@ -577,7 +587,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   // The organizer is not a row of their own money: they pay the venue (the court row below).
   const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
+    // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
   const price = ctx.d.group.settings.pricePerPlayerCents;
   const played = isPlayed(s);
   const fin = s.finalized;
@@ -689,7 +700,8 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
               <div className="pay-btns">
                 {r.paymentStatus === 'paid' && !r.refundedAt ? (
                   <>
-                    {r.selfPaid && (
+                    {/* Confirm an I paid while they are in; one on a seat that left is a claim, answered on Home. */}
+                    {r.selfPaid && r.status === 'confirmed' && !s.state.flags.canceled && (
                       <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
                         Mark paid
                       </button>
@@ -712,7 +724,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                           className="btn small secondary"
                           disabled={busy}
                           data-unmark-credit={r.name}
-                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false }), `${r.name}'s credit put back`)}
+                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`)}
                         >
                           Unmark
                         </button>

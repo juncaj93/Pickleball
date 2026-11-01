@@ -4,14 +4,14 @@ import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { creditBackNote } from '../../shared/pricing';
 import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
-import { creditHintText, creditUsedMessage } from '../../shared/credit';
+import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
-import { flushHold, holdPending, startHold, undoHold, UNDO_MS } from '../hold';
+import { flushHold, holdPending, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
@@ -37,6 +37,36 @@ function forgetPendingDrop(sessionId: string) {
     if (JSON.parse(storageGet(PENDING_DROP_KEY) ?? '{}').sessionId === sessionId) storageRemove(PENDING_DROP_KEY);
   } catch {
     storageRemove(PENDING_DROP_KEY);
+  }
+}
+/**
+ * Before I'm in on a game: a drop held on this phone (or left over from a page that closed before sending it)
+ * goes to the server FIRST, and the join waits for it. The credit that drop gives back is then there for the
+ * new seat (it goes on at I'm in), instead of the new seat owing money while that credit sits unused.
+ */
+async function sendDropsBeforeJoin(joiningId: string) {
+  await settleHolds();
+  let note: PendingDropNote | null = null;
+  try {
+    note = JSON.parse(storageGet(PENDING_DROP_KEY) ?? 'null');
+  } catch {
+    note = null;
+  }
+  if (!note?.sessionId || note.sessionId === joiningId) return;
+  // The same age rules as a left-over note: younger than the hold, another tab may still be holding it (its Undo
+  // must work), so leave it; older than 2 minutes, too late to be sure. The server's drop is safe to repeat.
+  const next = pendingDropAction(note, Date.now(), () => true, holdPending);
+  if (next.do === 'forget') {
+    storageRemove(PENDING_DROP_KEY);
+    return;
+  }
+  if (next.do !== 'send') return;
+  try {
+    await api('POST', `/api/sessions/${note.sessionId}/withdraw`, {});
+    storageRemove(PENDING_DROP_KEY);
+  } catch (err) {
+    // Refused (game started, already out...): nothing left to send. No signal: the note stays for later.
+    if (err instanceof ApiError && err.code !== 'offline') storageRemove(PENDING_DROP_KEY);
   }
 }
 const CELEBRATE_MS = 1600;
@@ -90,12 +120,15 @@ const GOOD_NEWS = {
   court_opened: "Good news, the court opened, so you're in.",
 };
 
-/** What the banner says after I'm in. With no court booked everyone who taps I'm in is simply in. */
-export function joinedText(d: JoinResponse, noCourt = false): string {
-  if (noCourt) return "You're in";
-  if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
-  if (d.result === 'standby') return `You're on standby, #${d.position}`;
-  return "You're in";
+/**
+ * What the banner says after I'm in. With no court booked everyone who taps I'm in is simply in.
+ * Credit that went on the game at once is said too: "You're in. $14 credit used." or, part cover on a
+ * booked court, "You're in. $3 credit used, $11 due." (`priceCents` is the flat price.)
+ */
+export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0): string {
+  if (!noCourt && d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
+  if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
+  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, !noCourt);
 }
 
 /**
@@ -220,41 +253,84 @@ export function PlayerHome({
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
-        if (before + 1 === MIN_PLAYERS && !offer) return toast('Game on!', 'ok', { ball: true });
+        if (before + 1 === MIN_PLAYERS && !offer) return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, !noCourt), 'ok', { ball: true });
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents });
-      toast(joinedText(res, noCourt));
+      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0));
     },
-    [toast, markCelebrated],
+    [toast, markCelebrated, g?.group.priceCents],
   );
 
-  // A drop that was held for Undo when the page closed: finish it.
+  // A drop that was held for Undo when the page closed (or lost signal): finish it. A note younger than the hold
+  // may belong to another tab still holding it, so this page looks again once it is old enough, instead of
+  // leaving it for a later visit (where it could have run out).
   useEffect(() => {
     if (!g || !g.me || switching || viewAs) return;
-    const raw = storageGet(PENDING_DROP_KEY);
-    if (!raw) return;
-    let rec: { sessionId?: string; at?: number } = {};
-    try {
-      rec = JSON.parse(raw);
-    } catch {
-      /* broken note: drop it */
-    }
-    if (rec.sessionId && holdPending(rec.sessionId)) return;
-    const age = Date.now() - (rec.at ?? 0);
-    // Younger than the hold: another tab is still holding it (its Undo must work), so leave it alone.
-    if (age < UNDO_MS + 2_000) return;
-    storageRemove(PENDING_DROP_KEY);
-    const mineHere = g.sessions.find((x) => x.id === rec.sessionId)?.mine?.status === 'confirmed';
-    if (rec.sessionId && mineHere && age < 2 * 60_000) {
-      void api('POST', `/api/sessions/${rec.sessionId}/withdraw`, {}).then(() => load.quiet(), () => {});
-    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const look = async () => {
+      let note: PendingDropNote | null = null;
+      const raw = storageGet(PENDING_DROP_KEY);
+      if (raw) {
+        try {
+          note = JSON.parse(raw);
+        } catch {
+          note = {};
+        }
+      }
+      // Whether they are still in comes from the server as it is now, not from this page's older copy. No answer
+      // (no signal): decide nothing, keep the note, and look again.
+      let fresh: GroupView | null = null;
+      if (note?.sessionId) {
+        fresh = await api<GroupView>('GET', '/api/group').catch(() => null);
+        if (!fresh) {
+          timer = setTimeout(() => void look(), 15_000);
+          return;
+        }
+      }
+      const stillIn = (id: string) => ['confirmed', 'waitlisted'].includes(fresh?.sessions.find((x) => x.id === id)?.mine?.status ?? '');
+      const next = pendingDropAction(note, Date.now(), stillIn, holdPending);
+      if (next.do === 'wait') timer = setTimeout(() => void look(), next.ms);
+      else if (next.do === 'forget') {
+        storageRemove(PENDING_DROP_KEY);
+        // The screen stops drawing that drop (and its credit); the real data shows.
+        if (note?.sessionId) setOverlay(note.sessionId, null);
+        await load.quiet();
+      } else if (next.do === 'send') {
+        try {
+          await api('POST', `/api/sessions/${next.sessionId}/withdraw`, {});
+          storageRemove(PENDING_DROP_KEY);
+          setOverlay(next.sessionId, null);
+          await load.quiet();
+        } catch (err) {
+          // No signal again: the note stays and the next look (or visit) tries again. Refused (the game started,
+          // or was canceled): nothing more to send, and the screen shows the real data.
+          if (err instanceof ApiError && err.code !== 'offline') {
+            storageRemove(PENDING_DROP_KEY);
+            setOverlay(next.sessionId, null);
+            await load.quiet();
+          } else timer = setTimeout(() => void look(), 15_000);
+        }
+      }
+    };
+    void look();
+    // Back to the page (after a send that failed while it was hidden): finish the drop then.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void look();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [g?.me?.id]);
   // Leaving the screen sends a held drop right away.
   useEffect(() => () => flushHold(true), []);
 
-  const balance = g && (switching || (!viewAs && !g.me)) ? null : (g?.credit.balanceCents ?? null);
+  // The header chip and the credit sheet read the screen's data, so a held drop's credit shows with its banner.
+  const credit = view?.credit ?? g?.credit;
+  const balance = g && (switching || (!viewAs && !g.me)) ? null : (credit?.balanceCents ?? null);
   useEffect(() => {
     if (balance !== null) lastBalance.current = balance;
   }, [balance]);
@@ -291,7 +367,7 @@ export function PlayerHome({
 
   const pickName = !!g && (switching || (!viewAs && !g.me));
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
-  const showChip = !!g && !pickName && (g.credit.balanceCents > 0 || !!g.credit.pending);
+  const showChip = !!g && !!credit && !pickName && (credit.balanceCents > 0 || !!credit.pending);
   const chipStart = lastBalance.current;
 
 
@@ -322,7 +398,7 @@ export function PlayerHome({
           ) : undefined
         }
         tools={<ModeButton preview={!!viewAs} />}
-        chip={showChip ? <CreditChip credit={g.credit} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
+        chip={showChip ? <CreditChip credit={credit!} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
       />
       <main className="page stack-lg">
         {load.loading && !g && !load.error && <ScheduleSkeleton />}
@@ -423,7 +499,7 @@ export function PlayerHome({
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
       {cashOut && <CashOutPrompt key={cashOut.sessionId} sessionId={cashOut.sessionId} cents={cashOut.cents} onClose={() => setCashOut(null)} onChanged={load.reload} />}
-      {g && <CreditSheet open={creditOpen && showChip} credit={g.credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
+      {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </>
   );
 }
@@ -602,15 +678,18 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
   );
 }
 
-/** "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. */
-function usePaid(sessionIds: string[], onChanged: () => Promise<void>) {
+/**
+ * "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. "I paid" sends the
+ * amount the screen showed for each game, so a price that changed in the meantime is refused, not recorded.
+ */
+function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   async function set(paid: boolean) {
     setBusy(true);
     const release = holdLive();
     try {
-      for (const id of sessionIds) await api('POST', `/api/sessions/${id}/paid`, { paid });
+      for (const o of owed) await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
       toast(paid ? 'Marked paid' : 'Marked not paid');
       await onChanged();
     } catch (err) {
@@ -735,7 +814,7 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
-  const paid = usePaid(due.map((o) => o.sessionId), onChanged);
+  const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
@@ -865,6 +944,7 @@ function SuggestionCard({
     try {
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
+        await sendDropsBeforeJoin(s.sessionId);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
         onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
@@ -993,7 +1073,7 @@ function RowPay({
   drop: ReactNode;
 }) {
   const mine = s.mine!;
-  const paid = usePaid([s.id], onChanged);
+  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(s.id);
   const busy = paid.busy || credit.busy;
@@ -1027,9 +1107,16 @@ function RowPay({
     </span>
   );
   if (mine.oweCents <= 0) {
+    // No court booked yet: no Pay, but credit they can use is always offered ("Use $14 credit").
+    const useNow = mine.useCreditCents > 0 && (
+      <button className="btn pay-btn" data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.useCreditCents, mine.useCreditCents)}>
+        Use {formatPrice(mine.useCreditCents)} credit
+      </button>
+    );
     return (
       <div className="sched-money stacked">
         {creditChip}
+        {useNow}
         <span className="inline-links">{drop}</span>
       </div>
     );
@@ -1197,6 +1284,7 @@ export function ScheduleRow({
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
     try {
+      await sendDropsBeforeJoin(s.id);
       joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
       await onChanged();
     } catch (err) {
@@ -1223,17 +1311,22 @@ export function ScheduleRow({
     const soon = Date.now() + UNDO_MS + 3_000;
     const deadline = Date.parse(s.dropCutoffAt);
     if (Date.parse(s.startsAt) - Date.now() < 10_000 || (deadline > Date.now() - 1_000 && deadline < soon)) {
-      void run('withdraw', () => "You're out");
+      void run('withdraw', (d) => droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out."));
       return;
     }
     const id = s.id;
     setOverlay(id, 'drop');
     storageSet(PENDING_DROP_KEY, JSON.stringify({ sessionId: id, at: Date.now() }));
+    // Sent because the page was going away (closed, hidden, switched app): a failure then is most likely no
+    // signal while leaving, so the note stays and the drop is finished on return or the next open.
+    let leavingSend = false;
     startHold(id, {
       send: async (leaving) => {
+        leavingSend = leaving;
         await api('POST', `/api/sessions/${id}/withdraw`, {}, { keepalive: leaving && !demoOn() });
       },
       settled: async (err) => {
+        if (err && leavingSend && err instanceof ApiError && err.code === 'offline') return;
         forgetPendingDrop(id);
         if (err) {
           setOverlay(id, null);
@@ -1248,7 +1341,8 @@ export function ScheduleRow({
         setOverlay(id, null);
       },
     });
-    toast('You dropped out.', 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
+    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, undefined, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);
@@ -1271,7 +1365,7 @@ export function ScheduleRow({
       Drop out
     </button>
   );
-  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || onTop);
+  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || mine.useCreditCents > 0 || onTop);
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
   const notIn = open && !(inSession || waiting);

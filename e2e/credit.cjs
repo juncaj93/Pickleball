@@ -311,9 +311,9 @@ async function main() {
         const sheet = await openSheet(page);
         assert(squash(await sheet.locator('[data-credit-balance]').innerText()) === '$14 credit', `balance was "${await sheet.locator('[data-credit-balance]').innerText()}"`);
         const hist = sheet.locator('[data-credit-history] li');
-        assert((await hist.count()) === 1 && squash(await hist.first().innerText()) === '+$14 canceled Thu, Oct 29', `history: ${await hist.allInnerTexts()}`);
+        assert((await hist.count()) === 1 && / \$14 back from Oct 29 \(canceled\)$/.test(squash(await hist.first().innerText())), `history: ${await hist.allInnerTexts()}`);
         await sheet.locator('[data-request-refund]').waitFor();
-        await sheet.getByText('Use your credit when you pay for a game.').waitFor();
+        await sheet.getByText("Your credit goes on a game by itself when you tap I'm in.").waitFor();
         assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'nothing pending');
         assert((await greenButtons(sheet)) <= 1, 'at most one green button on the sheet');
         await tidy(sheet, 'credit sheet');

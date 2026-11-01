@@ -122,6 +122,8 @@ async function main() {
   for (const n of ['Wren', 'Zed']) {
     await join(n, 1);
     await post(who[n], `/api/sessions/${games[1].id}/paid`, { paid: true });
+    // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+    await post(areq, `/api/admin/sessions/${games[1].id}/payment`, { playerId: idOf(n), paid: true });
     await post(who[n], `/api/sessions/${games[1].id}/withdraw`, {});
   }
   await post(who.Zed, '/api/me/refund-request', { cents: 500 });
@@ -334,8 +336,14 @@ async function main() {
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
+    // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+    const sid = (await card.getAttribute('id')).replace(/^row-/, '');
+    await post(areq, `/api/admin/sessions/${sid}/payment`, { playerId: idOf('Julian'), paid: true });
     await card.getByRole('button', { name: 'Drop out' }).click();
-    await confirmDrop(page);
+    // The chip comes with the "You dropped out" banner (the held drop's credit is drawn in at once), so watch it
+    // from the tap; the drop itself is sent when the 5 seconds end (waited for below).
+    const sent = page.waitForResponse((r) => /\/withdraw$/.test(r.url()), { timeout: 15000 });
+    await page.locator('dialog[open]').getByRole('button', { name: 'Drop out' }).click();
     const chip = page.locator('header [data-credit-chip]');
     await chip.waitFor();
     const seen = [];
@@ -354,6 +362,9 @@ async function main() {
     assert(nums[0] < 14 || seen.length > 1, `chip never counted up: ${seen}`);
     assert(widths.size === 1, `chip changed width while counting: ${[...widths]}`);
     assert(pulsed, 'chip did not pulse when the count ended');
+    await sent;
+    await page.waitForTimeout(400);
+    assert(squash(await chip.locator('.cc-amount').innerText()) === '$14', 'still $14 once the drop is sent');
     assert((await page.locator('[data-credit-back]').count()) === 0, 'the "Your $14 is now credit. Request refund" line is gone');
     assert(!/Request refund|is now credit\. /.test(await card.innerText()), `card text: ${await card.innerText()}`);
     await ctx.close();
@@ -365,6 +376,9 @@ async function main() {
     await card.locator('.tile-check').waitFor();
     await card.getByRole('button', { name: 'I paid' }).first().click();
     await card.locator('.paid-tag').waitFor();
+    // Confirmed by the organizer: since Oct 31 only a confirmed payment turns into credit on a drop.
+    const sid = (await card.getAttribute('id')).replace(/^row-/, '');
+    await post(areq, `/api/admin/sessions/${sid}/payment`, { playerId: idOf('Blair'), paid: true });
     await card.getByRole('button', { name: 'Drop out' }).click();
     await confirmDrop(page);
     const chip = page.locator('header [data-credit-chip]');
