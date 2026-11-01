@@ -789,3 +789,32 @@ Screens, one seat rule, and one one-time repair. No price, amount, credit rule o
 - **Restore points:** Time Travel bookmark `000002f1-00000000-00005116-9fda069f0c40099d335fc6afec7bc73b` (taken Sun Nov 1, about 3:10 AM Eastern), SQL export `live-before-waitlist-rule-2026-11-01.sql` (213 rows, phone numbers, in the session scratch folder, not committed). Code rollback: Pages deployment `5674340d-06c9-4b10-9408-55cb4a5a34d3` (commit c68fd63, the money audit).
 - **Tests:** 1,218 unit passed (1 skipped from the money audit's tests); browser suites all green (run.cjs 229, admin-cleanup 36, money-visible and the rest). Tests that assumed "a Waitlist court makes standby seats" were rewritten to the new rule, none deleted.
 - **Preview:** a separate throwaway database `pickleball-preview` (fake data) and the branch preview `preview-admin-look` were made for the look checks; they hold no real data and can be deleted.
+
+## Player screens audit (Sun Nov 1, 2026)
+
+Audit 1 of 3 (player screens). Base: main 8d8ed0c, caught up to the live site first (PR #52, plain merge, no deploy:
+the live site already ran that code). Every scenario, result and test is in `docs/AUDIT_SCENARIOS_player.md`.
+No database change, no money rule, price or credit rule changed.
+
+### Live on their own (bug fixes, no visible change)
+- Raising Max players moves waiting players in, first in line first (they used to stay waiting next to open spots).
+- The held drop (5-second Undo) and its note on the phone:
+  - sent first when switching names (not you?, Add my name), using credit, or asking to cash out;
+  - one note per game (`src/dropNotes.ts`), tied to the player and the seat (sign-up time), cleared by I'm in on
+    that game, re-read after every server check, never written, read or sent by View as;
+  - every real drop is sent with keepalive; a demo drop never reaches the live site after Exit.
+- A double tap on the drop question's Drop out no longer lands on the banner's Undo.
+- The red error card no longer sticks after a failed tap (the banner already says why).
+- Add my name: accents folded (Jose finds José), names in every alphabet kept apart.
+- Tap areas (calendar icon 44 px; I paid / Drop out no longer take the bottom of Pay), money chip wraps at big text.
+
+### On the preview, waiting for Alex's "ship it"
+- "Good news, a spot opened up" shows only the first time on that phone (`src/goodNews.ts`, browser storage only).
+- "Out for Tuesday?" (not "next Tuesday") two days ahead.
+- Canceled cards not see-through (contrast); "If you paid, it's now your credit." only for players who were in.
+- The CREDIT word on the chip readable in dark mode.
+
+### Tests
+- New: `tests/audit-player-api.test.ts` (214), `tests/good-news.test.ts`, `tests/fresh-{a,c,d,e,f,g}-nov1.test.ts`,
+  `e2e/audit-player-flows.cjs`, `e2e/audit-player-look.cjs` (12 checks marked OPEN: big text and a 29-letter name),
+  `e2e/good-news.cjs`, `e2e/fresh-attack.cjs` (random hostile sequences, not in test:e2e, about 20 minutes).
