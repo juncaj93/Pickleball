@@ -4118,7 +4118,16 @@ async function main() {
       // Thu Oct 29, 10:30 PM Eastern: Tue and both Wed games are over.
       await clockTo(Date.parse('2026-10-29T22:30:00-04:00'));
       await admin.reload();
+      // Games never marked Booked are asked "Did you guys play?" first, and their Finalize card follows the
+      // answer (Nov 1 admin audit, item 16). Answer Yes for each, as the organizer would.
+      const asked = admin.locator('.do-now article[data-task="court_played"]');
+      for (let k = 0; k < 6 && (await asked.count()) > 0; k++) {
+        const n = await asked.count();
+        await asked.first().getByRole('button', { name: 'Yes, we played' }).click();
+        await admin.waitForFunction((m) => document.querySelectorAll('.do-now article[data-task="court_played"]').length < m, n);
+      }
       await admin.locator('[data-finalize]').first().waitFor();
+      await admin.waitForFunction(() => document.querySelectorAll('[data-finalize] button:disabled').length === 0);
     });
 
     await check('Home after the games: a Finalize card per game with 4 or more in (date, count, preview, green Everyone played, Change who played), above the text cards; under 4 it offers Cancel session and Finalize anyway', async () => {
