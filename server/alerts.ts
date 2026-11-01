@@ -21,6 +21,8 @@ import { isAdminPage, linkText, ourAddress, type TextLink } from './telegram-lin
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
+/** Alerts caused by player taps (drops, it's on, cash outs) stop at this many an hour, so the clock's alerts always keep a few of the 20. */
+export const MAX_PLAYER_ALERTS_PER_HOUR = 15;
 const SEND_TIMEOUT_MS = 5000;
 /** What deliver() says when Telegram took too long: the message may still have arrived. */
 export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
@@ -112,7 +114,7 @@ async function recordResult(ctx: Ctx, groupId: string, ok: boolean, error: strin
 }
 
 /** One of the hour's alert slots, or false when they're used up. Written first, so a burst can't slip past. */
-async function takeSlot(ctx: Ctx): Promise<boolean> {
+async function takeSlot(ctx: Ctx, max: number): Promise<boolean> {
   const id = newId();
   const nowIso = new Date(ctx.nowMs).toISOString();
   await ctx.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'telegram', 'server', ?)").bind(id, nowIso).run();
@@ -120,7 +122,7 @@ async function takeSlot(ctx: Ctx): Promise<boolean> {
     .prepare("SELECT COUNT(*) AS n FROM rate_events WHERE kind = 'telegram' AND created_at > ?")
     .bind(new Date(ctx.nowMs - HOUR_MS).toISOString())
     .first<{ n: number }>();
-  if ((row?.n ?? 0) > MAX_ALERTS_PER_HOUR) {
+  if ((row?.n ?? 0) > max) {
     await ctx.db.prepare('DELETE FROM rate_events WHERE id = ?').bind(id).run();
     return false;
   }
@@ -174,17 +176,19 @@ function siteUrl(ctx: Ctx): string {
 
 /** Rate limit, send, write down how it went. Never throws. */
 /**
- * `links: false` for messages that carry player names (drops, cash outs): they never hold a link of
- * their own, so nothing in a name can turn into one. The clock's alerts (no names) keep their links.
+ * `fromPlayer`: a message a player's tap caused (drops, it's on, cash outs). It carries names, so it is
+ * sent with no links at all (nothing in a name can turn into one), and it stops at
+ * MAX_PLAYER_ALERTS_PER_HOUR so one player can't use up the hour and silence the clock's alerts.
  */
-export async function deliver(ctx: Ctx, groupId: string, text: string, links = true): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function deliver(ctx: Ctx, groupId: string, text: string, fromPlayer = false): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    if (!(await takeSlot(ctx))) {
-      const error = `${PAUSED_PREFIX} more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
+    const max = fromPlayer ? MAX_PLAYER_ALERTS_PER_HOUR : MAX_ALERTS_PER_HOUR;
+    if (!(await takeSlot(ctx, max))) {
+      const error = `${PAUSED_PREFIX} more than ${max} alerts in an hour.`;
       await recordResult(ctx, groupId, false, error);
       return { ok: false, error };
     }
-    const sent = await sendTelegram(ctx.env, siteUrl(ctx), text, links);
+    const sent = await sendTelegram(ctx.env, siteUrl(ctx), text, !fromPlayer);
     // Once Telegram took it, it counts as sent even if writing down the result fails (so it is never sent twice).
     await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error).catch(() => {});
     return sent;
@@ -260,7 +264,7 @@ export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: s
       .prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'refund_alert', ?, ?)")
       .bind(newId(), playerId, new Date(ctx.nowMs).toISOString())
       .run();
-    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents), false));
+    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents), true));
   } catch {
     // Never worth failing the request over.
   }
@@ -276,7 +280,7 @@ export async function notifyCashOutUsed(ctx: Ctx, group: GroupRow, name: string,
     if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
     const prefs = prefsOf(await alertRow(ctx.db, group.id));
     if (!prefs.enabled || !prefs.refundRequests) return;
-    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone), false));
+    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone), true));
   } catch {
     // Never worth failing the request over.
   }
@@ -297,7 +301,7 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null): Promise<void
       timezone: watch.group.timezone,
       prefs: watch.prefs,
     });
-    if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text, false));
+    if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text, true));
   } catch {
     // An alert is never worth failing a tap over.
   }

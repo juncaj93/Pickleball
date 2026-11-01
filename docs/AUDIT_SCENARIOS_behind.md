@@ -376,4 +376,17 @@ Test files new in this audit: `tests/audit-behind-clock.test.ts`,
 | 311 | Max players set below the number already in | Allowed; the health check then shows more_in_than_max | Question | integrity check |
 | 312 | A dropper re-taps I'm in before the waitlist moves up | Gets the spot back ahead of the waitlist; money stays right | Question | auditor B script |
 
-**Total: 312 scenarios.**
+## 11. Found by the fresh auditors (round 2)
+
+| # | Scenario | Expected by the rules | Status | Test |
+|---|---|---|---|---|
+| 313 | Court waitlist tapped on a finalized game | Refused, nothing changes (was "ok" and cleared the court-booked mark) | Fixed | audit-behind-races |
+| 314 | Game canceled while a slow tick is sending its alerts | No more alerts for it from that tick | Fixed | audit-behind-clock |
+| 315 | One player toggles in and out every 5 minutes all evening | Their alerts stop at 15 an hour; the clock's 10:00 PM warning and 10:30 PM follow-up still go | Fixed | audit-behind-clock |
+| 316 | Name with U+0085, U+2028 or U+2029 | Refused (would break the name across lines) | Fixed | audit-behind-security |
+| 317 | Game moved to another day and back | Its alerts can go again; card taps start over | By design | code |
+| 318 | 40 self-adds at once from 40 addresses | Stops at 30; goes past it | Open (minor) | auditor script |
+| 319 | Group-word guesses from many addresses | No overall cap (the PIN has one) | Open (group word is off on live) | auditor script |
+| 320 | A name that is a visible web address | Telegram may make the visible address tappable itself; never hidden words | By design | audit-behind-telegram |
+
+**Total: 320 scenarios.**

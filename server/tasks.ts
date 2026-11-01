@@ -272,7 +272,12 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     const [sessionId, task] = alert.key.split(':');
     const claimId = newId();
     const claim = await ctx.db
-      .prepare("INSERT OR IGNORE INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, ?, ?, 'sent', ?)")
+      // Only while the game is still on: a cancel or finalize saved since this tick read the games (it can take
+      // a few seconds when Telegram is slow) stops its alerts here.
+      .prepare(
+        `INSERT OR IGNORE INTO task_log (id, group_id, session_id, task, kind, at)
+         SELECT ?1, ?2, ?3, ?4, 'sent', ?5 WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL)`,
+      )
       .bind(claimId, group.id, sessionId, task, ctx.nowIso)
       .run();
     if (!claim.meta.changes) continue;

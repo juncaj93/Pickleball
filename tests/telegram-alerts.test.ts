@@ -357,7 +357,8 @@ describe('Telegram alerts', () => {
     await out(ctx, s.id, 'Devon');
     await ctx.app.settle();
     expect(sent).toHaveLength(MAX_ALERTS_PER_HOUR);
-    expect((await dash(ctx)).alerts).toMatchObject({ lastOk: false, lastError: 'Paused: more than 20 alerts in an hour.' });
+    // A tap's alert stops at 15 an hour (MAX_PLAYER_ALERTS_PER_HOUR), so its pause line names 15.
+    expect((await dash(ctx)).alerts).toMatchObject({ lastOk: false, lastError: 'Paused: more than 15 alerts in an hour.' });
     ctx.app.advance(HOUR + 60_000);
     expect((await ctx.organizer.call('POST', '/api/admin/alerts/test', {})).status).toBe(200);
   });

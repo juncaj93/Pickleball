@@ -427,6 +427,66 @@ describe('the clock at its worst moments (the tick API, Telegram stubbed)', () =
   });
 });
 
+describe('fresh audit D: the clock against cancels and floods', () => {
+  it('a game canceled while a slow tick is busy sending gets no more alerts from that tick', async () => {
+    let release: (() => void) | null = null;
+    let first = true;
+    const g = await auditGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    g.app.db.raw.prepare("UPDATE groups SET first_session_date = '2026-11-03'").run();
+    const dash = (await g.ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const s = dash.sessions.find((x: any) => x.startsAt === '2026-11-04T01:00:00.000Z');
+    await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
+    for (const n of ['Blair', 'Casey', 'Devon']) await (await g.phone(n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    await g.app.settle();
+    // 10:35 PM: the 10:00 PM warning and the 10:30 PM follow-up are both due. Telegram holds the first one open.
+    g.app.now = at('2026-11-03T03:35:00Z');
+    const realFetch = g.app.env.TELEGRAM_FETCH!;
+    const texts: string[] = [];
+    g.app.env.TELEGRAM_FETCH = (async (u: string, init: RequestInit) => {
+      texts.push(JSON.parse(String(init.body)).text);
+      if (first) {
+        first = false;
+        await new Promise<void>((r) => (release = r));
+      }
+      return realFetch(u, init);
+    }) as typeof fetch;
+    const tick = g.tick();
+    while (!release) await new Promise((r) => setTimeout(r, 5));
+    expect((await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
+    (release as unknown as () => void)();
+    await tick;
+    expect(texts.length).toBe(1);
+  });
+
+  it('one player toggling in and out all evening can\'t silence the 10:00 PM cancel warning', async () => {
+    const g = await auditGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    g.app.db.raw.prepare("UPDATE groups SET first_session_date = '2026-11-03'").run();
+    const dash = (await g.ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const s = dash.sessions.find((x: any) => x.startsAt === '2026-11-04T01:00:00.000Z');
+    await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
+    for (const n of ['Blair', 'Casey', 'Devon']) await (await g.phone(n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    await g.app.settle();
+    g.sent.length = 0;
+    const pest = await g.phone('Emery');
+    for (let t = at('2026-11-03T01:55:00Z'); t <= at('2026-11-03T03:45:00Z'); t += 5 * MIN) {
+      g.app.now = t;
+      await g.tick();
+      g.app.now = t + 2 * MIN;
+      await pest.call('POST', `/api/sessions/${s.id}/join`, {});
+      g.app.now = t + 3 * MIN;
+      await pest.call('POST', `/api/sessions/${s.id}/withdraw`, {});
+      await g.app.settle();
+    }
+    const clock = g.sent.map((m) => m.text).filter((t) => /Cancel court|court canceled\?/.test(t));
+    expect(clock.length).toBe(2);
+    // The player's own alerts stopped at 15 an hour.
+    const inHour = g.sent.filter((m) => m.at > at('2026-11-03T02:45:00Z') && !/Cancel court|court canceled\?/.test(m.text));
+    expect(inHour.length).toBeLessThanOrEqual(15);
+  });
+});
+
 describe('Sun Nov 1 clock change: ticks through the repeated 1 AM hour', () => {
   it('every 5-minute tick from Sat 6 PM to Mon 6 PM is a distinct moment and nothing is sent twice', async () => {
     const g = await auditGroup();

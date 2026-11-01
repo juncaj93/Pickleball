@@ -808,6 +808,12 @@ change, nothing players or the organizer see changed.
   on a finalized game.
 - Group-word guesses sent all at once were all checked; now at most 10 per
   15 minutes (the group word is off on live).
+- A game canceled while a slow tick was sending could still get the tick's
+  next alert; the claim now checks the game is still on.
+- One player toggling in and out could use up the 20 alerts an hour and
+  silence the clock's cancel warning. Alerts from player taps now stop at 15
+  an hour, so the clock always keeps a few.
+- Names with U+0085, U+2028 or U+2029 (line breaks in disguise) are refused.
 - Preview deployments were bound to the LIVE database. New previews use the
   throwaway `pickleball-preview` database (`[env.preview]` in wrangler.toml).
   Old preview links keep the live binding until redeployed or deleted.

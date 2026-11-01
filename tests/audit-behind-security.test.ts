@@ -224,6 +224,16 @@ describe('every field: huge, emoji, HTML, SQL, wrong types, negative or giant nu
   });
 });
 
+describe('names that would break across lines (fresh audit D)', () => {
+  it('U+0085, U+2028 and U+2029 in a name are refused', async () => {
+    const { ctx } = await world();
+    for (const bad of ['Ann\u0085Lee', 'Ann\u2028Lee', 'Ann\u2029Lee']) {
+      expect((await ctx.organizer.call('POST', '/api/admin/players', { name: bad, phone: null, isRegular: true, isActive: true })).status).toBe(400);
+    }
+    expect((await ctx.organizer.call('POST', '/api/admin/players', { name: 'Zoë Ñandú 🏓', phone: null, isRegular: true, isActive: true })).status).toBe(200);
+  });
+});
+
 describe('no secrets in the repo or the built site', () => {
   it('no Telegram token, Cloudflare token or private key in tracked files', async () => {
     const { execSync } = await import('node:child_process');
