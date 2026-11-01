@@ -34,7 +34,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { creditBackLeft, creditBackStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
+import { creditBackLeft, creditBackStatements, repriceStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
 import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -790,7 +790,8 @@ export async function applyPayment(
           playedCount: session.final_played_count ?? null,
           nowIso: ctx.nowIso,
           settle: false,
-          guard: confirmedNow,
+          // Only with the finalize it was worked out for (a Reopen or redo since gives nothing here).
+          guard: `${confirmedNow} AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ${sqlText(session.id)}) = '${asRead.replace(/'/g, '')}'`,
         }),
       ]);
       if (res.meta.changes !== 1) {
@@ -886,6 +887,24 @@ export async function applyPayment(
         // Any seat that is not in (withdrawn, waitlisted, declined) or a canceled game: the same seats as a claim.
         when: (sp) => `(${sp}.status <> 'confirmed' OR (SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled')`,
       }),
+      // Only the latest cash went: the credit (and cash held) left on the seat may cover its price on its own. Then
+      // the seat is paid with it, and on a finalized game that played, what is above the final price comes back as
+      // credit, as Finalize does (never left unused on a seat that owes nothing).
+      ...(latestCash > 0 ? repriceStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, ctx.nowIso) : []),
+      ...(latestCash > 0 && session.finalized_at && row.played === 1 && session.final_price_cents !== null && session.final_price_cents !== undefined
+        ? creditBackStatements(ctx.db, {
+            groupId: group.id,
+            sessionId: session.id,
+            playerId,
+            cents: onSeat.usedCents + onSeat.cashCents - session.final_price_cents,
+            reason: 'finalized',
+            playedCount: session.final_played_count ?? null,
+            nowIso: ctx.nowIso,
+            settle: false,
+            // Only once the reprice paid the seat with exactly that credit (the Unmark went in).
+            guard: `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND payment_status = 'paid' AND self_paid_at IS NULL AND payment_amount_cents = ${onSeat.usedCents + onSeat.cashCents})`,
+          })
+        : []),
     ]);
     if (unpaid.meta.changes !== 1) {
       if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0) {

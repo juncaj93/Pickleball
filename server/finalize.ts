@@ -218,6 +218,9 @@ export async function reopenFinalize(ctx: Ctx) {
   // all of theirs (beyond a pending cash out); the game is unfinalized only once none of it is left; seats paid
   // with credit at the final price are short of the flat price again.
   const now = ctx.nowIso;
+  // Checked again inside the batch: an I paid landing while Reopen runs (below the flat price ?4) stops it too.
+  const unconfirmedShort = `SELECT 1 FROM session_players u WHERE u.session_id = ?2 AND u.status = 'confirmed' AND u.payment_status = 'paid'
+    AND u.refunded_at IS NULL AND u.self_paid_at IS NOT NULL AND COALESCE(u.payment_amount_cents, 0) < ?4`;
   const backRows = `credit_ledger.kind = 'kept' AND credit_ledger.session_id = ?2 AND credit_ledger.ended_at IS NULL AND credit_ledger.reason IN ('finalized', 'not_played')`;
   const allThere = `NOT EXISTS (SELECT 1 FROM (SELECT player_id, SUM(amount_cents) AS back FROM credit_ledger
       WHERE kind = 'kept' AND session_id = ?2 AND ended_at IS NULL AND reason IN ('finalized', 'not_played') GROUP BY player_id) b
@@ -225,8 +228,8 @@ export async function reopenFinalize(ctx: Ctx) {
   const [taken, , unfinalized] = await ctx.db.batch([
     // Only while the game is still the finalize this Reopen looked at (a newer Finalize from another device keeps its credit).
     ctx.db
-      .prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${backRows} AND ${allThere} AND (SELECT finalized_at FROM sessions WHERE id = ?2) = ?3`)
-      .bind(now, session.id, session.finalized_at),
+      .prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${backRows} AND ${allThere} AND (SELECT finalized_at FROM sessions WHERE id = ?2) = ?3 AND NOT EXISTS (${unconfirmedShort})`)
+      .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents),
     ctx.db
       .prepare(
         `UPDATE session_players SET refunded_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND refunded_at IS NOT NULL
@@ -237,13 +240,21 @@ export async function reopenFinalize(ctx: Ctx) {
     ctx.db
       .prepare(
         `UPDATE sessions SET finalized_at = NULL, final_price_cents = NULL, final_played_count = NULL, updated_at = ?1
-         WHERE id = ?2 AND finalized_at = ?3 AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE ${backRows})`,
+         WHERE id = ?2 AND finalized_at = ?3 AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE ${backRows})
+           AND NOT EXISTS (${unconfirmedShort})`,
       )
-      .bind(now, session.id, session.finalized_at),
+      .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents),
     ctx.db.prepare('UPDATE session_players SET played = NULL, updated_at = ?1 WHERE session_id = ?2 AND played IS NOT NULL AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL').bind(now, session.id),
     ...repriceStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, now),
   ]);
   if (unfinalized.meta.changes !== 1) {
+    const late = (
+      await ctx.db
+        .prepare(`SELECT p.display_name AS name FROM session_players u JOIN players p ON p.id = u.player_id WHERE ${unconfirmedShort.replace('SELECT 1 FROM session_players u WHERE ', '')}`)
+        .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents)
+        .all<{ name: string }>()
+    ).results;
+    if (late.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${late.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
     if (taken.meta.changes === 0) {
       const late = await reopenBlockers(ctx, session.id);
       if (late.requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(late.requested));

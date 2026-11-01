@@ -323,7 +323,7 @@ export function repriceStatements(db: D1Database, sessionId: string, flatCents: 
   // A paid seat that is now short goes back to unpaid; the cash in its payment (beyond the credit on it) is held
   // against it as a 'cash' pair first, the same way Finalize does, so it still counts and the seat owes only the rest.
   const short = (sp: string) =>
-    `${sp}.session_id = ?2 AND ${sp}.status = 'confirmed' AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL
+    `${sp}.session_id = ?2 AND ${sp}.status = 'confirmed' AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL AND ${sp}.self_paid_at IS NULL
      AND (${SEAT_USED(sp)} + ${SEAT_CASH(sp)}) > 0
      AND (SELECT CASE WHEN s.status = 'canceled' THEN NULL WHEN s.finalized_at IS NULL THEN ?3 WHEN ${sp}.played = 1 THEN s.final_price_cents ELSE NULL END FROM sessions s WHERE s.id = ${sp}.session_id) > COALESCE(${sp}.payment_amount_cents, 0)`;
   const cash = (sp: string) => `(COALESCE(${sp}.payment_amount_cents, 0) - ${SEAT_USED(sp)} - ${SEAT_CASH(sp)})`;
@@ -342,7 +342,7 @@ export function repriceStatements(db: D1Database, sessionId: string, flatCents: 
     db
       .prepare(
         `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
-         WHERE session_id = ?2 AND status = 'confirmed' AND payment_status = 'paid' AND ${used} > 0
+         WHERE session_id = ?2 AND status = 'confirmed' AND payment_status = 'paid' AND self_paid_at IS NULL AND ${used} > 0
            AND ${price} IS NOT NULL AND COALESCE(payment_amount_cents, 0) < ${price}`,
       )
       .bind(nowIso, sessionId, flatCents),
