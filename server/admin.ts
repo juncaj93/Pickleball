@@ -877,7 +877,9 @@ export async function applyPayment(
         )
         .bind(ctx.nowIso, session.id, playerId, finalizeAsRead),
       // Only its ledger statement: that one moves credit only once the seat is unpaid, so a blocked Unmark moves nothing.
-      ...(self || latestCash > 0 ? [] : returnSeatCreditStatements(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true }).slice(1)),
+      ...(self || latestCash > 0
+        ? []
+        : returnSeatCreditStatements(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true, finalizedAsRead: session.finalized_at ?? null }).slice(1)),
       // A seat that left the game, or a canceled game (an unconfirmed I paid kept it frozen): once the claim is
       // gone, whatever it still holds goes back to the player, as on any drop or cancel.
       ...seatMoneyBackStatements(ctx.db, {
@@ -904,8 +906,9 @@ export async function applyPayment(
             playedCount: session.final_played_count ?? null,
             nowIso: ctx.nowIso,
             settle: false,
-            // Only once the reprice paid the seat with exactly that credit (the Unmark went in).
-            guard: `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND payment_status = 'paid' AND self_paid_at IS NULL AND payment_amount_cents = ${onSeat.usedCents + onSeat.cashCents})`,
+            // Only once the reprice paid the seat with exactly that credit, in the finalize this Unmark read.
+            guard: `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND payment_status = 'paid' AND self_paid_at IS NULL AND payment_amount_cents = ${onSeat.usedCents + onSeat.cashCents})
+              AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ${sqlText(session.id)}) = '${finalizeAsRead.replace(/'/g, '')}'`,
           })
         : []),
     ]);

@@ -77,7 +77,6 @@ async function game(ctx: Ctx, opts: { credit?: number; blairPays?: boolean } = {
   return { g, blair };
 }
 
-const others = (ctx: Ctx) => ['Casey', 'Devon', 'Emery', 'Frankie', 'Alex'].map((n) => ctx.byName[n]);
 const mark = async (ctx: Ctx, sid: string, paid: boolean) => {
   const r = await rowOf(ctx, sid, 'Blair');
   return ctx.organizer.call('POST', `/api/admin/sessions/${sid}/payment`, { playerId: ctx.byName.Blair, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) });
