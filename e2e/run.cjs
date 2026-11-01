@@ -2070,13 +2070,17 @@ async function main() {
       assert((await card.getAttribute('data-court')) === 'waitlist', 'card should show the court waitlist look');
       assert((await card.locator('.court-banner').count()) === 0, 'the old waitlist banner is gone from the card');
       assert((await card.getByRole('button', { name: /^(I booked it|Court opened|Didn't open)$/ }).count()) === 0, 'the card itself has no court buttons');
-      // A waitlisted game gets one plain Do this now card: "Court still needs to be booked" with the booking link, nothing else.
-      const task = admin.locator(`.do-now article[data-task="court_book"][data-session="${cardId}"]`);
-      await task.waitFor();
-      assert((await task.locator('.dn-text').innerText()) === 'Court still needs to be booked', 'the plain court card');
-      assert((await task.getByRole('button').count()) === 0 && (await task.getByRole('link').count()) === 1, 'only the CourtReserve link on it');
+      // A waitlisted game follows the Not booked rule (Alex, Nov 1): the plain "Court still needs to be booked" card
+      // only for the next 2 games with no court. This is the 4th game, so no card; never a second one.
+      const task = admin.locator(`.do-now article[data-session="${cardId}"]`);
+      await admin.waitForTimeout(500);
+      assert((await task.count()) === 0, `the 4th game should have no Do this now card: ${await task.count()}`);
+      const plain = admin.locator('.do-now article[data-task="court_book"]').first();
+      if (await plain.count()) {
+        assert((await plain.locator('.dn-text').innerText()) === 'Court still needs to be booked', 'the plain court card');
+        assert((await plain.getByRole('button').count()) === 0 && (await plain.getByRole('link').count()) === 1, 'only the CourtReserve link on it');
+      }
       assert((await admin.getByRole('button', { name: /^(Court opened|Didn't open)$/ }).count()) === 0, 'the old Court opened / Didn\'t open buttons are gone');
-      await task.screenshot({ path: path.join(SHOTS, 'card-court-waitlist.png') });
       await admin.screenshot({ path: path.join(SHOTS, 'admin-court-waitlist.png') });
       const texts = await textMenu(card);
       const shareBody = smsOf(await texts.locator('.text-row[data-text="share"] a').getAttribute('href')).body;
@@ -2107,6 +2111,7 @@ async function main() {
       await c2.getByRole('button', { name: 'Booked', exact: true }).click();
       await c2.locator('.court-switch button[aria-pressed="true"]', { hasText: 'Booked' }).waitFor();
       assert((await admin.locator('dialog[open]').count()) === 0, 'Booked should not ask anything');
+      // Still no court card once Booked.
       await admin.waitForFunction((id) => !document.querySelector(`.do-now article[data-session="${id}"][data-task="court_book"]`), cardId);
       await admin.reload();
       if (await admin.locator('.sg-more').count()) await admin.locator('.sg-more').click();
