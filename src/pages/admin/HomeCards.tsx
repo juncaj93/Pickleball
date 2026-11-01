@@ -7,7 +7,7 @@ import { formatShortDate } from '../../../shared/time';
 import { api, ApiError, openVenmo, storageGet, storageSet } from '../../lib';
 import { Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { tapsHeld } from './tapGuard';
+import { tapsHeld, useTapsHeld } from './tapGuard';
 import '../../finalize.css';
 
 const CREDIT_NOTE = 'Pickleball credit refund';
@@ -45,7 +45,10 @@ function useRun(ctx: AdminCtx) {
 export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const price = ctx.d.group.settings.pricePerPlayerCents;
-  const { busy, run } = useRun(ctx);
+  const { busy: saving, run } = useRun(ctx);
+  // Dimmed for a moment right after "Yes, we played" brings this card in under the finger.
+  const held = useTapsHeld();
+  const busy = saving || held;
   const [changing, setChanging] = useState(false);
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const n = inNow.length;
@@ -79,7 +82,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         ) : (
           <>
             <button className="btn" disabled={busy} data-everyone-played onClick={() => finalize(inNow.map((r) => r.playerId))}>
-              {busy ? 'Saving…' : 'Everyone played'}
+              {saving ? 'Saving…' : 'Everyone played'}
             </button>
             <button className="btn secondary" disabled={busy} data-change-played onClick={() => !tapsHeld() && setChanging(true)}>
               Change who played

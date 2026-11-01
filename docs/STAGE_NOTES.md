@@ -843,6 +843,11 @@ No money rule, price rule, schema or migration change.
   Finalize card, never a money button. Also caught that "Book a court" had not been saved. A: Home
   now uses the same moving clock as Do this now; the focus after Yes stops if a sheet opens; the
   "court booked for the new time? No" answer refuses a game canceled in between. All fixed.
+- Third pass: A clean. B clean on money (20 slow double taps, keyboard Enter/Space: nothing
+  finalized). B found a failed Yes could not be retried for a second: the pause now starts only
+  when it saved. The guarded buttons (Yes, Cancel game, Everyone played, Change who played,
+  Cancel session, Finalize anyway) are dimmed while the screen settles, so a tap that waits is
+  visible, not silent. All auditor scripts pass (66 checks).
 
 ### Tests
 - New: `tests/admin-audit.test.ts` (court card, X, every admin route refuses strangers, forged and

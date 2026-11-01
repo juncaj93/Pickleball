@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarkName, Task, TaskButton, TaskStep } from '../../../shared/tasks';
 import { api, ApiError, isIOS, storageGet, storageSet, usePretend } from '../../lib';
 import { CourtReserveLink, MessageIcon, useToast } from '../../ui';
-import { SETTLE_MS, settleTaps, tapsHeld } from './tapGuard';
+import { SETTLE_MS, settleTaps, tapsHeld, useTapsHeld } from './tapGuard';
 import type { AdminCtx } from '../Admin';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { formatShortDate, formatTime } from '../../../shared/time';
@@ -111,6 +111,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
+  const held = useTapsHeld();
   const s = card.session;
   // Date and start time: two games on one day (an extra game) never look the same.
   const day = `${formatShortDate(s.startsAt, ctx.d.group.timezone)} · ${formatTime(s.startsAt, ctx.d.group.timezone)}`;
@@ -171,6 +172,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
       working.current = false;
       setBusy(false);
       // Cards moved only when it saved; after a failure nothing moved, so a retry works at once.
+      // Cards moved only when it saved; after a failure nothing moved, so a retry works at once.
       settleTaps(saved ? SETTLE_MS : 0);
     }
   };
@@ -179,10 +181,10 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
       <div className="dn-eyebrow">{day}</div>
       <p className="dn-text">Did you guys play?</p>
       <div className="dn-btns">
-        <button type="button" className="btn small" disabled={busy} data-action="played" onClick={() => void played()}>
+        <button type="button" className="btn small" disabled={busy || held} data-action="played" onClick={() => void played()}>
           {busy ? 'Saving…' : 'Yes, we played'}
         </button>
-        <button type="button" className="btn small danger" disabled={busy} data-action="cancel-game" onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
+        <button type="button" className="btn small danger" disabled={busy || held} data-action="cancel-game" onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
           Cancel game
         </button>
       </div>

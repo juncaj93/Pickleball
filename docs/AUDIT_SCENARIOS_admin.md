@@ -108,6 +108,7 @@ Test files: `tests/admin-audit.test.ts` (API and logic), `e2e/admin-audit.cjs` (
 | C25 | Slow double tap on "Yes, we played" (second tap 0.7 to 1.4 s later) | Never answers the next game, never taps Everyone played | UI | fixed (auditor B pass 2; tapGuard.ts; auditB/a2yes.cjs fails without it) |
 | C26 | Home left open past midnight, no reload | Question and Finalize card never both show | Code | fixed (auditor A pass 2: Home uses the moving clock) |
 | C27 | After Yes, organizer opens a sheet within a second | Focus is not pulled back behind the sheet | Code | fixed (auditor A pass 2) |
+| C28 | "Yes, we played" fails (no signal), tapped again at once | The retry is taken | UI | fixed (auditor B pass 3; auditB/aretry.cjs) |
 | C24 | Book link wording | "Book a court", same link and look as the pill | UI | built (e2e/run.cjs kept-words check) |
 
 ## 2c. Requested: dismiss X on notice cards (item 15) (X)
