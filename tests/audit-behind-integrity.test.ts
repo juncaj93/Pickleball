@@ -125,6 +125,17 @@ describe('consistency checks (scripts/integrity-checks.sql)', () => {
       ['game_ends_before_start', () => raw.prepare('UPDATE sessions SET ends_at = starts_at WHERE id = ?').run(s1.id)],
       ['alert_log_without_game', () => raw.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, '55555555-5555-4555-8555-555555555555', 'night', 'failed', ?)").run(id(), g, now)],
     ];
+    // An unanswered "I paid" on a seat that was left keeps its credit until the organizer answers (by design): not a problem.
+    raw.exec('SAVEPOINT t');
+    raw.prepare("INSERT INTO session_players (id, session_id, player_id, status, claimed_at, updated_at, payment_status, payment_amount_cents, self_paid_at) VALUES (?, ?, ?, 'withdrawn', ?, ?, 'paid', 700, ?)").run(id(), s1.id, blair, now, now, now);
+    ledger(blair, 'kept', 1400, null);
+    ledger(blair, 'used', 700, s1.id);
+    raw.prepare("UPDATE sessions SET status = 'canceled' WHERE id = ?").run(s1.id);
+    const claimRun = run(raw);
+    expect([claimRun.credit_used_on_left_seat, claimRun.credit_used_on_canceled_game]).toEqual([0, 0]);
+    expect(claimRun.info_unanswered_i_paid_on_canceled_game).toBe(1);
+    raw.exec('ROLLBACK TO t');
+    raw.exec('RELEASE t');
     for (const [name, make] of cases) {
       raw.exec('SAVEPOINT t');
       make();

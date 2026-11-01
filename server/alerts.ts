@@ -113,20 +113,30 @@ async function recordResult(ctx: Ctx, groupId: string, ok: boolean, error: strin
     .run();
 }
 
-/** One of the hour's alert slots, or false when they're used up. Written first, so a burst can't slip past. */
-async function takeSlot(ctx: Ctx, max: number): Promise<boolean> {
+/**
+ * One of the hour's alert slots, or false when they're used up. Written first, so a burst can't slip past.
+ * A player alert first holds a 'telegram_pending' slot and counts every slot, its own included; only once
+ * it fits does the slot become a plain 'telegram' one. The clock's alerts count only plain slots, so a
+ * flood of player alerts being turned away can never push the clock's alerts over the limit.
+ */
+async function takeSlot(ctx: Ctx, max: number, fromPlayer: boolean): Promise<boolean> {
   const id = newId();
   const nowIso = new Date(ctx.nowMs).toISOString();
-  await ctx.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'telegram', 'server', ?)").bind(id, nowIso).run();
+  const kind = fromPlayer ? 'telegram_pending' : 'telegram';
+  await ctx.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, ?, 'server', ?)").bind(id, kind, nowIso).run();
   const row = await ctx.db
-    .prepare("SELECT COUNT(*) AS n FROM rate_events WHERE kind = 'telegram' AND created_at > ?")
+    .prepare(`SELECT COUNT(*) AS n FROM rate_events WHERE kind IN (${fromPlayer ? "'telegram', 'telegram_pending'" : "'telegram'"}) AND created_at > ?`)
     .bind(new Date(ctx.nowMs - HOUR_MS).toISOString())
     .first<{ n: number }>();
   if ((row?.n ?? 0) > max) {
     await ctx.db.prepare('DELETE FROM rate_events WHERE id = ?').bind(id).run();
     return false;
   }
-  await ctx.db.prepare("DELETE FROM rate_events WHERE kind = 'telegram' AND created_at < ?").bind(new Date(ctx.nowMs - 86_400_000).toISOString()).run();
+  if (fromPlayer) await ctx.db.prepare("UPDATE rate_events SET kind = 'telegram' WHERE id = ?").bind(id).run();
+  await ctx.db
+    .prepare("DELETE FROM rate_events WHERE kind IN ('telegram', 'telegram_pending') AND created_at < ?")
+    .bind(new Date(ctx.nowMs - 86_400_000).toISOString())
+    .run();
   return true;
 }
 
@@ -183,7 +193,7 @@ function siteUrl(ctx: Ctx): string {
 export async function deliver(ctx: Ctx, groupId: string, text: string, fromPlayer = false): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const max = fromPlayer ? MAX_PLAYER_ALERTS_PER_HOUR : MAX_ALERTS_PER_HOUR;
-    if (!(await takeSlot(ctx, max))) {
+    if (!(await takeSlot(ctx, max, fromPlayer))) {
       const error = `${PAUSED_PREFIX} more than ${max} alerts in an hour.`;
       await recordResult(ctx, groupId, false, error);
       return { ok: false, error };

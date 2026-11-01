@@ -389,4 +389,14 @@ Test files new in this audit: `tests/audit-behind-clock.test.ts`,
 | 319 | Group-word guesses from many addresses | No overall cap (the PIN has one) | Open (group word is off on live) | auditor script |
 | 320 | A name that is a visible web address | Telegram may make the visible address tappable itself; never hidden words | By design | audit-behind-telegram |
 
-**Total: 320 scenarios.**
+## 12. Found by the fresh auditors (round 3)
+
+| # | Scenario | Expected by the rules | Status | Test |
+|---|---|---|---|---|
+| 321 | 8 player alerts being turned away at the exact moment of the 7:00 PM tick | The last call still goes (was paused, could be lost after an hour of flooding) | Fixed | audit-behind-clock |
+| 322 | Unanswered "I paid" with credit on a left seat or canceled game | Health check reads 0 (it is a to-do by design); was a false alarm | Fixed | audit-behind-integrity |
+| 323 | Second self-added name with no Latin letters ("王芳" after "Иван") | Added; is refused as "already used" | Open (minor, player screens) | auditor script |
+| 324 | Look-alike names ("Аlex" with a Cyrillic A) and rare invisible marks | Refused or flagged; accepted today | Open (minor) | auditor script |
+| 325 | Code review round 3 and attack round 3 on the final code | No duplicate, missing or wrong alert; no canceled game revived; no 500; money checks 0 | Pass | both auditors |
+
+**Total: 325 scenarios.**

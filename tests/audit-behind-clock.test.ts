@@ -459,6 +459,57 @@ describe('fresh audit D: the clock against cancels and floods', () => {
     expect(texts.length).toBe(1);
   });
 
+  it('player alerts being turned away at the same moment never hold back the 7:00 PM last call (fresh audit E)', async () => {
+    const g = await auditGroup();
+    g.app.now = at('2026-11-02T17:00:00Z');
+    g.app.db.raw.prepare("UPDATE groups SET first_session_date = '2026-11-03'").run();
+    const dash = (await g.ctx.organizer.call('GET', '/api/admin/dashboard')).data;
+    const s = dash.sessions.find((x: any) => x.startsAt === '2026-11-04T01:00:00.000Z');
+    await g.ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
+    for (const n of ['Blair', 'Casey', 'Devon']) await (await g.phone(n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    const others = ['Emery', 'Frankie', ...EXTRA];
+    const phones = await Promise.all(others.map((n) => g.phone(n)));
+    for (const p of phones) await p.call('POST', `/api/sessions/${s.id}/join`, {});
+    await g.app.settle();
+    // 15 player alerts already went out in the last hour (the most player taps may send).
+    const ins = g.app.db.raw.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'telegram', 'server', ?)");
+    g.app.now = at('2026-11-03T00:00:00Z');
+    for (let i = 0; i < 15; i++) ins.run(`00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, new Date(g.app.now - 30 * MIN).toISOString());
+    g.sent.length = 0;
+    // The exact moment: 8 players drop out and each drop's alert has written its slot but not yet counted,
+    // when the clock's 7:00 PM tick takes its own slot. (Each held alert is then turned away: 15 an hour.)
+    const real = g.app.env.DB as any;
+    let gate!: () => void;
+    const open = new Promise<void>((r) => (gate = r));
+    let held = 0;
+    const COUNT = /SELECT COUNT\(\*\) AS n FROM rate_events WHERE kind/;
+    const wrap = (sql: string, st: any): any => ({
+      bind: (...v: unknown[]) => wrap(sql, st.bind(...v)),
+      first: async () => {
+        if (COUNT.test(sql) && held < 8) {
+          held++;
+          await open;
+        }
+        return st.first();
+      },
+      all: () => st.all(),
+      run: () => st.run(),
+      runSync: () => st.runSync(),
+      __inner: st,
+    });
+    g.app.env.DB = { raw: real.raw, prepare: (sql: string) => wrap(sql, real.prepare(sql)), batch: (xs: any[]) => real.batch(xs.map((x) => x.__inner ?? x)) } as any;
+    const drops = phones.map((p) => p.call('POST', `/api/sessions/${s.id}/withdraw`, {}));
+    await Promise.all(drops);
+    for (let i = 0; i < 200 && held < 8; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(held).toBe(8);
+    const r = await g.ctx.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': SECRET });
+    expect(r.status).toBe(200);
+    gate();
+    await g.app.settle();
+    g.app.env.DB = real;
+    expect(g.sent.map((m) => m.text).filter((t) => /Text the group/.test(t))).toEqual([expect.stringMatching(/^Tuesday: \d+ players? in/)]);
+  });
+
   it('one player toggling in and out all evening can\'t silence the 10:00 PM cancel warning', async () => {
     const g = await auditGroup();
     g.app.now = at('2026-11-02T17:00:00Z');

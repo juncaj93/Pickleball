@@ -19,6 +19,11 @@ pending AS (
 used_on_seat AS (
   SELECT session_id, player_id, SUM(amount_cents) AS cents FROM credit_ledger
   WHERE kind = 'used' AND ended_at IS NULL AND session_id IS NOT NULL GROUP BY session_id, player_id
+),
+-- Seats with an "I paid" the organizer has not answered: by design nothing on them moves (not even the
+-- credit) until Confirm / Didn't pay, so they are a to-do, not a problem.
+claim AS (
+  SELECT session_id, player_id FROM session_players WHERE payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
 )
 SELECT
   (SELECT COUNT(*) FROM session_players sp LEFT JOIN sessions s ON s.id = sp.session_id WHERE s.id IS NULL) AS seat_without_game
@@ -29,8 +34,8 @@ SELECT
   ,(SELECT COUNT(*) FROM refund_requests r LEFT JOIN players p ON p.id = r.player_id WHERE p.id IS NULL) AS cash_out_without_player
   ,(SELECT COUNT(*) FROM pot WHERE cents < 0) AS pot_below_zero
   ,(SELECT COUNT(*) FROM pending pe LEFT JOIN pot po ON po.player_id = pe.player_id WHERE pe.cents > COALESCE(po.cents, 0)) AS pending_cash_out_over_pot
-  ,(SELECT COUNT(*) FROM used_on_seat u JOIN sessions s ON s.id = u.session_id WHERE s.status = 'canceled') AS credit_used_on_canceled_game
-  ,(SELECT COUNT(*) FROM used_on_seat u LEFT JOIN session_players sp ON sp.session_id = u.session_id AND sp.player_id = u.player_id WHERE sp.id IS NULL OR sp.status IN ('withdrawn', 'declined')) AS credit_used_on_left_seat
+  ,(SELECT COUNT(*) FROM used_on_seat u JOIN sessions s ON s.id = u.session_id WHERE s.status = 'canceled' AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id)) AS credit_used_on_canceled_game
+  ,(SELECT COUNT(*) FROM used_on_seat u LEFT JOIN session_players sp ON sp.session_id = u.session_id AND sp.player_id = u.player_id WHERE (sp.id IS NULL OR sp.status IN ('withdrawn', 'declined')) AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id)) AS credit_used_on_left_seat
   ,(SELECT COUNT(*) FROM used_on_seat WHERE cents > 1400) AS credit_on_seat_over_14
   ,(SELECT COUNT(*) FROM (SELECT session_id FROM session_players WHERE status = 'confirmed' GROUP BY session_id HAVING COUNT(*) > COALESCE((SELECT json_extract(settings_json, '$.maxPlayers') FROM groups LIMIT 1), 10))) AS more_in_than_max
   ,(SELECT COUNT(*) FROM session_players WHERE payment_status = 'paid' AND payment_amount_cents IS NULL) AS paid_seat_without_amount
