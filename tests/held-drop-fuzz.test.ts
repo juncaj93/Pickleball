@@ -6,7 +6,7 @@
 // opened again, the server must match what the player last saw, and no money may be lost or doubled.
 import { describe, expect, it, vi } from 'vitest';
 import { potEffect } from '../shared/credit';
-import { flushHold, holdPending, pendingDropAction, PENDING_DROP_MAX_MS, startHold, undoHold, UNDO_MS } from '../src/hold';
+import { flushHold, holdPending, pendingDropAction, PENDING_DROP_MAX_MS, settleHolds, startHold, undoHold, UNDO_MS } from '../src/hold';
 import { playerPhone, setupGroup, TestApp } from './harness';
 
 const TZ = 'America/Detroit';
@@ -38,11 +38,16 @@ async function world(seed: number, credit: number, paidCash: boolean, court: 'bo
       `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
        SELECT 'pot-${seed}', id, '${ctx.byName.Blair}', 'kept', ${credit}, '${old.id}', '2026-10-26T13:00:00.000Z', 'canceled' FROM groups`,
     );
+  // A second game to tap I'm in on right after the drop (its own kind of court).
+  const g2 = d.sessions.find((x: any) => dayOf(x.startsAt) === '2026-11-10');
+  const court2 = (['booked', 'not_booked', 'waitlist'] as const)[seed % 3];
+  if (court2 === 'booked') await ctx.organizer.call('POST', `/api/admin/sessions/${g2.id}/booked`, {});
+  if (court2 === 'waitlist') await ctx.organizer.call('POST', `/api/admin/sessions/${g2.id}/court`, { action: 'waitlist' });
   const phone = await playerPhone(ctx, 'Blair');
   expect((await phone.call('POST', `/api/sessions/${g.id}/join`, {})).status).toBe(200);
   // (On a waitlist court the join is standby: nothing to pay yet.)
   if (paidCash && court !== 'waitlist') await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
-  return { app, ctx, g, phone };
+  return { app, ctx, g, g2, court2, phone };
 }
 
 const potOf = (ctx: Ctx) =>
@@ -54,6 +59,7 @@ const seatOf = (ctx: Ctx, sid: string) => ctx.app.db.raw.prepare('SELECT * FROM 
 /** What the player is worth in this game: pot + what the seat holds (credit on it, or its unsettled payment). */
 function worth(ctx: Ctx, sid: string) {
   const s = seatOf(ctx, sid);
+  if (!s) return potOf(ctx);
   const used = (ctx.app.db.raw.prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL").get(sid, ctx.byName.Blair) as any).c;
   const onSeat = s.payment_status === 'paid' && !s.refunded_at ? Math.max(s.payment_amount_cents ?? 0, used) : used;
   return potOf(ctx) + onSeat;
@@ -64,8 +70,10 @@ async function runSequence(seed: number) {
   const credit = r.pick([0, 300, 1400]);
   const paidCash = credit < 1400 && r.next() < 0.5;
   const court = r.pick(['booked', 'booked', 'not_booked', 'waitlist'] as const);
-  const { app, ctx, g, phone } = await world(seed, credit, paidCash, court);
-  const before = worth(ctx, g.id);
+  const { app, ctx, g, g2, court2, phone } = await world(seed, credit, paidCash, court);
+  const seatOf2 = () => ctx.app.db.raw.prepare('SELECT * FROM session_players WHERE session_id = ? AND player_id = ?').get(g2.id, ctx.byName.Blair) as any;
+  const total = () => worth(ctx, g.id) + worth(ctx, g2.id) - potOf(ctx);
+  const before = total();
   const storage = new Map<string, string>();
   let signal = true;
   let alive = true; // the page is open (not closed)
@@ -79,9 +87,9 @@ async function runSequence(seed: number) {
   const landed = async () => {
     while (inflight.length) await Promise.allSettled(inflight.splice(0));
   };
-  const post = async (path: string) => {
+  const post = async (path: string, sid = g.id) => {
     if (!signal) throw new Offline('No signal, try again');
-    const call = phone.call('POST', `/api/sessions/${g.id}/${path}`, {});
+    const call = phone.call('POST', `/api/sessions/${sid}/${path}`, {});
     inflight.push(call);
     const res = await call;
     if (res.status !== 200) throw Object.assign(new Error(res.text), { code: 'server' });
@@ -134,9 +142,10 @@ async function runSequence(seed: number) {
       },
     });
   };
+  let joinedAfterDrop = false;
   const steps = r.int(2, 9);
   for (let i = 0; i < steps; i++) {
-    const a = r.pick(['drop', 'drop', 'undo', 'in', 'wait', 'wait', 'close', 'reload', 'offline', 'online', 'book']);
+    const a = r.pick(['drop', 'drop', 'undo', 'in', 'wait', 'wait', 'close', 'reload', 'offline', 'online', 'book', 'in2', 'in2']);
     log.push(a);
     if (process.env.HELD_DEBUG) console.log(seed, a, { shownIn, serverIn: serverIn(), held: holdPending(g.id), note: storage.get('note'), signal, alive, now: app.now });
     if (a === 'drop' && alive && shownIn && serverIn()) drop();
@@ -168,6 +177,31 @@ async function runSequence(seed: number) {
       shownIn = serverIn();
       await look();
       shownIn = serverIn();
+    } else if (a === 'in2' && alive) {
+      // I'm in on the other game: as PlayerHome sendDropsBeforeJoin, a held or left-over drop goes first.
+      const droppedFirst = !shownIn;
+      const wasIn2 = ['confirmed', 'waitlisted'].includes(seatOf2()?.status ?? '');
+      await settleHolds();
+      const raw2 = storage.get('note');
+      const note = raw2 ? JSON.parse(raw2) : null;
+      if (note?.sessionId && note.sessionId !== g2.id && !holdPending(note.sessionId)) {
+        try {
+          await post('withdraw');
+          storage.delete('note');
+          shownIn = serverIn();
+        } catch (err: any) {
+          if (err?.code !== 'offline') storage.delete('note');
+        }
+      }
+      let joined = false;
+      try {
+        await post('join', g2.id);
+        joined = true;
+      } catch {
+        /* no signal: the error banner */
+      }
+      // Dropped game 1, then I'm in on game 2: checked at the end, once everything landed.
+      if (joined && !wasIn2 && droppedFirst) joinedAfterDrop = true;
     } else if (a === 'book') {
       // The organizer marks the court booked (on a waitlist court: "Court opened", standby moves in).
       await landed();
@@ -187,14 +221,19 @@ async function runSequence(seed: number) {
   // What the player last saw (or decided): the server agrees.
   const intendedOut = !shownIn;
   if (out !== intendedOut || storage.has('note')) throw new Error(`seed ${seed} [${log.join(' ')}]: server ${out ? 'out' : 'in'}, screen ${intendedOut ? 'out' : 'in'}, note ${storage.get('note') ?? 'none'}`);
-  // Money: nothing lost or doubled. In: the seat holds what it held. Out: all of it is back in the pot.
-  expect(worth(ctx, g.id), `seed ${seed} [${log.join(' ')}]: worth`).toBe(before);
+  // Money: nothing lost or doubled (checked across both games below).
   const liveUsed = (ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE kind = 'used' AND ended_at IS NULL AND player_id = ?").get(ctx.byName.Blair) as any).n;
   expect(liveUsed, `seed ${seed}: credit used at most once`).toBeLessThanOrEqual(1);
-  if (out) expect(potOf(ctx), `seed ${seed}: all money back`).toBe(before);
+  if (out && !seatOf2()) expect(potOf(ctx), `seed ${seed}: all money back`).toBe(before);
   // In and owing on a game that has its seat (booked or not booked yet): their credit is on it, never left unused.
   const seat = seatOf(ctx, g.id);
   if (seat.status === 'confirmed' && seat.payment_status === 'unpaid') expect(potOf(ctx), `seed ${seed} [${log.join(' ')}]: credit left unused on an owing seat`).toBe(0);
+  expect(total(), `seed ${seed} [${log.join(' ')}]: worth across both games`).toBe(before);
+  // Dropped game 1, then I'm in on game 2, and game 1 stayed dropped: the drop's credit is on the new seat, never
+  // left unused beside a seat that owes (court booked or not booked; a venue-waitlist court is standby, owing nothing).
+  const s2 = seatOf2();
+  if (joinedAfterDrop && out && court2 !== 'waitlist' && s2?.status === 'confirmed' && s2.payment_status === 'unpaid' && !log.slice(log.lastIndexOf('in2') + 1).includes('book'))
+    expect(potOf(ctx), `seed ${seed} [${log.join(' ')}]: game 2 owes while the drop's credit sits unused`).toBe(0);
   flushHold(false);
 }
 

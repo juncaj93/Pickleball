@@ -260,7 +260,7 @@ export function adminSessionView(
       .map((r) => {
         const seat = potFor(r);
         // A claim (unconfirmed "I paid" on a seat that left) is not money the players cover.
-        if (isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at }, session.status === 'canceled')) return 0;
+        if (isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: session.finalized_at && r.played === 0 ? false : null }, session.status === 'canceled')) return 0;
         if (r.payment_status === 'paid' && !r.refunded_at) return (r.payment_amount_cents ?? 0) - seat.backCents;
         // An unpaid seat: its whole price (what they still owe, plus credit and cash already put on it).
         if (r.status === 'confirmed' && r.payment_status === 'unpaid') return prices.get(r.player_id)?.cents ?? 0;

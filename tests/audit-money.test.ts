@@ -460,7 +460,7 @@ describe('credit at finalize', () => {
     await agree(ctx);
   });
 
-  it('paid, used nothing, then "I paid" with partial credit: payment is cash plus credit and the credit back is the same $3', async () => {
+  it('paid, used nothing, then "I paid" with partial credit: payment is cash plus credit; the $3 back comes once the organizer confirms', async () => {
     const ctx = await group();
     // Credit arrives after they joined, so Use credit is still theirs to tap (credit at sign-up is automatic now).
     const s = await nextSession(ctx, [(await nextSession(ctx)).id]);
@@ -477,7 +477,13 @@ describe('credit at finalize', () => {
     await payAll(ctx, s.id, names.slice(1));
     await endGame(ctx, s);
     expect((await finalize(ctx, s.id)).status).toBe(200);
-    const view = await adminSession(ctx, s.id);
+    // Since Oct 31 only confirmed money becomes credit: his I paid is not confirmed, so the $3 back waits...
+    let view = await adminSession(ctx, s.id);
+    expect(row(view, 'Alex')).toMatchObject({ creditBackCents: 0, owesCents: 0 });
+    expect(await creditOf(ctx, 'Alex')).toBe(0);
+    // ...until the organizer confirms it (Mark paid): then the $3 comes back.
+    expect((await pay(ctx, s.id, 'Alex')).status).toBe(200);
+    view = await adminSession(ctx, s.id);
     expect(row(view, 'Alex')).toMatchObject({ creditBackCents: 300, owesCents: 0 });
     expect(await creditOf(ctx, 'Alex')).toBe(300);
     expect((await monthFor(ctx, s)).collectedCents).toBe(5 * 1100);

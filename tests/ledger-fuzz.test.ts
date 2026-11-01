@@ -871,8 +871,12 @@ function checkDb(w: World, out: Violation[]): Snapshot {
     const fin = !!sp.s_fin;
     const price = fin ? (sp.played === 1 ? sp.s_price : 0) : flat;
     if (live) {
-      if (fin && sp.played === 0) add('I3.not-played-still-paid', `${who}: did not play, payment ${pay} kept`);
-      else if (fin && pay - x.keptFin !== price) add('I3.final-pieces', `${who}: paid ${pay} - back ${x.keptFin} != final price ${price}`);
+      // An unconfirmed I paid (Alex, Oct 31): did not play, it is a claim on Home; played, its money back waits
+      // until it is confirmed. Everything else adds up exactly.
+      const unconfirmed = !!sp.self_paid_at;
+      if (fin && sp.played === 0 && !unconfirmed) add('I3.not-played-still-paid', `${who}: did not play, payment ${pay} kept`);
+      else if (fin && sp.played === 1 && !(unconfirmed && x.keptFin === 0 && pay >= price) && pay - x.keptFin !== price)
+        add('I3.final-pieces', `${who}: paid ${pay} - back ${x.keptFin} != final price ${price}`);
       // Weakened: after the game ends, a seat paid at an earlier final price and then reopened shows paid below the flat
       // price until the redo of Finalize (which holds that cash and asks the rest, checked exactly above).
       else if (!fin && pay < price && w.app.now < Date.parse(sp.s_ends) && !w.priceChanged) add('I3.paid-below-price', `${who}: paid ${pay} < price ${price}`);
@@ -927,7 +931,7 @@ async function checkScreens(w: World, snap: Snapshot, out: Violation[], full = t
     for (const r of others) dashSeat.set(`${s.id}:${r.playerId}`, r);
     if (s.status === 'canceled') continue;
     // An unconfirmed I paid on a seat that left is a claim (held, never kept or covering the court).
-    const claim = (r: any) => r.paymentStatus === 'paid' && !r.refundedAt && r.selfPaid && r.status !== 'confirmed';
+    const claim = (r: any) => r.paymentStatus === 'paid' && !r.refundedAt && r.selfPaid && (r.status !== 'confirmed' || (s.finalized && r.played === false));
     const kept = others.reduce((sum: number, r: any) => sum + (claim(r) ? 0 : r.paymentStatus === 'paid' && !r.refundedAt ? Math.max(0, r.paymentAmountCents - r.creditBackCents) : (r.paidEarlierCents ?? 0)), 0);
     const unpaidOwes = others.reduce((sum: number, r: any) => sum + r.owesCents, 0);
     const creditOnUnpaid = others.reduce((sum: number, r: any) => sum + (r.status === 'confirmed' && r.paymentStatus === 'unpaid' ? r.creditCents : 0), 0);

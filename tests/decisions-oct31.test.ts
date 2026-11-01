@@ -219,3 +219,96 @@ describe('claims: fourth audit pass', () => {
   });
 });
 });
+
+// Alex, Oct 31 (evening): an unconfirmed I paid on a player marked "did not play" at Finalize stays a claim; no
+// credit is ever made from money nobody confirmed (a player who played gets the money back once it is confirmed).
+describe('2b. Finalize and an unconfirmed I paid', () => {
+  async function game(ctx: Ctx, opts: { credit?: number } = {}) {
+    const old = await on(ctx, '2026-10-29');
+    if (opts.credit) givePot(ctx, 'Blair', opts.credit, old.id);
+    const g = await on(ctx, '2026-11-03');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Alex']) await (await playerPhone(ctx, n)).call('POST', `/api/sessions/${g.id}/join`, {});
+    const blair = await playerPhone(ctx, 'Blair');
+    const owe = (await blair.call('GET', '/api/group')).data.owed.find((o: any) => o.sessionId === g.id).amountCents;
+    expect((await blair.call('POST', `/api/sessions/${g.id}/paid`, { paid: true, cents: owe })).status).toBe(200);
+    ctx.app.now = Date.parse(g.endsAt) + HOUR;
+    return g;
+  }
+  const others = (ctx: Ctx) => ['Casey', 'Devon', 'Emery', 'Frankie', 'Alex'].map((n) => ctx.byName[n]);
+
+  it('did not play: no credit, a claim on Home ("Did not play"); Paid gives all of it back as credit', async () => {
+    const ctx = await group();
+    const g = await game(ctx);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { played: others(ctx) })).status).toBe(200);
+    expect(potOf(ctx, 'Blair')).toBe(0);
+    const d = await dash(ctx);
+    expect(d.paymentClaims).toEqual([expect.objectContaining({ name: 'Blair', cents: 1400, why: 'not_played' })]);
+    // Her claimed $14 is held, never collected (nobody else has paid yet).
+    expect((await month(ctx, '2026-11')).sessions.find((s: any) => s.id === g.id).collectedCents).toBe(0);
+    expect((await month(ctx, '2026-11')).heldCents).toBe(1400);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/claim`, { playerId: ctx.byName.Blair, paid: true })).data).toMatchObject({ changed: true });
+    expect(potOf(ctx, 'Blair')).toBe(1400);
+    expect((await dash(ctx)).paymentClaims).toEqual([]);
+    // Repeat: nothing more.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/claim`, { playerId: ctx.byName.Blair, paid: true })).data).toMatchObject({ changed: false });
+    expect(potOf(ctx, 'Blair')).toBe(1400);
+  });
+
+  it("did not play, part credit: Didn't pay gives back only the credit; Unmark and Mark paid on Who paid answer the claim too", async () => {
+    const ctx = await group();
+    const g = await game(ctx, { credit: 300 });
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { played: others(ctx) })).status).toBe(200);
+    expect(potOf(ctx, 'Blair')).toBe(0); // the $3 credit stays on the frozen seat
+    expect((await dash(ctx)).paymentClaims).toEqual([expect.objectContaining({ name: 'Blair', cents: 1100, why: 'not_played' })]);
+    // Unmark from Who paid answers it as "Didn't pay": the $3 credit comes back, the $11 claim is gone.
+    const r = await rowOf(ctx, g.id, 'Blair');
+    const un = await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: false, seen: r.moneySeen });
+    expect(un.status).toBe(200);
+    expect(potOf(ctx, 'Blair')).toBe(300);
+    expect((await dash(ctx)).paymentClaims).toEqual([]);
+    // Reopen undoes the finalize: the $3 goes back on her seat ("Credit $3 used", $11 owed), no claim.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/reopen`, {})).status).toBe(200);
+    expect(potOf(ctx, 'Blair')).toBe(0);
+    expect(await rowOf(ctx, g.id, 'Blair')).toMatchObject({ paymentStatus: 'unpaid', creditCents: 300, owesCents: 1100 });
+    expect((await dash(ctx)).paymentClaims).toEqual([]);
+  });
+
+  it('played with an unconfirmed I paid: counts as paid, but the $5 back waits until Mark paid confirms it', async () => {
+    const ctx = await group();
+    const g = await game(ctx);
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true })).status).toBe(200); // 6 played: $9
+    expect(potOf(ctx, 'Blair')).toBe(0);
+    expect(await rowOf(ctx, g.id, 'Blair')).toMatchObject({ paymentStatus: 'paid', selfPaid: true, creditBackCents: 0, owesCents: 0 });
+    expect((await dash(ctx)).paymentClaims).toEqual([]);
+    const r = await rowOf(ctx, g.id, 'Blair');
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true, seen: r.moneySeen })).status).toBe(200);
+    expect(potOf(ctx, 'Blair')).toBe(500);
+    // A second confirm tap: nothing more.
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: ctx.byName.Blair, paid: true });
+    expect(potOf(ctx, 'Blair')).toBe(500);
+  });
+});
+
+describe('4. Remove player on a standby seat', () => {
+  it('a standby seat (court on the venue waitlist) removed by the organizer: no credit made, none lost', async () => {
+    const ctx = await group();
+    const old = await on(ctx, '2026-10-29');
+    givePot(ctx, 'Blair', 1400, old.id);
+    const g = await on(ctx, '2026-11-05');
+    await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    const blair = await playerPhone(ctx, 'Blair');
+    // Mitchel's path: paid with credit, the game goes on the venue's Waitlist, drop, I'm in again (standby).
+    expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ paidWithCredit: true });
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'waitlist' })).status).toBe(200);
+    await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {});
+    expect((await blair.call('POST', `/api/sessions/${g.id}/join`, {})).data).toMatchObject({ result: 'standby' });
+    expect(potOf(ctx, 'Blair')).toBe(1400);
+    const rows = () => (raw(ctx).prepare('SELECT COUNT(*) AS n FROM credit_ledger WHERE player_id = ?').get(ctx.byName.Blair) as any).n;
+    const before = rows();
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/roster`, { playerId: ctx.byName.Blair, action: 'withdraw' })).data).toMatchObject({ result: 'withdrawn' });
+    expect(potOf(ctx, 'Blair')).toBe(1400);
+    expect(rows()).toBe(before);
+    expect((raw(ctx).prepare('SELECT status, payment_status FROM session_players WHERE session_id = ? AND player_id = ?').get(g.id, ctx.byName.Blair) as any)).toMatchObject({ status: 'withdrawn', payment_status: 'not_applicable' });
+  });
+});

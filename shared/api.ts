@@ -369,7 +369,7 @@ export interface AdminDashboard {
   /** Refund requests waiting on the organizer, oldest first. */
   refundRequests: RefundRequestView[];
   /** Unconfirmed "I paid" on a seat that left or a canceled game: the organizer decides (shared/credit.ts isPaymentClaim). */
-  paymentClaims: { sessionId: string; startsAt: string; playerId: string; name: string; cents: number; why: 'dropped' | 'canceled' }[];
+  paymentClaims: { sessionId: string; startsAt: string; playerId: string; name: string; cents: number; why: 'dropped' | 'canceled' | 'not_played' }[];
   /** The organizer's own player record, once they have one (their name from Settings). */
   me: { id: string; name: string } | null;
   /** "Do this now" taps saved on the server, as "sessionId:mark". */

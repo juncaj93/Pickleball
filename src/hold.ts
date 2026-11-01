@@ -14,7 +14,7 @@ export interface Hold {
   /** Send it for real. `leaving` is true when the page is going away. */
   send(leaving: boolean): Promise<void>;
   /** Sent (or failed): the screen should stop showing the held state. */
-  settled(err: unknown | null): void;
+  settled(err: unknown | null): void | Promise<void>;
   /** Undone: the screen should show the original again. */
   undone(): void;
 }
@@ -26,18 +26,25 @@ interface Active extends Hold {
 }
 
 let active: Active | null = null;
+/** The send that is on its way (fired, not yet answered), so a tap can wait for it to land. */
+let inFlight: Promise<void> | null = null;
 
 async function fire(h: Active, leaving: boolean) {
   if (h.done) return;
   h.done = true;
   clearTimeout(h.timer);
   if (active === h) active = null;
-  try {
-    await h.send(leaving);
-    h.settled(null);
-  } catch (err) {
-    h.settled(err);
-  }
+  const run = (async () => {
+    try {
+      await h.send(leaving);
+      await h.settled(null);
+    } catch (err) {
+      await h.settled(err);
+    }
+  })();
+  inFlight = run;
+  await run;
+  if (inFlight === run) inFlight = null;
 }
 
 /** Hold a send for `ms`. Only one hold at a time: starting another sends the first at once. */
@@ -56,6 +63,16 @@ export function undoHold(key: string): boolean {
   active = null;
   h.undone();
   return true;
+}
+
+/**
+ * Send any held action now and wait until it has landed (or failed): a tap that depends on it goes after.
+ * I'm in on another game right after a Drop out: the drop's credit must be on the server before the join, or
+ * the new seat would owe money while that credit sits unused.
+ */
+export async function settleHolds(): Promise<void> {
+  if (active) await fire(active, false);
+  else if (inFlight) await inFlight;
 }
 
 /** Send the held action now (leaving the page, or a new hold starting). */

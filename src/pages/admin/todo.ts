@@ -40,7 +40,7 @@ export function heldCents(d: AdminDashboard, playerId?: string): number {
     for (const r of s.roster) {
       if (r.isOrganizer || (playerId && r.playerId !== playerId)) continue;
       // An unconfirmed "I paid" on a seat that left, or in a canceled game: held until the organizer decides (as on Money).
-      if (isPaymentClaim(r, s.state.flags.canceled)) {
+      if (isPaymentClaim({ ...r, played: s.finalized && r.played === false ? false : null }, s.state.flags.canceled)) {
         total += r.paymentAmountCents ?? 0;
         continue;
       }

@@ -112,13 +112,17 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
         // Only the cash part: credit (and cash already held) on the seat stays on it as it is.
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paid - onSeat), paymentCents: paid }));
+      } else if (back > 0 && paid > 0 && r.self_paid_at) {
+        // An I paid the organizer has not confirmed: it counts as paid, but the money back waits until it is
+        // confirmed (only confirmed money becomes credit; Mark paid then gives it back).
       } else if (back > 0) {
         if (paid === 0) statements.push(payWithCredit(r, used));
         statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: back, reason: 'finalized', playedCount: n, settle: false }));
         backs.push({ player: r.display_name, playerId: r.player_id, cents: back, reason: 'finalized' });
       }
-    } else if (paid > 0 && r.self_paid_at && r.status !== 'confirmed') {
-      // An unconfirmed "I paid" on a seat that left the game: a claim, not money. It waits for the organizer.
+    } else if (paid > 0 && r.self_paid_at) {
+      // An unconfirmed "I paid" on a seat that left the game or did not play: a claim, not money. It waits for the
+      // organizer's Paid / Didn't pay on Home (Alex, Oct 31).
     } else if (paid > 0) {
       statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: paid, reason: 'not_played', settle: true }));
       backs.push({ player: r.display_name, playerId: r.player_id, cents: paid, reason: 'not_played' });

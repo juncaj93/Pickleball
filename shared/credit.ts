@@ -334,14 +334,19 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
  * itself; the organizer confirms it (then it becomes credit) or clears it
  * (Alex, Oct 31). Counted as held until then, never as collected.
  */
-export function isPaymentClaim(seat: { status: string; paymentStatus: string; selfPaid: boolean; refundedAt: string | null; isOrganizer?: boolean }, canceled: boolean): boolean {
-  return !seat.isOrganizer && seat.paymentStatus === 'paid' && !seat.refundedAt && seat.selfPaid && (seat.status !== 'confirmed' || canceled);
+export function isPaymentClaim(
+  seat: { status: string; paymentStatus: string; selfPaid: boolean; refundedAt: string | null; isOrganizer?: boolean; played?: boolean | null },
+  canceled: boolean,
+): boolean {
+  // A seat that left, a canceled game, or marked "did not play" at Finalize (Alex, Oct 31: only confirmed money becomes credit).
+  return !seat.isOrganizer && seat.paymentStatus === 'paid' && !seat.refundedAt && seat.selfPaid && (seat.status !== 'confirmed' || canceled || seat.played === false);
 }
 
 /** The organizer's note for a claim: "Ryan tapped I paid ($14), not confirmed. Dropped out of Tue, Nov 3." */
-export function paymentClaimText(name: string, cents: number, why: 'dropped' | 'canceled', startsAt: string, tz: string): string {
+export function paymentClaimText(name: string, cents: number, why: 'dropped' | 'canceled' | 'not_played', startsAt: string, tz: string): string {
   const day = formatShortDate(startsAt, tz);
-  return `${name} tapped I paid (${formatPrice(cents)}), not confirmed. ${why === 'canceled' ? `${day} was canceled.` : `Dropped out of ${day}.`}`;
+  const what = why === 'canceled' ? `${day} was canceled.` : why === 'not_played' ? `Did not play ${day}.` : `Dropped out of ${day}.`;
+  return `${name} tapped I paid (${formatPrice(cents)}), not confirmed. ${what}`;
 }
 
 /**

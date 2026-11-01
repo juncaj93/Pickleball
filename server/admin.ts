@@ -3,7 +3,7 @@ import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings } from '../shared/settings';
 import { openSpots } from '../shared/spots';
-import { reopenBlockers } from './finalize';
+import { reopenBlockers, sqlText } from './finalize';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -34,7 +34,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { creditBackLeft, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
+import { creditBackLeft, creditBackStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
 import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -166,7 +166,14 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       (rosters.get(s.id) ?? [])
         .filter((r) =>
           isPaymentClaim(
-            { status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, isOrganizer: r.player_id === organizerId },
+            {
+              status: r.status,
+              paymentStatus: r.payment_status,
+              selfPaid: !!r.self_paid_at,
+              refundedAt: r.refunded_at,
+              isOrganizer: r.player_id === organizerId,
+              played: s.finalized_at && r.played === 0 ? false : null,
+            },
             s.status === 'canceled',
           ),
         )
@@ -174,7 +181,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
           // What they said they sent: the payment minus credit (and cash held) already on the seat.
           const seat = seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
           const cents = Math.max(0, (r.payment_amount_cents ?? 0) - seat.usedCents - seat.cashCents);
-          return { sessionId: s.id, startsAt: s.starts_at, playerId: r.player_id, name: r.display_name, cents, why: s.status === 'canceled' ? ('canceled' as const) : ('dropped' as const) };
+          const why = s.status === 'canceled' ? ('canceled' as const) : r.status === 'confirmed' ? ('not_played' as const) : ('dropped' as const);
+          return { sessionId: s.id, startsAt: s.starts_at, playerId: r.player_id, name: r.display_name, cents, why };
         }),
     ),
     me: await organizerPlayer(ctx, group, false),
@@ -600,40 +608,83 @@ export async function answerClaim(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
   const paid = v.bool(body.paid, 'paid');
+  if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'That is your court payment.');
+  return answerClaimOn(ctx, group, session, playerId, paid);
+}
+
+/**
+ * The answer to a claim (also what Unmark or the player's "Didn't pay?" does on one). A claim is an unconfirmed
+ * I paid on a seat that left the game, in a canceled game, or marked "did not play" at Finalize.
+ *  - Left or canceled: confirmed, everything on the seat goes back as on any drop or cancel; cleared, the
+ *    payment is gone and the credit on the seat goes back.
+ *  - Did not play: confirmed, the whole payment comes back as "did not play" credit, as Finalize does for a
+ *    confirmed payment; cleared, only the credit on the seat comes back.
+ * One batch each; every statement guarded, so a repeat or a second device changes nothing.
+ */
+async function answerClaimOn(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, paid: boolean) {
   const organizerId = await organizerIdOf(ctx.db, group);
-  if (playerId === organizerId) throw new HttpError(409, 'organizer_pays_court', 'That is your court payment.');
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>();
   if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
   const canceled = session.status === 'canceled';
-  // The claim as it is now: still self-marked, not settled, on a seat that left (or any seat of a canceled game).
+  // The claim as it is now: still self-marked, not settled, on a seat that left, in a canceled game, or not played.
   const claim = `session_id = ?2 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
-    AND (status <> 'confirmed' OR (SELECT status FROM sessions WHERE id = ?2) = 'canceled')`;
-  const before = await ctx.db.prepare(`SELECT payment_amount_cents AS c FROM session_players WHERE ?1 IS NOT NULL AND ${claim}`).bind(ctx.nowIso, session.id, playerId).first<{ c: number }>();
+    AND (status <> 'confirmed' OR (SELECT status FROM sessions WHERE id = ?2) = 'canceled'
+         OR (played = 0 AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NOT NULL))`;
+  const before = await ctx.db
+    .prepare(`SELECT payment_amount_cents AS c, status, played FROM session_players WHERE ?1 IS NOT NULL AND ${claim}`)
+    .bind(ctx.nowIso, session.id, playerId)
+    .first<{ c: number; status: string; played: number | null }>();
   if (!before) return { ok: true, changed: false };
-  const reason = canceled ? 'canceled' : 'dropped';
-  const entryId = newId();
-  // One batch: answer the claim, then whatever the seat still holds goes back as on any drop or cancel (the
-  // credit on it, cash held against it, and, when they did pay, that payment).
-  const [answered] = await ctx.db.batch([
-    paid
-      ? ctx.db.prepare(`UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`).bind(ctx.nowIso, session.id, playerId)
-      : ctx.db
-          .prepare(
-            `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
-               paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`,
-          )
-          .bind(ctx.nowIso, session.id, playerId),
-    ...seatMoneyBackStatements(ctx.db, {
-      groupId: group.id,
-      sessionId: session.id,
-      playerId,
-      organizerId,
-      reason,
-      nowIso: ctx.nowIso,
-      entryId,
-      when: (sp) => `(${sp}.status <> 'confirmed' OR (SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled')`,
-    }),
-  ]);
+  const notPlayed = !canceled && before.status === 'confirmed' && before.played === 0;
+  let statements: D1PreparedStatement[];
+  let reason: string;
+  if (notPlayed) {
+    reason = 'not_played';
+    const used = (
+      await ctx.db
+        .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+        .bind(session.id, playerId)
+        .first<{ c: number }>()
+    )?.c ?? 0;
+    // After the answer the seat is no longer a claim; the credit-back statements only run if the answer went in.
+    const answered = `NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NOT NULL)`;
+    const back = paid ? (before.c ?? 0) : used;
+    statements = [
+      paid
+        ? ctx.db.prepare(`UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`).bind(ctx.nowIso, session.id, playerId)
+        : // Not paid: the payment is only the credit on the seat (as Finalize records a credit-only seat), or nothing.
+          ctx.db
+            .prepare(
+              `UPDATE session_players SET payment_status = CASE WHEN ?4 > 0 THEN 'paid' ELSE 'unpaid' END, payment_amount_cents = CASE WHEN ?4 > 0 THEN ?4 ELSE NULL END,
+                 paid_at = CASE WHEN ?4 > 0 THEN paid_at ELSE NULL END, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`,
+            )
+            .bind(ctx.nowIso, session.id, playerId, used),
+      ...creditBackStatements(ctx.db, { groupId: group.id, sessionId: session.id, playerId, cents: back, reason: 'not_played', nowIso: ctx.nowIso, settle: true, guard: answered }),
+    ];
+  } else {
+    reason = canceled ? 'canceled' : 'dropped';
+    statements = [
+      paid
+        ? ctx.db.prepare(`UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`).bind(ctx.nowIso, session.id, playerId)
+        : ctx.db
+            .prepare(
+              `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
+                 paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1 WHERE ${claim}`,
+            )
+            .bind(ctx.nowIso, session.id, playerId),
+      ...seatMoneyBackStatements(ctx.db, {
+        groupId: group.id,
+        sessionId: session.id,
+        playerId,
+        organizerId,
+        reason: canceled ? 'canceled' : 'dropped',
+        nowIso: ctx.nowIso,
+        entryId: newId(),
+        when: (sp) => `(${sp}.status <> 'confirmed' OR (SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled')`,
+      }),
+    ];
+  }
+  const [answered] = await ctx.db.batch(statements);
   if (answered.meta.changes !== 1) return { ok: true, changed: false };
   await audit(ctx.db, group.id, session.id, paid ? 'payment_claim_confirmed' : 'payment_claim_cleared', { player: p.display_name, playerId, amountCents: before.c, reason }, ctx.nowIso);
   return { ok: true, changed: true };
@@ -693,6 +744,14 @@ export async function applyPayment(
     }
   }
 
+  // A claim (an unconfirmed I paid on a seat that left, a canceled game, or "did not play"): Mark paid and Unmark
+  // answer it the way the Home card does (the player's own "Didn't pay?" clears it too).
+  const isClaim = isPaymentClaim(
+    { status: row.status, paymentStatus: row.payment_status, selfPaid: !!row.self_paid_at, refundedAt: row.refunded_at, played: session.finalized_at && row.played === 0 ? false : null },
+    session.status === 'canceled',
+  );
+  if (isClaim && (paid ? !self : true)) return answerClaimOn(ctx, group, session, playerId, paid);
+
   if (paid) {
     if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
     if (row.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
@@ -702,14 +761,31 @@ export async function applyPayment(
       if (self || !row.self_paid_at) return { ok: true, changed: false };
       // Only while the seat is still in, paid and self-marked in a game that is on: a cancel or a drop at the same
       // moment made it a claim, which the claim card answers (confirming it here would leave the money nowhere).
-      const res = await ctx.db
-        .prepare(
-          `UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
-           WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
-             AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'`,
-        )
-        .bind(ctx.nowIso, session.id, playerId)
-        .run();
+      // Finalized and played above the final price: the money back was held until this payment was confirmed
+      // (only confirmed money becomes credit); it comes back now, in the same batch.
+      const finalCents = session.finalized_at && row.played === 1 ? session.final_price_cents : null;
+      const back = finalCents !== null && finalCents !== undefined ? Math.max(0, (row.payment_amount_cents ?? 0) - finalCents) : 0;
+      const confirmedNow = `NOT EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NOT NULL)`;
+      const [res] = await ctx.db.batch([
+        ctx.db
+          .prepare(
+            `UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+             WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
+               AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'`,
+          )
+          .bind(ctx.nowIso, session.id, playerId),
+        ...creditBackStatements(ctx.db, {
+          groupId: group.id,
+          sessionId: session.id,
+          playerId,
+          cents: back,
+          reason: 'finalized',
+          playedCount: session.final_played_count ?? null,
+          nowIso: ctx.nowIso,
+          settle: false,
+          guard: confirmedNow,
+        }),
+      ]);
       if (res.meta.changes !== 1) {
         // A second device confirmed it first: already as wanted.
         const now = await ctx.db

@@ -85,7 +85,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     // paid earlier toward a seat whose price went up.
     // An unconfirmed "I paid" on a seat that left (or a canceled game) is a claim: held until the organizer decides.
     const claim = (r: (typeof roster)[number]) =>
-      isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at }, s.status === 'canceled');
+      isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: s.finalized_at && r.played === 0 ? false : null }, s.status === 'canceled');
     const claims = roster.filter((r) => r.player_id !== organizerId && claim(r)).reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
     const kept = roster
       .filter((r) => r.player_id !== organizerId && !claim(r))

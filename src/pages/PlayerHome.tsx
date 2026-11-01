@@ -11,7 +11,7 @@ import { CreditChip, CreditSheet } from './CreditSheet';
 import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageRemove, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
-import { flushHold, holdPending, pendingDropAction, type PendingDropNote, startHold, undoHold, UNDO_MS } from '../hold';
+import { flushHold, holdPending, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
@@ -37,6 +37,28 @@ function forgetPendingDrop(sessionId: string) {
     if (JSON.parse(storageGet(PENDING_DROP_KEY) ?? '{}').sessionId === sessionId) storageRemove(PENDING_DROP_KEY);
   } catch {
     storageRemove(PENDING_DROP_KEY);
+  }
+}
+/**
+ * Before I'm in on a game: a drop held on this phone (or left over from a page that closed before sending it)
+ * goes to the server FIRST, and the join waits for it. The credit that drop gives back is then there for the
+ * new seat (it goes on at I'm in), instead of the new seat owing money while that credit sits unused.
+ */
+async function sendDropsBeforeJoin(joiningId: string) {
+  await settleHolds();
+  let note: PendingDropNote | null = null;
+  try {
+    note = JSON.parse(storageGet(PENDING_DROP_KEY) ?? 'null');
+  } catch {
+    note = null;
+  }
+  if (!note?.sessionId || note.sessionId === joiningId || holdPending(note.sessionId)) return;
+  try {
+    await api('POST', `/api/sessions/${note.sessionId}/withdraw`, {});
+    storageRemove(PENDING_DROP_KEY);
+  } catch (err) {
+    // Refused (game started, already out...): nothing left to send. No signal: the note stays for later.
+    if (err instanceof ApiError && err.code !== 'offline') storageRemove(PENDING_DROP_KEY);
   }
 }
 const CELEBRATE_MS = 1600;
@@ -914,6 +936,7 @@ function SuggestionCard({
     try {
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
+        await sendDropsBeforeJoin(s.sessionId);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
         onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
@@ -1253,6 +1276,7 @@ export function ScheduleRow({
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
     try {
+      await sendDropsBeforeJoin(s.id);
       joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
       await onChanged();
     } catch (err) {

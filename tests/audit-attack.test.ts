@@ -370,8 +370,9 @@ async function books(w: World, label = '') {
     const price = !sp.finalized_at ? FLAT : sp.played === 1 ? sp.final_price_cents : null;
     if (price === null) {
       // Did not play: everything came back; a seat still holding credit must be settled with all of it back.
-      expect(unsettledPaid, at(`did-not-play seat still paid ${who}`)).toBe(false);
-      if (usedNC + held > 0) {
+      // (An unconfirmed I paid is a claim the organizer answers on Home, Alex Oct 31: it stays as it is.)
+      if (!sp.self_paid_at) expect(unsettledPaid, at(`did-not-play seat still paid ${who}`)).toBe(false);
+      if (usedNC + held > 0 && !(unsettledPaid && sp.self_paid_at)) {
         expect(!!sp.refunded_at, at(`did-not-play seat with credit not settled ${who}`)).toBe(true);
         expect(backNP, at(`did-not-play credit not all back ${who}`)).toBeGreaterThanOrEqual(usedNC + held);
       }
@@ -379,12 +380,15 @@ async function books(w: World, label = '') {
     }
     // Credit used on a seat, net of what came back from it after Finalize, is never above its price.
     expect(usedNC - backFin, at(`more credit than the price on ${who}`)).toBeLessThanOrEqual(price);
-    expect(usedNC + held - backFin, at(`credit + held above price on ${who}`)).toBeLessThanOrEqual(price);
+    // (An unconfirmed I paid's money back waits until it is confirmed: the seat holds more until then.)
+    if (!(unsettledPaid && sp.self_paid_at && sp.finalized_at)) expect(usedNC + held - backFin, at(`credit + held above price on ${who}`)).toBeLessThanOrEqual(price);
     if (unsettledPaid) {
       // Tolerated (by design, server/credit.ts repriceStatements `short`): after a Reopen, a seat paid in cash at
       // the lower final price shows paid at the flat price until the game is finalized again.
       const reopenedCashSeat = !sp.finalized_at && usedNC + held === 0 && sp.payment_amount_cents < price;
-      if (!reopenedCashSeat) expect(sp.payment_amount_cents - backFin, at(`paid seat net of credit back is not its price ${who}`)).toBe(price);
+      // An unconfirmed I paid on a finalized seat: its money back waits until the organizer confirms it (Oct 31).
+      const withheld = !!sp.self_paid_at && !!sp.finalized_at && backFin === 0 && sp.payment_amount_cents >= price;
+      if (!reopenedCashSeat && !withheld) expect(sp.payment_amount_cents - backFin, at(`paid seat net of credit back is not its price ${who}`)).toBe(price);
       expect(usedNC + held, at(`credit on a paid seat above its payment ${who}`)).toBeLessThanOrEqual(sp.payment_amount_cents);
     } else if (sp.payment_status === 'unpaid') {
       expect(usedNC + held, at(`unpaid seat whose credit covers it ${who}`)).toBeLessThan(price);
@@ -768,7 +772,8 @@ async function signUp(w: World, sid: string, who: [string, Money][]) {
   }
   await books(w, 'signed up');
   for (const [n, m] of who) {
-    if (m === 'cash') expect((await iPaid(w, n, sid)).status).toBe(200);
+    // Cash, confirmed by the organizer (an unconfirmed I paid gives nothing back: tests/decisions-oct31.test.ts).
+    if (m === 'cash') expect((await iPaidConfirmed(w, n, sid)).status).toBe(200);
     if (m === 'org_paid') expect((await markPaid(w, n, sid)).status).toBe(200);
   }
   await books(w, 'paid up');
@@ -818,7 +823,9 @@ describe('finalize at every N from 4 to 10', () => {
             const didPlay = played.includes(n);
             const paid = before.payment_status === 'paid' ? before.payment_amount_cents : 0;
             const delta = potOf(w, n) - potsBefore.get(n)!;
-            if (paid === FLAT) expect(delta, `${n} paid $14, ${didPlay ? 'played' : 'did not play'}`).toBe(didPlay ? FLAT - price : FLAT);
+            // An unconfirmed I paid gives nothing back at Finalize (Alex, Oct 31: only confirmed money becomes credit).
+            const unconfirmed = !!before.self_paid_at;
+            if (paid === FLAT) expect(delta, `${n} paid $14${unconfirmed ? ' (unconfirmed)' : ''}, ${didPlay ? 'played' : 'did not play'}`).toBe(unconfirmed ? 0 : didPlay ? FLAT - price : FLAT);
           }
           await everyonePays(w, sid, inGame);
           await books(w, `N=${N} seed=${seed} everyone paid`);
@@ -857,7 +864,8 @@ async function playedGame() {
   await givePot(w, 'Casey', 500);
   for (const n of ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale']) expect((await join(w, n, sid)).status).toBe(200);
   expect((await w.org.call('POST', `/api/admin/sessions/${sid}/me`, { in: true })).status).toBe(200);
-  expect((await iPaid(w, 'Devon', sid)).status).toBe(200);
+  // Devon paid $14 cash, confirmed (an unconfirmed I paid gives nothing back at Finalize since Oct 31).
+  expect((await iPaidConfirmed(w, 'Devon', sid)).status).toBe(200);
   expect((await markPaid(w, 'Gale', sid)).status).toBe(200);
   await givePot(w, 'Frankie', 1400);
   atIso(w, AFTER_OCT27);
@@ -1830,8 +1838,12 @@ describe('second pass: Reopen and the taps that check the exact finalize', () =>
     SCENARIOS++;
     await sweepLater('Emery I paid $8 ⊃ redo without Emery', eight, (s) => iPaid(s.w, 'Emery', s.sid, 0, 800), redo(swap), async (s) => {
       const seat = seatRow(s.w, s.sid, 'Emery');
-      // A payment that landed first comes back in full when the redo says he did not play (settled); one that lands after is refused.
-      expect(seat.payment_status === 'paid' && !seat.refunded_at && seat.played === 0).toBe(false);
+      // An I paid that landed first stays a claim (unconfirmed, Alex Oct 31) when the redo says he did not play,
+      // and shows on Home; one that lands after is refused. Never a paid, unsettled, confirmed did-not-play seat.
+      expect(seat.payment_status === 'paid' && !seat.refunded_at && seat.played === 0 && !seat.self_paid_at).toBe(false);
+      if (seat.payment_status === 'paid' && !seat.refunded_at && seat.played === 0) {
+        expect((await dash(s.w)).paymentClaims.some((c: any) => c.sessionId === s.sid && c.name === 'Emery')).toBe(true);
+      }
     });
     await sweepLater('Mark paid Emery ⊃ redo without Emery', eight, (s) => markPaid(s.w, 'Emery', s.sid), redo(swap));
     await sweepLater('Frankie Use credit ⊃ redo without Frankie', eight, (s) => useCredit(s.w, 'Frankie', s.sid), redo(swapF), async (s) => {
