@@ -30,7 +30,12 @@ export function isAdminPage(url: string): boolean {
 const LINKED = /: (https?:\/\/[^\s"]+)/g;
 const BOUNDARY = /(?:[.?!:] |\n)/g;
 
-export function linkText(text: string, plain: (url: string) => boolean = () => false): { text: string; entities: TextLink[] } {
+/**
+ * `allowed`: only these addresses become links. Any other "words: address"
+ * (say a player named "Bob: https://...") is left exactly as typed, so a
+ * name can never turn into hidden link words.
+ */
+export function linkText(text: string, plain: (url: string) => boolean = () => false, allowed: (url: string) => boolean = () => true): { text: string; entities: TextLink[] } {
   const entities: TextLink[] = [];
   let out = '';
   let from = 0;
@@ -41,10 +46,29 @@ export function linkText(text: string, plain: (url: string) => boolean = () => f
     let phraseStart = 0;
     for (const b of before.matchAll(BOUNDARY)) phraseStart = b.index + b[0].length;
     if (phraseStart >= before.length) continue; // no words to link: leave the address as it is
+    if (!plain(m[1]) && !allowed(m[1])) continue; // not one of our addresses: leave it as typed
     out += before;
     from = at + m[0].length;
     if (plain(m[1])) continue;
     entities.push({ type: 'text_link', offset: out.length - (before.length - phraseStart), length: before.length - phraseStart, url: m[1] });
   }
   return { text: out + text.slice(from), entities };
+}
+
+/** The addresses alerts may link to: the site itself and CourtReserve. */
+export function ourAddress(siteUrl: string): (url: string) => boolean {
+  let site = '';
+  try {
+    site = new URL(siteUrl).host;
+  } catch {
+    // No site address: only CourtReserve.
+  }
+  return (url: string) => {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:' && (u.host === site || u.host === 'mobileapp.courtreserve.com' || u.host === 'app.courtreserve.com');
+    } catch {
+      return false;
+    }
+  };
 }

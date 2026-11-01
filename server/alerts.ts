@@ -16,7 +16,7 @@ import { isPretend } from './pretend';
 import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
 import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
-import { isAdminPage, linkText, type TextLink } from './telegram-links';
+import { isAdminPage, linkText, ourAddress, type TextLink } from './telegram-links';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
@@ -138,8 +138,8 @@ function telegramProblem(status: number, description: string): string {
 
 /** Send one message to the organizer's chat, with an "Open site" button. */
 /** The message with each "words: address" shown as tappable words, and the /admin page (the Open site button) as plain words (see telegram-links.ts). */
-function telegramText(text: string): { text: string; entities?: TextLink[] } {
-  const linked = linkText(text, isAdminPage);
+function telegramText(text: string, siteUrl: string): { text: string; entities?: TextLink[] } {
+  const linked = linkText(text, isAdminPage, ourAddress(siteUrl));
   return linked.entities.length ? linked : { text: linked.text };
 }
 
@@ -152,7 +152,7 @@ async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: env.TELEGRAM_CHAT_ID,
-        ...telegramText(text),
+        ...telegramText(text, siteUrl),
         link_preview_options: { is_disabled: true },
         reply_markup: { inline_keyboard: [[{ text: 'Open site', url: `${siteUrl}/admin` }]] },
       }),
