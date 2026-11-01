@@ -873,7 +873,8 @@ against the 10 ms limit, 0 errors so far. Clock Worker 0.6 ms.
 
 Audit 2 of 3 (player screens and behind the scenes run in their own channels). Started from main
 8d8ed0c (main caught up to the live site: money audit, organizer cleanup, Waitlist rule).
-Scenario list with a status for each: `docs/AUDIT_SCENARIOS_admin.md` (224 scenarios).
+Scenario list with a status for each: `docs/AUDIT_SCENARIOS_admin.md` (238 scenarios: 191 pass,
+14 fixed, 33 built, 0 open).
 No money rule, price rule, schema or migration change.
 
 ### Requested change 16: the court card for a game never marked Booked
@@ -940,9 +941,23 @@ No money rule, price rule, schema or migration change.
   `e2e/admin-cleanup.cjs`) and the kept-words list in `tests/wording.test.ts` ("Mark it off").
 
 ### Not deployed
-- Nothing from this audit is live and there is no preview link yet: this session's permission
-  settings refused the Cloudflare deploy (even a preview). A throwaway database
-  `pickleball-preview-admin` (fake data, PIN 135790) is ready for the preview. Steps once allowed:
-  add a temporary `[env.preview]` block binding DB to it, `npm run build`,
-  `npx wrangler pages deploy dist --project-name pickleball-club --branch preview-admin-audit`,
-  then restore wrangler.toml. Production: merge to main, pull, test, back up, deploy from main.
+- Nothing from this audit is live and there is no preview link: this session's permission
+  settings refused every Cloudflare deploy (even a preview). Main now sends previews to the
+  throwaway `pickleball-preview` database (behind-the-scenes channel, 0cd3e80), so a preview
+  is just `npm run build` then
+  `npx wrangler pages deploy dist --project-name pickleball-club --branch preview-admin-audit`.
+  A second throwaway database `pickleball-preview-admin` (fake data, PIN 135790) was made before
+  that landed; it is not needed and can be deleted (free, holds no real data).
+- To ship after Alex's "ship it": merge this branch into main, pull the latest main, run the tests,
+  take a Time Travel bookmark and SQL export, deploy from main (`npm run deploy`), read-only check.
+  No migration. Before shipping, look read-only at the live list for games that will ask
+  "Did you guys play?" at once (past 28 days, never booked, someone in, not finalized).
+
+### Final test totals (merged with main e806c40)
+- Unit: 1,288 passed in 75 files (1 helper skipped on purpose). Typecheck clean.
+- Browser: 27 suites, 1,002 checks, 0 failed (run 229, credit 153, court 84, held 81, alerts 52,
+  texts 52, admin-cleanup 35, suggest 35, popup 33, gates 32, live 26, round2 25, names 24,
+  auto-credit 22, circles 18, do-now 13, card-times 13, money-visible 12, admin-audit 11,
+  banner 11, no-court 10, cancel-reason 8, dryrun-screens 6, admin-sweep 6, want-in 4,
+  double-tap 4, audit-stage3 3). Run one at a time: run.cjs fails in bulk when the machine is
+  also running the unit tests.
