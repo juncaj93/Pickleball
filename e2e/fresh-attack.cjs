@@ -198,7 +198,10 @@ async function runSequence(browser, seed, t0) {
   await setupCtx.close();
 
   // ----- organizer (API) -----
-  const adminCtx = await browser.newContext();
+  const adminCtx = await browser.newContext({ viewport: { width: 390, height: 800 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: UA });
+  allContexts.push(adminCtx);
+  await adminCtx.clock.setSystemTime(nowMs());
+  await adminCtx.route(/^https?:\/\/(?!localhost)/, (route) => route.abort().catch(() => {}));
   const A = adminCtx.request;
   await post(A, '/api/admin/login', { pin: PIN });
   let maxPlayers = pick([4, 4, 5, 6]);
@@ -383,7 +386,7 @@ async function runSequence(browser, seed, t0) {
       }
       case 'drop': {
         const s = pick(mineIn);
-        const mode = pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'close', 'rejoin', 'dbl', 'switch']);
+        const mode = pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'reload-rejoin', 'close', 'rejoin', 'dbl', 'switch']);
         const undoAt = ri(200, 4500);
         let note = '';
         const dropper = ph.who;
@@ -410,6 +413,16 @@ async function runSequence(browser, seed, t0) {
             const u = ph.page.locator('[data-banner] .toast-action', { hasText: 'Undo' });
             const clicked = await u.first().click({ timeout: 400 }).then(() => true).catch(() => false);
             note = ` undo@${mode === 'undo' ? undoAt : 5200}ms${clicked ? '' : ' (Undo gone)'}`;
+          } else if (mode === 'reload-rejoin') {
+            // Drop out, reload inside the Undo wait, then I'm in on the same game: they must end up in.
+            await sleep(undoAt);
+            await ph.page.reload().catch(() => {});
+            await row(ph, s.id).waitFor({ timeout: 8000 }).catch(() => {});
+            const btn = row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ });
+            await btn.first().waitFor({ timeout: 6000 }).catch(() => {});
+            const ok = await tap(btn);
+            await sleep(1500);
+            note = ` reload@${undoAt}ms then I'm in${ok ? '' : ' (no I\'m in button)'}`;
           } else if (mode === 'reload') {
             await sleep(undoAt);
             await ph.page.reload().catch(() => {});
@@ -607,6 +620,7 @@ async function runSequence(browser, seed, t0) {
     const errored = toasts.some((x) => x.error && !/Too late/.test(x.msg));
     if (/no Drop out|no confirm/.test(note)) return;
     if (mode === 'undo' && !/Undo gone/.test(note) && !tooLate) check(st === 'confirmed', 'intent', 'tapped Undo in time but ended up out', `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
+    else if (mode === 'reload-rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out, reload, I'm in again: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     else if (mode === 'rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out then I'm in during Undo: not in", `${ph.label} ${ph.who} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     else if (!errored) check(st !== 'confirmed', 'intent', `dropped out (${mode}) and Undo not tapped, but still in`, `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     // The drop banner says what happens to the money; the pot must move by that much.
@@ -619,13 +633,13 @@ async function runSequence(browser, seed, t0) {
   }
 
   // ---------- organizer actions (API) ----------
-  async function orgAction() {
+  async function orgAction(combo = false) {
     d = await dash();
     const live = d.sessions.filter((s) => s.status !== 'canceled' && Date.parse(s.endsAt) > nowMs());
     const open = live.filter((s) => Date.parse(s.startsAt) > nowMs());
     const ended = d.sessions.filter((s) => s.status !== 'canceled' && Date.parse(s.endsAt) <= nowMs() && !s.state?.finalized && !s.finalizedAt && s.roster.some((r) => r.status === 'confirmed'));
     const canceledOpen = d.sessions.filter((s) => s.status === 'canceled' && Date.parse(s.startsAt) > nowMs());
-    const opts = ['court', 'court', 'max'];
+    const opts = ['court', 'court', 'max', ...(combo ? [] : ['viewAs', 'viewAs'])];
     if (open.length) opts.push('move', 'cancel');
     if (ended.length) opts.push('finalize', 'finalize');
     if (canceledOpen.length) opts.push('reopen');
@@ -642,6 +656,36 @@ async function runSequence(browser, seed, t0) {
       return `${res.status()}${res.ok() ? '' : ` ${(await res.text()).slice(0, 80)}`}`;
     };
     switch (act) {
+      case 'viewAs': {
+        // Organizer: View as a player, Drop out on a game they are in, Exit inside the Undo wait. No real seat may change.
+        const snap = (dd) => JSON.stringify(dd.sessions.map((x) => [x.id, x.status, x.roster.map((y) => [y.playerId, y.status, y.paymentStatus, y.creditCents])]));
+        const before = snap(d);
+        const cands = live.filter((x) => Date.parse(x.startsAt) > nowMs()).flatMap((x) => x.roster.filter((y) => y.status === 'confirmed' && !y.isOrganizer).map((y) => [x, y]));
+        if (!cands.length) return 'ORG view as: nobody in a game';
+        const [gs, who] = pick(cands);
+        const exitAt = ri(300, 4500);
+        const page = await adminCtx.newPage();
+        let note = '';
+        try {
+          await page.goto(`${BASE}/admin`);
+          await page.getByRole('button', { name: 'View as…' }).click({ timeout: 8000 });
+          await page.locator('dialog[open]').getByRole('button', { name: who.name, exact: true }).click({ timeout: 4000 });
+          await page.getByRole('region', { name: 'Viewing as a player' }).waitFor({ timeout: 6000 });
+          const r0 = page.locator(`#row-${gs.id}`);
+          await r0.waitFor({ timeout: 6000 });
+          const dropped = (await tap(r0.getByRole('button', { name: 'Drop out' }))) && (await tap(page.locator('dialog[open]').getByRole('button', { name: 'Drop out' })));
+          await sleep(exitAt);
+          await page.getByRole('region', { name: 'Viewing as a player' }).getByRole('button', { name: 'Exit' }).click({ timeout: 2000 });
+          note = dropped ? '' : ' (no Drop out on the demo card)';
+        } catch (err) {
+          note = ` (harness: ${String(err.message).split('\n')[0].slice(0, 80)})`;
+        }
+        await sleep(6500);
+        await page.close().catch(() => {});
+        const after = snap(await dash());
+        check(before === after, 'view-as', `View as ${who.name}, Drop out, Exit at ${exitAt}ms changed a real seat`, `${day(gs.startsAt)}`);
+        return `ORG view as ${who.name}, Drop out ${day(gs.startsAt)}, Exit @${exitAt}ms${note}`;
+      }
       case 'court': {
         const s = pick(live.length ? live : d.sessions);
         const to = pick(['not_booked', 'waitlist', 'booked', 'booked']);
@@ -877,7 +921,7 @@ async function runSequence(browser, seed, t0) {
         const ph = pick(live);
         if (chance(0.12)) {
           // Organizer changes the game at the same moment as the tap.
-          const [a, b] = await Promise.all([playerAction(ph), orgAction()]);
+          const [a, b] = await Promise.all([playerAction(ph), orgAction(true)]);
           line = `${a}  ||  ${b}`;
         } else {
           const since = await browserNow(ph);
