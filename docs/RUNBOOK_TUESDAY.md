@@ -26,7 +26,8 @@ waited out until after the game, then fixed calmly.
 3. Find the deployment before the bad one (each row shows the time and the
    first words of the change). The last known good one is in
    `docs/STAGE_NOTES.md` under the latest deploy ("Code rollback: ...").
-   As of Sun Nov 1, 9:07 AM: live is `95faf42e`; the one before it is `eea78540`.
+   As of Sun Nov 1, 5:28 PM: live is `d156b8e0`; the one before it is `071a533a` (the new database column is
+   harmless to the older code, so rolling back is safe).
 4. Tap the three dots on that row, then **Rollback to this deployment**, then confirm.
 5. Open pickleball.juncaj.net and check it loads.
 

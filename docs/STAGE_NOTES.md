@@ -1194,3 +1194,21 @@ seat row and moving a game fail with an error (no money moves; proven in `tests/
   banner 11, no-court 10, time-shift 9, good-news 9, dryrun-screens 6, admin-sweep 6, cancel-reason 8, want-in 4,
   double-tap 4, audit-stage3 3). Changed on purpose: admin-cleanup reads "~10:30 AM" as 10:30 AM; run.cjs reads the
   tile outline from the new border layer and measures card density without a moved game's Waiting on lines.
+
+### Deploy (Sun Nov 1, 2026, 5:28 PM Eastern, on Alex's "ship it")
+- PR #63 merged as dace600. Production deployment `d156b8e0`, branch main, commit dace600 (main equals live).
+- Order: SQL export `live-before-time-shift-2026-11-01.sql` (223 rows, has phone numbers, not committed, in this
+  session's scratch folder); Time Travel bookmark `000003a4-00000000-00005116-3f7fe3ae7f3b1a3c218090b771f58a86`
+  (5:27 PM); migration 0016 applied (17 seats, column empty); then `npm run deploy` from main.
+- Live: the court look, logo tile, plain credit text and dark raised cards for everyone. The moved-game notice is
+  OFF for everyone (Settings > Schedule > "Moved-game notice for everyone"); Alex's phone test: pickleball.juncaj.net/?timeshift=on.
+- Rollback: Pages deployment `071a533a` (commit 453a5a0) rolls back the code; the old code ignores the new column, so
+  that is enough. To also drop the column: `npx wrangler d1 execute pickleball --remote --command "ALTER TABLE session_players DROP COLUMN time_confirmed; DELETE FROM d1_migrations WHERE name = '0016_time_confirmed.sql';"`
+  (code rollback first). Whole database: `npx wrangler d1 time-travel restore pickleball --bookmark=000003a4-00000000-00005116-3f7fe3ae7f3b1a3c218090b771f58a86`.
+- Read-only after: the backup address serves the new bundle; /, /admin, /api/status, /api/group/version, /logo.png,
+  /logo-xmas.png 200; /api/group answers with timeShift false and no asks, and with the private header timeShift true;
+  all 20 health checks 0; row counts (seats 17, credit entries 5, cash-out requests 0, players 10, games 8) match the
+  export. pickleball.juncaj.net could not be reached from this session's network (same before the deploy).
+- Tests on the deployed code: unit 1,557 passed in 86 files; browser run 229/229, time-shift 10/10, admin-sweep 6/6,
+  every other browser file green at 7cc88a5's code (see Tests above).
+- Fake preview database `pickleball-preview`: migration 0016 applied after the deploy (real taps on previews work again).
