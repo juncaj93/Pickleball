@@ -3,17 +3,18 @@ import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { creditBackNote } from '../../shared/pricing';
-import { DEFAULT_TIMEZONE, playerDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
+import { DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, viewingAs } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, noteStillApplies, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
 import { useLiveUpdates } from '../live';
 import { addNote, forgetGame, readNotes, removeNote, sameNote } from '../dropNotes';
+import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
@@ -1395,7 +1396,9 @@ export function ScheduleRow({
   }
 
   const court = courtStatus(s, tz);
-  const goodNews = inSession && mine.promotion ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion]) : null;
+  // Shown only the first time this player sees this promotion on this phone (src/goodNews.ts).
+  const promoted = inSession && !!mine.promotion && !!g.me && seeGoodNews(goodNewsKey(g.me.id, s.id, mine.signupAt), demoOn() ? demoSessionNumber() : null);
+  const goodNews = promoted ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion!]) : null;
 
   const names = s.confirmed.map((p) => p.name);
   const everyone = g.players.map((p) => p.name);
@@ -1508,7 +1511,8 @@ export function ScheduleRow({
             <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
           {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
-          {s.canceled && <p className="sched-sub">If you paid, it's now your credit.</p>}
+          {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
+          {s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>}
 
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && <p className="game-note">{s.note}</p>}
@@ -1528,7 +1532,7 @@ export function ScheduleRow({
 
       <ConfirmDialog
         open={askOut}
-        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${playerDay(s.startsAt, tz, nowMs).word}?`}
+        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         body={waiting ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
         confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : 'Drop out'}
         danger
