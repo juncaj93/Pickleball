@@ -29,7 +29,8 @@ The fake database `pickleball-preview` must NEVER be deleted, reset any other wa
 3. Find the deployment before the bad one (each row shows the time and the
    first words of the change). The last known good one is in
    `docs/STAGE_NOTES.md` under the latest deploy ("Code rollback: ...").
-   As of Sun Nov 1, 9:07 AM: live is `95faf42e`; the one before it is `eea78540`.
+   As of Sun Nov 1, 5:28 PM: live is `d156b8e0`; the one before it is `071a533a` (the new database column is
+   harmless to the older code, so rolling back is safe).
 4. Tap the three dots on that row, then **Rollback to this deployment**, then confirm.
 5. Open pickleball.juncaj.net and check it loads.
 
@@ -61,6 +62,20 @@ text. If it misbehaves:
 - To switch the link off: in `wrangler.toml`, change `GO_LINKS = "on"` to
   `GO_LINKS = "off"`, then deploy from main (`npm run deploy`). Alerts then
   say plain words and the Open site button takes you in.
+
+## 4b. The "time changed" notice misbehaves (TIME_SHIFT)
+
+The notice asks players who are in to confirm a moved start time. It never moves money or a seat.
+
+- Quick fix with no deploy: none needed for money. If players are confused, text them with the card's
+  Text button or Text the group.
+- To switch it off for everyone (no deploy): /admin, Settings, Schedule, turn off **Moved-game notice for everyone**.
+  The notice, "Confirmed 2 of 3" and the Edit game note go away; tile borders and "~" times stay (they are just looks).
+- To test it on one phone only while it is off: open pickleball.juncaj.net/?timeshift=on on that phone
+  (?timeshift=off ends it).
+- Last resort kill switch: in `wrangler.toml`, `TIME_SHIFT = "off"`, then deploy from main. Answers are kept.
+- Never deploy this code to a database without migration 0016 (`npx wrangler d1 migrations list pickleball --remote`
+  must show nothing to apply). Without it, I'm in again and moving a game fail.
 
 Other switches in the code (each needs a deploy):
 

@@ -106,6 +106,8 @@ export interface RosterRow {
   late_drop_done_at: string | null;
   /** Once finalized: 1 played, 0 did not. */
   played: number | null;
+  /** "Time may shift": the start time they agreed to and when (shared/timeShift.ts). NULL: the current time. Missing before migration 0016. */
+  time_confirmed?: string | null;
   display_name: string;
   phone_number: string | null;
 }

@@ -1,0 +1,328 @@
+/* "Time may shift" (Nov 2026): the court status on the date tile's border, the tilde time under it, the
+   "time changed" notice at the top of the player Home, and the organizer's "Confirmed 2 of 3" line. */
+
+:root {
+  --ts-booked: #18241d;
+  --ts-wait: #5f665d;
+  --ts-none: #7c837a;
+  --ts-muted: #4a4f46;
+  --ts-green: #226b4b;
+  --ts-green-soft: #e6f2eb;
+  --ts-outline: #226b4b;
+  --ts-neutral: #6b7069;
+  --ts-pop: 1.12;
+}
+:root[data-theme='dark'] {
+  --ts-booked: #8bd9a3;
+  --ts-wait: #a3ab9f;
+  --ts-none: #6b786f;
+  --ts-muted: #b8bfb2;
+  --ts-green: #7fd9a3;
+  --ts-green-soft: #1b3527;
+  --ts-outline: #3fa071;
+  --ts-neutral: #8c958b;
+  --ts-clock-ink: #0b140f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --ts-booked: #8bd9a3;
+    --ts-wait: #a3ab9f;
+    --ts-none: #6b786f;
+    --ts-muted: #b8bfb2;
+    --ts-green: #7fd9a3;
+    --ts-green-soft: #1b3527;
+    --ts-outline: #3fa071;
+    --ts-neutral: #8c958b;
+  --ts-clock-ink: #0b140f;
+  }
+}
+
+/* ---- Tile border: two layers, cross-faded (border-style itself never animates) ---- */
+.tile.ts {
+  border-color: transparent !important;
+}
+.tile .tb {
+  position: absolute;
+  /* Lies exactly on the tile's own (now see-through) border. */
+  inset: calc(var(--tb-w, 1.5px) * -1);
+  border-radius: inherit;
+  border: var(--tb-w, 1.5px) solid var(--ts-booked);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 260ms ease;
+}
+.tile:not(.ts) .tb {
+  display: none;
+}
+.tile .tb-dash {
+  border-style: dashed;
+  border-color: var(--ts-wait);
+}
+.tile.ts-booked .tb-solid {
+  opacity: 1;
+  border-color: var(--ts-booked);
+}
+.tile.ts-none .tb-solid {
+  opacity: 1;
+  border-color: var(--ts-none);
+}
+.tile.ts-wait .tb-dash {
+  opacity: 1;
+}
+/* Border widths of each tile size (the same as before). */
+.schedule .tile.ptile {
+  --tb-w: 2px;
+}
+.tier-next .tile.ptile {
+  --tb-w: 1.5px;
+}
+/* LATER rows: a thinner outline, so each tier still steps down (this 2px, next 1.5px, later 1px). */
+.tier-later .tile.ptile.ts {
+  --tb-w: 1px;
+  border-width: 1px;
+}
+.tile .tile-check,
+.tile .tonight-tag {
+  z-index: 1;
+}
+
+/* ---- The time under the tile ---- */
+.schedule .sched-time.ts-booked,
+.scard-time.ts-booked {
+  color: var(--pc-ink, var(--ink));
+  font-weight: 800;
+}
+.schedule .sched-time.ts-none,
+.schedule .sched-time.ts-wait,
+.scard-time.ts-none,
+.scard-time.ts-wait {
+  color: var(--ts-muted);
+  font-weight: 650;
+}
+.sched-time.ts-flip,
+.scard-time.ts-flip {
+  animation: ts-pop 420ms cubic-bezier(0.2, 0.9, 0.3, 1.3);
+}
+@keyframes ts-pop {
+  0% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(var(--ts-pop));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ---- The notice: one bar per changed game, at the top of Home ---- */
+.ts-bars {
+  display: grid;
+  gap: 10px;
+}
+.ts-bar {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--raised, var(--surface));
+  color: var(--ink);
+  border: 1px solid var(--raised-line, var(--line));
+  box-shadow: var(--raised-shadow, 0 2px 10px rgb(24 36 29 / 10%));
+  transform-origin: top center;
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+  overflow: hidden;
+}
+.ts-bar.ts-gone {
+  opacity: 0;
+  transform: translateY(-6px) scaleY(0.6);
+}
+.ts-line1 {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.ts-clock {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ts-green);
+  color: var(--ts-clock-ink, #ffffff);
+}
+.ts-clock svg {
+  width: 20px;
+  height: 20px;
+}
+.ts-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding-top: 1px;
+}
+.ts-title {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: 1.05rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.ts-was {
+  font-size: 0.85rem;
+  color: var(--ts-muted);
+}
+.ts-line2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+.ts-line2 .btn {
+  min-height: 46px;
+  width: 100%;
+  padding: 10px 8px;
+  white-space: nowrap;
+}
+.ts-line2 .ts-yes {
+  background: var(--primary);
+  color: var(--primary-ink);
+  border-color: transparent;
+}
+.ts-line2 .ts-yes svg {
+  width: 18px;
+  height: 18px;
+}
+.ts-line2 .ts-no {
+  background: transparent;
+  color: var(--ink);
+  border: 1.5px solid var(--ts-neutral);
+}
+.ts-line2 .btn:disabled {
+  opacity: 1;
+}
+.ts-more {
+  justify-self: start;
+  min-height: 44px;
+}
+
+/* The game the notice is about: a thin green outline while it waits for an answer. */
+.sched.ts-asking {
+  outline: 1.5px solid var(--ts-outline);
+  outline-offset: 3px;
+  transition: outline-color 220ms ease;
+}
+.sched {
+  outline: 1.5px solid transparent;
+  outline-offset: 3px;
+  transition: outline-color 220ms ease;
+}
+
+/* ---- Organizer card: "Confirmed 2 of 3" and "Waiting on Dan" ---- */
+.ts-check {
+  display: grid;
+  gap: 4px;
+  font-size: 0.92rem;
+}
+.ts-check .ts-count {
+  font-weight: 700;
+}
+.ts-waiting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.ts-waiting .ts-name {
+  color: var(--muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.ts-waiting .btn.small,
+.ts-waiting-many .btn.small {
+  min-height: 44px;
+  padding: 6px 14px;
+}
+.ts-waiting-many {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.ts-waiting-many .ts-name {
+  color: var(--muted);
+  margin-right: 2px;
+}
+.ts-waiting-many .ts-pill {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ts-note {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+/* Reduce Motion: plain 100 ms fades (the site-wide rule turns every motion off; these fades are allowed back). */
+@media (prefers-reduced-motion: reduce) {
+  .tile .tb,
+  .sched.ts-asking,
+  .schedule > .sched {
+    transition: opacity 100ms linear, outline-color 100ms linear !important;
+  }
+  .ts-bar {
+    transition: opacity 100ms linear !important;
+  }
+  .ts-bar.ts-gone {
+    transform: none;
+  }
+  .sched-time.ts-flip,
+  .scard-time.ts-flip {
+    animation: ts-fade 100ms linear !important;
+  }
+}
+@keyframes ts-fade {
+  from {
+    opacity: 0.4;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* "~10:30 AM" is one character longer than any plain time: a touch smaller so it still fits on one line under the tile. */
+.scard-time.ts-wait {
+  font-size: min(0.9rem, 18.5cqw);
+  letter-spacing: -0.01em;
+}
+.schedule .sched-time.ts-wait {
+  font-size: min(0.95rem, 18.5cqw);
+  letter-spacing: -0.01em;
+}
+.tier-next .sched-time.ts-wait {
+  font-size: min(0.82rem, 18.5cqw);
+}
+.tier-later .sched-time.ts-wait {
+  font-size: min(0.74rem, 18.5cqw);
+}
+
+/* Dark mode: gray buttons on the raised sheets keep their shape (the sheet and the gray fill are close). */
+:root[data-theme='dark'] dialog.sheet .btn.secondary,
+:root[data-theme='dark'] dialog.sheet .icon-btn {
+  border: 1px solid #6f8a7c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) dialog.sheet .btn.secondary,
+  :root:not([data-theme='light']) dialog.sheet .icon-btn {
+    border: 1px solid #6f8a7c;
+  }
+}

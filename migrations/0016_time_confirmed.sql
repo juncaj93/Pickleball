@@ -1,0 +1,18 @@
+-- "Time may shift": which start time a player said "Still in" to, and when.
+--
+-- One new nullable column on session_players. Its value is the game's
+-- starts_at the player agreed to, a space, and when they agreed (both UTC ISO),
+-- e.g. "2026-11-06T00:30:00.000Z 2026-11-01T21:05:00.000Z".
+--   NULL   the player agreed to the game's current time (they joined at it),
+--          so nobody is asked anything when this column is added.
+--   value  compare its first part to sessions.starts_at: the same means
+--          confirmed, different means "waiting" (the time changed after they
+--          agreed). A later change, or a change back, needs no bulk update.
+-- Edit game fills NULL for the seats that are in, with the old start time,
+-- in the same step that moves the game. I'm in after a change sets it back
+-- to NULL (they joined at the new time).
+--
+-- Additive only: nothing existing is dropped, renamed or rewritten, no rows
+-- are filled here, and code that ignores this column keeps working.
+-- Rollback: ALTER TABLE session_players DROP COLUMN time_confirmed;
+ALTER TABLE session_players ADD COLUMN time_confirmed TEXT;

@@ -316,8 +316,10 @@ function designReport() {
   const byTier = {};
   for (const card of cards) {
     const t = card.querySelector('.tile');
-    const cs = getComputedStyle(t);
-    (byTier[card.dataset.tier || 'this'] ??= []).push({ w: parseFloat(cs.borderTopWidth), c: contrast(cs.borderTopColor, cs.backgroundColor), size: t.getBoundingClientRect().width });
+    // Time may shift (Nov 2026): the outline is drawn by the visible border layer on top of the tile.
+    const layer = [...t.querySelectorAll('.tb')].find((l) => parseFloat(getComputedStyle(l).opacity) > 0.5);
+    const cs = getComputedStyle(layer || t);
+    (byTier[card.dataset.tier || 'this'] ??= []).push({ w: parseFloat(cs.borderTopWidth), c: contrast(cs.borderTopColor, getComputedStyle(t).backgroundColor), size: t.getBoundingClientRect().width });
   }
   const avgOf = (rows, k) => rows.reduce((s, v) => s + v[k], 0) / rows.length;
   const present = order.filter((t) => byTier[t]);
@@ -674,21 +676,24 @@ async function main() {
       assert(alpha >= 0.95, `pill should be solid, background was ${pillBg}`);
       const pad = await admin.evaluate(() => parseFloat(getComputedStyle(document.querySelector('main.page')).paddingBottom));
       assert(pad >= box.height + 24, `not enough room under the last card for the pill (${pad}px)`);
-      await admin.locator('header img.brand-logo').waitFor();
+      await admin.locator('header .brand-tile img.brand-logo').waitFor();
       for (const scheme of ['light', 'dark']) {
         await admin.emulateMedia({ colorScheme: scheme });
-        const logo = await admin.locator('header img.brand-logo').evaluate((img) => ({
-          loaded: img.complete && img.naturalWidth === 128,
-          backing: getComputedStyle(img).backgroundColor,
-          width: img.getBoundingClientRect().width,
-        }));
-        assert(logo.loaded, `header logo did not load in ${scheme} mode`);
-        assert(logo.backing === 'rgb(255, 255, 255)', `logo should sit on a light backing in ${scheme} mode`);
-        assert(logo.width === 32, `header logo should be 32px, was ${logo.width}`);
+        // The logo sits on a rounded tile with a 2px outline (no white box): light green-gray with a black
+        // outline in light mode, the raised card color with a green outline in dark mode. Same 32px as before.
+        const logo = await admin.locator('header .brand-tile').evaluate((tile) => {
+          const img = tile.querySelector('img');
+          const cs = getComputedStyle(tile);
+          return { loaded: img.complete && img.naturalWidth > 0, src: img.getAttribute('src'), backing: cs.backgroundColor, line: cs.borderTopColor, lineW: cs.borderTopWidth, width: tile.getBoundingClientRect().width };
+        });
+        assert(logo.loaded && logo.src === '/logo.png', `header logo did not load in ${scheme} mode`);
+        const want = scheme === 'dark' ? ['rgb(23, 33, 29)', 'rgb(46, 139, 94)'] : ['rgb(230, 238, 228)', 'rgb(23, 35, 28)'];
+        assert(logo.backing === want[0] && logo.line === want[1] && logo.lineW === '2px', `logo tile in ${scheme} mode: ${logo.backing} / ${logo.line} ${logo.lineW}`);
+        assert(logo.width === 32, `header logo tile should be 32px, was ${logo.width}`);
       }
       await admin.emulateMedia({ colorScheme: 'light' });
       assert((await admin.locator('link[rel="icon"]').getAttribute('href')) === '/favicon-32.png', 'tab icon should be the logo');
-      for (const f of ['/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/favicon-32.png', '/logo-header.png']) {
+      for (const f of ['/apple-touch-icon.png', '/icon-192.png', '/icon-512.png', '/favicon-32.png', '/logo-header.png', '/logo.png', '/logo-xmas.png']) {
         const r = await admin.request.get(BASE + f);
         assert(r.ok() && r.headers()['content-type'].includes('image/png'), `${f} missing`);
       }
@@ -2719,6 +2724,9 @@ async function main() {
         await sessionCards(p).first().waitFor();
         await sessionCards(p).first().evaluate((el) => window.scrollTo(0, el.getBoundingClientRect().top + window.scrollY - 8));
         const fitAdmin = await p.evaluate(() => {
+          // A moved game's "Confirmed x of y / Waiting on" lines (time may shift) are a passing to-do, not the
+          // everyday card: measured without them.
+          for (const el of document.querySelectorAll('[data-time-check]')) el.style.display = 'none';
           const limit = document.querySelector('.tabbar').getBoundingClientRect().top;
           return [...document.querySelectorAll('section[aria-labelledby="sessions-title"] article')].filter((a) => {
             const r = a.getBoundingClientRect();
@@ -3302,7 +3310,11 @@ async function main() {
         // Alerts came later, so its own height doesn't count against that.
         if (width === 390) {
           const h = await p.evaluate(
-            () => document.documentElement.scrollHeight - (document.querySelector('details[data-section="alerts"]')?.getBoundingClientRect().height ?? 0),
+            // The Alerts section and the Nov 1 "Moved-game notice for everyone" row were added after this limit was set.
+            () =>
+              document.documentElement.scrollHeight -
+              (document.querySelector('details[data-section="alerts"]')?.getBoundingClientRect().height ?? 0) -
+              (document.querySelector('[data-row="timeShiftAll"]')?.getBoundingClientRect().height ?? 0),
           );
           assert(h <= 2623 - 100, `Settings is ${h}px tall (was 2623px)`);
         }

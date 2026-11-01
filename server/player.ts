@@ -25,6 +25,8 @@ import { claimSlot, releaseSlot } from './rate';
 import { clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { cashOutOffer, loadPendingRequests, moneyPicture } from './credit';
+import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
+import { timeShiftFor } from './timeShift';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -86,6 +88,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
+  const timeShift = await timeShiftFor(ctx, group.id);
 
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
@@ -183,11 +186,12 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     players: players.map((p) => ({ id: p.id, name: p.display_name })),
     me: me ? { id: me.id, name: me.display_name } : null,
     viewingAs: !!viewAsName,
+    timeShift,
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
-      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) })),
+      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift)),
     owed,
     payDue: owed.filter((o) => {
       const p = localParts(Date.parse(o.startsAt), tz);
@@ -410,6 +414,38 @@ export async function playerCancelRefundRequest(ctx: Ctx) {
   if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   return cancelRefundRequest(ctx, who.group, who.playerId, p?.display_name ?? 'A player');
+}
+
+/**
+ * POST /api/sessions/:id/still-in { startsAt }: "Still in" on the "time changed" notice. Records that this player
+ * agreed to the game's current start time (shared/timeShift.ts). Changes no money and no seat. `startsAt` is the
+ * time the notice showed: if the organizer moved the game again in between, nothing is saved and the screen looks again.
+ */
+export async function playerStillIn(ctx: Ctx, body: Record<string, unknown>) {
+  const who = await actingOn(ctx);
+  const shown = v.isoTime(body.startsAt, 'startsAt');
+  if (!(await timeShiftFor(ctx, who.group.id))) throw new HttpError(404, 'not_found', 'Not found.');
+  if (who.session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This game was canceled.');
+  if (ctx.nowMs >= Date.parse(who.session.starts_at)) throw new HttpError(409, 'session_started', 'This game already started.');
+  if (!shown || Date.parse(shown) !== Date.parse(who.session.starts_at)) throw new HttpError(409, 'time_changed', 'The time changed again. Look at the new time.');
+  const seat = await ctx.db
+    .prepare("SELECT time_confirmed FROM session_players WHERE session_id = ? AND player_id = ? AND status = 'confirmed'")
+    .bind(who.session.id, who.playerId)
+    .first<{ time_confirmed: string | null }>();
+  if (!seat) throw new HttpError(409, 'not_in_session', "You're not in this game.");
+  // Only if nothing changed the answer in between (a second tap or another phone): then this one has nothing to add.
+  const res = await ctx.db
+    .prepare("UPDATE session_players SET time_confirmed = ? WHERE session_id = ? AND player_id = ? AND status = 'confirmed' AND time_confirmed IS ?")
+    .bind(agreedValue(who.session.starts_at, ctx.nowIso, seat.time_confirmed), who.session.id, who.playerId, seat.time_confirmed)
+    .run();
+  if (!res.meta.changes) {
+    const now = await ctx.db.prepare("SELECT time_confirmed FROM session_players WHERE session_id = ? AND player_id = ? AND status = 'confirmed'").bind(who.session.id, who.playerId).first<{ time_confirmed: string | null }>();
+    if (!now) throw new HttpError(409, 'not_in_session', "You're not in this game.");
+    if (isWaitingOnTime(now.time_confirmed, who.session.starts_at)) throw new HttpError(409, 'try_again', 'That did not work. Try again.');
+    return { result: 'confirmed_time' };
+  }
+  await logAction(ctx, who, 'still_in', 'confirmed_time', { startsAt: who.session.starts_at });
+  return { result: 'confirmed_time' };
 }
 
 export async function playerConfirm(ctx: Ctx) {

@@ -210,7 +210,8 @@ async function main() {
         const { ctx, page } = await openAdmin(width, scheme);
         const rows = await LAYOUT(page);
         assert(rows.length >= 7, `only ${rows.length} cards`);
-        const times = rows.map((r) => r.time);
+        // A court on Waitlist shows its time as "~10:30 AM" (time may shift, Nov 2026): the tilde is part of the look.
+        const times = rows.map((r) => r.time.replace(/^~/, ''));
         for (const t of ['7:30 PM', '7 PM', '10:30 AM', '8 PM']) assert(times.includes(t), `no card shows "${t}": ${times.join(', ')}`);
         rows.forEach((r, i) => {
           const w = `card ${i + 1} ("${r.time}")`;

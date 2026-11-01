@@ -1,6 +1,7 @@
 import { sha256 } from './crypto';
 import type { Ctx } from './context';
 import type { GroupRow } from './repo';
+import { timeShiftForAll } from './timeShift';
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
 const TIME_BUCKET_MS = 10 * 60_000;
@@ -24,7 +25,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
   const me = playerId ?? '';
   const upcomingFrom = new Date(ctx.nowMs - 36 * 3_600_000).toISOString();
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
-  const [sessions, roster, mine, ledger, requests, players, self] = await ctx.db.batch([
+  // withTime: this player's "Still in" answers (migration 0016). Everything else still works if that column is missing.
+  const queries = (withTime: boolean) => [
     ctx.db
       .prepare(
         `SELECT id, status, starts_at, ends_at, court_state, booking_status, cancel_reason, finalized_at, final_price_cents, final_played_count, is_extra, note, holiday_hours_ok_at, updated_at
@@ -40,7 +42,7 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
       .bind(group.id, upcomingFrom),
     ctx.db
       .prepare(
-        `SELECT sp.session_id, sp.status, sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at
+        `SELECT sp.session_id, sp.status, sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at${withTime ? ', sp.time_confirmed' : ''}
          FROM session_players sp JOIN sessions s ON s.id = sp.session_id
          WHERE sp.player_id = ? AND s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id`,
       )
@@ -49,7 +51,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     ctx.db.prepare('SELECT id, status, amount_cents, resolved_at FROM refund_requests WHERE group_id = ? AND player_id = ? ORDER BY created_at, id').bind(group.id, me),
     ctx.db.prepare('SELECT id, display_name, is_active FROM players WHERE group_id = ? ORDER BY id').bind(group.id),
     ctx.db.prepare('SELECT is_regular, usual_days, is_active FROM players WHERE id = ? AND group_id = ?').bind(me, group.id),
-  ]);
+  ];
+  const [sessions, roster, mine, ledger, requests, players, self] = await ctx.db.batch(queries(true)).catch(() => ctx.db.batch(queries(false)));
   const part = (r: { results: unknown[] }) => JSON.stringify(r.results);
   const raw = [
     part(sessions),
@@ -63,6 +66,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     JSON.stringify([group.name, group.timezone, group.venmo_url, group.organizer_name, group.settings_json, group.first_session_date]),
     me,
     Math.floor(ctx.nowMs / TIME_BUCKET_MS),
+    // The organizer turning the moved-game notice on or off for everyone.
+    (await timeShiftForAll(ctx.db, group.id)) ? 'ts' : '',
   ].join('|');
   return (await sha256(raw)).slice(0, 16);
 }
@@ -76,7 +81,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
  */
 export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<string> {
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
-  const queries = (withMarks: boolean) => [
+  // withTime: the "Still in" answers (migration 0016). Both extras are left out, one at a time, if missing.
+  const queries = (withMarks: boolean, withTime = withMarks) => [
     ctx.db
       .prepare(
         `SELECT id, status, starts_at, ends_at, court_state, booking_status, cancel_reason, cancellation_deadline_at, admin_decision, finalized_at, final_price_cents, final_played_count,
@@ -87,7 +93,7 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
     ctx.db
       .prepare(
         `SELECT sp.session_id, sp.player_id, sp.status, sp.claim_seq, sp.confirm_seq, sp.attendance_confirmed_at, sp.promoted_at,
-                sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at
+                sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at${withTime ? ', sp.time_confirmed' : ''}
          FROM session_players sp JOIN sessions s ON s.id = sp.session_id
          WHERE s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id, sp.player_id`,
       )
@@ -99,7 +105,10 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
     // The "Do this now" taps. Everything else still works if that table is missing.
     ...(withMarks ? [ctx.db.prepare("SELECT session_id, task FROM task_log WHERE group_id = ? AND kind = 'mark' ORDER BY session_id, task").bind(group.id)] : []),
   ];
-  const results = await ctx.db.batch(queries(true)).catch(() => ctx.db.batch(queries(false)));
+  const results = await ctx.db
+    .batch(queries(true, true))
+    .catch(() => ctx.db.batch(queries(true, false)))
+    .catch(() => ctx.db.batch(queries(false, false)));
   const [sessions, roster, ledger, requests, players, audit] = results;
   const marks = results[6] ?? { results: [] };
   const part = (r: { results: unknown[] }) => JSON.stringify(r.results);

@@ -1093,6 +1093,126 @@ Later cleanup batch (big text, a 29-letter name, one rare shared-phone case): do
   health check (scripts/integrity-checks.sql) all 0; row counts (seats 17, credit entries 5, cash-out requests 0,
   players 10, games 8) match the export.
 
+## "Time may shift" package (Sun Nov 1, 2026)
+
+Started from main 5abaa38 (same code as the live deployment `071a533a`, plus a docs note). SPEC items 1 to 9.
+No money rule or price change.
+
+### What changed on screen
+- Tilde on Waitlist games: the time under the tile reads "~7 PM" in the muted gray of "Court not booked"; Not
+  booked games show a plain muted time; Booked games a bright bold time. Waitlist to Booked while the page is open:
+  the tilde goes and the time pops once (transform and opacity, 420 ms; 100 ms fade with Reduce Motion).
+- Date tile border shows the court (player and organizer cards): Booked solid bright (dark mode green #8BD9A3),
+  Waitlist dashed, Not booked solid dim. Two border layers cross-fade; border-style never animates.
+  Colors: light #18241d / #5f665d / #878e85, dark #8bd9a3 / #a3ab9f / #6b786f (all 3:1 or better on the card).
+- "Time changed" notice at the top of the player Home (`src/timeShift.tsx`): clock icon, "Thu Nov 5 moved to
+  7:30 PM", "Was 7:00 PM", then Still in and Can't make it at equal widths. Thin green outline on that game's card.
+  Raised dark card in dark mode. Stays until answered (server data, so reloads and the 5-second refresh keep it);
+  two at most, then "N more". Still in: "Confirmed" check, the bar folds away (about 220 ms). Can't make it: the
+  game card's own drop question (its button says "Can't make it"), then the same 5-second Undo and credit banner.
+  Offline or a failed call: the bar stays and the usual red banner shows.
+- Organizer card: "Confirmed 2 of 3" (everyone in, the organizer counted as confirmed) and "Waiting on Dan" with a
+  small Text button that opens Messages with "Thu Nov 5 is now 7:30 PM. Still in? Open the site and tap Still in."
+  plus the site address. Edit game shows "Players who are in will be asked to confirm the new time." before Save
+  when the start changes on a game with players in. Nothing is sent automatically.
+- Dark mode raised cards on toasts, sheets (every pop-up) and the gear menu (`--raised`, `--raised-line`,
+  `--raised-shadow` in `src/styles.css`). Light mode unchanged.
+- Header: new logo (`public/logo.png`) on a rounded tile (light green-gray with a 2px #17231C outline; dark #17211D
+  with a 2px #2E8B5E outline). `public/logo-xmas.png` is staged and unused. The logo was never a button (the sun
+  button switches the theme), so it still is not.
+- Credit in the header: plain text, a small green letterspaced CREDIT over the bold amount, between the sun button
+  and the date tile, hidden at $0; the name shortens first.
+
+### The rules (Alex's)
+- A player who is in is asked when the start time changed after they agreed to one. Joining agrees to the time
+  at that moment; Still in agrees to the current time. Every time they agreed to is kept, so a change back to any
+  of them asks nothing; any other time asks again ("Was" shows the last time they said yes to).
+- Never asked: the organizer, a dropped player, a real standby seat, a canceled, started or finalized game.
+  A standby who moves in later is asked about the time they joined at.
+- The organizer's In or To waitlist keeps a pending ask; the organizer adding someone new counts as confirmed.
+- Changing only the end time asks nobody.
+
+### Database
+Migration `0016_time_confirmed.sql`: one new nullable column, `session_players.time_confirmed`
+("<start agreed>[,<another>] <when>"). No rows are filled by the migration. Edit game fills it for the seats that
+are in (with the old start) in the same batch that moves the game. Rollback of the column:
+`ALTER TABLE session_players DROP COLUMN time_confirmed;` (old code ignores the column, so rolling back the code
+alone is enough). The migration MUST go on before this code is deployed: without the column, I'm in on an existing
+seat row and moving a game fail with an error (no money moves; proven in `tests/review-time-shift.test.ts`).
+
+### Switches (changed on Alex's "ship it": the look goes live, the notice ships off)
+- The court look (tile borders, "~7 PM"), logo tile, credit text and dark raised cards: always on.
+- The moved-game notice, Still in, "Confirmed x of y" and the Edit game note (`server/timeShift.ts`) are on when
+  the `TIME_SHIFT` var is not "off" (kill switch, needs a deploy) AND one of:
+  - Settings > Schedule > "Moved-game notice for everyone" (off at ship; Alex turns it on Monday before 6 PM). Saved as
+    one `task_log` row (kind 'mark', task 'time_shift_on', no game), so no schema change; a backup restore empties
+    task_log, so check this switch after a restore.
+  - The private test switch: open the site once with `?timeshift=on` on a phone (sends `X-Time-Shift: on`; that phone
+    only; `?timeshift=off` ends it). Works on /admin too ("Confirmed x of y").
+  - The View as demo (always on).
+- While it is off, Edit game still records who agreed to which time, so turning it on asks exactly the players who
+  were in before a move and have not answered.
+
+### Fresh checks (helpers that did not write the code)
+- Money paths: no path changes money, credit, payment or a seat. Found and fixed: the organizer's In / To waitlist
+  cleared a pending ask; a change back to the time a player joined at asked again after a Still in (now every
+  agreed time is kept). Accepted: deploying before migration 0016 breaks I'm in again and moving a game (the ship
+  order puts the migration first; `tests/review-time-shift.test.ts` documents it). Accepted: a player who loaded the
+  old time and taps I'm in a second after a move counts as confirmed for the new time (narrow race).
+- Screens (320 and 390 px, light and dark): fixed the "You dropped out." banner after Can't make it (now "You're out."
+  with the same money words), Reduce Motion (100 ms fades instead of a cut), gray buttons on dark sheets (thin
+  outline), the Not booked border on the page background (now 3.5:1), and the Waiting on rows (one compact row of
+  "Text Name" buttons when several are waiting).
+- Already there before this package, left alone: the drop question's Go back and confirm buttons look alike inside
+  the game list; Edit game's End time is clipped at 320 px; some old tap targets under 44 px (not you?, All games,
+  calendar icon, I paid / Drop out links, + Add game, Book a court, paid pill, gear 44x34).
+
+### Preview (Sun Nov 1, 2026, 4:18 PM Eastern)
+- https://preview-time-shift.pickleball-club-9h0.pages.dev (deployment 79178936), branch claude/new-session-qrwtfr.
+  Database: the fake `pickleball-preview` (group "Pickleball Bros (PREVIEW, fake data)"; PIN in docs/PREVIEW_FAKE_DB.md
+  on its branch). Migration 0016 is NOT on the fake database (this session's permissions refused it), so test in View
+  as demo only: real taps there that rejoin a game or move a game would fail. The demo copy builds its own tables.
+- Demo walk (scripted, light and dark): View as, Pretend it's now, Edit game on Tue Nov 3 to 8:30 PM (note shows),
+  Confirmed 1 of 5 with Text buttons, View as Indy, the notice, Still in folds it away; zero requests left the browser.
+
+### To ship (after Alex's "ship it", before 8:00 PM, never Tue/Thu evening)
+1. Merge this branch into main, pull main, run the unit tests.
+2. Time Travel bookmark (`npx wrangler d1 time-travel info pickleball`) and SQL export
+   (`npx wrangler d1 export pickleball --remote --output live-before-time-shift-2026-11-01.sql`, kept out of git).
+3. `npx wrangler d1 migrations apply pickleball --remote` (only 0016 pending), then check the column exists and the
+   integrity checks read 0.
+4. `npm run deploy` from main. Read-only live check: /, /admin, /api/status, /api/group/version 200; row counts match.
+
+### Tests (branch claude/new-session-qrwtfr, Sun Nov 1, 4:40 PM Eastern)
+- Unit: 1,556 passed in 86 files (1 helper skipped). New: `tests/time-shift.test.ts` (who is asked, Still in,
+  Can't make it, organizer numbers, TIME_SHIFT off, and 10 random 80-step sequences with credit, cash, drops,
+  rejoins, a full game and the waitlist, checked against a model of the rules and the 20 integrity checks) and
+  `tests/review-time-shift.test.ts` (the fresh reviewer's).
+- Browser: 31 files, 1,246 checks, 0 failed (run 229, credit 153, audit-player-look 133 + 12 known open,
+  audit-player-flows 93, court 84, held 81, alerts 52, texts 52, admin-cleanup 35, suggest 35, popup 33, gates 32,
+  live 26, round2 25, names 24, auto-credit 22, circles 18, do-now 13, card-times 13, money-visible 12, admin-audit 11,
+  banner 11, no-court 10, time-shift 9, good-news 9, dryrun-screens 6, admin-sweep 6, cancel-reason 8, want-in 4,
+  double-tap 4, audit-stage3 3). Changed on purpose: admin-cleanup reads "~10:30 AM" as 10:30 AM; run.cjs reads the
+  tile outline from the new border layer and measures card density without a moved game's Waiting on lines.
+
+### Deploy (Sun Nov 1, 2026, 5:28 PM Eastern, on Alex's "ship it")
+- PR #63 merged as dace600. Production deployment `d156b8e0`, branch main, commit dace600 (main equals live).
+- Order: SQL export `live-before-time-shift-2026-11-01.sql` (223 rows, has phone numbers, not committed, in this
+  session's scratch folder); Time Travel bookmark `000003a4-00000000-00005116-3f7fe3ae7f3b1a3c218090b771f58a86`
+  (5:27 PM); migration 0016 applied (17 seats, column empty); then `npm run deploy` from main.
+- Live: the court look, logo tile, plain credit text and dark raised cards for everyone. The moved-game notice is
+  OFF for everyone (Settings > Schedule > "Moved-game notice for everyone"); Alex's phone test: pickleball.juncaj.net/?timeshift=on.
+- Rollback: Pages deployment `071a533a` (commit 453a5a0) rolls back the code; the old code ignores the new column, so
+  that is enough. To also drop the column: `npx wrangler d1 execute pickleball --remote --command "ALTER TABLE session_players DROP COLUMN time_confirmed; DELETE FROM d1_migrations WHERE name = '0016_time_confirmed.sql';"`
+  (code rollback first). Whole database: `npx wrangler d1 time-travel restore pickleball --bookmark=000003a4-00000000-00005116-3f7fe3ae7f3b1a3c218090b771f58a86`.
+- Read-only after: the backup address serves the new bundle; /, /admin, /api/status, /api/group/version, /logo.png,
+  /logo-xmas.png 200; /api/group answers with timeShift false and no asks, and with the private header timeShift true;
+  all 20 health checks 0; row counts (seats 17, credit entries 5, cash-out requests 0, players 10, games 8) match the
+  export. pickleball.juncaj.net could not be reached from this session's network (same before the deploy).
+- Tests on the deployed code: unit 1,557 passed in 86 files; browser run 229/229, time-shift 10/10, admin-sweep 6/6,
+  every other browser file green at 7cc88a5's code (see Tests above).
+- Fake preview database `pickleball-preview`: migration 0016 applied after the deploy (real taps on previews work again).
+
 
 ## Fake-data preview (Sun Nov 1, 2026, about 3:40 PM Eastern; config, scripts and docs only)
 
@@ -1120,4 +1240,3 @@ Previews now run on a practice database full of made-up players, so every tap on
 - Previews share ONE fake database, so two people testing at once see each other's taps. Re-seed when it gets messy.
 - A new migration must be applied to the preview database too: `npx wrangler d1 migrations apply pickleball-preview --remote --env preview`.
 - The flow in SITE_RULES ("test on the fake-data preview, then ship it") can now use real taps.
-

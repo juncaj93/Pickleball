@@ -15,6 +15,8 @@ migrations_dir = "migrations"
 SITE_URL = "https://pickleball.juncaj.net"
 # "on": night-before Telegram alerts link to the direct text page /go/... (turn "off" to fall back to the admin link).
 GO_LINKS = "on"
+# "Time may shift" (tilde times, court borders, the Still in notice, Confirmed x of y). "off" hides them all.
+TIME_SHIFT = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -25,6 +27,7 @@ GO_LINKS = "on"
 
 [env.preview.vars]
 GO_LINKS = "on"
+TIME_SHIFT = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

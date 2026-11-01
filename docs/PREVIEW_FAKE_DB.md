@@ -24,8 +24,8 @@ The wiring lives in two places, both already in place:
 
 1. `wrangler.toml`, the `[env.preview]` part: "previews use `pickleball-preview`".
 2. The Cloudflare Pages project's stored **Preview** settings (read from
-   Cloudflare on Sun Nov 1): database `DB` = `pickleball-preview`; the only variable is
-   `GO_LINKS`. Production keeps `DB` = `pickleball` plus the real Telegram and clock secrets.
+   Cloudflare on Sun Nov 1): database `DB` = `pickleball-preview`; the only variables are
+   `GO_LINKS` and `TIME_SHIFT` (plain on/off switches, no secrets). Production keeps `DB` = `pickleball` plus the real Telegram and clock secrets.
 
 Production is bound to the real database and was not changed.
 
@@ -92,6 +92,8 @@ fake world), `tests/preview-seed.test.ts` (proves the fake world passes the live
 checks and covers every state).
 
 ## When the real database changes (a new migration)
+
+Status: the preview database matches live through migration `0016_time_confirmed` (the "Time may shift" column `session_players.time_confirmed`, applied Sun Nov 1). The seed fills it correctly because it is built by the real site code.
 
 Previews share one practice database, so a new migration must reach it too, or a
 preview of newer code will break:

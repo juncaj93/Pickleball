@@ -38,6 +38,8 @@ export interface Env {
   CRON_SECRET?: string;
   /** "on": night-before alerts link to the direct text page (/go/...). Anything else: the admin link. A wrangler.toml var. */
   GO_LINKS?: string;
+  /** "Time may shift" (tilde times, court borders, the Still in notice, Confirmed x of y): on unless "off". A wrangler.toml var. */
+  TIME_SHIFT?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

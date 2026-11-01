@@ -72,6 +72,19 @@
   --pop-err-bg: #fbe1dc;
   --pop-err-fg: #8a1b14;
   --pop-err-line: #efb2a8;
+  --pop-shadow: 0 10px 28px rgb(10 20 15 / 30%);
+
+  /* Raised cards (toasts, pop-ups, sheets, menus, notices). Light mode keeps white;
+     dark mode gets a card a little lighter than the page, a thin border and a soft shadow. */
+  --raised: #ffffff;
+  --raised-line: #e2e2dc;
+  --raised-shadow: 0 8px 20px rgb(20 28 22 / 10%);
+  /* Sheets sit on the page color in light mode (as before). */
+  --sheet-bg: var(--bg);
+
+  /* Header logo tile. */
+  --logo-bg: #e6eee4;
+  --logo-line: #17231c;
 
   /* Type */
   --display: 'Bricolage Grotesque Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
@@ -139,12 +152,19 @@
     --holiday-bg: #2b1f3c;
     --ext-bg: #14313d;
     --ext-fg: #9fd3e8;
-    --pop-bg: #f1f3f1;
-    --pop-fg: #121614;
-    --pop-line: #f1f3f1;
+    --pop-bg: #22312a;
+    --pop-fg: #f1f3f1;
+    --pop-line: #35493f;
     --pop-err-bg: #4a1d18;
     --pop-err-fg: #ffd3cc;
     --pop-err-line: #7a3029;
+    --pop-shadow: 0 8px 20px rgb(0 0 0 / 35%);
+    --raised: #22312a;
+    --raised-line: #35493f;
+    --raised-shadow: 0 8px 20px rgb(0 0 0 / 30%);
+    --sheet-bg: #22312a;
+    --logo-bg: #17211d;
+    --logo-line: #2e8b5e;
     --shadow: 0 0 0 1px rgb(255 255 255 / 3%);
     --shadow-lift: 0 10px 32px rgb(0 0 0 / 55%), 0 0 0 1px rgb(255 255 255 / 6%);
     color-scheme: dark;
@@ -191,12 +211,19 @@
   --holiday-bg: #2b1f3c;
   --ext-bg: #14313d;
   --ext-fg: #9fd3e8;
-  --pop-bg: #f1f3f1;
-  --pop-fg: #121614;
-  --pop-line: #f1f3f1;
+  --pop-bg: #22312a;
+  --pop-fg: #f1f3f1;
+  --pop-line: #35493f;
   --pop-err-bg: #4a1d18;
   --pop-err-fg: #ffd3cc;
   --pop-err-line: #7a3029;
+  --pop-shadow: 0 8px 20px rgb(0 0 0 / 35%);
+  --raised: #22312a;
+  --raised-line: #35493f;
+  --raised-shadow: 0 8px 20px rgb(0 0 0 / 30%);
+  --sheet-bg: #22312a;
+  --logo-bg: #17211d;
+  --logo-line: #2e8b5e;
   --shadow: 0 0 0 1px rgb(255 255 255 / 3%);
   --shadow-lift: 0 10px 32px rgb(0 0 0 / 55%), 0 0 0 1px rgb(255 255 255 / 6%);
   color-scheme: dark;
@@ -461,16 +488,24 @@ a {
   cursor: pointer;
 }
 
-/* Header logo on a white rounded backing, so its white edge looks intentional in dark mode. */
-.brand-logo {
+/* Header logo tile: a rounded square the same size as before (32px) with a 2px outline, no white box.
+   Light: light green-gray with a black outline. Dark: the raised card color with a green outline. */
+.brand-tile {
+  flex: none;
   width: 32px;
   height: 32px;
   border-radius: 9px;
-  background: #fff;
-  padding: 2px;
-  flex: none;
+  box-sizing: border-box;
+  border: 2px solid var(--logo-line);
+  background: var(--logo-bg);
+  display: grid;
+  place-items: center;
+}
+.brand-logo {
+  width: 24px;
+  height: 24px;
   object-fit: contain;
-  box-shadow: 0 0 0 1px rgb(0 0 0 / 8%), 0 1px 2px rgb(0 0 0 / 8%);
+  display: block;
 }
 
 /* "Ryan  not you?": the name, then small gray underlined text on the same line. */
@@ -1483,7 +1518,7 @@ dialog.sheet {
   max-height: 92dvh;
   margin: auto auto 0;
   border-radius: 22px 22px 0 0;
-  background: var(--bg);
+  background: var(--sheet-bg);
   color: var(--ink);
   box-shadow: 0 -8px 40px rgb(0 0 0 / 22%);
   /* Tall sheets scroll inside themselves; nothing spills over the tab bar. */
@@ -1516,7 +1551,7 @@ dialog.sheet::backdrop {
 .sheet-head {
   position: sticky;
   top: 0;
-  background: color-mix(in srgb, var(--bg) 94%, transparent);
+  background: color-mix(in srgb, var(--sheet-bg) 94%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   padding: 14px 12px 10px var(--gutter);
@@ -1619,7 +1654,7 @@ dialog.sheet::backdrop {
   font-weight: 650;
   line-height: 1.25;
   text-align: left;
-  box-shadow: 0 10px 28px rgb(10 20 15 / 30%);
+  box-shadow: var(--pop-shadow);
   cursor: pointer;
   touch-action: pan-y;
   overflow: hidden;
@@ -4089,4 +4124,28 @@ dialog.sheet[open]::backdrop {
 }
 .refund-list > li {
   padding: 8px 0;
+}
+
+/* ---------- Dark mode: raised cards ----------
+   Toasts, pop-ups, bottom sheets and menus get the same raised dark card: a little lighter than the
+   page (--raised), light text, a thin border (--raised-line) and a soft shadow (--raised-shadow).
+   Never a bright white card on a dark page. Light mode is unchanged (toasts and the cash-out prompt
+   get theirs through --pop-bg / --pop-line / --pop-shadow in the dark token blocks above). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) dialog.sheet {
+    border: 1px solid var(--raised-line);
+    box-shadow: 0 -8px 40px rgb(0 0 0 / 45%);
+  }
+  :root:not([data-theme='light']) .menu-pop {
+    background: var(--raised);
+    border-color: var(--raised-line);
+  }
+}
+:root[data-theme='dark'] dialog.sheet {
+  border: 1px solid var(--raised-line);
+  box-shadow: 0 -8px 40px rgb(0 0 0 / 45%);
+}
+:root[data-theme='dark'] .menu-pop {
+  background: var(--raised);
+  border-color: var(--raised-line);
 }
