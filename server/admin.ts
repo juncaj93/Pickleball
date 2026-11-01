@@ -863,16 +863,19 @@ export async function applyPayment(
     const onSeat = seatCredit((await moneyPictureOf(ctx, group)).ledger, session.id, playerId, { paymentStatus: row.payment_status, paidAt: row.paid_at, refundedAt: row.refunded_at });
     const latestCash = (row.payment_amount_cents ?? 0) - onSeat.usedCents - onSeat.cashCents;
     const before = await creditReturnedAt(ctx.db, session.id, playerId, 'unmarked', ctx.nowIso);
+    // Everything below was worked out for the game as read: a Finalize or Reopen landing first means look again.
+    const finalizeAsRead = `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`;
     const [, unpaid] = await ctx.db.batch([
-      ...undoFinalizedBackStatements(ctx.db, session.id, playerId, ctx.nowIso),
+      ...undoFinalizedBackStatements(ctx.db, session.id, playerId, ctx.nowIso, finalizeAsRead),
       ctx.db
         .prepare(
           `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
              paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
            WHERE session_id = ?2 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL
-             AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')`,
+             AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')
+             AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4`,
         )
-        .bind(ctx.nowIso, session.id, playerId),
+        .bind(ctx.nowIso, session.id, playerId, finalizeAsRead),
       // Only its ledger statement: that one moves credit only once the seat is unpaid, so a blocked Unmark moves nothing.
       ...(self || latestCash > 0 ? [] : returnSeatCreditStatements(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true }).slice(1)),
       // A seat that left the game, or a canceled game (an unconfirmed I paid kept it frozen): once the claim is
@@ -907,6 +910,8 @@ export async function applyPayment(
         : []),
     ]);
     if (unpaid.meta.changes !== 1) {
+      const fresh = await getSession(ctx.db, group.id, session.id);
+      if (`${fresh?.finalized_at ?? ''}:${fresh?.final_price_cents ?? -1}` !== finalizeAsRead) throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
       if ((await creditBackLeft(ctx.db, session.id, playerId)) > 0) {
         if (await hasPendingRequest(ctx.db, playerId))
           throw new HttpError(409, 'refund_requested', `${row.display_name} asked for this credit back, so this payment can't be unmarked. Answer the refund request on Home first.`);

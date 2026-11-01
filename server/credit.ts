@@ -404,16 +404,18 @@ export function creditBackStatements(
  * it. Statements only, for the caller's batch: check afterwards with
  * `creditBackLeft` whether it was blocked.
  */
-export function undoFinalizedBackStatements(db: D1Database, sessionId: string, playerId: string, nowIso: string): D1PreparedStatement[] {
+export function undoFinalizedBackStatements(db: D1Database, sessionId: string, playerId: string, nowIso: string, finalizeAsRead?: string): D1PreparedStatement[] {
   const back = `(SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')`;
+  // `finalizeAsRead` ("finalized_at:final price" the caller read): only while the game is still that finalize.
+  const asRead = finalizeAsRead !== undefined ? ` AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4` : '';
   return [
     db
       .prepare(
         `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone'
          WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized'
-           AND ${POT('?3')} - ${RESERVED('?3')} - ${back} >= 0`,
+           AND ${POT('?3')} - ${RESERVED('?3')} - ${back} >= 0${asRead}`,
       )
-      .bind(nowIso, sessionId, playerId),
+      .bind(nowIso, sessionId, playerId, ...(finalizeAsRead !== undefined ? [finalizeAsRead] : [])),
   ];
 }
 
