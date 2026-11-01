@@ -1048,3 +1048,24 @@ No money rule, price rule, schema or migration change.
 - Totals at 230168f: unit 1,292 passed in 76 files (1 helper skipped); browser 27 suites,
   1,002 checks, 0 failed.
 
+### Deploy (Sun Nov 1, 2026, 1:05 PM Eastern)
+- Merged as #57 (main e48a69c), after merging main with the player screens audit (#58). Production
+  deployment `30ff85a9`, branch main, commit e48a69c. No migration, no data change.
+- Gate: unit 1,526 passed in 83 files (1 helper skipped); browser 29 suites, 1,094 checks, 0 failed.
+  One player-channel fuzz test (tests/held-drop-fuzz.test.ts, seed 1631) failed once while the
+  whole suite ran at full load; it passes alone (all 2,000 sequences, and seed 1631 three times).
+  Left to that channel.
+- Restore points: Time Travel bookmark
+  `00000373-00000000-00005116-44ca4b7c774bb807e480ec143a2a6774` (1:05 PM, right before the deploy);
+  SQL export `live-before-admin-audit-2026-11-01.sql` (221 rows, phone numbers, not committed) in
+  this session's scratch folder.
+- Code rollback: Pages deployment `e8f47388` (commit e38a399, the player screens audit). The deploy
+  changed no data, so rolling the code back is enough.
+- Read-only before: past games never booked with someone in and not finalized: none (Tue Oct 27 had
+  nobody in and is before the first session date; Thu Oct 29 is canceled). So no "Did you guys
+  play?" card shows on deploy.
+- Read-only after: /, /admin, /api/status, /api/group/version 200; the live bundle has the new
+  cards and no "Court opened"; scripts/integrity-checks.sql all 20 checks 0.
+- Deleted on Alex's OK: the unused throwaway database `pickleball-preview-admin` (fake data only;
+  no code, config, commit or deployment used it). Every other database, preview and branch kept.
+
