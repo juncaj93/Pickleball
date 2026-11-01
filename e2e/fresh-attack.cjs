@@ -203,7 +203,18 @@ async function runSequence(browser, seed, t0) {
   await post(A, '/api/admin/login', { pin: PIN });
   let maxPlayers = pick([4, 4, 5, 6]);
   await A.put(BASE + '/api/admin/group', { data: { organizerName: ORGANIZER, settings: { maxPlayers } }, headers: { Origin: BASE } });
-  const dash = async () => (await A.get(`${BASE}/api/admin/dashboard`)).json();
+  // A dropped connection (the dev server reloading code that changed on disk) is retried, not counted as a finding.
+  const retry = async (fn) => {
+    for (let i = 0; ; i++) {
+      try {
+        return await fn();
+      } catch (err) {
+        if (i >= 8 || !/ECONNRESET|ECONNREFUSED|socket hang up|Unexpected end|JSON/i.test(String(err && err.message))) throw err;
+        await sleep(750);
+      }
+    }
+  };
+  const dash = () => retry(async () => (await A.get(`${BASE}/api/admin/dashboard`)).json());
   let d = await dash();
   for (const h of d.hiddenSessions || []) await post(A, `/api/admin/sessions/${h.id}/show`, { shown: true });
   d = await dash();
@@ -220,9 +231,11 @@ async function runSequence(browser, seed, t0) {
     api[n] = c.request;
   }
   const truthOf = async (req, who) => {
-    const r = await req.get(`${BASE}/api/group`);
-    if (!r.ok()) return null;
-    const j = await r.json();
+    const j = await retry(async () => {
+      const r = await req.get(`${BASE}/api/group`);
+      return r.ok() ? r.json() : null;
+    });
+    if (!j) return null;
     scanPrivacy(j, who, 'GET /api/group');
     return j;
   };
@@ -323,6 +336,8 @@ async function runSequence(browser, seed, t0) {
       } finally {
         await sleep(ri(300, 2500));
         await ph.ctx.setOffline(false);
+        // A page opened while offline is the browser's own "no internet" page: the player reloads once back online.
+        if (ph.page && !ph.page.isClosed() && !(await ph.page.locator('main').count().catch(() => 0))) await ph.page.reload().catch(() => {});
       }
     }
     return fn('');
@@ -363,7 +378,7 @@ async function runSequence(browser, seed, t0) {
           await sleep(net === 'offline' ? 1500 : 600);
           return ok;
         });
-        await expectAfterJoin(ph, s, since, balBefore, net);
+        if (res) await expectAfterJoin(ph, s, since, balBefore, net);
         return `join ${tag} ${day(s.startsAt)}${dbl ? ' double-tap' : ''}${res ? '' : ' (no button)'}`;
       }
       case 'drop': {
@@ -371,6 +386,15 @@ async function runSequence(browser, seed, t0) {
         const mode = pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'close', 'rejoin', 'dbl', 'switch']);
         const undoAt = ri(200, 4500);
         let note = '';
+        const dropper = ph.who;
+        const othersBefore = {};
+        if (mode === 'switch') {
+          for (const n of NAMES) {
+            const t = await truthOf(api[n], n);
+            const m = t && t.sessions.find((x) => x.id === s.id);
+            othersBefore[n] = m && m.mine ? m.mine.status : 'none';
+          }
+        }
         await withNet(ph, net, async () => {
           if (!(await tap(row(ph, s.id).getByRole('button', { name: 'Drop out' }), mode === 'dbl'))) {
             note = ' (no Drop out)';
@@ -402,14 +426,23 @@ async function runSequence(browser, seed, t0) {
             note = ` I'm-in@${undoAt}ms`;
           } else if (mode === 'switch') {
             await sleep(undoAt);
-            note = ` not-you@${undoAt}ms ${await switchName(ph)}`;
+            const inToo = Object.keys(othersBefore).filter((n) => n !== ph.who && othersBefore[n] === 'confirmed' && !bots.includes(n));
+            note = ` not-you@${undoAt}ms ${await switchName(ph, inToo.length && chance(0.8) ? pick(inToo) : null)}`;
           }
         });
-        await expectAfterDrop(ph, s, mode, note, since, balBefore, net);
-        return `drop ${tag} ${day(s.startsAt)} ${mode}${note}`;
+        // The banner at the tap says what happens to the money: it must match the seat as the server has it.
+        if (!/no Drop out|no confirm/.test(note)) {
+          const msg = ((await toastsOf(ph, since)).find((x) => /^You dropped out\./.test(x.msg)) || {}).msg;
+          const m = s.mine;
+          const want = m.dropClaimCents > 0 ? `once` : m.dropCreditCents + m.dropCashCents > 0 ? fmt(m.dropCreditCents + m.dropCashCents) : null;
+          if (msg) check(want ? msg.includes(want) : msg === 'You dropped out.', 'toast-money', `drop banner "${msg}" but the seat holds credit ${fmt(m.dropCreditCents)}, cash ${fmt(m.dropCashCents)}, unconfirmed I paid ${fmt(m.dropClaimCents)}`, `${ph.label} ${ph.who} ${day(s.startsAt)} ${JSON.stringify(m)}`);
+        }
+        await expectAfterDrop(ph, s, mode, note, since, balBefore, net, dropper, othersBefore);
+        return `drop ${tag} ${day(s.startsAt)} ${mode}${note} (seat ${s.mine.paymentStatus}${s.mine.selfPaid ? ' self' : ''} cr${s.mine.dropCreditCents} cash${s.mine.dropCashCents} claim${s.mine.dropClaimCents})`;
       }
       case 'iPaid': {
         const s = pick(unpaid);
+        let top = false;
         await withNet(ph, net, async () => {
           if (chance(0.4)) {
             // Pay first (opens Venmo, blocked here), then I paid shows beside it.
@@ -418,18 +451,25 @@ async function runSequence(browser, seed, t0) {
             for (const pg of ph.ctx.pages()) if (pg !== ph.page) await pg.close().catch(() => {});
           }
           const inRow = row(ph, s.id).getByRole('button', { name: 'I paid' });
-          if (!(await tap(inRow, chance(0.2)))) await tap(ph.page.locator('section[aria-label="Payment"]').getByRole('button', { name: 'I paid' }));
+          if (!(await tap(inRow, chance(0.2)))) {
+            top = true;
+            await tap(ph.page.locator('section[aria-label="Payment"]').getByRole('button', { name: 'I paid' }));
+          }
           await sleep(500);
         });
-        return `I paid ${tag} ${day(s.startsAt)}`;
+        return `I paid ${tag} ${top ? 'on the top card (every game due today)' : day(s.startsAt)}`;
       }
       case 'useCredit': {
         const s = pick(unpaid);
+        let top = false;
         await withNet(ph, net, async () => {
-          if (!(await tap(row(ph, s.id).locator('[data-use-credit]'), chance(0.25)))) await tap(ph.page.locator('section[aria-label="Payment"] [data-use-credit]'));
+          if (!(await tap(row(ph, s.id).locator('[data-use-credit]'), chance(0.25)))) {
+            top = true;
+            await tap(ph.page.locator('section[aria-label="Payment"] [data-use-credit]'));
+          }
           await sleep(500);
         });
-        return `use credit ${tag} ${day(s.startsAt)}`;
+        return `use credit ${tag} ${top ? 'on the top card' : day(s.startsAt)}`;
       }
       case 'undoCredit': {
         const s = pick(creditPaid);
@@ -515,10 +555,10 @@ async function runSequence(browser, seed, t0) {
     return act;
   }
 
-  async function switchName(ph) {
+  async function switchName(ph, prefer = null) {
     if (!(await tap(ph.page.getByRole('button', { name: 'Not you?' })))) return '(no Not you?)';
     const choices = NAMES.filter((n) => n !== ph.who && n !== ORGANIZER && !bots.includes(n));
-    const to = chance(0.15) ? ORGANIZER : pick(choices);
+    const to = prefer || (chance(0.15) ? ORGANIZER : pick(choices));
     const ok = await tap(ph.page.locator('section[aria-label="Pick your name"]').getByRole('button', { name: to, exact: true }));
     if (ok) {
       await sleep(400);
@@ -541,7 +581,20 @@ async function runSequence(browser, seed, t0) {
     const used = /\$(\d+) credit used/.exec(m);
     if (used && st === 'confirmed') check(balBefore - t.credit.balanceCents === Number(used[1]) * 100 || balBefore - t.credit.balanceCents === 0, 'toast-money', `"${used[0]}" but credit went ${fmt(balBefore)} -> ${fmt(t.credit.balanceCents)}`, `${ph.label} ${ph.who} ${m}`);
   }
-  async function expectAfterDrop(ph, s, mode, note, since, balBefore, net) {
+  async function expectAfterDrop(ph, s, mode, note, since, balBefore, net, dropper, othersBefore) {
+    if (mode === 'switch' && net !== 'offline' && !/no Drop out|no confirm|no Not you|no name/.test(note)) {
+      // Not you? while the drop waits for Undo: the drop is still the first player's, never the new name's.
+      await sleep(7000);
+      for (const [n, st] of Object.entries(othersBefore)) {
+        const now = await truthOf(api[n], n);
+        const m = now && now.sessions.find((x) => x.id === s.id);
+        if (!m || m.started || m.canceled) return;
+        const stNow = m.mine ? m.mine.status : 'none';
+        if (n === dropper) check(stNow !== 'confirmed', 'intent', `${dropper} dropped out, then Not you? during the Undo wait: ${dropper} is still in`, `${ph.label} ${note}`);
+        else check(stNow === st || st !== 'confirmed', 'wrong-player', `${dropper}'s held drop took ${n} out after Not you? on the same phone`, `${ph.label} ${day(s.startsAt)} ${n}: ${st} -> ${stNow} ${note}`);
+      }
+      return;
+    }
     if (mode === 'switch' || net === 'offline') return;
     await sleep(net === 'slow' ? 9500 : mode === 'undo' || mode === 'late-undo' ? 1500 : 6800);
     const who = mode === 'switch' ? null : ph.who;
@@ -777,7 +830,8 @@ async function runSequence(browser, seed, t0) {
         if (!way) probs.push(['no-way-to-pay', `${day(s.startsAt)}: joined, unpaid, court booked, owes ${fmt(m.oweCents)}, but no Pay / Use credit / I paid on screen`]);
       }
       if (m.paymentStatus === 'unpaid' && !booked && m.useCreditCents > 0 && !r.useCredit) probs.push(['no-way-to-pay', `${day(s.startsAt)}: court not booked, ${fmt(m.useCreditCents)} credit usable, no Use credit button`]);
-      if (onTop && !dom.top) probs.push(['no-way-to-pay', `${day(s.startsAt)}: server payDue but no Payment card on top`]);
+      // (A game whose court is not booked never shows Pay: the phone leaves it off the top card on purpose.)
+      if (onTop && booked && !dom.top) probs.push(['no-way-to-pay', `${day(s.startsAt)}: server payDue but no Payment card on top`]);
     }
     return probs;
   }
@@ -825,7 +879,12 @@ async function runSequence(browser, seed, t0) {
           // Organizer changes the game at the same moment as the tap.
           const [a, b] = await Promise.all([playerAction(ph), orgAction()]);
           line = `${a}  ||  ${b}`;
-        } else line = await playerAction(ph);
+        } else {
+          const since = await browserNow(ph);
+          line = await playerAction(ph);
+          const ts = await toastsOf(ph, since);
+          if (ts.length) line += `  {banners: ${ts.map((x) => (x.error ? '!' : '') + x.msg).join(' / ')}}`;
+        }
       } else if (r < 0.8) line = await orgAction();
       else line = await clockAction();
     } catch (err) {
