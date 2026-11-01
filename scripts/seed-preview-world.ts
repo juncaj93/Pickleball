@@ -1,0 +1,248 @@
+// The fake world for the preview database: made-up players and games in every state.
+// Run it with `npm run db:seed:preview` (see seed-preview.ts). This file only BUILDS the SQL.
+//
+//   npm run db:seed:preview              build the fake world, load it into pickleball-preview
+//   npm run db:seed:preview -- --dry-run build it and run the safety checks, touch nothing remote
+//   npm run db:seed:preview -- --out x.sql   also keep the SQL it would load
+//
+// How it works: it plays a fake group on a throwaway in-memory copy of the site (the real site code,
+// a fake clock, no network), so every game and every money state comes from the site's own rules
+// instead of hand-written rows. Then it loads that into the database named "pickleball-preview".
+//
+// Safety, in plain words:
+//  - It only ever talks to the database named "pickleball-preview" with the id written below, and it
+//    refuses to run if that id is the live database's id or the database holds anything that is not
+//    marked as fake (the group name must say "PREVIEW, fake data").
+//  - It never reads live data and never sends a text or Telegram (the in-memory site has no token).
+//  - Everything it writes is fake: made-up names, 313-555-01xx phone numbers, a fake PIN.
+
+import { createNodeD1 } from '../dev/nodeD1';
+import { handleApi } from '../server/app';
+import type { Env } from '../server/db';
+import { backupToSql } from './backup-sql.mjs';
+
+export const FAKE_GROUP_NAME = 'Pickleball Bros (PREVIEW, fake data)';
+
+export const PREVIEW_PIN = '135790';
+const SETUP_TOKEN = 'preview-seed-setup-token-0123456789';
+const ORIGIN = 'https://preview.example';
+const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
+
+// ---- a tiny phone/browser that talks to the in-memory site -----------------------------------------------
+class Phone {
+  cookies = new Map<string, string>();
+  groupKey: string | null = null;
+  constructor(private world: World) {}
+
+  async call(method: string, path: string, body?: unknown) {
+    const h = new Headers();
+    if (body !== undefined) h.set('Content-Type', 'application/json');
+    if (this.groupKey) h.set('X-Group-Key', this.groupKey);
+    if (this.cookies.size) h.set('Cookie', [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; '));
+    const res = await handleApi(
+      new Request(ORIGIN + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }),
+      this.world.env,
+      this.world.now,
+      (work) => this.world.background.push(work),
+    );
+    for (const c of res.headers.getSetCookie()) {
+      const [pair, ...attrs] = c.split(';');
+      const [name, value] = pair.split('=');
+      if (attrs.some((a) => a.trim() === 'Max-Age=0')) this.cookies.delete(name);
+      else this.cookies.set(name, value);
+    }
+    const text = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+    return { status: res.status, data, text };
+  }
+
+  /** A call that must work: a failure here means the fake world would be wrong, so stop loudly. */
+  async ok(method: string, path: string, body?: unknown) {
+    const r = await this.call(method, path, body);
+    if (r.status >= 300) throw new Error(`${method} ${path} -> ${r.status} ${r.text.slice(0, 300)}`);
+    return r.data;
+  }
+}
+
+class World {
+  db = createNodeD1(':memory:');
+  env: Env = { DB: this.db, SETUP_TOKEN };
+  now = Date.now();
+  background: Promise<unknown>[] = [];
+  phones = new Map<string, Phone>();
+  ids: Record<string, string> = {};
+  org = new Phone(this);
+  groupKey = '';
+
+  async settle() {
+    while (this.background.length) await Promise.allSettled(this.background.splice(0));
+  }
+
+  phone(name: string): Phone {
+    let p = this.phones.get(name);
+    if (!p) {
+      p = new Phone(this);
+      p.groupKey = this.groupKey;
+      this.phones.set(name, p);
+    }
+    return p;
+  }
+
+  async pick(name: string) {
+    const p = this.phone(name);
+    if (!p.cookies.size) await p.ok('POST', '/api/me', { playerId: this.ids[name] });
+    return p;
+  }
+}
+
+// ---- the cast: all made up --------------------------------------------------------------------------------
+const ORGANIZER = 'Organizer Orla';
+const CAST = ['Avery', 'Blake', 'Casey', 'Drew', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jordan', 'Kai', 'Lane', 'Morgan'];
+
+export interface Seed {
+  sql: string;
+  summary: string[];
+}
+
+export async function buildSeed(startMs = Date.now()): Promise<Seed> {
+  const w = new World();
+  const summary: string[] = [];
+  const N = startMs; // "now" for the person tapping; everything below is placed around it
+
+  // Setup happens 12 days ago so there are past games to play and finish.
+  w.now = N - 12 * DAY;
+  const players = [ORGANIZER, ...CAST].map((name, i) => ({ name, phone: `(313) 555-01${String(i).padStart(2, '0')}` }));
+  await w.org.ok('POST', '/api/setup', {
+    setupToken: SETUP_TOKEN,
+    groupName: FAKE_GROUP_NAME,
+    pin: PREVIEW_PIN,
+    venmoUrl: 'https://venmo.com/u/pickleball-preview-fake',
+    players,
+  });
+  await w.org.ok('PUT', '/api/admin/group', { organizerName: ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way' });
+  let dash = await w.org.ok('GET', '/api/admin/dashboard');
+  w.groupKey = String(dash.group.privateLink).split('/g/')[1];
+  for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
+
+  const games = () => (dash.sessions as any[]).slice().sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const refresh = async () => {
+    dash = await w.org.ok('GET', '/api/admin/dashboard');
+  };
+  /** Move the fake clock forward to this moment (it never goes back). */
+  const at = async (ms: number) => {
+    w.now = Math.max(w.now, ms);
+    await refresh();
+  };
+  const ms = (iso: string) => Date.parse(iso);
+
+  // Pick the games by position around "now".
+  await refresh();
+  const ended = games().filter((g) => ms(g.endsAt) <= N);
+  const coming = games().filter((g) => ms(g.startsAt) > N);
+  if (ended.length < 2 || coming.length < 5) throw new Error(`not enough games around now (${ended.length} past, ${coming.length} coming)`);
+  const pastBooked = ended[ended.length - 2];
+  const pastNeverBooked = ended[ended.length - 1];
+  const [u0, u1, u2, u3, u4] = coming;
+  // Like the live site's first-game date: nothing older than the first seeded game is shown (no empty games from before it).
+  const firstDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit' }).format(new Date(ms(pastBooked.startsAt)));
+  await w.org.ok('PUT', '/api/admin/group', { firstSessionDate: firstDay });
+
+  const join = async (name: string, g: any) => (await w.pick(name)).ok('POST', `/api/sessions/${g.id}/join`, {});
+  const orgPays = (name: string, g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[name], paid: true });
+  const setCourt = (g: any, status: 'booked' | 'waitlist' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
+
+  // 1. A past game that WAS booked, everyone paid $14, 5 played, finalized: $11 each, $3 credit back each.
+  await at(ms(pastBooked.startsAt) - 3 * DAY);
+  for (const n of ['Avery', 'Blake', 'Casey', 'Drew', 'Emery']) await join(n, pastBooked);
+  await setCourt(pastBooked, 'booked');
+  for (const n of ['Avery', 'Blake', 'Casey', 'Drew', 'Emery']) await orgPays(n, pastBooked);
+  await at(Math.min(ms(pastBooked.endsAt) + 2 * HOUR, N));
+  await w.org.ok('POST', `/api/admin/sessions/${pastBooked.id}/finalize`, { everyone: true });
+  summary.push('past game, booked, finalized: 5 played, $11 each, $3 credit back to Avery, Blake, Casey, Drew, Emery');
+
+  // 2. A past game that was never booked, 4 signed up, nobody answered "Did you guys play?" yet.
+  await at(ms(pastNeverBooked.startsAt) - 2 * DAY);
+  for (const n of ['Gray', 'Harper', 'Kai', 'Jordan']) await join(n, pastNeverBooked);
+  await at(Math.min(ms(pastNeverBooked.endsAt) + HOUR, N));
+  summary.push('past game, never booked, 4 in (Gray, Harper, Kai, Jordan), not finalized: shows "Did you guys play?"');
+
+  // Back to "now" for everything upcoming (the fake clock moves forward only).
+  await at(N);
+
+  // 3. The canceled game (with a reason). Three players paid $14 first, so it comes back to them as credit.
+  await setCourt(u4, 'booked');
+  for (const n of ['Finley', 'Gray', 'Harper']) {
+    await join(n, u4);
+    await orgPays(n, u4);
+  }
+  await w.org.ok('POST', `/api/admin/sessions/${u4.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Court closed' });
+  summary.push('canceled game "Court closed": Finley, Gray, Harper paid $14 and got it back as credit');
+
+  // 4. Cash-out pending: Gray asks Alex for the $14 back (before joining anything, so it stays reserved).
+  await (await w.pick('Gray')).ok('POST', '/api/me/refund-request', { cents: 1400 });
+  summary.push('cash-out pending: Gray asked for $14');
+
+  // 5. u0: court Booked, 5 in, every payment state. Credit is used automatically at "I'm in".
+  await setCourt(u0, 'booked');
+  await w.org.ok('POST', `/api/admin/sessions/${u0.id}/me`, { in: true });
+  for (const n of ['Indy', 'Jordan', 'Avery', 'Finley']) await join(n, u0);
+  // Indy pays cash: taps "I paid", the organizer confirms.
+  await (await w.pick('Indy')).ok('POST', `/api/sessions/${u0.id}/paid`, { paid: true, cents: 1400 });
+  await w.org.ok('POST', `/api/admin/sessions/${u0.id}/claim`, { playerId: w.ids.Indy, paid: true });
+  summary.push('game 1 (Booked, 5 in): Organizer in; Indy paid cash; Jordan owes $14; Avery used $3 credit and owes $11; Finley paid with credit');
+  // Kai taps "I paid" and then drops out: the organizer gets a Confirm / Didn't pay card on Home.
+  await join('Kai', u0);
+  await (await w.pick('Kai')).ok('POST', `/api/sessions/${u0.id}/paid`, { paid: true, cents: 1400 });
+  await (await w.pick('Kai')).ok('POST', `/api/sessions/${u0.id}/withdraw`, {});
+  summary.push('Kai tapped "I paid" for game 1 and then dropped out: an unanswered claim waits on the organizer Home screen');
+
+  // 6. u1: court on the venue's Waitlist (players read "Court not booked"), 3 in, each used $3 credit.
+  await setCourt(u1, 'waitlist');
+  for (const n of ['Blake', 'Drew', 'Emery']) await join(n, u1);
+  summary.push('game 2 (court Waitlist, 3 in): Blake, Drew, Emery used $3 credit each and owe $11');
+
+  // 7. u2: Not booked, 3 of 4 in.
+  for (const n of ['Gray', 'Emery', 'Lane']) await join(n, u2);
+  summary.push('game 3 (Not booked): "3 of 4 in"');
+
+  // 8. u3: Booked and FULL (10 in) with a real standby (Gray). Mixed payments, one self-reported "I paid".
+  await setCourt(u3, 'booked');
+  await w.org.ok('POST', `/api/admin/sessions/${u3.id}/me`, { in: true });
+  for (const n of ['Avery', 'Blake', 'Drew', 'Emery', 'Finley', 'Indy', 'Jordan', 'Lane', 'Morgan']) await join(n, u3);
+  await join('Gray', u3); // the game is full, so Gray is on standby
+  for (const n of ['Indy', 'Jordan', 'Finley']) await orgPays(n, u3);
+  await (await w.pick('Morgan')).ok('POST', `/api/sessions/${u3.id}/paid`, { paid: true, cents: 1400 });
+  summary.push('game 4 (Booked, full, 10 in): Gray is the real standby; Indy, Jordan, Finley paid; Morgan tapped "I paid" (shows as self-reported); the rest owe $14');
+  summary.push('left with credit and in no game: Casey $3, Harper $14 (Kai is in no game)');
+
+  // Hand the world to the caller as SQL.
+  const backupRes = await w.org.call('GET', '/api/admin/backup');
+  const backup = JSON.parse(backupRes.text);
+  // Phones that picked a name in the in-memory copy mean nothing on the preview; everyone picks fresh.
+  backup.tables.player_devices = [];
+  await w.settle();
+
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w);
+  return { sql, summary };
+}
+
+/** Rows the backup format does not carry, cleared first so a re-seed starts clean (and no PIN lockout carries over). */
+function wipeExtras(): string {
+  return ['organizer_alerts', 'login_attempts', 'rate_events', 'task_log', 'admin_sessions'].map((t) => `DELETE FROM ${t};`).join('\n') + '\n';
+}
+
+/** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */
+function extraRows(w: World): string {
+  const row = w.db.raw.prepare('SELECT * FROM organizer_alerts').get() as Record<string, unknown> | undefined;
+  if (!row) return '';
+  const cols = Object.keys(row);
+  const lit = (v: unknown) => (v === null || v === undefined ? 'NULL' : typeof v === 'number' ? String(v) : `'${String(v).replace(/'/g, "''")}'`);
+  return `INSERT INTO organizer_alerts (${cols.join(', ')}) VALUES (${cols.map((c) => lit(row[c])).join(', ')});\n`;
+}
+

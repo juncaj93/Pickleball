@@ -853,7 +853,7 @@ against the 10 ms limit, 0 errors so far. Clock Worker 0.6 ms.
 - Read-only checks after: home, /admin, /api/status, /api/group/version 200
   with the new bundle; a broken cookie no longer errors; the tick refuses
   without the secret; health checks 0.
-- **Until a preview is proven to use a fake database, previews are tested in View as demo mode only, never with real taps.**
+- ~~Until a preview is proven to use a fake database, previews are tested in View as demo mode only.~~ Superseded Sun Nov 1, 2026 (evening): previews are proven to use the fake database; see the last section, "Fake-data preview".
 - Previews: `[env.preview]` is in wrangler.toml, but the project's stored
   preview setting still names the live database and no preview has been
   deployed since, so the new wiring is not proven yet. Until a preview is
@@ -1092,3 +1092,31 @@ Later cleanup batch (big text, a 29-letter name, one rare shared-phone case): do
 - After deploy, read-only: new bundle served; /api/status, /api/group, /api/group/version, /admin 200; the 20-column
   health check (scripts/integrity-checks.sql) all 0; row counts (seats 17, credit entries 5, cash-out requests 0,
   players 10, games 8) match the export.
+
+
+## Fake-data preview (Sun Nov 1, 2026, about 3:40 PM Eastern; config, scripts and docs only)
+
+Previews now run on a practice database full of made-up players, so every tap on a preview is safe. How-to and undo: `docs/PREVIEW_FAKE_DB.md`.
+
+### What was found (read-only)
+- The Pages project's stored Preview settings already named `pickleball-preview` (database `6f94e087-...`), with the single variable `GO_LINKS`. Production names `pickleball` (`5c939453-...`) plus the real Telegram and clock secrets, and was left alone. `[env.preview]` in `wrangler.toml` says the same.
+- Every existing preview deploy (`preview-admin-audit` 1f239094 and f0eae118, `preview-admin-look` 67b18991) is bound to `pickleball-preview`. None points at the live database. The earlier warning ("the stored preview setting still names the live database") was out of date.
+- `pickleball-preview` held only made-up data, and its structure matched live exactly (all 34 tables, indexes and triggers identical, compared from a read-only export of the live structure; no live data read).
+- The 5-minute clock calls only the live address and sends a password the preview does not have. A preview has no Telegram token.
+
+### What changed
+- `scripts/seed-preview.ts` and `scripts/seed-preview-world.ts`, new: `npm run db:seed:preview` wipes and refills the fake database (14 made-up players, games in every state, credit, a cash-out, a claim). `--dry-run` builds and checks without touching Cloudflare. The command refuses any database that is not `pickleball-preview` with the right id and a "PREVIEW, fake data" group.
+- `tests/preview-seed.test.ts`, new (7 tests): the fake world passes all 20 live health checks, holds only 313-555-01xx phones, and covers every game and money state. It is not a screen test.
+- `package.json`: the `db:seed:preview` script. `tsconfig.node.json`: the two script files added to the type check.
+- No site code, screen, money rule, migration or production deploy changed. `wrangler.toml` was not changed.
+
+### Proof (live counts read-only; test tap through a preview)
+- Preview deploy 9a2aff78 (branch `preview-fake-db`, built from main 5abaa38): Cloudflare lists database `pickleball-preview` and only `GO_LINKS`. Test alert answered "Not connected"; the clock endpoint answered Not found with no password and with a wrong one.
+- Live row counts before and after a test tap on that preview, all 16 tables: identical (`admin_audit_log=121, admin_sessions=3, credit_ledger=5, credits=0, d1_migrations=15, groups=1, login_attempts=1, organizer_alerts=1, player_devices=33, players=10, rate_events=4, refund_requests=0, session_action_tokens=0, session_players=17, sessions=8, task_log=2`).
+- The test tap (a fake player, Kai, said "I'm in") appeared in `pickleball-preview` only (seats 35 to 36). Then the database was re-seeded.
+
+### Notes
+- Previews share ONE fake database, so two people testing at once see each other's taps. Re-seed when it gets messy.
+- A new migration must be applied to the preview database too: `npx wrangler d1 migrations apply pickleball-preview --remote --env preview`.
+- The flow in SITE_RULES ("test on the fake-data preview, then ship it") can now use real taps.
+
