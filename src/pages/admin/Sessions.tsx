@@ -382,7 +382,7 @@ function CourtForNewTime({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       </div>
       {answer === false && (
         <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-          Book on CourtReserve
+          Book a court
         </CourtReserveLink>
       )}
     </fieldset>

@@ -6,7 +6,7 @@ clear type, quick to scan. All of it lives in `src/styles.css`, tokens first.
 ## Rules
 
 - **One green button per card at most.** Green is the accent for the main
-  action (I'm in, Pay, I booked it, Court opened). Everything else is soft
+  action (I'm in, Pay, Yes, we played). Everything else is soft
   gray or outlined. The browser tests count this on every screen.
 - **Status colors keep their meaning.** Green: court booked (solid left
   edge). Amber, dashed: court not booked. Gray: booking not open yet. Blue:
