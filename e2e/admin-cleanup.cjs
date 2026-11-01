@@ -777,18 +777,16 @@ async function main() {
   });
 
   // ---------- Do this now ----------
-  await check('Do this now keeps "Court opened" and "Didn\'t open" for waitlisted games; the game cards do not', async () => {
+  await check('Do this now: one plain "Court still needs to be booked" card per waitlisted game; no Court opened / Didn\'t open anywhere', async () => {
     const { ctx, page } = await openAdmin();
-    const card1 = page.locator('.do-now [data-task="court_waitlist"]').first();
+    const card1 = page.locator('.do-now [data-task="court_book"]').first();
     await card1.waitFor();
-    await card1.getByRole('button', { name: 'Court opened' }).waitFor();
-    await card1.getByRole('button', { name: "Didn't open" }).waitFor();
-    assert((await page.locator(`${CARDS} button:has-text("Court opened")`).count()) === 0, 'Court opened is on a game card');
+    assert((await page.getByRole('button', { name: /^(Court opened|Didn't open)$/ }).count()) === 0, 'Court opened / Didn\'t open still shown');
     // One court card per game: a waitlisted game never also gets "No court yet / I booked it".
     await page.getByRole('button', { name: /^\+\d+ more/ }).click().catch(() => {});
     for (const id of [roles.waitA, roles.waitB]) {
       const cards = await page.locator(`.do-now article[data-session="${id}"]`).evaluateAll((els) => els.map((e) => e.getAttribute('data-task')));
-      assert(cards.length === 1 && cards[0] === 'court_waitlist', `waitlisted game has Do this now cards: ${cards}`);
+      assert(cards.length === 1 && cards[0] === 'court_book', `waitlisted game has Do this now cards: ${cards}`);
     }
     for (const kind of ['nocourt', 'nocourt_later', 'book']) {
       for (const id of [roles.waitA, roles.waitB]) assert((await page.locator(`.do-now [data-task="${kind}"][data-session="${id}"]`).count()) === 0, `${kind} card on a waitlisted game`);

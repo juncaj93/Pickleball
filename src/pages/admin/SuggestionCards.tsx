@@ -5,7 +5,10 @@ import { MessageIcon } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { pruneTapped, readTapped, type Suggestion, suggestions, type SuggestionKind, type Tapped, visibleSuggestions, writeTapped } from './suggestions';
 import { coveredByDoNow } from './doNow';
+import { DISMISSIBLE } from './dismiss';
+import { DismissX } from './DismissX';
 import '../../suggestions.css';
+import '../../do-now.css';
 
 const KIND_LABEL: Record<SuggestionKind, string> = {
   promoted: 'Spot opened',
@@ -16,6 +19,7 @@ const KIND_LABEL: Record<SuggestionKind, string> = {
 };
 
 const SHOWN = 2;
+
 
 /**
  * At the top of Home: a card for each game that needs a text, with one green
@@ -47,7 +51,15 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
   return (
     <section className="stack suggest-cards" aria-label="Texts to send">
       {list.map((c) => (
-        <article key={c.key} className="card suggest-card" aria-label={`${KIND_LABEL[c.kind]}: ${c.when}`} data-suggest={c.kind} data-session={c.sessionId}>
+        <article
+          key={c.key}
+          className={`card suggest-card${DISMISSIBLE.has(c.kind) ? ' dismissible' : ''}`}
+          aria-label={`${KIND_LABEL[c.kind]}: ${c.when}`}
+          data-suggest={c.kind}
+          data-session={c.sessionId}
+        >
+          {/* Dismiss hides it like a Text tap does: on this phone, until the situation changes. */}
+          {DISMISSIBLE.has(c.kind) && <DismissX label={`${KIND_LABEL[c.kind]}, ${c.when}`} onDismiss={() => tap(c)} />}
           <div className="sg-head">
             <span className="sg-kind">{KIND_LABEL[c.kind]}</span>
             <span className="sg-who small muted">{c.who}</span>

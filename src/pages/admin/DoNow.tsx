@@ -1,12 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarkName, Task, TaskButton, TaskStep } from '../../../shared/tasks';
-import { api, ApiError, isIOS } from '../../lib';
+import { api, ApiError, isIOS, storageGet, storageSet } from '../../lib';
 import { MessageIcon, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { CourtWaitButtons } from './Sessions';
-import { courtSwitchOf } from '../../../shared/court';
+import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { formatShortDate } from '../../../shared/time';
-import { textHref, visibleTasks } from './doNow';
+import { courtCards, type CourtCard, textHref, visibleTasks } from './doNow';
+import { type Dismissed, pruneDismissed, readDismissed, writeDismissed } from './dismiss';
+import { DismissX } from './DismissX';
 import '../../do-now.css';
 
 /** Save a card tap on the server. */
@@ -47,41 +48,124 @@ function useServerNow(serverNow: string): number {
 export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useServerNow(ctx.d.now);
   const [more, setMore] = useState(false);
-  const tasks = visibleTasks(ctx.d, nowMs, `${window.location.origin}/admin`);
-  // Games waiting on the venue's court list: "Court opened" or "Didn't open?" lives here, not on the game card.
-  const waiting = ctx.d.sessions.filter((s) => !s.state.flags.canceled && !s.state.flags.started && courtSwitchOf(s) === 'waitlist');
-  if (tasks.length === 0 && waiting.length === 0) return null;
+  const adminUrl = `${window.location.origin}/admin`;
+  const all = visibleTasks(ctx.d, nowMs, adminUrl);
+  // The night-before text card has an X: hidden on this phone until the count changes (see dismiss.tsx).
+  const nights = all.filter((t) => t.kind === 'night').map((t) => ({ key: t.id, token: nightToken(ctx, t) }));
+  const [dismissed, setDismissed] = useState<Dismissed>(() => readDismissed(storageGet));
+  useEffect(() => {
+    const next = pruneDismissed(nights, dismissed);
+    if (Object.keys(next).length !== Object.keys(dismissed).length) {
+      setDismissed(next);
+      writeDismissed(next, storageSet);
+    }
+  }, [nights.map((n) => `${n.key}=${n.token}`).join('|'), dismissed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dismiss = (t: Task) => {
+    const next = { ...dismissed, [t.id]: nightToken(ctx, t) };
+    setDismissed(next);
+    writeDismissed(next, storageSet);
+  };
+  const tasks = all.filter((t) => !(t.kind === 'night' && dismissed[t.id] === nightToken(ctx, t)));
+  // Games never marked Booked: one court card each ("Court still needs to be booked", or after the game day "Did you guys play?").
+  const courts = courtCards(ctx.d, nowMs, adminUrl);
+  if (tasks.length === 0 && courts.length === 0) return null;
   const [first, ...rest] = tasks;
   return (
     <section className="do-now" aria-labelledby="do-now-title">
       <h2 id="do-now-title" className="sr-only">
         Do this now
       </h2>
-      {waiting.map((s) => (
-        <article key={s.id} className="card dn-card" data-task="court_waitlist" data-session={s.id} aria-label={`Court waitlist: ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}>
-          <div className="dn-eyebrow">Waitlist</div>
-          <p className="dn-text">{formatShortDate(s.startsAt, ctx.d.group.timezone)}: did the court open?</p>
-          <CourtWaitButtons ctx={ctx} s={s} />
-        </article>
+      {courts.map((c) => (
+        <CourtCardView key={c.session.id} ctx={ctx} card={c} />
       ))}
-      {first && <TaskCard ctx={ctx} task={first} nowMs={nowMs} lead={waiting.length === 0} />}
+      {first && <TaskCard ctx={ctx} task={first} nowMs={nowMs} lead={courts.length === 0} onDismiss={dismiss} />}
       {first && rest.length > 0 && (
         <button type="button" className="link-btn dn-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>
           {more ? 'Show less' : `+${rest.length} more`}
         </button>
       )}
-      {more && rest.map((t) => <TaskCard key={t.id} ctx={ctx} task={t} nowMs={nowMs} />)}
+      {more && rest.map((t) => <TaskCard key={t.id} ctx={ctx} task={t} nowMs={nowMs} onDismiss={dismiss} />)}
     </section>
   );
 }
 
-function TaskCard({ ctx, task, nowMs, lead }: { ctx: AdminCtx; task: Task; nowMs: number; lead?: boolean }) {
+/**
+ * The court card for a game never marked Booked. Before it is over: the plain "Court still needs to be
+ * booked" with the CourtReserve booking link (the one "Book a court" uses), nothing else. After the game
+ * day: "Did you guys play?" with "Yes, we played" (no money moves; it brings the Finalize card into view
+ * when there is one) and "Cancel game" (the usual Cancel session dialog: credit back to everyone paid).
+ */
+function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const working = useRef(false);
+  const s = card.session;
+  const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  if (card.kind === 'book') {
+    return (
+      <article className="card dn-card" data-task="court_book" data-session={s.id} aria-label={`${day}: court still needs to be booked`}>
+        <div className="dn-eyebrow">{day}</div>
+        <p className="dn-text">Court still needs to be booked</p>
+        <div className="dn-btns">
+          <a className="btn small external" href={COURTRESERVE_BOOKING_URL} target="_blank" rel="noopener noreferrer" data-action="book-link">
+            Book on CourtReserve
+            <span className="sr-only"> (opens CourtReserve)</span>
+          </a>
+        </div>
+      </article>
+    );
+  }
+  const played = async () => {
+    if (working.current) return;
+    working.current = true;
+    setBusy(true);
+    try {
+      await markTask(s.id, 'played');
+      await ctx.reload();
+      toast('Saved');
+      // The Finalize card for this game, if there is one, is next: bring it into view.
+      const el = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"]`);
+      el?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
+      el?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    } finally {
+      working.current = false;
+      setBusy(false);
+    }
+  };
+  return (
+    <article className="card dn-card" data-task="court_played" data-session={s.id} aria-label={`${day}: did you guys play?`}>
+      <div className="dn-eyebrow">{day}</div>
+      <p className="dn-text">Did you guys play?</p>
+      <div className="dn-btns">
+        <button type="button" className="btn small" disabled={busy} data-action="played" onClick={() => void played()}>
+          {busy ? 'Saving…' : 'Yes, we played'}
+        </button>
+        <button type="button" className="btn small danger" disabled={busy} data-action="cancel-game" onClick={() => ctx.open('cancel', s.id)}>
+          Cancel game
+        </button>
+      </div>
+    </article>
+  );
+}
+
+/** What the night-before card is about: the number in and which text it offers. A change shows a dismissed card again. */
+function nightToken(ctx: AdminCtx, t: Task): string {
+  const s = ctx.d.sessions.find((x) => x.id === t.sessionId);
+  return `${s?.confirmedCount ?? 0}:${t.buttons[0]?.label ?? ''}`;
+}
+
+function TaskCard({ ctx, task, nowMs, lead, onDismiss }: { ctx: AdminCtx; task: Task; nowMs: number; lead?: boolean; onDismiss?: (t: Task) => void }) {
   const s = ctx.d.sessions.find((x) => x.id === task.sessionId);
   if (!s) return null;
   // A checklist shows the buttons of its first open step only.
   const current = task.steps.find((st) => !st.done && st.enabled);
+  // Only the night-before text is a notice; cancel checklists and finalize need an answer.
+  const canDismiss = task.kind === 'night' && !!onDismiss;
   return (
-    <article className={`card dn-card${lead ? ' lead' : ''}`} data-task={task.kind} data-session={task.sessionId} aria-label={`Do this now: ${task.text}`}>
+    <article className={`card dn-card${lead ? ' lead' : ''}${canDismiss ? ' dismissible' : ''}`} data-task={task.kind} data-session={task.sessionId} aria-label={`Do this now: ${task.text}`}>
+      {canDismiss && <DismissX label={task.text} onDismiss={() => onDismiss!(task)} />}
       <div className="dn-eyebrow">{lead ? 'Do this now' : KIND_LABEL[task.kind]}</div>
       <p className="dn-text">{task.text}</p>
       {task.steps.length > 0 ? (

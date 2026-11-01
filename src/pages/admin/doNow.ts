@@ -3,9 +3,9 @@
 import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
-import { nextTasks, type Task, type TaskAction, type TaskSession } from '../../../shared/tasks';
+import { markKey, nextTasks, type Task, type TaskAction, type TaskSession } from '../../../shared/tasks';
 import { courtSwitchOf } from '../../../shared/court';
-import { checkInOpensMs, type Suggestion } from './suggestions';
+import { checkInOpensMs, daysSince, type Suggestion } from './suggestions';
 import { sessionTexts } from './textMenu';
 
 export function taskSessionOfView(s: AdminSessionView, courtBookedAt: Record<string, string> = {}): TaskSession {
@@ -61,22 +61,53 @@ export function coveredByDoNow(c: Suggestion, d: AdminDashboard, nowMs: number):
   return false;
 }
 
-/** The "no court yet" family of cards: all say the same thing (nothing is booked), so a game gets at most one. */
+/** The "no court yet" family of task cards. On Home they become the one court card below (Telegram is not affected). */
 const NO_COURT_KINDS: ReadonlySet<Task['kind']> = new Set(['book', 'nocourt', 'nocourt_later']);
 
 /**
- * What the "Do this now" card shows: the task list, one card per game for the court question.
- * A game on Waitlist is asked "did the court open?" (its own card), so the "No court yet" cards for
- * it are dropped; a Not booked game keeps its "No court yet" card; a Booked game has none.
- * The Telegram alerts come from the full list and are not affected.
+ * What the "Do this now" card shows from the task list: everything except the "no court yet"
+ * family, which `courtCards` draws as one plain card per game. The Telegram alerts come from the
+ * full list and are not affected.
  */
 export function visibleTasks(d: AdminDashboard, nowMs: number, adminUrl: string): Task[] {
-  const waiting = new Set(d.sessions.filter((s) => courtSwitchOf(s) === 'waitlist').map((s) => s.id));
-  const seen = new Set<string>();
-  return dashboardTasks(d, nowMs, adminUrl).filter((t) => {
-    if (!NO_COURT_KINDS.has(t.kind)) return true;
-    if (waiting.has(t.sessionId) || seen.has(t.sessionId)) return false;
-    seen.add(t.sessionId);
-    return true;
-  });
+  const tasks = dashboardTasks(d, nowMs, adminUrl);
+  // A game asked "Did you guys play?" gets that one card; its "finalize who played" task waits for the answer.
+  const asking = new Set(courtCardsFrom(d, nowMs, tasks).filter((c) => c.kind === 'played').map((c) => c.session.id));
+  return tasks.filter((t) => !NO_COURT_KINDS.has(t.kind) && !(t.kind === 'finalize' && asking.has(t.sessionId)));
+}
+
+/**
+ * The court card for a game that is not canceled and was never marked Booked (Waitlist or Not booked):
+ * - 'book': before the game is over, "Court still needs to be booked" with the CourtReserve link.
+ *   Waitlist games get it until they end; Not booked games when the task list asks about their court
+ *   (booking day, the morning of, or the next 2 games open to book), as before.
+ * - 'played': once the game's date has passed (Eastern calendar day), with someone in and not finalized,
+ *   "Did you guys play?" (Yes, we played / Cancel game), until answered.
+ * One card per game at most. A canceled, Booked or finalized game gets none.
+ */
+export type CourtCard = { kind: 'book' | 'played'; session: AdminSessionView };
+
+/** "Did you guys play?" is asked for games whose date passed at most this many days ago (the server keeps card taps for 30). */
+export const PLAYED_ASK_DAYS = 28;
+
+export function courtCards(d: AdminDashboard, nowMs: number, adminUrl: string): CourtCard[] {
+  return courtCardsFrom(d, nowMs, dashboardTasks(d, nowMs, adminUrl));
+}
+
+function courtCardsFrom(d: AdminDashboard, nowMs: number, tasks: Task[]): CourtCard[] {
+  const tz = d.group.timezone;
+  const marks = new Set(d.taskMarks ?? []);
+  const asked = new Set(tasks.filter((t) => NO_COURT_KINDS.has(t.kind)).map((t) => t.sessionId));
+  const book: CourtCard[] = [];
+  const played: CourtCard[] = [];
+  for (const s of d.sessions) {
+    if (s.state.flags.canceled || s.bookingStatus === 'booked' || s.finalized) continue;
+    if (nowMs < Date.parse(s.endsAt)) {
+      if (courtSwitchOf(s) === 'waitlist' || asked.has(s.id)) book.push({ kind: 'book', session: s });
+    } else if (daysSince(s.startsAt, nowMs, tz) >= 1 && daysSince(s.startsAt, nowMs, tz) <= PLAYED_ASK_DAYS && s.confirmedCount > 0 && !marks.has(markKey(s.id, 'played'))) {
+      played.push({ kind: 'played', session: s });
+    }
+  }
+  const byStart = (a: CourtCard, b: CourtCard) => Date.parse(a.session.startsAt) - Date.parse(b.session.startsAt);
+  return [...played.sort(byStart), ...book.sort(byStart)];
 }

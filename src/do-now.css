@@ -130,3 +130,38 @@
   height: 22px;
   flex: none;
 }
+
+/* The X on notice cards (Spot opened, Need players, Check-in, Final price, the night-before text):
+   a 44 px tap area in the top-right corner, a small quiet mark inside it. The card keeps room for it. */
+.dismissible {
+  position: relative;
+}
+/* The top lines make room for the X (the card's own 14 to 16 px padding plus this clears 44 px). */
+.dismissible > .sg-head,
+.dismissible > .dn-eyebrow,
+.dismissible > .dn-text {
+  padding-right: 32px;
+}
+.card-x {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0 var(--radius) 0 12px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.card-x:active {
+  color: var(--ink);
+}
+.card-x:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: -3px;
+}

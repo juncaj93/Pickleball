@@ -199,38 +199,6 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 }
 
 /** "Court opened" / "Didn't open" while on the venue's court waitlist. Both one tap, "Didn't open" asks first. */
-export function CourtWaitButtons({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const { busy, run } = useAction(ctx);
-  const [ask, setAsk] = useState(false);
-  return (
-    <div className="banner-btns">
-      <button
-        className="btn"
-        disabled={busy}
-        onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Court opened')}
-      >
-        Court opened
-      </button>
-      <button className="btn secondary" disabled={busy} onClick={() => setAsk(true)}>
-        Didn't open
-      </button>
-      <ConfirmDialog
-        open={ask}
-        title="The court didn't open?"
-        body={`This session gets marked off with "Court didn't open." Standby players see that, and nobody owes anything.`}
-        confirmLabel="Mark it off"
-        danger
-        busy={busy}
-        onConfirm={async () => {
-          await run(() => api('POST', `/api/admin/sessions/${s.id}/court`, { action: 'not_opened' }), "Marked: court didn't open");
-          setAsk(false);
-        }}
-        onCancel={() => setAsk(false)}
-      />
-    </div>
-  );
-}
-
 export function HideAgain({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   return (
@@ -789,10 +757,13 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
           ) : (
             <>
               <p>Players will see it as canceled, and reminders and payments stop for it.</p>
-              <Notice tone="warn" title="This does not cancel your court">
-                Cancel the reservation with the venue yourself.
-                {` Cancel by ${cancelByShort(s.startsAt, tz)}.`}
-              </Notice>
+              {/* After the start there is no court to cancel any more (and "Cancel by" is in the past). */}
+              {!s.state.flags.started && (
+                <Notice tone="warn" title="This does not cancel your court">
+                  Cancel the reservation with the venue yourself.
+                  {` Cancel by ${cancelByShort(s.startsAt, tz)}.`}
+                </Notice>
+              )}
               {s.bookingStatus === 'booked' && (
                 <CourtReserveLink href={COURTRESERVE_CANCEL_URL} small>
                   Cancel court on CourtReserve

@@ -31,8 +31,9 @@ export interface TaskSession {
 }
 
 /** Taps the organizer made on the card, saved on the server. */
-export type MarkName = 'night_text' | 'court_canceled' | 'canceled_text' | 'postgame_text';
-export const MARK_NAMES: MarkName[] = ['night_text', 'court_canceled', 'canceled_text', 'postgame_text'];
+/** 'played': "Yes, we played" on the card for a past game whose court was never marked booked. Changes no money. */
+export type MarkName = 'night_text' | 'court_canceled' | 'canceled_text' | 'postgame_text' | 'played';
+export const MARK_NAMES: MarkName[] = ['night_text', 'court_canceled', 'canceled_text', 'postgame_text', 'played'];
 
 /** Marks as "sessionId:mark". */
 export type Marks = ReadonlySet<string>;
