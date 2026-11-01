@@ -1763,20 +1763,20 @@ afterAll(() => {
   );
 });
 
-describe('confirmed failures (stale organizer screen)', () => {
-  it.fails('BUG 5: Unmark on "Credit $5" after the player paid the other $4 erases the $4 cash payment', async () => {
+describe('stale organizer screen (was BUG 5, settled by decision 3)', () => {
+  it('BUG 5: Unmark on "Credit $5" after the player paid the other $4 undoes only the $4 (the latest payment)', async () => {
     const { w, sid } = await playedGame();
     expect((await finalize(w, sid, ['Blair', 'Casey', 'Devon', 'Emery', 'Gale', ORG])).status).toBe(200); // 6 played: $9
-    // The organizer's Who paid shows Casey "Credit $5", owes $4. Casey pays the $4 her screen shows...
     const d = await dash(w);
     expect(d.sessions.find((s: any) => s.id === sid).roster.find((r: any) => r.name === 'Casey').creditCents).toBe(500);
     expect((await iPaid(w, 'Casey', sid, 0, 400)).status).toBe(200);
-    // ...and the organizer, still looking at "Credit $5", taps Unmark to put the $5 back in her pot.
+    const pot = potOf(w, 'Casey');
     const u = await w.org.call('POST', `/api/admin/sessions/${sid}/payment`, { playerId: w.ids.Casey, paid: false });
     expect(u.status).toBe(200);
-    // Correct: her $4 still counts (she now owes $5, the credit that went back), or the tap is refused as stale.
-    // Actually: the whole payment is gone, the $5 is back in her pot, and she owes $9 although she sent $4.
-    expect(await shownOwe(w, 'Casey', sid)).toBe(500);
+    // Decision 3 (Oct 31): Unmark undoes only the latest payment. The $4 is undone, her $5 credit stays on the
+    // seat, she owes $4 again, and her pot does not move.
+    expect(await shownOwe(w, 'Casey', sid)).toBe(400);
+    expect(potOf(w, 'Casey')).toBe(pot);
   });
 });
 

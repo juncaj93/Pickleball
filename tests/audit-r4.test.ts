@@ -1390,8 +1390,8 @@ describe('second pass: Unmark / Mark paid / Unmark cycles after Finalize, credit
       });
 });
 
-/** Second-pass findings: `it.fails` while the bug is there (R4_SHOW=1 runs them as plain tests). */
-const finding2 = process.env.R4_SHOW ? it : it.fails;
+/** Second-pass finding G1: fixed (Unmark's undo, unpaid and money back are tied to the finalize it read). Plain regression tests now. */
+const finding2 = it;
 const RACE_FINDINGS = new Set(['1000:finalize10', '1000:finalize6', '1000:reopen+finalize7']);
 
 describe('second pass: Unmark racing Finalize / Reopen (two organizer devices)', () => {
