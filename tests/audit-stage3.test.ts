@@ -16,7 +16,7 @@ import { finalPrice } from '../shared/pricing';
 import { sessionTexts, reminderText } from '../src/pages/admin/textMenu';
 import { suggestions, visibleSuggestions } from '../src/pages/admin/suggestions';
 import { buildTodo } from '../src/pages/admin/todo';
-import { DAY, HOUR, PLAYER_NAMES, playerPhone, setupGroup, TestApp } from './harness';
+import { DAY, HOUR, PLAYER_NAMES, playerPhone, setupGroup, TestApp, withoutIds } from './harness';
 
 type Ctx = Awaited<ReturnType<typeof setupGroup>>;
 type Phone = Awaited<ReturnType<typeof playerPhone>>;
@@ -729,7 +729,9 @@ describe('privacy of every player-facing answer', () => {
     await alex.call('GET', '/api/admin/money?month=2026-11');
     await alex.call('POST', `/api/admin/refund-requests/${(await dashboard(ctx)).refundRequests[0].id}`, { action: 'refunded' });
     expect(texts.length).toBeGreaterThan(15);
-    for (const { what, text } of texts) {
+    // Random ids are blanked first: an id like "...ade4321" or "...2300..." is not money (it failed about 1 run in 20).
+    for (const { what, text: raw } of texts) {
+      const text = withoutIds(raw);
       expect(text, `${what}: phone`).not.toMatch(/\) 555-|\(313\)|313555/);
       expect(text, `${what}: venmo`).not.toMatch(/VenmoSecret/);
       expect(text, `${what}: court cost / membership`).not.toMatch(/4321|3579|43\.21|35\.79/);
