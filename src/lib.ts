@@ -98,6 +98,9 @@ export function usePretend(): number | null {
 }
 
 /** Changes whenever the demo starts, ends or is reset, so screens load again. */
+/** The demo session number right now (it changes when a demo starts, ends or is reset). */
+export const demoSessionNumber = () => demoVersion;
+
 export function useDemoVersion(): number {
   return useSyncExternalStore(subscribeDemo, () => demoVersion);
 }
