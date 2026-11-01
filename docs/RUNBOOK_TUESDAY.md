@@ -6,6 +6,8 @@ One page. Plain steps. Times are Eastern. Written Sun Nov 1, 2026.
 someone taps a button, and every tap is written down. Most problems can be
 waited out until after the game, then fixed calmly.
 
+**Previews: Until a preview is proven to use a fake database, previews are tested in View as demo mode only, never with real taps.**
+
 ## 1. Which kind of problem is it?
 
 | What you see | Do this |
