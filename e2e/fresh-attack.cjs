@@ -369,7 +369,7 @@ async function runSequence(browser, seed, t0) {
     if (g.credit.pending) options.push('cashOutCancel', 'cashOutUse');
     options.push('notYou', 'reload', 'twoPhones', 'hack');
     const act = pick(options);
-    const net = chance(0.12) ? 'slow' : chance(0.08) ? 'offline' : '';
+    let net = chance(0.12) ? 'slow' : chance(0.08) ? 'offline' : '';
     const since = await browserNow(ph);
     const balBefore = g.credit.balanceCents;
     const tag = `${ph.who}@${ph.label}${net ? ` [${net}]` : ''}`;
@@ -388,7 +388,9 @@ async function runSequence(browser, seed, t0) {
       }
       case 'drop': {
         const s = pick(mineIn);
-        const mode = FOCUS && chance(0.6) ? 'reload-rejoin' : pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'reload-rejoin', 'close', 'rejoin', 'dbl', 'switch']);
+        const mode = FOCUS && chance(0.7) ? pick(['reload-rejoin', 'offline-note']) : pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'reload-rejoin', 'offline-note', 'close', 'rejoin', 'dbl', 'switch']);
+        // This step makes its own network trouble.
+        if (mode === 'offline-note') net = '';
         const undoAt = ri(200, 4500);
         let note = '';
         const dropper = ph.who;
@@ -415,6 +417,31 @@ async function runSequence(browser, seed, t0) {
             const u = ph.page.locator('[data-banner] .toast-action', { hasText: 'Undo' });
             const clicked = await u.first().click({ timeout: 400 }).then(() => true).catch(() => false);
             note = ` undo@${mode === 'undo' ? undoAt : 5200}ms${clicked ? '' : ' (Undo gone)'}`;
+          } else if (mode === 'offline-note') {
+            // Drop out, then offline and hidden: the send fails and the drop note stays. ~7 s later, back online with
+            // GET /api/group slowed ~3 s, and I'm in on the same game during that slow check: they must end up in.
+            await sleep(ri(200, 2500));
+            await ph.ctx.setOffline(true);
+            const setVis = (v) => ph.page.evaluate((vis) => {
+              Object.defineProperty(document, 'visibilityState', { value: vis, configurable: true });
+              Object.defineProperty(document, 'hidden', { value: vis === 'hidden', configurable: true });
+              document.dispatchEvent(new Event('visibilitychange'));
+            }, v).catch(() => {});
+            await setVis('hidden');
+            await sleep(7000);
+            const slowMs = ri(2500, 3500);
+            await ph.page.route('**/api/group', async (route) => {
+              await sleep(slowMs);
+              await route.continue().catch(() => {});
+            });
+            await ph.ctx.setOffline(false);
+            await setVis('visible');
+            await sleep(ri(100, 900));
+            const btn = row(ph, s.id).getByRole('button', { name: /^(I'm in|Join waitlist)$/ });
+            const ok = await tap(btn);
+            await sleep(slowMs + 2000);
+            await ph.page.unroute('**/api/group').catch(() => {});
+            note = ` offline+hidden, back online with /api/group slowed ${slowMs}ms, I'm in${ok ? '' : " (no I'm in button)"}`;
           } else if (mode === 'reload-rejoin') {
             // Drop out, reload inside the Undo wait, then I'm in on the same game: they must end up in.
             await sleep(undoAt);
@@ -622,7 +649,18 @@ async function runSequence(browser, seed, t0) {
     const errored = toasts.some((x) => x.error && !/Too late/.test(x.msg));
     if (/no Drop out|no confirm/.test(note)) return;
     if (mode === 'undo' && !/Undo gone/.test(note) && !tooLate) check(st === 'confirmed', 'intent', 'tapped Undo in time but ended up out', `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
-    else if (mode === 'reload-rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out, reload, I'm in again: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
+    else if (mode === 'offline-note') {
+      // The left-over note's retry runs 15 s later: the seat must still be in after it.
+      if (!/no I'm in button/.test(note)) {
+        await sleep(17000);
+        const t2 = await truthOf(api[ph.who], ph.who);
+        const a2 = t2 && t2.sessions.find((x) => x.id === s.id);
+        const st2 = a2 && a2.mine && a2.mine.status;
+        const toasts2 = await toastsOf(ph, since);
+        const err2 = toasts2.some((x) => x.error && !/offline|signal|connection/i.test(x.msg));
+        if (a2 && !a2.started && !a2.canceled) check(st2 === 'confirmed' || st2 === 'waitlisted' || err2, 'intent', "drop failed offline (note kept), I'm in on the same game when back: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st}->${st2} toasts=${JSON.stringify(toasts2.map((x) => x.msg))}`);
+      }
+    } else if (mode === 'reload-rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out, reload, I'm in again: not in", `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     else if (mode === 'rejoin') check(st === 'confirmed' || st === 'waitlisted' || errored, 'intent', "Drop out then I'm in during Undo: not in", `${ph.label} ${ph.who} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     else if (!errored) check(st !== 'confirmed', 'intent', `dropped out (${mode}) and Undo not tapped, but still in`, `${ph.label} ${ph.who} ${day(s.startsAt)} ${note} status=${st} toasts=${JSON.stringify(toasts.map((x) => x.msg))}`);
     // The drop banner says what happens to the money; the pot must move by that much.
