@@ -27,7 +27,13 @@ export function parseCookies(header: string | null): Record<string, string> {
     if (idx < 0) continue;
     const name = part.slice(0, idx).trim();
     const value = part.slice(idx + 1).trim();
-    if (name) out[name] = decodeURIComponent(value);
+    if (!name) continue;
+    // A cookie from another site on the same domain with a broken %-escape must not break every request.
+    try {
+      out[name] = decodeURIComponent(value);
+    } catch {
+      out[name] = value;
+    }
   }
   return out;
 }

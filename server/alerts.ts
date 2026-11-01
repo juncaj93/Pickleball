@@ -13,13 +13,16 @@ import { newId } from './crypto';
 import type { D1Database, Env } from './db';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../shared/settings';
 import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
 import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
-import { isAdminPage, linkText, type TextLink } from './telegram-links';
+import { isAdminPage, linkText, ourAddress, type TextLink } from './telegram-links';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
+/** Alerts caused by player taps (drops, it's on, cash outs) stop at this many an hour, so the clock's alerts always keep a few of the 20. */
+export const MAX_PLAYER_ALERTS_PER_HOUR = 15;
 const SEND_TIMEOUT_MS = 5000;
 /** What deliver() says when Telegram took too long: the message may still have arrived. */
 export const TIMEOUT_ERROR = "Telegram didn't answer in time.";
@@ -110,20 +113,30 @@ async function recordResult(ctx: Ctx, groupId: string, ok: boolean, error: strin
     .run();
 }
 
-/** One of the hour's alert slots, or false when they're used up. Written first, so a burst can't slip past. */
-async function takeSlot(ctx: Ctx): Promise<boolean> {
+/**
+ * One of the hour's alert slots, or false when they're used up. Written first, so a burst can't slip past.
+ * A player alert first holds a 'telegram_pending' slot and counts every slot, its own included; only once
+ * it fits does the slot become a plain 'telegram' one. The clock's alerts count only plain slots, so a
+ * flood of player alerts being turned away can never push the clock's alerts over the limit.
+ */
+async function takeSlot(ctx: Ctx, max: number, fromPlayer: boolean): Promise<boolean> {
   const id = newId();
   const nowIso = new Date(ctx.nowMs).toISOString();
-  await ctx.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'telegram', 'server', ?)").bind(id, nowIso).run();
+  const kind = fromPlayer ? 'telegram_pending' : 'telegram';
+  await ctx.db.prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, ?, 'server', ?)").bind(id, kind, nowIso).run();
   const row = await ctx.db
-    .prepare("SELECT COUNT(*) AS n FROM rate_events WHERE kind = 'telegram' AND created_at > ?")
+    .prepare(`SELECT COUNT(*) AS n FROM rate_events WHERE kind IN (${fromPlayer ? "'telegram', 'telegram_pending'" : "'telegram'"}) AND created_at > ?`)
     .bind(new Date(ctx.nowMs - HOUR_MS).toISOString())
     .first<{ n: number }>();
-  if ((row?.n ?? 0) > MAX_ALERTS_PER_HOUR) {
+  if ((row?.n ?? 0) > max) {
     await ctx.db.prepare('DELETE FROM rate_events WHERE id = ?').bind(id).run();
     return false;
   }
-  await ctx.db.prepare("DELETE FROM rate_events WHERE kind = 'telegram' AND created_at < ?").bind(new Date(ctx.nowMs - 86_400_000).toISOString()).run();
+  if (fromPlayer) await ctx.db.prepare("UPDATE rate_events SET kind = 'telegram' WHERE id = ?").bind(id).run();
+  await ctx.db
+    .prepare("DELETE FROM rate_events WHERE kind IN ('telegram', 'telegram_pending') AND created_at < ?")
+    .bind(new Date(ctx.nowMs - 86_400_000).toISOString())
+    .run();
   return true;
 }
 
@@ -138,12 +151,12 @@ function telegramProblem(status: number, description: string): string {
 
 /** Send one message to the organizer's chat, with an "Open site" button. */
 /** The message with each "words: address" shown as tappable words, and the /admin page (the Open site button) as plain words (see telegram-links.ts). */
-function telegramText(text: string): { text: string; entities?: TextLink[] } {
-  const linked = linkText(text, isAdminPage);
+function telegramText(text: string, siteUrl: string): { text: string; entities?: TextLink[] } {
+  const linked = linkText(text, isAdminPage, ourAddress(siteUrl, [COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL]));
   return linked.entities.length ? linked : { text: linked.text };
 }
 
-async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
+async function sendTelegram(env: Env, siteUrl: string, text: string, links: boolean): Promise<{ ok: true } | { ok: false; error: string }> {
   const doFetch = env.TELEGRAM_FETCH ?? fetch;
   let res: Response;
   try {
@@ -152,7 +165,7 @@ async function sendTelegram(env: Env, siteUrl: string, text: string): Promise<{ 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: env.TELEGRAM_CHAT_ID,
-        ...telegramText(text),
+        ...(links ? telegramText(text, siteUrl) : { text }),
         link_preview_options: { is_disabled: true },
         reply_markup: { inline_keyboard: [[{ text: 'Open site', url: `${siteUrl}/admin` }]] },
       }),
@@ -172,14 +185,20 @@ function siteUrl(ctx: Ctx): string {
 }
 
 /** Rate limit, send, write down how it went. Never throws. */
-export async function deliver(ctx: Ctx, groupId: string, text: string): Promise<{ ok: true } | { ok: false; error: string }> {
+/**
+ * `fromPlayer`: a message a player's tap caused (drops, it's on, cash outs). It carries names, so it is
+ * sent with no links at all (nothing in a name can turn into one), and it stops at
+ * MAX_PLAYER_ALERTS_PER_HOUR so one player can't use up the hour and silence the clock's alerts.
+ */
+export async function deliver(ctx: Ctx, groupId: string, text: string, fromPlayer = false): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
-    if (!(await takeSlot(ctx))) {
-      const error = `${PAUSED_PREFIX} more than ${MAX_ALERTS_PER_HOUR} alerts in an hour.`;
+    const max = fromPlayer ? MAX_PLAYER_ALERTS_PER_HOUR : MAX_ALERTS_PER_HOUR;
+    if (!(await takeSlot(ctx, max, fromPlayer))) {
+      const error = `${PAUSED_PREFIX} more than ${max} alerts in an hour.`;
       await recordResult(ctx, groupId, false, error);
       return { ok: false, error };
     }
-    const sent = await sendTelegram(ctx.env, siteUrl(ctx), text);
+    const sent = await sendTelegram(ctx.env, siteUrl(ctx), text, !fromPlayer);
     // Once Telegram took it, it counts as sent even if writing down the result fails (so it is never sent twice).
     await recordResult(ctx, groupId, sent.ok, sent.ok ? null : sent.error).catch(() => {});
     return sent;
@@ -255,7 +274,7 @@ export async function notifyRefundRequest(ctx: Ctx, group: GroupRow, playerId: s
       .prepare("INSERT INTO rate_events (id, kind, client_key, created_at) VALUES (?, 'refund_alert', ?, ?)")
       .bind(newId(), playerId, new Date(ctx.nowMs).toISOString())
       .run();
-    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents)));
+    ctx.waitUntil(deliver(ctx, group.id, refundRequestMessage(name, cents), true));
   } catch {
     // Never worth failing the request over.
   }
@@ -271,7 +290,7 @@ export async function notifyCashOutUsed(ctx: Ctx, group: GroupRow, name: string,
     if (ctx.env.SANDBOX || isPretend(ctx.db) || !connected(ctx.env)) return;
     const prefs = prefsOf(await alertRow(ctx.db, group.id));
     if (!prefs.enabled || !prefs.refundRequests) return;
-    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone)));
+    ctx.waitUntil(deliver(ctx, group.id, cashOutUsedMessage(name, usedCents, requestCents, startsAt, group.timezone), true));
   } catch {
     // Never worth failing the request over.
   }
@@ -292,7 +311,7 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null): Promise<void
       timezone: watch.group.timezone,
       prefs: watch.prefs,
     });
-    if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text));
+    if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text, true));
   } catch {
     // An alert is never worth failing a tap over.
   }
