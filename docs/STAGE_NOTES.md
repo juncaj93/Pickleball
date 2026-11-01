@@ -838,6 +838,29 @@ with history (each 5-second check reads every game ever made), rows written
 under 1%. Site CPU per request on live: p50 6 ms, p90 13 ms, p99 41 ms
 against the 10 ms limit, 0 errors so far. Clock Worker 0.6 ms.
 
+### Deploy (Sun Nov 1, 2026, 9:07 AM Eastern)
+- Merged as #53 (main 79c82ab). Production deployment `95faf42e`, branch main.
+  No migration, no data change. Production still bound to the live database,
+  all secrets present.
+- Restore points: Time Travel bookmark
+  `00000340-00000000-00005116-3a0500ef5cdb9021c43384f4f36d9077` (9:07 AM; an
+  earlier one at 6:47 AM: `00000320-00000000-00005116-2ff371e0501ec3c0b997fc1d635c0a07`),
+  SQL exports `live-before-behind-audit-2026-11-01.sql` and
+  `live-before-behind-deploy-2026-11-01.sql` (217 rows each, phone numbers, not
+  committed) in that session's scratch folder.
+- Code rollback: Pages deployment `eea78540` (commit 7b1f14b). The deploy
+  changed no data, so rolling back the code is enough.
+- Read-only checks after: home, /admin, /api/status, /api/group/version 200
+  with the new bundle; a broken cookie no longer errors; the tick refuses
+  without the secret; health checks 0.
+- Previews: `[env.preview]` is in wrangler.toml, but the project's stored
+  preview setting still names the live database and no preview has been
+  deployed since, so the new wiring is not proven yet. Until a preview is
+  deployed and checked (its /api/group/version must differ from live), treat
+  every preview link as writing to live data.
+- Tests: 1261 unit; browser 984 passed, 1 failed (admin-cleanup "Edit game
+  on a short phone", fails on main too).
+
 ### Not fixed (see the report)
 - Two Finalize requests in the same millisecond with different lists both
   partly apply (money code; needs two requests in one millisecond).
