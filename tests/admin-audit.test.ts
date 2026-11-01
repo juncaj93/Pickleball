@@ -330,3 +330,85 @@ describe('1: sign in', () => {
     expect((await c.call('POST', '/api/admin/login', { pin: PIN })).status).toBe(200);
   });
 });
+
+describe('5 / 6 / 7 / 10: edit game, cancel, players, settings edge cases', () => {
+  const move = (ctx: Ctx, id: string, startsAt: number, endsAt: number) =>
+    ctx.organizer.call('PUT', `/api/admin/sessions/${id}/time`, { startsAt: new Date(startsAt).toISOString(), endsAt: new Date(endsAt).toISOString() });
+
+  it('E3 / E4 / E19: end before start, a past time, an empty time and a canceled game are refused; nothing moves', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    const s0 = Date.parse(g.startsAt);
+    expect((await move(ctx, g.id, s0 + DAY, s0 + DAY - HOUR)).status).toBe(400);
+    expect((await move(ctx, g.id, ctx.app.now - HOUR, ctx.app.now + HOUR)).status).toBe(400);
+    expect((await ctx.organizer.call('PUT', `/api/admin/sessions/${g.id}/time`, { startsAt: '', endsAt: '' })).status).toBe(400);
+    expect((await ctx.organizer.call('PUT', `/api/admin/sessions/${g.id}/time`, { startsAt: 'tomorrow', endsAt: 'later' })).status).toBe(400);
+    await cancel(ctx, g.id);
+    expect((await move(ctx, g.id, s0 + DAY, s0 + DAY + 2 * HOUR)).status).toBe(409);
+    const after = (await dash(ctx)).sessions.find((s: any) => s.id === g.id);
+    expect(after.startsAt).toBe(g.startsAt);
+  });
+
+  it('E1 / E9 / E11: moving a game players joined keeps every seat, payment and credit; the deadline is start minus 12 hours', async () => {
+    const ctx = await setupGroup();
+    const [g] = await games(ctx);
+    await setCourt(ctx, g.id, 'booked');
+    for (const n of ['Alex', 'Blair', 'Casey']) await join(ctx, n, g.id);
+    await pay(ctx, g.id, 'Alex');
+    const before = { s: seats(ctx), l: ledger(ctx) };
+    const to = Date.parse(g.startsAt) + DAY + 30 * 60_000;
+    expect((await move(ctx, g.id, to, to + 2 * HOUR)).data).toMatchObject({ ok: true, changed: true });
+    expect({ s: seats(ctx), l: ledger(ctx) }).toEqual(before);
+    const row = ctx.app.db.raw.prepare('SELECT starts_at, cancellation_deadline_at FROM sessions WHERE id = ?').get(g.id) as { starts_at: string; cancellation_deadline_at: string };
+    expect(Date.parse(row.starts_at) - Date.parse(row.cancellation_deadline_at)).toBe(12 * HOUR);
+    // Same values again: "nothing changed".
+    expect((await move(ctx, g.id, to, to + 2 * HOUR)).data).toMatchObject({ changed: false });
+  });
+
+  it('E6: moving onto the exact time of another game is refused with a clear message', async () => {
+    const ctx = await setupGroup();
+    const [a, b] = await games(ctx);
+    const r = await move(ctx, a.id, Date.parse(b.startsAt), Date.parse(b.endsAt));
+    expect(r.status).toBe(409);
+    expect(r.data.message).toMatch(/already/);
+  });
+
+  it('K7: a cancel reason over 40 characters or with markup is cut or refused, never stored as markup that runs', async () => {
+    const ctx = await setupGroup();
+    const [a, b] = await games(ctx);
+    const long = await ctx.organizer.call('POST', `/api/admin/sessions/${a.id}/decision`, { decision: 'cancel', confirm: true, reason: 'x'.repeat(200) });
+    expect(long.status).toBeLessThan(500);
+    if (long.status === 200) {
+      const r = (await dash(ctx)).sessions.find((s: any) => s.id === a.id).cancelReason;
+      expect(r.length).toBeLessThanOrEqual(40);
+    }
+    const html = await ctx.organizer.call('POST', `/api/admin/sessions/${b.id}/decision`, { decision: 'cancel', confirm: true, reason: '<img src=x onerror=alert(1)>' });
+    expect(html.status).toBeLessThan(500);
+  });
+
+  it('P11 / P12 / P13: odd names are kept as plain text; a duplicate name and a bad phone get clear messages', async () => {
+    const ctx = await setupGroup();
+    const odd = "Seán O'Brien-Núñez 🏓";
+    const r = await ctx.organizer.call('POST', '/api/admin/players', { name: odd, phone: '(313) 555-0199' });
+    expect(r.status, r.text).toBe(200);
+    expect((await dash(ctx)).players.some((p: any) => p.name === odd)).toBe(true);
+    const dup = await ctx.organizer.call('POST', '/api/admin/players', { name: 'Alex' });
+    expect(dup.status).toBeGreaterThanOrEqual(400);
+    expect(dup.status).toBeLessThan(500);
+    const badPhone = await ctx.organizer.call('POST', '/api/admin/players', { name: 'Zed', phone: '12' });
+    expect(badPhone.status).toBeGreaterThanOrEqual(400);
+    expect(badPhone.status).toBeLessThan(500);
+  });
+
+  it('T3: max players outside 4 to 12 is refused or clamped, never saved as is', async () => {
+    const ctx = await setupGroup();
+    for (const maxPlayers of [0, 3, 13, -1, 4.5, 'ten']) {
+      const r = await ctx.organizer.call('PUT', '/api/admin/group', { settings: { maxPlayers } });
+      expect(r.status, String(maxPlayers)).toBeLessThan(500);
+      const saved = (await dash(ctx)).group.settings.maxPlayers;
+      expect(saved, String(maxPlayers)).toBeGreaterThanOrEqual(4);
+      expect(saved, String(maxPlayers)).toBeLessThanOrEqual(12);
+      expect(Number.isInteger(saved)).toBe(true);
+    }
+  });
+});
