@@ -29,6 +29,8 @@ const SEEDS = (process.env.SEEDS || '1103,2026,77,4242,9001,31337,555,8128,1999,
 const STEPS = Number(process.env.STEPS) || 50;
 const BUDGET_MS = (Number(process.env.BUDGET_MIN) || 24) * 60_000;
 const SETTLE_MS = 6500;
+/** FOCUS=1: more View as drop-and-exit and drop-reload-rejoin steps (same checks). */
+const FOCUS = process.env.FOCUS === '1';
 const START = Date.parse('2026-10-30T09:00:00-04:00'); // Fri Oct 30, 9:00 AM Eastern
 const DST = [Date.parse('2026-11-01T05:30:00Z'), Date.parse('2026-11-01T06:30:00Z'), Date.parse('2026-11-01T07:10:00Z')]; // 1:30 AM EDT, 1:30 AM EST, 2:10 AM EST
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -386,7 +388,7 @@ async function runSequence(browser, seed, t0) {
       }
       case 'drop': {
         const s = pick(mineIn);
-        const mode = pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'reload-rejoin', 'close', 'rejoin', 'dbl', 'switch']);
+        const mode = FOCUS && chance(0.6) ? 'reload-rejoin' : pick(['plain', 'plain', 'undo', 'undo', 'late-undo', 'reload', 'reload-rejoin', 'close', 'rejoin', 'dbl', 'switch']);
         const undoAt = ri(200, 4500);
         let note = '';
         const dropper = ph.who;
@@ -639,7 +641,7 @@ async function runSequence(browser, seed, t0) {
     const open = live.filter((s) => Date.parse(s.startsAt) > nowMs());
     const ended = d.sessions.filter((s) => s.status !== 'canceled' && Date.parse(s.endsAt) <= nowMs() && !s.state?.finalized && !s.finalizedAt && s.roster.some((r) => r.status === 'confirmed'));
     const canceledOpen = d.sessions.filter((s) => s.status === 'canceled' && Date.parse(s.startsAt) > nowMs());
-    const opts = ['court', 'court', 'max', ...(combo ? [] : ['viewAs', 'viewAs'])];
+    const opts = ['court', 'court', 'max', ...(combo ? [] : FOCUS ? ['viewAs', 'viewAs', 'viewAs', 'viewAs', 'viewAs', 'viewAs'] : ['viewAs', 'viewAs'])];
     if (open.length) opts.push('move', 'cancel');
     if (ended.length) opts.push('finalize', 'finalize');
     if (canceledOpen.length) opts.push('reopen');
@@ -660,7 +662,9 @@ async function runSequence(browser, seed, t0) {
         // Organizer: View as a player, Drop out on a game they are in, Exit inside the Undo wait. No real seat may change.
         const snap = (dd) => JSON.stringify(dd.sessions.map((x) => [x.id, x.status, x.roster.map((y) => [y.playerId, y.status, y.paymentStatus, y.creditCents])]));
         const before = snap(d);
-        const cands = live.filter((x) => Date.parse(x.startsAt) > nowMs()).flatMap((x) => x.roster.filter((y) => y.status === 'confirmed' && !y.isOrganizer).map((y) => [x, y]));
+        // Only games the player screen lists without "Show more" (the first 6 upcoming).
+        const shown = d.sessions.filter((x) => Date.parse(x.endsAt) > nowMs()).sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt)).slice(0, 6).map((x) => x.id);
+        const cands = live.filter((x) => Date.parse(x.startsAt) > nowMs() && shown.includes(x.id)).flatMap((x) => x.roster.filter((y) => y.status === 'confirmed' && !y.isOrganizer).map((y) => [x, y]));
         if (!cands.length) return 'ORG view as: nobody in a game';
         const [gs, who] = pick(cands);
         const exitAt = ri(300, 4500);
