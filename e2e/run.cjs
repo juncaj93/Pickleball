@@ -2690,6 +2690,12 @@ async function main() {
       assert(/\b\d{1,2}(:\d{2})? (AM|PM)\b/.test(text), 'missing a 12-hour start time');
       const range = await admin.evaluate(async () => (await (await fetch('/api/admin/dashboard')).json()).sessions[0]);
       assert(/^\d{4}-\d{2}-\d{2}T/.test(range.startsAt), 'the data still carries real timestamps');
+      // The first card shows exactly this game's start in Eastern time under its date tile ("8 PM", "7:30 PM"), and that is a real hour:
+      // the stored start (UTC) converted to America/Detroit, never the UTC hour.
+      const want = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Detroit', hour: 'numeric', minute: '2-digit' }).format(new Date(range.startsAt)).replace(/[\u202f\u00a0]/g, ' ').replace(':00', '');
+      const shownTime = (await sessionCards(admin).first().locator('[data-card-time]').innerText()).trim();
+      assert(shownTime === want, `the first card shows "${shownTime}" but this game starts at ${want} Eastern`);
+      assert(!/UTC/.test(shownTime) && shownTime !== new Date(range.startsAt).toISOString().slice(11, 16), 'the card shows a UTC time');
       assert(!/\b(EDT|EST)\b/.test(text), 'EDT/EST should be gone from screens');
       assert(!/UTC|GMT|\d{2}:\d{2}:\d{2}/.test(text), 'found UTC or 24h time');
     });
