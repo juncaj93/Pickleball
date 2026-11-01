@@ -6,7 +6,10 @@ One page. Plain steps. Times are Eastern. Written Sun Nov 1, 2026.
 someone taps a button, and every tap is written down. Most problems can be
 waited out until after the game, then fixed calmly.
 
-**Previews: Until a preview is proven to use a fake database, previews are tested in View as demo mode only, never with real taps.**
+**Previews run on a FAKE database (proven Sun Nov 1, 2026).** Any preview link (a branch that is not `main`) uses
+`pickleball-preview` with made-up players, no Telegram and no clock, so real taps there are safe. The group name on
+screen says "PREVIEW, fake data". To wipe and refill it: `npm run db:seed:preview`. Details: `docs/PREVIEW_FAKE_DB.md`.
+The fake database `pickleball-preview` must NEVER be deleted, reset any other way, or reused for anything else. Never put a test on the live address. A preview is never the place to "fix" live data.
 
 ## 1. Which kind of problem is it?
 
