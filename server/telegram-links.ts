@@ -30,7 +30,12 @@ export function isAdminPage(url: string): boolean {
 const LINKED = /: (https?:\/\/[^\s"]+)/g;
 const BOUNDARY = /(?:[.?!:] |\n)/g;
 
-export function linkText(text: string, plain: (url: string) => boolean = () => false): { text: string; entities: TextLink[] } {
+/**
+ * `allowed`: only these addresses become links. Any other "words: address"
+ * (say a player named "Bob: https://...") is left exactly as typed, so a
+ * name can never turn into hidden link words.
+ */
+export function linkText(text: string, plain: (url: string) => boolean = () => false, allowed: (url: string) => boolean = () => true): { text: string; entities: TextLink[] } {
   const entities: TextLink[] = [];
   let out = '';
   let from = 0;
@@ -41,10 +46,23 @@ export function linkText(text: string, plain: (url: string) => boolean = () => f
     let phraseStart = 0;
     for (const b of before.matchAll(BOUNDARY)) phraseStart = b.index + b[0].length;
     if (phraseStart >= before.length) continue; // no words to link: leave the address as it is
+    if (!plain(m[1]) && !allowed(m[1])) continue; // not one of our addresses: leave it as typed
     out += before;
     from = at + m[0].length;
     if (plain(m[1])) continue;
     entities.push({ type: 'text_link', offset: out.length - (before.length - phraseStart), length: before.length - phraseStart, url: m[1] });
   }
   return { text: out + text.slice(from), entities };
+}
+
+/**
+ * The exact addresses alerts may link to, nothing looser: the site's own
+ * /go/<signed token> direct text link and the two CourtReserve pages the
+ * alerts are built with. Any other address (even one on the site, or one with
+ * a backslash or an @ that parsers read differently) is left as typed.
+ */
+export function ourAddress(siteUrl: string, courtReserve: readonly string[]): (url: string) => boolean {
+  const site = siteUrl.replace(/\/$/, '');
+  const go = new RegExp(`^${site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/go/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$`);
+  return (url: string) => courtReserve.includes(url) || (/^https:\/\//.test(site) && go.test(url));
 }

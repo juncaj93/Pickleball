@@ -789,3 +789,58 @@ Screens, one seat rule, and one one-time repair. No price, amount, credit rule o
 - **Restore points:** Time Travel bookmark `000002f1-00000000-00005116-9fda069f0c40099d335fc6afec7bc73b` (taken Sun Nov 1, about 3:10 AM Eastern), SQL export `live-before-waitlist-rule-2026-11-01.sql` (213 rows, phone numbers, in the session scratch folder, not committed). Code rollback: Pages deployment `5674340d-06c9-4b10-9408-55cb4a5a34d3` (commit c68fd63, the money audit).
 - **Tests:** 1,218 unit passed (1 skipped from the money audit's tests); browser suites all green (run.cjs 229, admin-cleanup 36, money-visible and the rest). Tests that assumed "a Waitlist court makes standby seats" were rewritten to the new rule, none deleted.
 - **Preview:** a separate throwaway database `pickleball-preview` (fake data) and the branch preview `preview-admin-look` were made for the look checks; they hold no real data and can be deleted.
+
+## Behind-the-scenes audit (Sun Nov 1, 2026)
+
+Audit 3 of 3 (alerts, the clock Worker, Telegram, time, security, data, free
+plan, backups, deploy settings). Scenario list: `docs/AUDIT_SCENARIOS_behind.md`
+(312). Runbook: `docs/RUNBOOK_TUESDAY.md`. No database change, no money rule
+change, nothing players or the organizer see changed.
+
+### Fixed (each with a test that fails on the old code)
+- A player name like "Bob: https://..." became hidden link words in the
+  organizer's Telegram alert. Alerts that carry names now have no links; the
+  clock's alerts link only the exact /go/ and CourtReserve addresses.
+- A cookie with a broken %-escape (say from another juncaj.net site) made
+  every request fail for that browser.
+- "Court waitlist" racing a cancel could bring the canceled game back with
+  everyone's $14 already returned as credit (a free game). Refused now, also
+  on a finalized game.
+- Group-word guesses sent all at once were all checked; now at most 10 per
+  15 minutes (the group word is off on live).
+- A game canceled while a slow tick was sending could still get the tick's
+  next alert; the claim now checks the game is still on.
+- One player toggling in and out could use up the 20 alerts an hour and
+  silence the clock's cancel warning. Alerts from player taps now stop at 15
+  an hour, so the clock always keeps a few.
+- Names with U+0085, U+2028 or U+2029 (line breaks in disguise) are refused.
+- Preview deployments were bound to the LIVE database. New previews use the
+  throwaway `pickleball-preview` database (`[env.preview]` in wrangler.toml).
+  Old preview links keep the live binding until redeployed or deleted.
+
+### Checked, no change needed
+- Five weeks of 5-minute ticks through the real tick, compared with a second,
+  independent copy of the alert rules: every alert once, on its first tick.
+  Late, doubled and down clocks, Telegram slow or down, edits between ticks,
+  the Nov 1 clock change. First real alert: Mon Nov 2, 7:00 PM ("Tuesday: 3
+  players in, need a 4th." with the direct text link), replayed from live
+  counts read-only.
+- Every organizer route refuses without the PIN; cookie flags; PIN lockout;
+  cross-site requests; other players' ids; every field with hostile values.
+- `scripts/integrity-checks.sql` (read-only): 0 on live for all 19 checks.
+- SQL export restored into a scratch database: every row count matches live.
+- Build reproducible; no secrets in the repo or built files; 0 vulnerable
+  packages in what ships.
+
+### Free plan (worst case, game day)
+Requests about 12% (extreme 44%), D1 rows read about 28% today and growing
+with history (each 5-second check reads every game ever made), rows written
+under 1%. Site CPU per request on live: p50 6 ms, p90 13 ms, p99 41 ms
+against the 10 ms limit, 0 errors so far. Clock Worker 0.6 ms.
+
+### Not fixed (see the report)
+- Two Finalize requests in the same millisecond with different lists both
+  partly apply (money code; needs two requests in one millisecond).
+- 40 self-adds at once pass the 30-name cap.
+- e2e/admin-cleanup.cjs "Edit game on a short phone" fails on main too
+  (admin screens channel).

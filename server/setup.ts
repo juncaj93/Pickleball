@@ -3,7 +3,7 @@ import { DEFAULT_TIMEZONE, isValidTimezone } from '../shared/time';
 import { ACCESS_COOKIE, accessToken, hashGroupWord, hasGroupAccess, startAdminSession } from './auth';
 import { setCookie } from './context';
 import { playerLinkFor } from './admin';
-import { recentCount, recordEvent } from './rate';
+import { claimSlot, releaseSlot } from './rate';
 import type { Ctx } from './context';
 import { hashPin, newId, randomToken, timingSafeEqual } from './crypto';
 import { HttpError } from './http';
@@ -29,14 +29,15 @@ export async function enterGroupWord(ctx: Ctx, body: Record<string, unknown>) {
   const group = await getGroup(ctx.db);
   if (!group || !group.open_access) throw new HttpError(404, 'group_not_found', 'Open the link your organizer sent you.');
   if (!group.group_word_hash) return { ok: true };
-  if ((await recentCount(ctx, 'group_word_wrong', 15 * 60_000)) >= WORD_GUESSES_PER_15_MIN) {
-    throw new HttpError(429, 'too_many_tries', 'Too many tries. Wait 15 minutes and try again.');
-  }
+  // Each try takes a slot BEFORE the word is checked, so a burst of guesses sent at once all count
+  // (at most WORD_GUESSES_PER_15_MIN are ever checked). A right word gives its slot back.
+  const slot = await claimSlot(ctx, 'group_word_wrong', 15 * 60_000, WORD_GUESSES_PER_15_MIN);
+  if (!slot) throw new HttpError(429, 'too_many_tries', 'Too many tries. Wait 15 minutes and try again.');
   const word = typeof body.word === 'string' ? body.word.slice(0, 60) : '';
   if (!word.trim() || !timingSafeEqual(await hashGroupWord(word), group.group_word_hash)) {
-    await recordEvent(ctx, 'group_word_wrong');
     throw new HttpError(401, 'wrong_group_word', "That's not the group word. Ask in the group chat.");
   }
+  await releaseSlot(ctx, slot);
   setCookie(ctx, ACCESS_COOKIE, await accessToken(group), 365 * 86_400, 'Lax');
   return { ok: true };
 }
