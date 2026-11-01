@@ -740,3 +740,23 @@ database change, no migration.
 - Price-at-sign-up plan: docs/PRICE_SNAPSHOT.md (after Tue Nov 3). $14 setting frozen.
 - Preview redeployed 6:55 PM (same link), commit bc2d4c5. Bookmark right before:
   `00000280-00000000-00005115-946ddeaca1c4ff680436a4e361d1811e`.
+
+### Round 4 (Sat Oct 31 to Sun Nov 1, 2026, night): Alex's five fixes, then production
+- Pay and I paid stay hidden until Court booked; credit can go on any time (unchanged).
+- Unconfirmed I paid on a seat marked "did not play" at Finalize stays a claim (Home card
+  Paid / Didn't pay). Finalize skips it; nothing becomes credit until the organizer
+  confirms. A played seat with an unconfirmed I paid has its money back withheld until
+  Mark paid, which issues it in the same save. Reopen refuses while an unconfirmed short
+  I paid would be undone ("look again").
+- Drop then quick I'm in on another game: the phone sends any held drop first, then the
+  I'm in (src/pages/PlayerHome.tsx sendDropsBeforeJoin), so the new seat picks up the
+  credit. Booked, Not booked, venue Waitlist, reload and no signal covered in
+  tests/held-drop-fuzz.test.ts.
+- Remove player on a standby seat: no credit made, none lost (tests/audit-r4.test.ts).
+- Instant CREDIT chip on drop kept; Undo takes it back.
+- Two fresh audits: A (6 passes) clean; B found F1 to F4 and G1 (Unmark racing a Finalize
+  or Reopen from a second organizer device). All fixed: every Unmark and Mark paid step
+  is tied to the finalize it read, so a change in between gets "look again" and no money
+  moves. Old test BUG 5 rewritten for decision 3 (Unmark undoes only the latest payment).
+- Still open, cannot happen while $14 is frozen: lowering the price below credit already
+  on an unpaid seat leaves that seat unpaid until Finalize (ledger-fuzz case G).
