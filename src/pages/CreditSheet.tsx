@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CreditView } from '../../shared/api';
-import { creditEntryText } from '../../shared/credit';
+import { creditChanges } from '../../shared/credit';
 import { formatPrice, parseDollars } from '../../shared/money';
 import { api, ApiError, isDemo } from '../lib';
 import { Notice, Sheet, useToast } from '../ui';
 
-const SHOW_HISTORY = 8;
+/** The credit sheet lists this many of the latest changes. */
+const SHOW_CHANGES = 10;
 
 // Credit chip count-up (all timings in one place, easy to tweak).
 const CHIP_COUNT_MS = 750;
@@ -92,15 +93,14 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  const [more, setMore] = useState(false);
   useEffect(() => {
     if (!open) {
       setAsking(false);
       setError(null);
-      setMore(false);
     }
   }, [open]);
-  const history = more ? credit.history : credit.history.slice(0, SHOW_HISTORY);
+  // Every change to their credit in plain words, newest first, returns included ("Oct 31: $14 returned from Nov 5 (you dropped)").
+  const changes = creditChanges(credit.history, tz, organizerName, SHOW_CHANGES);
 
   async function run(fn: () => Promise<unknown>, done: string) {
     if (working.current) return;
@@ -176,21 +176,16 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
           )
         )}
         {error && !asking && <Notice tone="danger">{error}</Notice>}
-        {history.length > 0 && (
-          <ul className="credit-history" aria-label="Credit history" data-credit-history>
-            {history.map((e) => (
-              <li key={e.id} data-credit-entry={e.kind}>
-                {creditEntryText(e, tz, true)}
+        {changes.length > 0 && (
+          <ul className="credit-history" aria-label="Latest credit changes" data-credit-history>
+            {changes.map((c) => (
+              <li key={c.key} data-credit-change>
+                {c.text}
               </li>
             ))}
           </ul>
         )}
-        {credit.history.length > SHOW_HISTORY && (
-          <button className="link-btn" onClick={() => setMore((v) => !v)}>
-            {more ? 'Fewer' : 'More'}
-          </button>
-        )}
-        <p className="small muted">Use your credit when you pay for a game.</p>
+        <p className="small muted">Your credit goes on a game by itself when you tap I'm in.</p>
       </div>
     </Sheet>
   );

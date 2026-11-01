@@ -412,7 +412,7 @@ describe('dry run: edge cases', () => {
     expect((await view(d, g1.id)).needsFinalize).toBe(false);
   });
 
-  it('"I paid" not yet confirmed by the organizer still counts at finalize; unmarking it later takes the credit back', async () => {
+  it('"I paid" not yet confirmed by the organizer counts as paid at finalize but gives no credit back; unmarking it leaves the final price owed', async () => {
     const d = await dry();
     const [, g2] = await games(d);
     await join(d, g2.id, PLAYER_NAMES);
@@ -422,8 +422,9 @@ describe('dry run: edge cases', () => {
     endOf(d, g2);
     await finalize(d, g2.id, { everyone: true });
     let v = await view(d, g2.id);
-    expect(row(v, 'Alex')).toMatchObject({ paymentStatus: 'paid', creditBackCents: 500 });
-    // Organizer notices no Venmo came in and unmarks: the $5 credit goes away, Alex owes $9.
+    // Since Oct 31 only confirmed money becomes credit: it counts as paid, but no $5 back until confirmed.
+    expect(row(v, 'Alex')).toMatchObject({ paymentStatus: 'paid', creditBackCents: 0 });
+    // Organizer notices no Venmo came in and unmarks: Alex owes $9 (nothing to take back).
     const u = await d.ctx.organizer.call('POST', `/api/admin/sessions/${g2.id}/payment`, { playerId: d.ctx.byName.Alex, paid: false });
     expect(u.status, u.text).toBe(200);
     v = await view(d, g2.id);

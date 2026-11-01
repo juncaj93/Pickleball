@@ -5,9 +5,11 @@
 // other game: "Court not booked", "3 of 4 in", "I'm in" / "You're in" with Drop
 // out, and no money prompts (nobody pays before a court is booked; credit used at
 // sign-up still shows as "Paid with credit" or "Credit $3 used"). The words
-// waitlist, waiting and standby are not used for it. (Behind the scenes the
-// server still keeps people who tap I'm in on a game that is waiting on the
-// venue's court list in order; the screen simply calls them in.) Once the court
+// waitlist, waiting and standby are not used for it, unless the game is really
+// full beyond the max (then it has a real waitlist, like a booked game). A court
+// set to Waitlist is the same as Not booked here: the server gives normal seats.
+// (An old standby seat left over from before that rule is drawn as in while there
+// is room, until the one-time repair moves it in.) Once the court
 // is booked the game shows its normal look, pay prompts included; booked and
 // later changed back to not booked, they go away again. Someone who already
 // paid stays paid and still sees it. A game with a booked court that is full
@@ -26,26 +28,38 @@ export function isNoCourt(s: PlayerSessionView): boolean {
 /** One game, shown the normal way when its court is not booked. Other games are returned as they are. */
 function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView {
   if (!isNoCourt(s)) return s;
-  // Everyone who tapped I'm in counts as in, in the order they did.
-  const confirmed = [...s.confirmed, ...s.waitlist.map((w) => ({ name: w.name, attendanceConfirmed: false }))];
+  // A court on Waitlist works like Not booked: real seats while there is room. The server no longer makes standby seats
+  // for it, but an old standby seat still left over counts as in as long as there is room; only a full game keeps a waitlist.
+  const room = Math.max(0, maxPlayers - s.confirmed.length);
+  const lifted = s.waitlist.slice(0, room);
+  const stays = s.waitlist.slice(room);
+  const confirmed = [...s.confirmed, ...lifted.map((w) => ({ name: w.name, attendanceConfirmed: false }))];
   const mine = s.mine
     ? {
         ...s.mine,
-        ...(s.mine.status === 'waitlisted' ? { status: 'confirmed' as const, waitlistPosition: null } : {}),
-        // No money prompts before a court is booked. A payment that is already recorded stays and shows, and so
-        // does credit already used on the seat ("Credit $3 used"); what is left to pay waits for the court.
-        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0, useCreditCents: 0 }),
+        ...(s.mine.status === 'waitlisted'
+          ? (s.mine.waitlistPosition ?? Infinity) <= room
+            ? { status: 'confirmed' as const, waitlistPosition: null }
+            : { waitlistPosition: (s.mine.waitlistPosition ?? room + 1) - lifted.length }
+          : {}),
+        // No Pay before a court is booked. A payment that is already recorded stays and shows, and so does credit
+        // already used on the seat ("Credit $3 used"). Credit they can still use stays usable (Alex, Oct 31: a
+        // player with an unpaid seat and credit always has a way to use it): "Use $14 credit".
+        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0 }),
       }
     : s.mine;
   return {
     ...s,
     confirmed,
-    waitlist: [],
+    waitlist: stays,
     countText: countText(confirmed.length, maxPlayers),
     full: confirmed.length >= maxPlayers,
-    joinAs: 'in',
+    // Only a game that is really full beyond the max sends people to the waitlist, same as a booked one.
+    joinAs: confirmed.length >= maxPlayers ? 'waitlist' : 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
     courtState: s.courtState === 'waitlist' ? null : s.courtState,
+    // The old third value must not leave a different look (blue) behind: to players it is plain Not booked.
+    bookingStatus: s.bookingStatus === 'unavailable' ? 'needs_booking' : s.bookingStatus,
     mine,
   };
 }
@@ -63,7 +77,7 @@ export function courtDisplay(g: GroupView): GroupView {
     owed: g.owed.filter((o) => !noCourt.has(o.sessionId)),
     suggestion:
       g.suggestion && suggested
-        ? { ...g.suggestion, joinAs: 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
+        ? { ...g.suggestion, joinAs: suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
         : g.suggestion,
   };
 }

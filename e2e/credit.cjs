@@ -18,7 +18,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = 5195;
+const PORT = Number(process.env.E2E_PORT) || 5195;
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'credit-setup-token-0123456789';
 const PIN = '482913';
@@ -311,9 +311,9 @@ async function main() {
         const sheet = await openSheet(page);
         assert(squash(await sheet.locator('[data-credit-balance]').innerText()) === '$14 credit', `balance was "${await sheet.locator('[data-credit-balance]').innerText()}"`);
         const hist = sheet.locator('[data-credit-history] li');
-        assert((await hist.count()) === 1 && squash(await hist.first().innerText()) === '+$14 canceled Thu, Oct 29', `history: ${await hist.allInnerTexts()}`);
+        assert((await hist.count()) === 1 && / \$14 back from Oct 29 \(canceled\)$/.test(squash(await hist.first().innerText())), `history: ${await hist.allInnerTexts()}`);
         await sheet.locator('[data-request-refund]').waitFor();
-        await sheet.getByText('Use your credit when you pay for a game.').waitFor();
+        await sheet.getByText("Your credit goes on a game by itself when you tap I'm in.").waitFor();
         assert((await sheet.locator('[data-refund-pending]').count()) === 0, 'nothing pending');
         assert((await greenButtons(sheet)) <= 1, 'at most one green button on the sheet');
         await tidy(sheet, 'credit sheet');
@@ -646,8 +646,8 @@ async function main() {
     const { ctx, page } = await open('light', 390);
     await check(`Cancel session ${label}: ${asked ? 'asks' : 'does not ask'} "Were you charged for this court?"`, async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
-      await card.getByRole('button', { name: /^Session options/ }).click();
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('button', { name: /^Game menu for/ }).click();
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.getByRole('button', { name: 'Cancel session' }).waitFor();
       const q = dlg.getByText('Were you charged for this court?');
@@ -673,8 +673,8 @@ async function main() {
     let afterCancel = null;
     await check('answering Yes with an amount counts it as that canceled game\'s court cost in Money; the cash payer is listed as "Now their credit" and gets the credit', async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
-      await card.getByRole('button', { name: /^Session options/ }).click();
-      await card.getByRole('button', { name: 'Cancel session' }).click();
+      await card.getByRole('button', { name: /^Game menu for/ }).click();
+      await card.getByRole('menuitem', { name: 'Cancel session' }).click();
       const dlg = page.locator('dialog[open]');
       await dlg.getByRole('button', { name: 'Yes', exact: true }).click();
       await dlg.getByLabel('Amount charged').fill('35');

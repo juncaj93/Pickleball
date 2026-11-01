@@ -549,6 +549,25 @@ Three front-end fixes, one deploy. No database change, no money logic touched.
 - Proof: `tests/fixtures/tick-golden.json`, written by the old code, matches the new code at every 5-minute tick Oct 14 to Nov 27 (Sun Nov 1 clock change, 7:00, 7:30, 8:00 PM games, no-court game); 150 random games in every zone across four clock changes never lose a due alert. 766 unit tests, 893 browser checks in 22 files, all green.
 - Deploys: Pages `d087f6ce` (commit dcafc3a, 8:37 PM) and `3748190d` (commit 483e2ce, 9:25 PM). No database change. Clock Worker untouched: runs every 5 minutes, 0 errors.
 - Restore points: Time Travel bookmarks `0000014a-00000004-00005114-0a7d95b6118acbc8ec7497c655eab182` (6:40 PM), `00000167-00000000-00005115-a33828fd3013708f9198136a4f522f26` (before 8:37 PM), `00000172-00000000-00005115-f4eb03de0b830c0eb270f9ea479b1da4` (before 9:25 PM). SQL exports (165 rows, phone numbers, not committed) in that session's scratch folder. Code rollback: Pages `16bdf705` (polish deploy, commit 4508b42).
+
+
+### Organizer cleanup: game cards, court switch, Edit game, live screens (Sat Oct 31, 2026)
+Screens only. No money rule, amount, credit rule or Telegram word changed, and the player screens are identical.
+
+- **Court switch on every game card:** `Not booked | Waitlist | Booked`, one tap, saved at once (`POST /api/admin/sessions/:id/court-status`, one write so a game can never sit half way between two states). Waitlist reuses the existing third booking value (`booking_status = 'unavailable'`, the one the old screens called "Not available") and also sets the venue-waitlist flag (`court_state = 'waitlist'`), so everything that already understood the court waitlist (standby order, "Court opened") works as before. No database change: the column already allows it. Old rows holding only the third value now simply read as Waitlist. "Not available" is gone from every organizer screen.
+- **Players never see Waitlist.** `courtStatus` gives players "Court not booked" for it, `courtDisplay` draws it like any game with no court (everyone "in", no pay prompts). One planned difference: a game stored with only the old third value used to show players the gray words "No court available"; it now reads "Court not booked", as the spec asks.
+- **Do this now** keeps "Court opened / Didn't open" for waitlisted games (a card per game, above the other task cards) and the "I booked it" card for games with no court. The blue "Court waitlist" block and the amber "Book / I booked it" strip are gone from the cards.
+- **Gear pop-up** (small, anchored to the gear): Text the group, Edit game, Players, Add to calendar (when booked), Cancel session (red, last, apart). Escape or a tap outside closes it; arrow keys move between rows; focus returns to the gear. "Edit booking" and "Modify court" are gone.
+- **Edit game, one sheet** ("Edit game · Tue Nov 3"): the same switch (held until Save), "Cancel by Tue 8:00 AM, set automatically.", Date / Start / End, "Change court on CourtReserve", one Save. A changed date or time uses the old Move session code (`PUT /api/admin/sessions/:id/time`, players are not texted, the Moved text sheet opens as before); a changed switch only changes the status. Removed from the screens: More details, Not available, the cancellation deadline editor, "Fill in 12 hours before start", the Deadline line, the Booking sheet.
+- **Cancel-by is automatic:** always start minus 12 hours, worked out from the start every time it is shown (`cancelByIso` in `shared/time.ts`), so a move or a holiday needs nothing. Stored deadlines stay in the database untouched; the organizer screens just stop reading them. The server still keeps its own saved deadline for the drop rules (money logic, untouched); a move still rewrites it the way it always did. Note: Settings > Schedule still has "Cancellation deadline for new sessions (hours before play)". The cards no longer follow it (they always say 12 hours); the drop rules still do. It is 12 today.
+- **Card:** the date tile with the start time under it (same fix as the player cards: sized to the tile's column, never wraps; no end time). One small pill under the names, "2 of 3 paid" (people paid of people in, organizer left out, hidden when nobody is in), opens the same Players sheet as the menu. Made from data that exists today; the credit channel's work has not merged, so Money and Players screens are untouched. A red "Cancel by 8:00 AM today" shows only in the last 24 hours before cancel-by.
+- **Live organizer screens:** Home, game cards, Players, Money and History refresh by themselves like the player side (every 5 seconds while in use, every 15 seconds after 2 minutes idle, stopped after 10, one check on return to the tab). `GET /api/admin/version` is one batch of 7 small reads and returns a 16-letter hash; the full dashboard loads only when the hash changed. A refresh waits while the gear pop-up, any sheet or a finger is down, and Settings is left out so typing is never overwritten. A tiny "Updated just now" sits under the title bar (hidden while a sheet is open). Extra cost per open organizer screen: at most 720 tiny checks per hour while in use (about 240 per hour once idle for 2 minutes, none after 10 minutes), about 1 database batch each.
+
+### Tests (organizer cleanup)
+- Unit: `tests/admin-cleanup.test.ts` (22): switch, stored values, standby order, money untouched, players read Waitlist as Not booked, cancel-by across the clock change and holidays, move saves, pill numbers, the change stamp.
+- Browser: `e2e/admin-cleanup.cjs` (22): phone widths 360, 393, 430 in light and dark, the switch (colors, 4.5:1 text, tap targets), the pop-up (anchor, order, keys, focus), Edit game, pill, cancel-by line, players' view, Do this now, live refresh that does not move the page or close a pop-up or sheet.
+- Existing suites updated only where the old screens they drove were removed on purpose; see each file's history. Player-side checks were not changed.
+
 - Follow-up (Fri Oct 30, 10:50 PM): links only where a tap does the job. "Text the group" opens the direct /go/ text; CourtReserve words open CourtReserve; /admin words are plain (Open site button kept). TEST smart alert is one line with a TEST direct link on "Text the group".
 
 ## Credit used automatically at I'm in (Sat Oct 31, 2026)
@@ -613,3 +632,160 @@ game (kind `used` with the game's id).
   deployment `6721fb3d` (commit 6d35cb0). The deploy changed no data, so rolling the code
   back is enough.
 - Tests: 828 unit (52 files), 938 browser checks in 23 files, all green.
+
+## Money audit: correct in every case, and visible (Sat Oct 31, 2026)
+
+Spec: AUDIT_SPEC.md and START_HERE.md from Alex. No money rule changed, no
+database change, no migration.
+
+### What was wrong and is fixed (server; each has a test that fails on the old code)
+- **Half-moved money.** Drop out, Remove player, cancel, "Didn't open", un-cancel,
+  Finalize, Reopen and Unmark each saved in several steps. A request cut off between
+  them (the free plan's time limit, lost signal) could leave a player out with their
+  credit still on the game, a canceled game still holding credit, or a half-finalized
+  game, and a retry did not fix it. Each is now ONE batch with every amount worked out
+  inside the database (`seatMoneyBackStatements`, `returnSeatCreditStatements`,
+  `repriceStatements`, `creditBackStatements`, `holdCashStatements` in server/credit.ts);
+  a retry finishes or changes nothing. Finalize also refuses if any seat or credit
+  changed since it looked (`MONEY_STATE` in server/finalize.ts).
+- Mark paid / I paid could land on a player who had just dropped out (paid, out).
+- Undo of "Paid with credit" after Finalize gave back all the credit while the money
+  back from it stayed ($3 made). Refused once finalized.
+- Reopen unpaid a seat paid part credit, part cash and dropped the cash ($4 lost). The
+  cash is held against the seat, as Finalize does.
+- A refused Unmark (credit from the game already spent) still shrank the payment ($7 lost).
+- Finalize after the flat price went up held a seat's credit as cash too ($5 made).
+- I paid / Mark paid / Use credit landing just after a Finalize or Reopen (even a redo
+  at the same price) used the new price, or spent credit on a did-not-play seat. They
+  now check the exact finalize they read. I paid also sends the amount the screen showed.
+- A Reopen from a second device wiped a newer Finalize's credit back ($15 lost).
+- Unmark of "Credit $3" racing Finalize gave the $3 back twice.
+- Renaming the organizer in Settings could turn their court payment into a player's
+  credit on cancel; the organizer's id is saved before a rename, and a court-payment
+  row never becomes credit.
+- "I booked it" (or a booking edit) just after a cancel brought the canceled game back.
+- Price set to $0: anyone with credit got an error on I'm in.
+- The cash-out request Telegram line used the full saved name; now the first name.
+- A double-tapped Cancel answers "nothing changed" instead of an error.
+
+### Players see what happens to their money (player screens; preview, waits for "ship it")
+- Drop out: "You dropped out. $14 credit returned." ("$14 back as credit." for cash,
+  just "You dropped out." when nothing was paid), with Undo.
+- I'm in: "You're in. $14 credit used." / "You're in. $3 credit used, $11 due."
+  (no amount due before Court booked; same after "Game on!").
+- The CREDIT chip's sheet lists the last 10 changes in plain words, newest first,
+  returns included ("Oct 31: $14 returned from Nov 5 (you dropped)"). Kept the
+  existing chip instead of adding a second "Credit $14" line under the name (the
+  chip already shows only when there is credit or a pending cash out).
+- New card fields `dropCreditCents` / `dropCashCents`; the player's own credit history
+  now includes ended entries (their own only).
+
+### Not fixed (and why)
+- Organizer screens wait for the admin cleanup (not merged): Players-tab Held leaves
+  out cash held against an unpaid seat (`heldCents`); Money tab counts a held cash pair
+  on a settled did-not-play seat as Collected; Mark paid and Unmark don't send the
+  amount the screen showed (a stale organizer screen); the Players-tab Undo of a
+  refund should send the refund id (server accepts `ledgerId` now).
+- Decisions for Alex: an unconfirmed "I paid" becomes credit on drop or cancel and
+  Unmark can't take it back; Unmark ends cash held against a seat; seats are not
+  repriced when the flat price setting changes.
+
+### Tests
+- `tests/money-cutoff.test.ts`: every money action cut off at every write and retried
+  ends like a clean run; exact races.
+- `tests/ledger-fuzz.test.ts`: random sequences of every money action (double taps,
+  two at once, clock moves) with the books checked after every step. Default 360
+  sequences (~9,800 steps, ~50 s); `FUZZ_SEQS` / `FUZZ_PAR_SEQS` for long runs (6,000
+  run clean).
+- `tests/audit-attack.test.ts`: the independent attack suite (exact interleavings,
+  cut-offs on 21 actions, random sequences with full books).
+- `tests/audit-oct31.test.ts`, `tests/money-visible.test.ts`, `e2e/money-visible.cjs`.
+
+### Round 2 (Sat Oct 31, 2026, morning): Alex's answers
+- Base: the live site runs the admin cleanup (branch `claude/new-session-sm74gy`, commit
+  41dea7a, deployed as production "main" but never merged into GitHub main). It was
+  merged into this branch first, so deploying this branch keeps it.
+- Read-only live check (8:35 AM): no pot below $0, no credit or cash stuck on a seat
+  that left or a canceled game, no cash out larger than its pot, organizer id saved.
+  Only one player has credit history (Mitchel: $14 back from the canceled Oct 29 game,
+  used on Thu Nov 5; balance $0, matching his history and the Nov 5 seat). 2 unconfirmed
+  "I paid" taps live, 0 pending cash outs.
+- Decisions built: unconfirmed I paid is a claim (Home card Paid / Didn't pay, nothing
+  on the seat moves until then, Held not Collected); Unmark undoes only the latest
+  payment; organizer Mark paid / Unmark carry what the screen showed (`moneySeen`);
+  Players-tab refund Undo names the refund (`ledgerId`); Players Held and Money
+  Collected fixes. Tests: `tests/decisions-oct31.test.ts`.
+- Not built, waits for Alex: "existing sign-ups keep the price they signed at" needs
+  one new additive table (the price each seat signed at is not stored today).
+- Restore points before the preview: Time Travel bookmark
+  `00000218-00000004-00005115-0636e0716ea7288a3b03715050d8c00f` (10:22 AM Eastern);
+  SQL export `live-before-money-audit-preview-2026-10-31.sql` (185 rows, has phone
+  numbers, not committed) in this session's scratch folder.
+
+### Round 3 (Sat Oct 31, 2026, evening)
+- Drop out shows the money at once: the drop stays held on the phone for Undo (5 s), and
+  the screen draws in its credit with the banner (src/optimistic.ts). Kept the client
+  hold instead of a server-side drop + reversal: a real reversal would have to undo a
+  waitlist promotion and Telegram drop alerts made in those 5 seconds. Safe because
+  nothing is saved until the send, the send is idempotent (a seat can only leave once),
+  and a note on the phone finishes a drop the page could not send (closed, no signal),
+  up to 2 minutes. Two gaps there were fixed (a failed send while leaving lost the note;
+  a too-young note was ignored for the whole visit). tests/held-drop-fuzz.test.ts.
+- Live Mitchel (read-only, 6:00 PM): Thu Nov 5 is on the venue's court Waitlist, so his
+  I'm in is standby (owes nothing; the credit waits for Court opened, by rule). Pot $14 =
+  history. Nothing inconsistent; no fix needed. The card now says "Your $14 credit goes
+  on this game once the court is booked."; a player in and owing on a no-court game with
+  credit now sees "Use $14 credit" (Pay still waits for Court booked).
+- Third fresh audit: 7 findings, all fixed (tests/audit-r3.test.ts).
+- Price-at-sign-up plan: docs/PRICE_SNAPSHOT.md (after Tue Nov 3). $14 setting frozen.
+- Preview redeployed 6:55 PM (same link), commit bc2d4c5. Bookmark right before:
+  `00000280-00000000-00005115-946ddeaca1c4ff680436a4e361d1811e`.
+
+### Round 4 (Sat Oct 31 to Sun Nov 1, 2026, night): Alex's five fixes, then production
+- Pay and I paid stay hidden until Court booked; credit can go on any time (unchanged).
+- Unconfirmed I paid on a seat marked "did not play" at Finalize stays a claim (Home card
+  Paid / Didn't pay). Finalize skips it; nothing becomes credit until the organizer
+  confirms. A played seat with an unconfirmed I paid has its money back withheld until
+  Mark paid, which issues it in the same save. Reopen refuses while an unconfirmed short
+  I paid would be undone ("look again").
+- Drop then quick I'm in on another game: the phone sends any held drop first, then the
+  I'm in (src/pages/PlayerHome.tsx sendDropsBeforeJoin), so the new seat picks up the
+  credit. Booked, Not booked, venue Waitlist, reload and no signal covered in
+  tests/held-drop-fuzz.test.ts.
+- Remove player on a standby seat: no credit made, none lost (tests/audit-r4.test.ts).
+- Instant CREDIT chip on drop kept; Undo takes it back.
+- Two fresh audits: A (6 passes) clean; B found F1 to F4 and G1 (Unmark racing a Finalize
+  or Reopen from a second organizer device). All fixed: every Unmark and Mark paid step
+  is tied to the finalize it read, so a change in between gets "look again" and no money
+  moves. Old test BUG 5 rewritten for decision 3 (Unmark undoes only the latest payment).
+- Still open, cannot happen while $14 is frozen: lowering the price below credit already
+  on an unpaid seat leaves that seat unpaid until Finalize (ledger-fuzz case G).
+
+### Deploy (Sun Nov 1, 2026, 12:05 AM Eastern)
+- Gates: unit 1,203 passed (1 replay helper skipped by design), browser 25 files all
+  green (run.cjs 229/229 and admin-cleanup 26/26 rerun on a quiet machine), audit A clean
+  (b77e3c1, code unchanged since), audit B clean (1627848, 72 more race variants).
+- Production deployment 5674340d, commit c68fd63. Previous: c1bad936 (commit 41dea7a).
+- Restore points: Time Travel bookmark
+  `000002bf-00000000-00005116-9c9ae9bcc6928f296fc5f46421b048ca` (12:05 AM); SQL export
+  `live-before-round4-deploy-2026-11-01.sql` (213 rows, phone numbers, not committed) in
+  this session's scratch folder.
+- Read-only live check after: no pot below $0, no credit or cash stuck on a left seat or
+  canceled game, no cash out above a pot, no pending cash outs. Only pot: Mitchel $14 =
+  his history (kept $14 from canceled Thu Oct 29; three later uses all ended). One open
+  unconfirmed I paid: Mitchel, Tue Nov 3 (booked, still in): not a claim, it waits for
+  Mark paid as usual. His Oct 29 I paid became the $14 on Oct 28, before the claim rule.
+- Rollback: Cloudflare dashboard, Pages, pickleball-club, Deployments, c1bad936,
+  "Rollback to this deployment". No data change to undo.
+
+
+### Organizer cleanup, Waitlist rule, seat repair (Sat Oct 31 to Sun Nov 1, 2026)
+Screens, one seat rule, and one one-time repair. No price, amount, credit rule or Telegram word changed. No database change.
+
+- **Shipped Oct 31, 12:25 AM and later (deploys `c1bad936`, preview-checked):** court switch (Not booked | Waitlist | Booked), gear pop-up, Edit game sheet, automatic cancel-by (start minus 12 hours), paid pill, start time under the date tile, live organizer screens (`GET /api/admin/version`), one Do this now card per game, gear menu that opens down, up, or as a panel above the tab bar and never moves the page, "Not booked" on two lines, even card spacing (10 px top and bottom, 7.2 px between count row, names and pill).
+- **Seat rule, deployed Sun Nov 1, 3:15 AM Eastern (deploy `23ff4137`, then `eea78540`):** a court set to Waitlist behaves exactly like Not booked for sign-ups. I'm in gives a normal seat, credit goes on at I'm in, and Pay stays hidden until Court booked. A real waitlist exists only when the game is full beyond Max players. Moving the switch, Court opened and the old court endpoints never move a seat, payment or credit. Didn't open still cancels and every credit use comes back. Players keep seeing "Court not booked". The card line "credit goes on once the court is booked" is gone with the standby seats it described.
+- **One-time repair (ran once, then removed):** a route that ran the site's own `settle` for upcoming games on Waitlist with people waiting and room. Dry run showed only Mitchel on Thu Nov 5 (Brandon already in). The real run moved Mitchel in and put his $14 on (Paid with credit). Alex's Nov 5 seat was dropped and was not touched. The route and its token are gone (production answers "Not found", also with the old token).
+- **Live check after (read-only):** Nov 5 Brandon and Mitchel confirmed, Alex withdrawn; Mitchel's ledger: kept $14, live "used" $14 on Nov 5 (reason auto), pot $0; nobody waiting anywhere while a game has room; no pot below $0; no cash-outs pending.
+- **Restore points:** Time Travel bookmark `000002f1-00000000-00005116-9fda069f0c40099d335fc6afec7bc73b` (taken Sun Nov 1, about 3:10 AM Eastern), SQL export `live-before-waitlist-rule-2026-11-01.sql` (213 rows, phone numbers, in the session scratch folder, not committed). Code rollback: Pages deployment `5674340d-06c9-4b10-9408-55cb4a5a34d3` (commit c68fd63, the money audit).
+- **Tests:** 1,218 unit passed (1 skipped from the money audit's tests); browser suites all green (run.cjs 229, admin-cleanup 36, money-visible and the rest). Tests that assumed "a Waitlist court makes standby seats" were rewritten to the new rule, none deleted.
+- **Preview:** a separate throwaway database `pickleball-preview` (fake data) and the branch preview `preview-admin-look` were made for the look checks; they hold no real data and can be deleted.

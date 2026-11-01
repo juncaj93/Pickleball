@@ -30,14 +30,27 @@ export interface CourtStatus {
   playerText: string;
 }
 
+/** The organizer's three-way court switch. "waitlist" is the old third value ("unavailable") or the venue's court waitlist. */
+export type CourtSwitch = 'not_booked' | 'waitlist' | 'booked';
+
+/** True when the court is on the waitlist: the stored third booking value (once called "Not available") or the venue-waitlist flag. */
+export function isCourtWaitlist(s: { bookingStatus: BookingStatus; courtState: CourtInput['courtState'] }): boolean {
+  return s.bookingStatus !== 'booked' && (s.bookingStatus === 'unavailable' || s.courtState === 'waitlist');
+}
+
+export function courtSwitchOf(s: { bookingStatus: BookingStatus; courtState: CourtInput['courtState'] }): CourtSwitch {
+  if (s.bookingStatus === 'booked') return 'booked';
+  return isCourtWaitlist(s) ? 'waitlist' : 'not_booked';
+}
+
 export function courtStatus(s: CourtInput, tz = 'America/Detroit'): CourtStatus {
   if (s.canceled && s.courtState === 'not_opened') return off("Court didn't open");
   if (s.canceled) return off('Canceled');
   if (s.past) return off('Played');
   if (s.bookingStatus === 'booked') return { kind: 'booked', text: 'Court booked', playerText: 'Court booked' };
   if (s.started) return off('Started, no court was booked');
-  if (s.courtState === 'waitlist') return { kind: 'waitlist', text: 'Court waitlist', playerText: 'Court not booked' };
-  if (s.bookingStatus === 'unavailable') return off('No court available');
+  // Waitlist is the organizer's word only. Players read it exactly like Not booked.
+  if (isCourtWaitlist(s)) return { kind: 'waitlist', text: 'Waitlist', playerText: 'Court not booked' };
   if (s.bookingOpen === false && s.bookingOpensAt) {
     return { kind: 'later', text: `Booking opens ${formatShortDate(s.bookingOpensAt, tz)}`, playerText: 'Court not booked' };
   }

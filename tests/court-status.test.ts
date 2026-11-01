@@ -15,15 +15,16 @@ describe('court status words', () => {
     expect(courtStatus(base)).toEqual({ kind: 'needs', text: 'Court not booked', playerText: 'Court not booked' });
     expect(courtStatus({ ...base, courtState: 'waitlist' })).toEqual({
       kind: 'waitlist',
-      text: 'Court waitlist',
+      text: 'Waitlist',
       playerText: 'Court not booked', // players never read waiting or standby words (src/courtDisplay.ts)
     });
   });
 
-  it('is gray with the reason when canceled or unavailable', () => {
+  it('is gray with the reason when canceled', () => {
     expect(courtStatus({ ...base, canceled: true })).toMatchObject({ kind: 'off', text: 'Canceled' });
     expect(courtStatus({ ...base, canceled: true, courtState: 'not_opened' })).toMatchObject({ kind: 'off', text: "Court didn't open" });
-    expect(courtStatus({ ...base, bookingStatus: 'unavailable' })).toMatchObject({ kind: 'off', text: 'No court available' });
+    // The old third value ("Not available") now reads as Waitlist, and players read it as Not booked.
+    expect(courtStatus({ ...base, bookingStatus: 'unavailable' })).toEqual({ kind: 'waitlist', text: 'Waitlist', playerText: 'Court not booked' });
     expect(courtStatus({ ...base, bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' })).toMatchObject({ kind: 'later', text: 'Booking opens Tue, Nov 17' });
     // A booked or waitlisted session keeps its own look even before the window opens.
     expect(courtStatus({ ...base, bookingStatus: 'booked', bookingOpen: false, bookingOpensAt: '2026-11-17T12:00:00Z' }).kind).toBe('booked');

@@ -403,13 +403,14 @@ describe('waitlists', () => {
     await books(ctx);
   });
 
-  it('on the venue court waitlist (standby) nothing is used until Court opened moves them in', async () => {
+  it('on a court set to Waitlist it is exactly like Not booked: a real seat and the credit goes on at I\'m in; Court opened changes nothing', async () => {
     const ctx = await group({ noCourt: true });
     await givePot(ctx, 'Casey', 900);
     const g = await on(ctx, '2026-11-05');
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/court`, { action: 'waitlist' });
-    expect(await join(ctx, g.id, 'Casey')).toMatchObject({ result: 'standby' });
-    expect(await pot(ctx, 'Casey')).toBe(900);
+    expect(await join(ctx, g.id, 'Casey')).toMatchObject({ result: 'confirmed', creditCents: 900 });
+    expect(await mine(ctx, 'Casey', g.id)).toMatchObject({ status: 'confirmed', creditCents: 900, oweCents: 500 });
+    expect(await pot(ctx, 'Casey')).toBe(0);
     await ctx.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
     expect(await mine(ctx, 'Casey', g.id)).toMatchObject({ status: 'confirmed', creditCents: 900, oweCents: 500 });
     expect(await pot(ctx, 'Casey')).toBe(0);

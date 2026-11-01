@@ -60,8 +60,8 @@ describe('which games count as having no court', () => {
 describe('(a) no words about waiting on a game with no court', () => {
   it('the card never says waitlist, waiting or standby, for someone not in, someone in, and someone put on the list', async () => {
     const { ctx, noCourt, waitlisted } = await scene();
-    for (const n of ['Emery', 'Frankie']) await post(ctx, n, `/api/sessions/${waitlisted.id}/join`); // answered "standby" behind the scenes
-    expect((await raw(ctx, 'Emery')).sessions.find((s) => s.id === waitlisted.id)!.mine!.status).toBe('waitlisted'); // the record is unchanged
+    for (const n of ['Emery', 'Frankie']) await post(ctx, n, `/api/sessions/${waitlisted.id}/join`); // a court on Waitlist gives normal seats
+    expect((await raw(ctx, 'Emery')).sessions.find((s) => s.id === waitlisted.id)!.mine!.status).toBe('confirmed');
     await post(ctx, 'Blair', `/api/sessions/${noCourt.id}/join`);
     for (const who of ['Devon', 'Alex', 'Emery', 'Frankie', 'Blair']) {
       const g = await shown(ctx, who);
@@ -157,7 +157,7 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     const id = waitlisted.id;
     const join = async () => (await post(ctx, 'Emery', `/api/sessions/${id}/join`)).data;
     const res = await join();
-    expect(res.result).toBe('standby'); // what the server calls it
+    expect(res.result).toBe('confirmed'); // a court on Waitlist is just Not booked: a real seat
     expect(joinedText(res, true)).toBe("You're in");
     expect(card(await shown(ctx, 'Emery'), id)).toMatch(/You're in.*Drop out/);
     expect((await post(ctx, 'Emery', `/api/sessions/${id}/withdraw`)).status).toBe(200);
@@ -176,6 +176,8 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     expect(joinedText({ result: 'confirmed' }, true)).toBe("You're in");
     expect(joinedText({ result: 'standby', position: 2 }, false)).toBe("You're on standby, #2");
     expect(joinedText({ result: 'waitlisted', position: 1 }, false)).toBe("You're #1 on the waitlist");
+    // A really full game with no court booked has a real waitlist too: the banner says so, not "You're in".
+    expect(joinedText({ result: 'waitlisted', position: 1 }, true)).toBe("You're #1 on the waitlist");
     expect(card(await shown(ctx, 'Devon'), noCourt.id)).toMatch(/I'm in/);
     // A booked game that is full still says waitlist.
     const max = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data.group.settings.maxPlayers;
@@ -184,5 +186,68 @@ describe('(f) dropping out and joining again on a game with no court', () => {
     for (const n of ['Alex', 'Blair', 'Casey', 'Devon']) await post(ctx, n, `/api/sessions/${booked.id}/join`);
     const text = card(await shown(ctx, 'Emery'), booked.id);
     expect(text).toMatch(/Join waitlist/);
+  });
+});
+
+// Alex, Oct 31 (Mitchel on the live site): drop a game paid with credit, then I'm in again. And: a player with an
+// unpaid seat and credit available always sees a way to use it, even before the court is booked.
+describe('drop and rejoin with credit, on every kind of court', () => {
+  const pot = async (ctx: Ctx, n: string) => (await raw(ctx, n)).credit.balanceCents;
+  const mineOn = async (ctx: Ctx, n: string, id: string) => (await raw(ctx, n)).sessions.find((s) => s.id === id)!.mine!;
+  async function withCredit() {
+    const s = await scene();
+    const old = (await s.ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions[0];
+    s.ctx.app.db.raw.exec(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+       SELECT 'pot-devon', id, '${s.ctx.byName.Devon}', 'kept', 1400, '${old.id}', '2026-10-26T13:00:00.000Z', 'canceled' FROM groups`,
+    );
+    return s;
+  }
+
+  for (const kind of ['booked', 'noCourt'] as const) {
+    it(`${kind === 'booked' ? 'court booked' : 'court not booked'}: Paid with credit, Drop out, I'm in again: the credit goes on again, Paid with credit`, async () => {
+      const s = await withCredit();
+      const id = s[kind].id;
+      expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+      expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/withdraw`)).data).toMatchObject({ creditReturnedCents: 1400 });
+      expect(await pot(s.ctx, 'Devon')).toBe(1400);
+      expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+      expect(await pot(s.ctx, 'Devon')).toBe(0);
+      expect(card(await shown(s.ctx, 'Devon'), id)).toContain('Paid with credit');
+    });
+  }
+
+  it("court set to Waitlist (Mitchel's Nov 5) is just Not booked: a real seat, the credit goes on at I'm in (Paid with credit), no waiting words; Court opened changes nothing", async () => {
+    const s = await withCredit();
+    const id = s.waitlisted.id;
+    expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/join`)).data).toMatchObject({ result: 'confirmed', creditCents: 1400, paidWithCredit: true });
+    expect(await pot(s.ctx, 'Devon')).toBe(0);
+    const text = card(await shown(s.ctx, 'Devon'), id);
+    expect(text).toContain("You're in");
+    expect(text).toContain('Paid with credit');
+    // The old line "credit goes on once the court is booked" is gone: there is nothing left waiting.
+    expect(text).not.toMatch(/once the court is booked|goes on this game/);
+    expect(text).not.toMatch(FORBIDDEN);
+    expect(await mineOn(s.ctx, 'Devon', id)).toMatchObject({ status: 'confirmed', paymentStatus: 'paid', paidWithCredit: true });
+    // The organizer marks the court booked ("Court opened"): nobody's seat or credit changes.
+    expect((await s.ctx.organizer.call('POST', `/api/admin/sessions/${id}/booked`, {})).status).toBe(200);
+    expect(await mineOn(s.ctx, 'Devon', id)).toMatchObject({ status: 'confirmed', paymentStatus: 'paid', paidWithCredit: true });
+    expect(await pot(s.ctx, 'Devon')).toBe(0);
+  });
+
+  it('court not booked, in and unpaid, credit arrives later: "Use $14 credit" shows (no Pay), and it works', async () => {
+    const s = await scene();
+    const id = s.noCourt.id;
+    await post(s.ctx, 'Devon', `/api/sessions/${id}/join`);
+    const old = (await s.ctx.organizer.call('GET', '/api/admin/dashboard')).data.sessions[0];
+    s.ctx.app.db.raw.exec(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+       SELECT 'later-devon', id, '${s.ctx.byName.Devon}', 'kept', 1400, '${old.id}', '2026-10-26T13:00:00.000Z', 'canceled' FROM groups`,
+    );
+    const text = card(await shown(s.ctx, 'Devon'), id);
+    expect(text).toContain('Use $14 credit');
+    expect(text).not.toMatch(/\bPay\b|\bdue\b|I paid/);
+    expect((await post(s.ctx, 'Devon', `/api/sessions/${id}/use-credit`)).data).toMatchObject({ ok: true, usedCents: 1400, paid: true });
+    expect(card(await shown(s.ctx, 'Devon'), id)).toContain('Paid with credit');
   });
 });

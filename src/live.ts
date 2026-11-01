@@ -15,10 +15,26 @@ import { LIVE_UPDATES, LivePoller } from './livecore';
  * If a sheet is open, a button is saving or a finger is down, the new data
  * waits and is applied the moment things go quiet.
  */
-export function useLiveUpdates({ enabled, version, reload }: { enabled: boolean; version: string | null; reload: () => Promise<boolean> }) {
+export function useLiveUpdates({
+  enabled,
+  version,
+  reload,
+  path = '/api/group/version',
+  onChecked,
+}: {
+  enabled: boolean;
+  version: string | null;
+  reload: () => Promise<boolean>;
+  /** The tiny "did anything change?" address. The organizer's screens use their own. */
+  path?: string;
+  /** A check went through (changed or not). */
+  onChecked?: () => void;
+}) {
   const poller = useRef<LivePoller | null>(null);
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
+  const checkedRef = useRef(onChecked);
+  checkedRef.current = onChecked;
   const pending = useRef(false);
   const applying = useRef(false);
   // The tiny check works but the full load does not: wait (doubling, up to a minute) instead of reloading every check.
@@ -50,7 +66,8 @@ export function useLiveUpdates({ enabled, version, reload }: { enabled: boolean;
       now: () => Date.now(),
       setTimer: (fn, ms) => setTimeout(fn, ms),
       clearTimer: (t) => clearTimeout(t as ReturnType<typeof setTimeout>),
-      fetchStamp: async () => (await api<{ v: string }>('GET', '/api/group/version')).v,
+      fetchStamp: async () => (await api<{ v: string }>('GET', path)).v,
+      onChecked: () => checkedRef.current?.(),
       isVisible: () => document.visibilityState === 'visible',
       onChange: () => {
         if (demoOn() || Date.now() < cooldown.current.until) return;

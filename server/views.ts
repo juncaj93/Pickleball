@@ -6,7 +6,7 @@ import type {
   PlayerSessionView,
 } from '../shared/api';
 import { cardWindows, deadlineMs } from '../shared/cards';
-import { NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
+import { isPaymentClaim, moneySeen, NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
 import { holidayFor } from '../shared/holidays';
 import { courtSplit, flatAtFinalize } from '../shared/pricing';
 import type { GroupSettings } from '../shared/settings';
@@ -32,6 +32,9 @@ const NO_MONEY = {
   selfPaid: false,
   oweCents: 0,
   creditCents: 0,
+  dropCreditCents: 0,
+  dropCashCents: 0,
+  dropClaimCents: 0,
   paidEarlierCents: 0,
   paidWithCredit: false,
   useCreditCents: 0,
@@ -62,6 +65,8 @@ export function playerSessionView(
   const owes = !!mine && mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id);
   const price = mine ? (prices.get(mine.player_id)?.cents ?? 0) : 0;
   const owe = owes ? Math.max(0, price - pot.seat.usedCents - pot.seat.cashCents) : 0;
+  const paidNow = mine && mine.payment_status === 'paid' && !mine.refunded_at ? (mine.payment_amount_cents ?? 0) : 0;
+  const claimed = !!mine && paidNow > 0 && !!mine.self_paid_at;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
         status: mine.status,
@@ -74,6 +79,12 @@ export function playerSessionView(
         signupAt: mine.confirmed_at ?? mine.claimed_at,
         oweCents: owe,
         creditCents: mine.payment_status === 'unpaid' ? pot.seat.usedCents : 0,
+        // What a drop out would give back right now (the same sums as seatMoneyBackStatements): credit used on the
+        // seat goes back to the pot; cash paid toward it (and cash held against it) comes back as credit.
+        // An unconfirmed "I paid" freezes the seat on a drop: nothing moves until the organizer confirms it (dropClaimCents).
+        dropCreditCents: isOrganizer || claimed ? 0 : pot.seat.usedCents,
+        dropCashCents: isOrganizer || claimed ? 0 : pot.seat.cashCents + Math.max(0, paidNow - pot.seat.usedCents - pot.seat.cashCents),
+        dropClaimCents: isOrganizer || !claimed ? 0 : Math.max(paidNow, pot.seat.usedCents + pot.seat.cashCents),
         paidEarlierCents: mine.payment_status === 'unpaid' ? pot.seat.cashCents : 0,
         paidWithCredit: mine.payment_status === 'paid' && pot.seat.usedCents > 0 && pot.seat.usedCents >= (mine.payment_amount_cents ?? 0),
         useCreditCents: owes && !canceled ? Math.min(pot.usableCents, owe) : 0,
@@ -199,6 +210,26 @@ export function adminSessionView(
         paidEarlierCents: r.payment_status === 'unpaid' ? seat.cashCents : 0,
         creditBackCents: seat.backCents,
         creditBackReason: seat.backReason,
+        // What Remove would give back right now (the same sums as a drop; a claim moves nothing).
+        ...(() => {
+          const paidNow = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;
+          const claimed = paidNow > 0 && !!r.self_paid_at;
+          return {
+            dropCreditCents: me || claimed ? 0 : seat.usedCents,
+            dropCashCents: me || claimed ? 0 : seat.cashCents + Math.max(0, paidNow - seat.usedCents - seat.cashCents),
+            dropClaimCents: me || !claimed ? 0 : Math.max(0, paidNow - seat.usedCents - seat.cashCents),
+          };
+        })(),
+        moneySeen: moneySeen({
+          paymentStatus: r.payment_status,
+          paymentAmountCents: r.payment_amount_cents,
+          refunded: !!r.refunded_at,
+          selfPaid: !!r.self_paid_at,
+          creditCents: seat.usedCents,
+          cashCents: seat.cashCents,
+          priceCents: share,
+          finalizedAt: session.finalized_at ?? null,
+        }),
         played: r.played === null || r.played === undefined ? null : r.played === 1,
         isOrganizer: me,
         waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
@@ -228,6 +259,8 @@ export function adminSessionView(
       .filter((r) => r.player_id !== organizerId)
       .map((r) => {
         const seat = potFor(r);
+        // A claim (unconfirmed "I paid" on a seat that left) is not money the players cover.
+        if (isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: session.finalized_at && r.played === 0 ? false : null }, session.status === 'canceled')) return 0;
         if (r.payment_status === 'paid' && !r.refunded_at) return (r.payment_amount_cents ?? 0) - seat.backCents;
         // An unpaid seat: its whole price (what they still owe, plus credit and cash already put on it).
         if (r.status === 'confirmed' && r.payment_status === 'unpaid') return prices.get(r.player_id)?.cents ?? 0;
