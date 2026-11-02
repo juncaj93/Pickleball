@@ -636,6 +636,8 @@ function GameFilterToggle({ filter, onChange }: { filter: GameFilter; onChange: 
   );
 }
 
+const NOT_LOADED = 'Your name is saved, but your games did not load. Reload this page.';
+
 function NamePicker({
   g,
   onPicked,
@@ -652,6 +654,8 @@ function NamePicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // True after a pick whose games did not load: the old screen must not come back (Cancel reloads instead).
+  const [stale, setStale] = useState(false);
   async function pick(playerId: string) {
     if (busy) return;
     setBusy(true);
@@ -670,7 +674,10 @@ function NamePicker({
         await onPicked();
       } catch {
         // The name is saved on this phone, but the games did not load: stay here so nobody acts on the old screen.
-        setError('Your name is saved, but your games did not load. Tap your name again.');
+        // (Cancel now reloads the page: going back to the old screen would show another name's games.)
+        setAdding(false);
+        setStale(true);
+        setError(NOT_LOADED);
       }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save your name.');
@@ -681,7 +688,8 @@ function NamePicker({
   if (adding) return <AddMyName onPick={pick} onDone={() =>
         void Promise.resolve(onPicked()).catch(() => {
           setAdding(false);
-          setError('Your name is saved, but your games did not load. Tap your name again.');
+          setStale(true);
+          setError(NOT_LOADED);
         })
       } onBack={() => setAdding(false)} />;
   return (
@@ -698,7 +706,7 @@ function NamePicker({
         Add my name
       </button>
       {onCancel && (
-        <button className="btn ghost" onClick={onCancel}>
+        <button className="btn ghost" disabled={busy} onClick={() => (stale ? window.location.reload() : onCancel())}>
           Cancel
         </button>
       )}
@@ -1204,6 +1212,10 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '' }: { iso: string; t
   );
 }
 
+/** A comment of this many characters or fewer is a pill; a longer one is a soft box. */
+const NOTE_PILL_MAX = 18;
+const noteLook = (text: string) => (text.trim().length <= NOTE_PILL_MAX ? 'note-pill' : 'note-box');
+
 function countLine(s: PlayerSessionView): string {
   if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   return s.countText;
@@ -1594,7 +1606,9 @@ export function ScheduleRow({
   // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled (with the organizer's reason).
   const courtWord = <span>{court.playerText}</span>;
   let status: ReactNode;
-  if (s.canceled) status = <span className="st-canceled">{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
+  // A canceled game's reason is shown like a comment: a pill when the reason is short, a soft box when it is long (same words as before).
+  const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
+  if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn)
     status = (
@@ -1645,7 +1659,8 @@ export function ScheduleRow({
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} ts={s.extra ? '' : tsClass(ts, flip)} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} />
+        <div className="sched-when-col">
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
           // where it ends, on a second short line, so nobody is misled.
@@ -1657,6 +1672,13 @@ export function ScheduleRow({
             </div>
           );
         })()}
+        {/* A one-off game: the usual date tile, and a small EXTRA tag under the time. */}
+        {s.extra && (
+          <span className="extra-flag" aria-hidden="true">
+            EXTRA
+          </span>
+        )}
+        </div>
       </div>
       <h2 id={`s-${s.id}`} className="sr-only">
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
@@ -1686,7 +1708,7 @@ export function ScheduleRow({
           {s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>}
 
           {s.extra && <span className="sr-only">Extra game</span>}
-          {s.note && <p className="game-note">{s.note}</p>}
+          {s.note && (s.note.trim().length <= NOTE_PILL_MAX ? <span className="game-note note-pill">{s.note.trim()}</span> : <p className="game-note note-box">{s.note}</p>)}
           {goodNews && <Notice tone="ok">{goodNews}</Notice>}
           {tier === 'later' && noteEl}
         </div>

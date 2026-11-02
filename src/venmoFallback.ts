@@ -29,14 +29,19 @@ export interface PageHideWin {
  * Start watching right after Pay is tapped. `onNoApp` runs once, only if the page stayed in view the whole wait.
  * Returns a function that stops the watching (called by itself when it is over).
  */
+let active: (() => void) | null = null;
+
 export function watchVenmoLaunch(
   onNoApp: () => void,
   waitMs: number = NO_VENMO_WAIT_MS,
   doc: VisibilityDoc = document,
   win: PageHideWin = window,
 ): () => void {
+  // Only one watch at a time (two Pay buttons tapped within 2 seconds still give one note).
+  active?.();
   let over = false;
   const stop = () => {
+    if (active === stop) active = null;
     over = true;
     clearTimeout(timer);
     doc.removeEventListener('visibilitychange', onVisibility);
@@ -54,5 +59,6 @@ export function watchVenmoLaunch(
   }, waitMs);
   doc.addEventListener('visibilitychange', onVisibility);
   win.addEventListener('pagehide', stop);
+  active = stop;
   return stop;
 }

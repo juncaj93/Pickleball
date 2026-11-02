@@ -1561,6 +1561,15 @@ Nothing here is deployed to the live site. New switches: none (see "Why no switc
   (the game card and the game-day Pay card). `src/venmoFallback.ts`, `useNoVenmoNote` in `PlayerHome.tsx`.
   Only phones where Pay hands over to the app (`venmo://`) get it; computers and the organizer's own Venmo buttons do not.
 
+- **Item 9: extra (one-off) game tile and comments (player screens only).** An extra game now uses the normal date tile
+  (no more ink or cream tile) with a small purple EXTRA tag under the time. The organizer's comment shows as a pill when it is
+  18 characters or fewer, otherwise as a soft tinted note box (`.note-pill` / `.note-box` in `src/player-cards.css`, same
+  `game-note` class as before). A canceled game's reason follows the same rule on its status line: the words are unchanged
+  ("Canceled - Rain"), only the look is a pill or a box. Item 9 was not in the POLISH_SPEC file I was first given (it ended
+  at item 8); it was added from Alex's description. Admin cards are untouched. Tests: `extra games and comments` in
+  `e2e/layout-polish.cjs` (normal tile, tag under the time inside its column, pill vs box, canceled reason, a normal game has
+  none of it; 12 looks incl. 320 px, 200% text, light and dark); two old checks that expected the ink tile were updated.
+
 ### Items from "Later cleanup batch" (docs/AUDIT_SCENARIOS_player.md)
 L1 to L4 fixed (all layout-only). **L5 not done** (it is about a failed drop on a shared phone, not layout).
 

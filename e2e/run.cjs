@@ -3488,10 +3488,9 @@ async function main() {
       if (await more2.count()) await more2.click();
       const prow = pl.locator('.schedule article[data-extra="yes"]');
       await prow.waitFor();
-      // Extra games get their own tile (ink in light, cream in dark) instead of "Extra game" words on the card.
-      const xt = await prow.locator('.tile.extra').evaluate((el) => getComputedStyle(el).backgroundColor);
-      const plainTile = await pl.locator('.schedule article:not([data-extra]) .tile').first().evaluate((el) => getComputedStyle(el).backgroundColor);
-      assert(xt !== plainTile, 'the extra game tile should look different from a normal tile');
+      // Extra games use the normal date tile (Nov 2026, item 9) and a small EXTRA tag under the time; the words "Extra game" stay for screen readers.
+      assert((await prow.locator('.tile.extra').count()) === 0, 'the extra game uses the normal date tile');
+      assert((await prow.locator('.extra-flag', { hasText: 'EXTRA' }).count()) === 1, 'a small EXTRA tag under the time');
       assert((await prow.getByText('Extra game').count()) === 1 && (await prow.getByText('Extra game').first().evaluate((el) => el.classList.contains('sr-only'))), 'the words "Extra game" stay for screen readers only');
       await prow.getByText('Court 3').waitFor();
       assert((await prow.getByRole('button', { name: "I'm in" }).count()) === 1, 'players can sign up for it');

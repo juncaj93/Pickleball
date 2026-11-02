@@ -97,6 +97,61 @@ async function main() {
     }
   }
 
+  /* ---------------- 9: extra games (EXTRA tag, comment pill / soft box) and canceled reasons ---------------- */
+  for (const l of LOOKS) {
+    await check(`extra games and comments, ${tag(l)}: normal tile, EXTRA tag under the time, short comment = pill, long = soft box, none = nothing; canceled reason the same; a normal game has none of it`, async () => {
+      const a = await openPlayer('Ryan', l.width, l.scheme, l.pct);
+      const f = await a.page.evaluate(({ ids, S8, normal }) => {
+        const rect = (e) => e && e.getBoundingClientRect();
+        const info = (id) => {
+          const c = document.getElementById(`row-${id}`);
+          if (!c) return null;
+          const col = c.querySelector('.sched-tilecol');
+          const time = c.querySelector('.sched-time');
+          const flag = c.querySelector('.extra-flag');
+          const note = c.querySelector('.game-note');
+          const st = c.querySelector('.st-canceled');
+          const tile = c.querySelector('.tile.ptile');
+          return {
+            extraTile: !!c.querySelector('.tile.extra'),
+            tileBg: tile && getComputedStyle(tile).backgroundColor,
+            flag: flag && flag.textContent.trim(),
+            flagBelowTime: flag && time ? rect(flag).top >= rect(time).bottom - 1 : null,
+            flagInsideCol: flag && col ? rect(flag).left >= rect(col).left - 1 && rect(flag).right <= rect(col).right + 1 : null,
+            noteClass: note ? note.className : null,
+            noteText: note ? note.textContent.trim() : null,
+            noteRadius: note ? parseFloat(getComputedStyle(note).borderTopLeftRadius) : null,
+            noteBg: note ? getComputedStyle(note).backgroundColor : null,
+            stClass: st ? st.className : null,
+          };
+        };
+        return { short: info(ids.short), long: info(ids.long), none: info(ids.none), rain: info(S8), normal: info(normal) };
+      }, { ids: w.extras, S8: S[8], normal: S[1] });
+      const bad = [];
+      const nrm = f.normal;
+      for (const [k, c] of Object.entries({ short: f.short, long: f.long, none: f.none })) {
+        if (!c) { bad.push(`${k}: card missing`); continue; }
+        if (c.extraTile) bad.push(`${k}: still the special tile`);
+        if (c.tileBg !== nrm.tileBg) bad.push(`${k}: tile color ${c.tileBg} is not the normal ${nrm.tileBg}`);
+        if (c.flag !== 'EXTRA' || !c.flagBelowTime || !c.flagInsideCol) bad.push(`${k}: EXTRA tag ${JSON.stringify([c.flag, c.flagBelowTime, c.flagInsideCol])}`);
+      }
+      if (!f.short.noteClass || !/note-pill/.test(f.short.noteClass) || f.short.noteText !== 'Bring balls') bad.push(`short comment: ${JSON.stringify([f.short.noteClass, f.short.noteText])}`);
+      else if (f.short.noteRadius < 14) bad.push(`short comment is not pill-shaped (${f.short.noteRadius})`);
+      if (!f.long.noteClass || !/note-box/.test(f.long.noteClass) || !/side door/.test(f.long.noteText)) bad.push(`long comment: ${JSON.stringify([f.long.noteClass, f.long.noteText])}`);
+      else if (f.long.noteRadius > 16 || f.long.noteBg === 'rgba(0, 0, 0, 0)') bad.push('long comment is not a tinted box');
+      if (f.none.noteClass) bad.push('no comment, yet a note shows');
+      if (f.rain && !/note-pill/.test(f.rain.stClass || '')) bad.push(`canceled reason "Rain" should be a pill: ${f.rain.stClass}`);
+      if (nrm.flag || nrm.noteClass) bad.push(`a normal game shows an EXTRA tag or a note: ${JSON.stringify(nrm)}`);
+      // The long canceled reason (20 characters, "Thanksgiving week") is a soft box.
+      const tg = await a.page.evaluate(() => [...document.querySelectorAll('.st-canceled')].map((e) => [e.textContent.trim(), e.className]));
+      const tw = tg.find((x) => /Thanksgiving week/.test(x[0]));
+      if (tw && !/note-box/.test(tw[1])) bad.push(`long canceled reason should be a box: ${tw[1]}`);
+      if (l.pct === 200 || (l.width === 390 && l.pct === 100)) await shot(a.page, `extra-${l.width}-${l.scheme}-${l.pct}.png`);
+      await a.ctx.close();
+      none(bad);
+    });
+  }
+
   /* ---------------- 3: the CREDIT text in the header ---------------- */
   for (const l of LOOKS.filter((x) => x.scheme === 'light')) {
     await check(`header credit, ${tag(l)}: label over the amount, right-aligned, whole, with "${L.LONG.slice(0, 11)}…" ($140) beside it; hidden at $0`, async () => {
@@ -258,7 +313,7 @@ async function main() {
           around: (document.body.innerText.match(/.{0,40}\$140.{0,20}/s) || [''])[0].replace(/\s+/g, ' '),
         }));
         // While waiting: either the name list is still up, or Ryan's own page is. Never the old name's page under the new cookie.
-        if (/\$140/.test(snap.text) || (snap.title === L.LONG && snap.cards > 0 && !/Who are you/.test(snap.text) === false)) seen.push(`old name's page showed: ${snap.title} ${/\$140/.test(snap.text) ? `($140 near "${snap.around}")` : ''}`);
+        if (/\$140/.test(snap.text) || (snap.title === L.LONG && snap.cards > 0 && /Who are you/.test(snap.text))) seen.push(`old name's page showed: ${snap.title} ${/\$140/.test(snap.text) ? `($140 near "${snap.around}")` : ''}`);
         if (snap.title === L.LONG && snap.cards > 0) seen.push('old name\'s cards still tappable after the switch');
         await sleep(100);
       }
@@ -498,7 +553,7 @@ async function main() {
       const appHref = await link.getAttribute('data-app-href');
       assert(/^https:\/\/venmo\.com\/\?txn=pay&recipients=organizer&amount=14/.test(href) && /note=Pickleball/.test(href) && /^venmo:\/\/paycharge\?/.test(appHref), `link: ${href} ${appHref}`);
       await link.click();
-      await a.page.waitForTimeout(1500);
+      await a.page.waitForTimeout(900);
       assert((await note(a.page).count()) === 0, 'nothing before about 2 seconds');
       await note(a.page).waitFor({ timeout: 2500 });
       assert((await note(a.page).innerText()).trim() === 'No Venmo? Pay Alex directly', `text: ${await note(a.page).innerText()}`);

@@ -901,9 +901,9 @@ async function main() {
   await check('canceled without a reason: just "Canceled"', async () => {
     assert(fact('Ryan', S[10]).status === 'Canceled', fact('Ryan', S[10]).status);
   });
-  await check('extra game with a note: ink tile, "Extra game" for screen readers, the whole note shows', async () => {
+  await check('extra game with a note: normal tile, EXTRA tag, "Extra game" for screen readers, the whole note shows (a long one in a soft box)', async () => {
     const c = fact('Ryan', E.note);
-    assert(c.tileExtra && /Extra game/.test(c.allText) && c.text.includes(NOTE), c.text);
+    assert(!c.tileExtra && /EXTRA/.test(c.text) && /Extra game/.test(c.allText) && c.text.includes(NOTE), c.text);
   });
   await check('not in, 4 already in, room left: I\'m in + "If 5 play, you get $3 back as credit."', async () => {
     const c = fact('Ryan', E.note);

@@ -294,11 +294,13 @@ section[aria-labelledby='sessions-title'],
 }
 
 /* The gear's pop-up rows wrap at big text. */
-.menu-row {
-  white-space: normal;
-  overflow-wrap: anywhere;
-  height: auto;
-  padding-block: 6px;
+@container pbwide (max-width: 17rem) {
+  .menu-row {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    height: auto;
+    padding-block: 6px;
+  }
 }
 
 /* ---------- 7. The page header at big text: the buttons, credit and date take a row of their own ---------- */
@@ -393,13 +395,15 @@ section[aria-labelledby='sessions-title'],
 }
 
 /* ---------- 9. Rows with a name on the left and a chip or buttons on the right (sheets, lists) ---------- */
-/* When the two don't fit side by side the right part drops under the name, and a long name wraps (even with no spaces). */
-.spread {
-  flex-wrap: wrap;
-}
+/* A long name wraps (even with no spaces) instead of pushing the chip off the screen; at big text the right part drops under it. */
 .spread > :first-child {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+@container pbwide (max-width: 17rem) {
+  .spread {
+    flex-wrap: wrap;
+  }
 }
 
 /* ---------- 10. Sheets with the keyboard open (src/keyboard.ts sets --kb only while a keyboard covers the page) ---------- */
@@ -408,4 +412,18 @@ html[data-kb] dialog.sheet,
 html[data-kb] body:has(.tabbar) dialog.sheet {
   margin-bottom: calc(var(--kb) + 8px);
   max-height: calc(100dvh - var(--kb) - 24px);
+}
+
+/* ---------- 11. Stacked cards: the time and the EXTRA tag under it sit beside the tile, one above the other ---------- */
+@container pbwide (max-width: 15rem) {
+  .schedule > .sched .sched-tilecol .sched-when-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+  .schedule > .sched .sched-tilecol .extra-flag {
+    align-self: flex-start;
+  }
 }

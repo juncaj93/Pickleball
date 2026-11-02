@@ -26,6 +26,8 @@ async function startSite({ port, name, token, root = ROOT }) {
   const dbFile = path.join(ROOT, '.data', `${name}.sqlite`);
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   rmSync(dbFile, { force: true });
+  // A server already answering on this port would be used silently (with an old database): refuse.
+  if (await fetch(`${BASE}/api/status`).then((r) => r.ok, () => false)) throw new Error(`port ${port} is already in use`);
   const server = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
     cwd: root,
     env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: token, DEV_CLOCK: '1', TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '', MOTION: 'on', MOTION_ADMIN: 'on' },
@@ -43,6 +45,7 @@ async function startSite({ port, name, token, root = ROOT }) {
     } catch {}
     await sleep(500);
   }
+  if (!(await fetch(`${BASE}/api/status`).then((r) => r.ok, () => false))) throw new Error('the site did not start in 40 seconds');
   return { BASE, server };
 }
 
@@ -117,7 +120,7 @@ async function seed({ BASE, token }) {
   // Wren: part credit needs credit, so Wren pays for S7 and the game is canceled for a reason (credit $14).
   await join('Wren', S[7], 'confirmed');
   await adminPaid('Wren', S[7]);
-  await cancel(S[7], 'Thanksgiving week');
+  await cancel(S[7], 'Thanksgiving week, venue closed');
   await join('Zed', S[8], 'confirmed');
   // $140.00 of credit for the 29-letter name (ten $14 seats paid, then the games canceled and hidden). Last, so
   // the credit is not used up by the joins above.
@@ -130,6 +133,13 @@ async function seed({ BASE, token }) {
     await cancel(id);
     await ok(await post(areq, `/api/admin/sessions/${id}/show`, { shown: false }), 'hide');
   }
+  // Extra (one-off) games for the EXTRA tag and the comment pill / box: a short comment, a long one, none. And a canceled game with a short reason.
+  const extras = {
+    short: await addGame('2026-11-04T18:30:00-05:00', '2026-11-04T20:30:00-05:00', 'Bring balls'),
+    long: await addGame('2026-11-07T10:30:00-05:00', '2026-11-07T12:30:00-05:00', 'New spot: east courts 5 and 6. Park by the tennis bubble, walk in the side door'),
+    none: await addGame('2026-11-08T10:30:00-05:00', '2026-11-08T12:30:00-05:00'),
+  };
+  await cancel(S[8], 'Rain');
   // Thu Nov 12 (S3... the third game) moves 30 minutes later: its players get the Still in / Can't make it notice.
   await ok(await put(areq, '/api/admin/time-shift', { on: true }), 'time shift on');
   d = await dash();
@@ -137,7 +147,7 @@ async function seed({ BASE, token }) {
   const later = (iso) => new Date(Date.parse(iso) + 30 * 60 * 1000).toISOString();
   await ok(await put(areq, `/api/admin/sessions/${S[3]}/time`, { startsAt: later(moved.startsAt), endsAt: later(moved.endsAt) }), 'move S3');
   await clock('2026-11-02T09:00:00-05:00');
-  return { browser, post, put, ok, clock, areq, who, S, idOf, dash, join, adminPaid, d };
+  return { browser, post, put, ok, clock, areq, who, S, extras, idOf, dash, join, adminPaid, d };
 }
 
 module.exports = { ROOT, PIN, UA, LONG, NOSPACE, EMOJI, ACCENT, FILL, NAMES, at, sleep, startSite, seed };

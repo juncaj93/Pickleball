@@ -143,7 +143,7 @@ function audit(opts) {
   }
 
   // Fixed bars (toast, tab bar, sheet) must be on screen.
-  for (const e of document.querySelectorAll('.tabbar, .toast, dialog[open].sheet')) {
+  for (const e of document.querySelectorAll('.tabbar, .toast, .menu-pop, dialog[open].sheet')) {
     if (!vis(e)) continue;
     const r = e.getBoundingClientRect();
     if (r.bottom > vh + 1 || r.top < -1 || r.right > vw + 1 || r.left < -1) push('off-screen', `${name(e)} ${Math.round(r.left)},${Math.round(r.top)}..${Math.round(r.right)},${Math.round(r.bottom)} in ${vw}x${vh}`);

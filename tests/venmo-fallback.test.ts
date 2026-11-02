@@ -98,6 +98,18 @@ describe('"No Venmo? Pay Alex directly"', () => {
     expect(second).toHaveBeenCalledTimes(1);
   });
 
+  it('two taps close together (two Pay buttons) give one note: the newer watch replaces the older', () => {
+    const p = fakePage();
+    const first = vi.fn();
+    const second = vi.fn();
+    watchVenmoLaunch(first, NO_VENMO_WAIT_MS, p.doc, p.win);
+    vi.advanceTimersByTime(500);
+    watchVenmoLaunch(second, NO_VENMO_WAIT_MS, p.doc, p.win);
+    vi.advanceTimersByTime(NO_VENMO_WAIT_MS + 1);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledTimes(1);
+  });
+
   it('timing: about 2 seconds to wait, about 6 seconds on screen', () => {
     expect(NO_VENMO_WAIT_MS).toBe(2000);
     expect(NO_VENMO_STAY_MS).toBe(6000);
