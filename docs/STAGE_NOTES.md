@@ -1388,3 +1388,27 @@ Preview only: nothing here is on production until Alex says "ship it".
 - Reduce Motion: the dim behind a sheet used to keep fading because the global reduce rule cannot reach that pseudo-element; it is now
   off with Reduce Motion on the organizer screens only (the player screens are untouched; the reviewer caught a first version that leaked there).
 - Pull to refresh stays player only. The organizer page keeps the browser's own pull-down.
+
+### Fresh check
+A helper that did not write the code reviewed the diff and ran it (switch off vs main on 8 size and theme combinations: identical DOM,
+text, boxes and 18 computed properties; switch on at 320 and 390 px, light and dark; Reduce Motion; rapid taps; View as). No blockers.
+Found and fixed: the Reduce Motion backdrop rule also reached player sheets (now organizer only); closing the Edit sheet during the
+360 ms "Saved" skipped the "Moved" follow-up step (it now always follows, like with the motion off); a quick double tap on an expander
+ended closed instead of open (now matches the old result). Left as is: the paid pill text is now one text node (0.03 px wider with the
+switch off, text identical); the court switch text color changes at once while the highlight glides (under 150 ms); the Dashboard now
+writes `pb_motion_admin_seen` in localStorage.
+
+### Tests (Mon Nov 2, 2026)
+- Unit: 1,578 passed, 1 skipped, in 89 files (was 1,571 in 88; new `tests/motion-admin.test.ts`, 7: the var, dark by default, the player
+  MOTION does not switch it on, the private header, nothing else in the dashboard answer changes, a court change saves the same).
+- Browser, every file on its own, all green at the same counts as before: run 229, names 24, gates 32, alerts 52, court 84, held 81,
+  credit 153, suggest 35, popup 33, texts 52, circles 18, audit-stage3 3, cancel-reason 8, round2 25, want-in 4, double-tap 4,
+  dryrun-screens 6, do-now 13, live 26, banner 11, card-times 13, no-court 10, auto-credit 22, money-visible 12, admin-cleanup 35,
+  good-news 9, audit-player-flows 93, audit-player-look 133 (+12 known open), admin-audit 11, admin-sweep 6, time-shift 10, motion 22,
+  and the new `e2e/admin-motion.cjs` 28. No existing test was changed. `package.json` `test:e2e` now ends with `node e2e/admin-motion.cjs`.
+
+### Preview (Mon Nov 2, 2026)
+- Branch `claude/new-session-ftr39p`, Pages preview alias `https://preview-motion-admin.pickleball-club-9h0.pages.dev` (fake database
+  `pickleball-preview`, MOTION_ADMIN on in the preview vars; `/admin?motionadmin=on` also works on any address). Not on production.
+- Ship plan (after "ship it"): back up and Time Travel bookmark first, merge to main, deploy from main with `MOTION_ADMIN = "off"`, Alex
+  tests with `/admin?motionadmin=on`, then one line (`MOTION_ADMIN = "on"`) and a deploy in a quiet window.
