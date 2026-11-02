@@ -1425,3 +1425,41 @@ writes `pb_motion_admin_seen` in localStorage.
   before any organizer motion code). No data changed in any of these deploys, so no restore is needed.
 - The old `e2e/live-check.cjs` line "setup code is configured" fails on the live site because setup is finished (`setupEnabled` is false); it is
   an old check from before setup and not related to motion.
+
+## Always ask for payment (PAY_ALWAYS), Mon Nov 2, 2026 - preview only, waiting on Alex's answer
+
+Spec: PAY_SPEC (approved by Alex Sun Nov 1). Started from main ce26ca8, merged with main 4fb55a7 (organizer motion, live as
+deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
+
+### What was found first (read-only, before any code)
+- The server never cared about the court for money. What a player owes, credit at I'm in (`autoCreditStatements`), the money
+  back on a drop (`withdraw`), on an organizer cancel and on a Waitlist court's "Didn't open" (`cancelWithMoney`), Mark paid,
+  I paid, Finalize and the organizer's numbers ("x of y paid", Players, Money held) all work the same on Booked, Waitlist and
+  Not booked. A standby seat (no real spot) owes nothing (`owes` needs status confirmed in `server/views.ts`).
+- Pay was hidden only on the player screen, in `src/courtDisplay.ts` (zeroes what is owed on a game with no court, and drops
+  it from the game-day Pay card).
+- No game ever cancels by itself. A never-booked game, or one under 4, stays on until Alex taps Cancel ("Did you guys play?"
+  > Cancel game, the gear menu, or "Didn't open"). Money comes back as credit at that tap, never before. PAY_SPEC item 4 says
+  to stop and ask: question 1 in the scenario list. That is why this is on the preview only.
+- Already true before this change (switch off): once a never-booked game has ended, it is no longer on the schedule, so the
+  hiding no longer covered it and the game-day Pay card already listed it (`tests/pay-always.test.ts` E15).
+
+### What changed
+- `src/courtDisplay.ts`: with `payAlways` on, a game with no court keeps "$14 due", Pay, I paid, part credit and its place on
+  the game-day Pay card, exactly as on a booked game. The court words, counts, seats and "never says waitlist" stay.
+- I'm in / Game on! banners say "$3 credit used, $11 due." wherever the card shows "$ due" (`joinedText`, `joinToast`).
+- The switch, copied from the moved-game notice: `PAY_ALWAYS` var (kill switch, "on" = allowed), Settings > Money > "Ask for
+  payment on every game" (one `task_log` row, task `pay_always_on`, no schema change; a backup restore empties task_log, so
+  check this switch after a restore), the private test link `?payalways=on` (header `X-Pay-Always: on`, that phone only,
+  `?payalways=off` ends it), and the View as demo (always on). New `payAlways` on `/api/group`, `payAlwaysForAll` on the
+  dashboard, `PUT /api/admin/pay-always`, Activity log `pay_always_on` / `pay_always_off`. The player change stamp includes the
+  switch, so open phones pick it up within 5 seconds.
+- Not changed: price, credit-back math, Venmo link, any server money path, any organizer screen except the one new Settings row.
+
+### Tests
+- New `tests/pay-always.test.ts` (67): the switch, every court x credit (none, $3, $14, $20) x switch, events (drop after cash,
+  after part credit, unconfirmed I paid, organizer cancel, "Didn't open", court booked later, changed back, standby promoted,
+  Undo, organizer, nothing paid), organizer money screens, and a 40-step random script giving identical books with the
+  switch off, on by test link and on by Settings.
+- New `e2e/pay-always.cjs` (12 checks): off at ship, test link on one phone only, remembered and ended, I paid, game-day Pay
+  card, 360 px light and dark, the Settings switch from the organizer screen, a page left open picking it up.
