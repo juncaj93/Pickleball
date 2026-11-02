@@ -122,6 +122,8 @@ export interface GroupView {
   timeShift?: boolean;
   /** The MOTION switch (server/motion.ts): the player screens animate. Visual only; false or missing means the screen looks exactly as it did. */
   motion?: boolean;
+  /** "Ask for payment on every game" is on for this screen (server/payAlways.ts): Pay shows on games with no court booked too. False or missing: hidden there, as before. */
+  payAlways?: boolean;
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -362,6 +364,8 @@ export interface AdminDashboard {
   timeShift?: boolean;
   /** Settings > "Moved-game notice for everyone" is on. */
   timeShiftForAll?: boolean;
+  /** Settings > "Ask for payment on every game" is on (for everyone). */
+  payAlwaysForAll?: boolean;
   group: {
     name: string;
     timezone: string;

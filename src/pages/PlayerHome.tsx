@@ -172,11 +172,12 @@ const GOOD_NEWS = {
  * Credit that went on the game at once is said too: "You're in. $14 credit used." or, part cover on a
  * booked court, "You're in. $3 credit used, $11 due." (`priceCents` is the flat price.)
  */
-export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0): string {
+export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, showDue = !noCourt): string {
   // A really full game has a real waitlist, court or no court: say so.
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
   if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
-  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, !noCourt);
+  // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
+  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
 
 /**
@@ -344,19 +345,21 @@ export function PlayerHome({
   const joinToast = useCallback(
     (sessionId: string, before: number, res: JoinResponse, noCourt = false) => {
       const offer = res.cashOutOffer && res.cashOutOffer.cents > 0 ? res.cashOutOffer : null;
+      // "$11 due" is said only where the card shows it: a booked court, or "Ask for payment on every game" is on.
+      const showDue = !noCourt || !!g?.payAlways;
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
         if (before + 1 === MIN_PLAYERS && !offer) {
           burst(sessionId);
-          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, !noCourt), 'ok', { ball: true });
+          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, showDue), 'ok', { ball: true });
         }
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents });
-      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0));
+      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0, showDue));
     },
-    [toast, markCelebrated, burst, g?.group.priceCents],
+    [toast, markCelebrated, burst, g?.group.priceCents, g?.payAlways],
   );
 
   // A drop that was held for Undo when the page closed (or lost signal): finish it. A note younger than the hold
@@ -547,7 +550,8 @@ export function PlayerHome({
                 </button>
               </section>
             ) : (
-              g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
+              // The court-display view: a game with no court reads like a normal one here too (suggestion.noCourt is set there).
+              view!.suggestion && <SuggestionCard key={view!.suggestion.sessionId} g={view!} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
@@ -1054,10 +1058,11 @@ function SuggestionCard({
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
-  // With no court booked the game reads like a normal one and never says waitlist.
+  // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
+  // warns first. With room, a game with no court booked reads like a normal one.
   const standby = s.courtState === 'waitlist';
-  const waitlistForm = !standby && !s.noCourt && s.confirmedCount >= g.group.maxPlayers;
-  const subline = standby || (s.noCourt && s.confirmedCount >= g.group.maxPlayers) ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
+  const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
+  const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     setBusy(true);
@@ -1068,7 +1073,7 @@ function SuggestionCard({
         await sendDropsBeforeJoin(s.sessionId);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
-        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
+        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt, g.group.priceCents, !s.noCourt || !!g.payAlways), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
       } else {
         await api('POST', `/api/sessions/${s.sessionId}/decline`, {});
@@ -1232,7 +1237,8 @@ function RowPay({
     </span>
   );
   if (mine.oweCents <= 0) {
-    // No court booked yet: no Pay, but credit they can use is always offered ("Use $14 credit").
+    // Nothing due on the card (paid by other means, or no court booked yet with "Ask for payment on every game" off):
+    // no Pay, but credit they can use is always offered ("Use $14 credit").
     const useNow = mine.useCreditCents > 0 && (
       <button className="btn pay-btn" data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.useCreditCents, mine.useCreditCents)}>
         <RollText text={`Use ${formatPrice(mine.useCreditCents)} credit`} />

@@ -28,6 +28,7 @@ import { cashOutOffer, loadPendingRequests, moneyPicture } from './credit';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
 import { timeShiftFor } from './timeShift';
 import { motionFor } from './motion';
+import { payAlwaysFor } from './payAlways';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -189,6 +190,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     viewingAs: !!viewAsName,
     timeShift,
     motion: motionFor(ctx),
+    payAlways: await payAlwaysFor(ctx, group.id),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions

@@ -24,6 +24,10 @@ MOTION = "on"
 # "on" = the organizer screens animate (switched on Sun Nov 1, 2026, about 10:10 PM Eastern, after Alex tested it on his phone).
 # "off" = dark. A phone opened once with ?motionadmin=on still sees it (the private test switch). Needs a deploy.
 MOTION_ADMIN = "on"
+# "Ask for payment on every game" (Pay shows on Not booked and Waitlist games too). "on" here only ALLOWS it; who
+# sees it is Settings > Money > "Ask for payment on every game" (off at ship = nobody), plus a phone opened once
+# with ?payalways=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+PAY_ALWAYS = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -37,6 +41,7 @@ GO_LINKS = "on"
 TIME_SHIFT = "on"
 MOTION = "on"
 MOTION_ADMIN = "on"
+PAY_ALWAYS = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

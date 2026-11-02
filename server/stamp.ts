@@ -2,6 +2,7 @@ import { sha256 } from './crypto';
 import type { Ctx } from './context';
 import type { GroupRow } from './repo';
 import { timeShiftForAll } from './timeShift';
+import { payAlwaysForAll } from './payAlways';
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
 const TIME_BUCKET_MS = 10 * 60_000;
@@ -68,6 +69,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     Math.floor(ctx.nowMs / TIME_BUCKET_MS),
     // The organizer turning the moved-game notice on or off for everyone.
     (await timeShiftForAll(ctx.db, group.id)) ? 'ts' : '',
+    // The organizer turning "Ask for payment on every game" on or off for everyone.
+    (await payAlwaysForAll(ctx.db, group.id)) ? 'pa' : '',
   ].join('|');
   return (await sha256(raw)).slice(0, 16);
 }

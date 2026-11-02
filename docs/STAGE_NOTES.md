@@ -1425,3 +1425,75 @@ writes `pb_motion_admin_seen` in localStorage.
   before any organizer motion code). No data changed in any of these deploys, so no restore is needed.
 - The old `e2e/live-check.cjs` line "setup code is configured" fails on the live site because setup is finished (`setupEnabled` is false); it is
   an old check from before setup and not related to motion.
+
+## Always ask for payment (PAY_ALWAYS), Mon Nov 2, 2026 - preview only, waiting on Alex's answer
+
+Spec: PAY_SPEC (approved by Alex Sun Nov 1). Started from main ce26ca8, merged with main 4fb55a7 (organizer motion, live as
+deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
+
+### What was found first (read-only, before any code)
+- The server never cared about the court for money. What a player owes, credit at I'm in (`autoCreditStatements`), the money
+  back on a drop (`withdraw`), on an organizer cancel and on a Waitlist court's "Didn't open" (`cancelWithMoney`), Mark paid,
+  I paid, Finalize and the organizer's numbers ("x of y paid", Players, Money held) all work the same on Booked, Waitlist and
+  Not booked. A standby seat (no real spot) owes nothing (`owes` needs status confirmed in `server/views.ts`).
+- Pay was hidden only on the player screen, in `src/courtDisplay.ts` (zeroes what is owed on a game with no court, and drops
+  it from the game-day Pay card).
+- No game ever cancels by itself. A never-booked game, or one under 4, stays on until Alex taps Cancel ("Did you guys play?"
+  > Cancel game, the gear menu, or "Didn't open"). Money comes back as credit at that tap, never before. PAY_SPEC item 4 says
+  to stop and ask: question 1 in the scenario list. That is why this is on the preview only.
+- Already true before this change (switch off): once a never-booked game has ended, it is no longer on the schedule, so the
+  hiding no longer covered it and the game-day Pay card already listed it (`tests/pay-always.test.ts` E15).
+
+### What changed
+- `src/courtDisplay.ts`: with `payAlways` on, a game with no court keeps "$14 due", Pay, I paid, part credit and its place on
+  the game-day Pay card, exactly as on a booked game. The court words, counts, seats and "never says waitlist" stay.
+- I'm in / Game on! banners say "$3 credit used, $11 due." wherever the card shows "$ due" (`joinedText`, `joinToast`).
+- The switch, copied from the moved-game notice: `PAY_ALWAYS` var (kill switch, "on" = allowed), Settings > Money > "Ask for
+  payment on every game" (one `task_log` row, task `pay_always_on`, no schema change; a backup restore empties task_log, so
+  check this switch after a restore), the private test link `?payalways=on` (header `X-Pay-Always: on`, that phone only,
+  `?payalways=off` ends it), and the View as demo (always on). New `payAlways` on `/api/group`, `payAlwaysForAll` on the
+  dashboard, `PUT /api/admin/pay-always`, Activity log `pay_always_on` / `pay_always_off`. The player change stamp includes the
+  switch, so open phones pick it up within 5 seconds.
+- Not changed: price, credit-back math, Venmo link, any server money path, any organizer screen except the one new Settings row.
+
+### Tests
+- New `tests/pay-always.test.ts` (67): the switch, every court x credit (none, $3, $14, $20) x switch, events (drop after cash,
+  after part credit, unconfirmed I paid, organizer cancel, "Didn't open", court booked later, changed back, standby promoted,
+  Undo, organizer, nothing paid), organizer money screens, and a 40-step random script giving identical books with the
+  switch off, on by test link and on by Settings.
+- New `e2e/pay-always.cjs` (12 checks): off at ship, test link on one phone only, remembered and ended, I paid, game-day Pay
+  card, 360 px light and dark, the Settings switch from the organizer screen, a page left open picking it up.
+
+### Fresh checks (helpers that did not write the code)
+- Code reader: no money bug. Confirmed every server money path ignores the court (joins, credit at I'm in, standby promotion,
+  drops, late drops, organizer cancel, "Didn't open", I paid, Mark paid / Unmark, Finalize, Money and "x of y paid"). Fixed from
+  its list: the "Want in?" card got the raw data, so on a game with no court its banner and answer card could say "$11 due" while
+  the card hid it (older bug, now uses the same court view as the game cards; checked on the preview both ways); weak tests
+  (Money row for a canceled game now required; the random script checks its taps and covers I paid claims). Left as they were
+  (older, and they agree with the screen once the switch is on): with the switch off, a no-court game shows Pay once it has
+  started or ended; the organizer's "Remind all unpaid" text and Home owed cards count seats on every court; the Settings row does
+  not grey out when the kill switch is "off"; View as always shows it.
+- Preview attacker (real taps, 360 and 393 px, light and dark): every money case worked to the spec (part, exact and extra credit;
+  Undo; I paid and Didn't pay?; drop after paying; organizer cancel with a reason; "Didn't open"; real standby on a full Not booked
+  game moving in with credit applied; court switched back and forth; two phones as one player; offline taps; the Settings switch
+  reaching an open phone in under 5 seconds; books add up). One real bug, the "Want in?" answer card above (fixed). Older nits it
+  noted, not changed: the Waitlist cancel dialog says "This does not cancel your court"; the Money tab shows "Court due" for a game
+  with no court; "Didn't open" is only on the API now (the court switch has no button for it); small text links (I paid, Drop out).
+
+### Preview (Sun Nov 1, 2026, about 11:00 PM Eastern)
+- https://preview-pay-always.pickleball-club-9h0.pages.dev (deployment fd180065), branch claude/new-session-ejzdck merged with main
+  4fb55a7. Fake database `pickleball-preview`, re-seeded after the tests. The Settings switch there is off: use `?payalways=on`,
+  or flip Settings > Money > "Ask for payment on every game" on the preview's /admin.
+- Not on production. Nothing was deployed to the live site, no live data was read or changed.
+
+### To ship (after Alex answers the two questions and says "ship it"; quiet window: before Mon 6:00 PM, else Wed 6:00 AM)
+1. Merge this branch into main (PR), pull main, `npm test`, confirm main equals live plus this change.
+2. SQL export (`npx wrangler d1 export pickleball --remote --output live-before-pay-always-2026-11-02.sql`, kept out of git) and a
+   Time Travel bookmark (`npx wrangler d1 time-travel info pickleball`).
+3. `npm run deploy` from main. No migration. Ships OFF (Settings switch off).
+4. Read-only live check: /, /admin, /api/status, /api/group/version 200; `/api/group` answers `payAlways: false`, and `true` with
+   the header `X-Pay-Always: on`; the 20 health checks 0; row counts match the export.
+5. Alex tests on his phone with pickleball.juncaj.net/?payalways=on, then flips Settings > Money > "Ask for payment on every game"
+   in a quiet window (no deploy).
+- Rollback: Settings switch off (instant, no deploy). Code: Pages deployment 6153a25f (commit 199170c, before this change); the
+  Settings row is one task_log row the old code ignores, so no data restore is needed.

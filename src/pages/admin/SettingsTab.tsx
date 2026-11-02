@@ -267,6 +267,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           </p>
           {money('typicalCourtCostCents', 'Typical court cost', 'Only you see this')}
           {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
+          <PayAlwaysRow ctx={ctx} auto={auto} />
         </Section>
 
         <Section id="schedule" title="Schedule" note={`Tue & Thu ${minutesLabel(g.settings.defaultStartMinutes)}`} sections={sections}>
@@ -618,6 +619,39 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
           </button>
         </form>
       </Sheet>
+    </div>
+  );
+}
+
+/**
+ * "Ask for payment on every game": players who are in see Pay on every game, Booked, Waitlist or Not booked.
+ * Off: Pay waits for Court booked, except on a phone that opened the site with ?payalways=on (a private test).
+ * Saves itself. It only changes what the player screen shows; no money moves.
+ */
+function PayAlwaysRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.payAlwaysForAll);
+  return (
+    <div className="set-row-wrap" data-row="payAlwaysAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Ask for payment on every game <SaveMark state={auto.rows.payAlwaysAll} />
+          </span>
+          <span className="set-hint">Pay shows before the court is booked. Off: only phones opened with ?payalways=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-pay-always-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('payAlwaysAll', { on: e.target.checked }, '/api/admin/pay-always').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.payAlwaysAll} />
     </div>
   );
 }

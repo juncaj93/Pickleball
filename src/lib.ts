@@ -147,6 +147,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (motionTest()) headers['X-Motion'] = 'on';
   // The organizer screens' own private motion switch (?motionadmin=on, see server/motion.ts).
   if (motionAdminTest()) headers['X-Motion-Admin'] = 'on';
+  // "Ask for payment on every game", private test switch for this phone (?payalways=on, see server/payAlways.ts).
+  if (payAlwaysTest()) headers['X-Pay-Always'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
   // Demo: the throwaway copy answers. Signing out always goes to the live site.
@@ -406,6 +408,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('timeshift');
   if (want === 'on') storageSet(TIME_SHIFT_KEY, 'on');
   else if (want === 'off') storageRemove(TIME_SHIFT_KEY);
+}
+
+/**
+ * "Ask for payment on every game" on this phone only, before it is on for everyone: open the site once with
+ * ?payalways=on (?payalways=off turns it back off). Remembered in this browser; nothing else changes.
+ */
+const PAY_ALWAYS_KEY = 'pb_pay_always';
+export function payAlwaysTest(): boolean {
+  return storageGet(PAY_ALWAYS_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('payalways');
+  if (want === 'on') storageSet(PAY_ALWAYS_KEY, 'on');
+  else if (want === 'off') storageRemove(PAY_ALWAYS_KEY);
 }
 
 /**
