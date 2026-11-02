@@ -1463,3 +1463,37 @@ deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
   switch off, on by test link and on by Settings.
 - New `e2e/pay-always.cjs` (12 checks): off at ship, test link on one phone only, remembered and ended, I paid, game-day Pay
   card, 360 px light and dark, the Settings switch from the organizer screen, a page left open picking it up.
+
+### Fresh checks (helpers that did not write the code)
+- Code reader: no money bug. Confirmed every server money path ignores the court (joins, credit at I'm in, standby promotion,
+  drops, late drops, organizer cancel, "Didn't open", I paid, Mark paid / Unmark, Finalize, Money and "x of y paid"). Fixed from
+  its list: the "Want in?" card got the raw data, so on a game with no court its banner and answer card could say "$11 due" while
+  the card hid it (older bug, now uses the same court view as the game cards; checked on the preview both ways); weak tests
+  (Money row for a canceled game now required; the random script checks its taps and covers I paid claims). Left as they were
+  (older, and they agree with the screen once the switch is on): with the switch off, a no-court game shows Pay once it has
+  started or ended; the organizer's "Remind all unpaid" text and Home owed cards count seats on every court; the Settings row does
+  not grey out when the kill switch is "off"; View as always shows it.
+- Preview attacker (real taps, 360 and 393 px, light and dark): every money case worked to the spec (part, exact and extra credit;
+  Undo; I paid and Didn't pay?; drop after paying; organizer cancel with a reason; "Didn't open"; real standby on a full Not booked
+  game moving in with credit applied; court switched back and forth; two phones as one player; offline taps; the Settings switch
+  reaching an open phone in under 5 seconds; books add up). One real bug, the "Want in?" answer card above (fixed). Older nits it
+  noted, not changed: the Waitlist cancel dialog says "This does not cancel your court"; the Money tab shows "Court due" for a game
+  with no court; "Didn't open" is only on the API now (the court switch has no button for it); small text links (I paid, Drop out).
+
+### Preview (Mon Nov 2, 2026, about 12:10 AM Eastern)
+- https://preview-pay-always.pickleball-club-9h0.pages.dev (deployment fd180065), branch claude/new-session-ejzdck merged with main
+  4fb55a7. Fake database `pickleball-preview`, re-seeded after the tests. The Settings switch there is off: use `?payalways=on`,
+  or flip Settings > Money > "Ask for payment on every game" on the preview's /admin.
+- Not on production. Nothing was deployed to the live site, no live data was read or changed.
+
+### To ship (after Alex answers the two questions and says "ship it"; quiet window: before Mon 6:00 PM, else Wed 6:00 AM)
+1. Merge this branch into main (PR), pull main, `npm test`, confirm main equals live plus this change.
+2. SQL export (`npx wrangler d1 export pickleball --remote --output live-before-pay-always-2026-11-02.sql`, kept out of git) and a
+   Time Travel bookmark (`npx wrangler d1 time-travel info pickleball`).
+3. `npm run deploy` from main. No migration. Ships OFF (Settings switch off).
+4. Read-only live check: /, /admin, /api/status, /api/group/version 200; `/api/group` answers `payAlways: false`, and `true` with
+   the header `X-Pay-Always: on`; the 20 health checks 0; row counts match the export.
+5. Alex tests on his phone with pickleball.juncaj.net/?payalways=on, then flips Settings > Money > "Ask for payment on every game"
+   in a quiet window (no deploy).
+- Rollback: Settings switch off (instant, no deploy). Code: Pages deployment 6153a25f (commit 199170c, before this change); the
+  Settings row is one task_log row the old code ignores, so no data restore is needed.

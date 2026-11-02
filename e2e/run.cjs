@@ -3310,11 +3310,13 @@ async function main() {
         // Alerts came later, so its own height doesn't count against that.
         if (width === 390) {
           const h = await p.evaluate(
-            // The Alerts section and the Nov 1 "Moved-game notice for everyone" row were added after this limit was set.
+            // The Alerts section, the Nov 1 "Moved-game notice for everyone" row and the Nov 2 "Ask for payment on every
+            // game" row were added after this limit was set.
             () =>
               document.documentElement.scrollHeight -
               (document.querySelector('details[data-section="alerts"]')?.getBoundingClientRect().height ?? 0) -
-              (document.querySelector('[data-row="timeShiftAll"]')?.getBoundingClientRect().height ?? 0),
+              (document.querySelector('[data-row="timeShiftAll"]')?.getBoundingClientRect().height ?? 0) -
+              (document.querySelector('[data-row="payAlwaysAll"]')?.getBoundingClientRect().height ?? 0),
           );
           assert(h <= 2623 - 100, `Settings is ${h}px tall (was 2623px)`);
         }
