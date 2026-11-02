@@ -421,7 +421,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 {r.lateFee
                   ? r.lateFee.paid
                     ? ` · their ${formatPrice(r.paymentAmountCents ?? 0)} stays on the game unless someone takes the spot`
-                    : ` · owes ${formatPrice(r.owesCents)} unless someone takes the spot`
+                    : ` · ${r.isOrganizer ? 'you owe' : 'owes'} ${formatPrice(r.lateFee.oweCents)} unless someone takes the spot`
                   : r.creditBackCents > 0
                     ? ` · ${formatPrice(r.creditBackCents)} is their credit now`
                     : ''}

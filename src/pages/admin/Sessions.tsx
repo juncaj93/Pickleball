@@ -12,7 +12,8 @@ import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit'
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
-import { ClearChoices, lateFeeLine } from './LateFees';
+import { ClearChoices, EditableDraft, lateFeeLine, PlayersText } from './LateFees';
+import { lateCancelText } from './textMenu';
 import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
@@ -32,7 +33,7 @@ import '../../admin-cards.css';
 import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 
-export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set';
+export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set' | 'players_text';
 
 export function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -403,6 +404,7 @@ export function SessionSheets({
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
     moved_set: `Moved · ${title}`,
+    players_text: `Text the players · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -416,6 +418,7 @@ export function SessionSheets({
       )}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
+      {s && kind === 'players_text' && <PlayersText ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved' || kind === 'moved_set') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} askCourt={kind === 'moved'} />}
     </Sheet>
   );
@@ -432,7 +435,25 @@ function ChangeText({ ctx, s, canceled, askCourt }: { ctx: AdminCtx; s: AdminSes
   const tz = ctx.d.group.timezone;
   const [reason, setReason] = useState('');
   const link = siteAddress(ctx.d.group.playerLink);
+  // Late fees on and canceled inside 12 hours: the text follows the venue answer (shared/messages.ts). Off: as before.
+  const late = canceled ? lateCancelText(ctx.d, s, reason) : null;
   const body = canceled ? canceledMessage(s, tz, Date.parse(ctx.d.now), link, reason) : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, Date.parse(ctx.d.now), link, reason);
+  if (late) {
+    return (
+      <div className="stack" data-late-cancel={late.feeKept ? 'fee_kept' : 'waived'}>
+        {!late.feeKept && (
+          <label className="field">
+            Reason (optional)
+            <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder="Rain in the forecast" />
+          </label>
+        )}
+        <EditableDraft to={`${late.to} · ${late.reach.count}`} who={late.reach} initial={late.body} name={late.feeKept ? 'canceled_fee_kept' : 'canceled_today'} openLabel="Text the players who were in" onOpen={() => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {})} />
+        {!late.feeKept && <CreditBackList s={s} />}
+        <h3 className="section-title">Text the players</h3>
+        <PlayersText ctx={ctx} s={s} />
+      </div>
+    );
+  }
   // Everyone signed up and on the waitlist; never the organizer.
   const who = reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), ctx.d.me?.id ?? null);
   return (
@@ -683,7 +704,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   // The organizer is not a row of their own money: they pay the venue (the court row below).
   // Late fees (shared/lateFees.ts) get their own short list below (Mark paid / Unmark and Clear).
   const rows = s.roster.filter((r) => !r.isOrganizer && !r.lateFee && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
-  const feeRows = s.roster.filter((r) => !r.isOrganizer && r.lateFee);
+  const feeRows = s.roster.filter((r) => r.lateFee);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
@@ -748,7 +769,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                 <span className="small muted">{lateFeeLine(r)}</span>
               </div>
               <div className="pay-btns">
-                {r.lateFee!.paid ? (
+                {r.isOrganizer ? null : r.lateFee!.paid ? (
                   <>
                     {r.selfPaid && (
                       <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
@@ -923,8 +944,8 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
               </label>
               {askWaived && (
                 <fieldset className="charge-ask" data-venue-waived>
-                  <legend>Did the venue waive the fee?</legend>
-                  <div className="segmented" role="group" aria-label="Did the venue waive the fee?">
+                  <legend>Did the venue waive the fee or give you credit toward the next booking?</legend>
+                  <div className="segmented" role="group" aria-label="Did the venue waive the fee or give you credit toward the next booking?">
                     <button
                       type="button"
                       aria-pressed={waived === true}
@@ -948,10 +969,10 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                   </div>
                   <p className="small muted">
                     {waived === false
-                      ? 'No money moves: everyone who was in still owes their $14 (late drops too).'
+                      ? 'No: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
                       : waived === true
-                        ? 'Everyone gets their money back as credit, nobody owes.'
-                        : 'Yes: everyone gets money back as credit. No: everyone who was in still owes their $14.'}
+                        ? 'Yes: everyone gets their money back as credit, nobody owes.'
+                        : 'Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up still owes $14.'}
                   </p>
                   {waivedError && <span className="field-error">Pick Yes or No.</span>}
                 </fieldset>

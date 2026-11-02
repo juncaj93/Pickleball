@@ -6,7 +6,7 @@ import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFall
 import { creditBackNote } from '../../shared/pricing';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
-import { lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
+import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
@@ -542,6 +542,7 @@ export function PlayerHome({
                 setFilter('all');
               }}
             />
+            <FeeNotices g={view!} />
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
             {answered ? (
               <section className="card stack suggest" aria-label="Your answer">
@@ -816,6 +817,53 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
         Back
       </button>
     </form>
+  );
+}
+
+/** The ids of cleared-debt notices this phone dismissed (shared/lateFees.ts feeClearedNotice). */
+const FEE_SEEN_KEY = 'pb_fee_notices_seen';
+function readFeeSeen(): string[] {
+  try {
+    const v = JSON.parse(storageGet(FEE_SEEN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." One notice per cleared late fee of THIS
+ * player, in the usual banner look, shown each time the site opens until they tap Dismiss (remembered on this phone).
+ */
+function FeeNotices({ g }: { g: GroupView }) {
+  const [seen, setSeen] = useState<string[]>(readFeeSeen);
+  const tz = g.group.timezone;
+  const list = (g.feeNotices ?? []).filter((n) => !seen.includes(n.id));
+  if (list.length === 0) return null;
+  const dismiss = (id: string) => {
+    const next = [...readFeeSeen().filter((x) => x !== id), id].slice(-50);
+    try {
+      storageSet(FEE_SEEN_KEY, JSON.stringify(next));
+    } catch {
+      /* it simply shows again next time */
+    }
+    setSeen(next);
+  };
+  return (
+    <>
+      {list.map((n) => (
+        <div key={n.id} className="fee-notice" data-fee-notice={n.why}>
+          <Notice tone="ok">
+            <span className="fee-notice-row">
+              <span>{feeClearedNotice(n.why, formatShortDate(n.startsAt, tz), formatPrice(g.group.priceCents), n.creditCents > 0 ? formatPrice(n.creditCents) : null)}</span>
+              <button type="button" className="btn small ghost" onClick={() => dismiss(n.id)}>
+                Dismiss
+              </button>
+            </span>
+          </Notice>
+        </div>
+      ))}
+    </>
   );
 }
 

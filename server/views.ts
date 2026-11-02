@@ -259,7 +259,12 @@ export function adminSessionView(
           finalizedAt: session.finalized_at ?? null,
         }),
         played: r.played === null || r.played === undefined ? null : r.status === 'withdrawn' ? null : r.played === 1,
-        lateFee: fee ? { kind: fee, paid: r.payment_status === 'paid' && !r.refunded_at } : null,
+        // The organizer's own late drop: owed until cleared, never "paid" (their seat's payment is the court payment).
+        lateFee: fee
+          ? me
+            ? { kind: fee, paid: false, oweCents: settings.pricePerPlayerCents }
+            : { kind: fee, paid: r.payment_status === 'paid' && !r.refunded_at, oweCents: owes }
+          : null,
         isOrganizer: me,
         waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
         promotedAt: r.status === 'confirmed' ? r.promoted_at : null,

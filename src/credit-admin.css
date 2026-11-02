@@ -70,3 +70,8 @@
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }
+
+/* "Late drops owe $14": an editable prepared text (Text the players, the late-cancel text). */
+.draft textarea[data-draft-body] { width: 100%; min-height: 8.5rem; font: inherit; resize: vertical; box-sizing: border-box; }
+[data-players-text] .segmented { flex-wrap: wrap; }
+[data-players-text] .segmented button { min-height: 44px; }

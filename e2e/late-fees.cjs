@@ -236,32 +236,160 @@ async function main() {
     await ctx.close();
   });
 
-  await check('the cancel sheet asks "Did the venue waive the fee?" (Yes / No, neither picked) on a game inside 12 hours', async () => {
-    // A fresh game inside 12 hours: the next one after B.
-    const g = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
-    const C = g.sessions.filter((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > Date.parse(B.startsAt))[0];
-    await setClock(Date.parse(C.startsAt) - 3 * 3600_000);
-    await join('Devon', C);
-    const { ctx, page } = await openAdmin({ query: '?latefees=on&adminr2=off&adminv2=off' });
+  // Extra games a few hours out (so they are inside 12 hours at once), each with a different player to find its card by.
+  const addGameIn = async (hours, note) => {
+    const now = Date.parse((await (await areq.get(`${BASE}/api/admin/dashboard`)).json()).now);
+    const start = Math.ceil((now + hours * 3600_000) / 900_000) * 900_000;
+    const r = await post(areq, '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * 3600_000).toISOString(), note });
+    assert(r.ok(), `add game: ${await r.text()}`);
+    return (await r.json()).id;
+  };
+  const A_TEXT = "Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!";
+  const B_TEXT = "Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!";
+  /** Open the gear menu of the card that holds `who`, and pick the menu item `name`. */
+  async function gearPick(page, who, name) {
     const gear = page.getByRole('button', { name: /^Game menu for / }).filter({ visible: true });
     const n = await gear.count();
-    let opened = false;
-    for (let i = 0; i < n && !opened; i++) {
-      await gear.nth(i).click();
-      const item = page.getByRole('menuitem', { name: /Cancel session/ });
-      // The menu that belongs to C: its card holds Devon.
+    for (let i = 0; i < n; i++) {
       const owner = await gear.nth(i).evaluate((b) => b.closest('article')?.textContent || '');
-      if ((await item.count()) && /Devon/.test(owner)) {
+      if (!owner.includes(who)) continue;
+      await gear.nth(i).click();
+      const item = page.getByRole('menuitem', { name });
+      if (await item.count()) {
         await item.first().click();
-        opened = true;
-      } else await page.keyboard.press('Escape');
+        return;
+      }
+      await page.keyboard.press('Escape');
     }
-    assert(opened, 'no gear menu for the game');
-    const t = await dialogText(page);
-    assert(/Did the venue waive the fee\?/.test(t) && !/Were you charged/.test(t), `sheet: ${t}`);
-    const pressed = await page.locator('dialog[open] [data-venue-waived] button[aria-pressed="true"]').count();
-    assert(pressed === 0, `a default is picked: ${pressed}`);
-    await noSideScroll(page, 'cancel sheet');
+    throw new Error(`no gear menu item ${name} on the card with ${who}`);
+  }
+
+  const lateCancels = [
+    ['light', 360, 'Brandon'],
+    ['dark', 430, 'Casey'],
+  ];
+  const gameOf = {};
+  for (const [i, [, , who]] of lateCancels.entries()) {
+    gameOf[who] = await addGameIn(3 + i, `Cancel test ${who}`);
+    await join(who, { id: gameOf[who] });
+    await join('Julian', { id: gameOf[who] });
+  }
+  for (const [scheme, width, who] of lateCancels) {
+    await check(`${scheme} ${width}px: cancel inside 12 hours asks "Did the venue waive the fee or give you credit toward the next booking?" (nothing picked); No opens the "Heads up" text to the players who were in, and Text the players with "Court canceled" picked`, async () => {
+      const { ctx, page } = await openAdmin({ scheme, width, query: '?latefees=on&adminr2=off&adminv2=off' });
+      await gearPick(page, `Cancel test ${who}`, /Cancel session/);
+      const t = await dialogText(page);
+      assert(/Did the venue waive the fee or give you credit toward the next booking\?/.test(t) && !/Were you charged/.test(t), `sheet: ${t}`);
+      assert((await page.locator('dialog[open] [data-venue-waived] button[aria-pressed="true"]').count()) === 0, 'a default is picked');
+      await noSideScroll(page, 'cancel sheet');
+      // Confirming with no answer is refused on the sheet itself.
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      await page.locator('dialog[open] .field-error', { hasText: 'Pick Yes or No.' }).waitFor({ timeout: 4000 });
+      await page.locator('dialog[open] [data-venue-waived]').getByRole('button', { name: 'No' }).click();
+      await page.locator('dialog[open]').getByRole('button', { name: 'Cancel session' }).click();
+      const after = page.locator('[data-late-cancel="fee_kept"]');
+      await after.waitFor({ timeout: 8000 });
+      const body = await after.locator('[data-draft="canceled_fee_kept"] textarea').inputValue();
+      assert(/^Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court\. If you were signed up, your \$14 share still applies \(if you already paid, you're all set\)\. You can pay on the site: \S+\. Sorry about that!$/.test(body), `No text: ${body}`);
+      assert(!/credit|tomorrow/.test(body), `No text mentions credit: ${body}`);
+      const head = squash(await after.locator('[data-draft="canceled_fee_kept"] .draft-head').innerText());
+      assert(/The players who were in · 2/.test(head), `who: ${head}`);
+      const href = await after.locator('[data-draft="canceled_fee_kept"] [data-draft-open]').getAttribute('href');
+      assert(/^sms:/.test(href) && /Heads%20up|Heads up/.test(href), `Messages link: ${href}`);
+      // Text the players: Court canceled first and picked.
+      assert((await after.locator('[data-pick="court_canceled"][aria-pressed="true"]').count()) === 1, 'Court canceled not picked');
+      assert((await after.locator('[data-players-text] textarea').inputValue()) === A_TEXT, 'A text');
+      await after.locator('[data-pick="court_booked"]').click();
+      assert((await after.locator('[data-players-text] textarea').inputValue()) === B_TEXT, 'B text');
+      await noSideScroll(page, 'after-cancel sheet');
+      await page.screenshot({ path: path.join(ROOT, '.data', `late-fees-after-cancel-${scheme}-${width}.png`), fullPage: true });
+      await ctx.close();
+      // Money: the player's Pay card and the organizer's numbers match the No case.
+      const v = await (await phones[who].get(`${BASE}/api/group`)).json();
+      const o = v.owed.find((x) => x.sessionId === gameOf[who]);
+      assert(o && o.lateFee === 'canceled_late' && o.amountCents === 1400, `owed: ${JSON.stringify(v.owed)}`);
+    });
+  }
+
+  await check('gear menu > Text the players (switch on): "Court canceled" picked, editable, to the 2 players in (not you, not the waitlist)', async () => {
+    const gid = await addGameIn(5.5, 'Text test');
+    for (const n of ['Nathan', 'Mitchel']) await join(n, { id: gid });
+    for (const [scheme, width] of [
+      ['light', 360],
+      ['dark', 430],
+    ]) {
+      const { ctx, page } = await openAdmin({ scheme, width, query: '?latefees=on&adminr2=off&adminv2=off' });
+      await gearPick(page, 'Text test', /Text the players/);
+      const box = page.locator('[data-players-text]');
+      await box.waitFor({ timeout: 6000 });
+      assert((await box.locator('[data-pick="court_canceled"][aria-pressed="true"]').count()) === 1, 'A not picked');
+      assert((await box.locator('textarea').inputValue()) === A_TEXT, 'A text');
+      const head = squash(await box.locator('.draft-head').innerText());
+      assert(/The players who are in · 2/.test(head) && /2 numbers/.test(head), `who: ${head}`);
+      await box.locator('textarea').fill('Edited words');
+      const href = await box.locator('[data-draft-open]').getAttribute('href');
+      assert(/Edited%20words|Edited words/.test(decodeURIComponent(href)), `edited text not in the link: ${href}`);
+      await noSideScroll(page, 'Text the players');
+      await ctx.close();
+    }
+    // Off: no menu item.
+    const { ctx, page } = await openAdmin({ query: '?latefees=off&adminr2=off&adminv2=off' });
+    const gear = page.getByRole('button', { name: /^Game menu for / }).filter({ visible: true }).first();
+    await gear.click();
+    assert((await page.getByRole('menuitem', { name: /Text the players/ }).count()) === 0, 'menu item shows with the switch off');
+    await ctx.close();
+  });
+
+  for (const [scheme, width] of [
+    ['light', 360],
+    ['dark', 430],
+  ]) {
+    await check(`${scheme} ${width}px: Ryan (debt cleared, "Sub found") sees "Good news: someone took your spot ... You no longer owe $14." until he dismisses it`, async () => {
+      const ctx = await browser.newContext(phone(scheme, width));
+      await post(ctx.request, '/api/me', { playerId: idOf('Ryan') });
+      const page = await ctx.newPage();
+      await page.goto(`${BASE}/`);
+      const n = page.locator('[data-fee-notice="sub"]');
+      await n.waitFor({ timeout: 8000 });
+      const t = squash(await n.innerText());
+      assert(/^Good news: someone took your spot for \w{3}, \w{3} \d+\. You no longer owe \$14\. Dismiss$/.test(t), `notice: ${t}`);
+      await noSideScroll(page, 'notice');
+      await page.reload();
+      await n.waitFor({ timeout: 8000 });
+      await n.getByRole('button', { name: 'Dismiss' }).click();
+      await page.reload();
+      await page.locator('.schedule article.sched').first().waitFor();
+      assert((await page.locator('[data-fee-notice]').count()) === 0, 'notice back after Dismiss');
+      await ctx.close();
+      // The next run (dark) uses a fresh phone, so it shows again there.
+    });
+  }
+
+  await check('another player never sees Ryan\'s notice', async () => {
+    const { ctx, page } = await open('Julian');
+    assert((await page.locator('[data-fee-notice]').count()) === 0, 'Julian sees a notice');
+    await ctx.close();
+  });
+
+  await check('the organizer drops late (In / Out) and the game goes short: Money shows "late drop (you) · owes $14" with a one-tap Clear', async () => {
+    const gid = await addGameIn(7, 'Org test');
+    for (const n of ['Nathan', 'Mitchel', 'Brandon']) await join(n, { id: gid });
+    await post(areq, `/api/admin/sessions/${gid}/me`, { in: true });
+    const out = await post(areq, `/api/admin/sessions/${gid}/me`, { in: false }, { 'X-Late-Fees': 'on' });
+    assert((await out.json()).lateFee, 'no debt');
+    const { ctx, page } = await openAdmin({ width: 360, scheme: 'dark' });
+    await tab(page, 'Money');
+    const game = page.locator(`[data-session="${gid}"]`).first();
+    if ((await game.getAttribute('data-open')) !== 'yes') await game.locator('.r2m-toggle').click();
+    const r = page.locator('[data-pay-row="Alex"]').first();
+    await r.waitFor({ timeout: 8000 });
+    const rt = squash(await r.innerText());
+    assert(/late drop \(you\) · owes \$14/.test(rt) && /Clear/.test(rt) && !/Mark paid/.test(rt), `row: ${rt}`);
+    await r.locator('.mv2-btncell button').click();
+    await page.waitForTimeout(900);
+    const g = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
+    assert(!g.sessions.find((s) => s.id === gid).roster.find((x) => x.name === 'Alex').lateFee, 'still owes after one tap');
+    await noSideScroll(page, 'Money');
     await ctx.close();
   });
 

@@ -139,6 +139,12 @@ export interface GroupView {
   payNote?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
+  /**
+   * This player's own late fees that were cleared in the last 60 days (never anyone else's), for a notice they dismiss
+   * on this phone: 'sub' someone took their spot, 'cleared' the organizer cleared it (or the game was canceled).
+   * `creditCents`: what came back to them as credit (0 when they had not paid).
+   */
+  feeNotices?: { id: string; startsAt: string; why: 'sub' | 'cleared'; creditCents: number }[];
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -224,7 +230,7 @@ export interface AdminRosterEntry {
   /** Set once the game is finalized: did they play. */
   played: boolean | null;
   /** An open late fee on this seat (shared/lateFees.ts), paid or not. Null for everyone else. */
-  lateFee?: { kind: LateFeeKind; paid: boolean } | null;
+  lateFee?: { kind: LateFeeKind; paid: boolean; oweCents: number } | null;
   /**
    * This is the organizer. They pay the venue, not the other players, so
    * there is no share or credit here, and their paid mark means "Court paid".

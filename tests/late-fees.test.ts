@@ -8,9 +8,12 @@ import { backupToSql } from '../scripts/backup-sql.mjs';
 import { createNodeD1 } from '../dev/nodeD1';
 import { activityText } from '../shared/activity';
 import { creditChanges } from '../shared/credit';
-import { dropLeavesShort, FEE_KEPT, LATE_FEES_HEADER, lateDropDialogText, lateDropToast, lateFeeKind, lateFeesAllowed } from '../shared/lateFees';
+import { dropLeavesShort, FEE_KEPT, feeClearedNotice, LATE_FEES_HEADER, lateDropDialogText, lateDropToast, lateFeeKind, lateFeesAllowed } from '../shared/lateFees';
 import type { GroupView } from '../shared/api';
 import { OPEN_FEE } from '../server/lateFees';
+import { backOutTexts, confirmedReach, lateCancelText, sessionTexts } from '../src/pages/admin/textMenu';
+import { unpaidRows } from '../src/pages/admin/moneyList';
+import { smsHref } from '../shared/messages';
 import { type Client, HOUR, PIN, setupGroup, TestApp, withoutIds } from './harness';
 
 const PRICE = 1400;
@@ -211,7 +214,7 @@ describe('late drops owe only when the game goes below 4', () => {
     const r1 = await drop(w, g.id, 'Blair');
     expect(r1).toMatchObject({ creditBackCents: 0, creditReturnedCents: 0, lateFee: { paid: true } });
     expect(await pot(w, 'Blair')).toBe(0);
-    expect((await rowOf(w, g.id, 'Blair')).lateFee).toEqual({ kind: 'late_drop', paid: true });
+    expect((await rowOf(w, g.id, 'Blair')).lateFee).toEqual({ kind: 'late_drop', paid: true, oweCents: 0 });
     // 3 left; Casey (paid with credit) drops: 2 left, credit stays spent.
     const r2 = await drop(w, g.id, 'Casey');
     expect(r2).toMatchObject({ creditBackCents: 0, creditReturnedCents: 0, lateFee: { paid: true } });
@@ -260,15 +263,11 @@ describe('late drops owe only when the game goes below 4', () => {
     expect((await rowOf(w, g.id, 'Blair')).lateDropAt).toBeNull();
   });
 
-  it('the organizer never owes, and an organizer removal is never late', async () => {
+  it('an organizer removal of someone else is never late', async () => {
     const w = await world();
     const g = await game(w);
-    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
-    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
     at(w, g.start, 3);
-    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false })).status).toBe(200);
-    expect((await rowOf(w, g.id, ORG)).lateFee).toBeNull();
-    // 3 left; the organizer takes Blair out: never late, no debt.
     expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/roster`, { playerId: w.byName.Blair, action: 'withdraw' })).status).toBe(200);
     expect((await rowOf(w, g.id, 'Blair')).lateFee).toBeNull();
     expect(await owedOf(w, 'Blair', g.id)).toBeNull();
@@ -416,7 +415,7 @@ describe('retries', () => {
     expect(await drop(w, g.id, 'Blair')).toMatchObject({ creditBackCents: 0 });
     expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/roster`, { playerId: w.byName.Blair, action: 'withdraw' })).status).toBe(200);
     expect(await pot(w, 'Blair')).toBe(0);
-    expect((await rowOf(w, g.id, 'Blair')).lateFee).toEqual({ kind: 'late_drop', paid: true });
+    expect((await rowOf(w, g.id, 'Blair')).lateFee).toEqual({ kind: 'late_drop', paid: true, oweCents: 0 });
     // The old Done button refuses an open debt (it would leave the money nowhere).
     expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/late-drop-done`, { playerId: w.byName.Blair })).status).toBe(409);
     // A sub still clears it with the switch off.
@@ -576,7 +575,7 @@ describe('Finalize: did not play owes only when fewer than 4 played', () => {
     const w = await world();
     const g = await played(w, ['Blair', 'Casey', 'Devon'], ['Blair', 'Casey', 'Devon', 'Emery']);
     expect(await pot(w, 'Emery')).toBe(0);
-    expect((await rowOf(w, g.id, 'Emery')).lateFee).toEqual({ kind: 'no_show', paid: true });
+    expect((await rowOf(w, g.id, 'Emery')).lateFee).toEqual({ kind: 'no_show', paid: true, oweCents: 0 });
     expect((await sessOf(w, g.id)).finalized).toMatchObject({ playedCount: 3, priceCents: PRICE });
     expect(audits(w, 'late_fee_owed')).toEqual([expect.objectContaining({ player: 'Emery', kind: 'no_show' })]);
     expect(health(w)).toEqual({});
@@ -646,7 +645,7 @@ describe('Cancel inside the 12 hours: "Did the venue waive the fee?"', () => {
     const s = await sessOf(w, g.id);
     expect(s.canceledBy).toBe(FEE_KEPT);
     expect(await pot(w, 'Blair')).toBe(0);
-    expect((await rowOf(w, g.id, 'Blair')).lateFee).toEqual({ kind: 'canceled_late', paid: true });
+    expect((await rowOf(w, g.id, 'Blair')).lateFee).toEqual({ kind: 'canceled_late', paid: true, oweCents: 0 });
     expect(await owedOf(w, 'Casey', g.id)).toMatchObject({ amountCents: PRICE, lateFee: 'canceled_late' });
     expect(await owedOf(w, 'Emery', g.id)).toMatchObject({ amountCents: PRICE, lateFee: 'late_drop' });
     expect(s.court).not.toBeNull();
@@ -795,5 +794,238 @@ describe('the words', () => {
     expect(dropLeavesShort(4, 0)).toBe(true);
     expect(dropLeavesShort(5, 0)).toBe(false);
     expect(dropLeavesShort(4, 1)).toBe(false);
+  });
+});
+
+// ---------- round 2 (Alex, Mon Nov 2 evening) ----------
+
+const A_TEXT =
+  "Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial or call the courts at 810-207-5698. Sorry again, hope you can still get it in!";
+const B_TEXT =
+  "Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at 810-207-5698. Sorry again!";
+
+describe('1a. cancel inside 12 hours with the organizer in the game', () => {
+  async function setup() {
+    const w = await world();
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    await markPaid(w, g.id, 'Blair');
+    // The organizer paid the venue (the court row).
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName[ORG], paid: true })).status).toBe(200);
+    at(w, g.start, 4);
+    return { w, g };
+  }
+  it('Yes: every player gets their money back as credit, nobody owes, the organizer gets nothing back and owes nothing', async () => {
+    const { w, g } = await setup();
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: true })).status).toBe(200);
+    expect(await pot(w, 'Blair')).toBe(PRICE);
+    for (const n of ['Casey', 'Devon']) expect(await owedOf(w, n, g.id)).toBeNull();
+    expect((await rowOf(w, g.id, ORG)).lateFee).toBeNull();
+    expect((await dash(w)).creditLedger.find((p: any) => p.playerId === w.byName[ORG])).toBeUndefined();
+    expect(health(w)).toEqual({});
+  });
+  it('No: the 3 players owe $14 each (Blair already paid), the organizer owes nothing, the court row stays', async () => {
+    const { w, g } = await setup();
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false })).status).toBe(200);
+    expect(await pot(w, 'Blair')).toBe(0);
+    expect((await rowOf(w, g.id, 'Blair')).lateFee).toMatchObject({ kind: 'canceled_late', paid: true });
+    for (const n of ['Casey', 'Devon']) expect(await owedOf(w, n, g.id)).toMatchObject({ amountCents: PRICE, lateFee: 'canceled_late' });
+    expect((await rowOf(w, g.id, ORG)).lateFee).toBeNull();
+    const s = await sessOf(w, g.id);
+    expect(s.payableCount).toBe(3);
+    expect(s.paidCount).toBe(1);
+    expect(s.court).toMatchObject({ paid: true });
+    expect(unpaidRows(s).map((r: any) => r.name).sort()).toEqual(['Casey', 'Devon']);
+    expect(health(w)).toEqual({});
+  });
+});
+
+describe('1b. the organizer drops late and the game goes on: treated like any player', () => {
+  it('leaves fewer than 4: the $14 shows as owed on Money and Home, one tap clears it ("My choice"), and it never blocks them', async () => {
+    const w = await world();
+    const g = await game(w);
+    const later = await game(w, 1);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName[ORG], paid: true })).status).toBe(200);
+    at(w, g.start, 3);
+    const out = await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false });
+    expect(out.data).toMatchObject({ result: 'withdrawn', lateFee: { cents: PRICE } });
+    const row = await rowOf(w, g.id, ORG);
+    expect(row).toMatchObject({ status: 'withdrawn', isOrganizer: true, lateFee: { kind: 'late_drop', paid: false, oweCents: PRICE } });
+    expect(audits(w, 'late_fee_owed')).toEqual([expect.objectContaining({ player: ORG, kind: 'late_drop' })]);
+    // The court payment is untouched (it is never a share, never credit).
+    expect((await sessOf(w, g.id)).court).toMatchObject({ paid: true });
+    // Never blocks: the organizer's own In on another game, and the remind list never texts them.
+    expect((await admin(w, 'POST', `/api/admin/sessions/${later.id}/me`, { in: true })).data.result).toBe('confirmed');
+    expect(unpaidRows(await sessOf(w, g.id)).map((r: any) => r.name)).not.toContain(ORG);
+    // One tap: Clear, "My choice".
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/late-fee`, { playerId: w.byName[ORG], why: 'choice' })).data.changed).toBe(true);
+    expect((await rowOf(w, g.id, ORG)).lateFee).toBeNull();
+    expect((await sessOf(w, g.id)).court).toMatchObject({ paid: true });
+    expect((await dash(w)).creditLedger.find((p: any) => p.playerId === w.byName[ORG])).toBeUndefined();
+    expect(health(w)).toEqual({});
+  });
+  it('a sub clears the organizer\'s debt like anyone\'s; the organizer coming back in settles their own', async () => {
+    const w = await world();
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    at(w, g.start, 3);
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false });
+    await join(w, g.id, ['Emery']);
+    expect((await rowOf(w, g.id, ORG)).lateFee).toBeNull();
+    expect(audits(w, 'late_fee_cleared')).toEqual([expect.objectContaining({ player: ORG, why: 'sub', sub: 'Emery' })]);
+    // Again: drop (4 left now: Blair, Casey, Devon, Emery -> nothing owed); come back in.
+    w.app.now += 1000;
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    w.app.now += 1000;
+    await drop(w, g.id, 'Emery');
+    w.app.now += 1000;
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false });
+    expect((await rowOf(w, g.id, ORG)).lateFee).toMatchObject({ kind: 'late_drop' });
+    w.app.now += 1000;
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).data.result).toBe('confirmed');
+    expect((await rowOf(w, g.id, ORG))).toMatchObject({ status: 'confirmed', lateFee: null });
+  });
+  it('switch off: the organizer\'s late drop owes nothing (as before)', async () => {
+    const w = await world({ mode: 'off' });
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    at(w, g.start, 3);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false })).data.lateFee).toBeUndefined();
+    expect((await rowOf(w, g.id, ORG)).lateFee).toBeNull();
+  });
+});
+
+describe('2. Text the players', () => {
+  it('goes only to the players confirmed in that game: not the organizer, not the waitlist, not hidden players', async () => {
+    const w = await world({ maxPlayers: 4 });
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    expect((await w.organizer.call('POST', `/api/admin/players/${w.byName.Casey}/admin-hide`, { hidden: true }, { 'X-Admin-R2': 'on' })).status).toBe(200);
+    const d = (await w.organizer.call('GET', '/api/admin/dashboard', undefined, { ...w.headers, 'X-Admin-R2': 'on' })).data;
+    const s = d.sessions.find((x: any) => x.id === g.id);
+    expect(s.roster.find((r: any) => r.name === 'Emery').status).toBe('waitlisted');
+    const who = confirmedReach(d, s, false);
+    const phoneOf = (n: string) => s.roster.find((r: any) => r.name === n).phone;
+    expect(who.phones.sort()).toEqual([phoneOf('Blair'), phoneOf('Devon')].sort());
+    expect(who.count).toBe(2);
+    expect(who.phones).not.toContain(phoneOf(ORG));
+  });
+  it('the two texts, word for word, in order, with the booking link and the courts\' number', () => {
+    const t = backOutTexts();
+    expect(t.map((x) => x.label)).toEqual(['Court canceled', 'Court still booked (backup)']);
+    expect(t[0].body).toBe(A_TEXT);
+    expect(t[1].body).toBe(B_TEXT);
+    expect(t[0].body).toContain('https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial');
+    expect(t[1].body).toContain('810-207-5698');
+    // Messages opens with the words and the numbers (the site never sends).
+    expect(smsHref(['3135550101', '3135550103'], t[0].body, true)).toMatch(/^sms:/);
+  });
+  it('shows only with the switch on (the dashboard says so)', async () => {
+    expect((await dash(await world({ mode: 'off' }))).lateFees).toBe(false);
+    expect((await dash(await world())).lateFees).toBe(true);
+  });
+});
+
+describe('3. the person who owed is told when the debt is cleared', () => {
+  it('cleared by a sub, never paid: "Good news ... You no longer owe $14."; only they see it', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w, g.start, 5);
+    await drop(w, g.id, 'Blair');
+    expect((await view(w, 'Blair')).feeNotices).toEqual([]);
+    await join(w, g.id, ['Frankie']);
+    const n = (await view(w, 'Blair')).feeNotices!;
+    expect(n).toEqual([expect.objectContaining({ why: 'sub', creditCents: 0, startsAt: new Date(g.start).toISOString() })]);
+    expect(feeClearedNotice(n[0].why, 'Tue, Oct 27', '$14', null)).toBe('Good news: someone took your spot for Tue, Oct 27. You no longer owe $14.');
+    for (const other of ['Casey', 'Frankie']) expect((await view(w, other)).feeNotices).toEqual([]);
+    expect(withoutIds(JSON.stringify(await view(w, 'Casey')))).not.toMatch(/someone took your spot|late_fee/);
+  });
+  it('cleared by a sub after paying: "... Your $14 is back as credit."', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w, g.id, 'Blair');
+    at(w, g.start, 5);
+    await drop(w, g.id, 'Blair');
+    await join(w, g.id, ['Frankie']);
+    const n = (await view(w, 'Blair')).feeNotices!;
+    expect(n[0]).toMatchObject({ why: 'sub', creditCents: PRICE });
+    expect(feeClearedNotice('sub', 'Tue, Oct 27', '$14', '$14')).toBe('Good news: someone took your spot for Tue, Oct 27. Your $14 is back as credit.');
+  });
+  it('cleared by the organizer (venue waived or my choice): "You no longer owe $14 for Tue, Oct 27."', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w, g.start, 5);
+    await drop(w, g.id, 'Blair');
+    w.app.now += 1000;
+    await drop(w, g.id, 'Casey');
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/late-fee`, { playerId: w.byName.Blair, why: 'venue' });
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/late-fee`, { playerId: w.byName.Casey, why: 'choice' });
+    for (const n of ['Blair', 'Casey']) expect((await view(w, n)).feeNotices).toEqual([expect.objectContaining({ why: 'cleared', creditCents: 0 })]);
+    expect(feeClearedNotice('cleared', 'Tue, Oct 27', '$14', null)).toBe('You no longer owe $14 for Tue, Oct 27.');
+  });
+  it('the organizer never gets a notice about their own debt', async () => {
+    const w = await world();
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    at(w, g.start, 3);
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: false });
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/late-fee`, { playerId: w.byName[ORG], why: 'choice' });
+    expect((await view(w, ORG)).feeNotices).toEqual([]);
+  });
+});
+
+describe('4. the text after a late cancel follows the venue answer', () => {
+  async function canceled(waived: boolean) {
+    const w = await world({ maxPlayers: 4 });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    at(w, g.start, 4);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: waived })).status).toBe(200);
+    const d = await dash(w);
+    return { w, g, d, s: d.sessions.find((x: any) => x.id === g.id) };
+  }
+  it('No: "Heads up: today\'s game is canceled ..." to the confirmed players only (not the waitlist); the Home card text matches', async () => {
+    const { d, s } = await canceled(false);
+    const t = lateCancelText(d, s, '')!;
+    const link = String(d.group.playerLink).replace(/^https?:\/\//, '').replace(/\/$/, '');
+    expect(t.feeKept).toBe(true);
+    expect(t.body).toBe(
+      `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your $14 share still applies (if you already paid, you're all set). You can pay on the site: ${t.body.match(/site: (\S+)\. Sorry/)![1]}. Sorry about that!`,
+    );
+    expect(t.body).not.toMatch(/credit|tomorrow/);
+    expect(t.body).toContain(link.split('/')[0]);
+    const confirmedPhones = s.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.phone).sort();
+    expect(t.reach.phones.sort()).toEqual(confirmedPhones);
+    expect(t.reach.phones).not.toContain(s.roster.find((r: any) => r.status === 'waitlisted').phone);
+    // The Home "Do this now" card's text button uses the same words and people.
+    const item = sessionTexts(d, s, Date.parse(d.now)).find((x) => x.id === 'canceled')!;
+    expect(item.body).toBe(t.body);
+    expect(item.phones.sort()).toEqual(confirmedPhones);
+  });
+  it('Yes: the credit text, saying "today" (not "tomorrow"), to everyone signed up and waiting', async () => {
+    const { d, s } = await canceled(true);
+    const t = lateCancelText(d, s, 'Rain')!;
+    expect(t.feeKept).toBe(false);
+    expect(t.body).toMatch(/^Pickleball today is canceled\. Rain\. If you paid, it's now your credit\. You can request a cash out on the site\. /);
+    expect(t.reach.count).toBe(5);
+  });
+  it('switch off: the old text stays', async () => {
+    const w = await world({ mode: 'off' });
+    const g = await game(w);
+    await join(w, g.id, ['Blair']);
+    at(w, g.start, 4);
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true });
+    const d = await dash(w);
+    expect(lateCancelText(d, d.sessions.find((x: any) => x.id === g.id), '')).toBeNull();
   });
 });

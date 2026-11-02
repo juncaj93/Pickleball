@@ -14,7 +14,10 @@
 // A debt is open while late_drop_done_at is empty and the seat still holds its payment (unpaid = owes, or paid and not
 // handed back = paid). "Clear" (a sub took the spot, the venue waived it, or the organizer's choice) sets
 // late_drop_done_at and gives the money back as credit the same way a drop or cancel does. A clear is final.
-// The organizer never owes (they pay the venue).
+// The organizer is treated like any player for a late drop (Alex, Nov 2): their own drop inside the 12 hours that
+// leaves the game short is a debt too, shown on Money and Home and cleared in one tap. Their seat's payment fields mean
+// "court paid", so their debt never reads a payment: it is simply owed until a sub or Clear ends it. They never owe on a
+// late cancel or as a no-show (they pay the venue).
 
 /** sessions.canceled_by for "Did the venue waive the fee?" answered No: no money moved, everyone signed up still owes. */
 export const FEE_KEPT = 'organizer_fee_kept';
@@ -58,7 +61,8 @@ export interface FeeGame {
  * The organizer's own seat is never a debt: pass `isOrganizer`.
  */
 export function lateFeeKind(seat: FeeSeat, game: FeeGame, isOrganizer = false): LateFeeKind | null {
-  if (isOrganizer || seat.late_drop_done_at) return null;
+  if (seat.late_drop_done_at) return null;
+  if (isOrganizer) return seat.status === 'withdrawn' && seat.played === 0 && seat.late_drop_at ? 'late_drop' : null;
   const holds = seat.payment_status === 'unpaid' || (seat.payment_status === 'paid' && !seat.refunded_at);
   if (!holds) return null;
   if (seat.status === 'withdrawn' && seat.played === 0 && seat.late_drop_at) return 'late_drop';
@@ -111,4 +115,14 @@ export function lateDropDialogText(time: string, owes: boolean, feeText: string,
 /** The drop banner when the drop leaves the game short. */
 export function lateDropToast(feeText: string, paid: boolean): string {
   return paid ? `You're out. Your ${feeText} stays on this game unless someone takes your spot.` : `You're out. You owe ${feeText} unless someone takes your spot.`;
+}
+
+/**
+ * The notice a player sees once their debt is cleared (until they dismiss it). `day` is "Tue, Nov 3".
+ * Sub: "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." (paid: "... Your $14 is back as credit.")
+ * The organizer (venue waived, my choice, or the game was canceled): "You no longer owe $14 for Tue, Nov 3."
+ */
+export function feeClearedNotice(why: 'sub' | 'cleared', day: string, feeText: string, creditText: string | null): string {
+  if (why === 'sub') return `Good news: someone took your spot for ${day}. ${creditText ? `Your ${creditText} is back as credit.` : `You no longer owe ${feeText}.`}`;
+  return `You no longer owe ${feeText} for ${day}.${creditText ? ` Your ${creditText} is back as credit.` : ''}`;
 }

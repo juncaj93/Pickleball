@@ -27,6 +27,32 @@ import { lateFeesFor } from './lateFees';
 import { lateFeeKind } from '../shared/lateFees';
 
 /**
+ * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." The cleared late fees of THIS player only
+ * (their own History lines, matched by their id), from the last 60 days. The phone remembers which ones were dismissed.
+ */
+async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string): Promise<NonNullable<GroupView['feeNotices']>> {
+  const since = new Date(ctx.nowMs - 60 * DAY_MS).toISOString();
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT a.id, a.details_json, s.starts_at FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
+       WHERE a.group_id = ? AND a.action = 'late_fee_cleared' AND a.created_at >= ? ORDER BY a.created_at, a.rowid`,
+    )
+    .bind(groupId, since)
+    .all<{ id: string; details_json: string; starts_at: string }>();
+  const out: NonNullable<GroupView['feeNotices']> = [];
+  for (const r of results) {
+    try {
+      const d = JSON.parse(r.details_json) as { playerId?: string; why?: string; amountCents?: number };
+      if (d.playerId !== playerId) continue;
+      out.push({ id: r.id, startsAt: r.starts_at, why: d.why === 'sub' ? 'sub' : 'cleared', creditCents: typeof d.amountCents === 'number' && d.amountCents > 0 ? d.amountCents : 0 });
+    } catch {
+      /* an unreadable line shows nothing */
+    }
+  }
+  return out;
+}
+
+/**
  * This player's late fees that were cleared, keyed "session|time": 'sub' when someone took their spot, 'cleared' when
  * the organizer cleared it (or the game was canceled). Read from their own History lines only.
  */
@@ -121,6 +147,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const hiddenIds = await hiddenFromPlayers(ctx, group.id, sessions);
 
   const owed: GroupView['owed'] = [];
+  const feeNotices: NonNullable<GroupView['feeNotices']> = [];
   let suggestion: GroupView['suggestion'] = null;
   const credit: GroupView['credit'] = { balanceCents: 0, usableCents: 0, pending: null, history: [] };
   // Their own seats' part of the pot: credit used on it, cash paid toward it earlier, and money that came back from it.
@@ -162,6 +189,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       credit.pending = pending ? { id: pending.id, cents: pending.amount_cents, at: pending.created_at } : null;
       // Money that came back because a late fee was cleared: "someone took your spot" (a sub) or cleared by the organizer.
       const feeClears = await lateFeeClearsFor(ctx, group.id, me.id);
+      feeNotices.push(...(await feeNoticesFor(ctx, group.id, me.id)));
       const startsOf = new Map(
         (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
       );
@@ -230,6 +258,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
+    feeNotices,
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs && !hiddenIds.has(s.id))
       .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift, lateFees)),

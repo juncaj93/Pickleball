@@ -3,7 +3,11 @@
 // Messages with the words ready; it never sends anything.
 import type { AdminDashboard, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
+  canceledFeeKeptMessage,
   canceledMessage,
+  canceledTodayMessage,
+  courtCanceledMessage,
+  courtStillBookedMessage,
   checkInMessage,
   finalMessage,
   movedMessage,
@@ -59,7 +63,10 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   }
 
   if (s.state.flags.canceled) {
-    items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
+    // Late fees on and canceled inside 12 hours: the text follows the venue answer (fee kept: confirmed players only).
+    const late = lateCancelText(d, s, '');
+    if (late) items.push({ id: 'canceled', label: 'Canceled', body: late.body, chat: false, phones: late.reach.phones, missing: late.reach.missing, who: `${late.to} · ${late.reach.count}` });
+    else items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
     return items;
   }
   const n = s.confirmedCount;
@@ -116,5 +123,58 @@ export function unpaidPeople(d: AdminDashboard) {
     missing: owing.filter((p) => !p.phone).map((p) => p.name),
     count: owing.length,
     body: remindAllMessage(siteAddress(d.group.playerLink)),
+  };
+}
+
+// ---------- "Text the players" (LATE_FEES on) ----------
+
+/**
+ * Who "Text the players" (and the "venue did not waive" cancel text) goes to: only the players confirmed in this game.
+ * Never the organizer, never the waitlist, never the whole group. `withHidden` false also leaves out players hidden
+ * from the Players list (Hide player).
+ */
+export function confirmedReach(d: AdminDashboard, s: AdminSessionView, withHidden: boolean) {
+  const hidden = new Set(withHidden ? [] : d.players.filter((p) => p.adminHidden).map((p) => p.id));
+  return reach(
+    s.roster.filter((r) => r.status === 'confirmed' && !r.isOrganizer && !hidden.has(r.playerId)),
+    d.me?.id ?? null,
+  );
+}
+
+export interface BackOutText {
+  id: 'court_canceled' | 'court_booked';
+  label: string;
+  body: string;
+}
+
+/** The two texts for backing out of today's game, main one first. */
+export function backOutTexts(): BackOutText[] {
+  return [
+    { id: 'court_canceled', label: 'Court canceled', body: courtCanceledMessage() },
+    { id: 'court_booked', label: 'Court still booked (backup)', body: courtStillBookedMessage() },
+  ];
+}
+
+/** True when the game was canceled inside the 12 hours before its start (the venue question was asked). */
+export function canceledLate(s: AdminSessionView): boolean {
+  return !!s.canceledAt && Date.parse(s.canceledAt) >= Date.parse(s.startsAt) - 12 * 3_600_000 && Date.parse(s.canceledAt) < Date.parse(s.startsAt);
+}
+
+/**
+ * The text after a cancel, with LATE_FEES on and the cancel inside 12 hours: venue did NOT waive the fee ->
+ * "Heads up: today's game is canceled ..." to the confirmed players only; waived -> the usual credit text saying "today",
+ * to everyone signed up and waiting. Null: not a late cancel with the switch on (the old text stays).
+ */
+export function lateCancelText(d: AdminDashboard, s: AdminSessionView, reason: string): { body: string; to: string; feeKept: boolean; reach: ReturnType<typeof reach> } | null {
+  if (d.lateFees !== true || !canceledLate(s)) return null;
+  const link = siteAddress(d.group.playerLink);
+  if (s.canceledBy === 'organizer_fee_kept') {
+    return { body: canceledFeeKeptMessage(d.group.settings.pricePerPlayerCents, link), to: 'The players who were in', feeKept: true, reach: confirmedReach(d, s, true) };
+  }
+  return {
+    body: canceledTodayMessage(link, reason),
+    to: 'Everyone signed up and waiting',
+    feeKept: false,
+    reach: reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), d.me?.id ?? null),
   };
 }

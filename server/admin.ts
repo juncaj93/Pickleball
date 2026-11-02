@@ -313,7 +313,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     // signed up still owes their $14 (late droppers keep owing too).
     const lateFees = askedCharge && (await lateFeesFor(ctx, group.id));
     if (lateFees) {
-      if (typeof body.venueWaived !== 'boolean') throw new HttpError(400, 'answer_needed', 'Did the venue waive the fee? Pick Yes or No.');
+      if (typeof body.venueWaived !== 'boolean') throw new HttpError(400, 'answer_needed', 'Did the venue waive the fee or give you credit toward the next booking? Pick Yes or No.');
       if (body.venueWaived === false) return cancelFeeKept(ctx, group, session, reason);
     }
     const chargedCents = askedCharge && !lateFees ? (v.cents(body.chargedCents, 'chargedCents') ?? 0) : 0;
@@ -404,7 +404,10 @@ async function cancelWithMoney(ctx: Ctx, group: GroupRow, session: SessionRow, c
       .bind(session.id, ctx.nowIso)
       .all<{ name: string; id: string }>()
   ).results;
-  for (const c of cleared) await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: c.name, playerId: c.id, why: 'canceled' }, ctx.nowIso);
+  for (const c of cleared) {
+    const back = (await moneyBackAt(ctx.db, session.id, c.id, 'canceled', ctx.nowIso))[0];
+    await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: c.name, playerId: c.id, why: 'canceled', amountCents: (back?.cashCents ?? 0) + (back?.creditCents ?? 0) }, ctx.nowIso);
+  }
   const moved = await moneyBackAt(ctx.db, session.id, null, 'canceled', ctx.nowIso);
   const names = new Map((await loadRoster(ctx.db, session.id)).map((r) => [r.player_id, r.display_name]));
   for (const m of moved) {
@@ -494,7 +497,8 @@ export async function clearLateFee(ctx: Ctx, body: Record<string, unknown>) {
   const tagged = `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND late_drop_done_at = ${sqlText(now)})`;
   const statements: D1PreparedStatement[] = [
     ctx.db
-      .prepare(`UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3 AND ${OPEN_FEE('session_players')}`)
+      // A late drop is tagged by its marks alone (the organizer's own has no owed payment on it); the others as open fees.
+      .prepare(`UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3 AND ${kind === 'late_drop' ? OPEN_LATE_DROP('session_players') : OPEN_FEE('session_players')}`)
       .bind(now, session.id, playerId),
   ];
   const base = { groupId: group.id, sessionId: session.id, playerId, organizerId, nowIso: now };
@@ -1604,10 +1608,13 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
     if (res.result !== 'already_confirmed') await audit(ctx.db, group.id, session.id, 'player_join', { player: me.name, result: res.result, organizer: true }, ctx.nowIso, me.name);
     return res;
   }
-  const res = await withdraw(ctx.db, group, session, me.id, ctx.nowMs);
-  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group)) : false;
-  if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
-  return { result: res.changed ? 'withdrawn' : 'not_in_session' };
+  // Late fees: the organizer's own late drop counts like any player's (it can leave them owing $14, cleared in one tap).
+  const lateFees = await lateFeesFor(ctx, group.id);
+  const res = await withdraw(ctx.db, group, session, me.id, ctx.nowMs, { lateFees });
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group), lateFees) : false;
+  if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true, ...(res.lateFee ? { owes: true } : {}) }, ctx.nowIso, me.name);
+  if (res.lateFee) await auditLateFeeOwed(ctx.db, group.id, session.id, me.id, 'late_drop', ctx.nowIso, me.name);
+  return { result: res.changed ? 'withdrawn' : 'not_in_session', ...(res.lateFee ? { lateFee: { cents: settingsOf(group).pricePerPlayerCents } } : {}) };
 }
 
 /** PUT /api/admin/time-shift { on }: Settings > "Moved-game notice for everyone". Changes no money and no seat. */

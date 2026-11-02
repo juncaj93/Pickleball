@@ -195,7 +195,8 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   // The organizer is not a row of their own money: they pay the venue (the court row).
   // Plus every open late fee (shared/lateFees.ts): a late drop, a no-show, a seat in a game canceled late.
-  const allRows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid' || !!r.lateFee) && (!s.state.flags.canceled || !!r.lateFee));
+  // Your own late drop shows too (Clear only: your seat's payment is the court payment).
+  const allRows = s.roster.filter((r) => (r.isOrganizer ? !!r.lateFee : r.status === 'confirmed' || r.paymentStatus === 'paid' || !!r.lateFee) && (!s.state.flags.canceled || !!r.lateFee));
   // Round 2 (ADMIN_R2): the people who still owe come first, then the people who paid (each group keeps its order). Same rows, same money.
   const rows = r2 ? [...allRows.filter((r) => r.paymentStatus !== 'paid'), ...allRows.filter((r) => r.paymentStatus === 'paid')] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
@@ -205,7 +206,7 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   const setCourtPaid = (paid: boolean) => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
   const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.');
 
-  const feeRows = s.roster.some((r) => !r.isOrganizer && r.lateFee);
+  const feeRows = s.roster.some((r) => r.lateFee);
   if (s.state.flags.canceled && !feeRows) {
     return (
       <div className="mv2-body stack">
@@ -223,6 +224,12 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
     run(() => api('POST', `/api/admin/sessions/${s.id}/late-fee`, { playerId: r.playerId, why }), `${r.name}: cleared (${label.toLowerCase()})`);
   const actionsOf = (r: AdminRosterEntry): Act[] => {
     const acts: Act[] = [];
+    if (r.lateFee && r.isOrganizer) {
+      // Your own late drop: Clear is one tap ("My choice"), the other reasons under the row.
+      acts.push({ label: 'Clear', attrs: { 'data-clear-why': 'choice' }, onClick: () => void clearFee(r, 'choice', 'My choice') });
+      for (const c of CLEAR_CHOICES.filter((x) => x.why !== 'choice')) acts.push({ label: `Clear: ${c.label.toLowerCase()}`, attrs: { 'data-clear-why': c.why }, onClick: () => void clearFee(r, c.why, c.label) });
+      return acts;
+    }
     if (r.lateFee) {
       // A late fee: Mark paid (or Unmark), and Clear with why (shared/lateFees.ts rule 8). The money stays on this game.
       if (r.paymentStatus === 'paid' && !r.refundedAt) {

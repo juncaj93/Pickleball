@@ -361,7 +361,10 @@ export async function withdraw(
   // Late fee (shared/lateFees.ts rule 2): only a seat that was in, never the organizer, inside the 12 hours before the
   // start. Whether the game is left short is worked out inside the same statement that takes the seat out, so two
   // drops at the same moment can't both see "still 4": the one that takes it below 4 owes.
-  const feeDrop = !!opts.lateFees && existing.status === 'confirmed' && playerId !== organizerId && nowMs >= lateFeeCutoffMs(session.starts_at);
+  // The organizer counts like any player here (Alex, Nov 2), but their seat's payment is the court payment: it is never
+  // turned into an owed share (?5), and nothing on it ever becomes credit.
+  const isOrg = playerId === organizerId;
+  const feeDrop = !!opts.lateFees && existing.status === 'confirmed' && nowMs >= lateFeeCutoffMs(session.starts_at);
   const short = LEAVES_SHORT('session_players.session_id', 'session_players.id');
   const owes = `(?4 = 1 AND ${short})`;
   const money = seatMoneyBackStatements(db, {
@@ -384,11 +387,11 @@ export async function withdraw(
                  played = CASE WHEN ${owes} THEN 0 ELSE played END,
                  late_drop_at = CASE WHEN ${owes} THEN ?1 ELSE late_drop_at END,
                  late_drop_done_at = CASE WHEN ${owes} THEN NULL ELSE late_drop_done_at END,
-                 payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' WHEN ${owes} THEN 'unpaid' ELSE 'not_applicable' END,
+                 payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' WHEN ${owes} AND ?5 = 0 THEN 'unpaid' ELSE 'not_applicable' END,
                  updated_at = ?1
                WHERE id = ?2 AND status = ?3`,
             )
-            .bind(nowIso, existing.id, existing.status, feeDrop ? 1 : 0),
+            .bind(nowIso, existing.id, existing.status, feeDrop ? 1 : 0, isOrg ? 1 : 0),
         ]
       : []),
     ...money,
@@ -408,7 +411,7 @@ export async function withdraw(
   }
   // Did this drop leave an open late-drop debt (its money stayed on the game)?
   const after = changed && feeDrop ? await existingRow(db, session.id, playerId) : null;
-  const lateFee = isOpenLateDrop(after) ? { paid: await seatHoldsMoney(db, session.id, playerId) } : null;
+  const lateFee = isOpenLateDrop(after) ? { paid: isOrg ? false : await seatHoldsMoney(db, session.id, playerId) } : null;
   if (!changed && cash === 0 && credit === 0) return nothing;
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.

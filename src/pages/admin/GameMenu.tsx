@@ -190,6 +190,12 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               )}
             </>
           )}
+          {ctx.d.lateFees === true && (
+            <button role="menuitem" className="menu-row" data-players-text-menu onClick={pick(() => ctx.open('players_text', s.id))}>
+              <MessageIcon />
+              Text the players
+            </button>
+          )}
           {!canceled && (
             <button role="menuitem" className="menu-row" onClick={pick(() => ctx.open('edit', s.id))}>
               <EditIcon />
