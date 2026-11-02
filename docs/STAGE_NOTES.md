@@ -1705,3 +1705,16 @@ that at 100% text only. Tell Alex if he wants the count never cut.
 1. Merge the branch into main (PR), pull main, `npm test`, confirm main equals live plus this change.
 2. SQL export and a Time Travel bookmark (no migration, no database change: this is for the rule).
 3. `npm run deploy` from main. 4. Read-only live check. 5. Rollback: redeploy the previous commit (no data to restore).
+
+### Deploy: layout polish LIVE (Mon Nov 2, 2026, about 1:57 PM Eastern, quiet window), every new switch OFF
+- PR #74 merged as 09547e3 (same tree as the tested branch head 76b28cc). Production deployment `cd5a5dd6-8f6e-40a1-827f-20949dc84211`, branch main.
+- Before it: SQL export `live-before-layout-polish-2026-11-02.sql` (260 INSERTs, has phone numbers, not committed, in the session scratch folder);
+  Time Travel bookmark `000004a5-00000000-00005117-edbd66114d824e1284cd284b78373c28` (1:56 PM). No migration, no database change.
+- Switches: PAY_NOTE allowed, Settings > Feature switches > "No Venmo? note" OFF for everyone (the live `/api/group` answers `payNote: false`,
+  and `true` only with the private header `X-Pay-Note: on`). Nothing else was switched. Layout and item 9 are plain CSS/markup with no switch.
+- After it (read-only): /, /admin, /api/status, /api/group/version 200; bundle holds the new code; row counts identical to before
+  (players 10, sessions 9, session_players 21, credit_ledger 5, player_devices 38, task_log 6, admin_audit_log 144, refund_requests 0);
+  live-check.cjs all green except the known "setup code is configured" line.
+- Rollback: Pages deployment `c0d807e3-2261-4bdd-a74f-5f6f155ebdb7` (commit ebb375a, admin v2) via the Cloudflare dashboard, Deployments, "Rollback to this
+  deployment". No data to restore. Whole database only if ever needed: `npx wrangler d1 time-travel restore pickleball --bookmark=000004a5-00000000-00005117-edbd66114d824e1284cd284b78373c28`.
+- Known and not mine: admin-cleanup (2) and admin-motion "2. press" fail on untouched main too; round2 has one older flaky check; L5 left for later.
