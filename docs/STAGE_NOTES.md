@@ -1775,3 +1775,54 @@ Test: `F6 In / Out moves the instant it is tapped...` (a slowed server, three qu
 - Rollback: Settings switch off (instant). Code: redeploy Pages deployment `cd5a5dd6-8f6e-40a1-827f-20949dc84211`. New code only writes `task_log` rows (the switch, hidden players), which the old code ignores, so no data restore is needed. Whole database:
   `npx wrangler d1 time-travel restore pickleball --bookmark=000004c5-00000000-00005117-9e11ffebadcdf849d188deae9bdd5c5d`.
 - Tests on the deployed code: type check clean; unit 1,707 passed, 1 skipped (95 files); `e2e/admin-r2.cjs` 27 of 27; old screens with the switch off passed apart from the known failures on main (admin-cleanup 2, admin-motion "press" 1).
+
+## Late drops owe $14 (LATE_FEES) - Mon Nov 2, 2026 - on a preview, waiting for "ship it"
+
+Spec: LATE_FEES_SPEC (Alex, Mon Nov 2, 12:35 PM) over the read-only AUDIT_REPORT (main 3f6fc1a). Started from main 6a9874e (admin screens
+round 2 already live with its switch off). This is a MONEY change. Ships OFF. No database change (no migration).
+
+### The rules as built (plain words)
+- Late = inside the 12 hours before the start (start minus 12 hours, one clock). With the switch off, the late-drop mark keeps
+  using each game's saved deadline as before (12 hours today; they only differ if Settings > Schedule's deadline is changed).
+- A player's own late drop that leaves fewer than 4 in (people on the waitlist count, they move in at once) keeps their $14 on the
+  game: cash stays paid, credit stays spent, unpaid means they owe. With 4 or more left, nothing is owed and money comes back as
+  credit like today. Two drops at once: the one that takes it below 4 owes (decided inside the same database statement).
+- Anyone who gets a seat afterwards (a new I'm in, a waitlist move-in, Alex adding someone, Alex's own In) clears the OLDEST open
+  late-drop debt, one each, in the same database step as their seat. The dropper's money comes back as credit; their credit
+  sheet says "Tue, Nov 3: someone took your spot. $14 back as credit." A dropper who comes back settles only their own debt
+  (their payment is kept, no double charge).
+- Finalize with fewer than 4 played: someone who was in and did not play owes $14 flat (their payment stays). 4 or more played:
+  as today (everything back as credit). Reopen undoes the no-show debts with the rest of the finalize.
+- Cancel inside 12 hours asks "Did the venue waive the fee?" (no default). Yes = today's cancel (open late drops are cleared too).
+  No = no money moves, `canceled_by = 'organizer_fee_kept'`, everyone who was in still owes $14 (late droppers too); Money counts
+  the court cost as charged and what was paid as collected. Reopen = a normal game again.
+- Debts show on the player's top Pay card with "(late drop)", "(canceled late)" or "(did not play)" and the usual Use credit /
+  Pay / I paid. Never blocks sign-up. Nobody else sees them. The organizer never owes; organizer removals are never late.
+- Organizer: Money shows an Unpaid row on that game ("late drop · owes $14", "canceled, fee not waived"), Mark paid / Unmark, and
+  Clear (Sub found / Venue waived / My choice), each with a History line. Home "Late drop" card: Find a sub (opens Messages with
+  the game's prepared text) and Clear replace Done. The old Done refuses an open debt (it would have left the money nowhere).
+
+### How it is stored (no schema change)
+- A late-drop debt: the seat row is `withdrawn` with `played = 0` (only this switch's code ever writes `played` on a seat that
+  left). A no-show: `late_drop_at` equal to the game's `finalized_at`. A late cancel: `sessions.canceled_by = 'organizer_fee_kept'`.
+  Cleared = `late_drop_done_at` set. One rule in TypeScript (`shared/lateFees.ts` lateFeeKind) and the same rule in SQL
+  (`server/lateFees.ts` OPEN_FEE); a test checks they agree on all 576 seat shapes.
+- The money-back statements (`seatMoneyBackStatements`) now skip open debts by default, so a retry tap, a second cancel tap, an
+  Unmark or an organizer edit can never hand the held $14 back. A clear marks the seat first, then moves the money.
+- The switch: `LATE_FEES` var (kill switch), Settings > Feature switches > "Late drops owe $14" (one `task_log` row `late_fees_on`),
+  private link `?latefees=on` / `/admin?latefees=on` (header `X-Late-Fees: on`). The switch only decides whether NEW debts are
+  made; existing debts always show and always clear by a sub or Clear.
+- Health checks (`scripts/integrity-checks.sql`): open debts are excluded from "credit used on left seat" and "cash still on
+  canceled game", and counted in the new `info_open_late_fees` (a to-do, not a problem).
+
+### Differences from the written spec / audit, for Alex
+- SITE_RULES "Under 4 the game is canceled" is wrong: the code never cancels by itself. Fixed in `docs/SITE_RULES.md` (a copy of
+  the rules now kept in the repo).
+- Cancel-by mismatch (reported): cards and the cancel question use start minus 12 hours; with the switch off the late-drop mark
+  uses the saved deadline (12 today, set from Settings when a game is made or moved). With the switch on, everything uses start
+  minus 12 hours.
+- "Use credit" on a debt already takes part of the credit when that is all there is (no new credit rule).
+- A drop that a waitlisted player fills at once never creates a debt (the waiting player is counted), instead of creating one and
+  clearing it a moment later.
+- The Pay card shows a debt right away, not only from 8:00 AM on game day.
+- Preview seed: an extra game "Late-fee test" 11 hours after the seed with 4 in (Jordan, Lane, Morgan, Kai; Kai paid cash).
