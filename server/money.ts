@@ -17,6 +17,7 @@ import { HttpError } from './http';
 import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
+import { FEE_KEPT, lateFeeKind } from '../shared/lateFees';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -84,7 +85,11 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     // What other players paid and have not been given back as credit (settled seats gave it all back), plus cash
     // paid earlier toward a seat whose price went up.
     // An unconfirmed "I paid" on a seat that left (or a canceled game) is a claim: held until the organizer decides.
+    // A game canceled late with the fee kept ("Did the venue waive the fee?" No): the venue charged, and what the players
+    // paid toward it stays with the group, so it counts like a game that was played.
+    const feeKept = s.status === 'canceled' && s.canceled_by === FEE_KEPT;
     const claim = (r: (typeof roster)[number]) =>
+      !lateFeeKind(r, s) &&
       isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: s.finalized_at && r.played === 0 ? false : null }, s.status === 'canceled');
     const claims = roster.filter((r) => r.player_id !== organizerId && claim(r)).reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
     const kept = roster
@@ -103,22 +108,20 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     if (state !== 'played' && state !== 'canceled') held += kept;
     // Credit put on a seat that still owes the rest is the organizer's money already, so it is held (finalized
     // or not) until the seat is paid; then the whole payment is counted above.
-    if (state !== 'canceled')
+    if (state !== 'canceled' || feeKept)
       held += roster
-        .filter((r) => r.player_id !== organizerId && r.status === 'confirmed' && r.payment_status === 'unpaid')
+        .filter((r) => r.player_id !== organizerId && (r.status === 'confirmed' || lateFeeKind(r, s)) && r.payment_status === 'unpaid')
         .reduce((sum, r) => sum + seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at }).usedCents, 0);
     courts += charged;
-    if (state === 'played') {
-      collected += kept;
-      courts += cost;
-    }
+    if (state === 'played' || feeKept) collected += kept;
+    if (state === 'played') courts += cost;
     sessions.push({
       id: s.id,
       startsAt: s.starts_at,
       endsAt: s.ends_at,
       state,
       charged: charged > 0,
-      collectedCents: state === 'played' ? kept : 0,
+      collectedCents: state === 'played' || feeKept ? kept : 0,
       courtCostCents: state === 'played' ? cost : charged,
       typicalCost: s.court_cost_cents === null,
       playedCount: s.finalized_at ? (s.final_played_count ?? 0) : null,

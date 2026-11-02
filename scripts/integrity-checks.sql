@@ -24,6 +24,15 @@ used_on_seat AS (
 -- credit) until Confirm / Didn't pay, so they are a to-do, not a problem.
 claim AS (
   SELECT session_id, player_id FROM session_players WHERE payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
+),
+-- Open late fees ("Late drops owe $14", shared/lateFees.ts): by design their money stays on the game (a seat that left,
+-- or a game canceled late that the venue charged) until the organizer marks them paid or clears them. A to-do, not a problem.
+fee AS (
+  SELECT sp.session_id, sp.player_id FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+  WHERE sp.late_drop_done_at IS NULL AND (sp.payment_status = 'unpaid' OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL)) AND (
+    (sp.status = 'withdrawn' AND sp.played = 0 AND sp.late_drop_at IS NOT NULL)
+    OR (sp.status = 'confirmed' AND s.status = 'canceled' AND COALESCE(s.canceled_by, '') = 'organizer_fee_kept')
+    OR (sp.status = 'confirmed' AND s.status <> 'canceled' AND sp.played = 0 AND sp.late_drop_at IS NOT NULL AND sp.late_drop_at = s.finalized_at))
 )
 SELECT
   (SELECT COUNT(*) FROM session_players sp LEFT JOIN sessions s ON s.id = sp.session_id WHERE s.id IS NULL) AS seat_without_game
@@ -34,16 +43,18 @@ SELECT
   ,(SELECT COUNT(*) FROM refund_requests r LEFT JOIN players p ON p.id = r.player_id WHERE p.id IS NULL) AS cash_out_without_player
   ,(SELECT COUNT(*) FROM pot WHERE cents < 0) AS pot_below_zero
   ,(SELECT COUNT(*) FROM pending pe LEFT JOIN pot po ON po.player_id = pe.player_id WHERE pe.cents > COALESCE(po.cents, 0)) AS pending_cash_out_over_pot
-  ,(SELECT COUNT(*) FROM used_on_seat u JOIN sessions s ON s.id = u.session_id WHERE s.status = 'canceled' AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id)) AS credit_used_on_canceled_game
-  ,(SELECT COUNT(*) FROM used_on_seat u LEFT JOIN session_players sp ON sp.session_id = u.session_id AND sp.player_id = u.player_id WHERE (sp.id IS NULL OR sp.status IN ('withdrawn', 'declined')) AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id)) AS credit_used_on_left_seat
+  ,(SELECT COUNT(*) FROM used_on_seat u JOIN sessions s ON s.id = u.session_id WHERE s.status = 'canceled' AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id) AND NOT EXISTS (SELECT 1 FROM fee f WHERE f.session_id = u.session_id AND f.player_id = u.player_id)) AS credit_used_on_canceled_game
+  ,(SELECT COUNT(*) FROM used_on_seat u LEFT JOIN session_players sp ON sp.session_id = u.session_id AND sp.player_id = u.player_id WHERE (sp.id IS NULL OR sp.status IN ('withdrawn', 'declined')) AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id) AND NOT EXISTS (SELECT 1 FROM fee f WHERE f.session_id = u.session_id AND f.player_id = u.player_id)) AS credit_used_on_left_seat
   ,(SELECT COUNT(*) FROM used_on_seat WHERE cents > 1400) AS credit_on_seat_over_14
   ,(SELECT COUNT(*) FROM (SELECT session_id FROM session_players WHERE status = 'confirmed' GROUP BY session_id HAVING COUNT(*) > COALESCE((SELECT json_extract(settings_json, '$.maxPlayers') FROM groups LIMIT 1), 10))) AS more_in_than_max
   ,(SELECT COUNT(*) FROM session_players WHERE payment_status = 'paid' AND payment_amount_cents IS NULL) AS paid_seat_without_amount
   -- Cash on a canceled game turns into credit at once, except an "I paid" the organizer has not answered yet
   -- (it waits for Confirm / Didn't pay) and the organizer's own court payment (never credit).
-  ,(SELECT COUNT(*) FROM session_players sp JOIN sessions s ON s.id = sp.session_id JOIN groups g ON g.id = s.group_id WHERE s.status = 'canceled' AND sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NULL AND sp.player_id <> COALESCE(g.organizer_player_id, '') AND sp.status <> 'declined') AS cash_still_on_canceled_game
+  ,(SELECT COUNT(*) FROM session_players sp JOIN sessions s ON s.id = sp.session_id JOIN groups g ON g.id = s.group_id WHERE s.status = 'canceled' AND sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NULL AND sp.player_id <> COALESCE(g.organizer_player_id, '') AND sp.status <> 'declined' AND NOT EXISTS (SELECT 1 FROM fee f WHERE f.session_id = sp.session_id AND f.player_id = sp.player_id)) AS cash_still_on_canceled_game
   -- Not a problem, a to-do: "I paid" taps on canceled games still waiting for the organizer's answer.
   ,(SELECT COUNT(*) FROM session_players sp JOIN sessions s ON s.id = sp.session_id WHERE s.status = 'canceled' AND sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL) AS info_unanswered_i_paid_on_canceled_game
+  -- Not a problem, a to-do: late fees still open (owed or paid, not cleared).
+  ,(SELECT COUNT(*) FROM fee) AS info_open_late_fees
   ,(SELECT COUNT(*) FROM sessions WHERE finalized_at IS NOT NULL AND (final_price_cents IS NULL OR final_played_count IS NULL)) AS finalized_without_price
   ,(SELECT COUNT(*) FROM (SELECT 1 FROM sessions WHERE status <> 'canceled' GROUP BY group_id, starts_at HAVING COUNT(*) > 1)) AS two_games_same_start
   ,(SELECT COUNT(*) FROM sessions WHERE ends_at <= starts_at) AS game_ends_before_start

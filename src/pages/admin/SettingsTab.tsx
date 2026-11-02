@@ -365,10 +365,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {ctx.d.adminR2 === true && <HiddenPlayers ctx={ctx} />}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
           <AdminR2Row ctx={ctx} auto={auto} />
           <PayNoteRow ctx={ctx} auto={auto} />
+          <LateFeesRow ctx={ctx} auto={auto} />
         </Section>
       </div>
 
@@ -698,6 +699,39 @@ function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.timeShiftAll} />
+    </div>
+  );
+}
+
+/**
+ * "Late drops owe $14" (LATE_FEES, shared/lateFees.ts). CHANGES MONEY: a late drop that leaves a game below 4, a no-show
+ * with fewer than 4 played, and a late cancel the venue did not waive leave the person owing their $14 (a sub clears it).
+ * Off: only phones opened with ?latefees=on (a private test). Saves itself, no deploy.
+ */
+function LateFeesRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.lateFeesForAll);
+  return (
+    <div className="set-row-wrap" data-row="lateFeesAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Late drops owe $14 <SaveMark state={auto.rows.lateFeesAll} />
+          </span>
+          <span className="set-hint">Changes money: inside 12 hours, a drop that leaves fewer than 4 owes unless someone takes the spot. Off: only phones opened with ?latefees=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-late-fees-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('lateFeesAll', { on: e.target.checked }, '/api/admin/late-fees').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.lateFeesAll} />
     </div>
   );
 }

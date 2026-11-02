@@ -1,0 +1,114 @@
+// "Late drops owe $14" (LATE_FEES, Alex's rules of Mon Nov 2, 2026). The court needs 4 people paying. Someone who
+// drops late (inside the 12 hours before the start) or does not play only owes their $14 when their absence leaves
+// the game SHORT of 4. If 4 or more are still playing, nobody who sat out owes anything.
+//
+// No new table or column: a debt lives on the person's own seat row (session_players), with columns that already
+// exist. Three kinds:
+//   late_drop      the seat left inside the 12 hours and the game fell below 4 (waitlist counted): status 'withdrawn',
+//                  played = 0, late_drop_at set. Their money STAYS on the game (cash stays paid, credit stays spent;
+//                  an unpaid seat stays 'unpaid' = owes). Only this switch's code ever writes played on a withdrawn seat.
+//   no_show        marked "did not play" at Finalize with fewer than 4 played: status 'confirmed', played = 0, and
+//                  late_drop_at equal to the game's finalized_at (an exact match, so an old leftover never counts).
+//   canceled_late  the organizer canceled inside the 12 hours and the venue did NOT waive the fee: every seat that
+//                  was in a game with canceled_by = 'organizer_fee_kept'.
+// A debt is open while late_drop_done_at is empty and the seat still holds its payment (unpaid = owes, or paid and not
+// handed back = paid). "Clear" (a sub took the spot, the venue waived it, or the organizer's choice) sets
+// late_drop_done_at and gives the money back as credit the same way a drop or cancel does. A clear is final.
+// The organizer never owes (they pay the venue).
+
+/** sessions.canceled_by for "Did the venue waive the fee?" answered No: no money moved, everyone signed up still owes. */
+export const FEE_KEPT = 'organizer_fee_kept';
+
+/** Fewer than this many playing means someone who sat out owes. */
+export const FEE_MIN_PLAYERS = 4;
+
+/** The cancel-by clock for late fees: start minus 12 hours (the same clock as the cards, shared/time.ts cancelByIso). */
+export const LATE_FEE_HOURS = 12;
+
+/** The phone-only test switch: the page sends this header when the phone opened the site with ?latefees=on. */
+export const LATE_FEES_HEADER = 'X-Late-Fees';
+
+/** The LATE_FEES kill switch (a wrangler.toml var): allowed unless it says "off". Who gets it is Settings' call. */
+export function lateFeesAllowed(flag: string | undefined | null): boolean {
+  return (flag ?? 'on').trim().toLowerCase() !== 'off';
+}
+
+export type LateFeeKind = 'late_drop' | 'no_show' | 'canceled_late';
+
+/** Why the organizer cleared a debt (each gets a History line). */
+export type LateFeeClearWhy = 'sub' | 'venue' | 'choice';
+
+export interface FeeSeat {
+  status: string;
+  played: number | null;
+  late_drop_at: string | null;
+  late_drop_done_at: string | null;
+  payment_status: string;
+  refunded_at: string | null;
+}
+
+export interface FeeGame {
+  status: string;
+  canceled_by: string | null;
+  finalized_at: string | null;
+}
+
+/**
+ * The open late fee on a seat, or null. Mirrors OPEN_FEE in server/lateFees.ts exactly (tests check both agree).
+ * The organizer's own seat is never a debt: pass `isOrganizer`.
+ */
+export function lateFeeKind(seat: FeeSeat, game: FeeGame, isOrganizer = false): LateFeeKind | null {
+  if (isOrganizer || seat.late_drop_done_at) return null;
+  const holds = seat.payment_status === 'unpaid' || (seat.payment_status === 'paid' && !seat.refunded_at);
+  if (!holds) return null;
+  if (seat.status === 'withdrawn' && seat.played === 0 && seat.late_drop_at) return 'late_drop';
+  if (seat.status === 'confirmed' && game.status === 'canceled' && game.canceled_by === FEE_KEPT) return 'canceled_late';
+  if (seat.status === 'confirmed' && game.status !== 'canceled' && seat.played === 0 && !!game.finalized_at && seat.late_drop_at === game.finalized_at) return 'no_show';
+  return null;
+}
+
+/** The words in brackets on the player's Pay card and the organizer's Money row. */
+export function lateFeeLabel(kind: LateFeeKind): string {
+  return kind === 'late_drop' ? 'late drop' : kind === 'no_show' ? 'did not play' : 'canceled late';
+}
+
+/** The organizer's Money row note. */
+export function lateFeeAdminNote(kind: LateFeeKind): string {
+  return kind === 'canceled_late' ? 'canceled, fee not waived' : kind === 'no_show' ? 'did not play' : 'late drop';
+}
+
+/** The three ways the organizer can clear one, in the order the sheet shows them. */
+export const CLEAR_CHOICES: { why: LateFeeClearWhy; label: string }[] = [
+  { why: 'sub', label: 'Sub found' },
+  { why: 'venue', label: 'Venue waived' },
+  { why: 'choice', label: 'My choice' },
+];
+
+export function clearWhyText(why: LateFeeClearWhy): string {
+  return CLEAR_CHOICES.find((c) => c.why === why)?.label ?? 'Cleared';
+}
+
+/** True when a drop by someone who is in now would leave fewer than 4 (anyone on the waitlist moves in, so they count). */
+export function dropLeavesShort(confirmedCount: number, waitlistCount: number): boolean {
+  return confirmedCount - 1 + waitlistCount < FEE_MIN_PLAYERS;
+}
+
+/** The start minus 12 hours, in ms: inside it a drop is late. */
+export function lateFeeCutoffMs(startsAtIso: string): number {
+  return Date.parse(startsAtIso) - LATE_FEE_HOURS * 3_600_000;
+}
+
+/**
+ * The drop dialog's words, past the cancel-by time with the switch on. `time` is "8:00 AM".
+ * Owes: "It's past the 8:00 AM cancel-by. If no one takes your spot, you still owe $14."
+ * Not short: the money comes back as credit (or nothing is owed when nothing was paid).
+ */
+export function lateDropDialogText(time: string, owes: boolean, feeText: string, moneyBackText: string | null): string {
+  if (owes) return `It's past the ${time} cancel-by. If no one takes your spot, you still owe ${feeText}.`;
+  return moneyBackText ? `It's past the ${time} cancel-by. Enough players are still in, so ${moneyBackText}.` : `It's past the ${time} cancel-by. Enough players are still in, so you owe nothing.`;
+}
+
+/** The drop banner when the drop leaves the game short. */
+export function lateDropToast(feeText: string, paid: boolean): string {
+  return paid ? `You're out. Your ${feeText} stays on this game unless someone takes your spot.` : `You're out. You owe ${feeText} unless someone takes your spot.`;
+}

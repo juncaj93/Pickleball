@@ -83,7 +83,7 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'session_added':
       return `${who} added a game${forDay}`;
     case 'session_canceled':
-      return `${who} canceled${day ? ` ${day}` : ' a session'}${typeof d.chargedCents === 'number' && d.chargedCents > 0 ? ` (venue charged ${formatPrice(d.chargedCents)})` : ''}`;
+      return `${who} canceled${day ? ` ${day}` : ' a session'}${d.feeKept === true ? ' (venue did not waive the fee: everyone in still owes)' : d.venueWaived === true ? ' (venue waived the fee)' : typeof d.chargedCents === 'number' && d.chargedCents > 0 ? ` (venue charged ${formatPrice(d.chargedCents)})` : ''}`;
     case 'session_reopened':
       return `${who} reopened${day ? ` ${day}` : ' a session'}`;
     case 'session_rescheduled':
@@ -166,6 +166,18 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} switched the new admin layout on`;
     case 'admin_v2_off':
       return `${who} switched the new admin layout off`;
+    case 'late_fees_on':
+      return `${who} switched "Late drops owe $14" on`;
+    case 'late_fees_off':
+      return `${who} switched "Late drops owe $14" off`;
+    case 'late_fee_owed':
+      return `${player} owes ${d.kind === 'canceled_late' ? 'their $14 (canceled late, fee not waived)' : d.kind === 'no_show' ? 'their $14 (did not play, fewer than 4 played)' : 'their $14 (late drop, game short)'}${forDay}`;
+    case 'late_fee_cleared':
+      return d.why === 'sub'
+        ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s $14 cleared${forDay}`
+        : d.why === 'canceled'
+          ? `${player}'s late drop cleared (game canceled)${forDay}`
+          : `${who} cleared ${player}'s $14 (${d.why === 'venue' ? 'venue waived' : 'my choice'})${forDay}`;
     case 'admin_r2_on':
       return `${who} switched the admin screens round 2 on`;
     case 'admin_r2_off':

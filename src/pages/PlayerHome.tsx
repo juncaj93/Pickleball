@@ -4,8 +4,9 @@ import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
-import { DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
+import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
+import { lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
@@ -1003,10 +1004,16 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   );
   const todayKey = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: tz });
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
+  // A late fee says why: "You owe $14 for Tue, Nov 3 (late drop)" (shared/lateFees.ts rule 7).
+  const why = (o: (typeof due)[number]) => (o.lateFee ? ` (${lateFeeLabel(o.lateFee)})` : '');
   const title =
-    due.length > 1 ? `You owe ${formatPrice(total)} total` : tonight ? `Tonight: you owe ${formatPrice(total)}` : `You owe ${formatPrice(total)} for ${formatShortDate(due[0].startsAt, tz)}`;
+    due.length > 1
+      ? `You owe ${formatPrice(total)} total`
+      : tonight && !due[0].lateFee
+        ? `Tonight: you owe ${formatPrice(total)}`
+        : `You owe ${formatPrice(total)} for ${formatShortDate(due[0].startsAt, tz)}${why(due[0])}`;
   const detail = (o: (typeof due)[number]) =>
-    [o.finalized ? 'final price' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
+    [o.finalized && !o.lateFee ? 'final price' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
   // (On this card the amounts are already after any credit; each game's own line says what is left.)
   const who = g.group.organizerName ?? 'The organizer';
   return (
@@ -1018,7 +1025,8 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
         <ul className="pay-list">
           {due.map((o) => (
             <li key={o.sessionId}>
-              {formatShortDate(o.startsAt, tz)}: <RollText text={formatPrice(o.amountCents)} />
+              {formatShortDate(o.startsAt, tz)}
+              {why(o)}: <RollText text={formatPrice(o.amountCents)} />
               {detail(o) && <span className="muted"> ({detail(o)})</span>}
             </li>
           ))}
@@ -1514,7 +1522,9 @@ export function ScheduleRow({
     const soon = Date.now() + UNDO_MS + 3_000;
     const deadline = Date.parse(s.dropCutoffAt);
     if (Date.parse(s.startsAt) - Date.now() < 10_000 || (deadline > Date.now() - 1_000 && deadline < soon)) {
-      void run('withdraw', (d) => droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out."));
+      void run('withdraw', (d) =>
+        d?.lateFee ? lateDropToast(formatPrice(d.lateFee.cents), d.lateFee.paid) : droppedText(d?.creditReturnedCents ?? 0, d?.creditBackCents ?? 0, "You're out."),
+      );
       return;
     }
     const id = s.id;
@@ -1556,7 +1566,9 @@ export function ScheduleRow({
       },
     });
     // Says what happens to their money: "You dropped out. $14 credit returned." (nothing is sent until Undo runs out).
-    toast(droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, lead, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
+    // Late fees on and the game would go short: "You're out. You owe $14 unless someone takes your spot." (shared/lateFees.ts).
+    const lateOwes = mine?.lateDrop?.owes ? mine.lateDrop : null;
+    toast(lateOwes ? lateDropToast(formatPrice(lateOwes.feeCents), lateOwes.paid) : droppedText(mine?.dropCreditCents ?? 0, mine?.dropCashCents ?? 0, lead, mine?.dropClaimCents ?? 0, g.group.organizerName), 'ok', { stayMs: UNDO_MS - BANNER_FADE_MS, action: { label: 'Undo', onClick: () => tooLateToast(undoHold(id)) } });
   }
 
   const court = courtStatus(s, tz);
@@ -1706,7 +1718,13 @@ export function ScheduleRow({
           )}
           {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
-          {s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>}
+          {s.canceled && (inSession || waiting) && mine.lateFee?.kind === 'canceled_late' ? (
+            <p className="sched-sub" data-late-fee>
+              Canceled late. {mine.lateFee.oweCents > 0 ? `You still owe ${formatPrice(mine.lateFee.oweCents)}.` : `Your ${formatPrice(g.group.priceCents)} stays on this game.`}
+            </p>
+          ) : (
+            s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>
+          )}
 
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && (s.note.trim().length <= NOTE_PILL_MAX ? <span className="game-note note-pill">{s.note.trim()}</span> : <p className="game-note note-box">{s.note}</p>)}
@@ -1728,7 +1746,19 @@ export function ScheduleRow({
       <ConfirmDialog
         open={askOut}
         title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
-        body={waiting ? 'You lose your place in line.' : 'Your spot opens up for someone else.'}
+        body={
+          waiting
+            ? 'You lose your place in line.'
+            : mine?.lateDrop
+              ? // Past the cancel-by with late fees on: what this drop costs (shared/lateFees.ts rule 9).
+                lateDropDialogText(
+                  formatTime(mine.lateDrop.cancelByAt, tz),
+                  mine.lateDrop.owes,
+                  formatPrice(mine.lateDrop.feeCents),
+                  mine.dropCreditCents + mine.dropCashCents > 0 ? `your ${formatPrice(mine.dropCreditCents + mine.dropCashCents)} comes back as credit` : null,
+                )
+              : 'Your spot opens up for someone else.'
+        }
         confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
         danger
         busy={busy}

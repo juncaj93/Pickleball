@@ -4,6 +4,7 @@ import type { GroupRow } from './repo';
 import { timeShiftForAll } from './timeShift';
 import { payAlwaysForAll } from './payAlways';
 import { payNoteForAll } from './payNote';
+import { lateFeesForAll } from './lateFees';
 import { hiddenGameIds } from './hideGame';
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
@@ -45,7 +46,7 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
       .bind(group.id, upcomingFrom),
     ctx.db
       .prepare(
-        `SELECT sp.session_id, sp.status, sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at${withTime ? ', sp.time_confirmed' : ''}
+        `SELECT sp.session_id, sp.status, sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at, sp.late_drop_done_at${withTime ? ', sp.time_confirmed' : ''}
          FROM session_players sp JOIN sessions s ON s.id = sp.session_id
          WHERE sp.player_id = ? AND s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id`,
       )
@@ -75,6 +76,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     (await payAlwaysForAll(ctx.db, group.id)) ? 'pa' : '',
     // The organizer turning the "No Venmo?" note on or off for everyone.
     (await payNoteForAll(ctx.db, group.id)) ? 'pn' : '',
+    // The organizer turning "Late drops owe $14" on or off for everyone (the drop dialog's words follow it).
+    (await lateFeesForAll(ctx.db, group.id)) ? 'lf' : '',
     // The organizer removing a canceled game from the player screen (or putting it back).
     [...(await hiddenGameIds(ctx.db, group.id))].sort().join(','),
   ].join('|');
@@ -102,7 +105,7 @@ export async function adminChangeStamp(ctx: Ctx, group: GroupRow): Promise<strin
     ctx.db
       .prepare(
         `SELECT sp.session_id, sp.player_id, sp.status, sp.claim_seq, sp.confirm_seq, sp.attendance_confirmed_at, sp.promoted_at,
-                sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at${withTime ? ', sp.time_confirmed' : ''}
+                sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at, sp.late_drop_done_at${withTime ? ', sp.time_confirmed' : ''}
          FROM session_players sp JOIN sessions s ON s.id = sp.session_id
          WHERE s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id, sp.player_id`,
       )

@@ -25,6 +25,7 @@ import {
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
 import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
+import { dropLeavesShort, FEE_KEPT, lateFeeCutoffMs, lateFeeKind } from '../shared/lateFees';
 
 /** The organizer pays the venue, so their own player screen carries no share, Pay, credit or "paid". */
 const NO_MONEY = {
@@ -58,6 +59,8 @@ export function playerSessionView(
   pot: { usableCents: number; hasCredit?: boolean; seat: SeatCredit } = { usableCents: 0, seat: NO_SEAT_CREDIT },
   /** The TIME_SHIFT switch: ask a player who is in to confirm a start time that changed after they agreed to one. */
   timeShift = false,
+  /** The LATE_FEES switch for this screen (server/lateFees.ts): the drop dialog and banner say what a late drop costs. */
+  lateFees = false,
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
   const waitlist = waitlistOf(roster);
@@ -70,6 +73,13 @@ export function playerSessionView(
   const owe = owes ? Math.max(0, price - pot.seat.usedCents - pot.seat.cashCents) : 0;
   const paidNow = mine && mine.payment_status === 'paid' && !mine.refunded_at ? (mine.payment_amount_cents ?? 0) : 0;
   const claimed = !!mine && paidNow > 0 && !!mine.self_paid_at;
+  // Late fees (shared/lateFees.ts): past the cancel-by with the switch on, a drop that leaves the game short keeps their
+  // money on it (nothing comes back), and the dialog and banner say so.
+  const feeCents = settings.pricePerPlayerCents;
+  const lateWindow =
+    lateFees && !isOrganizer && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
+  const dropOwes = lateWindow && dropLeavesShort(confirmed.length, waitlist.length);
+  const openFee = mine ? lateFeeKind(mine, session, isOrganizer) : null;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {
         status: mine.status,
@@ -85,14 +95,18 @@ export function playerSessionView(
         // What a drop out would give back right now (the same sums as seatMoneyBackStatements): credit used on the
         // seat goes back to the pot; cash paid toward it (and cash held against it) comes back as credit.
         // An unconfirmed "I paid" freezes the seat on a drop: nothing moves until the organizer confirms it (dropClaimCents).
-        dropCreditCents: isOrganizer || claimed ? 0 : pot.seat.usedCents,
-        dropCashCents: isOrganizer || claimed ? 0 : pot.seat.cashCents + Math.max(0, paidNow - pot.seat.usedCents - pot.seat.cashCents),
-        dropClaimCents: isOrganizer || !claimed ? 0 : Math.max(paidNow, pot.seat.usedCents + pot.seat.cashCents),
+        dropCreditCents: isOrganizer || claimed || dropOwes ? 0 : pot.seat.usedCents,
+        dropCashCents: isOrganizer || claimed || dropOwes ? 0 : pot.seat.cashCents + Math.max(0, paidNow - pot.seat.usedCents - pot.seat.cashCents),
+        dropClaimCents: isOrganizer || !claimed || dropOwes ? 0 : Math.max(paidNow, pot.seat.usedCents + pot.seat.cashCents),
         paidEarlierCents: mine.payment_status === 'unpaid' ? pot.seat.cashCents : 0,
         paidWithCredit: mine.payment_status === 'paid' && pot.seat.usedCents > 0 && pot.seat.usedCents >= (mine.payment_amount_cents ?? 0),
         useCreditCents: owes && !canceled ? Math.min(pot.usableCents, owe) : 0,
         // Once that credit is all spent the "Your $14 is now credit. Request refund" line would point at nothing, so it goes.
         creditBackCents: pot.hasCredit === false ? 0 : pot.seat.backCents,
+        ...(lateWindow
+          ? { lateDrop: { cancelByAt: new Date(lateFeeCutoffMs(session.starts_at)).toISOString(), owes: dropOwes, paid: paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0, feeCents } }
+          : {}),
+        lateFee: openFee ? { kind: openFee, oweCents: mine.payment_status === 'unpaid' ? Math.max(0, feeCents - pot.seat.usedCents - pot.seat.cashCents) : 0 } : null,
       }
     : null;
   return {
@@ -118,10 +132,11 @@ export function playerSessionView(
     bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     past: nowMs >= Date.parse(session.ends_at),
     finalized: session.finalized_at ? { playedCount: session.final_played_count ?? 0, priceCents: session.final_price_cents ?? settings.pricePerPlayerCents } : null,
-    dropCutoffAt: new Date(deadlineMs({ startsAt: session.starts_at, cancellationDeadlineAt: session.cancellation_deadline_at }, settings)).toISOString(),
+    // With LATE_FEES on, one clock: start minus 12 hours (the late-drop rule uses the same one).
+    dropCutoffAt: new Date(lateFees ? lateFeeCutoffMs(session.starts_at) : deadlineMs({ startsAt: session.starts_at, cancellationDeadlineAt: session.cancellation_deadline_at }, settings)).toISOString(),
     confirmationOpen:
       !canceled && !started && nowMs >= Date.parse(session.starts_at) - settings.checkInHours * 3600_000,
-    mine: ownRow && isOrganizer ? { ...ownRow, ...NO_MONEY } : ownRow,
+    mine: ownRow && isOrganizer ? { ...ownRow, ...NO_MONEY, lateFee: null } : ownRow,
     // Only a player who is in, on a game still ahead: never the organizer (confirmed automatically), a dropped
     // player or a real standby seat.
     timeAsk:
@@ -202,7 +217,9 @@ export function adminSessionView(
       const me = r.player_id === organizerId;
       const seat = me ? NO_SEAT_CREDIT : potFor(r);
       const share = me ? null : (prices.get(r.player_id)?.cents ?? null);
-      const owes = !me && r.status === 'confirmed' && r.payment_status === 'unpaid' && share !== null ? Math.max(0, share - seat.usedCents - seat.cashCents) : 0;
+      // An open late fee (shared/lateFees.ts) owes like a seat that is in, also on a seat that left or a game canceled late.
+      const fee = lateFeeKind(r, session, me);
+      const owes = !me && (r.status === 'confirmed' || fee) && r.payment_status === 'unpaid' && share !== null ? Math.max(0, share - seat.usedCents - seat.cashCents) : 0;
       return {
         playerId: r.player_id,
         name: r.display_name,
@@ -241,7 +258,8 @@ export function adminSessionView(
           priceCents: share,
           finalizedAt: session.finalized_at ?? null,
         }),
-        played: r.played === null || r.played === undefined ? null : r.played === 1,
+        played: r.played === null || r.played === undefined ? null : r.status === 'withdrawn' ? null : r.played === 1,
+        lateFee: fee ? { kind: fee, paid: r.payment_status === 'paid' && !r.refunded_at } : null,
         isOrganizer: me,
         waitlistPosition: r.status === 'waitlisted' ? waitlist.findIndex((w) => w.id === r.id) + 1 : null,
         promotedAt: r.status === 'confirmed' ? r.promoted_at : null,
@@ -255,14 +273,18 @@ export function adminSessionView(
 
   // Other players only: the organizer pays the venue and is never counted as owing.
   const others = confirmed.filter((r) => r.player_id !== organizerId);
-  const payable = session.status !== 'canceled' ? others.filter((r) => prices.has(r.player_id)).length : 0;
-  const paidCount = payable ? others.filter((r) => prices.has(r.player_id) && r.payment_status === 'paid').length : 0;
+  // Seats that pay: everyone in a game that is on, plus open late fees (a late drop, a no-show, a late cancel the venue charged).
+  const feeRows = roster.filter((r) => r.player_id !== organizerId && lateFeeKind(r, session));
+  const payers = [...(session.status !== 'canceled' ? others.filter((r) => prices.has(r.player_id) && !lateFeeKind(r, session)) : []), ...feeRows];
+  const payable = payers.length;
+  const paidCount = payable ? payers.filter((r) => r.payment_status === 'paid').length : 0;
+  const feeKept = session.status === 'canceled' && session.canceled_by === FEE_KEPT;
 
   // The organizer's court row: the full court cost, what the other players
   // cover (what they owe before finalizing, what the group kept after), and
   // whether the venue has been paid.
   const myRow = organizerId ? roster.find((r) => r.player_id === organizerId) : undefined;
-  const hasCourt = session.status !== 'canceled' && (session.booking_status === 'booked' || confirmed.length > 0);
+  const hasCourt = (session.status !== 'canceled' || feeKept) && (session.booking_status === 'booked' || confirmed.length > 0);
   const courtCost = courtCostOf(session, settings);
   const split = courtSplit(
     courtCost,
@@ -270,8 +292,11 @@ export function adminSessionView(
       .filter((r) => r.player_id !== organizerId)
       .map((r) => {
         const seat = potFor(r);
+        const fee = lateFeeKind(r, session);
+        // An open late fee still owed: its whole price.
+        if (fee && r.payment_status === 'unpaid') return prices.get(r.player_id)?.cents ?? 0;
         // A claim (unconfirmed "I paid" on a seat that left) is not money the players cover.
-        if (isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: session.finalized_at && r.played === 0 ? false : null }, session.status === 'canceled')) return 0;
+        if (!fee && isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: session.finalized_at && r.played === 0 ? false : null }, session.status === 'canceled')) return 0;
         if (r.payment_status === 'paid' && !r.refunded_at) return (r.payment_amount_cents ?? 0) - seat.backCents;
         // An unpaid seat: its whole price (what they still owe, plus credit and cash already put on it).
         if (r.status === 'confirmed' && r.payment_status === 'unpaid') return prices.get(r.player_id)?.cents ?? 0;

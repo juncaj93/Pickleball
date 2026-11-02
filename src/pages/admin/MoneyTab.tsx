@@ -32,7 +32,7 @@ function MoneyTabClassic({ ctx }: { ctx: AdminCtx }) {
   // Every session with a court to pay for: players' payments, and the organizer's court row.
   // A canceled game stays here when payments became credit, so the organizer can see who got what back.
   const canceledWithCredit = ctx.d.sessions.filter((s) => s.state.flags.canceled && creditBackRows(s).length > 0);
-  const withMoney = ctx.d.sessions.filter((s) => (!s.state.flags.canceled && s.court !== null) || canceledWithCredit.includes(s));
+  const withMoney = ctx.d.sessions.filter((s) => (!s.state.flags.canceled && s.court !== null) || canceledWithCredit.includes(s) || (s.state.flags.canceled && s.roster.some((r) => r.lateFee)));
   // Most recent games first: the ones people are paying for now.
   const started = withMoney.filter((s) => Date.parse(s.startsAt) <= nowMs).reverse();
   const upcoming = withMoney.filter((s) => Date.parse(s.startsAt) > nowMs);

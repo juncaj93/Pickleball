@@ -21,6 +21,7 @@ import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
 import { HomeGame, useOpenGames } from './admin/HomeV2';
 import { HistoryTab } from './admin/HistoryTab';
+import { ClearChoices, FindSubLink } from './admin/LateFees';
 
 type Tab = 'home' | 'players' | 'money' | 'history' | 'settings';
 
@@ -399,6 +400,9 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
 
   const s = item.session;
   const title = 'Late drop';
+  // Late fees (shared/lateFees.ts rule 8): "Find a sub" and Clear replace Done while the switch is on, or while any of
+  // these late drops still owes (a debt made while it was on stays until it is cleared or paid).
+  const feeMode = ctx.d.lateFees === true || lateDrops(s).some((r) => r.lateFee);
   return (
     <article className="card stack" aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`}>
       <div>
@@ -414,12 +418,24 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
               </span>
               <span className="small muted">
                 dropped {formatDateTime(r.lateDropAt!, tz)}
-                {r.creditBackCents > 0 ? ` · ${formatPrice(r.creditBackCents)} is their credit now` : ''}
+                {r.lateFee
+                  ? r.lateFee.paid
+                    ? ` · their ${formatPrice(r.paymentAmountCents ?? 0)} stays on the game unless someone takes the spot`
+                    : ` · owes ${formatPrice(r.owesCents)} unless someone takes the spot`
+                  : r.creditBackCents > 0
+                    ? ` · ${formatPrice(r.creditBackCents)} is their credit now`
+                    : ''}
               </span>
             </span>
+            {feeMode && <ClearChoices ctx={ctx} s={s} r={r} />}
           </li>
         ))}
       </ul>
+      {feeMode ? (
+        <div className="inline-links">
+          <FindSubLink ctx={ctx} s={s} />
+        </div>
+      ) : (
       <button
         className="btn small ghost"
         disabled={busy}
@@ -431,6 +447,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
       >
         Done
       </button>
+      )}
     </article>
   );
 }

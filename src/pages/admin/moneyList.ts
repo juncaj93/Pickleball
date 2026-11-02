@@ -1,7 +1,9 @@
 import type { AdminSessionView } from '../../../shared/api';
 
 /** Who still owes on this game: the same players the old "Payment reminder" button was for. */
-export const unpaidRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid') && r.paymentStatus === 'unpaid' && r.owesCents > 0);
+export const unpaidRows = (s: AdminSessionView) =>
+  // An open late fee (shared/lateFees.ts) owes too, also on a seat that left or a game canceled late.
+  s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid' || !!r.lateFee) && r.paymentStatus === 'unpaid' && r.owesCents > 0);
 
 /** What is still owed on a game, in cents: the people in unpaidRows, added up. */
 export const owedCentsOf = (s: AdminSessionView) => unpaidRows(s).reduce((sum, r) => sum + r.owesCents, 0);
@@ -19,7 +21,8 @@ export type MoneyGameKind = 'money' | 'waiting' | 'closed';
 export function moneyGames(sessions: AdminSessionView[], nowMs: number): { s: AdminSessionView; kind: MoneyGameKind }[] {
   const out: { s: AdminSessionView; kind: MoneyGameKind }[] = [];
   for (const s of sessions) {
-    if (s.state.flags.canceled) out.push({ s, kind: 'closed' });
+    // A canceled game still holding late fees (canceled late, fee not waived, or a late drop) opens like any game with money.
+    if (s.state.flags.canceled) out.push({ s, kind: s.roster.some((r) => r.lateFee) ? 'money' : 'closed' });
     else if (s.court !== null) out.push({ s, kind: 'money' });
     else if (Date.parse(s.endsAt) > nowMs) out.push({ s, kind: 'waiting' });
   }

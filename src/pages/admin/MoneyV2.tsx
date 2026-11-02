@@ -14,6 +14,8 @@ import { isPlayed } from './todo';
 import { unpaidRows } from './moneyList';
 import { reopenRequestedReason } from '../../../shared/credit';
 import '../../credit-admin.css';
+import { CLEAR_CHOICES } from '../../../shared/lateFees';
+import { lateFeeLine } from './LateFees';
 
 type View = 'who' | 'totals';
 type Tone = 'ok' | 'info' | 'warn' | 'muted';
@@ -192,7 +194,8 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   const played = isPlayed(s);
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   // The organizer is not a row of their own money: they pay the venue (the court row).
-  const allRows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
+  // Plus every open late fee (shared/lateFees.ts): a late drop, a no-show, a seat in a game canceled late.
+  const allRows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid' || !!r.lateFee) && (!s.state.flags.canceled || !!r.lateFee));
   // Round 2 (ADMIN_R2): the people who still owe come first, then the people who paid (each group keeps its order). Same rows, same money.
   const rows = r2 ? [...allRows.filter((r) => r.paymentStatus !== 'paid'), ...allRows.filter((r) => r.paymentStatus === 'paid')] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
@@ -202,7 +205,8 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   const setCourtPaid = (paid: boolean) => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
   const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.');
 
-  if (s.state.flags.canceled) {
+  const feeRows = s.roster.some((r) => !r.isOrganizer && r.lateFee);
+  if (s.state.flags.canceled && !feeRows) {
     return (
       <div className="mv2-body stack">
         <Notice tone="muted" title="Session canceled">
@@ -215,8 +219,19 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   }
 
   type Act = { label: string; onClick: () => void; attrs?: Record<string, string> };
+  const clearFee = (r: AdminRosterEntry, why: string, label: string) =>
+    run(() => api('POST', `/api/admin/sessions/${s.id}/late-fee`, { playerId: r.playerId, why }), `${r.name}: cleared (${label.toLowerCase()})`);
   const actionsOf = (r: AdminRosterEntry): Act[] => {
     const acts: Act[] = [];
+    if (r.lateFee) {
+      // A late fee: Mark paid (or Unmark), and Clear with why (shared/lateFees.ts rule 8). The money stays on this game.
+      if (r.paymentStatus === 'paid' && !r.refundedAt) {
+        if (r.selfPaid) acts.push({ label: 'Mark paid', onClick: () => void setPaid(r, true) });
+        acts.push({ label: 'Unmark', onClick: () => void setPaid(r, false) });
+      } else if (r.owesCents > 0) acts.push({ label: 'Mark paid', onClick: () => void setPaid(r, true) });
+      for (const c of CLEAR_CHOICES) acts.push({ label: `Clear: ${c.label.toLowerCase()}`, attrs: { 'data-clear-why': c.why }, onClick: () => void clearFee(r, c.why, c.label) });
+      return acts;
+    }
     if (r.paymentStatus === 'paid' && !r.refundedAt) {
       // Confirm an I paid while they are in; one on a seat that left is a claim, answered on Home.
       if (r.selfPaid && r.status === 'confirmed' && !s.state.flags.canceled) acts.push({ label: 'Mark paid', onClick: () => void setPaid(r, true) });
@@ -237,7 +252,12 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
 
   return (
     <div className="mv2-body">
-      {(fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (
+      {s.state.flags.canceled && (
+        <p className="mv2-summary small muted" data-summary>
+          {s.canceledBy === 'organizer_fee_kept' ? 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.' : 'Canceled. Only late fees are left on it.'}
+        </p>
+      )}
+      {!s.state.flags.canceled && (fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (
         <p className="mv2-summary small muted" data-summary>
           {fin ? <span data-finalized-line>{formatPrice(fin.creditBackCents)} back as credit</span> : <span>Not finalized yet. Finalize it from Home.</span>}
         </p>
@@ -248,10 +268,12 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
           const chip = { tone: base.tone, label: r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid' };
           const acts = actionsOf(r);
           const selfMarked = r.selfPaid && r.paymentStatus === 'paid';
-          const full = `${selfMarked ? 'self-marked · ' : ''}${payMoneyLine(r, s, tz)}`.replace(/ · $/, '');
+          const feeLine = lateFeeLine(r);
+          const full = feeLine ?? `${selfMarked ? 'self-marked · ' : ''}${payMoneyLine(r, s, tz)}`.replace(/ · $/, '');
           const paidWithCredit = r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0);
-          const short =
-            r.paymentStatus === 'paid' && r.paidAt
+          const short = feeLine
+            ? feeLine
+            : r.paymentStatus === 'paid' && r.paidAt
               ? selfMarked
                 ? 'self-marked'
                 : r.refundedAt

@@ -155,6 +155,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (adminV2Test()) headers['X-Admin-V2'] = 'on';
   // "Admin screens, round 2", private test switch for this phone (/admin?adminr2=on, see server/adminR2.ts).
   if (adminR2Test()) headers['X-Admin-R2'] = 'on';
+  // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
+  if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
   // Demo: the throwaway copy answers. Signing out always goes to the live site.
@@ -467,6 +469,21 @@ if (typeof window !== 'undefined') {
  * "Admin screens, round 2" (Home cards, Money, Players, History, header) on this phone only, before it is on for everyone:
  * open /admin once with ?adminr2=on (?adminr2=off turns it back off). Remembered in this browser; nothing else changes.
  */
+/**
+ * "Late drops owe $14" on this phone only, before it is on for everyone: open the site (or /admin) once with ?latefees=on
+ * (?latefees=off turns it back off). Remembered in this browser. It CHANGES MONEY for this phone's own taps: a late drop
+ * that leaves a game short owes, and the organizer's Finalize and late cancel follow the new rules.
+ */
+const LATE_FEES_KEY = 'pb_late_fees';
+export function lateFeesTest(): boolean {
+  return storageGet(LATE_FEES_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('latefees');
+  if (want === 'on') storageSet(LATE_FEES_KEY, 'on');
+  else if (want === 'off') storageRemove(LATE_FEES_KEY);
+}
+
 const ADMIN_R2_KEY = 'pb_admin_r2';
 export function adminR2Test(): boolean {
   return storageGet(ADMIN_R2_KEY) === 'on';

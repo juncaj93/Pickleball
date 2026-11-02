@@ -95,6 +95,8 @@ route('POST', '/api/admin/refund-requests/:id', resolveRefundRequest);
 route('POST', '/api/admin/players/:id/credit-refund', refundCreditBalance);
 route('GET', '/api/admin/money', (ctx) => monthlyMoney(ctx));
 route('POST', '/api/admin/sessions/:id/late-drop-done', admin.lateDropDone);
+route('POST', '/api/admin/sessions/:id/late-fee', admin.clearLateFee);
+route('PUT', '/api/admin/late-fees', admin.setLateFees);
 route('POST', '/api/admin/sessions/:id/booked', admin.markBooked);
 route('POST', '/api/admin/sessions/:id/court-answer', admin.courtAnswer);
 route('POST', '/api/admin/sessions/:id/court', admin.courtWaitlist);

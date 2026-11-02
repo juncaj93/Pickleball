@@ -10,6 +10,7 @@ import type { Ctx } from './context';
 import { newId } from './crypto';
 import { cashOutOffer, loadPendingRequests, moneyPicture, refundCredit, returnSeatCredit, spendCredit, undoRefund, USABLE, useCashOutOnSeat } from './credit';
 import { HttpError } from './http';
+import { lateFeeKind } from '../shared/lateFees';
 import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 
@@ -27,12 +28,14 @@ export async function usableFor(ctx: Ctx, group: GroupRow, playerId: string) {
  * everything, the game is paid ("Paid with credit"); otherwise they pay the rest as usual.
  */
 export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string) {
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'There is nothing for you to pay here.');
   const roster = await loadRoster(ctx.db, session.id);
   const row = roster.find((r) => r.player_id === playerId);
+  // An open late fee (shared/lateFees.ts) is paid like any game, also on a seat that left or a game canceled late.
+  const fee = row ? lateFeeKind(row, session) : null;
+  if (session.status === 'canceled' && !fee) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   const price = pricesFor(session, roster, settingsOf(group)).get(playerId);
-  if (!row || row.status !== 'confirmed' || row.payment_status !== 'unpaid' || !price) {
+  if (!row || (row.status !== 'confirmed' && !fee) || row.payment_status !== 'unpaid' || !price) {
     throw new HttpError(409, 'nothing_owed', 'You do not owe anything for this game.');
   }
   const { usableCents, pic } = await usableFor(ctx, group, playerId);
