@@ -391,9 +391,14 @@ export function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: st
     e.preventDefault();
     return;
   }
-  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+  if (!venmoHandsOffToApp(pay)) return;
   e.preventDefault();
-  window.location.href = pay.appUrl;
+  window.location.href = pay.appUrl!;
+}
+
+/** Will a tap on Pay hand the phone over to the Venmo app (a venmo:// address)? Then a phone without the app sees "invalid address". */
+export function venmoHandsOffToApp(pay: { url: string | null; appUrl: string | null }): boolean {
+  return !demoOn() && !!pay.appUrl && !!pay.url && PHONE.test(navigator.userAgent);
 }
 
 /**

@@ -2,13 +2,14 @@ import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useM
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
+import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
 import { DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, venmoHandsOffToApp, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, noteStillApplies, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
@@ -520,8 +521,10 @@ export function PlayerHome({
                 : undefined
             }
             onPicked={async () => {
+              // Stay on the name list until the new name's own data has arrived: for a moment the page still holds the
+              // old name's credit and buttons, and a tap there would act as the new name.
+              if (!(await load.quiet())) throw new Error('games did not load');
               setSwitching(false);
-              await load.reload();
             }}
             onCancel={g.me ? () => setSwitching(false) : undefined}
           />
@@ -640,7 +643,7 @@ function NamePicker({
   demo,
 }: {
   g: GroupView;
-  onPicked: () => void;
+  onPicked: () => void | Promise<void>;
   onCancel?: () => void;
   /** "View as...": picking a name only switches the view. */
   demo?: (p: { id: string; name: string }) => void;
@@ -663,14 +666,24 @@ function NamePicker({
     setBusy(true);
     try {
       await api('POST', '/api/me', { playerId });
-      onPicked();
+      try {
+        await onPicked();
+      } catch {
+        // The name is saved on this phone, but the games did not load: stay here so nobody acts on the old screen.
+        setError('Your name is saved, but your games did not load. Tap your name again.');
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save your name.');
     } finally {
       setBusy(false);
     }
   }
-  if (adding) return <AddMyName onPick={pick} onDone={onPicked} onBack={() => setAdding(false)} />;
+  if (adding) return <AddMyName onPick={pick} onDone={() =>
+        void Promise.resolve(onPicked()).catch(() => {
+          setAdding(false);
+          setError('Your name is saved, but your games did not load. Tap your name again.');
+        })
+      } onBack={() => setAdding(false)} />;
   return (
     <section className="stack" aria-label="Pick your name">
       {error && <Notice tone="danger">{error}</Notice>}
@@ -827,6 +840,21 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
  * Players with credit don't see "I paid" until they tap Pay (Venmo opened).
  * Remembered on this phone, per game.
  */
+/**
+ * After Pay is tapped on a phone, wait about 2 seconds: if the Venmo app did not take over the screen, say so with a
+ * small note ("No Venmo? Pay Alex directly"). The Pay button and its link are not touched. See src/venmoFallback.ts.
+ */
+function useNoVenmoNote(organizerName: string | null) {
+  const toast = useToast();
+  const stop = useRef<(() => void) | null>(null);
+  useEffect(() => () => stop.current?.(), []);
+  return (pay: { url: string | null; appUrl: string | null }) => {
+    if (!venmoHandsOffToApp(pay)) return;
+    stop.current?.();
+    stop.current = watchVenmoLaunch(() => toast(noVenmoMessage(organizerName), 'ok', { stayMs: NO_VENMO_STAY_MS }));
+  };
+}
+
 function usePayTapped(key: string) {
   const storeKey = `pb_pay_tapped_${key}`;
   const read = () => {
@@ -940,6 +968,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
+  const watchNoVenmo = useNoVenmoNote(g.group.organizerName);
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   let potLeft = g.credit.usableCents;
@@ -1005,6 +1034,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
             onClick={(e) => {
               payTap.mark();
+              watchNoVenmo(pay);
               openVenmo(e, pay);
             }}
           >
@@ -1204,6 +1234,7 @@ function RowPay({
   const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(s.id);
+  const watchNoVenmo = useNoVenmoNote(g.group.organizerName);
   const busy = paid.busy || credit.busy;
   if (mine.paymentStatus === 'paid') {
     const amount = mine.shareCents;
@@ -1301,6 +1332,7 @@ function RowPay({
       aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
       onClick={(e) => {
         payTap.mark();
+        watchNoVenmo(pay);
         openVenmo(e, pay);
       }}
     >

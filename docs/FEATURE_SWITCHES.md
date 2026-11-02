@@ -17,3 +17,4 @@ None of them touches money, seats, prices or the database: they only show or hid
 - The private test links only work while the switch is off for everyone. Once it is on, they change nothing.
 - Quiet windows for switching one on: Wed 6:00 AM to 6:00 PM, and Fri through Mon 6:00 PM (see SITE_RULES). Never in the hour after Alex texts the group.
 - Quickest rollback for the motion switches: set the value to `"off"` and deploy (no data restore needed). Rollbacks are listed per deploy in `STAGE_NOTES.md`.
+- The layout polish (Mon Nov 2: big text, long names, keyboard, shared phone) and the "No Venmo? Pay Alex directly" note have no switch: the layout rules are plain CSS that only act when text is big or a name is long, and the note only shows when the Venmo app fails to open. See STAGE_NOTES, "Layout polish".

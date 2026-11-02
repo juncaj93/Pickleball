@@ -1528,3 +1528,76 @@ deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
   no-court 10, time-shift 10, good-news 9, cancel-reason 8, dryrun-screens 6, admin-sweep 6, want-in 4, double-tap 4,
   audit-stage3 3). round2: 24 of 25; one check ("banner timings ... reduce motion fades only") fails about 2 runs in 3 on this
   code AND on the live code before this change (199170c, checked in a separate copy): an older flaky check, not caused here.
+
+## Layout polish (Mon Nov 2, 2026) - on a preview, waiting for "ship it"
+
+Spec: `POLISH_SPEC` (layout robustness, no redesign, no new money rules, no database change). Started from main e740244.
+Nothing here is deployed to the live site. New switches: none (see "Why no switch" below).
+
+### What was fixed (plain words)
+- **Very big phone text (150% and 200%).** The checks run at 320 and 390 px wide, light and dark, on the player and the
+  organizer screens. Fixed: the header (name, credit, sun button, date square), the date tiles, the cards, the LATER rows,
+  the "THIS WEEK ... All games" line, the "time changed" bar (Still in and Can't make it stay equal width, they wrap and
+  stack instead of overlapping), the organizer cards (court switch, "Confirmed x of y" and the Text buttons, holiday tags,
+  "+ Add game" and "Book a court"), the tab bar, the Players list, Money's month picker, History's chips, Settings rows,
+  sheets, the gear menu, the name list ("Who are you?") and the banners.
+- **Long names** (29 letters, 28 letters with no spaces, emoji, accents): in the header the name ends in "..." on one line and
+  gives way first; the sun button, the credit and the date square keep their size. A name with no spaces breaks inside cards
+  and lists (it has nowhere else to go); names with spaces wrap between words and are never broken in the middle.
+- **Credit text in the header** (label above the amount, right-aligned, hidden at $0): checked with the 29-letter name,
+  $140, and 200% text.
+- **Shared phone (a real bug, fixed).** After picking a different name the page kept showing the OLD name's credit and cards
+  until the new data arrived (about a second on a slow phone), and a tap in that gap acted as the NEW name. The name list now
+  stays up until the new name's own data is there (`onPicked` in `src/pages/PlayerHome.tsx`). A test slows the load down by
+  1.5 s and watches the screen every 0.1 s; it fails on the old code (it saw "$140" under another name) and passes now.
+- **Short screens (landscape) and the keyboard.** Sheets and dialogs fit and scroll to their last button at 320x260 and
+  568x320. With an iPhone keyboard open the page itself is not shrunk, so a sheet at the bottom ended up under the keyboard
+  with its Save button hidden. `src/keyboard.ts` now tells the page how tall the keyboard is (only while one covers it), and
+  a sheet sits above it and scrolls inside what is left. Android phones that shrink the page themselves are unaffected.
+- **Pay button fallback (item 8).** Some players have no Venmo app and see "invalid address" when they tap Pay. The Pay
+  button and its link are exactly as before. After a tap, if the page was NOT hidden or left within 2 seconds, a small
+  banner shows "No Venmo? Pay Alex directly" (first name from the site data, "the organizer" if there is none) for about 6
+  seconds, or until tapped. If the Venmo app opened, nothing ever shows, even when the player comes back. Both Pay buttons
+  (the game card and the game-day Pay card). `src/venmoFallback.ts`, `useNoVenmoNote` in `PlayerHome.tsx`.
+  Only phones where Pay hands over to the app (`venmo://`) get it; computers and the organizer's own Venmo buttons do not.
+
+### Items from "Later cleanup batch" (docs/AUDIT_SCENARIOS_player.md)
+L1 to L4 fixed (all layout-only). **L5 not done** (it is about a failed drop on a shared phone, not layout).
+
+### How it is built
+- New `src/large-text.css`, loaded last. It uses container queries measured in `rem`: a 320 px screen at normal text is
+  about 18 text-sizes wide and keeps today's layout exactly; the same screen at 200% text is about 9 wide and switches to the
+  roomier layout (tile above the words, buttons under the names, one-column switches). So normal text is not touched.
+- `Shell.tsx`: the buttons, credit and date square are one group (`.topbar-end`) that moves to its own row at big text.
+- Date tile numbers are capped to their tile (`cqw`), so a 200% "17" no longer outgrows a 56 px tile.
+
+### Checked that normal text did not change
+Screenshots of 36 screens (player: Ryan, Wren, Pia and the 29-letter name; organizer: Home, Players, Money, History, Settings;
+390 and 320 px, light and dark, normal text) were taken on main and on this branch and compared pixel by pixel. The same
+page positions were compared element by element. Findings: identical, except (1) rows that used to break a long name in the
+middle of a word (they now wrap by word), (2) the header of a player with a credit chip and a long name (two lines became one
+line with "..."), (3) things that move by themselves (the "Game on" banner, the port number in the Settings link). One thing
+found along the way: on phones 380 px wide or narrower the LATER tile's day number was already 2.1rem (an old rule order
+slip); it is kept exactly as it was.
+
+### Tests
+- `e2e/layout-polish.cjs` (new, run by `npm run test:e2e`): see the count in "Tests on this branch" below. Uses
+  `e2e/layout-lib.cjs` (the fake group with the awkward cases) and `e2e/layout-audit.cjs` (the measuring code: sideways
+  scroll, past the edge, text cut off, overlaps, mid-word breaks, sheets that do not scroll). The checks fail on the old code.
+- `e2e/audit-player-look.cjs`: the 12 "OPEN" checks about big text and the header are real checks now (0 open).
+- Unit: `tests/venmo-fallback.test.ts` (7), `tests/keyboard.test.ts` (6).
+
+### Why no switch
+Every change is layout or a safety fix. At normal text size nothing moves (see above). The Pay note shows only when the Venmo
+app fails to open. A switch for the CSS is not possible (it would need two copies of every style); a switch for the Pay note
+would be a small add if Alex wants one (question in the report).
+
+### Not tested for real here (needs a phone)
+- The iPhone keyboard (tested with a stand-in for the phone's "visible area": the keyboard test shrinks it by 300 px).
+- A real iPhone WITHOUT the Venmo app (tested with the page staying in view / going hidden).
+- Real Larger Text (the tests make the text 150% and 200% bigger the way a browser setting does).
+
+### To ship (after "ship it", quiet window: Wed 6:00 AM to 6:00 PM, or Fri through Mon 6:00 PM)
+1. Merge the branch into main (PR), pull main, `npm test`, confirm main equals live plus this change.
+2. SQL export and a Time Travel bookmark (no migration, no database change: this is for the rule).
+3. `npm run deploy` from main. 4. Read-only live check. 5. Rollback: redeploy the previous commit (no data to restore).

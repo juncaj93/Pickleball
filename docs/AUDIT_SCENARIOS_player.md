@@ -241,15 +241,16 @@ See the table at the top, plus: cancel-by on Election Day Nov 3, start and end e
   database): the Good news note shows once; "Out for Tuesday?"; canceled cards no longer see-through; "If you paid,
   it's now your credit." only for players who were in; the CREDIT word's color in dark mode; weeks start on Sunday.
 
-## Later cleanup batch (not now: Alex, Nov 1)
+## Later cleanup batch (Alex, Nov 1) - done Mon Nov 2, 2026 (layout polish), except L5
 
-Left alone until after Tuesday's game. Each has a check in `e2e/audit-player-look.cjs` marked OPEN (reported, never
-failing the run), or a note in `tests/fresh-e-nov1.test.ts`.
+L1 to L4 were layout-only and are fixed; their checks in `e2e/audit-player-look.cjs` are real checks now (no OPEN left).
+The new, wider test is `e2e/layout-polish.cjs` (see STAGE_NOTES, "Layout polish"). L5 is not layout (it is about what a
+failed drop leaves behind when the phone switches names), so it was not touched.
 
-| # | Item | Where | Idea |
+| # | Item | Status | How it was fixed |
 |---|---|---|---|
-| L1 | Very big text (150% to 200%): LATER rows beside a wide button squeeze names to a few letters a line | `.tier-later` grid in src/player-cards.css | Drop the button under the middle block when the text is large (container query) |
-| L2 | Very big text: header name, CREDIT chip and date square overflow their boxes | `.topbar` in src/styles.css | Let the header wrap to two rows at large text |
-| L3 | Very big text: the "Court not booked" + calendar line runs past the card at 320 px / 200% | `.st-tail` in src/player-cards.css | Wrap it only at large text (normal sizes must stay one line) |
-| L4 | A 29-letter made-up name with the CREDIT chip breaks mid-word in the header | src/styles.css `.topbar h1` | Show the first name only when the chip is there |
-| L5 | Shared phone, no signal: a name switched within about 7 s of a drop that failed can lose that drop | src/pages/PlayerHome.tsx `finishNotes` | Keep another name's note until that name opens the page again |
+| L1 | Very big text (150% to 200%): LATER rows beside a wide button squeeze names to a few letters a line | fixed | Under a width of about 17 text-sizes the button drops under the names (`src/large-text.css`, section 3) |
+| L2 | Very big text: header name, CREDIT chip and date square overflow their boxes | fixed | The name ends in "..." first; with big text the buttons, credit and date take a row of their own; the date square grows with its text |
+| L3 | Very big text: the "Court not booked" + calendar line runs past the card at 320 px / 200% | fixed | The date tile moves above the words, and the status line may wrap, only at big text |
+| L4 | A 29-letter made-up name with the CREDIT chip breaks mid-word in the header | fixed | One line with "..." (the name is never broken in the middle of a word) |
+| L5 | Shared phone, no signal: a name switched within about 7 s of a drop that failed can lose that drop | NOT done (not layout) | Still open: `src/pages/PlayerHome.tsx` `finishNotes`, idea: keep another name's note until that name opens the page again |
