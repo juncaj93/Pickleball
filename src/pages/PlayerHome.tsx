@@ -1058,10 +1058,11 @@ function SuggestionCard({
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
-  // With no court booked the game reads like a normal one and never says waitlist.
+  // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
+  // warns first. With room, a game with no court booked reads like a normal one.
   const standby = s.courtState === 'waitlist';
-  const waitlistForm = !standby && !s.noCourt && s.confirmedCount >= g.group.maxPlayers;
-  const subline = standby || (s.noCourt && s.confirmedCount >= g.group.maxPlayers) ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
+  const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
+  const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     setBusy(true);
