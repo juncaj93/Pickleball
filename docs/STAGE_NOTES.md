@@ -1426,7 +1426,7 @@ writes `pb_motion_admin_seen` in localStorage.
 - The old `e2e/live-check.cjs` line "setup code is configured" fails on the live site because setup is finished (`setupEnabled` is false); it is
   an old check from before setup and not related to motion.
 
-## Always ask for payment (PAY_ALWAYS), Mon Nov 2, 2026 - preview only, waiting on Alex's answer
+## Always ask for payment (PAY_ALWAYS), Mon Nov 2, 2026 - LIVE with the switch OFF for everyone
 
 Spec: PAY_SPEC (approved by Alex Sun Nov 1). Started from main ce26ca8, merged with main 4fb55a7 (organizer motion, live as
 deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
@@ -1497,3 +1497,34 @@ deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
    in a quiet window (no deploy).
 - Rollback: Settings switch off (instant, no deploy). Code: Pages deployment 6153a25f (commit 199170c, before this change); the
   Settings row is one task_log row the old code ignores, so no data restore is needed.
+
+### Alex's answers and "ship it" (Sun Nov 1, 2026, about 11:10 PM Eastern)
+- "Ship it" after testing the preview on his phone. Deploy with the switch OFF; Alex tests on live with the private link and
+  switches it on himself. Taken as: Q1 keep canceling never-booked or short games by hand (no auto-cancel built); Q2 keep the
+  Oct 31 rule (an unconfirmed I paid waits for Paid / Didn't pay).
+- Pre-deploy fresh reviewer (did not write the code): SHIP. One finding fixed before the deploy: giving the "Want in?" card the
+  court view had dropped the "You'd be on the waitlist" warning for a game with no court that is really full; restored (73d3f08).
+
+### Deploy (Mon Nov 2, 2026, 12:01 AM Eastern)
+- PR #70 merged as ea2ff2f (same tree as the tested 73d3f08). Production deployment `a756dbe2`, branch main, commit ea2ff2f.
+- Before it: read-only live check (20 health checks 0, no `pay_always_on` row); SQL export `live-before-pay-always-2026-11-02.sql`
+  (239 rows, has phone numbers, not committed, in this session's scratch folder); Time Travel bookmark
+  `000003f9-00000000-00005117-eedc9cd132061bbc7b55ad632fc4e1ba` (12:01 AM). No migration.
+- After it (read-only): the backup address serves the new bundle; /, /admin, /api/status, /api/group/version 200; `/api/group`
+  answers `payAlways: false`, and `true` only with the header `X-Pay-Always: on`; all 20 health checks 0; row counts identical to
+  before (admin_audit_log 131, credit_ledger 5, d1_migrations 16, player_devices 35, players 10, session_players 20, sessions 8,
+  task_log 3, the rest unchanged); no `pay_always_on` row (off for everyone). pickleball.juncaj.net could not be reached from this
+  session's network (same as earlier deploys); it serves the same Pages project.
+- Switch it on for everyone: /admin > Settings > Money > "Ask for payment on every game" (no deploy). Private test on a phone:
+  pickleball.juncaj.net/?payalways=on (that phone only; ?payalways=off ends it).
+- Rollback: Settings switch off (instant). Code: Pages deployment `6153a25f` (commit 199170c); the old code ignores the task_log
+  row, so no data restore is needed. Whole database: `npx wrangler d1 time-travel restore pickleball --bookmark=000003f9-00000000-00005117-eedc9cd132061bbc7b55ad632fc4e1ba`.
+
+### Tests on the deployed code (73d3f08 = ea2ff2f)
+- Typecheck clean. Unit: 1,645 passed, 1 skipped, 0 failed, in 90 files.
+- Browser: all 34 files run one by one: 33 green (run 229, credit 153, audit-player-look 133 + 12 known open, audit-player-flows 93,
+  court 84, held 81, alerts 52, texts 52, admin-cleanup 35, suggest 35, popup 33, gates 32, admin-motion 28, live 26, names 24,
+  auto-credit 22, motion 22, circles 18, do-now 13, card-times 13, pay-always 12, money-visible 12, admin-audit 11, banner 11,
+  no-court 10, time-shift 10, good-news 9, cancel-reason 8, dryrun-screens 6, admin-sweep 6, want-in 4, double-tap 4,
+  audit-stage3 3). round2: 24 of 25; one check ("banner timings ... reduce motion fades only") fails about 2 runs in 3 on this
+  code AND on the live code before this change (199170c, checked in a separate copy): an older flaky check, not caused here.
