@@ -120,6 +120,8 @@ export interface GroupView {
   viewingAs: boolean;
   /** The moved-game notice is on for this screen (server/timeShift.ts). The court look does not depend on it. */
   timeShift?: boolean;
+  /** The MOTION switch (server/motion.ts): the player screens animate. Visual only; false or missing means the screen looks exactly as it did. */
+  motion?: boolean;
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */

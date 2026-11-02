@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
@@ -18,11 +18,13 @@ import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
-import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
+import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
+import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
 import '../credit-player.css';
 import '../player-cards.css';
+import '../motion.css';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 
 const SHOW_FIRST = 6;
@@ -239,6 +241,41 @@ export function PlayerHome({
   const g = load.data;
   const toast = useToast();
 
+  // ---- Motion (the MOTION switch). Visual only; with it off none of this does anything. ----
+  // <html data-motion> follows the server's answer; until the first answer, what this phone heard last time
+  // (so the loading skeleton already behaves). Cleared when this screen goes away (the organizer's screens never animate).
+  useLayoutEffect(() => {
+    setMotion(g ? g.motion === true : rememberedMotion());
+  }, [g, g?.motion]);
+  useEffect(() => {
+    if (g) rememberMotion(g.motion === true);
+  }, [g, g?.motion]);
+  useLayoutEffect(() => () => setMotion(false), []);
+  const motion = useMotion();
+  // The first-load cascade plays once per page open (not on refreshes, filter taps or name switches). `live` turns on
+  // when it is over: anything that appears from then on is a real change.
+  const firstData = useRef(true);
+  const [cascade, setCascade] = useState(false);
+  const [live, setLive] = useState(false);
+  const cascadeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!g || !firstData.current) return;
+    firstData.current = false;
+    if (!canMove()) {
+      setLive(true);
+      return;
+    }
+    setCascade(true);
+    // Not cancelled by the next refresh: the cascade ends on its own, once.
+    cascadeTimer.current = setTimeout(() => {
+      setCascade(false);
+      setLive(true);
+    }, 900);
+  }, [g]);
+  useEffect(() => () => clearTimeout(cascadeTimer.current), []);
+  const ptrBall = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+
   // Taps still waiting on the server are drawn at once (I'm in, and a held Drop out).
   const [overlay, setOverlayState] = useState<Overlay>({});
   const setOverlay = useCallback((id: string, kind: 'join' | 'drop' | null) => {
@@ -268,6 +305,15 @@ export function PlayerHome({
   const celebrated = useRef<Set<string> | null>(null);
   if (!celebrated.current) celebrated.current = celebratedIds();
   const [celebrating, setCelebrating] = useState<Set<string>>(new Set());
+  // Game on burst (motion): never on page load, so the first look at the page never bursts.
+  const firstPlan = useRef(true);
+  /** The 8 little balls pop out of this game's card once. */
+  const burst = useCallback((id: string) => {
+    if (!canMove()) return;
+    const ids = new Set([id]);
+    setCelebrating(ids);
+    setTimeout(() => setCelebrating((cur) => (cur === ids ? new Set() : cur)), CELEBRATE_MS);
+  }, []);
   const markCelebrated = useCallback((id: string) => {
     celebrated.current!.add(id);
     rememberCelebrated(celebrated.current!);
@@ -284,7 +330,9 @@ export function PlayerHome({
     if (plan.now.length) notices.push({ msg: `Game on! ${plan.now[0].confirmed.length} in`, ball: true });
     // Not cleaned up on purpose: the memory above is already saved, so a repeat of this effect must not cancel them.
     notices.forEach((n, i) => (i === 0 ? toast(n.msg, 'ok', { ball: n.ball }) : setTimeout(() => toast(n.msg, 'ok', { ball: n.ball }), i * NOTICE_GAP_MS)));
-    if (plan.now.length) {
+    const first = firstPlan.current;
+    firstPlan.current = false;
+    if (plan.now.length && !(motionOn() && first)) {
       const ids = new Set(plan.now.map((x) => x.id));
       setCelebrating(ids);
       setTimeout(() => setCelebrating((cur) => (cur === ids ? new Set() : cur)), CELEBRATE_MS);
@@ -299,13 +347,16 @@ export function PlayerHome({
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
-        if (before + 1 === MIN_PLAYERS && !offer) return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, !noCourt), 'ok', { ball: true });
+        if (before + 1 === MIN_PLAYERS && !offer) {
+          burst(sessionId);
+          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, !noCourt), 'ok', { ball: true });
+        }
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents });
       toast(joinedText(res, noCourt, g?.group.priceCents ?? 0));
     },
-    [toast, markCelebrated, g?.group.priceCents],
+    [toast, markCelebrated, burst, g?.group.priceCents],
   );
 
   // A drop that was held for Undo when the page closed (or lost signal): finish it. A note younger than the hold
@@ -368,6 +419,11 @@ export function PlayerHome({
   // Scroll to a shared session once the schedule shows (after picking a name).
   const focusIndex = g && focusId ? g.sessions.findIndex((s) => s.id === focusId) : -1;
   const choosing = !!g && (switching || (!viewAs && !g.me));
+  // The CREDIT chip pops in when it first appears and fades out at $0 (motion).
+  const chipOn = !!g && !!credit && !choosing && (credit.balanceCents > 0 || !!credit.pending);
+  const chipEnter = useJustChanged(chipOn, 600) && chipOn && live;
+  const chipShown = useLingering(chipOn ? credit : null, 220);
+  usePullToRefresh({ enabled: motion && canMove() && !!g && !choosing, onRefresh: load.quiet, ball: ptrBall, shift: mainRef });
   const mineOnly = filter === 'mine';
   const filtered = view ? (mineOnly ? view.sessions.filter(isMineGame) : view.sessions) : [];
   const shownSessions = showAll || focusIndex >= SHOW_FIRST ? filtered : filtered.slice(0, SHOW_FIRST);
@@ -429,9 +485,21 @@ export function PlayerHome({
           ) : undefined
         }
         tools={<ModeButton preview={!!viewAs} />}
-        chip={showChip ? <CreditChip credit={credit!} startFrom={chipStart} onOpen={() => setCreditOpen(true)} /> : undefined}
+        chip={
+          showChip ? (
+            <CreditChip credit={credit!} startFrom={chipStart} enter={chipEnter} onOpen={() => setCreditOpen(true)} />
+          ) : chipShown.value ? (
+            <CreditChip credit={chipShown.value} leave={chipShown.leaving} onOpen={() => {}} />
+          ) : undefined
+        }
       />
-      <main className="page stack-lg">
+      <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`}>
+        {/* Pull to refresh: the ball that shows in the gap the list leaves (motion only). */}
+        {motion && (
+          <div ref={ptrBall} className="m-ptr" aria-hidden="true">
+            <Pickleball />
+          </div>
+        )}
         {load.loading && !g && !load.error && <ScheduleSkeleton />}
         {load.error && load.error.status !== 404 && (!g || !!viewAs) && <ErrorState error={load.error} onRetry={load.reload} />}
 
@@ -467,7 +535,7 @@ export function PlayerHome({
                 setFilter('all');
               }}
             />
-            {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} />}
+            {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
             {answered ? (
               <section className="card stack suggest" aria-label="Your answer">
                 <h2>{answered.text}</h2>
@@ -852,7 +920,9 @@ function useCredit(onChanged: () => Promise<void>) {
  * "Pickleball Tue Nov 3 - Ryan" when Venmo allows it; otherwise the note shows
  * with Copy. Opening Venmo never marks anyone paid.
  */
-function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void> }) {
+function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: () => Promise<void>; enter?: boolean }) {
+  // Only a card that appears after the page has settled enters; a later refresh never replays it.
+  const enter = useRef(enterNow).current;
   const toast = useToast();
   const tz = g.group.timezone;
   const due = g.payDue;
@@ -898,13 +968,15 @@ function PayCard({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void
   // (On this card the amounts are already after any credit; each game's own line says what is left.)
   const who = g.group.organizerName ?? 'The organizer';
   return (
-    <section className="card pay-card" aria-label="Payment">
-      <h2>{title}</h2>
+    <section className={`card pay-card${enter ? ' m-enter' : ''}`} aria-label="Payment">
+      <h2>
+        <RollText text={title} />
+      </h2>
       {due.length > 1 ? (
         <ul className="pay-list">
           {due.map((o) => (
             <li key={o.sessionId}>
-              {formatShortDate(o.startsAt, tz)}: {formatPrice(o.amountCents)}
+              {formatShortDate(o.startsAt, tz)}: <RollText text={formatPrice(o.amountCents)} />
               {detail(o) && <span className="muted"> ({detail(o)})</span>}
             </li>
           ))}
@@ -1132,7 +1204,9 @@ function RowPay({
     const amount = mine.shareCents;
     return (
       <div className="sched-money stacked">
-        <span className="pchip chip-ok paid-tag" data-paid>{mine.paidWithCredit ? 'Paid with credit' : amount ? `Paid ${formatPrice(amount)}` : 'Paid'}</span>
+        <span className="pchip chip-ok paid-tag" data-paid>
+          <RollText text={mine.paidWithCredit ? 'Paid with credit' : amount ? `Paid ${formatPrice(amount)}` : 'Paid'} />
+        </span>
         <span className="inline-links">
           {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
           {mine.paidWithCredit && (
@@ -1154,14 +1228,14 @@ function RowPay({
   // Credit already on the seat (used at sign-up, or with Use credit): its own small chip, even before a court is booked.
   const creditChip = left && (
     <span className="pchip chip-credit-used" data-credit-used>
-      Credit {formatPrice(mine.creditCents)} used
+      <RollText text={`Credit ${formatPrice(mine.creditCents)} used`} />
     </span>
   );
   if (mine.oweCents <= 0) {
     // No court booked yet: no Pay, but credit they can use is always offered ("Use $14 credit").
     const useNow = mine.useCreditCents > 0 && (
       <button className="btn pay-btn" data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.useCreditCents, mine.useCreditCents)}>
-        Use {formatPrice(mine.useCreditCents)} credit
+        <RollText text={`Use ${formatPrice(mine.useCreditCents)} credit`} />
       </button>
     );
     return (
@@ -1176,8 +1250,13 @@ function RowPay({
   const showCredit = mine.useCreditCents > 0;
   const chip = (
     <span className="pchip chip-warn" data-owe>
-      {formatPrice(mine.oweCents)} due
-      {showCredit && !left && <span className="chip-credit"> · {formatPrice(g.credit.usableCents)} credit</span>}
+      <RollText text={`${formatPrice(mine.oweCents)} due`} />
+      {showCredit && !left && (
+        <span className="chip-credit">
+          {' · '}
+          <RollText text={`${formatPrice(g.credit.usableCents)} credit`} />
+        </span>
+      )}
     </span>
   );
   if (onTop) {
@@ -1219,7 +1298,7 @@ function RowPay({
         openVenmo(e, pay);
       }}
     >
-      {left ? payLabel : 'Pay'}
+      {left ? <RollText text={payLabel} /> : 'Pay'}
     </a>
   ) : (
     <button className={showCredit ? outline : filled} disabled={busy} onClick={() => paid.set(true)}>
@@ -1247,6 +1326,22 @@ function RowPay({
         {drop}
       </div>
     </>
+  );
+}
+
+/** "Game on": 8 small pickleballs pop out of the card once (about 400 ms). Decoration only; it never takes a tap. */
+function Burst() {
+  return (
+    <span className="m-burst" aria-hidden="true">
+      {Array.from({ length: 8 }, (_, k) => {
+        const a = (k / 8) * Math.PI * 2 + 0.2;
+        return (
+          <span key={k} style={{ display: 'contents', ['--k' as string]: k, ['--dx' as string]: `${Math.round(Math.cos(a) * 74)}px`, ['--dy' as string]: `${Math.round(Math.sin(a) * 46)}px` }}>
+            <Pickleball />
+          </span>
+        );
+      })}
+    </span>
   );
 }
 
@@ -1296,6 +1391,10 @@ export function ScheduleRow({
   const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
   const nowMs = Date.parse(g.now);
+  const motion = useMotion();
+  // Motion: the status control eases from the I'm in button into the chip (and back), and what just changed pops.
+  const rowRef = useRef<HTMLElement>(null);
+  useStatusMorph(rowRef);
 
   async function run(path: string, label: (data: any) => string) {
     if (working.current) return;
@@ -1429,6 +1528,12 @@ export function ScheduleRow({
   const everyone = g.players.map((p) => p.name);
   const onTop = g.payDue.some((o) => o.sessionId === s.id);
   const isIn = inSession && !s.canceled;
+  // Both only after a real change (never on the first draw of the page): you just got in / the money line changed.
+  const justJoined = useJustChanged(isIn, 700);
+  // Coarse on purpose (yes or no, not the amounts), so a changed amount alone never re-pops the buttons.
+  const moneyKey = `${isIn ? 1 : 0}|${(mine?.oweCents ?? 0) > 0 ? 1 : 0}|${(mine?.creditCents ?? 0) > 0 ? 1 : 0}`;
+  const moneyFresh = useJustChanged(moneyKey, 700);
+  const paidFresh = useJustChanged(mine?.paymentStatus === 'paid', 700);
   const tonight = open && playerDay(s.startsAt, tz, nowMs).word === 'tonight';
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
   const calLink = isIn && open && (
@@ -1475,7 +1580,7 @@ export function ScheduleRow({
     );
 
   const joinBtn = notIn && (
-    <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} disabled={busy} aria-busy={busy} onClick={join}>
+    <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
       {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
     </button>
   );
@@ -1492,8 +1597,9 @@ export function ScheduleRow({
 
   return (
     <article
+      ref={rowRef}
       id={`row-${s.id}`}
-      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}`}
+      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-mine={isIn ? 'in' : undefined}
@@ -1527,7 +1633,9 @@ export function ScheduleRow({
         <div className="sched-main">
           {showCount && (
             <div className="in-line">
-              <span className="in-count">{countLine(s)}</span>
+              <span className="in-count">
+                <RollText text={countLine(s)} />
+              </span>
               <SpotDots names={names} me={g.me?.name} celebrate={celebrating} />
             </div>
           )}
@@ -1555,6 +1663,7 @@ export function ScheduleRow({
         {tier !== 'later' && noteEl}
       </div>
 
+      {celebrating && motion && <Burst />}
       <ConfirmDialog
         open={askOut}
         title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}

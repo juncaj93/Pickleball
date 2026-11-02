@@ -1,8 +1,9 @@
-import { type ReactElement, type ReactNode, useEffect, useState } from 'react';
+import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react';
 import { SITE_NAME } from '../shared/settings';
 import { DEFAULT_TIMEZONE, localParts } from '../shared/time';
 import { applyTheme, getTheme, setTheme, type ThemeChoice, useNow } from './lib';
 import { AutoModeIcon, MoonIcon, SunIcon, useToast } from './ui';
+import { canMove, motionOn } from './motion';
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -91,14 +92,30 @@ export function ModeButton({ preview }: { preview?: boolean }) {
     return () => applyTheme(getTheme());
   }, [preview]);
   const cur = MODES.find((m) => m.v === mode) ?? MODES[0];
+  // With the motion on: colors fade over about 200 ms and the new icon turns half a circle into place.
+  const btn = useRef<HTMLButtonElement>(null);
+  const turn = useRef(false);
+  useEffect(() => {
+    if (!turn.current) return;
+    turn.current = false;
+    if (!canMove()) return;
+    btn.current?.querySelector('svg')?.animate([{ transform: 'rotate(-180deg)' }, { transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.22,.9,.3,1)' });
+  }, [mode]);
   return (
     <button
+      ref={btn}
       type="button"
       className="mode-btn"
       data-mode={mode}
       aria-label={`Light or dark: ${cur.label}. Tap to change.`}
       onClick={() => {
         const next = MODES[(MODES.indexOf(cur) + 1) % MODES.length];
+        if (motionOn() && canMove()) {
+          turn.current = true;
+          const root = document.documentElement;
+          root.classList.add('m-theme-fade');
+          setTimeout(() => root.classList.remove('m-theme-fade'), 320);
+        }
         if (preview) applyTheme(next.v);
         else setTheme(next.v);
         setMode(next.v);

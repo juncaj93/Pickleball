@@ -4,6 +4,7 @@ import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
 import { holdLive } from './busy';
 import { DEMO_MESSAGE, isIOS } from './lib';
+import { canMove, motionOn, useMotion } from './motion';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -75,7 +76,14 @@ export function ErrorState({ error, onRetry }: { error: ApiError; onRetry?: () =
 }
 
 export function Empty({ children }: { children: ReactNode }) {
-  return <div className="empty card">{children}</div>;
+  const motion = useMotion();
+  return (
+    <div className="empty card">
+      {/* A soft shadow under the ball while it bounces (only with the motion on). */}
+      {motion && <span className="m-empty-shadow" aria-hidden="true" />}
+      {children}
+    </div>
+  );
 }
 
 // ---------- Pop-up messages: one banner at the bottom ----------
@@ -163,10 +171,47 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** With the motion on, a confirmation holds about 3 seconds (an error and an Undo keep their own time). */
+const MOTION_STAY_MS = 3000;
+const stayFor = (shown: Shown, motion: boolean) => shown.opts.stayMs ?? (shown.kind === 'error' ? BANNER_TIMING.errorStay : motion ? MOTION_STAY_MS : BANNER_TIMING.stay);
+/** A swipe down this far (px) sends the banner away; less and it glides back. */
+const SWIPE_DISMISS_PX = 36;
+
+/** The Undo ring: drains over exactly the Undo window. */
+function UndoRing({ ms }: { ms: number }) {
+  return (
+    <svg className="m-undo-ring" viewBox="0 0 24 24" aria-hidden="true" style={{ '--ring-ms': `${ms}ms` } as React.CSSProperties}>
+      <circle className="m-ring-back" cx="12" cy="12" r="9.5" />
+      <circle className="m-ring-front" cx="12" cy="12" r="9.5" pathLength="100" />
+    </svg>
+  );
+}
+
 function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>('');
   const swipe = useRef<{ x: number; y: number } | null>(null);
+  // Decided once, when it appears: the motion look (a raised card, spring in, glides under the finger).
+  const motion = useRef(motionOn()).current;
+  const dragged = useRef(0);
+  function drag(dy: number) {
+    const el = ref.current;
+    if (!el) return;
+    dragged.current = Math.max(dragged.current, Math.abs(dy));
+    el.classList.remove('m-snap');
+    el.classList.add('m-dragging');
+    el.style.transform = `translateX(-50%) translateY(${Math.max(0, dy)}px)`;
+  }
+  function release(dy: number) {
+    const el = ref.current;
+    if (!el) return;
+    el.classList.remove('m-dragging');
+    if (dy > SWIPE_DISMISS_PX) return setLeaving((v) => v || 'down');
+    // Let go early: it glides back up and stays.
+    el.classList.add('m-snap');
+    el.style.transform = '';
+    setTimeout(() => el.classList.remove('m-snap'), 260);
+  }
   // When it appeared: a tap on its button that is the second half of a double tap on whatever was under it (Drop out
   // sits right there) is not a choice, so it is ignored.
   const bornAt = useRef(pressCount);
@@ -181,7 +226,7 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
     }
   }, []);
   useEffect(() => {
-    const stay = shown.opts.stayMs ?? (shown.kind === 'error' ? BANNER_TIMING.errorStay : BANNER_TIMING.stay);
+    const stay = stayFor(shown, motion);
     const t = setTimeout(() => setLeaving((v) => v || 'down'), BANNER_TIMING.fadeIn + stay);
     return () => clearTimeout(t);
   }, [shown]);
@@ -196,14 +241,32 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
     <div
       ref={ref}
       popover="manual"
-      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}${shown.opts.ball ? ' pop-ball' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
+      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}${shown.opts.ball ? ' pop-ball' : ''}${motion ? ' m-toast' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
       data-banner
       // Screen readers hear the message through the live regions; a banner with a button must stay reachable.
       aria-hidden={shown.opts.action ? undefined : true}
       style={{ '--b-in': `${BANNER_TIMING.fadeIn}ms`, '--b-out': `${BANNER_TIMING.out}ms` } as React.CSSProperties}
-      onClick={() => setLeaving((v) => v || 'down')}
+      onClick={() => {
+        // A drag that ended on the banner is not a tap.
+        if (motion && dragged.current > 6) return;
+        setLeaving((v) => v || 'down');
+      }}
       onPointerDown={(e) => {
         swipe.current = { x: e.clientX, y: e.clientY };
+        dragged.current = 0;
+      }}
+      onPointerMove={(e) => {
+        if (!motion || !swipe.current || leaving) return;
+        const dy = e.clientY - swipe.current.y;
+        if (dy > 4 || dragged.current > 0) {
+          if (dragged.current === 0) (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+          drag(dy);
+        }
+      }}
+      onPointerCancel={() => {
+        if (!motion || !swipe.current) return;
+        swipe.current = null;
+        release(0);
       }}
       onPointerUp={(e) => {
         const from = swipe.current;
@@ -211,6 +274,8 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
         if (!from) return;
         const dx = e.clientX - from.x;
         const dy = e.clientY - from.y;
+        // With the motion on only a swipe DOWN does anything (sideways never dismisses).
+        if (motion) return release(dy);
         if (Math.abs(dx) > 24 && Math.abs(dx) >= Math.abs(dy)) setLeaving(dx < 0 ? 'left' : 'right');
         else if (dy > 18) setLeaving('down');
       }}
@@ -242,6 +307,7 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
             setLeaving((v) => v || 'down');
           }}
         >
+          {motion && shown.opts.action.label === 'Undo' && <UndoRing ms={BANNER_TIMING.fadeIn + stayFor(shown, motion)} />}
           {shown.opts.action.label}
         </button>
       )}
@@ -252,6 +318,11 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
 export const useToast = () => useContext(ToastContext);
 
 // ---------- Sheets & dialogs (native <dialog> handles focus and Escape) ----------
+
+/** Sheet timing with the motion on: it snaps up in 180 ms (motion.css) and closes in 150 ms. */
+const SHEET_CLOSE_MS = 150;
+/** Dragging the top of a sheet down this far (px) closes it. */
+const SHEET_DRAG_CLOSE_PX = 80;
 
 export function Sheet({
   open,
@@ -266,18 +337,56 @@ export function Sheet({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // With the motion on, a sheet that is closing stays drawn for the length of its slide down.
+  const [closing, setClosing] = useState(false);
+  const wasOpen = useRef(open);
+  // Set at once (state waits for a redraw) so the effect below does not close the dialog before the slide down.
+  const keep = useRef(false);
+  useLayoutEffect(() => {
+    const was = wasOpen.current;
+    wasOpen.current = open;
+    if (open) {
+      keep.current = false;
+      setClosing(false);
+      // A sheet that was dragged down to close must come back at its normal place.
+      const el = ref.current;
+      if (el) {
+        el.style.transform = '';
+        el.classList.remove('m-dragging', 'm-snap');
+      }
+      return undefined;
+    }
+    const d = ref.current;
+    if (was && d?.open && canMove()) {
+      keep.current = true;
+      setClosing(true);
+      const t = setTimeout(() => {
+        keep.current = false;
+        setClosing(false);
+      }, SHEET_CLOSE_MS);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [open]);
   // An open sheet holds live updates back until it closes.
   useEffect(() => (open ? holdLive() : undefined), [open]);
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
     if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
+    if (!open && d.open && !keep.current) {
+      d.close();
+      d.style.transform = '';
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, closing]);
+  // Drag the top of the sheet down to close it (touch or mouse); let go early and it glides back.
+  const dragFrom = useRef<number | null>(null);
+  const dragDy = useRef(0);
   return (
     <dialog
       ref={ref}
-      className="sheet"
+      className={`sheet${closing && !open ? ' m-closing' : ''}`}
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => {
@@ -292,9 +401,46 @@ export function Sheet({
         if (under) setTimeout(() => under.click(), 0);
       }}
     >
-      {open && (
+      {(open || closing) && (
         <>
-          <div className="sheet-head">
+          <div
+            className="sheet-head"
+            onPointerDown={(e) => {
+              if (!motionOn() || (e.target as Element).closest('button')) return;
+              dragFrom.current = e.clientY;
+              dragDy.current = 0;
+            }}
+            onPointerMove={(e) => {
+              const d = ref.current;
+              if (dragFrom.current === null || !d) return;
+              dragDy.current = Math.max(0, e.clientY - dragFrom.current);
+              if (dragDy.current > 4) {
+                (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                d.classList.remove('m-snap');
+                d.classList.add('m-dragging');
+                d.style.transform = `translateY(${dragDy.current}px)`;
+              }
+            }}
+            onPointerUp={() => {
+              const d = ref.current;
+              const dy = dragDy.current;
+              if (dragFrom.current === null || !d) return;
+              dragFrom.current = null;
+              dragDy.current = 0;
+              d.classList.remove('m-dragging');
+              if (dy > SHEET_DRAG_CLOSE_PX) return onClose();
+              d.classList.add('m-snap');
+              d.style.transform = '';
+              setTimeout(() => d.classList.remove('m-snap'), 220);
+            }}
+            onPointerCancel={() => {
+              const d = ref.current;
+              dragFrom.current = null;
+              if (!d) return;
+              d.classList.remove('m-dragging');
+              d.style.transform = '';
+            }}
+          >
             <h2 id={titleId}>{title}</h2>
             <button className="icon-btn" onClick={onClose} aria-label="Close">
               ✕
@@ -703,7 +849,8 @@ export function NamesLine({
     const was = seen.current;
     seen.current = new Set(names);
     if (!was) return;
-    const added = names.filter((n) => !was.has(n));
+    // With the motion on, YOUR own join is not flashed (you just tapped it); only someone else arriving is.
+    const added = names.filter((n) => !was.has(n) && !(motionOn() && n === me));
     if (added.length === 0) return;
     setFresh((cur) => [...cur, ...added]);
     setTimeout(() => setFresh((cur) => cur.filter((n) => !added.includes(n))), 700);

@@ -82,6 +82,17 @@ Other switches in the code (each needs a deploy):
 - `LIVE_UPDATES.on` in `src/livecore.ts`: `false` stops the 5-second refresh
   (pages still refresh after a tap and when reopened).
 
+## 4c. Motion (animations) on the player screens misbehaves (MOTION)
+
+Purely visual. If a screen looks wrong or jumpy once the motion is on:
+
+1. **Only while it is still dark for everyone:** `?motion=off` at the end of the address ends the private test on that phone.
+   (Once it is on for everyone there is no per-phone off; use step 2.)
+2. **Everyone:** set `MOTION = "off"` in `wrangler.toml` (the `[vars]` block, not the preview one), then `npm run deploy` from main.
+   Off means the site is exactly as it was before the motion pass. No data is touched.
+3. Never needed for money: the motion cannot change a seat, a payment or a price.
+4. Private test on the live site while it is off for everyone: open the site with `?motion=on` on your phone once.
+
 ## 5. Put data back (after the game, never mid-game)
 
 Every change is in the Activity log and in Cloudflare's 7-day history.

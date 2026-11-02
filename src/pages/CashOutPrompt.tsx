@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { formatPrice } from '../../shared/money';
 import { holdLive } from '../busy';
 import { api, ApiError, isDemo } from '../lib';
 import { useToast } from '../ui';
+import { canMove } from '../motion';
 
 /**
  * The one question after I'm in when a cash out is pending and the player's
@@ -11,8 +12,17 @@ import { useToast } from '../ui';
  * part of a card. "Use it" puts that money on the game (the request shrinks or
  * goes); "No, keep cash out" just closes it: they are in and pay as usual.
  */
-export function CashOutPrompt({ sessionId, cents, onClose, onChanged }: { sessionId: string; cents: number; onClose: () => void; onChanged: () => Promise<void> }) {
+export function CashOutPrompt({ sessionId, cents, onClose: closeNow, onChanged }: { sessionId: string; cents: number; onClose: () => void; onChanged: () => Promise<void> }) {
   const toast = useToast();
+  // With the motion on it slides down in 150 ms before it is gone (the question is already answered by then).
+  const [leaving, setLeaving] = useState(false);
+  const leaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(leaveTimer.current), []);
+  const onClose = useCallback(() => {
+    if (!canMove()) return closeNow();
+    setLeaving(true);
+    leaveTimer.current = setTimeout(closeNow, 150);
+  }, [closeNow]);
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
   const first = useRef<HTMLButtonElement>(null);
@@ -44,7 +54,7 @@ export function CashOutPrompt({ sessionId, cents, onClose, onChanged }: { sessio
   }
 
   return (
-    <div className="cashout-prompt" role="dialog" aria-modal="false" aria-labelledby="cashout-q" data-cashout-prompt>
+    <div className={`cashout-prompt${leaving ? ' m-leaving' : ''}`} role="dialog" aria-modal="false" aria-labelledby="cashout-q" data-cashout-prompt>
       <p id="cashout-q" className="cashout-q">
         Use the {formatPrice(cents)} you asked to cash out for this game?
       </p>
