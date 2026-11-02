@@ -21,8 +21,9 @@ TIME_SHIFT = "on"
 # "off" = dark for everyone; a phone opened once with ?motion=on still sees it (the private test switch). Needs a deploy.
 MOTION = "on"
 # "Motion" on the organizer screens (a separate switch, because MOTION above is already on for the players).
+# "on" = the organizer screens animate (switched on Sun Nov 1, 2026, about 10:10 PM Eastern, after Alex tested it on his phone).
 # "off" = dark. A phone opened once with ?motionadmin=on still sees it (the private test switch). Needs a deploy.
-MOTION_ADMIN = "off"
+MOTION_ADMIN = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
