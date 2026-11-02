@@ -7,6 +7,7 @@ import { PaymentsManager } from './Sessions';
 import { unpaidPeople } from './textMenu';
 import { SmsDraft } from '../../ui';
 import { RollText } from '../../motion';
+import { MoneyTabV2 } from './MoneyV2';
 
 /** A canceled game where someone's payment became credit. */
 const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
@@ -16,6 +17,12 @@ const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrga
  * session's payments (Mark paid, who played and the final price, Reopen).
  */
 export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
+  // The new layout (ADMIN_V2): one control row, Who paid | Totals. Off: exactly as before.
+  if (ctx.d.adminV2 === true) return <MoneyTabV2 ctx={ctx} />;
+  return <MoneyTabClassic ctx={ctx} />;
+}
+
+function MoneyTabClassic({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
   const unpaid = unpaidPeople(ctx.d);
   const tz = ctx.d.group.timezone;

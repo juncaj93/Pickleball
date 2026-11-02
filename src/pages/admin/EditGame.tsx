@@ -29,6 +29,10 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const [start, setStart] = useState(startLocal.slice(11));
   const [end, setEnd] = useState(toLocalInputValue(s.endsAt, tz).slice(11));
   const [error, setError] = useState<string | null>(null);
+  // The short label ("Veteran's Day", "Court 3"): the new layout only (ADMIN_V2). It is the game's note, changed with Save.
+  const labelOn = ctx.d.adminV2 === true;
+  const [label, setLabel] = useState(s.note ?? '');
+  const labelChanged = labelOn && label.trim() !== (s.note ?? '');
   // The game's length (2 hours usually): a new start moves the end with it, unless the end is changed by hand.
   const lengthMin = Math.max(30, Math.round((Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 60_000));
   const pickStart = (v: string) => {
@@ -53,22 +57,25 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const timeChanged = !started && !!startsAt && !!endsAt && (minute(startsAt) !== minute(s.startsAt) || minute(endsAt) !== minute(s.endsAt));
   const statusChanged = status !== current;
 
+  const savedText = () => (timeChanged || labelChanged ? 'Game saved' : 'Court status saved');
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!timeChanged && !statusChanged) return onDone(false, false);
+    if (!timeChanged && !statusChanged && !labelChanged) return onDone(false, false);
     let moved = false;
     const easing = motion && canMove();
     const ok = await run(async () => {
       // The move first (it can be turned down: a time already taken, in the past), then the status.
       if (timeChanged) moved = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
       if (statusChanged) await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status });
-    }, easing ? undefined : moved || timeChanged ? 'Game saved' : 'Court status saved');
+      if (labelChanged) await api('PUT', `/api/admin/sessions/${s.id}/note`, { note: label.trim() });
+    }, easing ? undefined : savedText());
     if (ok && easing) {
       // The green Saved shows, then the toast comes up and the sheet slides away.
       setSaved(true);
       await new Promise((r) => setTimeout(r, SAVED_SHOW_MS));
-      toast(moved || timeChanged ? 'Game saved' : 'Court status saved');
+      toast(savedText());
       // Even if the sheet was closed during the Saved moment, the follow-up step (Moved text) still happens, as with the motion off.
       onDone(moved, statusChanged);
     } else if (ok) onDone(moved, statusChanged);
@@ -116,6 +123,12 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
             </p>
           )}
         </>
+      )}
+      {labelOn && (
+        <label className="field" data-label-field>
+          Label
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Veteran's Day, Court 3" autoComplete="off" />
+        </label>
       )}
       {error && <p className="field-error">{error}</p>}
       <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Change court on CourtReserve</CourtReserveLink>

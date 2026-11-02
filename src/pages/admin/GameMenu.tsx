@@ -4,11 +4,12 @@ import type { AdminSessionView } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { formatShortDate } from '../../../shared/time';
 import { holdLive } from '../../busy';
-import { isIOS } from '../../lib';
-import { CalendarPlusIcon, GearIcon, MessageIcon } from '../../ui';
+import { api, ApiError, isIOS } from '../../lib';
+import { CalendarPlusIcon, GearIcon, MessageIcon, useToast } from '../../ui';
 import { canMove } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { sessionTexts } from './textMenu';
+import { noteMenuDismissed } from './menuDismiss';
 
 /**
  * The gear's small pop-up, anchored next to the gear (not a full sheet):
@@ -95,7 +96,10 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
     const release = holdLive();
     const onDown = (e: Event) => {
       const t = e.target as Node;
-      if (wrap.current && !wrap.current.contains(t) && !pop.current?.contains(t)) close(false);
+      if (wrap.current && !wrap.current.contains(t) && !pop.current?.contains(t)) {
+        noteMenuDismissed();
+        close(false);
+      }
     };
     document.addEventListener('pointerdown', onDown, true);
     return () => {
@@ -129,6 +133,18 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
     fn();
   };
   const canceled = s.state.flags.canceled;
+  // The new layout (ADMIN_V2): take a canceled game off the player screen, or put it back. It only hides: nothing is deleted.
+  const toast = useToast();
+  const hidden = s.hiddenFromPlayers === true;
+  const toggleHidden = async () => {
+    try {
+      await api('POST', `/api/admin/sessions/${s.id}/hide`, { hidden: !hidden });
+      await ctx.reload();
+      toast(hidden ? `${day} shows on the player screen again` : `${day} is off the player screen. Money and history are untouched.`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    }
+  };
 
   const menu = (
     <div
@@ -179,6 +195,12 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               Add to calendar
             </a>
           )}
+          {canceled && ctx.d.adminV2 === true && (
+            <button role="menuitem" className="menu-row" data-hide-game onClick={pick(() => void toggleHidden())}>
+              <HideIcon />
+              {hidden ? 'Show on player screen again' : 'Remove from player screen'}
+            </button>
+          )}
           <button
             role="menuitem"
             className="menu-row danger"
@@ -225,6 +247,14 @@ function PeopleSmallIcon() {
       <circle cx="9" cy="8" r="3.2" />
       <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
       <path d="M16 5.2a3.1 3.1 0 0 1 0 5.6M18 14.8c2 .7 3.2 2.4 3.2 5.2" />
+    </svg>
+  );
+}
+function HideIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
+      <path d="m4 4 16 16" />
     </svg>
   );
 }

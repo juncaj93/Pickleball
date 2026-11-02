@@ -12,6 +12,8 @@ import { hashPin, newId, randomToken, verifyPin } from './crypto';
 import { motionAdminFor } from './motion';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
+import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
+import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
 import {
@@ -80,6 +82,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const potFor = (sessionId: string) => (r: RosterRow) =>
     seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
   const charges = await loadCancelCharges(ctx.db, group.id);
+  const hiddenIds = await hiddenGameIds(ctx.db, group.id);
   const startsOf = new Map(
     (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
   );
@@ -159,9 +162,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       hasGroupWord: !!group.group_word_hash,
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
-    sessions: sessions.map((s) =>
-      adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
-    ),
+    sessions: sessions.map((s) => ({
+      ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
+      hiddenFromPlayers: hiddenIds.has(s.id),
+    })),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
     creditLedger,
@@ -198,6 +202,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     timeShiftForAll: await timeShiftForAll(ctx.db, group.id),
     motion: motionAdminFor(ctx),
     payAlwaysForAll: await payAlwaysForAll(ctx.db, group.id),
+    adminV2: await adminV2For(ctx, group.id),
+    adminV2ForAll: await adminV2ForAll(ctx.db, group.id),
   };
 }
 
@@ -327,6 +333,8 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
         )
         .bind(ctx.nowIso, session.id),
     ]);
+    // A reopened game is a normal game again: it shows to players (a hide only ever applies to a canceled game).
+    await setHiddenFromPlayers(ctx.db, group.id, session.id, false, ctx.nowIso);
     await audit(ctx.db, group.id, session.id, 'session_reopened', {}, ctx.nowIso);
     return { ok: true, changed: true };
   }
@@ -1439,4 +1447,41 @@ export async function setPayAlways(ctx: Ctx, body: Record<string, unknown>) {
   await setPayAlwaysForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'pay_always_on' : 'pay_always_off', {}, ctx.nowIso);
   return { ok: true, on };
+}
+
+/** PUT /api/admin/admin-v2 { on }: Settings > Feature switches > "New admin layout". Display only: changes no money and no seat. */
+export async function setAdminV2(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setAdminV2ForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'admin_v2_on' : 'admin_v2_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/sessions/:id/note { note }: the game's short label ("Veteran's Day", "Court 3"), changed after the game exists.
+ * Only the label changes: no seat, payment, credit or time. Empty clears it. At most 80 characters (same as when adding a game).
+ */
+export async function setSessionNote(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const note = v.optionalText(body.note, 'note', 80);
+  if ((session.note ?? null) === note) return { ok: true, changed: false, note };
+  await ctx.db.prepare('UPDATE sessions SET note = ?, updated_at = ? WHERE id = ?').bind(note, ctx.nowIso, session.id).run();
+  await audit(ctx.db, group.id, session.id, 'session_note_changed', { from: session.note ?? null, to: note }, ctx.nowIso);
+  return { ok: true, changed: true, note };
+}
+
+/**
+ * POST /api/admin/sessions/:id/hide { hidden }: take a CANCELED game off every player screen, or put it back.
+ * Only hides: nothing about the game, its players, money or credit changes (see server/hideGame.ts). Only canceled games can be hidden.
+ */
+export async function hideFromPlayers(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const hidden = v.bool(body.hidden, 'hidden');
+  if (hidden && session.status !== 'canceled') throw new HttpError(409, 'not_canceled', 'Only a canceled game can be removed from the player screen.');
+  const was = (await hiddenGameIds(ctx.db, group.id)).has(session.id);
+  if (was === hidden) return { ok: true, changed: false, hidden };
+  await setHiddenFromPlayers(ctx.db, group.id, session.id, hidden, ctx.nowIso);
+  await audit(ctx.db, group.id, session.id, hidden ? 'session_hidden_from_players' : 'session_shown_to_players', {}, ctx.nowIso);
+  return { ok: true, changed: true, hidden };
 }

@@ -57,7 +57,8 @@ export function useAction(ctx: AdminCtx) {
   return { busy, run };
 }
 
-export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+/** `courtNeed` (new layout): this game is the one "Court still needs to be booked" is about, so its card says it and carries the Book a court button. */
+export function SessionCard({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSessionView; courtNeed?: boolean }) {
   const tz = ctx.d.group.timezone;
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
@@ -104,6 +105,16 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
             </div>
           </div>
           {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}
+          {s.hiddenFromPlayers && s.state.flags.canceled && ctx.d.adminV2 === true && (
+            <div className="small muted hidden-tag" data-hidden-tag>
+              Not shown to players
+            </div>
+          )}
+          {courtNeed && !s.state.flags.canceled && (
+            <div className="court-need" data-court-need>
+              Court still needs to be booked
+            </div>
+          )}
           {(s.extra || s.note) && (
             <div className="game-note">
               {s.extra && <span className="extra-tag">Extra game</span>}
@@ -147,6 +158,14 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
           )}
         </div>
       </div>
+      {courtNeed && !s.state.flags.canceled && (
+        <div className="court-need-btn">
+          {/* The same link, words and look as the "Book a court" pill above the games. */}
+          <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+            Book a court
+          </CourtReserveLink>
+        </div>
+      )}
       {s.state.flags.shortOnPlayers && <ShortPanel ctx={ctx} s={s} />}
     </article>
   );
@@ -444,7 +463,7 @@ function CourtForNewTime({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 }
 
 /** After a cancel: who got their payment back as credit (automatic; nothing to tap). */
-function CreditBackList({ s }: { s: AdminSessionView }) {
+export function CreditBackList({ s }: { s: AdminSessionView }) {
   const rows = s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
   if (rows.length === 0) return null;
   return (
@@ -602,6 +621,39 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
 // ---------- Payments ----------
 
+/** One row's money line: what they paid, what came back as credit, or what they owe. Shared by both Money layouts. */
+export function payMoneyLine(r: AdminRosterEntry, s: AdminSessionView, tz: string): string {
+  const played = isPlayed(s);
+  const fin = s.finalized;
+  const paidWithCredit = r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0);
+  const parts: string[] = [];
+  if (r.status !== 'confirmed') parts.push(r.status === 'withdrawn' ? 'dropped out' : r.status === 'waitlisted' ? 'on the waitlist' : 'not playing');
+  else if (fin && r.played === false) parts.push('did not play');
+  if (r.paidAt && r.paymentStatus === 'paid') {
+    parts.push(`${paidWithCredit ? 'paid with credit' : 'paid'} ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}`);
+    if (!paidWithCredit && r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} of it credit`);
+    if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
+    else if (!played && !r.refundedAt) parts.push('not finalized yet');
+  } else if (r.status === 'confirmed' && r.shareCents !== null) {
+    parts.push(`owes ${formatPrice(r.owesCents)}`);
+    if (r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} credit used`);
+  } else if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
+  return parts.join(' · ');
+}
+
+/** The status chip on a player's money row: Paid, Paid with credit, Unpaid, Credit $3, Nothing owed. Shared by both Money layouts. */
+export function payChip(r: AdminRosterEntry, s: AdminSessionView): { tone: 'ok' | 'info' | 'warn' | 'muted'; label: string } {
+  const played = isPlayed(s);
+  if (r.paymentStatus === 'paid') {
+    return {
+      tone: played || r.refundedAt ? 'ok' : 'info',
+      label: r.refundedAt ? 'Credit' : r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0) ? 'Paid with credit' : 'Paid',
+    };
+  }
+  if (r.creditCents > 0 && r.status === 'confirmed') return { tone: r.owesCents > 0 ? 'warn' : 'muted', label: `Credit ${formatPrice(r.creditCents)}` };
+  return r.owesCents > 0 ? { tone: 'warn', label: 'Unpaid' } : { tone: 'muted', label: 'Nothing owed' };
+}
+
 export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const { busy, run } = useAction(ctx);
@@ -619,23 +671,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
   const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.');
 
-  /** One row's money line: what they paid, what came back as credit, or what they owe. */
-  const moneyLine = (r: AdminRosterEntry) => {
-    const paidWithCredit = r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0);
-    const parts: string[] = [];
-    if (r.status !== 'confirmed') parts.push(r.status === 'withdrawn' ? 'dropped out' : r.status === 'waitlisted' ? 'on the waitlist' : 'not playing');
-    else if (fin && r.played === false) parts.push('did not play');
-    if (r.paidAt && r.paymentStatus === 'paid') {
-      parts.push(`${paidWithCredit ? 'paid with credit' : 'paid'} ${formatPrice(r.paymentAmountCents ?? 0)} on ${formatShortDate(r.paidAt, tz)}`);
-      if (!paidWithCredit && r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} of it credit`);
-      if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
-      else if (!played && !r.refundedAt) parts.push('not finalized yet');
-    } else if (r.status === 'confirmed' && r.shareCents !== null) {
-      parts.push(`owes ${formatPrice(r.owesCents)}`);
-      if (r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} credit used`);
-    } else if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
-    return parts.join(' · ');
-  };
+  const moneyLine = (r: AdminRosterEntry) => payMoneyLine(r, s, tz);
 
   return (
     <div className="stack">
@@ -705,19 +741,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                   {r.selfPaid && r.paymentStatus === 'paid' && <span className="self-tag">self-marked</span>}
                   <div className="small muted">{moneyLine(r)}</div>
                 </div>
-                <Chip tone={r.paymentStatus === 'paid' ? (played || r.refundedAt ? 'ok' : 'info') : r.owesCents > 0 ? 'warn' : 'muted'}>
-                  {r.paymentStatus === 'paid'
-                    ? r.refundedAt
-                      ? 'Credit'
-                      : r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0)
-                        ? 'Paid with credit'
-                        : 'Paid'
-                    : r.creditCents > 0 && r.status === 'confirmed'
-                      ? `Credit ${formatPrice(r.creditCents)}`
-                      : r.owesCents > 0
-                        ? 'Unpaid'
-                        : 'Nothing owed'}
-                </Chip>
+                <Chip tone={payChip(r, s).tone}>{payChip(r, s).label}</Chip>
               </div>
               <div className="pay-btns">
                 {r.paymentStatus === 'paid' && !r.refundedAt ? (

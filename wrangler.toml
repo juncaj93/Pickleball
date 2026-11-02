@@ -28,6 +28,10 @@ MOTION_ADMIN = "on"
 # sees it is Settings > Money > "Ask for payment on every game" (off at ship = nobody), plus a phone opened once
 # with ?payalways=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
 PAY_ALWAYS = "on"
+# "New admin layout" (organizer History, Money and Home, version 2). "on" here only ALLOWS it; who sees it is
+# Settings > Feature switches > "New admin layout" (off at ship = nobody), plus a phone opened once with
+# /admin?adminv2=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+ADMIN_V2 = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -42,6 +46,7 @@ TIME_SHIFT = "on"
 MOTION = "on"
 MOTION_ADMIN = "on"
 PAY_ALWAYS = "on"
+ADMIN_V2 = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"
