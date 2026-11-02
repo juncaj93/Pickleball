@@ -271,7 +271,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
           {ctx.d.adminR2 === true &&
             text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
-              hint: 'The Pay button on the player screen opens this',
+              hint: 'Where Pay sends players',
               check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
             })}
           <PayAlwaysRow ctx={ctx} auto={auto} />
