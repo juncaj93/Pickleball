@@ -5,6 +5,7 @@ import { formatShortDate, localParts } from '../../../shared/time';
 import { api, useDemoVersion, useLoad, usePretend } from '../../lib';
 import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import { RollText } from '../../motion';
 import '../../credit-admin.css';
 
 const STATE_TEXT = { played: '', not_finalized: 'Not finalized yet, money held', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
@@ -37,6 +38,8 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
   const demo = useDemoVersion();
   const load = useLoad(() => api<MonthlyMoney>('GET', `/api/admin/money?month=${month}`), [month, pretend, demo, ctx.d]);
   const m = load.data;
+  // Money numbers roll when they change; keyed by the month shown, so moving to another month never rolls.
+  const roll = (text: string) => <RollText key={m?.label} text={text} />;
   return (
     <section className="stack" aria-labelledby="mm-title">
       <div className="spread" style={{ alignItems: 'center' }}>
@@ -87,16 +90,16 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
             {/* The big number: what players paid beyond the courts, or what you covered. Never you as the source of a surplus. */}
             <div className="money-head">
               <span className="money-left-label">{m.coveredCents > 0 ? 'You covered' : m.surplusCents > 0 ? 'Surplus' : 'Left'}</span>
-              <span className="big-amount">{formatPrice(m.coveredCents > 0 ? m.coveredCents : m.surplusCents)}</span>
+              <span className="big-amount">{roll(formatPrice(m.coveredCents > 0 ? m.coveredCents : m.surplusCents))}</span>
               <p className="bottom-line">{m.bottomLine}</p>
             </div>
             <dl className="kv">
               <dt>Collected</dt>
-              <dd>{formatPrice(m.collectedCents)}</dd>
+              <dd>{roll(formatPrice(m.collectedCents))}</dd>
               <dt>Court costs</dt>
-              <dd>{minus(m.courtCostCents)}</dd>
+              <dd>{roll(minus(m.courtCostCents))}</dd>
               <dt>Credits owed</dt>
-              <dd data-credits-owed>{formatPrice(m.creditsOwedCents)}</dd>
+              <dd data-credits-owed>{roll(formatPrice(m.creditsOwedCents))}</dd>
               {m.creditsOwedCents > 0 && (
                 <>
                   <dt className="sr-only">Note</dt>
@@ -108,11 +111,11 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
               {m.heldCents > 0 && (
                 <>
                   <dt className="held-amt">Held</dt>
-                  <dd className="held-amt">{formatPrice(m.heldCents)}</dd>
+                  <dd className="held-amt">{roll(formatPrice(m.heldCents))}</dd>
                 </>
               )}
               <dt>Membership</dt>
-              <dd>{formatPrice(m.membershipCents)}</dd>
+              <dd>{roll(formatPrice(m.membershipCents))}</dd>
               <dt>Sessions played</dt>
               <dd>{m.sessions.filter((x) => x.state === 'played').length}</dd>
             </dl>

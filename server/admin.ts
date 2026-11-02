@@ -9,6 +9,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '..
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
+import { motionAdminFor } from './motion';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
@@ -194,6 +195,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     version,
     timeShift,
     timeShiftForAll: await timeShiftForAll(ctx.db, group.id),
+    motion: motionAdminFor(ctx),
   };
 }
 

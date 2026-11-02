@@ -1,10 +1,11 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useEffect, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { type CourtSwitch as CourtSwitchValue, courtSwitchOf } from '../../../shared/court';
 import { COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { cancelByShort, formatShortDate, formatTimeRange, fromLocalInputValue, toLocalInputValue } from '../../../shared/time';
 import { api } from '../../lib';
-import { CourtReserveLink } from '../../ui';
+import { CourtReserveLink, Pickleball, useToast } from '../../ui';
+import { canMove, useMotion } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { CourtSwitch } from './CourtSwitch';
 import { HideAgain, useAction } from './Sessions';
@@ -16,6 +17,9 @@ import { HideAgain, useAction } from './Sessions';
  * status saves only the status. The cancel-by time is not a field: it is
  * always 12 hours before the start and moves with it.
  */
+/** How long the green Saved shows before the toast comes up and the sheet slides away (motion only). */
+const SAVED_SHOW_MS = 360;
+
 export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; onDone: (moved: boolean, statusChanged: boolean) => void }) {
   const tz = ctx.d.group.timezone;
   const startLocal = toLocalInputValue(s.startsAt, tz);
@@ -35,6 +39,18 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
     setEnd(`${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`);
   };
   const { busy, run } = useAction(ctx);
+  // Motion: Save spins a small pickleball, then shows a green "Saved" with a check for a moment before the sheet goes
+  // (and the toast comes up). The save itself is never held back: only the closing waits, about a third of a second.
+  const motion = useMotion();
+  const toast = useToast();
+  const [saved, setSaved] = useState(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const started = s.state.flags.started;
   const over = s.state.flags.past;
   const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
@@ -49,12 +65,19 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
     setError(null);
     if (!timeChanged && !statusChanged) return onDone(false, false);
     let moved = false;
+    const easing = motion && canMove();
     const ok = await run(async () => {
       // The move first (it can be turned down: a time already taken, in the past), then the status.
       if (timeChanged) moved = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
       if (statusChanged) await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status });
-    }, moved || timeChanged ? 'Game saved' : 'Court status saved');
-    if (ok) onDone(moved, statusChanged);
+    }, easing ? undefined : moved || timeChanged ? 'Game saved' : 'Court status saved');
+    if (ok && easing) {
+      // The green Saved shows, then the toast comes up and the sheet slides away.
+      setSaved(true);
+      await new Promise((r) => setTimeout(r, SAVED_SHOW_MS));
+      toast(moved || timeChanged ? 'Game saved' : 'Court status saved');
+      if (alive.current) onDone(moved, statusChanged);
+    } else if (ok) onDone(moved, statusChanged);
     else if (moved) await ctx.reload(); // the move went through even though the switch did not
   }
 
@@ -103,8 +126,26 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
       {error && <p className="field-error">{error}</p>}
       <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Change court on CourtReserve</CourtReserveLink>
       {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
-      <button className="btn big" type="submit" disabled={busy || (!started && (!startsAt || !endsAt))}>
-        {busy ? 'Saving…' : 'Save'}
+      <button className={`btn big${saved ? ' m-saved' : ''}`} type="submit" disabled={busy || saved || (!started && (!startsAt || !endsAt))} aria-busy={motion && busy ? true : undefined}>
+        {saved ? (
+          <>
+            <svg className="m-saved-check" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+              <path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Saved
+          </>
+        ) : busy ? (
+          <>
+            {motion && (
+              <span className="m-btn-ball" aria-hidden="true">
+                <Pickleball />
+              </span>
+            )}
+            Saving…
+          </>
+        ) : (
+          'Save'
+        )}
       </button>
     </form>
   );

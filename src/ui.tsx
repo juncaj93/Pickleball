@@ -4,7 +4,7 @@ import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
 import { holdLive } from './busy';
 import { DEMO_MESSAGE, isIOS } from './lib';
-import { canMove, motionOn, useMotion } from './motion';
+import { adminMotionOn, canMove, motionOn, RollText, useMotion } from './motion';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
 
@@ -57,6 +57,32 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
     <div role="status">
       <div className="spinner" aria-hidden="true" />
       <span className="sr-only">{label}…</span>
+    </div>
+  );
+}
+
+/**
+ * The organizer's loading screen with the motion on: a pickleball that bounces on a small shadow until the data is
+ * here. It only shows if loading takes longer than 250 ms, so a fast load never flashes it.
+ */
+export function LoadingBall() {
+  // Not drawn at all until 250 ms have passed (a timer here, so it holds even with Reduce Motion on).
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLate(true), 250);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div className="m-loading" role="status">
+      {late && (
+        <>
+          <span className="m-loading-ball">
+            <Pickleball />
+          </span>
+          <span className="m-loading-shadow" aria-hidden="true" />
+        </>
+      )}
+      <span className="sr-only">Loading…</span>
     </div>
   );
 }
@@ -852,8 +878,10 @@ export function NamesLine({
     // With the motion on, YOUR own join is not flashed (you just tapped it); only someone else arriving is.
     const added = names.filter((n) => !was.has(n) && !(motionOn() && n === me));
     if (added.length === 0) return;
+    // Organizer screens with the motion on: nothing flashes behind an open sheet or pop-up.
+    if (adminMotionOn() && document.querySelector('dialog[open], .menu-pop')) return;
     setFresh((cur) => [...cur, ...added]);
-    setTimeout(() => setFresh((cur) => cur.filter((n) => !added.includes(n))), 700);
+    setTimeout(() => setFresh((cur) => cur.filter((n) => !added.includes(n))), adminMotionOn() ? 1000 : 700);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   if (names.length === 0) return null;
@@ -901,7 +929,9 @@ export function PlayersLine({
   return (
     <div className="players players-line">
       <div className="players-top">
-        <span className="players-count">{countText(names.length, maxPlayers)}</span>
+        <span className="players-count">
+          <RollText text={countText(names.length, maxPlayers)} />
+        </span>
         <SpotDots names={names} />
         {after && <span className="players-after">{after}</span>}
       </div>

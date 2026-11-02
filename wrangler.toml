@@ -20,6 +20,9 @@ TIME_SHIFT = "on"
 # "Motion" (animations on the player screens). "on" = everyone (switched on Sun Nov 1, 2026, 8:2x PM Eastern).
 # "off" = dark for everyone; a phone opened once with ?motion=on still sees it (the private test switch). Needs a deploy.
 MOTION = "on"
+# "Motion" on the organizer screens (a separate switch, because MOTION above is already on for the players).
+# "off" = dark. A phone opened once with ?motionadmin=on still sees it (the private test switch). Needs a deploy.
+MOTION_ADMIN = "off"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -32,6 +35,7 @@ MOTION = "on"
 GO_LINKS = "on"
 TIME_SHIFT = "on"
 MOTION = "on"
+MOTION_ADMIN = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

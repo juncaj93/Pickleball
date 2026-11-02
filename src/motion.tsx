@@ -6,7 +6,7 @@
 // on top of what the screen already shows.
 
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { motionTest, storageGet, storageSet } from './lib';
+import { motionAdminTest, motionTest, storageGet, storageSet } from './lib';
 
 // ---------- The switch ----------
 
@@ -303,4 +303,108 @@ export function usePullToRefresh({ enabled, onRefresh, ball, shift }: { enabled:
       apply(0, false);
     };
   }, [enabled, ball, shift]);
+}
+
+// ---------- The organizer screens ----------
+//
+// The organizer side has its own switch, MOTION_ADMIN (server/motion.ts), because the player MOTION is already on for
+// everyone. It reuses everything above: the same <html data-motion="on"> (so the shared sheets, toasts, press, focus
+// and rolls just work) plus <html data-motion-admin> for the rules that exist only on the organizer screens.
+
+const ADMIN_SEEN_KEY = 'pb_motion_admin_seen';
+/** What this phone last heard from the server for the organizer screens (so the loading ball can already follow it), or the private test switch. */
+export const rememberedAdminMotion = () => motionAdminTest() || storageGet(ADMIN_SEEN_KEY) === 'on';
+
+/**
+ * Turns the motion on for the organizer dashboard while it is showing and the answer is yes. `answer` is what the
+ * server said (`d.motion`); `active` is false while the player demo (View as) is on screen, which looks after itself.
+ */
+export function useAdminMotion(answer: boolean, active: boolean) {
+  useLayoutEffect(() => {
+    if (!active || !answer) return undefined;
+    setMotion(true);
+    document.documentElement.setAttribute('data-motion-admin', 'on');
+    return () => {
+      document.documentElement.removeAttribute('data-motion-admin');
+      setMotion(false);
+    };
+  }, [answer, active]);
+  useEffect(() => {
+    storageSet(ADMIN_SEEN_KEY, answer ? 'on' : 'off');
+  }, [answer]);
+}
+
+export const adminMotionOn = () => current && typeof document !== 'undefined' && document.documentElement.hasAttribute('data-motion-admin');
+
+/** A sheet or the gear pop-up is open: nothing flashes behind it. */
+const somethingOpen = () => typeof document !== 'undefined' && document.querySelector('dialog[open], .menu-pop') !== null;
+
+/**
+ * True for `ms` after `value` changes, on the organizer screens only: never on the first render, never while a sheet or
+ * menu is open, and with the motion off never at all. Used for live changes (a join, a payment, a drop).
+ */
+export function useLiveChanged(value: unknown, ms = 900): boolean {
+  const prev = useRef(value);
+  const [on, setOn] = useState(false);
+  useLayoutEffect(() => {
+    if (Object.is(prev.current, value)) return undefined;
+    prev.current = value;
+    if (!adminMotionOn() || !canMove() || somethingOpen()) return undefined;
+    setOn(true);
+    const t = setTimeout(() => setOn(false), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return on;
+}
+
+/** The knob of an on/off switch stretches as it slides: a class for the length of the stretch, set when the box changes. */
+export function useSwitchStretch(active: boolean) {
+  useEffect(() => {
+    if (!active) return undefined;
+    const onChange = (e: Event) => {
+      const el = e.target;
+      if (!(el instanceof HTMLInputElement) || !el.classList.contains('switch') || !canMove()) return;
+      el.classList.remove('m-stretch');
+      void el.offsetWidth; // restart the animation if it is tapped again quickly
+      el.classList.add('m-stretch');
+      setTimeout(() => el.classList.remove('m-stretch'), 180);
+    };
+    document.addEventListener('change', onChange, true);
+    return () => document.removeEventListener('change', onChange, true);
+  }, [active]);
+}
+
+/**
+ * Expanders (<details>) ease open and shut: the content fades and rises 4 px (transform and opacity). Opening plays a
+ * CSS animation under a short-lived class; closing plays the same backwards and only then lets the box close. The
+ * summary is never blocked: a second tap during the 120 ms just finishes the close.
+ */
+export function useDetailsEase(active: boolean) {
+  useEffect(() => {
+    if (!active) return undefined;
+    const onClick = (e: MouseEvent) => {
+      const t = e.target;
+      if (!(t instanceof Element) || !canMove()) return;
+      const sum = t.closest('summary');
+      const box = sum?.parentElement;
+      if (!sum || !(box instanceof HTMLDetailsElement)) return;
+      if (box.classList.contains('m-closing-d')) {
+        // Tapped again while closing: finish at once.
+        return;
+      }
+      if (box.open) {
+        e.preventDefault();
+        box.classList.add('m-closing-d');
+        setTimeout(() => {
+          box.open = false;
+          box.classList.remove('m-closing-d');
+        }, 120);
+      } else {
+        box.classList.add('m-opening-d');
+        setTimeout(() => box.classList.remove('m-opening-d'), 200);
+      }
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+  }, [active]);
 }
