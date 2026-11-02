@@ -149,6 +149,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (motionAdminTest()) headers['X-Motion-Admin'] = 'on';
   // "Ask for payment on every game", private test switch for this phone (?payalways=on, see server/payAlways.ts).
   if (payAlwaysTest()) headers['X-Pay-Always'] = 'on';
+  // "No Venmo? Pay Alex directly" note, private test switch for this phone (?paynote=on, see server/payNote.ts).
+  if (payNoteTest()) headers['X-Pay-Note'] = 'on';
   // "New admin layout", private test switch for this phone (/admin?adminv2=on, see server/adminV2.ts).
   if (adminV2Test()) headers['X-Admin-V2'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -393,9 +395,14 @@ export function openVenmo(e: React.MouseEvent<HTMLAnchorElement>, pay: { url: st
     e.preventDefault();
     return;
   }
-  if (!pay.appUrl || !pay.url || !PHONE.test(navigator.userAgent)) return;
+  if (!venmoHandsOffToApp(pay)) return;
   e.preventDefault();
-  window.location.href = pay.appUrl;
+  window.location.href = pay.appUrl!;
+}
+
+/** Will a tap on Pay hand the phone over to the Venmo app (a venmo:// address)? Then a phone without the app sees "invalid address". */
+export function venmoHandsOffToApp(pay: { url: string | null; appUrl: string | null }): boolean {
+  return !demoOn() && !!pay.appUrl && !!pay.url && PHONE.test(navigator.userAgent);
 }
 
 /**
@@ -424,6 +431,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('payalways');
   if (want === 'on') storageSet(PAY_ALWAYS_KEY, 'on');
   else if (want === 'off') storageRemove(PAY_ALWAYS_KEY);
+}
+
+/**
+ * The "No Venmo? Pay Alex directly" note on this phone only, before it is on for everyone: open the site once with
+ * ?paynote=on (?paynote=off turns it back off). Remembered in this browser; nothing else changes.
+ */
+const PAY_NOTE_KEY = 'pb_pay_note';
+export function payNoteTest(): boolean {
+  return storageGet(PAY_NOTE_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('paynote');
+  if (want === 'on') storageSet(PAY_NOTE_KEY, 'on');
+  else if (want === 'off') storageRemove(PAY_NOTE_KEY);
 }
 
 /**

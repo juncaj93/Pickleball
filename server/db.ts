@@ -46,6 +46,8 @@ export interface Env {
   MOTION_ADMIN?: string;
   /** "Ask for payment on every game": the kill switch, allowed unless "off". Who sees it: Settings, ?payalways=on, the demo (server/payAlways.ts). A wrangler.toml var. */
   PAY_ALWAYS?: string;
+  /** "No Venmo? Pay Alex directly" note: the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?paynote=on (server/payNote.ts). A wrangler.toml var. */
+  PAY_NOTE?: string;
   /** "New admin layout" (organizer History, Money, Home v2): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminv2=on (server/adminV2.ts). A wrangler.toml var. */
   ADMIN_V2?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */

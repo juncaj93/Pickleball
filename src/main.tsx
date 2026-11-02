@@ -10,6 +10,9 @@ import { SiteHome } from './pages/SiteHome';
 import { LinkPage } from './pages/LinkPage';
 import { AdminApp } from './pages/Admin';
 import { GoPage } from './pages/GoPage';
+import { watchKeyboard } from './keyboard';
+// Last, so its big-text rules win over the page styles above.
+import './large-text.css';
 
 function App() {
   const path = usePath();
@@ -21,6 +24,8 @@ function App() {
   if (/^\/setup\/?$/.test(path)) return <SetupPage />;
   return <SiteHome />;
 }
+
+watchKeyboard();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

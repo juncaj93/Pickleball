@@ -2,13 +2,14 @@ import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useM
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
+import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
 import { DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
 import { CreditChip, CreditSheet } from './CreditSheet';
-import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
+import { api, ApiError, isDemo, demoOn, setGroupKey, setViewAs, storageGet, storageSet, useLoad, usePretend, setPretend, useRefreshOnReturn, copyText, openVenmo, venmoHandsOffToApp, useDemoVersion, demoSessionNumber, viewingAs } from '../lib';
 import { holdLive } from '../busy';
 import { cashOutSeen, celebratedIds, planCashOut, planCelebration, rememberCashOuts, rememberCelebrated } from '../celebrate';
 import { flushHold, holdPending, noteStillApplies, pendingDropAction, type PendingDropNote, settleHolds, startHold, undoHold, UNDO_MS } from '../hold';
@@ -520,8 +521,10 @@ export function PlayerHome({
                 : undefined
             }
             onPicked={async () => {
+              // Stay on the name list until the new name's own data has arrived: for a moment the page still holds the
+              // old name's credit and buttons, and a tap there would act as the new name.
+              if (!(await load.quiet())) throw new Error('games did not load');
               setSwitching(false);
-              await load.reload();
             }}
             onCancel={g.me ? () => setSwitching(false) : undefined}
           />
@@ -633,6 +636,8 @@ function GameFilterToggle({ filter, onChange }: { filter: GameFilter; onChange: 
   );
 }
 
+const NOT_LOADED = 'Your name is saved, but your games did not load. Reload this page.';
+
 function NamePicker({
   g,
   onPicked,
@@ -640,7 +645,7 @@ function NamePicker({
   demo,
 }: {
   g: GroupView;
-  onPicked: () => void;
+  onPicked: () => void | Promise<void>;
   onCancel?: () => void;
   /** "View as...": picking a name only switches the view. */
   demo?: (p: { id: string; name: string }) => void;
@@ -649,6 +654,8 @@ function NamePicker({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // True after a pick whose games did not load: the old screen must not come back (Cancel reloads instead).
+  const [stale, setStale] = useState(false);
   async function pick(playerId: string) {
     if (busy) return;
     setBusy(true);
@@ -663,14 +670,28 @@ function NamePicker({
     setBusy(true);
     try {
       await api('POST', '/api/me', { playerId });
-      onPicked();
+      try {
+        await onPicked();
+      } catch {
+        // The name is saved on this phone, but the games did not load: stay here so nobody acts on the old screen.
+        // (Cancel now reloads the page: going back to the old screen would show another name's games.)
+        setAdding(false);
+        setStale(true);
+        setError(NOT_LOADED);
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Could not save your name.');
     } finally {
       setBusy(false);
     }
   }
-  if (adding) return <AddMyName onPick={pick} onDone={onPicked} onBack={() => setAdding(false)} />;
+  if (adding) return <AddMyName onPick={pick} onDone={() =>
+        void Promise.resolve(onPicked()).catch(() => {
+          setAdding(false);
+          setStale(true);
+          setError(NOT_LOADED);
+        })
+      } onBack={() => setAdding(false)} />;
   return (
     <section className="stack" aria-label="Pick your name">
       {error && <Notice tone="danger">{error}</Notice>}
@@ -685,7 +706,7 @@ function NamePicker({
         Add my name
       </button>
       {onCancel && (
-        <button className="btn ghost" onClick={onCancel}>
+        <button className="btn ghost" disabled={busy} onClick={() => (stale ? window.location.reload() : onCancel())}>
           Cancel
         </button>
       )}
@@ -827,6 +848,22 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
  * Players with credit don't see "I paid" until they tap Pay (Venmo opened).
  * Remembered on this phone, per game.
  */
+/**
+ * After Pay is tapped on a phone, wait about 2 seconds: if the Venmo app did not take over the screen, say so with a
+ * small note ("No Venmo? Pay Alex directly"). The Pay button and its link are not touched. See src/venmoFallback.ts.
+ */
+function useNoVenmoNote(organizerName: string | null, enabled: boolean) {
+  const toast = useToast();
+  const stop = useRef<(() => void) | null>(null);
+  useEffect(() => () => stop.current?.(), []);
+  return (pay: { url: string | null; appUrl: string | null }) => {
+    // Off (Settings > Feature switches): Pay behaves exactly as it always did.
+    if (!enabled || !venmoHandsOffToApp(pay)) return;
+    stop.current?.();
+    stop.current = watchVenmoLaunch(() => toast(noVenmoMessage(organizerName), 'ok', { stayMs: NO_VENMO_STAY_MS }));
+  };
+}
+
 function usePayTapped(key: string) {
   const storeKey = `pb_pay_tapped_${key}`;
   const read = () => {
@@ -940,6 +977,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
+  const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   let potLeft = g.credit.usableCents;
@@ -1005,6 +1043,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
             onClick={(e) => {
               payTap.mark();
+              watchNoVenmo(pay);
               openVenmo(e, pay);
             }}
           >
@@ -1174,6 +1213,10 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '' }: { iso: string; t
   );
 }
 
+/** A comment of this many characters or fewer is a pill; a longer one is a soft box. */
+const NOTE_PILL_MAX = 18;
+const noteLook = (text: string) => (text.trim().length <= NOTE_PILL_MAX ? 'note-pill' : 'note-box');
+
 function countLine(s: PlayerSessionView): string {
   if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   return s.countText;
@@ -1204,6 +1247,7 @@ function RowPay({
   const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(s.id);
+  const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   const busy = paid.busy || credit.busy;
   if (mine.paymentStatus === 'paid') {
     const amount = mine.shareCents;
@@ -1301,6 +1345,7 @@ function RowPay({
       aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
       onClick={(e) => {
         payTap.mark();
+        watchNoVenmo(pay);
         openVenmo(e, pay);
       }}
     >
@@ -1562,7 +1607,9 @@ export function ScheduleRow({
   // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled (with the organizer's reason).
   const courtWord = <span>{court.playerText}</span>;
   let status: ReactNode;
-  if (s.canceled) status = <span className="st-canceled">{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
+  // A canceled game's reason is shown like a comment: a pill when the reason is short, a soft box when it is long (same words as before).
+  const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
+  if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn)
     status = (
@@ -1613,7 +1660,8 @@ export function ScheduleRow({
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={s.extra} ts={s.extra ? '' : tsClass(ts, flip)} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} />
+        <div className="sched-when-col">
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
           // where it ends, on a second short line, so nobody is misled.
@@ -1625,6 +1673,13 @@ export function ScheduleRow({
             </div>
           );
         })()}
+        {/* A one-off game: the usual date tile, and a small EXTRA tag under the time. */}
+        {s.extra && (
+          <span className="extra-flag" aria-hidden="true">
+            EXTRA
+          </span>
+        )}
+        </div>
       </div>
       <h2 id={`s-${s.id}`} className="sr-only">
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
@@ -1654,7 +1709,7 @@ export function ScheduleRow({
           {s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>}
 
           {s.extra && <span className="sr-only">Extra game</span>}
-          {s.note && <p className="game-note">{s.note}</p>}
+          {s.note && (s.note.trim().length <= NOTE_PILL_MAX ? <span className="game-note note-pill">{s.note.trim()}</span> : <p className="game-note note-box">{s.note}</p>)}
           {goodNews && <Notice tone="ok">{goodNews}</Notice>}
           {tier === 'later' && noteEl}
         </div>

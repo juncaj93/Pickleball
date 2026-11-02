@@ -1,0 +1,470 @@
+/* Layout for very big phone text (150% to 200%) and very narrow screens. Layout only: no wording, color, font or
+ * money change, and at normal text sizes nothing here changes a pixel.
+ *
+ * How it works: a few boxes are "containers". The rules below ask how wide the box is in rem (the text size), so a
+ * 320 px screen at 100% text is 18 rem wide and stays exactly as it was, while the same screen at 200% text is 9 rem
+ * wide and switches to a roomier layout. Newer pieces are grouped by screen:
+ *   1. date tiles (the numbers never outgrow their tile)
+ *   2. player cards (date tile moves above the words when the words would be squeezed)
+ *   3. LATER rows (the button drops under the names)
+ *   4. the "time changed" notice bar
+ */
+
+/* The list of game cards, the notice bars and the organizer's list are the boxes that get asked "how wide?". */
+.schedule,
+.ts-bars {
+  container: pbwide / inline-size;
+}
+
+/* ---------- 1. Date tiles: the letters and numbers are as big as the tile allows, never bigger ---------- */
+/* Each tile asks its own width (cqw), so with big text the tile keeps its size and its numbers stay inside it.
+   The numbers are picked a little above what the tile fits at normal text, so there the rem value is the smaller one and nothing changes (checked pixel by pixel against the old screens). */
+.tile-wrap,
+.scard .tile {
+  container-type: inline-size;
+}
+.schedule .ptile .dow,
+.schedule .ptile .mon {
+  font-size: min(0.8rem, 15.6cqw);
+}
+.schedule .ptile .day {
+  font-size: min(2.35rem, 45.6cqw);
+}
+.tier-next .ptile .dow,
+.tier-next .ptile .mon {
+  font-size: min(0.7rem, 16.4cqw);
+}
+.tier-next .ptile .day {
+  font-size: min(1.8rem, 41.9cqw);
+}
+.tier-later .ptile .dow,
+.tier-later .ptile .mon {
+  font-size: min(0.64rem, 18.7cqw);
+}
+.tier-later .ptile .day {
+  font-size: min(1.15rem, 33.5cqw);
+}
+@media (max-width: 380px) {
+  /* Narrow phones have slightly smaller tile columns (76, 64 and 52 px). */
+  .schedule .ptile .dow,
+  .schedule .ptile .mon {
+    font-size: min(0.8rem, 17.2cqw);
+  }
+  .schedule .ptile .day {
+    font-size: min(2.1rem, 45cqw);
+  }
+  .tier-next .ptile .dow,
+  .tier-next .ptile .mon {
+    font-size: min(0.7rem, 17.9cqw);
+  }
+  .tier-next .ptile .day {
+    font-size: min(1.6rem, 40.8cqw);
+  }
+  .tier-later .ptile .dow,
+  .tier-later .ptile .mon {
+    font-size: min(0.64rem, 20.1cqw);
+  }
+  /* (On narrow phones the LATER tile's number is the larger "2.1rem" of the rule above in src/player-cards.css, as it always was.) */
+  .tier-later .ptile .day {
+    font-size: min(2.1rem, 66cqw);
+  }
+}
+/* The organizer's tile (56 px wide). */
+.scard .tile .dow,
+.scard .tile .mon {
+  font-size: min(0.7rem, 21.6cqw);
+}
+.scard .tile .day {
+  font-size: min(1.3rem, 40cqw);
+}
+
+/* ---------- 2. Player cards: tile above the words once the words column would be too narrow ---------- */
+@container pbwide (max-width: 15rem) {
+  .schedule > .sched.tier-this,
+  .schedule > .sched.tier-next {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .schedule > .sched.tier-this .sched-tilecol,
+  .schedule > .sched.tier-next .sched-tilecol {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .schedule > .sched.tier-this .tile-wrap {
+    flex: none;
+    width: 84px;
+  }
+  .schedule > .sched.tier-next .tile-wrap {
+    flex: none;
+    width: 70px;
+  }
+  .schedule > .sched .sched-tilecol .sched-time {
+    text-align: left;
+  }
+  /* In a column the body takes the height its words need (its usual "0 basis" is for the side-by-side layout). */
+  .schedule > .sched.tier-this .sched-body,
+  .schedule > .sched.tier-next .sched-body {
+    flex: 0 0 auto;
+  }
+}
+
+/* The status line ("You're in · Court booked" and the calendar icon) wraps instead of running past the card. */
+@container pbwide (max-width: 17rem) {
+  .schedule .sched-status .st-lead,
+  .schedule .sched-status .st-tail {
+    white-space: normal;
+    flex-wrap: wrap;
+  }
+  .schedule .sched-body .btn,
+  .schedule .sched-body .pchip {
+    max-width: 100%;
+  }
+  .schedule .sched-body .btn {
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+/* The section line ("THIS WEEK ------ All games") wraps instead of running past the edge. */
+@container pbwide (max-width: 17rem) {
+  .schedule > .week-break {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .schedule > .week-break::after {
+    flex: 1 1 2rem;
+  }
+  .schedule > .week-break .filter-toggle {
+    margin: 0 -4px 0 auto;
+  }
+}
+
+/* ---------- 3. LATER rows: the button goes under the names when the middle would get squeezed ---------- */
+@container pbwide (max-width: 17rem) {
+  .schedule > .sched.tier-later {
+    grid-template-columns: 56px minmax(0, 1fr);
+    grid-template-areas:
+      'tile head'
+      'tile main'
+      'tile links'
+      'tile money';
+    grid-template-rows: auto auto auto auto;
+  }
+  .tier-later .sched-money,
+  .tier-later .sched-money.stacked > .pchip {
+    justify-self: start;
+    align-self: start;
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+  .tier-later .sched-money.pay-line,
+  .tier-later .sched-money.pay-line .sched-btns {
+    align-items: flex-start;
+  }
+}
+
+/* ---------- 4. The "time changed" notice: Still in and Can't make it stay equal, and they wrap instead of overlapping ---------- */
+.ts-line2 .btn {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+@container pbwide (max-width: 14.5rem) {
+  .ts-line2 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---------- 5. The name list ("Who are you?") ---------- */
+/* Two columns, as before, until the names would not fit; then one column. A long name wraps inside its button. */
+.name-grid {
+  grid-template-columns: repeat(auto-fit, minmax(max(8rem, 45%), 1fr));
+}
+.name-grid .btn {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+  padding-block: 8px;
+}
+
+/* ---------- 6. The organizer's screens ---------- */
+section[aria-labelledby='sessions-title'],
+.sheet-body {
+  container: pbwide / inline-size;
+}
+
+/* The five tabs at the bottom: the labels stay small (like the iPhone's own tab bar) so five of them always fit. */
+.tabbar {
+  container-type: inline-size;
+}
+.tabbar button {
+  min-width: 0;
+  font-size: min(0.7rem, 3.9cqw);
+}
+
+/* A game card: the date tile moves above the words when the words column would be too narrow. */
+@container pbwide (max-width: 15rem) {
+  .scard-main {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+  .scard-tilecol {
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .scard .scard-tilecol .tile {
+    width: 56px;
+    flex: none;
+  }
+  .scard-time {
+    text-align: left;
+    font-size: 0.9rem;
+  }
+}
+
+@container pbwide (max-width: 17rem) {
+  /* Not booked | Waitlist | Booked: one under the other, each as wide as the card. */
+  .court-switch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* The status words ("Canceled - Thanksgiving week") wrap beside the gear instead of running under it. */
+  .scard-top .court-line {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .court-top {
+    flex-wrap: wrap;
+  }
+  .court-top .court-status,
+  .court-line .court-status {
+    white-space: normal;
+  }
+  .players-top {
+    flex-wrap: wrap;
+  }
+  /* "Confirmed 2 of 3" and the Text buttons: wrap, never past the edge. */
+  .ts-check {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ts-waiting-many {
+    min-width: 0;
+  }
+  .ts-waiting-many .ts-pill {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: left;
+  }
+  /* The section line ("THIS WEEK  + Add game  Book a court"): pills wrap onto the next line. */
+  .week-break {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+  .week-break::after {
+    flex: 1 1 2rem;
+  }
+  .week-break .btn.pill {
+    height: auto;
+    min-height: 26px;
+    margin: 0;
+    padding-block: 4px;
+    white-space: normal;
+    text-align: center;
+  }
+  .holiday-actions {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+}
+
+/* The holiday tag wraps onto two lines instead of ending in "…". Both screens. (Careful: this file is inlined into the page in
+   development, and one older test looks through the whole page for the venue-hours words, so they are not written here.) */
+@container pbwide (max-width: 17rem) {
+  .holiday {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    border-radius: 14px;
+  }
+}
+
+/* The gear's pop-up rows wrap at big text. */
+@container pbwide (max-width: 17rem) {
+  .menu-row {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    height: auto;
+    padding-block: 6px;
+  }
+}
+
+/* ---------- 7. The page header at big text: the buttons, credit and date take a row of their own ---------- */
+.topbar {
+  container: pbhead / inline-size;
+}
+@container pbhead (max-width: 16rem) {
+  .topbar-end {
+    flex-basis: 100%;
+  }
+}
+
+/* ---------- 8. Organizer lists and Settings rows: wrap instead of squeezing or cutting off ---------- */
+/* Players: a name block with the money and Edit beside it; when they don't fit together the money and Edit drop under
+   the name (right-aligned). Before, a phone number could be squeezed to one digit a line. */
+.player-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.player-row .player-open {
+  flex: 1 1 7rem;
+}
+.player-row .p-money,
+.player-row .p-edit {
+  flex: none;
+}
+.player-row .p-money {
+  margin-left: auto;
+}
+/* Anything else in the row (the "Refund credit balance" button) keeps the full-width line it had in the grid. */
+.player-row > :nth-child(n + 4) {
+  flex: 1 1 100%;
+}
+
+/* Money: the month name wraps between its two arrows. History: the two chips wrap. */
+.month-label {
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+  padding: 4px 6px;
+}
+.chips {
+  flex-wrap: wrap;
+}
+
+/* Settings: a row and its note / segmented switch wrap at big text; at normal text they sit on one line as before. */
+.set-top,
+.set-list {
+  container: pbwide / inline-size;
+}
+.set-line {
+  flex-wrap: wrap;
+}
+.set-line .set-label {
+  flex: 1 1 4.5rem;
+}
+.set-top .segmented.compact {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+}
+.segmented button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@container pbwide (max-width: 15rem) {
+  /* Auto | Light | Dark: one under the other when three side by side would break the words. */
+  .set-top .segmented.compact {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+  }
+  .set-sect > summary {
+    flex-wrap: wrap;
+  }
+  .set-note {
+    flex-basis: 100%;
+    margin-left: 0;
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+  }
+  .set-link {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
+/* ---------- 9. Rows with a name on the left and a chip or buttons on the right (sheets, lists) ---------- */
+/* A long name wraps (even with no spaces) instead of pushing the chip off the screen; at big text the right part drops under it. */
+.spread > :first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+@container pbwide (max-width: 17rem) {
+  .spread {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---------- 10. Sheets with the keyboard open (src/keyboard.ts sets --kb only while a keyboard covers the page) ---------- */
+/* The sheet sits above the keyboard and is no taller than what is left, so its buttons can always be scrolled to. */
+html[data-kb] dialog.sheet,
+html[data-kb] body:has(.tabbar) dialog.sheet {
+  margin-bottom: calc(var(--kb) + 8px);
+  max-height: calc(100dvh - var(--kb) - 24px);
+}
+
+/* ---------- 11. Stacked cards: the time and the EXTRA tag under it sit beside the tile, one above the other ---------- */
+@container pbwide (max-width: 15rem) {
+  .schedule > .sched .sched-tilecol .sched-when-col {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+  }
+  .schedule > .sched .sched-tilecol .extra-flag {
+    align-self: flex-start;
+  }
+}
+
+/* ---------- 12. New admin layout (ADMIN_V2), Home short rows at big text ---------- */
+/* Normal text: the row is one fixed height with the names cut by "..." (that is its design). With big text the court pill,
+   "In" and the arrow would squeeze the count to a few pixels, so they drop to a line of their own under the words, and the
+   count and names wrap instead of being cut off. */
+@container pbwide (max-width: 17rem) {
+  .hv2-short {
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas:
+      'tile main'
+      'side side';
+    height: auto;
+    min-height: 3.4rem;
+    padding-block: 8px;
+    row-gap: 6px;
+    overflow: visible;
+  }
+  .hv2-short > .tile {
+    grid-area: tile;
+  }
+  .hv2-short > .hv2-main {
+    grid-area: main;
+  }
+  .hv2-short > .hv2-side {
+    grid-area: side;
+    justify-self: end;
+  }
+  .hv2-count,
+  .hv2-names {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---------- 13. History > Activity: a long name with no spaces wraps instead of pushing the page wider ---------- */
+.a-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

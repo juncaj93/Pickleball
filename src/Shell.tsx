@@ -64,10 +64,13 @@ export function TopBar({
           )}
           {sub && <div className="sub">{sub}</div>}
         </div>
-        {action}
-        {tools && <div className="topbar-tools">{tools}</div>}
-        {chip}
-        <TodaySquare />
+        {/* One group on the right: with very big text it drops under the name instead of squeezing it. */}
+        <div className="topbar-end">
+          {action}
+          {tools && <div className="topbar-tools">{tools}</div>}
+          {chip}
+          <TodaySquare />
+        </div>
       </div>
     </header>
   );

@@ -13,6 +13,7 @@ import { motionAdminFor } from './motion';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
 import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
+import { payNoteForAll, setPayNoteForAll } from './payNote';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
@@ -203,6 +204,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     motion: motionAdminFor(ctx),
     payAlwaysForAll: await payAlwaysForAll(ctx.db, group.id),
     adminV2: await adminV2For(ctx, group.id),
+    payNoteForAll: await payNoteForAll(ctx.db, group.id),
     adminV2ForAll: await adminV2ForAll(ctx.db, group.id),
   };
 }
@@ -1446,6 +1448,15 @@ export async function setPayAlways(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setPayAlwaysForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'pay_always_on' : 'pay_always_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/pay-note { on }: Settings > Feature switches > "No Venmo? note". Display only: changes no money and no seat. */
+export async function setPayNote(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setPayNoteForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'pay_note_on' : 'pay_note_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

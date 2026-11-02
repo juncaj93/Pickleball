@@ -327,13 +327,27 @@ a {
 /* Logo, name, button and date square on one tidy row. */
 .topbar-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 6px 10px;
 }
 
+/* The name shrinks first (with an ellipsis) down to this much; below it the buttons, credit and date move to a row
+   of their own, so nothing on the right is ever squeezed. rem grows with big text, so this only happens then. */
 .topbar-text {
-  flex: 1;
+  flex: 1 1 4.5rem;
   min-width: 0;
+}
+
+.topbar-end {
+  flex: none;
+  max-width: 100%;
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
 }
 
 .topbar .eyebrow {
@@ -366,8 +380,10 @@ a {
 /* Today, drawn like the session date tiles: a paper calendar, red weekday. */
 .topbar .today {
   flex: none;
-  width: 42px;
+  box-sizing: border-box;
+  min-width: 42px;
   min-height: 44px;
+  padding: 0 5px;
   border-radius: 10px;
   background: var(--surface);
   border: 1.5px solid var(--tile-line);
@@ -523,18 +539,11 @@ a {
   min-width: 0;
   flex: 0 1 auto;
 }
-/* With the CREDIT chip there is less room: rather than "Brand…", "not you?"
- * moves under the name when both don't fit, and a long name wraps to two lines. */
+/* With the CREDIT chip there is less room: "not you?" moves under the name when both don't fit, and a long name
+ * ends in "…" on one line (never broken in the middle of a word). */
 .topbar-row:has(.credit-chip) .title-line {
   flex-wrap: wrap;
   row-gap: 0;
-}
-.topbar-row:has(.credit-chip) .title-line h1 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  white-space: normal;
-  overflow-wrap: break-word;
 }
 .not-you {
   position: relative;
@@ -3967,8 +3976,9 @@ dialog.sheet[open]::backdrop {
   :root {
     --gutter: 14px;
   }
-  .topbar-row {
-    gap: 8px;
+  .topbar-row,
+  .topbar-end {
+    gap: 6px 8px;
   }
   .topbar h1 {
     font-size: 1.22rem;

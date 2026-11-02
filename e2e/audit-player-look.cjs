@@ -677,8 +677,10 @@ async function main() {
       const bad = each(({ facts }) => [...facts.cards.flatMap((c) => c.clipped.map((x) => `${lab(c.id)}: ${x}`)), ...facts.header.clipped.filter((x) => !known.eyebrow(x) && !known.headerName(x)).map((x) => `header: ${x}`), ...(facts.pay ? facts.pay.clipped.map((x) => `pay card: ${x}`) : [])]);
       assert(bad.length === 0, bad.slice(0, 8).join(' | '));
     });
-    await check(`OPEN: ${tag}: the player's own name in the header is whole, not broken mid-word or cut ("${BMS}" with the CREDIT chip)`, async () => {
-      const bad = each(({ facts }) => [...facts.header.clipped, ...facts.header.overlaps].filter(known.headerName));
+    // Nov 2026 (layout polish): a long name ends in "..." on one line (CSS ellipsis) and gives way before the sun button, the
+    // CREDIT chip or the date square; it is never broken in the middle of a word and never sits on another part.
+    await check(`${tag}: the player's own name in the header ends in "..." on one line, never broken mid-word or over another part ("${BMS}" with the CREDIT chip)`, async () => {
+      const bad = each(({ facts }) => [...facts.header.clipped, ...facts.header.overlaps].filter((x) => known.headerName(x) && (/broken mid-word/.test(x) || /overlaps/.test(x))));
       assert(bad.length === 0, bad.join(' | '));
     });
     await check(`${tag}: header parts (logo, name, not you?, light/dark, CREDIT chip, today) never overlap`, async () => {
@@ -899,9 +901,9 @@ async function main() {
   await check('canceled without a reason: just "Canceled"', async () => {
     assert(fact('Ryan', S[10]).status === 'Canceled', fact('Ryan', S[10]).status);
   });
-  await check('extra game with a note: ink tile, "Extra game" for screen readers, the whole note shows', async () => {
+  await check('extra game with a note: normal tile, EXTRA tag, "Extra game" for screen readers, the whole note shows (a long one in a soft box)', async () => {
     const c = fact('Ryan', E.note);
-    assert(c.tileExtra && /Extra game/.test(c.allText) && c.text.includes(NOTE), c.text);
+    assert(!c.tileExtra && /EXTRA/.test(c.text) && /Extra game/.test(c.allText) && c.text.includes(NOTE), c.text);
   });
   await check('not in, 4 already in, room left: I\'m in + "If 5 play, you get $3 back as credit."', async () => {
     const c = fact('Ryan', E.note);
@@ -1246,6 +1248,7 @@ async function main() {
       const f = await page.evaluate(collectFacts);
       const sort = (x, tier) => {
         if (known.eyebrow(x)) return null; // deliberate "..."
+        if (/^h1\. "[^"]*" \(\d+x\d+ in \d+x\d+\)$/.test(x)) return null; // the name ends in "..." (deliberate, Nov 2026)
         if (tier === 'later' && /broken mid-word/.test(x)) return 'later';
         if (/pchip|cal-icon-link|court-status|st-tail|span\.chip-credit/.test(x)) return 'money';
         if (known.headerName(x) || /spills out of the (credit-chip|today)/.test(x) || /^(h1|div\.title-line|div\.topbar-text)/.test(x)) return 'header';
@@ -1272,16 +1275,16 @@ async function main() {
     await check(`${tag}: no sideways scroll, nothing past the edge, overlapping or cut off (cards, Pay card, header)`, async () => {
       assert(found.other.length === 0, list(found.other));
     });
-    await check(`${pct > 150 || w < 390 ? 'OPEN: ' : ''}${tag}: the money chip ("$14 due · $9 credit") and the "Court not booked" + calendar line stay inside the card`, async () => {
+    await check(`${tag}: the money chip ("$14 due · $9 credit") and the "Court not booked" + calendar line stay inside the card`, async () => {
       assert(found.money.length === 0, list(found.money));
     });
-    await check(`OPEN: ${tag}: LATER rows keep a readable middle column (names and status not broken letter by letter beside a wide button)`, async () => {
+    await check(`${tag}: LATER rows keep a readable middle column (names and status not broken letter by letter beside a wide button)`, async () => {
       assert(found.later.length === 0, list(found.later));
     });
     await check(`${tag}: the TONIGHT word stays inside its blue strip`, async () => {
       assert(found.tonight.length === 0, list(found.tonight));
     });
-    await check(`OPEN: ${tag}: the player's name, CREDIT chip and date square in the header are whole (no "Wre / n", no text out of its box)`, async () => {
+    await check(`${tag}: the player's name (ends in "..." when long), CREDIT chip and date square in the header are whole (no "Wre / n", no text out of its box)`, async () => {
       assert(found.header.length === 0, list(found.header));
     });
   }

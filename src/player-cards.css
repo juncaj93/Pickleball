@@ -962,3 +962,58 @@ a[href] {
   max-width: 100%;
   white-space: normal;
 }
+
+/* ---- A one-off (extra) game: the normal date tile, a small EXTRA tag under the time ---- */
+.sched-tilecol .extra-flag {
+  align-self: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--holiday-fg) 40%, transparent);
+  background: var(--holiday-bg);
+  color: var(--holiday-fg);
+  font-size: min(0.62rem, 15cqw);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.tier-later .sched-tilecol .extra-flag {
+  padding: 0 5px;
+}
+
+/* ---- A comment on a game (and a canceled game's reason): a pill when short, a soft tinted box when long ---- */
+.schedule .note-pill,
+.schedule .note-box {
+  /* The site's own soft tint and its text color (the "Regular" chip on the Players list), light and dark. */
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  overflow-wrap: anywhere;
+}
+.schedule .note-pill {
+  display: inline-block;
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 3px 11px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.schedule .note-box {
+  display: block;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  line-height: 1.3;
+}
+
+/* The time and the EXTRA tag under it travel together (no change to the layout of a normal card). */
+.sched-tilecol .sched-when-col {
+  display: contents;
+}
+
+.schedule .st-canceled.note-pill,
+.schedule .st-canceled.note-box {
+  color: var(--accent-text);
+}

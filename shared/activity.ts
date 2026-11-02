@@ -149,6 +149,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} removed${day ? ` ${day}` : ' a canceled game'} from the player screen`;
     case 'session_shown_to_players':
       return `${who} showed${day ? ` ${day}` : ' a canceled game'} on the player screen again`;
+    case 'pay_note_on':
+      return `${who} switched the "No Venmo?" note on`;
+    case 'pay_note_off':
+      return `${who} switched the "No Venmo?" note off`;
     case 'admin_v2_on':
       return `${who} switched the new admin layout on`;
     case 'admin_v2_off':
