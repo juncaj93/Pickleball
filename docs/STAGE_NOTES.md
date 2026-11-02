@@ -1758,3 +1758,8 @@ Files: `shared/adminR2.ts`, `server/adminR2.ts`, `PUT /api/admin/admin-r2`, `adm
 - **Header order** (round 2): logo and Admin, then View as..., then the Light/Dark button, then the calendar tile (the button sits next to the tile). At 320 px the group wraps onto a second row in the same order; nothing passes the screen edge, also at 200% text. Test: `H header fits...`.
 - **Tap to fold on Home**: the preview Alex tested was deployed before fix 4, so its cards were plain full cards with no fold at all. Now (round 2, with the new layout switch on or off): this week's cards start open, later weeks start folded, a tap on an empty spot of an open card (the tile, the words, the footer edge) folds it,
   a tap on a folded row opens it, and the controls (gear, In/Out, the court switch, the $ cell, Book, Yes) never fold it. Test: `F5 Home cards: tap a card to collapse it...` (24 checks became 26 in `e2e/admin-r2.cjs`).
+
+### In / Out is instant too (Mon Nov 2, 2026, about 4:10 PM Eastern)
+The footer's In | Out now fills the moment it is tapped, and the seat count, the dots and the names on the card follow at once (round 2 only, `InOut` in `CardR2.tsx`). The save goes out in the background and the toast shows when the server
+answers (before, it waited for a whole reload and the two buttons were disabled). A failed save snaps everything back and says "It went back." Quick taps are sent in order, the last one wins. Same request (`POST /api/admin/sessions/:id/me`), same rules.
+Test: `F6 In / Out moves the instant it is tapped...` (a slowed server, three quick taps, then a failing server). `e2e/admin-r2.cjs` is 27 checks.

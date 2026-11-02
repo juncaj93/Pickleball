@@ -9,7 +9,7 @@ import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
-import { courtLine, ShortPanel, TimeCheck, useAction, useOrganizerInOut } from './Sessions';
+import { courtLine, ShortPanel, TimeCheck, useAction } from './Sessions';
 import { CourtSwitch } from './CourtSwitch';
 import { GameMenu } from './GameMenu';
 import { lateDropsAll } from './todo';
@@ -34,6 +34,22 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   // The court switch answers the tap at once (see CardSwitchR2); this holds what was just tapped until the server's answer is drawn.
   const [picked, setPicked] = useState<CourtSwitchValue | null>(null);
   const switchValue = picked ?? courtSwitchOf(s);
+  // The organizer's own seat answers the tap at once too (see InOut): what was just tapped, until the server's answer is drawn.
+  const [seat, setSeat] = useState<boolean | null>(null);
+  const meId = ctx.d.me?.id ?? null;
+  const mineRow = meId ? s.roster.find((r) => r.playerId === meId && (r.status === 'confirmed' || r.status === 'waitlisted')) : undefined;
+  let confirmedNames = s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name);
+  let waitNames = s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name);
+  if (seat !== null && meId && ctx.d.me) {
+    if (seat && !mineRow) {
+      // Joining: the last spot after everyone, or the waitlist when the game is full.
+      if (confirmedNames.length >= ctx.d.group.settings.maxPlayers) waitNames = [...waitNames, ctx.d.me.name];
+      else confirmedNames = [...confirmedNames, ctx.d.me.name];
+    } else if (!seat && mineRow) {
+      confirmedNames = s.roster.filter((r) => r.status === 'confirmed' && r.playerId !== meId).map((r) => r.name);
+      waitNames = s.roster.filter((r) => r.status === 'waitlisted' && r.playerId !== meId).map((r) => r.name);
+    }
+  }
   const canceled = s.state.flags.canceled;
   const showSwitch = !canceled && !s.state.flags.past && !s.state.flags.started;
   const start = cardTime(s.startsAt, s.endsAt, tz).start;
@@ -90,8 +106,8 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             )}
             {!canceled && (
               <PlayersLine
-                names={s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name)}
-                waitlist={s.roster.filter((r) => r.status === 'waitlisted').map((r) => r.name)}
+                names={confirmedNames}
+                waitlist={waitNames}
                 waitLabel="Waitlist"
                 everyone={ctx.d.players.map((p) => p.name)}
                 maxPlayers={ctx.d.group.settings.maxPlayers}
@@ -105,7 +121,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
         </div>
         {!canceled && (
           <div className="r2-foot" data-r2-foot>
-            <div className="r2-cell r2-inout">{live && <InOut ctx={ctx} s={s} />}</div>
+            <div className="r2-cell r2-inout">{live && <InOut ctx={ctx} s={s} seat={seat} onSeat={setSeat} />}</div>
             <div className="r2-cell r2-paidcell">
               <button
                 type="button"
@@ -144,16 +160,53 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   );
 }
 
-/** The organizer's own seat: two plain words, In | Out. The one that is true is filled. Same rules and toasts as everyone's I'm in. */
-function InOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const { busy, mine, day, set } = useOrganizerInOut(ctx, s);
-  const isIn = !!mine;
+/**
+ * The organizer's own seat: two plain words, In | Out. The one that is true is filled, the moment it is tapped: the seat count, the
+ * dots and the names on the card follow at once. The save goes out in the background and the toast shows when the server answers
+ * (not after the whole screen reloads). If the server refuses or cannot be reached, everything snaps back and says so. Quick taps
+ * are sent in order and the last one wins. Nothing is disabled while it saves. Same request and same rules as the old I'm in.
+ */
+function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; seat: boolean | null; onSeat: (v: boolean | null) => void }) {
+  const toast = useToast();
+  const me = ctx.d.me;
+  const mine = me ? s.roster.find((r) => r.playerId === me.id && (r.status === 'confirmed' || r.status === 'waitlisted')) : undefined;
+  const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  const latest = useRef(0);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  const isIn = seat ?? !!mine;
+  const send = (goingIn: boolean) => {
+    const me_ = ++latest.current;
+    onSeat(goingIn);
+    chain.current = chain.current.then(async () => {
+      let said = goingIn ? "You're in" : "You're out";
+      try {
+        const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
+        if (goingIn && (res.result === 'waitlisted' || res.result === 'standby')) said = `You're #${res.position} on the waitlist`;
+        if (me_ === latest.current) toast(said);
+      } catch (err) {
+        toast(err instanceof ApiError ? `${err.message} It went back.` : 'That did not save, so it went back. Check your connection and try again.', 'error');
+        if (me_ === latest.current) {
+          // Show what the server really has (an earlier quick tap may have saved), then let go of the tap.
+          await ctx.reload().catch(() => {});
+          if (me_ === latest.current) onSeat(null);
+        }
+        return;
+      }
+      if (me_ !== latest.current) return;
+      try {
+        await ctx.reload();
+      } catch {
+        /* the next refresh brings it */
+      }
+      if (me_ === latest.current) onSeat(null);
+    });
+  };
   return (
     <div className="r2-seg" role="group" aria-label={`You, ${day}`} data-inout={isIn ? 'in' : 'out'}>
-      <button type="button" className="r2-seg-in" aria-pressed={isIn} disabled={busy} aria-label={`I'm in for ${day}${mine?.status === 'waitlisted' ? ' (you are on the waitlist)' : ''}`} onClick={() => !isIn && void set(true)}>
+      <button type="button" className="r2-seg-in" aria-pressed={isIn} aria-label={`I'm in for ${day}${mine?.status === 'waitlisted' && seat === null ? ' (you are on the waitlist)' : ''}`} onClick={() => !isIn && send(true)}>
         In
       </button>
-      <button type="button" className="r2-seg-out" aria-pressed={!isIn} disabled={busy} aria-label={`Out of ${day}`} onClick={() => isIn && void set(false)}>
+      <button type="button" className="r2-seg-out" aria-pressed={!isIn} aria-label={`Out of ${day}`} onClick={() => isIn && send(false)}>
         Out
       </button>
     </div>

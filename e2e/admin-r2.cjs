@@ -643,6 +643,57 @@ async function main() {
     await ctx.close();
   });
 
+  await check('F6 In / Out moves the instant it is tapped: seat count, dots and names follow, toast when the server answers, quick taps: last wins, failure snaps back', async () => {
+    // Start with Alex out of the game.
+    await post(areq, `/api/admin/sessions/${C.id}/me`, { in: false });
+    const { ctx, page } = await openAdmin();
+    const card = await reveal(page, C.id);
+    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'starts Out');
+    const count0 = (await card.locator('.players-count').innerText()).trim();
+    const dots0 = await card.locator('.dots').getAttribute('aria-label');
+    assert(!(await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'Alex is not in the names');
+    await page.route('**/api/admin/sessions/*/me', async (route) => {
+      await sleep(1500);
+      await route.continue();
+    });
+    const t0 = Date.now();
+    await card.locator('.r2-seg-in').click();
+    assert((await card.locator('.r2-seg-in').getAttribute('aria-pressed')) === 'true', 'In is filled at once');
+    assert(Date.now() - t0 < 400, `took ${Date.now() - t0} ms`);
+    assert((await card.locator('.players-count').innerText()).trim() !== count0, 'the seat count changed at once');
+    assert((await card.locator('.dots').getAttribute('aria-label')) !== dots0, 'the dots changed at once');
+    assert((await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'Alex shows in the names at once');
+    assert((await card.locator('.r2-seg button:disabled').count()) === 0, 'nothing disabled while it saves');
+    assert((await page.getByText("You're in", { exact: true }).count()) === 0, 'no toast before the server answers');
+    await page.waitForTimeout(2600);
+    assert((await page.getByText("You're in", { exact: true }).count()) >= 1, 'toast when the server answers');
+    assert((await dash()).sessions.find((x) => x.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'saved');
+    // Quick taps: Out then In then Out again: the last one wins.
+    await card.locator('.r2-seg-out').click();
+    await card.locator('.r2-seg-in').click();
+    await card.locator('.r2-seg-out').click();
+    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'shows the last tap at once');
+    assert((await card.locator('.players-count').innerText()).trim() === count0, 'count is back to without Alex at once');
+    await page.waitForTimeout(6000);
+    assert(!(await dash()).sessions.find((x) => x.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'the server ended with the last tap (Out)');
+    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'still Out after the answers');
+    await page.unroute('**/api/admin/sessions/*/me');
+    // The server fails: snaps back and says so.
+    await page.route('**/api/admin/sessions/*/me', async (route) => {
+      await sleep(900);
+      await route.abort();
+    });
+    await card.locator('.r2-seg-in').click();
+    assert((await card.locator('.r2-seg-in').getAttribute('aria-pressed')) === 'true', 'moves first');
+    await page.waitForTimeout(2200);
+    assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'snapped back');
+    assert((await card.locator('.players-count').innerText()).trim() === count0, 'the count snapped back');
+    assert(!(await card.locator('.names-line').allInnerTexts()).join(' ').includes('Alex'), 'the name snapped back');
+    assert((await page.getByText(/It went back/).count()) >= 1, 'says it did not save');
+    assert(!(await dash()).sessions.find((x) => x.id === C.id).roster.some((r) => r.name === 'Alex' && r.status === 'confirmed'), 'nothing was saved');
+    await ctx.close();
+  });
+
   await check('F3 History: Activity first and the default, Sessions second (round 2); off: Sessions first as before', async () => {
     const { ctx, page } = await openAdmin();
     await tab(page, 'History');
