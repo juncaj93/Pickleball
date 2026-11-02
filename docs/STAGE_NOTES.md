@@ -1886,3 +1886,21 @@ Alex's answers: "(did not play)" on the Pay card is fine; debts show on the Pay 
 4. The question is now "Did the venue waive the fee or give you credit toward the next booking?". After a late cancel the text
    follows the answer, on the after-cancel sheet and on the Home "Do this now" card's text button: No = "Heads up: today's game is
    canceled ... your $14 share still applies ..." to the confirmed players only; Yes = the credit text saying "today".
+- Fresh reviewer (did not write the code), round 2: SHIP, no money or privacy issue (proved the organizer's court payment stays
+  exactly as it was through Clear, cancel Yes, cancel No then Clear, a sub, Finalize then Clear, and "Court due" while a debt is
+  open). Fixed from its list: your own debt row on Money read "Paid" (the court payment's chip) and sorted with the paid rows, now
+  "Unpaid" from the debt itself; the organizer's own drop from the player site had no warning, now it has the same one; a
+  venue-did-not-waive cancel left the organizer's own late drop owing, now it ends with the cancel (the organizer never owes on a
+  cancel; no money moves on their seat); on the late-cancel sheet the Reason box reset any edits to the text, so it is gone there
+  (the text box itself is editable). A stray review test file that got committed is removed.
+- Left as is, for Alex: the texts always say "today" (as asked); a cancel more than 12 hours out keeps the old sheet (no venue
+  question, no "Text the players" there; the gear menu has it any time); hidden players are only left out of "Text the players"
+  while "Admin screens, round 2" is on (that is when hiding exists); the notices show even with the switch off (only debts made
+  while it was on can be cleared, and production has none).
+- Tests: unit 1,760 passed, 1 skipped, 0 failed (96 files; `tests/late-fees.test.ts` 53). Browser `e2e/late-fees.cjs` 17 of 17 at 360
+  and 430 px, light and dark (the venue question with nothing picked and Pick Yes or No, the No sheet text and who it goes to, Text
+  the players A picked, B, editable, not sent to you or the waitlist, off = no menu item, Ryan's notice and Dismiss, nobody else sees
+  it, your own debt row Unpaid with one-tap Clear). Re-run green: admin-r2 27, admin-v2 27, audit-player-flows 93, credit 153,
+  pay-always 12, money-visible 12, cancel-reason 8, do-now 13.
+- Preview redeployed Mon Nov 2, 6:45 PM Eastern: same link https://preview-late-fees.pickleball-club-9h0.pages.dev (deployment
+  78ad4bba), fake database re-seeded; the "Late-fee test" game now starts Tue Nov 3, 6:00 AM. Not on production.
