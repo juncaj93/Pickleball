@@ -172,11 +172,12 @@ const GOOD_NEWS = {
  * Credit that went on the game at once is said too: "You're in. $14 credit used." or, part cover on a
  * booked court, "You're in. $3 credit used, $11 due." (`priceCents` is the flat price.)
  */
-export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0): string {
+export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, showDue = !noCourt): string {
   // A really full game has a real waitlist, court or no court: say so.
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
   if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
-  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, !noCourt);
+  // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
+  return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
 
 /**
@@ -344,19 +345,21 @@ export function PlayerHome({
   const joinToast = useCallback(
     (sessionId: string, before: number, res: JoinResponse, noCourt = false) => {
       const offer = res.cashOutOffer && res.cashOutOffer.cents > 0 ? res.cashOutOffer : null;
+      // "$11 due" is said only where the card shows it: a booked court, or "Ask for payment on every game" is on.
+      const showDue = !noCourt || !!g?.payAlways;
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
         if (before + 1 === MIN_PLAYERS && !offer) {
           burst(sessionId);
-          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, !noCourt), 'ok', { ball: true });
+          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, showDue), 'ok', { ball: true });
         }
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents });
-      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0));
+      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0, showDue));
     },
-    [toast, markCelebrated, burst, g?.group.priceCents],
+    [toast, markCelebrated, burst, g?.group.priceCents, g?.payAlways],
   );
 
   // A drop that was held for Undo when the page closed (or lost signal): finish it. A note younger than the hold
@@ -1232,7 +1235,8 @@ function RowPay({
     </span>
   );
   if (mine.oweCents <= 0) {
-    // No court booked yet: no Pay, but credit they can use is always offered ("Use $14 credit").
+    // Nothing due on the card (paid by other means, or no court booked yet with "Ask for payment on every game" off):
+    // no Pay, but credit they can use is always offered ("Use $14 credit").
     const useNow = mine.useCreditCents > 0 && (
       <button className="btn pay-btn" data-use-credit disabled={busy} onClick={() => credit.use([s.id], mine.useCreditCents, mine.useCreditCents)}>
         <RollText text={`Use ${formatPrice(mine.useCreditCents)} credit`} />

@@ -14,6 +14,11 @@
 // later changed back to not booked, they go away again. Someone who already
 // paid stays paid and still sees it. A game with a booked court that is full
 // keeps its waitlist wording.
+//
+// "Ask for payment on every game" (PAY_ALWAYS, `g.payAlways`, server/payAlways.ts): when it is on, the money
+// prompts stay on a game with no court booked too: "$14 due", Pay, I paid, part credit, exactly as on a booked
+// game. Only the money is kept; the court words, counts and seats above work the same either way. A standby seat
+// still owes nothing (the server never asks a seat that is not in to pay).
 
 import type { GroupView, PlayerSessionView } from '../shared/api';
 import { courtStatus, isCourtWaitlist } from '../shared/court';
@@ -26,7 +31,7 @@ export function isNoCourt(s: PlayerSessionView): boolean {
 }
 
 /** One game, shown the normal way when its court is not booked. Other games are returned as they are. */
-function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView {
+function plainGame(s: PlayerSessionView, maxPlayers: number, payAlways = false): PlayerSessionView {
   if (!isNoCourt(s)) return s;
   // A court on Waitlist works like Not booked: real seats while there is room. The server no longer makes standby seats
   // for it, but an old standby seat still left over counts as in as long as there is room; only a full game keeps a waitlist.
@@ -45,7 +50,8 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
         // No Pay before a court is booked. A payment that is already recorded stays and shows, and so does credit
         // already used on the seat ("Credit $3 used"). Credit they can still use stays usable (Alex, Oct 31: a
         // player with an unpaid seat and credit always has a way to use it): "Use $14 credit".
-        ...(s.mine.paymentStatus === 'paid' ? {} : { oweCents: 0, paidEarlierCents: 0 }),
+        // With "Ask for payment on every game" on, what they owe stays and shows, as on a booked game.
+        ...(s.mine.paymentStatus === 'paid' || payAlways ? {} : { oweCents: 0, paidEarlierCents: 0 }),
       }
     : s.mine;
   return {
@@ -66,20 +72,27 @@ function plainGame(s: PlayerSessionView, maxPlayers: number): PlayerSessionView 
   };
 }
 
-/** The player's data with every game that has no court booked drawn as a normal game. */
+/** The player's data with every game that has no court booked drawn as a normal game (money prompts kept when `payAlways` is on). */
 export function courtDisplay(g: GroupView): GroupView {
   const noCourt = new Set(g.sessions.filter(isNoCourt).map((s) => s.id));
   if (noCourt.size === 0) return g;
-  const sessions = g.sessions.map((s) => plainGame(s, g.group.maxPlayers));
+  const payAlways = !!g.payAlways;
+  const sessions = g.sessions.map((s) => plainGame(s, g.group.maxPlayers, payAlways));
   const suggested = g.suggestion && noCourt.has(g.suggestion.sessionId) ? sessions.find((s) => s.id === g.suggestion!.sessionId) : null;
   return {
     ...g,
     sessions,
-    payDue: g.payDue.filter((o) => !noCourt.has(o.sessionId)),
-    owed: g.owed.filter((o) => !noCourt.has(o.sessionId)),
+    // The game-day Pay card: kept for a game with no court booked only while "Ask for payment on every game" is on.
+    payDue: payAlways ? g.payDue : g.payDue.filter((o) => !noCourt.has(o.sessionId)),
+    owed: payAlways ? g.owed : g.owed.filter((o) => !noCourt.has(o.sessionId)),
     suggestion:
       g.suggestion && suggested
         ? { ...g.suggestion, joinAs: suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
         : g.suggestion,
   };
+}
+
+/** Pay, "$ due" and "I paid" are hidden on this game: no court booked and "Ask for payment on every game" is off. */
+export function hidesPay(g: Pick<GroupView, 'payAlways'>, s: PlayerSessionView): boolean {
+  return isNoCourt(s) && !g.payAlways;
 }

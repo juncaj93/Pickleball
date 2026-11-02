@@ -10,6 +10,7 @@ import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessio
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
+import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
 import {
@@ -194,6 +195,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     version,
     timeShift,
     timeShiftForAll: await timeShiftForAll(ctx.db, group.id),
+    payAlwaysForAll: await payAlwaysForAll(ctx.db, group.id),
   };
 }
 
@@ -1425,5 +1427,14 @@ export async function setTimeShift(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setTimeShiftForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'time_shift_on' : 'time_shift_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/pay-always { on }: Settings > "Ask for payment on every game". Display only: changes no money and no seat. */
+export async function setPayAlways(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setPayAlwaysForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'pay_always_on' : 'pay_always_off', {}, ctx.nowIso);
   return { ok: true, on };
 }

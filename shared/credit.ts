@@ -264,7 +264,8 @@ export function droppedText(creditCents: number, cashCents: number, lead = 'You 
 /**
  * The sign-up banner when credit went on the game at once: "You're in. $14
  * credit used." Part cover: "You're in. $3 credit used, $11 due." The amount
- * due is left out while the court is not booked (no "$ due" shows then).
+ * due is left out where the card shows no "$ due" (a court not booked while
+ * "Ask for payment on every game" is off); `courtBooked` says it shows.
  */
 export function joinedCreditText(lead: string, creditCents: number, priceCents: number, courtBooked: boolean): string {
   if (creditCents <= 0) return lead;
