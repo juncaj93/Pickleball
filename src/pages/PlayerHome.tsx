@@ -550,7 +550,8 @@ export function PlayerHome({
                 </button>
               </section>
             ) : (
-              g.suggestion && <SuggestionCard key={g.suggestion.sessionId} g={g} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
+              // The court-display view: a game with no court reads like a normal one here too (suggestion.noCourt is set there).
+              view!.suggestion && <SuggestionCard key={view!.suggestion.sessionId} g={view!} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className="schedule">
@@ -1071,7 +1072,7 @@ function SuggestionCard({
         await sendDropsBeforeJoin(s.sessionId);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
-        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt), startsAt: s.startsAt, endsAt: s.endsAt });
+        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt, g.group.priceCents, !s.noCourt || !!g.payAlways), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
       } else {
         await api('POST', `/api/sessions/${s.sessionId}/decline`, {});

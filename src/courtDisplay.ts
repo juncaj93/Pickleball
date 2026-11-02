@@ -92,7 +92,3 @@ export function courtDisplay(g: GroupView): GroupView {
   };
 }
 
-/** Pay, "$ due" and "I paid" are hidden on this game: no court booked and "Ask for payment on every game" is off. */
-export function hidesPay(g: Pick<GroupView, 'payAlways'>, s: PlayerSessionView): boolean {
-  return isNoCourt(s) && !g.payAlways;
-}

@@ -17,7 +17,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GroupView, PlayerSessionView } from '../shared/api';
 import { joinedCreditText } from '../shared/credit';
 import { PAY_ALWAYS_HEADER, payAlwaysAllowed } from '../shared/payAlways';
-import { courtDisplay, hidesPay, isNoCourt } from '../src/courtDisplay';
+import { courtDisplay, isNoCourt } from '../src/courtDisplay';
 import { heldCents } from '../src/pages/admin/todo';
 // The page is TSX and is type-checked in the app project; this test only renders it.
 // @ts-ignore
@@ -278,7 +278,6 @@ describe('M: sign up on every court status with every credit amount', () => {
           const v = await shown(w, 'Blair');
           const mine = sOf(v, g.id).mine!;
           expect(mine.oweCents).toBe(hidden ? 0 : owe);
-          expect(hidesPay(await view(w, 'Blair'), sOf(await view(w, 'Blair'), g.id))).toBe(hidden);
           const text = card(v, g.id);
           if (owe === 0) {
             // Exact or extra credit: "Paid with credit" with Undo, exactly as on a booked game. No Pay.
@@ -637,7 +636,8 @@ describe('O: organizer money screens show early payments', () => {
     expect(after.heldCents).toBe(0);
     expect(after.collectedCents).toBe(0);
     const row = after.sessions.find((s: any) => s.id === g.id || s.sessionId === g.id);
-    if (row) expect(row.state).toBe('canceled');
+    expect(row, 'the canceled game has a row on Money').toBeTruthy();
+    expect(row.state).toBe('canceled');
     const d = await dash(w);
     expect(d.creditLedger.find((p: any) => p.playerId === w.byName.Blair).balanceCents).toBe(PRICE);
     await books(w, 0, PRICE);
@@ -670,13 +670,16 @@ describe('Z: the same taps move the same money with the switch off and on', () =
       givePot(w, 'Devon', 2000);
       const names = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale', 'Harper'];
       let seed = 7;
+      const ok = (r: { status: number; text: string }, what: string) => expect([200, 409], `${mode} ${what}: ${r.text}`).toContain(r.status);
       const rand = () => ((seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32);
       for (let step = 0; step < 40; step++) {
         const g = gs[Math.floor(rand() * gs.length)];
         const n = names[Math.floor(rand() * names.length)];
         const r = rand();
-        if (r < 0.4) await call(w, n, 'POST', `/api/sessions/${g.id}/join`, {});
-        else if (r < 0.55) await call(w, n, 'POST', `/api/sessions/${g.id}/withdraw`, {});
+        if (r < 0.35) ok(await call(w, n, 'POST', `/api/sessions/${g.id}/join`, {}), 'join');
+        else if (r < 0.5) ok(await call(w, n, 'POST', `/api/sessions/${g.id}/withdraw`, {}), 'drop');
+        else if (r < 0.58) await call(w, n, 'POST', `/api/sessions/${g.id}/paid`, { paid: true });
+        else if (r < 0.62) await w.organizer.call('POST', `/api/admin/sessions/${g.id}/claim`, { playerId: w.byName[n], paid: rand() < 0.7 });
         else if (r < 0.7) await w.organizer.call('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.byName[n], paid: true });
         else if (r < 0.78) await call(w, n, 'POST', `/api/sessions/${g.id}/use-credit`, {});
         else if (r < 0.84) await call(w, n, 'POST', `/api/sessions/${g.id}/undo-credit`, {});
@@ -688,12 +691,18 @@ describe('Z: the same taps move the same money with the switch off and on', () =
       const d = await dash(w);
       out.push(
         JSON.stringify({
-          pots: d.creditLedger.map((p: any) => [p.name ?? p.playerId.slice(0, 0), p.balanceCents]).sort(),
+          pots: d.players.map((p: any) => [p.name, d.creditLedger.find((l: any) => l.playerId === p.id)?.balanceCents ?? 0]),
+          claims: d.paymentClaims.map((c: any) => [c.name, c.cents, c.why]).sort(),
+          steps: w.app.db.raw.prepare('SELECT COUNT(*) AS n FROM session_players').get(),
           held: heldCents(d),
           seats: d.sessions.slice(0, 3).map((s: any) => s.roster.map((r: any) => [r.name, r.status, r.paymentStatus, r.paymentAmountCents ?? null])),
         }),
       );
     }
+    // The script really moved money (not a run of refused taps).
+    const first = JSON.parse(out[0]);
+    expect(first.held + first.pots.reduce((n: number, [, c]: [string, number]) => n + c, 0)).toBeGreaterThan(2300);
+    expect(first.seats.flat().some((r: any[]) => r[2] === 'paid')).toBe(true);
     expect(out[1]).toBe(out[0]);
     expect(out[2]).toBe(out[0]);
   });
