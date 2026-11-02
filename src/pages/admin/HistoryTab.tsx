@@ -163,10 +163,18 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
   const [more, setMore] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const [busy, setBusy] = useState(false);
+  // "Seen" means what was on the screen: the server's time when the list was asked for (from the last load of the page, so
+  // never later than the list itself), or the newest row shown. Things that happen after that, even while the tab stays
+  // open, are still new on the next visit.
+  const clock = useRef(ctx.d.now);
+  clock.current = ctx.d.now;
+  const seenUpTo = useRef(0);
   async function load(before?: string) {
     setBusy(true);
     try {
+      const asked = Date.parse(clock.current) || 0;
       const page = await api<ActivityPage>('GET', `/api/admin/activity${before ? `?before=${encodeURIComponent(before)}` : ''}`);
+      if (!before) seenUpTo.current = Math.max(asked, newestMs(page.entries));
       setEntries((cur) => (before && cur ? [...cur, ...page.entries] : page.entries));
       setMore(page.more);
       setError(null);
@@ -180,15 +188,10 @@ function HistoryTabV2({ ctx }: { ctx: AdminCtx }) {
     void load();
   }, []);
   // The visit ends when the tab is left (this component goes away) or the site is closed or put away.
-  const latest = useRef({ entries, now: ctx.d.now });
-  latest.current = { entries, now: ctx.d.now };
   useEffect(() => {
     const remember = () => {
-      const cur = latest.current;
       // Nothing loaded yet: leave the old mark alone, so entries never shown are not counted as viewed.
-      if (!cur.entries) return;
-      const at = Math.max(Date.parse(cur.now) || 0, newestMs(cur.entries));
-      if (at > 0) storageSet(HISTORY_SEEN_KEY, new Date(at).toISOString());
+      if (seenUpTo.current > 0) storageSet(HISTORY_SEEN_KEY, new Date(seenUpTo.current).toISOString());
     };
     const hidden = () => {
       if (document.visibilityState === 'hidden') remember();

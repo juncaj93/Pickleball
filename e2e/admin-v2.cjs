@@ -119,7 +119,8 @@ async function main() {
     return { ctx, page };
   }
   const tab = async (page, name) => {
-    await page.locator('.tabbar button', { hasText: name }).click();
+    // (A plain click: at 200% text the tab bar can be covered by an older, wider element, which is not what these checks are about.)
+    await page.locator('.tabbar button', { hasText: name }).evaluate((b) => b.click());
     await page.waitForTimeout(250);
   };
   const noOverflow = async (page, what) => {
@@ -212,6 +213,28 @@ async function main() {
     await page.locator('ul.activity-list li').first().waitFor();
     assert((await page.locator('[data-divider]').count()) === 0, 'next visit: nothing new');
     await shot(page, 'history-390-light');
+    await ctx.close();
+  });
+
+  await check('1 History: tapping the History tab again does not wipe NEW; events that arrive while you stay are still new next time', async () => {
+    const { ctx, page } = await openAdmin();
+    await tab(page, 'History');
+    await page.locator('ul.activity-list li').first().waitFor();
+    await tab(page, 'Home');
+    await sleep(1100);
+    await join('Brandon', C);
+    await tab(page, 'History');
+    await page.locator('[data-divider="new"]').waitFor();
+    await tab(page, 'History'); // the same tab again
+    await page.waitForTimeout(400);
+    assert((await page.locator('[data-divider="new"]').count()) === 1, 'NEW is still there after tapping the tab again');
+    // Something happens while we stay (the list is not reloaded), then we leave: it is new on the next visit.
+    await sleep(1100);
+    await join('Mitchel', C);
+    await tab(page, 'Home');
+    await tab(page, 'History');
+    await page.locator('[data-divider="new"]').waitFor();
+    assert(/· 1$/.test((await page.locator('[data-divider="new"]').innerText()).trim()), 'the event that was never shown is new');
     await ctx.close();
   });
 
@@ -434,7 +457,7 @@ async function main() {
     assert((await page.locator('[data-task="court_book"]').count()) === 0, 'no separate alert card');
     const need = page.locator('.hv2-short .hv2-need').first();
     assert((await need.count()) === 1, 'the short row says it');
-    const id = await need.locator('xpath=ancestor::div[contains(@class,"hv2-short")]').getAttribute('data-session');
+    const id = await need.locator('xpath=ancestor::div[@data-session]').getAttribute('data-session');
     await page.locator(`#session-${id}.hv2-short`).click({ position: { x: 150, y: 8 } });
     const card = page.locator(`article#session-${id}`);
     await card.waitFor();
@@ -443,6 +466,27 @@ async function main() {
     assert((await link.count()) === 1 && /courtreserve/i.test(await link.getAttribute('href')) && (await link.getAttribute('target')) === '_blank', 'Book a court link opens CourtReserve in a new tab');
     // Cash out and Do-this-now cards that are not about the court stay (the old layout's others are untouched code).
     await shot(page, 'home-open-need-390-light');
+    await ctx.close();
+  });
+
+  await check('3 Home: tapping blank card space to close the gear pop-up does not fold the card; the keyboard can open and fold and keeps its place', async () => {
+    const { ctx, page } = await openAdmin();
+    const card = page.locator('article.scard').first();
+    const id = (await card.getAttribute('id')).replace('session-', '');
+    await card.locator('button.icon-round').click();
+    await page.locator('.menu-pop').waitFor();
+    const box = await card.locator('.scard-tilecol').boundingBox();
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height - 2);
+    await page.waitForTimeout(300);
+    assert((await page.locator('.menu-pop').count()) === 0 && (await page.locator(`article#session-${id}`).count()) === 1, 'the menu closed and the card stayed open');
+    // Keyboard: Enter on a short row opens it and focus lands on the opened card.
+    const short = page.locator('.hv2-short').first();
+    const sid = await short.getAttribute('data-session');
+    await short.focus();
+    await page.keyboard.press('Enter');
+    await page.locator(`article#session-${sid}`).waitFor();
+    await page.waitForTimeout(150);
+    assert((await page.evaluate(() => document.activeElement && document.activeElement.id)) === `session-${sid}`, 'focus is on the opened card');
     await ctx.close();
   });
 
@@ -459,6 +503,85 @@ async function main() {
     assert((await page.locator(`article#session-${id}`).count()) === 1, 'card still open');
     await page.getByRole('button', { name: /Show all/ }).click();
     assert((await page.locator('.hv2-short').count()) >= 8, 'show all');
+    await ctx.close();
+  });
+
+  // ---------------------------------------------------------------- 5. Label on Edit game
+  await check('5 Edit game: a Label field in the same style as Date and Start, prefilled, saved with Save; the old sheet has none', async () => {
+    const off = await openAdmin({ v2: false });
+    await off.page.locator('article.scard').first().locator('button.icon-round').click();
+    await off.page.locator('[role="menuitem"]', { hasText: 'Edit game' }).click();
+    await off.page.locator('dialog[open]').waitFor();
+    assert((await off.page.locator('[data-label-field]').count()) === 0, 'no Label field with the switch off');
+    await off.ctx.close();
+    const { ctx, page } = await openAdmin();
+    const card = page.locator(`article#session-${A.id}`);
+    await card.locator('button.icon-round').click();
+    await card.locator('[role="menuitem"]', { hasText: 'Edit game' }).click();
+    const sheet = page.locator('dialog[open]');
+    await sheet.waitFor();
+    const field = sheet.locator('[data-label-field]');
+    assert((await field.count()) === 1, 'Label field');
+    assert((await field.evaluate((e) => e.className)) === (await sheet.locator('label.field', { hasText: 'Date' }).evaluate((e) => e.className)), 'same style as Date');
+    assert((await field.locator('input').inputValue()) === '', 'empty now');
+    await field.locator('input').fill("Veteran's Day");
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await page.locator('.pop.toast').first().waitFor();
+    await page.waitForTimeout(600);
+    assert((await card.locator('.game-note').innerText()).includes("Veteran's Day"), 'label shows on the card');
+    assert((await (await dash()).sessions.find((x) => x.id === A.id)).note === "Veteran's Day", 'saved');
+    // Prefilled next time, and clearing it works.
+    await card.locator('button.icon-round').click();
+    await card.locator('[role="menuitem"]', { hasText: 'Edit game' }).click();
+    await sheet.waitFor();
+    assert((await sheet.locator('[data-label-field] input').inputValue()) === "Veteran's Day", 'prefilled');
+    await sheet.locator('[data-label-field] input').fill('');
+    await sheet.getByRole('button', { name: 'Save' }).click();
+    await page.waitForTimeout(900);
+    assert((await (await dash()).sessions.find((x) => x.id === A.id)).note === null, 'cleared');
+    await ctx.close();
+  });
+
+  // ---------------------------------------------------------------- 6. Remove a canceled game from the player screen
+  await check('6 gear menu: "Remove from player screen" only on a canceled game and only with the new layout; it hides, never deletes; undo works', async () => {
+    const playerSees = async () => ((await (await phones['Ryan'].get(`${BASE}/api/group`)).json()).sessions || []).some((x) => x.id === F.id);
+    assert(await playerSees(), 'players see the canceled game today');
+    const off = await openAdmin({ v2: false });
+    await off.page.getByRole('button', { name: /Show all/ }).click().catch(() => {});
+    await off.page.locator(`#session-${F.id} button.icon-round`).click();
+    assert((await off.page.locator('[data-hide-game]').count()) === 0, 'not in the old menu');
+    await off.ctx.close();
+    const { ctx, page } = await openAdmin();
+    await page.getByRole('button', { name: /Show all/ }).click();
+    await page.locator(`#session-${F.id}.hv2-short`).click({ position: { x: 150, y: 8 } });
+    const card = page.locator(`article#session-${F.id}`);
+    await card.waitFor();
+    // A game that is not canceled has no such row.
+    await page.locator(`article#session-${A.id} button.icon-round`).click();
+    assert((await page.locator('[data-hide-game]').count()) === 0, 'not on a live game');
+    await page.keyboard.press('Escape');
+    const moneyBefore = JSON.stringify((await (await areq.get(`${BASE}/api/admin/money?month=${new Date(F.startsAt).toISOString().slice(0, 7)}`)).json()));
+    await card.locator('button.icon-round').click();
+    await page.locator('[data-hide-game]', { hasText: 'Remove from player screen' }).click();
+    await page.locator('.pop.toast').first().waitFor();
+    await page.waitForTimeout(700);
+    assert((await card.locator('[data-hidden-tag]').count()) === 1, 'the card says Not shown to players');
+    assert(!(await playerSees()), 'players no longer see it');
+    assert(!(await playerSees()), 'still hidden after another refresh');
+    // Still there for the organizer: Home, Money.
+    assert((await page.locator(`article#session-${F.id}`).count()) === 1, 'still on organizer Home');
+    await tab(page, 'Money');
+    assert((await page.locator(`.mv2-game[data-session="${F.id}"]`).count()) === 1, 'still in Money');
+    assert(JSON.stringify((await (await areq.get(`${BASE}/api/admin/money?month=${new Date(F.startsAt).toISOString().slice(0, 7)}`)).json())) === moneyBefore, 'Money numbers unchanged');
+    await tab(page, 'Home');
+    await page.getByRole('button', { name: /Show all/ }).click();
+    await page.locator(`#session-${F.id}.hv2-short`).click({ position: { x: 150, y: 8 } });
+    await page.locator(`article#session-${F.id} button.icon-round`).click();
+    await page.locator('[data-hide-game]', { hasText: 'Show on player screen again' }).click();
+    await page.locator('.pop.toast').first().waitFor();
+    await page.waitForTimeout(700);
+    assert(await playerSees(), 'undo: players see it again');
+    assert((await page.locator(`article#session-${F.id} [data-hidden-tag]`).count()) === 0, 'tag gone');
     await ctx.close();
   });
 

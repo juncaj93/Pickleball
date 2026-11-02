@@ -4670,3 +4670,20 @@ dialog.sheet[open]::backdrop {
     justify-content: flex-start;
   }
 }
+.hv2-label {
+  line-height: 1.3;
+}
+.hv2-label .extra-tag {
+  margin-right: 4px;
+}
+.hv2-book {
+  display: block;
+  margin-top: 6px;
+}
+.hv2-book .btn {
+  min-height: 44px;
+}
+/* History (new layout): the two tabs wrap onto a second line at very large text instead of running off the screen. */
+.history-v2 .chips {
+  flex-wrap: wrap;
+}

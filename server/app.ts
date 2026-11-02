@@ -101,6 +101,8 @@ route('POST', '/api/admin/sessions/:id/court', admin.courtWaitlist);
 route('POST', '/api/admin/sessions/:id/court-status', admin.setCourtStatus);
 route('GET', '/api/admin/version', (ctx) => admin.adminVersion(ctx));
 route('POST', '/api/admin/sessions/:id/show', admin.showSession);
+route('PUT', '/api/admin/sessions/:id/note', admin.setSessionNote);
+route('POST', '/api/admin/sessions/:id/hide', admin.hideFromPlayers);
 route('POST', '/api/admin/sessions/:id/holiday-hours', admin.holidayHours);
 route('POST', '/api/admin/sessions/:id/card-done', admin.cardDone);
 route('POST', '/api/admin/sessions/:id/told', admin.markTold);

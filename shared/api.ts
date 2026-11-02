@@ -273,6 +273,8 @@ export interface AdminSessionView {
   /** A one-off game the organizer added, with its optional note. */
   extra: boolean;
   note: string | null;
+  /** A canceled game the organizer removed from the player screen (server/hideGame.ts). Still shown on organizer screens. */
+  hiddenFromPlayers?: boolean;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;

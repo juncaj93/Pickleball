@@ -1,46 +1,28 @@
-import {
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import type { AdminSessionView } from "../../../shared/api";
-import {
-  type CourtSwitch,
-  courtStatus,
-  courtSwitchOf,
-} from "../../../shared/court";
-import { countText } from "../../../shared/spots";
-import { cardTime, formatShortDate } from "../../../shared/time";
-import { tsKind, tsTime } from "../../timeShift";
-import { DateTile } from "../PlayerHome";
-import type { AdminCtx } from "../Admin";
-import { SessionCard } from "./Sessions";
+import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import type { AdminSessionView } from '../../../shared/api';
+import { type CourtSwitch, courtStatus, courtSwitchOf } from '../../../shared/court';
+import { countText } from '../../../shared/spots';
+import { cardTime, formatShortDate } from '../../../shared/time';
+import { tsKind, tsTime } from '../../timeShift';
+import { DateTile } from '../PlayerHome';
+import type { AdminCtx } from '../Admin';
+import { SessionCard } from './Sessions';
+import { menuJustDismissed } from './menuDismiss';
+import { CourtReserveLink } from '../../ui';
+import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 
 /** Things inside a card that do their own job when tapped: a tap on them never folds the game. */
 const OWN_TAP =
-  'button, a, input, select, textarea, label, summary, dialog, [role="button"], [role="switch"], [role="menu"], [role="menuitem"], [data-no-fold]';
+  'button, a, input, select, textarea, label, summary, dialog, [role="button"], [role="switch"], [role="menu"], [role="menuitem"], [role="group"], .menu-pop, [data-no-fold]';
 
 const SWITCH_LABEL: Record<CourtSwitch, string> = {
-  booked: "Booked",
-  waitlist: "Waitlist",
-  not_booked: "Not booked",
+  booked: 'Booked',
+  waitlist: 'Waitlist',
+  not_booked: 'Not booked',
 };
 
 const Chevron = () => (
-  <svg
-    viewBox="0 0 24 24"
-    width="18"
-    height="18"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2.4"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden="true"
-  >
+  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="m9 6 6 6-6 6" />
   </svg>
 );
@@ -87,48 +69,31 @@ export function HomeGame({
   onToggle: () => void;
 }) {
   const date = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  // A game that opens or folds swaps one element for another; if that took the keyboard focus with it, put it on the new one.
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    const a = document.activeElement;
+    if (!a || a === document.body) document.getElementById(`session-${s.id}`)?.focus({ preventScroll: true });
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   if (open) {
     return (
-      <FoldArea
-        onToggle={onToggle}
-        className={`hv2-open${fx ? " hv2-fx" : ""}`}
-        data-game-open={s.id}
-      >
-        <button
-          type="button"
-          className="hv2-a11y"
-          aria-expanded="true"
-          onClick={onToggle}
-        >
+      <FoldArea onToggle={onToggle} className={`hv2-open${fx ? ' hv2-fx' : ''}`} data-game-open={s.id}>
+        <button type="button" className="hv2-a11y" aria-expanded="true" onClick={onToggle}>
           Fold {date}
         </button>
         <SessionCard ctx={ctx} s={s} courtNeed={needsCourt} />
       </FoldArea>
     );
   }
-  return (
-    <ShortRow
-      ctx={ctx}
-      s={s}
-      fx={fx}
-      needsCourt={needsCourt}
-      onToggle={onToggle}
-    />
-  );
+  return <ShortRow ctx={ctx} s={s} fx={fx} needsCourt={needsCourt} onToggle={onToggle} />;
 }
 
 /** Taps on empty space (not on a button, link or field, and not while selecting text) flip the game. */
-function FoldArea({
-  onToggle,
-  className,
-  children,
-  ...rest
-}: {
-  onToggle: () => void;
-  className: string;
-  children: ReactNode;
-  "data-game-open": string;
-}) {
+function FoldArea({ onToggle, className, children, ...rest }: { onToggle: () => void; className: string; children: ReactNode; 'data-game-open': string }) {
   return (
     <div
       className={className}
@@ -139,6 +104,8 @@ function FoldArea({
         if (!e.currentTarget.contains(t)) return;
         if (t.closest(OWN_TAP)) return;
         if (window.getSelection()?.toString()) return;
+        // The tap that just closed the gear pop-up only closes it.
+        if (menuJustDismissed()) return;
         onToggle();
       }}
     >
@@ -148,19 +115,7 @@ function FoldArea({
 }
 
 /** The folded game: date tile, "2 of 4 in" and the start time, names in small text, the court pill, "In" if you are, a chevron. */
-function ShortRow({
-  ctx,
-  s,
-  fx,
-  needsCourt,
-  onToggle,
-}: {
-  ctx: AdminCtx;
-  s: AdminSessionView;
-  fx: boolean;
-  needsCourt: boolean;
-  onToggle: () => void;
-}) {
+function ShortRow({ ctx, s, fx, needsCourt, onToggle }: { ctx: AdminCtx; s: AdminSessionView; fx: boolean; needsCourt: boolean; onToggle: () => void }) {
   const tz = ctx.d.group.timezone;
   const court = courtStatus(
     {
@@ -174,20 +129,16 @@ function ShortRow({
   );
   const switchValue = courtSwitchOf(s);
   const canceled = s.state.flags.canceled;
-  const names = s.roster
-    .filter((r) => r.status === "confirmed")
-    .map((r) => r.name);
-  const waiting = s.roster.filter((r) => r.status === "waitlisted").length;
+  const names = s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name);
+  const waiting = s.roster.filter((r) => r.status === 'waitlisted').length;
   const me = ctx.d.me;
-  const mine =
-    !!me &&
-    s.roster.some((r) => r.playerId === me.id && r.status === "confirmed");
+  const mine = !!me && s.roster.some((r) => r.playerId === me.id && r.status === 'confirmed');
   const ts = tsKind(court.kind, false);
   const start = tsTime(cardTime(s.startsAt, s.endsAt, tz).start, ts);
   const date = formatShortDate(s.startsAt, tz);
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
-    if (e.key === "Enter" || e.key === " ") {
+    if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       onToggle();
     }
@@ -196,11 +147,11 @@ function ShortRow({
     <div className="hv2-shortwrap">
       <div
         id={`session-${s.id}`}
-        className={`card hv2-short${fx ? " hv2-fx" : ""}`}
+        className={`card hv2-short${fx ? ' hv2-fx' : ''}`}
         role="button"
         tabIndex={0}
         aria-expanded="false"
-        aria-label={`${date}, ${canceled ? "canceled" : `${countText(names.length, ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you're in" : ""}. Open.`}
+        aria-label={`${date}, ${canceled ? 'canceled' : `${countText(names.length, ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you're in" : ''}. Open.`}
         data-session={s.id}
         data-court={court.kind}
         data-switch={switchValue}
@@ -213,55 +164,40 @@ function ShortRow({
         <DateTile iso={s.startsAt} tz={tz} />
         <div className="hv2-main">
           <div className="hv2-count">
-            {canceled ? (
-              <strong>Canceled</strong>
-            ) : (
-              <strong>
-                {countText(names.length, ctx.d.group.settings.maxPlayers)}
-              </strong>
-            )}
+            {canceled ? <strong>Canceled</strong> : <strong>{countText(names.length, ctx.d.group.settings.maxPlayers)}</strong>}
             <span className="hv2-start"> · {start}</span>
           </div>
-          {!canceled && names.length > 0 && (
-            <div className="hv2-names small muted">
-              {names.join(", ")}
-              {waiting > 0 ? ` · ${waiting} on the waitlist` : ""}
+          {(s.extra || s.note) && (
+            <div className="hv2-label small" data-short-label>
+              {s.extra && <span className="extra-tag">Extra game</span>} {s.note}
             </div>
           )}
-          {canceled && s.cancelReason && (
-            <div className="hv2-names small muted">{s.cancelReason}</div>
+          {!canceled && names.length > 0 && (
+            <div className="hv2-names small muted">
+              {names.join(', ')}
+              {waiting > 0 ? ` · ${waiting} on the waitlist` : ''}
+            </div>
           )}
-          {!canceled && court.kind === "later" && (
-            <div className="hv2-sub small muted">{court.text}</div>
-          )}
+          {canceled && s.cancelReason && <div className="hv2-names small muted">{s.cancelReason}</div>}
+          {!canceled && court.kind === 'later' && <div className="hv2-sub small muted">{court.text}</div>}
           {needsCourt && !canceled && (
-            <div className="hv2-need small">Court still needs to be booked</div>
+            <div className="hv2-need small">
+              Court still needs to be booked
+              {/* The same link as the Book a court pill; a tap on it never opens or folds the row. */}
+              <span className="hv2-book" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+                <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
+                  Book a court
+                </CourtReserveLink>
+              </span>
+            </div>
           )}
         </div>
         <div className="hv2-side">
-          {canceled ? (
-            <span className="hv2-pill off">Canceled</span>
-          ) : (
-            <span className={`hv2-pill sw-${switchValue}`}>
-              {SWITCH_LABEL[switchValue]}
-            </span>
-          )}
+          {canceled ? <span className="hv2-pill off">Canceled</span> : <span className={`hv2-pill sw-${switchValue}`}>{SWITCH_LABEL[switchValue]}</span>}
           {mine && !canceled && (
             <span className="hv2-in">
-              <svg
-                viewBox="0 0 12 12"
-                width="12"
-                height="12"
-                aria-hidden="true"
-              >
-                <path
-                  d="m2.6 6.3 2.2 2.2 4.6-4.8"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.9"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+              <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+                <path d="m2.6 6.3 2.2 2.2 4.6-4.8" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               In
             </span>

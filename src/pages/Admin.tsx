@@ -208,7 +208,8 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
-        {tab === 'history' && <HistoryTab key={fresh} ctx={ctx} />}
+        {/* The new History keeps its NEW group when you tap the History tab again (that is not leaving the tab). */}
+        {tab === 'history' && <HistoryTab key={d.adminV2 === true ? 'v2' : fresh} ctx={ctx} />}
         {tab === 'settings' && <SettingsTab ctx={ctx} />}
       </main>
       <nav className="tabbar" aria-label="Organizer sections">
@@ -486,7 +487,8 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   );
   // Home is upcoming only; played sessions live under History.
   const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs);
-  const shown = all ? list : list.slice(0, 6);
+  // (New layout: a game that needs its court booked is always listed, so its alert is never lost behind "Show all".)
+  const shown = all ? list : list.filter((s, i) => i < 6 || courtNeeded?.has(s.id));
   const tz = ctx.d.group.timezone;
 
   return (

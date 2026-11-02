@@ -143,6 +143,12 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} changed the PIN`;
     case 'player_link_rotated':
       return `${who} replaced the player link`;
+    case 'session_note_changed':
+      return `${who} changed the label${forDay}${typeof d.to === 'string' ? ` to "${d.to}"` : ' (cleared it)'}`;
+    case 'session_hidden_from_players':
+      return `${who} removed${day ? ` ${day}` : ' a canceled game'} from the player screen`;
+    case 'session_shown_to_players':
+      return `${who} showed${day ? ` ${day}` : ' a canceled game'} on the player screen again`;
     case 'admin_v2_on':
       return `${who} switched the new admin layout on`;
     case 'admin_v2_off':

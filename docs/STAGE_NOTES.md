@@ -1528,3 +1528,58 @@ deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
   no-court 10, time-shift 10, good-news 9, cancel-reason 8, dryrun-screens 6, admin-sweep 6, want-in 4, double-tap 4,
   audit-stage3 3). round2: 24 of 25; one check ("banner timings ... reduce motion fades only") fails about 2 runs in 3 on this
   code AND on the live code before this change (199170c, checked in a separate copy): an older flaky check, not caused here.
+
+## Admin screens v2 (ADMIN_V2), Mon Nov 2, 2026 - on a PREVIEW, not on the live site
+
+Spec: ADMIN_SPEC (Alex, Nov 2) items 1 to 4, plus item 5 (Label on Edit game) and item 6 (Remove a canceled game from the player
+screen) added the same day. Scenario list: `docs/AUDIT_SCENARIOS_adminv2.md`. Started from main e740244 (pay-always already live).
+
+### What changed
+- One switch, `ADMIN_V2` (ships OFF): Settings > Feature switches > "New admin layout" (no deploy), private link `/admin?adminv2=on|off`,
+  `ADMIN_V2` var in wrangler.toml as the kill switch. "On for everyone" is one `task_log` row (`admin_v2_on`), like PAY_ALWAYS.
+- History: Activity first, then Sessions (no All). Activity splits into "New since <last visit> · N" and "Viewed". The last visit is kept in
+  this browser (`pb_history_seen`), written when the tab is left or the site is closed or put away, never while staying; it is the server
+  time the list was asked for, so things that happen while the tab stays open are still new next time. First visit: no NEW group.
+- Money: one control row (month stepper, Who paid | Totals), always opens on Who paid. Games are lines: next game open, others closed, any
+  number open. Rows are name + second line, fixed chip, fixed gray button, in the same three columns (stack on 320 px or big text). Tap a
+  row for the whole line and any second action. "Remind N" lists the unpaid players, each with their own Text link (one number, today's
+  reminder). Totals: same numbers and math, two-column grid, one screen. Held now always shows. Same payload on every Mark paid / Unmark.
+- Home: top 2 games are today's full card, later ones short rows (tile, count and time, names, label, court pill, In, chevron). Tap a tile
+  or empty space to open or fold; nothing is remembered. "Court still needs to be booked" and Book a court now sit on the game's own card
+  (and on its short row); the separate alert card is gone. Games that need a court are never hidden behind "Show all".
+- Motion fix (MOTION_ADMIN, not ADMIN_V2): nothing rises in on load; the player's placeholder cards shimmer after 250 ms while loading.
+- Item 5: a Label field on Edit game (new layout only), prefilled, saved with Save. It is the game's existing `note` column
+  (`PUT /api/admin/sessions/:id/note`, 80 characters, logged). The "Extra game" tag is untouched.
+- Item 6: "Remove from player screen" / "Show on player screen again" in the gear menu of a CANCELED game (new layout only). It only hides.
+  Stored as one row per game in the existing `task_log` table (`hidden_from_players`): no new column, no migration. Players no longer get the
+  game in their schedule; credit history rows keep their text; the organizer still sees it on Home (tagged), History > Sessions and Money.
+  Reopening clears it. `ADMIN_V2 = "off"` puts every hidden game back. A backup restore empties task_log, so hidden games would show again.
+
+### Database
+No change. Item 5 reuses `sessions.note`; item 6 and the switch reuse `task_log`.
+
+### Fresh reviewer (did not write the code) and what was fixed
+Found and fixed: re-tapping the History tab wiped NEW; History marked events "seen" that were never shown; tapping blank card space to close
+the gear pop-up also folded the card (and the court switch's padding folded it); keyboard focus was lost when a game opened or folded;
+a game needing a court could hide behind "Show all"; the folded row dropped the label and the Book a court button; the paid line lost the
+amount; two screen-reader toggles per Money game. Left as is (by spec or choice): the folded row does not show the paid pill, late-drop
+line, "Still in" check or short-on-players panel (open the row to see them); the month stepper only drives Totals.
+
+### Tests
+- Unit: 1,667 passed, 1 skipped, in 91 files (was 1,645 in 90): new `tests/admin-v2.test.ts` (22: the switch, Label, hide/show, money
+  unchanged, kill switch, reopen, no migration touched).
+- Browser: new `e2e/admin-v2.cjs` (25 checks) and `e2e/admin-motion.cjs` (28; two checks rewritten: no ball, no rise). With the switch off
+  these still pass: do-now 13, admin-sweep 6, money-visible 12, court 84, held 81, good-news 9, live 26, banner 11, card-times 13,
+  no-court 10, pay-always 12, suggest 35, admin-audit 11 (failed once, then passed twice), time-shift 10. `admin-cleanup` 33 of 35: the same two
+  checks fail on untouched main (the "2 of 3 paid" tap area and the red cancel-by line), so they are older and not part of this change.
+- Older, not changed: at 200% text on a 320 px phone, the "+ Add game" and "Book a court" pills, the organizer's own I'm in and the tab bar
+  already run past the screen with the switch off.
+
+### Preview
+Pages preview alias `https://preview-admin-v2.pickleball-club-9h0.pages.dev`, branch `claude/new-session-x26a53`, fake database
+`pickleball-preview` (re-seeded just before). Use `/admin?adminv2=on` once on a phone. Not on production.
+
+### To ship (after "ship it"; admin-only, any time outside game night)
+1. Merge to main, pull, `npm test`, confirm main equals live plus this change. 2. SQL export and Time Travel bookmark. 3. `npm run deploy`
+from main (no migration; ships OFF). 4. Read-only live check. 5. Alex tests with `/admin?adminv2=on`, then switches it on in Settings.
+Rollback: Settings switch off (no deploy); `ADMIN_V2 = "off"` and a deploy for everyone; previous Pages deployment for the code. No data restore needed.

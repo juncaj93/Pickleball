@@ -63,3 +63,25 @@ Status: PASS = works as the spec says. NOTE = how it works, written down. ASK = 
 | A1 | Load a screen | Nothing rises; cards appear in place | PASS |
 | A2 | Slow load | After 250 ms the same placeholder cards the player page uses (shimmer), no bouncing ball | PASS |
 | A3 | Switch off | The plain spinner, as before | PASS |
+
+## L. Label on Edit game (item 5)
+| Id | Scenario | Expected | Status |
+|---|---|---|---|
+| L1 | Edit game, new layout | A short Label field, same style as Date and Start, prefilled with the game's current label, saved with Save | PASS |
+| L2 | Clear it | Empty clears the label | PASS |
+| L3 | Over 80 characters | Refused (same limit as when adding a game) | PASS |
+| L4 | Extra game | The "Extra game" tag stays; only the label text changes | PASS |
+| L5 | Switch off | No Label field in the sheet | PASS |
+| L6 | Where it is stored | The game's existing note column: no database change | NOTE |
+
+## R. Remove a canceled game from the player screen (item 6)
+| Id | Scenario | Expected | Status |
+|---|---|---|---|
+| R1 | Gear menu of a canceled game, new layout | "Remove from player screen" (or "Show on player screen again"); never on a live game; not in the old layout | PASS |
+| R2 | After removing | Players no longer see it, also after refresh; the organizer still sees it on Home (tagged "Not shown to players"), History > Sessions, Money | PASS |
+| R3 | Money and credit | Ledger, seats, credit balance, credit history rows, month totals identical before and after | PASS |
+| R4 | Show again | Undo restores it; same call twice changes nothing | PASS |
+| R5 | Only canceled games | Hiding a live game is refused; reopening a hidden game clears the hide | PASS |
+| R6 | Kill switch `ADMIN_V2 = "off"` | Every hidden game shows to players again | PASS |
+| R7 | Open player phones | Told something changed within 5 seconds | PASS |
+| R8 | How it is stored | One row in the existing task_log table per hidden game; no new column, no migration. A backup restore empties task_log, so hidden games would show again (never lost money) | NOTE |

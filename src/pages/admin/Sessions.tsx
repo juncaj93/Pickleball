@@ -105,6 +105,11 @@ export function SessionCard({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
             </div>
           </div>
           {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}
+          {s.hiddenFromPlayers && s.state.flags.canceled && ctx.d.adminV2 === true && (
+            <div className="small muted hidden-tag" data-hidden-tag>
+              Not shown to players
+            </div>
+          )}
           {courtNeed && !s.state.flags.canceled && (
             <div className="court-need" data-court-need>
               Court still needs to be booked

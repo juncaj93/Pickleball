@@ -177,7 +177,7 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
             </span>
           )
         )}
-        <button type="button" className="mv2-chev" aria-label={`${open ? 'Fold' : 'Open'} ${date}`} aria-expanded={open} onClick={onToggle}>
+        <button type="button" className="mv2-chev" aria-hidden="true" tabIndex={-1} onClick={onToggle}>
           <Chevron />
         </button>
       </div>
@@ -263,7 +263,7 @@ function GameBody({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
             r.paymentStatus === 'paid' && r.paidAt
               ? selfMarked
                 ? 'self-marked'
-                : `${paidWithCredit ? 'paid with credit' : 'paid'} ${formatShortDate(r.paidAt, tz)}`
+                : `${paidWithCredit ? 'paid with credit' : 'paid'} ${formatPrice(r.paymentAmountCents ?? 0)} ${formatShortDate(r.paidAt, tz)}`
               : payMoneyLine(r, s, tz);
           return (
             <MoneyRow
