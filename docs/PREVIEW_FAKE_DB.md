@@ -48,6 +48,7 @@ Production is bound to the real database and was not changed.
 | Then | **Not booked**, "3 of 4 in" | Gray, Emery, Lane |
 | Then | **Booked and full (10 in)** with a real **standby** | Gray is the standby; Indy, Jordan, Finley paid; Morgan tapped I paid; the rest owe $14 |
 | Then | **Canceled** ("Court closed") | Finley, Gray, Harper paid $14 and got it back as credit |
+| Extra game "Late-fee test", 11 hours after the seed | **Booked**, already past its cancel-by (start minus 12 hours) | Jordan, Lane, Morgan, Kai in (Kai paid cash). Open the preview with `?latefees=on` as one of them and tap Drop out: it leaves 3, so they owe $14 unless someone takes the spot |
 | Everything after | Normal empty games | The site makes these by itself |
 
 - Money states: credit left over for **Casey ($3)** and **Harper ($14)**, both in no
