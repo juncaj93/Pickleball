@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, SITE_NAME } from '../shared/settings';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, SITE_NAME , COURT_PUBLIC_BOOKING_URL } from '../shared/settings';
 import { firstSession, playerPhone, setupGroup } from './harness';
 
 const ROOT = join(__dirname, '..');
@@ -57,10 +57,12 @@ describe('CourtReserve', () => {
   it('every link goes to the booking page or the modify/cancel page', () => {
     expect(COURTRESERVE_BOOKING_URL).toBe('https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442');
     expect(COURTRESERVE_CANCEL_URL).toBe('https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1');
+    expect(COURT_PUBLIC_BOOKING_URL).toBe('https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial');
     for (const p of files(ROOT)) {
       const text = readFileSync(p, 'utf8');
       const links = text.match(/https?:\/\/[a-z.]*courtreserve\.com[^\s'"`)<]*/g) ?? [];
-      for (const l of links) expect([COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL], p).toContain(l);
+      // The third: the public booking page in the players' "Court canceled" text (Alex, Nov 2; shared/settings.ts).
+      for (const l of links) expect([COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, COURT_PUBLIC_BOOKING_URL], p).toContain(l);
     }
   });
 });

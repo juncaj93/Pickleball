@@ -1866,3 +1866,23 @@ fixes: re-run clean.
 - Rollback: Settings switch off (no deploy; debts already made stay until cleared). Code: Pages deployment 278ee022 (the new code only writes
   existing columns and one task_log row; the old code would show an open late-drop seat as an ordinary late drop with its money still on
   the seat, so Clear every open debt BEFORE rolling back the code).
+
+### Round 2 after Alex tested the preview (Mon Nov 2, 2026, evening)
+Alex's answers: "(did not play)" on the Pay card is fine; debts show on the Pay card right away (correct).
+1. Organizer as a player. a) Cancel inside 12 hours with the organizer in: Yes = every player's money back as credit, nobody owes;
+   No = every other player who was in owes $14; the organizer never owes on a cancel and their court payment is untouched.
+   b) The organizer's own Out inside 12 hours that leaves fewer than 4 in is a late-drop debt like anyone's (History line,
+   Money row "late drop (you) · owes $14", Home late-drop card), cleared in one tap (Clear = "My choice"), never blocks them, a
+   sub clears it. Their seat's paid mark means "Court paid", so it is never turned into an owed share or credit, and Mark paid
+   is never offered on it.
+2. "Text the players" (switch on only): gear menu, and right after a cancel. Two prepared, editable texts: "Court canceled" (first,
+   picked) and "Court still booked (backup)", Alex's exact words, addressed only to the players confirmed in that game (never
+   the organizer, the waitlist, hidden players or the whole group). The public booking link and the courts' phone are constants
+   (`COURT_PUBLIC_BOOKING_URL`, `COURTS_PHONE` in shared/settings.ts): the saved CourtReserve link is the members' page, a different address.
+3. The person whose debt was cleared sees a notice in the usual green banner the next time they open the site, until they tap
+   Dismiss (remembered on that phone): a sub: "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." (paid:
+   "... Your $14 is back as credit."); the organizer (venue waived, my choice, or a cancel with Yes): "You no longer owe $14 for Tue, Nov 3."
+   Read from their own History lines (last 60 days); nobody else gets it. No schema change.
+4. The question is now "Did the venue waive the fee or give you credit toward the next booking?". After a late cancel the text
+   follows the answer, on the after-cancel sheet and on the Home "Do this now" card's text button: No = "Heads up: today's game is
+   canceled ... your $14 share still applies ..." to the confirmed players only; Yes = the credit text saying "today".
