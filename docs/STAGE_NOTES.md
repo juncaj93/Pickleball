@@ -1846,3 +1846,23 @@ fixes: re-run clean.
   statements are now word for word the old ones for any seat that is not a late fee.
 - Browser: new `e2e/late-fees.cjs` 11 of 11 (360 and 430 px, light and dark). Re-run green with the switch off: admin-r2 27,
   admin-v2 27, audit-player-flows 93, credit 153, pay-always 12, money-visible 12, cancel-reason 8.
+
+### Preview (Mon Nov 2, 2026, about 5:35 PM Eastern)
+- https://preview-late-fees.pickleball-club-9h0.pages.dev (deployment 2404745d), branch `claude/new-session-37odjq` at a61d584.
+  Fake database `pickleball-preview`, re-seeded just before (`npm run db:seed:preview`). The Settings switch there is off: use
+  `?latefees=on` on a phone (and `/admin?latefees=on`), or flip Settings > Feature switches > "Late drops owe $14" on the preview's /admin.
+- The "Late-fee test" game starts Tue Nov 3, 4:45 AM (11 hours after the seed), so it is already past its cancel-by. After it starts,
+  any game less than 12 hours away works the same (or re-seed).
+- Not on production. Nothing was deployed to the live site; no live data was read or changed.
+
+### To ship (after "ship it"; LOUD HOURS until Tue 11:00 PM, so the first quiet window is Wed Nov 4, 6:00 AM to 6:00 PM)
+1. Merge this branch into main (PR), pull main, `npm test`, confirm main equals live (deployment 278ee022, commit dc6428b/6a9874e) plus this change.
+2. SQL export (`npx wrangler d1 export pickleball --remote --output live-before-late-fees-2026-11-04.sql`, kept out of git) and a Time
+   Travel bookmark (`npx wrangler d1 time-travel info pickleball`).
+3. `npm run deploy` from main. No migration. Ships OFF (no `late_fees_on` row).
+4. Read-only live check: /, /admin, /api/status, /api/group/version 200; `/api/group` answers `lateFees: false`, and `true` only with
+   `X-Late-Fees: on`; the health checks 0 (`info_open_late_fees` 0); row counts match the export.
+5. Alex tests on live with `?latefees=on` and a test player on an extra game (it writes real records), then switches it on in a quiet window.
+- Rollback: Settings switch off (no deploy; debts already made stay until cleared). Code: Pages deployment 278ee022 (the new code only writes
+  existing columns and one task_log row; the old code would show an open late-drop seat as an ordinary late drop with its money still on
+  the seat, so Clear every open debt BEFORE rolling back the code).
