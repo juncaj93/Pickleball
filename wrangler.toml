@@ -17,9 +17,9 @@ SITE_URL = "https://pickleball.juncaj.net"
 GO_LINKS = "on"
 # "Time may shift" (tilde times, court borders, the Still in notice, Confirmed x of y). "off" hides them all.
 TIME_SHIFT = "on"
-# "Motion" (animations on the player screens). "off" = dark for everyone; a phone opened once with ?motion=on still sees it
-# (Alex's private test switch). Change to "on" to switch it on for everyone (needs a deploy).
-MOTION = "off"
+# "Motion" (animations on the player screens). "on" = everyone (switched on Sun Nov 1, 2026, 8:2x PM Eastern).
+# "off" = dark for everyone; a phone opened once with ?motion=on still sees it (the private test switch). Needs a deploy.
+MOTION = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
