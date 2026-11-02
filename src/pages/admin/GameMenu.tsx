@@ -206,7 +206,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               Add to calendar
             </a>
           )}
-          {ctx.d.adminR2 === true && s.holiday && s.holidayHoursOk && !canceled && (
+          {ctx.d.adminR2 === true && s.holiday && s.holidayHoursOk && (
             <button role="menuitem" className="menu-row" data-holiday-undo onClick={pick(() => void undoHours())}>
               <UndoIcon />
               Undo hours confirmed

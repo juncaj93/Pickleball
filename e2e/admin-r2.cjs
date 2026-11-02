@@ -563,6 +563,7 @@ async function main() {
     const rows = await page.locator('.activity-list li').evaluateAll((els) => els.map((e) => ({ text: e.querySelector('.a-text').textContent, other: e.getAttribute('data-by-other') === 'yes' })));
     assert(rows.some((r) => r.other && /said I'm in|dropped out/.test(r.text)), 'a player\'s tap is highlighted');
     assert(rows.some((r) => !r.other && /Alex/.test(r.text)), 'Alex\'s own entries are plain');
+    assert(rows.some((r) => /^Alex said I'm in/.test(r.text)) && rows.filter((r) => /^Alex said I'm in/.test(r.text)).every((r) => !r.other), 'Alex\'s own In tap is not highlighted');
     assert(rows.filter((r) => !r.other).every((r) => !/^(Ryan|Julian|Nathan|Mitchel|Brandon) said/.test(r.text)), 'no player action is left plain');
     const bg = await page.locator('.activity-list li[data-by-other]').first().evaluate((e) => getComputedStyle(e).backgroundColor);
     const plain = await page.locator('.activity-list li:not([data-by-other])').first().evaluate((e) => getComputedStyle(e).backgroundColor);

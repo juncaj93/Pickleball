@@ -185,6 +185,9 @@ describe('History highlight', () => {
     expect(doneByOthers({ actorLabel: 'Ryan' })).toBe(true);
     expect(doneByOthers({ actorLabel: 'Organizer Orla' })).toBe(true);
     expect(doneByOthers({ actorLabel: 'system' })).toBe(true);
+    // The organizer's own I'm in / Out is logged under their real name, with organizer: true.
+    expect(doneByOthers({ actorLabel: 'Alex', details: { organizer: true } })).toBe(false);
+    expect(doneByOthers({ actorLabel: 'Alex', details: { player: 'Alex' } })).toBe(true);
   });
 });
 

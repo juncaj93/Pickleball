@@ -444,7 +444,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
           Hide player
         </button>
       )}
-      {canHide && <p className="small muted">Hiding only takes the name off your Players list and pickers. Their games, money and history stay as they are. Unhide it in Settings, under Advanced.</p>}
+      {canHide && <p className="small muted">Hiding only takes the name off your Players list and pickers. Their games, money and history stay as they are. Unhide it in Settings, under Advanced. A hidden name still counts toward the player limit and still blocks adding the same name again.</p>}
       {player && (
         <button type="button" className="btn danger" disabled={busy} onClick={() => setAskRemove(true)}>
           Remove from list

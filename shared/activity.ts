@@ -8,7 +8,8 @@ import { formatShortDate } from './time';
  * Was this done by someone other than the organizer? A player's own tap (their name), or anything else that is not the
  * organizer ("organizer" and "organizer as Ryan" are both the organizer's own hands). Admin screens round 2 highlights these.
  */
-export function doneByOthers(e: Pick<ActivityEntry, 'actorLabel'>): boolean {
+export function doneByOthers(e: Pick<ActivityEntry, 'actorLabel'> & { details?: Record<string, unknown> }): boolean {
+  if (e.details?.organizer === true) return false; // the organizer's own I'm in / Out is logged under their real name
   return !/^organizer( as .+)?$/.test(e.actorLabel);
 }
 
