@@ -16,6 +16,8 @@ import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
 import { adminHiddenPlayerIds, adminR2For, adminR2ForAll, setAdminHiddenPlayer, setAdminR2ForAll } from './adminR2';
 import { adminR2Allowed } from '../shared/adminR2';
 import { payNoteForAll, setPayNoteForAll } from './payNote';
+import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_DROP, setLateFeesForAll } from './lateFees';
+import { FEE_KEPT, lateFeeKind, type LateFeeClearWhy } from '../shared/lateFees';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
@@ -43,7 +45,7 @@ import {
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
 import { creditBackLeft, creditBackStatements, repriceStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
-import { clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
+import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
 import * as v from './validate';
@@ -189,7 +191,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
               played: s.finalized_at && r.played === 0 ? false : null,
             },
             s.status === 'canceled',
-          ),
+          ) && !lateFeeKind(r, s),
         )
         .map((r) => {
           // What they said they sent: the payment minus credit (and cash held) already on the seat.
@@ -213,6 +215,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     adminV2ForAll: await adminV2ForAll(ctx.db, group.id),
     adminR2,
     adminR2ForAll: await adminR2ForAll(ctx.db, group.id),
+    lateFees: await lateFeesFor(ctx, group.id),
+    lateFeesForAll: await lateFeesForAll(ctx.db, group.id),
   };
 }
 
@@ -303,8 +307,16 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     // "Were you charged for this court?" is only asked within 12 hours of the start.
     // A Yes counts as that canceled game's court cost; it is kept with the cancel in the Activity log.
     const askedCharge = ctx.nowMs >= Date.parse(session.starts_at) - CHARGE_ASK_HOURS * 3600_000 && ctx.nowMs < Date.parse(session.starts_at);
-    const chargedCents = askedCharge ? (v.cents(body.chargedCents, 'chargedCents') ?? 0) : 0;
     const reason = v.cancelReason(body.reason);
+    // Late fees (shared/lateFees.ts rule 5): inside the 12 hours the question is "Did the venue waive the fee?" (no default).
+    // Yes = the cancel below, exactly as before (everyone gets money back as credit). No = no money moves and everyone
+    // signed up still owes their $14 (late droppers keep owing too).
+    const lateFees = askedCharge && (await lateFeesFor(ctx, group.id));
+    if (lateFees) {
+      if (typeof body.venueWaived !== 'boolean') throw new HttpError(400, 'answer_needed', 'Did the venue waive the fee or give you credit toward the next booking? Pick Yes or No.');
+      if (body.venueWaived === false) return cancelFeeKept(ctx, group, session, reason);
+    }
+    const chargedCents = askedCharge && !lateFees ? (v.cents(body.chargedCents, 'chargedCents') ?? 0) : 0;
     const { changed, returned, back } = await cancelWithMoney(
       ctx,
       group,
@@ -317,7 +329,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       throw new HttpError(409, 'changed', 'This game just changed. Look again.');
     }
     await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
-    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back, ...(reason ? { reason } : {}) }, ctx.nowIso);
+    await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, creditReturnedCents: returned, creditBackCents: back, ...(reason ? { reason } : {}), ...(lateFees ? { venueWaived: true } : {}) }, ctx.nowIso);
     return { ok: true, changed: true };
   }
   if (decision === 'reopen') {
@@ -374,14 +386,176 @@ async function cancelWithMoney(ctx: Ctx, group: GroupRow, session: SessionRow, c
     nowIso: ctx.nowIso,
     when: (sp) => `(SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled'`,
   });
-  const out = await ctx.db.batch(cancel ? [cancel, ...money] : money);
+  // Open late-drop debts (shared/lateFees.ts) come back with everything else: the game is off, nobody owes. Never on a
+  // game canceled with the fee kept ("Did the venue waive the fee?" No): there, a second tap moves nothing.
+  const lateDrops = ctx.db
+    .prepare(
+      `UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1
+       WHERE session_id = ?2 AND ${OPEN_LATE_DROP('session_players')}
+         AND (SELECT status FROM sessions WHERE id = ?2) = 'canceled' AND COALESCE((SELECT canceled_by FROM sessions WHERE id = ?2), '') <> '${FEE_KEPT}'`,
+    )
+    .bind(ctx.nowIso, session.id);
+  const statements = [lateDrops, ...money, finishLateDropClear(ctx.db, session.id, ctx.nowIso, null)];
+  const out = await ctx.db.batch(cancel ? [cancel, ...statements] : statements);
   const changed = !!cancel && out[0].meta.changes === 1;
+  const cleared = (
+    await ctx.db
+      .prepare("SELECT p.display_name AS name, sp.player_id AS id FROM session_players sp JOIN players p ON p.id = sp.player_id WHERE sp.session_id = ? AND sp.status = 'withdrawn' AND sp.late_drop_done_at = ? AND sp.played IS NULL AND sp.late_drop_at IS NOT NULL")
+      .bind(session.id, ctx.nowIso)
+      .all<{ name: string; id: string }>()
+  ).results;
+  for (const c of cleared) {
+    const back = (await moneyBackAt(ctx.db, session.id, c.id, 'canceled', ctx.nowIso))[0];
+    await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: c.name, playerId: c.id, why: 'canceled', amountCents: (back?.cashCents ?? 0) + (back?.creditCents ?? 0) }, ctx.nowIso);
+  }
   const moved = await moneyBackAt(ctx.db, session.id, null, 'canceled', ctx.nowIso);
   const names = new Map((await loadRoster(ctx.db, session.id)).map((r) => [r.player_id, r.display_name]));
   for (const m of moved) {
     if (m.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(m.playerId) ?? 'A player', playerId: m.playerId, amountCents: m.cashCents, reason: 'canceled' }, ctx.nowIso);
   }
   return { changed, returned: moved.reduce((s, m) => s + m.creditCents, 0), back: moved.reduce((s, m) => s + m.cashCents, 0) };
+}
+
+/**
+ * Cancel inside the 12 hours with "Did the venue waive the fee?" answered No (LATE_FEES): the game is canceled,
+ * canceled_by 'organizer_fee_kept', and NO money moves. Everyone who was in still owes their $14 (cash stays paid,
+ * credit stays spent, unpaid stays owed), and so do open late drops. Reopen makes it a normal game again. The court
+ * cost counts as charged in Money (the venue charged it), kept with the cancel in the Activity log like before.
+ */
+async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, reason: string | null) {
+  const organizerId = await organizerIdOf(ctx.db, group);
+  const [cancel] = await ctx.db.batch([
+    ctx.db
+      .prepare(
+        `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, updated_at = ?1
+         WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL`,
+      )
+      .bind(ctx.nowIso, reason, session.id),
+    // A fresh debt on every seat that is in (an old cleared mark from an earlier cancel and reopen does not carry over).
+    ctx.db
+      .prepare(
+        `UPDATE session_players SET late_drop_done_at = NULL, updated_at = ?1
+         WHERE session_id = ?2 AND status = 'confirmed' AND late_drop_done_at IS NOT NULL
+           AND (SELECT canceled_at FROM sessions WHERE id = ?2) = ?1 AND (SELECT canceled_by FROM sessions WHERE id = ?2) = '${FEE_KEPT}'`,
+      )
+      .bind(ctx.nowIso, session.id),
+    // The organizer never owes on a cancel: their own open late drop ends here (their seat's court payment is untouched).
+    ctx.db
+      .prepare(
+        `UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1
+         WHERE session_id = ?2 AND player_id = ?3 AND ${OPEN_LATE_DROP('session_players')}
+           AND (SELECT canceled_at FROM sessions WHERE id = ?2) = ?1 AND (SELECT canceled_by FROM sessions WHERE id = ?2) = '${FEE_KEPT}'`,
+      )
+      .bind(ctx.nowIso, session.id, organizerId ?? ''),
+    finishLateDropClear(ctx.db, session.id, ctx.nowIso, organizerId ?? ''),
+    // Anyone NOT in (a paid waitlist seat, a seat that left with money still on it) gets it back as credit, exactly as
+    // on any cancel. Seats that owe (everyone in, open late drops) are open late fees, which these statements skip.
+    ...seatMoneyBackStatements(ctx.db, {
+      groupId: group.id,
+      sessionId: session.id,
+      playerId: null,
+      organizerId,
+      reason: 'canceled',
+      nowIso: ctx.nowIso,
+      when: (sp) => `(SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled'`,
+    }),
+  ]);
+  if (cancel.meta.changes !== 1) {
+    if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') return { ok: true, changed: false };
+    throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+  }
+  await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
+  const names = new Map((await loadRoster(ctx.db, session.id)).map((r) => [r.player_id, r.display_name]));
+  for (const m of await moneyBackAt(ctx.db, session.id, null, 'canceled', ctx.nowIso)) {
+    if (m.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(m.playerId) ?? 'A player', playerId: m.playerId, amountCents: m.cashCents, reason: 'canceled' }, ctx.nowIso);
+  }
+  const chargedCents = courtCostOf(session, settingsOf(group));
+  await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, venueWaived: false, feeKept: true, ...(reason ? { reason } : {}) }, ctx.nowIso);
+  const fresh = (await getSession(ctx.db, group.id, session.id))!;
+  const orgRow = organizerId ? (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === organizerId) : undefined;
+  if (orgRow && orgRow.status === 'withdrawn' && orgRow.late_drop_done_at === ctx.nowIso && orgRow.late_drop_at) {
+    await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: orgRow.display_name, playerId: orgRow.player_id, why: 'canceled', amountCents: 0 }, ctx.nowIso);
+  }
+  for (const r of await loadRoster(ctx.db, session.id)) {
+    if (r.status === 'confirmed' && lateFeeKind(r, fresh, r.player_id === organizerId)) await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso);
+  }
+  return { ok: true, changed: true, feeKept: true };
+}
+
+/**
+ * POST /api/admin/sessions/:id/late-fee { playerId, why }: Clear an open late fee (shared/lateFees.ts). why: 'sub'
+ * (Sub found), 'venue' (Venue waived) or 'choice' (My choice). The debt ends for good and the money on the seat comes
+ * back to them as credit, the same way a drop, a cancel or "did not play" gives it back. One batch: the seat is
+ * marked first and every money statement only touches a seat this batch marked, so a double tap or a second phone
+ * clears once. On a late drop that owes nothing, Clear is the old Done (the card goes away).
+ */
+export async function clearLateFee(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  const playerId = v.id(body.playerId, 'playerId');
+  const why = v.oneOf(body.why, 'why', ['sub', 'venue', 'choice'] as const) as LateFeeClearWhy;
+  const organizerId = await organizerIdOf(ctx.db, group);
+  const roster = await loadRoster(ctx.db, session.id);
+  const row = roster.find((r) => r.player_id === playerId);
+  if (!row) throw new HttpError(404, 'not_in_session', 'That player is not in this session.');
+  const kind = lateFeeKind(row, session, playerId === organizerId);
+  if (!kind) {
+    if (row.status === 'withdrawn' && row.late_drop_at && !row.late_drop_done_at) {
+      await ctx.db.prepare('UPDATE session_players SET late_drop_done_at = ? WHERE id = ? AND late_drop_done_at IS NULL').bind(ctx.nowIso, row.id).run();
+      await audit(ctx.db, group.id, session.id, 'late_drop_done', { player: row.display_name }, ctx.nowIso);
+      return { ok: true, changed: true };
+    }
+    return { ok: true, changed: false };
+  }
+  const now = ctx.nowIso;
+  const tagged = `EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND late_drop_done_at = ${sqlText(now)})`;
+  const statements: D1PreparedStatement[] = [
+    ctx.db
+      // A late drop is tagged by its marks alone (the organizer's own has no owed payment on it); the others as open fees.
+      .prepare(`UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3 AND ${kind === 'late_drop' ? OPEN_LATE_DROP('session_players') : OPEN_FEE('session_players')}`)
+      .bind(now, session.id, playerId),
+  ];
+  const base = { groupId: group.id, sessionId: session.id, playerId, organizerId, nowIso: now };
+  let reason: 'dropped' | 'canceled' | 'not_played' = 'dropped';
+  if (kind === 'late_drop') {
+    statements.push(...seatMoneyBackStatements(ctx.db, { ...base, reason: 'dropped', when: (sp) => `${sp}.status = 'withdrawn' AND ${sp}.played = 0 AND ${sp}.late_drop_done_at = ?1` }));
+    statements.push(finishLateDropClear(ctx.db, session.id, now, playerId));
+  } else if (kind === 'canceled_late') {
+    reason = 'canceled';
+    statements.push(
+      ...seatMoneyBackStatements(ctx.db, { ...base, reason: 'canceled', when: (sp) => `(SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled' AND ${sp}.late_drop_done_at = ?1` }),
+    );
+  } else {
+    // Did not play: what Finalize gives anyone who did not play when 4 or more did (all of it back as credit). An I paid
+    // nobody confirmed stays a claim (the Home card answers it, as for any no-show).
+    reason = 'not_played';
+    const paid = row.payment_status === 'paid' && !row.refunded_at ? (row.payment_amount_cents ?? 0) : 0;
+    const used = (
+      await ctx.db
+        .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+        .bind(session.id, playerId)
+        .first<{ c: number }>()
+    )?.c ?? 0;
+    if (paid > 0 && !row.self_paid_at) {
+      statements.push(...creditBackStatements(ctx.db, { groupId: group.id, sessionId: session.id, playerId, cents: paid, reason: 'not_played', nowIso: now, settle: true, guard: tagged }));
+    } else if (paid === 0 && used > 0) {
+      statements.push(
+        ctx.db
+          .prepare(
+            `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+             WHERE session_id = ?3 AND player_id = ?4 AND payment_status = 'unpaid' AND late_drop_done_at = ?1`,
+          )
+          .bind(now, used, session.id, playerId),
+        ...creditBackStatements(ctx.db, { groupId: group.id, sessionId: session.id, playerId, cents: used, reason: 'not_played', nowIso: now, settle: true, guard: tagged }),
+      );
+    }
+  }
+  const [tag] = await ctx.db.batch(statements);
+  if (tag.meta.changes !== 1) return { ok: true, changed: false };
+  const back = (await moneyBackAt(ctx.db, session.id, playerId, reason, now))[0];
+  const amountCents = (back?.cashCents ?? 0) + (back?.creditCents ?? 0);
+  await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: row.display_name, playerId, why, kind, amountCents }, now);
+  if (back && back.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: row.display_name, playerId, amountCents: back.cashCents, reason }, now);
+  return { ok: true, changed: true, creditBackCents: amountCents };
 }
 
 /**
@@ -630,10 +804,14 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
 export async function lateDropDone(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   const playerId = v.id(body.playerId, 'playerId');
-  await ctx.db
-    .prepare('UPDATE session_players SET late_drop_done_at = ? WHERE session_id = ? AND player_id = ? AND late_drop_at IS NOT NULL')
+  const res = await ctx.db
+    // Never on an open late fee: marking it done would leave its money on the game, neither owed nor credit. Clear does that.
+    .prepare(`UPDATE session_players SET late_drop_done_at = ? WHERE session_id = ? AND player_id = ? AND late_drop_at IS NOT NULL AND NOT ${OPEN_FEE('session_players')}`)
     .bind(ctx.nowIso, session.id, playerId)
     .run();
+  if (res.meta.changes === 0 && lateFeeKind((await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId) ?? { status: '', played: null, late_drop_at: null, late_drop_done_at: null, payment_status: '', refunded_at: null }, session)) {
+    throw new HttpError(409, 'late_fee_open', 'They still owe their $14. Use Clear (or Mark paid on the Money tab).');
+  }
   await audit(ctx.db, group.id, session.id, 'late_drop_done', {}, ctx.nowIso);
   return { ok: true };
 }
@@ -648,6 +826,9 @@ export async function answerClaim(ctx: Ctx, body: Record<string, unknown>) {
   const playerId = v.id(body.playerId, 'playerId');
   const paid = v.bool(body.paid, 'paid');
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'That is your court payment.');
+  // An I paid on an open late fee is a payment on that game (it stays there): Mark paid / Unmark answer it.
+  const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
+  if (row && lateFeeKind(row, session)) return applyPayment(ctx, group, session, playerId, paid, null);
   return answerClaimOn(ctx, group, session, playerId, paid);
 }
 
@@ -788,15 +969,21 @@ export async function applyPayment(
 
   // A claim (an unconfirmed I paid on a seat that left, a canceled game, or "did not play"): Mark paid and Unmark
   // answer it the way the Home card does (the player's own "Didn't pay?" clears it too).
-  const isClaim = isPaymentClaim(
-    { status: row.status, paymentStatus: row.payment_status, selfPaid: !!row.self_paid_at, refundedAt: row.refunded_at, played: session.finalized_at && row.played === 0 ? false : null },
-    session.status === 'canceled',
-  );
+  // An open late fee (shared/lateFees.ts) is paid like a seat that is in, also on a seat that left or a game canceled late.
+  const fee = lateFeeKind(row, session);
+  const isClaim =
+    !fee &&
+    isPaymentClaim(
+      { status: row.status, paymentStatus: row.payment_status, selfPaid: !!row.self_paid_at, refundedAt: row.refunded_at, played: session.finalized_at && row.played === 0 ? false : null },
+      session.status === 'canceled',
+    );
+  // The statements below are exactly as before for a seat that is in; for a seat read as an open late fee they check it
+  // still is one instead (a change since the read means "look again").
   if (isClaim && (paid ? !self : true)) return answerClaimOn(ctx, group, session, playerId, paid);
 
   if (paid) {
-    if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
-    if (row.status !== 'confirmed') throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
+    if (session.status === 'canceled' && !fee) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+    if (row.status !== 'confirmed' && !fee) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe a share.');
     const price = sharesFor(session, roster, settingsOf(group)).get(playerId);
     if (price === undefined) throw new HttpError(409, 'not_confirmed', 'Only confirmed players owe money.');
     if (row.payment_status === 'paid') {
@@ -815,8 +1002,8 @@ export async function applyPayment(
         ctx.db
           .prepare(
             `UPDATE session_players SET self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
-             WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
-               AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'
+             WHERE session_id = ?2 AND player_id = ?3 AND ${fee ? OPEN_FEE('session_players') : "status = 'confirmed'"} AND payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NOT NULL
+               ${fee ? '' : "AND (SELECT status FROM sessions WHERE id = ?2) <> 'canceled'"}
                AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?2) = ?4`,
           )
           .bind(ctx.nowIso, session.id, playerId, asRead),
@@ -842,7 +1029,7 @@ export async function applyPayment(
           .prepare('SELECT status, payment_status, refunded_at, self_paid_at FROM session_players WHERE session_id = ? AND player_id = ?')
           .bind(session.id, playerId)
           .first<{ status: string; payment_status: string; refunded_at: string | null; self_paid_at: string | null }>();
-        if (now?.status === 'confirmed' && now.payment_status === 'paid' && !now.refunded_at && !now.self_paid_at) return { ok: true, changed: false };
+        if ((now?.status === 'confirmed' || fee) && now?.payment_status === 'paid' && !now.refunded_at && !now.self_paid_at) return { ok: true, changed: false };
         throw new HttpError(409, 'changed', `${row.display_name}'s payment just changed. Look again.`);
       }
       await audit(ctx.db, group.id, session.id, 'marked_paid', { player: row.display_name, confirmed: true }, ctx.nowIso);
@@ -862,10 +1049,10 @@ export async function applyPayment(
       .prepare(
         `UPDATE session_players SET payment_status = 'paid', paid_at = ?1, payment_amount_cents = ?2, self_paid_at = ?3,
            payment_updated_at = ?1, updated_at = ?1
-         WHERE session_id = ?4 AND player_id = ?5 AND status = 'confirmed' AND payment_status = 'unpaid'
+         WHERE session_id = ?4 AND player_id = ?5 AND ${fee ? OPEN_FEE('session_players') : "status = 'confirmed'"} AND payment_status = 'unpaid'
            AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?4) = ?7
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?4 AND player_id = ?5 AND ended_at IS NULL) = ?6
-           AND (SELECT status FROM sessions WHERE id = ?4) <> 'canceled'`,
+           ${fee ? '' : "AND (SELECT status FROM sessions WHERE id = ?4) <> 'canceled'"}`,
       )
       // The finalize as read (when and at what price): a Reopen or a redo since, even at the same price, means look again.
       .bind(ctx.nowIso, price, self ? ctx.nowIso : null, session.id, playerId, used, `${session.finalized_at ?? ''}:${session.final_price_cents ?? -1}`)
@@ -887,7 +1074,7 @@ export async function applyPayment(
   } else {
     if (row.payment_status !== 'paid') {
       // "Credit $3" on a seat that still owes: the organizer's Unmark puts that credit back in the player's pot.
-      if (self || row.status !== 'confirmed') return { ok: true, changed: false };
+      if (self || (row.status !== 'confirmed' && !fee)) return { ok: true, changed: false };
       // Only while the game is the one this tap read (a Finalize at the same moment may have paid the seat with it).
       const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'unmarked', { creditOnly: true, finalizedAsRead: session.finalized_at ?? null });
       if (back <= 0) return { ok: true, changed: false };
@@ -911,7 +1098,7 @@ export async function applyPayment(
       ...undoFinalizedBackStatements(ctx.db, session.id, playerId, ctx.nowIso, finalizeAsRead),
       ctx.db
         .prepare(
-          `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
+          `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed'${fee ? ` OR ${OPEN_FEE('session_players')}` : ''} THEN 'unpaid' ELSE 'not_applicable' END,
              paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
            WHERE session_id = ?2 AND player_id = ?3 AND payment_status = 'paid' AND refunded_at IS NULL
              AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE kind = 'kept' AND session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'finalized')
@@ -1434,10 +1621,13 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
     if (res.result !== 'already_confirmed') await audit(ctx.db, group.id, session.id, 'player_join', { player: me.name, result: res.result, organizer: true }, ctx.nowIso, me.name);
     return res;
   }
-  const res = await withdraw(ctx.db, group, session, me.id, ctx.nowMs);
-  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group)) : false;
-  if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true }, ctx.nowIso, me.name);
-  return { result: res.changed ? 'withdrawn' : 'not_in_session' };
+  // Late fees: the organizer's own late drop counts like any player's (it can leave them owing $14, cleared in one tap).
+  const lateFees = await lateFeesFor(ctx, group.id);
+  const res = await withdraw(ctx.db, group, session, me.id, ctx.nowMs, { lateFees });
+  const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group), lateFees) : false;
+  if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true, ...(res.lateFee ? { owes: true } : {}) }, ctx.nowIso, me.name);
+  if (res.lateFee) await auditLateFeeOwed(ctx.db, group.id, session.id, me.id, 'late_drop', ctx.nowIso, me.name);
+  return { result: res.changed ? 'withdrawn' : 'not_in_session', ...(res.lateFee ? { lateFee: { cents: settingsOf(group).pricePerPlayerCents } } : {}) };
 }
 
 /** PUT /api/admin/time-shift { on }: Settings > "Moved-game notice for everyone". Changes no money and no seat. */
@@ -1482,6 +1672,20 @@ export async function setAdminR2(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setAdminR2ForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'admin_r2_on' : 'admin_r2_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/late-fees { on }: Settings > Feature switches > "Late drops owe $14". CHANGES MONEY: while on, a late drop
+ * that leaves a game short, a no-show with fewer than 4 played, and a late cancel the venue did not waive leave the
+ * person owing their $14. Off: new drops, Finalize and cancels work exactly as before (debts already made stay
+ * until cleared or paid). One task_log row, no schema change.
+ */
+export async function setLateFees(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setLateFeesForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'late_fees_on' : 'late_fees_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

@@ -242,3 +242,9 @@
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* "Late drops owe $14": the cleared-debt notice (the usual ok banner, with Dismiss at the end). */
+.fee-notice { margin-bottom: 12px; }
+.fee-notice-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fee-notice-row > span { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
+.fee-notice-row .btn { min-height: 44px; }

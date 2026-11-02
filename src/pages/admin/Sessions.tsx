@@ -12,6 +12,8 @@ import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit'
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
+import { ClearChoices, EditableDraft, lateFeeLine, PlayersText } from './LateFees';
+import { lateCancelText } from './textMenu';
 import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
@@ -31,7 +33,7 @@ import '../../admin-cards.css';
 import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 
-export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set';
+export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set' | 'players_text';
 
 export function useAction(ctx: AdminCtx) {
   const toast = useToast();
@@ -402,6 +404,7 @@ export function SessionSheets({
     canceled: `Canceled · ${title}`,
     moved: `Moved · ${title}`,
     moved_set: `Moved · ${title}`,
+    players_text: `Text the players · ${title}`,
   };
   return (
     <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
@@ -415,6 +418,7 @@ export function SessionSheets({
       )}
       {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
+      {s && kind === 'players_text' && <PlayersText ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved' || kind === 'moved_set') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} askCourt={kind === 'moved'} />}
     </Sheet>
   );
@@ -431,7 +435,19 @@ function ChangeText({ ctx, s, canceled, askCourt }: { ctx: AdminCtx; s: AdminSes
   const tz = ctx.d.group.timezone;
   const [reason, setReason] = useState('');
   const link = siteAddress(ctx.d.group.playerLink);
+  // Late fees on and canceled inside 12 hours: the text follows the venue answer (shared/messages.ts). Off: as before.
+  const late = canceled ? lateCancelText(ctx.d, s, reason) : null;
   const body = canceled ? canceledMessage(s, tz, Date.parse(ctx.d.now), link, reason) : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, Date.parse(ctx.d.now), link, reason);
+  if (late) {
+    return (
+      <div className="stack" data-late-cancel={late.feeKept ? 'fee_kept' : 'waived'}>
+        <EditableDraft to={`${late.to} · ${late.reach.count}`} who={late.reach} initial={late.body} name={late.feeKept ? 'canceled_fee_kept' : 'canceled_today'} openLabel="Text the players who were in" onOpen={() => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {})} />
+        {!late.feeKept && <CreditBackList s={s} />}
+        <h3 className="section-title">Text the players</h3>
+        <PlayersText ctx={ctx} s={s} />
+      </div>
+    );
+  }
   // Everyone signed up and on the waitlist; never the organizer.
   const who = reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), ctx.d.me?.id ?? null);
   return (
@@ -680,7 +696,9 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const { busy, run } = useAction(ctx);
   const [draftFor, setDraftFor] = useState<string | null>(null);
   // The organizer is not a row of their own money: they pay the venue (the court row below).
-  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
+  // Late fees (shared/lateFees.ts) get their own short list below (Mark paid / Unmark and Clear).
+  const rows = s.roster.filter((r) => !r.isOrganizer && !r.lateFee && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
+  const feeRows = s.roster.filter((r) => r.lateFee);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
@@ -720,12 +738,54 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
       )}
       {s.state.flags.canceled && (
         <>
-          <Notice tone="muted" title="Session canceled">
-            Nobody owes for it. Anyone who paid has it as credit.
-            {s.chargedCents ? ` The venue charged you ${formatPrice(s.chargedCents)}.` : ''}
-          </Notice>
+          {s.canceledBy === 'organizer_fee_kept' ? (
+            <Notice tone="warn" title="Canceled late">
+              The venue did not waive the fee: everyone who was in owes their {formatPrice(price)}.
+            </Notice>
+          ) : (
+            <Notice tone="muted" title="Session canceled">
+              Nobody owes for it. Anyone who paid has it as credit.
+              {s.chargedCents ? ` The venue charged you ${formatPrice(s.chargedCents)}.` : ''}
+            </Notice>
+          )}
           <CreditBackList s={s} />
         </>
+      )}
+      {feeRows.length > 0 && (
+        <ul className="list who-paid" aria-label="Late fees" data-late-fees>
+          {feeRows.map((r) => (
+            <li key={r.playerId} className="pay-row" data-pay-row={r.name} data-late-fee={r.lateFee!.kind}>
+              <div className="pc-top">
+                <strong className="pc-name">{r.name}</strong>
+                <Chip tone={r.lateFee!.paid ? 'ok' : 'warn'}>{r.lateFee!.paid ? 'Paid' : 'Unpaid'}</Chip>
+              </div>
+              <div className="pc-sub">
+                <span className="small muted">{lateFeeLine(r)}</span>
+              </div>
+              <div className="pay-btns">
+                {r.isOrganizer ? null : r.lateFee!.paid ? (
+                  <>
+                    {r.selfPaid && (
+                      <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
+                        Mark paid
+                      </button>
+                    )}
+                    <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, false)}>
+                      Unmark
+                    </button>
+                  </>
+                ) : (
+                  r.owesCents > 0 && (
+                    <button className="btn small secondary" disabled={busy} onClick={() => setPaid(r, true)}>
+                      Mark paid
+                    </button>
+                  )
+                )}
+                <ClearChoices ctx={ctx} s={s} r={r} />
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
       {!s.state.flags.canceled && (
         <ul className="list who-paid">
@@ -845,6 +905,10 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const [amount, setAmount] = useState(() => (((s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents) || 0) / 100).toFixed(2));
   const [amountError, setAmountError] = useState<string | null>(null);
   const [reason, setReason] = useState('');
+  // Late fees on (shared/lateFees.ts rule 5): the question is "Did the venue waive the fee?", with no default.
+  const askWaived = askCharge && ctx.d.lateFees === true;
+  const [waived, setWaived] = useState<boolean | null>(null);
+  const [waivedError, setWaivedError] = useState(false);
   return (
     <ConfirmDialog
       open
@@ -872,7 +936,42 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 Reason (optional)
                 <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={40} placeholder="Thanksgiving" autoComplete="off" />
               </label>
-              {askCharge && (
+              {askWaived && (
+                <fieldset className="charge-ask" data-venue-waived>
+                  <legend>Did the venue waive the fee or give you credit toward the next booking?</legend>
+                  <div className="segmented" role="group" aria-label="Did the venue waive the fee or give you credit toward the next booking?">
+                    <button
+                      type="button"
+                      aria-pressed={waived === true}
+                      onClick={() => {
+                        setWaived(true);
+                        setWaivedError(false);
+                      }}
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={waived === false}
+                      onClick={() => {
+                        setWaived(false);
+                        setWaivedError(false);
+                      }}
+                    >
+                      No
+                    </button>
+                  </div>
+                  <p className="small muted">
+                    {waived === false
+                      ? 'No: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
+                      : waived === true
+                        ? 'Yes: everyone gets their money back as credit, nobody owes.'
+                        : 'Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up still owes $14.'}
+                  </p>
+                  {waivedError && <span className="field-error">Pick Yes or No.</span>}
+                </fieldset>
+              )}
+              {askCharge && !askWaived && (
                 <fieldset className="charge-ask">
                   <legend>Were you charged for this court?</legend>
                   <div className="segmented" role="group" aria-label="Were you charged for this court?">
@@ -910,8 +1009,9 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
       danger={!reopening}
       busy={busy}
       onConfirm={async () => {
+        if (askWaived && waived === null) return setWaivedError(true);
         let chargedCents = 0;
-        if (askCharge && charged) {
+        if (askCharge && !askWaived && charged) {
           const cents = parseDollars(amount);
           if (cents === null) return setAmountError('Enter an amount like 48 or 48.50.');
           chargedCents = cents;
@@ -921,7 +1021,9 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
             api(
               'POST',
               `/api/admin/sessions/${s.id}/decision`,
-              reopening ? { decision: 'reopen' } : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) },
+              reopening
+                ? { decision: 'reopen' }
+                : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}), ...(askWaived ? { venueWaived: waived } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) },
             ),
           reopening ? 'Session reopened' : 'Session canceled',
         );

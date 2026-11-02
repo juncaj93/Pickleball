@@ -10,6 +10,7 @@ import { newId } from './crypto';
 import type { D1Database, D1PreparedStatement } from './db';
 import { HttpError } from './http';
 import { audit, type GroupRow, loadRosters, loadSessions, lookbackIso, organizerIdOf, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { OPEN_FEE } from './lateFees';
 
 const HISTORY_MS = 90 * 86_400_000;
 
@@ -169,8 +170,10 @@ export function seatMoneyBackStatements(
   },
 ): D1PreparedStatement[] {
   const { groupId, sessionId, playerId, organizerId, reason, nowIso, entryId } = args;
-  // A claimed seat (unconfirmed I paid) is left as it is until the organizer answers.
-  const when = (sp: string) => `(${args.when(sp)}) AND NOT ${SEAT_CLAIMED(sp)}`;
+  // A claimed seat (unconfirmed I paid) is left as it is until the organizer answers. An open late fee
+  // (shared/lateFees.ts) is money that stays on the game until it is cleared (a clear first marks the seat, so it is
+  // no longer open): a retry, a second cancel tap or an Unmark never hands it back by accident.
+  const when = (sp: string) => `(${args.when(sp)}) AND NOT ${SEAT_CLAIMED(sp)} AND NOT ${OPEN_FEE(sp)}`;
   // ?1 now, ?2 reason, ?3 session, ?4 organizer ('' for none), ?5 player (NULL for every seat), ?6 group, ?7 entry id.
   const seat = (sp: string) => `${sp}.session_id = ?3 AND (?5 IS NULL OR ${sp}.player_id = ?5)`;
   // Never the organizer, and never a court-payment row (status 'declined' and paid: only the organizer has those).
@@ -461,8 +464,10 @@ export async function spendCredit(
          SELECT ?1, ?2, ?3, 'used', ?4, ?5, ?6
          WHERE ${POT('?3')} - ${RESERVED('?3')} >= ?4
            AND (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?5 AND player_id = ?3 AND ended_at IS NULL) = ?7
-           AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'unpaid')
-           AND (SELECT status FROM sessions WHERE id = ?5) <> 'canceled'
+           -- A seat that is in a game still on, or an open late fee (shared/lateFees.ts: a late drop, a no-show, a late cancel the venue charged).
+           AND ((EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND payment_status = 'unpaid')
+                 AND (SELECT status FROM sessions WHERE id = ?5) <> 'canceled')
+             OR EXISTS (SELECT 1 FROM session_players fs WHERE fs.session_id = ?5 AND fs.player_id = ?3 AND fs.payment_status = 'unpaid' AND ${OPEN_FEE('fs')}))
            AND (SELECT COALESCE(finalized_at, '') || ':' || COALESCE(final_price_cents, -1) FROM sessions WHERE id = ?5) = ?8`,
       )
       .bind(entry, groupId, playerId, cents, sessionId, nowIso, alreadyUsed, `${finalizedAt ?? ''}:${finalPriceCents ?? -1}`),

@@ -303,10 +303,14 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     else if (e.kind === 'refunded') text = `${money} cashed out`;
     else if (e.reason === 'finalized') text = `${money} back${from}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;
     else if (e.reason === 'not_played') text = `${money} back${from} (did not play)`;
+    else if (e.lateFee === 'sub') text = `someone took your spot. ${money} back as credit.`;
+    else if (e.lateFee === 'cleared') text = `${money} back${from} (late fee cleared)`;
     else if (e.reason === 'dropped') text = `${money} back${from} (you dropped)`;
     else if (e.reason === 'canceled') text = `${money} back${from} (canceled)`;
     else text = `${money} kept${from}`;
-    out.push({ key: `${e.id}:start`, at: e.at, text: `${day(e.at)}: ${text}`, order: i * 2 });
+    // "Tue, Nov 3: someone took your spot. $14 back as credit." (the game's day: the spot was in that game).
+    const lead = e.kind === 'kept' && e.lateFee === 'sub' && e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : day(e.at);
+    out.push({ key: `${e.id}:start`, at: e.at, text: `${lead}: ${text}`, order: i * 2 });
     if (!e.endedAt) return;
     let end: string;
     if (e.kind === 'used') {
@@ -318,10 +322,11 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
             : e.endedReason === 'undone'
               ? 'you took it back'
               : `${organizerName ?? 'the organizer'} took it off`;
-      end = `${money} returned${from} (${why})`;
+      end = e.lateFee === 'sub' ? `someone took your spot. ${money} back as credit.` : e.lateFee === 'cleared' ? `${money} returned${from} (late fee cleared)` : `${money} returned${from} (${why})`;
     } else if (e.kind === 'refunded') end = `${money} back (cash out undone)`;
     else end = `${money} taken back${from} (game changed)`;
-    out.push({ key: `${e.id}:end`, at: e.endedAt, text: `${day(e.endedAt)}: ${end}`, order: i * 2 + 1 });
+    const endLead = e.kind === 'used' && e.lateFee === 'sub' && e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : day(e.endedAt);
+    out.push({ key: `${e.id}:end`, at: e.endedAt, text: `${endLead}: ${end}`, order: i * 2 + 1 });
   });
   return out
     .sort((a, b) => b.at.localeCompare(a.at) || b.order - a.order)

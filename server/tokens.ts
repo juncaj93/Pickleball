@@ -5,7 +5,8 @@ import { newId, randomToken, sha256 } from './crypto';
 import type { D1Database } from './db';
 import { HttpError } from './http';
 import { audit, confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf } from './repo';
-import { clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
+import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
+import { lateFeesFor } from './lateFees';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 
@@ -132,10 +133,12 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
       .run();
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
-    const res = await withdraw(ctx.db, r.group, r.session, r.token.player_id, ctx.nowMs);
-    const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group)) : false;
+    const lateFees = await lateFeesFor(ctx, r.group.id);
+    const res = await withdraw(ctx.db, r.group, r.session, r.token.player_id, ctx.nowMs, { lateFees });
+    const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group), lateFees) : false;
     outcome = 'withdrawn';
-    if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late });
+    if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late, ...(res.lateFee ? { owes: true } : {}) });
+    if (res.lateFee) await auditLateFeeOwed(ctx.db, r.group.id, r.session.id, r.token.player_id, 'late_drop', ctx.nowIso);
     await afterTap(ctx, watch);
   } else {
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);

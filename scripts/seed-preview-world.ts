@@ -233,6 +233,18 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   summary.push('game 4 (Booked, full, 10 in): Gray is the real standby; Indy, Jordan, Finley paid; Morgan tapped "I paid" (shows as self-reported); the rest owe $14');
   summary.push('left with credit and in no game: Casey $3, Harper $14 (Kai is in no game)');
 
+  // 9. "Late drops owe $14" (LATE_FEES): an extra game 11 hours from now, so it is already past its cancel-by (start minus
+  //    12 hours) and a drop there counts as late. Booked, exactly 4 in (Jordan, Lane, Morgan, Kai), Kai paid cash. With
+  //    ?latefees=on, any of them dropping leaves 3 and owes $14 unless someone takes the spot. Nothing here owes yet.
+  const lateStart = Math.ceil((N + 11 * HOUR) / (15 * 60_000)) * 15 * 60_000;
+  const lateGame = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(lateStart).toISOString(), endsAt: new Date(lateStart + 2 * HOUR).toISOString(), note: 'Late-fee test' });
+  await refresh();
+  const lg = games().find((g) => g.id === lateGame.id);
+  await setCourt(lg, 'booked');
+  for (const n of ['Jordan', 'Lane', 'Morgan', 'Kai']) await join(n, lg);
+  await orgPays('Kai', lg);
+  summary.push('extra game "Late-fee test" 11 hours from the seed (already inside its 12-hour cancel-by): 4 in (Jordan, Lane, Morgan, Kai), Kai paid cash');
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);

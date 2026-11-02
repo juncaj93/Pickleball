@@ -5,6 +5,8 @@ import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
+import { lateFeeKind } from '../shared/lateFees';
+import { OPEN_FEE } from './lateFees';
 import type { D1Database } from './db';
 
 export interface GroupRow {
@@ -279,12 +281,17 @@ export function waitlistOf(roster: RosterRow[]): RosterRow[] {
  * played (nothing for those who did not). Nobody owes for a canceled game.
  */
 export function pricesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, SeatPrice> {
-  return seatPrices(
+  const out = seatPrices(
     confirmedOf(roster).map((r) => ({ playerId: r.player_id, played: r.played })),
     settings.pricePerPlayerCents,
     session.status === 'canceled',
     session.finalized_at ? { priceCents: session.final_price_cents ?? settings.pricePerPlayerCents } : null,
   );
+  // An open late fee (shared/lateFees.ts) owes the flat price: a late drop that left the game short, a no-show with
+  // fewer than 4 played, or a seat in a game canceled late that the venue charged. None exist unless LATE_FEES made
+  // them. (Like every seat here, the organizer's is left for the caller to skip.)
+  for (const r of roster) if (lateFeeKind(r, session)) out.set(r.player_id, { cents: settings.pricePerPlayerCents });
+  return out;
 }
 
 /** What the venue charges for a session: the cost on the booking, else the typical court cost. */
@@ -387,7 +394,9 @@ export async function lookbackIso(db: D1Database, groupId: string, nowMs: number
        WHERE s.group_id = ? AND s.ends_at <= ?
          AND ((s.status <> 'canceled' AND sp.status = 'confirmed' AND sp.payment_status = 'unpaid')
            -- an unanswered "I paid" claim (seat that left, or a canceled game) stays on the organizer's Home
-           OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL AND (sp.status <> 'confirmed' OR s.status = 'canceled')))`,
+           OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL AND (sp.status <> 'confirmed' OR s.status = 'canceled'))
+           -- an open late fee still owed (shared/lateFees.ts) stays on the player's Pay card and the organizer's Money tab
+           OR (sp.payment_status = 'unpaid' AND ${OPEN_FEE('sp')}))`,
     )
     .bind(groupId, usual)
     .first<{ oldest: string | null }>();

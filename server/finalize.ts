@@ -12,6 +12,9 @@ import type { Ctx } from './context';
 import { creditBackStatements, holdCashStatements, repriceStatements, USABLE } from './credit';
 import { HttpError } from './http';
 import { writeMark } from './tasks';
+import { lateFeesFor } from './lateFees';
+import { auditLateFeeOwed } from './roster';
+import { FEE_MIN_PLAYERS, lateFeeKind } from '../shared/lateFees';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 
@@ -43,7 +46,7 @@ export async function finalizeSession(ctx: Ctx, body: Record<string, unknown>) {
     playedIds = new Set(body.played.map((x) => v.id(x, 'played')));
     for (const id of playedIds) if (!confirmed.some((r) => r.player_id === id)) throw new HttpError(400, 'invalid_played', 'Only people who were in can be marked as played.');
   }
-  return applyFinalize(ctx, group, session, playedIds);
+  return applyFinalize(ctx, group, session, playedIds, await lateFeesFor(ctx, group.id));
 }
 
 /** A value put straight into SQL text (an id or a time this server made), refused if it could break out of quotes. */
@@ -69,7 +72,7 @@ async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
  * paying at the same moment, or a request cut off halfway can never leave a
  * game half-finalized.
  */
-export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>) {
+export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false) {
   const settings = settingsOf(group);
   const state = await moneyState(ctx, session.id);
   const roster = await loadRoster(ctx.db, session.id);
@@ -79,6 +82,10 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   const price = finalPrice(settings.pricePerPlayerCents, n);
   const now = ctx.nowIso;
   const claimed = `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND finalized_at = ${sqlText(now)})`;
+  // Late fees (shared/lateFees.ts rule 4): with fewer than 4 played, someone who was in and did not play owes their $14
+  // flat. Their money stays on the game (nothing comes back), and they are not counted in N. 4 or more played: as before.
+  const noShowOwes = lateFees && n < FEE_MIN_PLAYERS;
+  const owing = new Set(noShowOwes ? confirmed.filter((r) => r.player_id !== organizerId && !playedIds.has(r.player_id)).map((r) => r.player_id) : []);
   const statements = [
     ctx.db
       .prepare(
@@ -88,6 +95,12 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       .bind(now, price, n, session.id, state),
     ...confirmed.map((r) =>
       ctx.db.prepare(`UPDATE session_players SET played = ?, updated_at = ? WHERE id = ? AND ${claimed}`).bind(playedIds.has(r.player_id) ? 1 : 0, now, r.id),
+    ),
+    // The no-show debt mark: late_drop_at equal to this finalize's time (Reopen takes it away again).
+    ...[...owing].map((pid) =>
+      ctx.db
+        .prepare(`UPDATE session_players SET late_drop_at = ?1, late_drop_done_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND ${claimed}`)
+        .bind(now, session.id, pid),
     ),
   ];
   const backs: { player: string; playerId: string; cents: number; reason: 'finalized' | 'not_played' }[] = [];
@@ -102,6 +115,10 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       .bind(now, used, r.id);
   for (const r of roster) {
     if (r.player_id === organizerId) continue;
+    // Owes the late fee: everything on the seat stays as it is.
+    if (owing.has(r.player_id)) continue;
+    // An open late-drop debt on a seat that left: its money stays on the game until it is cleared or paid.
+    if (lateFeeKind(r, session)) continue;
     const paid = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;
     const played = r.status === 'confirmed' && playedIds.has(r.player_id);
     if (played) {
@@ -152,6 +169,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   }
   await audit(ctx.db, group.id, session.id, 'session_finalized', { played: n, priceCents: price, creditBackCents: backs.reduce((s, b) => s + b.cents, 0) }, now);
   for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, now);
+  for (const pid of owing) await auditLateFeeOwed(ctx.db, group.id, session.id, pid, 'no_show', now);
   // Finalized means it was played: a later Reopen never asks "Did you guys play?" (a display mark, no money; never fails the tap).
   await writeMark(ctx.db, group.id, session.id, 'played', now).catch(() => {});
   return { ok: true, played: n, priceCents: price, creditBack: backs.map((b) => ({ playerId: b.playerId, cents: b.cents })) };
@@ -247,7 +265,12 @@ export async function reopenFinalize(ctx: Ctx) {
            AND NOT EXISTS (${unconfirmedShort})`,
       )
       .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents),
-    ctx.db.prepare('UPDATE session_players SET played = NULL, updated_at = ?1 WHERE session_id = ?2 AND played IS NOT NULL AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL').bind(now, session.id),
+    // Not a seat that left: played = 0 there is an open late-drop debt (shared/lateFees.ts), which Reopen does not touch.
+    ctx.db.prepare("UPDATE session_players SET played = NULL, updated_at = ?1 WHERE session_id = ?2 AND played IS NOT NULL AND status <> 'withdrawn' AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL").bind(now, session.id),
+    // The no-show debts that finalize made go with it (open or cleared): the game is not finalized any more.
+    ctx.db
+      .prepare("UPDATE session_players SET late_drop_at = NULL, late_drop_done_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND status = 'confirmed' AND late_drop_at = ?3 AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL")
+      .bind(now, session.id, session.finalized_at),
     ...repriceStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, now),
   ]);
   if (unfinalized.meta.changes !== 1) {

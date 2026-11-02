@@ -146,7 +146,7 @@ function GameR2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
   const owedRows = unpaidRows(s);
   const owedCents = owedCentsOf(s);
   let status: ReactNode = null;
-  if (canceled) status = <span className="r2m-closed">Closed</span>;
+  if (canceled && owedCents === 0) status = <span className="r2m-closed">Closed</span>;
   else if (s.needsFinalize) status = <Chip tone="warn">Finalize</Chip>;
   else if (owedCents > 0)
     status = (
@@ -157,7 +157,7 @@ function GameR2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
     );
   else if (s.court?.paid === false) status = <Chip tone="muted">Court due</Chip>;
   else if (s.payableCount > 0) status = <span className="r2m-allpaid">All paid</span>;
-  const showRemind = open && owedRows.length > 0 && !canceled;
+  const showRemind = open && owedRows.length > 0;
   return (
     <article className={`card mv2-game r2m-game${open ? ' open' : ''}${canceled ? ' closed' : ''}`} data-session={s.id} data-open={open ? 'yes' : 'no'}>
       <div className="r2m-head">

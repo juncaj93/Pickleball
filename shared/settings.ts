@@ -71,6 +71,13 @@ export const SITE_NAME = 'Pickleball Bros';
 export const COURTRESERVE_BOOKING_URL = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
 /** Where the organizer changes or cancels an existing CourtReserve booking. */
 export const COURTRESERVE_CANCEL_URL = 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1';
+/**
+ * The public booking page anyone (non-members too) can book the same slot on. COURTRESERVE_BOOKING_URL above is the
+ * organizer's member page, a different address, so the players' "Court canceled" text uses this one.
+ */
+export const COURT_PUBLIC_BOOKING_URL = 'https://app.courtreserve.com/Online/publicbookings/13765?tab=reserve&step=initial';
+/** The courts' phone number, for the players' texts. */
+export const COURTS_PHONE = '810-207-5698';
 export const SESSION_DAYS = [2, 4]; // Tuesday, Thursday
 // The usual game time is a setting now (defaultStartMinutes / defaultEndMinutes, Settings > Schedule).
 

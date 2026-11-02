@@ -1,4 +1,5 @@
 import { formatPrice } from './money';
+import { COURT_PUBLIC_BOOKING_URL, COURTS_PHONE } from './settings';
 import { formatDateTime, localParts, formatMonthDay, formatShortDate, formatTime, formatTimeRange, formatWeekday } from './time';
 
 // Short, prewritten texts. The site only drafts them; the organizer sends
@@ -198,4 +199,27 @@ export function formatPhone(phone: string | null | undefined): string {
   const ten = digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
   if (ten.length !== 10 || (phone.trim().startsWith('+') && !phone.trim().startsWith('+1'))) return phone.trim();
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+// ---------- "Text the players" (LATE_FEES on): the organizer backs out of today's game ----------
+// Alex's exact words (Nov 2). They always say "today's game": he only sends them on game day.
+
+/** A. The main one: the court is canceled, the players can book the same slot as non-members. */
+export function courtCanceledMessage(bookingUrl: string = COURT_PUBLIC_BOOKING_URL, phone: string = COURTS_PHONE): string {
+  return `Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: ${bookingUrl} or call the courts at ${phone}. Sorry again, hope you can still get it in!`;
+}
+
+/** B. The backup: the venue would not cancel, so the court is still booked under the organizer's name. */
+export function courtStillBookedMessage(phone: string = COURTS_PHONE): string {
+  return `Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at ${phone}. Sorry again!`;
+}
+
+/** After a cancel inside 12 hours where the venue did NOT waive the fee: everyone who was in still owes their share. */
+export function canceledFeeKeptMessage(priceCents: number, link: string): string {
+  return `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your ${formatPrice(priceCents)} share still applies (if you already paid, you're all set). You can pay on the site: ${link}. Sorry about that!`;
+}
+
+/** After a cancel inside 12 hours where the venue waived the fee: the usual credit text, saying "today" (sent on game day). */
+export function canceledTodayMessage(link: string, reason?: string | null): string {
+  return `${withReason('Pickleball today is canceled.', reason)} If you paid, it's now your credit. You can request a cash out on the site. ${link}`;
 }

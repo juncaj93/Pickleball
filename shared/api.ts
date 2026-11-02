@@ -1,3 +1,4 @@
+import type { LateFeeKind } from './lateFees';
 // Shapes of the JSON the API returns. Shared by server and browser.
 import type { CreditReason } from './credit';
 import type { GroupSettings } from './settings';
@@ -72,6 +73,14 @@ export interface PlayerSessionView {
     paidWithCredit: boolean;
     /** What "Use credit" would take off this session now: the smaller of their usable credit and what they owe. 0 hides the button. */
     useCreditCents: number;
+    /**
+     * LATE_FEES (shared/lateFees.ts): past the cancel-by (start minus 12 hours) with the switch on for this screen.
+     * `owes`: dropping now would leave the game short, so their $14 stays (or is owed) unless someone takes the spot.
+     * `paid`: money is on the seat ("Your $14 stays on this game"). Missing: the drop works exactly as before.
+     */
+    lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number };
+    /** An open late fee on this seat (e.g. a game canceled late that the venue charged): what kind, and what is still owed. */
+    lateFee?: { kind: LateFeeKind; oweCents: number } | null;
     /** Money from this session that came back to them as credit (they dropped out, it was canceled, they did not play, or they paid more than the final price). 0 once they have no credit left. */
     creditBackCents: number;
   };
@@ -98,6 +107,8 @@ export interface CreditEntryView {
   endedReason: 'undone' | 'unmarked' | 'dropped' | 'canceled' | null;
   reason: CreditReason | null;
   playedCount: number | null;
+  /** This money came back because a late fee was cleared: 'sub' (someone took their spot) or 'cleared' (the organizer cleared it). */
+  lateFee?: 'sub' | 'cleared' | null;
 }
 
 /** A player's own credit (never anyone else's). */
@@ -126,6 +137,14 @@ export interface GroupView {
   payAlways?: boolean;
   /** "No Venmo? Pay Alex directly" is on for this screen (server/payNote.ts). False or missing: Pay behaves exactly as before. */
   payNote?: boolean;
+  /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
+  lateFees?: boolean;
+  /**
+   * This player's own late fees that were cleared in the last 60 days (never anyone else's), for a notice they dismiss
+   * on this phone: 'sub' someone took their spot, 'cleared' the organizer cleared it (or the game was canceled).
+   * `creditCents`: what came back to them as credit (0 when they had not paid).
+   */
+  feeNotices?: { id: string; startsAt: string; why: 'sub' | 'cleared'; creditCents: number }[];
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -141,6 +160,8 @@ export interface GroupView {
     reminder: boolean;
     /** When this sign-up started (see `mine.signupAt`). */
     signupAt: string;
+    /** An open late fee (shared/lateFees.ts): "(late drop)", "(canceled late)" or "(did not play)" after the date. */
+    lateFee?: LateFeeKind;
   }[];
   /**
    * What to pay now, for the card at the top of the screen: owed sessions
@@ -208,6 +229,8 @@ export interface AdminRosterEntry {
   dropClaimCents: number;
   /** Set once the game is finalized: did they play. */
   played: boolean | null;
+  /** An open late fee on this seat (shared/lateFees.ts), paid or not. Null for everyone else. */
+  lateFee?: { kind: LateFeeKind; paid: boolean; oweCents: number } | null;
   /**
    * This is the organizer. They pay the venue, not the other players, so
    * there is no share or credit here, and their paid mark means "Court paid".
@@ -380,6 +403,10 @@ export interface AdminDashboard {
   adminR2?: boolean;
   /** Settings > Feature switches > "Admin screens, round 2" is on (for everyone). */
   adminR2ForAll?: boolean;
+  /** "Late drops owe $14" is on for this screen (server/lateFees.ts): the cancel question asks "Did the venue waive the fee?". */
+  lateFees?: boolean;
+  /** Settings > Feature switches > "Late drops owe $14" is on (for everyone). */
+  lateFeesForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   group: {
