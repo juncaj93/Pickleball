@@ -435,12 +435,27 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
            AND (SELECT canceled_at FROM sessions WHERE id = ?2) = ?1 AND (SELECT canceled_by FROM sessions WHERE id = ?2) = '${FEE_KEPT}'`,
       )
       .bind(ctx.nowIso, session.id),
+    // Anyone NOT in (a paid waitlist seat, a seat that left with money still on it) gets it back as credit, exactly as
+    // on any cancel. Seats that owe (everyone in, open late drops) are open late fees, which these statements skip.
+    ...seatMoneyBackStatements(ctx.db, {
+      groupId: group.id,
+      sessionId: session.id,
+      playerId: null,
+      organizerId: await organizerIdOf(ctx.db, group),
+      reason: 'canceled',
+      nowIso: ctx.nowIso,
+      when: (sp) => `(SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled'`,
+    }),
   ]);
   if (cancel.meta.changes !== 1) {
     if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') return { ok: true, changed: false };
     throw new HttpError(409, 'changed', 'This game just changed. Look again.');
   }
   await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
+  const names = new Map((await loadRoster(ctx.db, session.id)).map((r) => [r.player_id, r.display_name]));
+  for (const m of await moneyBackAt(ctx.db, session.id, null, 'canceled', ctx.nowIso)) {
+    if (m.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(m.playerId) ?? 'A player', playerId: m.playerId, amountCents: m.cashCents, reason: 'canceled' }, ctx.nowIso);
+  }
   const chargedCents = courtCostOf(session, settingsOf(group));
   await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, venueWaived: false, feeKept: true, ...(reason ? { reason } : {}) }, ctx.nowIso);
   const fresh = (await getSession(ctx.db, group.id, session.id))!;

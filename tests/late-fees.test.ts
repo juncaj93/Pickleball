@@ -357,6 +357,7 @@ describe('a sub clears the oldest open late drop, one each', () => {
     // The organizer adds Frankie: clears Blair.
     expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/roster`, { playerId: w.byName.Frankie, action: 'confirm' })).status).toBe(200);
     expect((await rowOf(w, g.id, 'Blair')).lateFee).toBeNull();
+    w.app.now += 1000;
     // The organizer's own In: clears Casey.
     expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
     expect((await rowOf(w, g.id, 'Casey')).lateFee).toBeNull();
@@ -421,6 +422,58 @@ describe('retries', () => {
     // A sub still clears it with the switch off.
     await join(w, g.id, ['Frankie']);
     expect(await pot(w, 'Blair')).toBe(PRICE);
+  });
+});
+
+// ---------- independent review findings (Nov 2) ----------
+
+describe('review fixes', () => {
+  it('cancel with the fee kept: a paid waitlist seat (not in) gets its $14 back as credit; everyone in still owes', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    await markPaid(w, g.id, 'Frankie');
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/roster`, { playerId: w.byName.Frankie, action: 'waitlist' })).status).toBe(200);
+    at(w, g.start, 4);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false })).status).toBe(200);
+    expect(await pot(w, 'Frankie')).toBe(PRICE);
+    expect(await owedOf(w, 'Blair', g.id)).toMatchObject({ amountCents: PRICE, lateFee: 'canceled_late' });
+    expect(health(w)).toEqual({});
+  });
+
+  it('moving a late-drop debtor to the waitlist is refused (the debt and its money stay put)', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w, g.id, 'Blair');
+    at(w, g.start, 4);
+    await drop(w, g.id, 'Blair');
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/roster`, { playerId: w.byName.Blair, action: 'waitlist' })).status).toBe(409);
+    expect((await rowOf(w, g.id, 'Blair'))).toMatchObject({ status: 'withdrawn', lateFee: { kind: 'late_drop', paid: true } });
+    w.app.now = g.start + 3 * HOUR;
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    expect(await pot(w, 'Blair')).toBe(0);
+    expect((await rowOf(w, g.id, 'Blair')).lateFee).toMatchObject({ kind: 'late_drop' });
+  });
+
+  it('"No" on a game you owe a late fee for does not end the debt', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w, g.start, 4);
+    await drop(w, g.id, 'Blair');
+    expect((await call(w, 'Blair', 'POST', `/api/sessions/${g.id}/decline`, {})).status).toBe(200);
+    expect(await owedOf(w, 'Blair', g.id)).toMatchObject({ amountCents: PRICE, lateFee: 'late_drop' });
+  });
+
+  it('the organizer\'s own seat is never counted as an open fee in the health check', async () => {
+    const w = await world();
+    const g = await game(w);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/me`, { in: true })).status).toBe(200);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon']);
+    at(w, g.start, 4);
+    await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
+    expect(info(w)).toBe(3);
   });
 });
 

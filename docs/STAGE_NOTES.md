@@ -1826,3 +1826,23 @@ round 2 already live with its switch off). This is a MONEY change. Ships OFF. No
   clearing it a moment later.
 - The Pay card shows a debt right away, not only from 8:00 AM on game day.
 - Preview seed: an extra game "Late-fee test" 11 hours after the seed with 4 in (Jordan, Lane, Morgan, Kai; Kai paid cash).
+
+### Fresh reviewer (did not write the code) and what was fixed
+Found 3 real bugs, all fixed with a test each (`tests/late-fees.test.ts` "review fixes"): a "venue did not waive" cancel left a
+paid WAITLIST seat's $14 on the canceled game (now it comes back as credit like any cancel; seats that owe are untouched);
+moving a late-drop debtor to the waitlist wiped the debt or stranded its money (now refused); a debtor's "No" on the suggestion
+card ended an unpaid debt (now ignored). Also tightened: a duplicate tap in the same millisecond can never clear a second debt
+(one clear per game per moment), and the health check no longer counts the organizer's own seat as an open fee. Verdict after
+fixes: re-run clean.
+
+### Tests
+- Unit: 1,744 passed, 1 skipped, 0 failed, in 96 files (was 1,707 in 95): new `tests/late-fees.test.ts` (37): the switch, the
+  threshold (6 in / 2 drop, 5 in / 1 drop, 4 in / 1 drop, 4 in / 2 drop, 5 in / 2 drop), waitlist, before the cutoff, organizer,
+  private header, subs (one, two drops then one sub, 5+ in, waitlist move-in, organizer add, organizer In, dropper rejoin, double
+  taps), retries with the switch on and off, Mark paid / Unmark / I paid / Use credit, Clear x3 with History, Finalize (5 signed /
+  4 played, 4 signed / 3 played, unpaid no-show, switch off), cancel (answer required, Yes, No, second tap, Reopen, switch off),
+  the same script with the switch off and on, backup and restore round trip, privacy, the SQL and TypeScript rules agreeing on 576
+  seat shapes, and the words. Ten older race tests failed at first only because they find statements by their SQL text; the
+  statements are now word for word the old ones for any seat that is not a late fee.
+- Browser: new `e2e/late-fees.cjs` 11 of 11 (360 and 430 px, light and dark). Re-run green with the switch off: admin-r2 27,
+  admin-v2 27, audit-player-flows 93, credit 153, pay-always 12, money-visible 12, cancel-reason 8.

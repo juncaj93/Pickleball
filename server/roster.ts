@@ -2,7 +2,7 @@ import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import type { GroupSettings } from '../shared/settings';
 import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, moneyBackAt, seatMoneyBackStatements } from './credit';
-import { finishLateDropClear, LEAVES_SHORT, tagOldestLateDrop } from './lateFees';
+import { finishLateDropClear, LEAVES_SHORT, OPEN_FEE, OPEN_LATE_DROP, tagOldestLateDrop } from './lateFees';
 import { lateFeeCutoffMs } from '../shared/lateFees';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
@@ -476,7 +476,8 @@ export async function decline(db: D1Database, session: SessionRow, playerId: str
   if (existing) {
     // A seat that still holds money (an unanswered I paid claim) stays as it is: "No" changes nothing about money.
     await db
-      .prepare("UPDATE session_players SET status = 'declined', updated_at = ? WHERE id = ? AND NOT (payment_status = 'paid' AND refunded_at IS NULL)")
+      // Nor does it end an open late fee (shared/lateFees.ts): that is cleared by a sub or the organizer, never by "No".
+      .prepare(`UPDATE session_players SET status = 'declined', updated_at = ? WHERE id = ? AND NOT (payment_status = 'paid' AND refunded_at IS NULL) AND NOT ${OPEN_FEE('session_players')}`)
       .bind(nowIso, existing.id)
       .run();
     return;
@@ -563,6 +564,8 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
   const existing = await existingRow(db, session.id, playerId);
   if (!existing) return addToWaitlist(db, session, playerId, nowIso);
   if (existing.status === 'waitlisted') return;
+  // An open late-drop debt (shared/lateFees.ts) is not a seat to move: it would wipe the debt or strand its money.
+  if (isOpenLateDrop(existing)) throw new HttpError(409, 'late_fee_open', 'They dropped late and still owe their $14. Clear it on the Money tab first.');
   try {
     await db.batch([
       db
@@ -571,7 +574,7 @@ export async function moveToWaitlist(db: D1Database, session: SessionRow, player
              attendance_confirmed_at = NULL, promoted_at = NULL, promotion_reason = NULL, promotion_notified_at = NULL, played = NULL,
              payment_status = CASE WHEN payment_status = 'paid' THEN 'paid' ELSE 'not_applicable' END,
              updated_at = ?2
-           WHERE id = ?3 AND status <> 'waitlisted'`,
+           WHERE id = ?3 AND status <> 'waitlisted' AND NOT ${OPEN_LATE_DROP('session_players')}`,
         )
         .bind(session.id, nowIso, existing.id),
       // Only while the seat is on the waitlist and not paid; a repeat finds nothing live and does nothing.

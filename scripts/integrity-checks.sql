@@ -28,8 +28,8 @@ claim AS (
 -- Open late fees ("Late drops owe $14", shared/lateFees.ts): by design their money stays on the game (a seat that left,
 -- or a game canceled late that the venue charged) until the organizer marks them paid or clears them. A to-do, not a problem.
 fee AS (
-  SELECT sp.session_id, sp.player_id FROM session_players sp JOIN sessions s ON s.id = sp.session_id
-  WHERE sp.late_drop_done_at IS NULL AND (sp.payment_status = 'unpaid' OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL)) AND (
+  SELECT sp.session_id, sp.player_id FROM session_players sp JOIN sessions s ON s.id = sp.session_id JOIN groups g ON g.id = s.group_id
+  WHERE sp.player_id <> COALESCE(g.organizer_player_id, '') AND sp.late_drop_done_at IS NULL AND (sp.payment_status = 'unpaid' OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL)) AND (
     (sp.status = 'withdrawn' AND sp.played = 0 AND sp.late_drop_at IS NOT NULL)
     OR (sp.status = 'confirmed' AND s.status = 'canceled' AND COALESCE(s.canceled_by, '') = 'organizer_fee_kept')
     OR (sp.status = 'confirmed' AND s.status <> 'canceled' AND sp.played = 0 AND sp.late_drop_at IS NOT NULL AND sp.late_drop_at = s.finalized_at))
