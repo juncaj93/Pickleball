@@ -319,6 +319,8 @@ export interface AdminPlayer {
   lateDrops: number;
   /** Organizer only: sessions they've played, ever. */
   played: number;
+  /** Admin screens round 2 only: the organizer hid this name from the Players list and pickers (nothing else about them changed). */
+  adminHidden?: boolean;
 }
 
 /** One line in History > Activity. */
@@ -374,6 +376,10 @@ export interface AdminDashboard {
   adminV2?: boolean;
   /** Settings > Feature switches > "New admin layout" is on (for everyone). */
   adminV2ForAll?: boolean;
+  /** "Admin screens, round 2" (Home cards, Money, Players, History, header) is on for this screen (server/adminR2.ts). False or missing: the screens look exactly as before. */
+  adminR2?: boolean;
+  /** Settings > Feature switches > "Admin screens, round 2" is on (for everyone). */
+  adminR2ForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   group: {

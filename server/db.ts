@@ -50,6 +50,8 @@ export interface Env {
   PAY_NOTE?: string;
   /** "New admin layout" (organizer History, Money, Home v2): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminv2=on (server/adminV2.ts). A wrangler.toml var. */
   ADMIN_V2?: string;
+  /** "Admin screens, round 2" (organizer Home cards, Money, Players, History, header): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminr2=on (server/adminR2.ts). A wrangler.toml var. */
+  ADMIN_R2?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

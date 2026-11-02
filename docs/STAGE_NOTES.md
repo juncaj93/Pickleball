@@ -1705,3 +1705,61 @@ that at 100% text only. Tell Alex if he wants the count never cut.
 1. Merge the branch into main (PR), pull main, `npm test`, confirm main equals live plus this change.
 2. SQL export and a Time Travel bookmark (no migration, no database change: this is for the rule).
 3. `npm run deploy` from main. 4. Read-only live check. 5. Rollback: redeploy the previous commit (no data to restore).
+
+## Admin screens, round 2 (ADMIN_R2) - Mon Nov 2, 2026 - on a preview, waiting for "ship it"
+
+Spec: zip 1 (Home cards, Money, Players, History, header), mockups `Home_round5_LOCKED` (option A) and `Money_round4_LOCKED` (option A, tight).
+Started from main 09547e3 (layout polish and admin v2 both live). Admin only: no player sees any change. Ships OFF behind `ADMIN_R2`.
+No database change (no migration; state is `task_log` rows, like the other switches). Nothing here is deployed to the live site.
+
+### The switch
+`ADMIN_R2` in `wrangler.toml` (kill switch, `[vars]` and `[env.preview.vars]`), `/admin?adminr2=on` (private, that phone only; `?adminr2=off` ends it),
+Settings > Feature switches (collapsed) > "Admin screens, round 2" (for everyone, no deploy), `docs/FEATURE_SWITCHES.md`.
+Files: `shared/adminR2.ts`, `server/adminR2.ts`, `PUT /api/admin/admin-r2`, `adminR2` / `adminR2ForAll` on the dashboard. With it off, admin looks exactly as before.
+
+### What changed (numbers match the zip's SCOPE)
+1. **Home cards** (`src/pages/admin/CardR2.tsx`, `src/admin-r2.css`): tile and time left; court switch with seats, dots and names under it; gear right; fixed 3-cell footer with thin dividers:
+   [In | Out] [green $ circle + "1 of 3"] [clock + cancel time, or blue "Book" with the arrow when a court is needed]. Words In, Out and Book, no check/X/calendar icons.
+   In/Out is the organizer's own seat (same call and rules as the old "I'm in"). The $ cell opens the Players sheet like the old paid pill. Holiday: a faint tab under the card, bottom right,
+   "Election Day · hours confirmed? [Yes]" (outlined Yes); confirmed becomes faint gray "Election Day ✓" with no tab; Undo is in the gear menu ("Undo hours confirmed").
+   Below 19 rem of card width (a 320 px phone) the tile and gear sit on a row and the switch gets the full width; at 15 rem the footer stacks.
+2. **Money** (`MoneyR2.tsx`, `moneyList.ts`, `GameBody r2` in `MoneyV2.tsx`): one list by date, no group headers, small date tiles, paid/owes bars, amount owed on the right, gray "waiting on court" lines (nothing to open), faded Closed.
+   Opened game: unpaid first, paid next, "Court $48" last (no Northville, no "$6"). Remind has Mark paid's size, font and shape. Paid chip is blue until the game is finalized, then green (the existing rule, kept). Court Due chip is gray.
+   Control bar a little shorter.
+3. **Players** (`PlayersTab.tsx`): no phone, days or Regular / Occasional on the list; names centered. "Hide player" in the Edit sheet (soft: gone from the Players list, View as and "Add someone"; every seat, payment, credit and history row stays;
+   the player still works on their own screen; never your own name). Settings > Advanced > "Hidden players" lists them with Unhide on each. One `task_log` row per hidden player (`admin_hidden_player:<id>`). Unhide always works, even with the kill switch off.
+4. **History**: activity by anyone other than the organizer ("organizer" and "organizer as X" are the organizer) gets a tinted row with a bar on the left, and screen readers hear "By someone else".
+5. **Header**: Light/Dark button (the existing Auto/Light/Dark button) left of "View as...", "Admin" under ORGANIZER, "Updated just now" removed on every screen. The Settings Appearance row still works.
+6. **"Book" with the arrow** replaces "Book a court" everywhere in admin (the week line pill, the Home card, the old court card, the moved-game question).
+
+### Differences from the written spec, for Alex to see
+- The cancel-by cell shows on every game, not only inside the last 24 hours: gray before that, red inside the last 24 hours (the mockup showed it red on every card).
+- Money now also lists coming games with no court ("waiting on court") and every canceled game ("Closed"). The old tab only listed games with a court, and canceled games that gave credit back.
+- Money order: games from now on, soonest first, then games already started, most recent first (the order the new Money tab already used).
+- "Court due chips gray from Nov 11 onward" in the feedback became "Court due is gray" (every date), as the zip's START_HERE says.
+- The court row has no detail line at all (not even on tap). Players-cover-$X details are no longer shown on this screen.
+
+### Tests
+- Unit: `tests/admin-r2.test.ts` (17): the switch (kill switch, header, Settings, Activity, organizer only), the dashboard is identical with it on or off apart from the switch fields,
+  Hide player (flag, nothing else changes, works twice, not yourself, kill switch), History actor rule, Money list and owed amounts. Writing the test caught that a player named "Organizer Orla" would have been treated as the organizer (fixed: exact match).
+- Browser: `e2e/admin-r2.cjs` (21 checks), added to `npm run test:e2e`: off by default, private link, Settings switch, header, card layout and footer, In/Out, Book, holiday tab, Money list, chips, Remind size, **Money numbers match the old Money tab (same paid counts, same owed amounts, same buttons, same court cost, game by game)**,
+  Mark paid / Unmark, Venmo move, Players, Hide / Unhide, History highlight, 320/360/430 px, light and dark, 200% text, 44 px tap targets.
+
+### After Alex tested the first preview (Mon Nov 2, 2026, evening): four fixes
+1. **Court switch is instant** (`CardSwitchR2` in `CardR2.tsx`, round 2 only): the tapped segment and the card's own marks change the moment it is tapped, the save goes out in the background, the toast shows when the server
+   answers (before, the toast waited for a whole screen reload and all three buttons were disabled while saving). A failed save snaps the switch back and says "The switch went back." Quick second taps are sent in order, the last one wins. Same request as before.
+2. **Venmo link is in Settings > Money** (the section that shows "$14 each"), not on the Money tab. Same setting and same save. With round 2 off it stays in Settings > Group.
+3. **History**: Activity is first and the default, Sessions second (round 2). Off: Sessions first, as before. (With the new admin layout on, History already opened on Activity.)
+4. **Home**: with round 2 on, only THIS WEEK's games start open; later weeks start folded as short rows (tap to open). If nothing is left this week, the first game opens so the screen is never all folded.
+   Round 2 uses the new layout's folded rows for this (`HomeGame`), also when the new admin layout switch is off. Not checked against the live site: reading the live database was blocked in this session, so whether the live admin has the new layout switched on (top 2 games open) or off (every game open) is unconfirmed.
+- Tests: `e2e/admin-r2.cjs` is 24 checks (new: F1 instant switch with a slowed and a failing server, F3 History order, F4 Home folding; the Venmo check now looks in Settings > Money and checks the old place when off).
+
+### One more change and a Home fold fix (Mon Nov 2, 2026, evening)
+- **Header order** (round 2): logo and Admin, then View as..., then the Light/Dark button, then the calendar tile (the button sits next to the tile). At 320 px the group wraps onto a second row in the same order; nothing passes the screen edge, also at 200% text. Test: `H header fits...`.
+- **Tap to fold on Home**: the preview Alex tested was deployed before fix 4, so its cards were plain full cards with no fold at all. Now (round 2, with the new layout switch on or off): this week's cards start open, later weeks start folded, a tap on an empty spot of an open card (the tile, the words, the footer edge) folds it,
+  a tap on a folded row opens it, and the controls (gear, In/Out, the court switch, the $ cell, Book, Yes) never fold it. Test: `F5 Home cards: tap a card to collapse it...` (24 checks became 26 in `e2e/admin-r2.cjs`).
+
+### In / Out is instant too (Mon Nov 2, 2026, about 4:10 PM Eastern)
+The footer's In | Out now fills the moment it is tapped, and the seat count, the dots and the names on the card follow at once (round 2 only, `InOut` in `CardR2.tsx`). The save goes out in the background and the toast shows when the server
+answers (before, it waited for a whole reload and the two buttons were disabled). A failed save snaps everything back and says "It went back." Quick taps are sent in order, the last one wins. Same request (`POST /api/admin/sessions/:id/me`), same rules.
+Test: `F6 In / Out moves the instant it is tapped...` (a slowed server, three quick taps, then a failing server). `e2e/admin-r2.cjs` is 27 checks.

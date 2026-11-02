@@ -124,7 +124,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
         <div className="dn-btns">
           {/* The same link, words and look as the "Book a court" pill above the games. */}
           <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-            Book a court
+            {ctx.d.adminR2 === true ? 'Book' : 'Book a court'}
           </CourtReserveLink>
         </div>
       </article>

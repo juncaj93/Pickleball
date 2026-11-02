@@ -146,6 +146,17 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
     }
   };
 
+  // Round 2 (ADMIN_R2): the holiday note's Undo lives here, not on the card.
+  const undoHours = async () => {
+    try {
+      await api('POST', `/api/admin/sessions/${s.id}/holiday-hours`, { ok: false });
+      await ctx.reload();
+      toast('Undone');
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    }
+  };
+
   const menu = (
     <div
       ref={pop}
@@ -194,6 +205,12 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               <CalendarPlusIcon />
               Add to calendar
             </a>
+          )}
+          {ctx.d.adminR2 === true && s.holiday && s.holidayHoursOk && (
+            <button role="menuitem" className="menu-row" data-holiday-undo onClick={pick(() => void undoHours())}>
+              <UndoIcon />
+              Undo hours confirmed
+            </button>
           )}
           {canceled && ctx.d.adminV2 === true && (
             <button role="menuitem" className="menu-row" data-hide-game onClick={pick(() => void toggleHidden())}>
@@ -255,6 +272,14 @@ function HideIcon() {
     <svg {...ICON}>
       <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
       <path d="m4 4 16 16" />
+    </svg>
+  );
+}
+function UndoIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M9 14 4 9l5-5" />
+      <path d="M4 9h10a6 6 0 0 1 0 12h-3" />
     </svg>
   );
 }

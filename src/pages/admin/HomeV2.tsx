@@ -25,8 +25,8 @@ const Chevron = () => (
   </svg>
 );
 
-/** How the games are open or folded: the top 2 start open, a tap flips one game. Nothing is remembered (a reload starts over). */
-export function useOpenGames(): {
+/** How the games are open or folded: the top 2 start open (round 2: this week's games), a tap flips one game. Nothing is remembered (a reload starts over). */
+export function useOpenGames(openByDefault?: (id: string, index: number) => boolean): {
   isOpen: (id: string, index: number) => boolean;
   toggle: (id: string, index: number) => void;
   justToggled: string | null;
@@ -35,9 +35,10 @@ export function useOpenGames(): {
   const [justToggled, setJust] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
-  const isOpen = (id: string, index: number) => over[id] ?? index < 2;
+  const startsOpen = (id: string, index: number) => (openByDefault ? openByDefault(id, index) : index < 2);
+  const isOpen = (id: string, index: number) => over[id] ?? startsOpen(id, index);
   const toggle = (id: string, index: number) => {
-    setOver((cur) => ({ ...cur, [id]: !(cur[id] ?? index < 2) }));
+    setOver((cur) => ({ ...cur, [id]: !(cur[id] ?? startsOpen(id, index)) }));
     setJust(id);
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setJust(null), 220);

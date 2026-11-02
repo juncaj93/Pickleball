@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { activityText } from '../../../shared/activity';
+import { activityText, doneByOthers } from '../../../shared/activity';
 import type { ActivityEntry, ActivityPage, AdminSessionView } from '../../../shared/api';
 import { formatDateTime, formatShortDate, formatTimeRange } from '../../../shared/time';
 import { api, ApiError, storageGet, storageSet } from '../../lib';
@@ -16,7 +16,19 @@ export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
 }
 
 function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
-  const [view, setView] = useState<'sessions' | 'activity'>('sessions');
+  // Admin screens, round 2 (ADMIN_R2): Activity first and the default, Sessions second.
+  const r2 = ctx.d.adminR2 === true;
+  const [view, setView] = useState<'sessions' | 'activity'>(r2 ? 'activity' : 'sessions');
+  const sessionsChip = (
+    <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
+      Sessions
+    </button>
+  );
+  const activityChip = (
+    <button className="chip-btn" aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
+      Activity
+    </button>
+  );
   return (
     <section className="stack history" aria-labelledby="history-title">
       <div className="history-head">
@@ -24,17 +36,24 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
           History
         </h2>
         <div className="chips" role="group" aria-label="Show">
-          <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
-            Sessions
-          </button>
-          <button className="chip-btn" aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
-            Activity
-          </button>
+          {r2 ? activityChip : sessionsChip}
+          {r2 ? sessionsChip : activityChip}
         </div>
       </div>
       {view === 'sessions' ? <PastSessions ctx={ctx} /> : <Activity ctx={ctx} />}
     </section>
   );
+}
+
+/**
+ * Admin screens, round 2 (ADMIN_R2): an entry done by someone other than the organizer is highlighted (a player's own tap, for example).
+ * `data-by-other` is the highlight's hook; the words "By a player" are for screen readers, so color is not the only cue.
+ */
+function otherMark(ctx: AdminCtx, e: ActivityEntry): { className?: string; 'data-by-other'?: string } {
+  return ctx.d.adminR2 === true && doneByOthers(e) ? { className: 'a-other', 'data-by-other': 'yes' } : {};
+}
+function otherNote(ctx: AdminCtx, e: ActivityEntry) {
+  return ctx.d.adminR2 === true && doneByOthers(e) ? <span className="sr-only">By someone else: </span> : null;
 }
 
 /** "Finalize", "All paid", "2 unpaid", or nothing when nobody owed anything. */
@@ -124,7 +143,8 @@ function Activity({ ctx }: { ctx: AdminCtx }) {
     <>
       <ul className="card activity-list" aria-label="Activity">
         {entries.map((e) => (
-          <li key={e.id}>
+          <li key={e.id} {...otherMark(ctx, e)}>
+            {otherNote(ctx, e)}
             <span className="a-text">{activityText(e, tz, organizer)}</span>
             <time className="a-time" dateTime={e.createdAt}>
               {formatDateTime(e.createdAt, tz)}
@@ -256,7 +276,8 @@ function ActivityV2({
   const list = (rows: ActivityEntry[], label: string) => (
     <ul className="card activity-list" aria-label={label}>
       {rows.map((e) => (
-        <li key={e.id}>
+        <li key={e.id} {...otherMark(ctx, e)}>
+          {otherNote(ctx, e)}
           <span className="a-text">{activityText(e, tz, organizer)}</span>
           <time className="a-time" dateTime={e.createdAt}>
             {formatDateTime(e.createdAt, tz)}

@@ -4,6 +4,15 @@ import type { ActivityEntry } from './api';
 import { formatPrice } from './money';
 import { formatShortDate } from './time';
 
+/**
+ * Was this done by someone other than the organizer? A player's own tap (their name), or anything else that is not the
+ * organizer ("organizer" and "organizer as Ryan" are both the organizer's own hands). Admin screens round 2 highlights these.
+ */
+export function doneByOthers(e: Pick<ActivityEntry, 'actorLabel'> & { details?: Record<string, unknown> }): boolean {
+  if (e.details?.organizer === true) return false; // the organizer's own I'm in / Out is logged under their real name
+  return !/^organizer( as .+)?$/.test(e.actorLabel);
+}
+
 /** The sentence for one entry. `organizer` is the organizer's name (from Settings), or "Organizer". */
 export function activityText(e: ActivityEntry, tz: string, organizer: string): string {
   const d = e.details;
@@ -157,6 +166,14 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} switched the new admin layout on`;
     case 'admin_v2_off':
       return `${who} switched the new admin layout off`;
+    case 'admin_r2_on':
+      return `${who} switched the admin screens round 2 on`;
+    case 'admin_r2_off':
+      return `${who} switched the admin screens round 2 off`;
+    case 'player_admin_hidden':
+      return `${who} hid ${player} from the Players list`;
+    case 'player_admin_unhidden':
+      return `${who} unhid ${player}`;
     default:
       return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
   }

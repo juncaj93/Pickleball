@@ -122,7 +122,7 @@ export function recipients(d: AdminDashboard, s: AdminSessionView, who: Audience
     return { ...r, count: r.phones.length + r.missing.length };
   }
   const inIds = new Set(s.roster.filter((r) => r.status === 'confirmed').map((r) => r.playerId));
-  const people = d.players.filter((p) => p.isActive && p.id !== me && (who === 'everyone' || !inIds.has(p.id)));
+  const people = d.players.filter((p) => p.isActive && !p.adminHidden && p.id !== me && (who === 'everyone' || !inIds.has(p.id)));
   return {
     phones: people.filter((p) => p.phone).map((p) => p.phone!),
     missing: people.filter((p) => !p.phone).map((p) => p.name),
