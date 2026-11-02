@@ -1904,3 +1904,12 @@ Alex's answers: "(did not play)" on the Pay card is fine; debts show on the Pay 
   pay-always 12, money-visible 12, cancel-reason 8, do-now 13.
 - Preview redeployed Mon Nov 2, 6:45 PM Eastern: same link https://preview-late-fees.pickleball-club-9h0.pages.dev (deployment
   78ad4bba), fake database re-seeded; the "Late-fee test" game now starts Tue Nov 3, 6:00 AM. Not on production.
+- Alex's answers (Mon Nov 2, evening): a cancel more than 12 hours out has no venue question and "Text the players" stays in the gear
+  menu only (OK); the organizer's own open late drop ends if they then cancel with No (OK, the organizer never owes on a cancel). The
+  loose ends stay as they are (texts say "today", notices show with the switch off, hidden players get the Heads up text because they owe).
+- "Ship it" Mon Nov 2, about 6:55 PM Eastern. Alex chose to deploy before game night (inside loud hours) because LATE_FEES ships OFF,
+  so players see no change. Before it: live health checks all 0, no late-fee marks or `late_fees_on` row, row counts audit 155,
+  credit_ledger 5, players 10, seats 21, games 9, task_log 9, refund_requests 0, migrations 16. SQL export
+  `live-before-late-fees-2026-11-02.sql` (274 INSERTs, has phone numbers, not committed, in this session's scratch folder) and
+  Time Travel bookmark `000004e7-00000000-00005117-5cbc7d22b8e829a7f0404216f256f54e` (6:58 PM). Live before: deployment
+  `278ee022-465e-4c22-8fb6-283a48ce2362` (commit dc6428b).
