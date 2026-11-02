@@ -1320,3 +1320,13 @@ unchanged Pay button re-popped on an amount change. Switch off: identical text, 
   that happened to contain "4837" in the page source (an old known kind of fluke) and passed on the rerun. No test was changed.
   `package.json` `test:e2e` now ends with `node e2e/motion.cjs`.
 
+### Deploys (Sun Nov 1, 2026, on Alex's "ship it")
+- 7:54 PM Eastern: PR #65 merged as 0afc87f, production deployment `f98dbbc1` from main with `MOTION = "off"` (dark for everyone).
+  Before it: SQL export `live-before-motion-2026-11-01.sql` (not committed, has phone numbers, in that session's scratch folder) and
+  Time Travel bookmark `000003c3-00000000-00005117-c7edd73afa2214c5a8cb67d4adad19a5`. Alex tested with `?motion=on` and approved.
+- Second deploy, `MOTION = "on"` for everyone (one line in `wrangler.toml`, no code change, no data change). Before it: SQL export
+  `live-before-motion-on-2026-11-01.sql` and Time Travel bookmark `000003c7-00000004-00005117-3485c6a035127765e47a38ffa1af1df5`.
+  Chosen over a Settings switch so no new admin or server code went to production the same night.
+- Rollback: Pages deployment `f98dbbc1` (motion off, same code) is the quickest; `d156b8e0` (commit dace600) is before the motion
+  code. No data changed in either deploy, so no restore is needed.
+
