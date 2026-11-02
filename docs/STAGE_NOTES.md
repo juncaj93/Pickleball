@@ -1753,3 +1753,8 @@ Files: `shared/adminR2.ts`, `server/adminR2.ts`, `PUT /api/admin/admin-r2`, `adm
 4. **Home**: with round 2 on, only THIS WEEK's games start open; later weeks start folded as short rows (tap to open). If nothing is left this week, the first game opens so the screen is never all folded.
    Round 2 uses the new layout's folded rows for this (`HomeGame`), also when the new admin layout switch is off. Not checked against the live site: reading the live database was blocked in this session, so whether the live admin has the new layout switched on (top 2 games open) or off (every game open) is unconfirmed.
 - Tests: `e2e/admin-r2.cjs` is 24 checks (new: F1 instant switch with a slowed and a failing server, F3 History order, F4 Home folding; the Venmo check now looks in Settings > Money and checks the old place when off).
+
+### One more change and a Home fold fix (Mon Nov 2, 2026, evening)
+- **Header order** (round 2): logo and Admin, then View as..., then the Light/Dark button, then the calendar tile (the button sits next to the tile). At 320 px the group wraps onto a second row in the same order; nothing passes the screen edge, also at 200% text. Test: `H header fits...`.
+- **Tap to fold on Home**: the preview Alex tested was deployed before fix 4, so its cards were plain full cards with no fold at all. Now (round 2, with the new layout switch on or off): this week's cards start open, later weeks start folded, a tap on an empty spot of an open card (the tile, the words, the footer edge) folds it,
+  a tap on a folded row opens it, and the controls (gear, In/Out, the court switch, the $ cell, Book, Yes) never fold it. Test: `F5 Home cards: tap a card to collapse it...` (24 checks became 26 in `e2e/admin-r2.cjs`).

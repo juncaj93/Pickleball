@@ -537,3 +537,23 @@
 .activity-list > li.a-other .a-text {
   font-weight: 650;
 }
+
+/* =========================================================================================================
+   Header: View as…, then the Light/Dark button, then the calendar tile
+   ========================================================================================================= */
+.r2-hdr-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+/* Small phones: a little less padding so the logo, Admin, View as…, the button and the tile fit on one line. */
+@media (max-width: 340px) {
+  .r2-hdr-actions .topbar-btn {
+    padding: 0 10px;
+    font-size: 0.8rem;
+  }
+  .r2-hdr-actions .mode-btn {
+    width: 40px;
+  }
+}

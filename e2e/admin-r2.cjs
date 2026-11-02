@@ -202,13 +202,17 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- 5. header
-  await check('5 header: Light/Dark button left of View as, "Admin" under ORGANIZER, no "Updated just now" anywhere', async () => {
+  await check('5 header: View as… then the Light/Dark button then the calendar tile, "Admin" under ORGANIZER, no "Updated just now" anywhere', async () => {
     const { ctx, page } = await openAdmin();
     assert((await page.locator('.topbar .eyebrow').innerText()).toLowerCase() === 'organizer', 'eyebrow');
     assert((await page.locator('.topbar h1').innerText()) === 'Admin', 'title says Admin');
     const m = await page.locator('.topbar .mode-btn').boundingBox();
     const v = await page.locator('.topbar-btn', { hasText: 'View as' }).boundingBox();
-    assert(m && v && m.x + m.width <= v.x + 1 && Math.abs(m.y + m.height / 2 - (v.y + v.height / 2)) < 12, 'toggle is left of View as, on the same line');
+    const t = await page.locator('.topbar .today').boundingBox();
+    const logo = await page.locator('.topbar .brand-tile').boundingBox();
+    assert(logo.x < v.x && v.x + v.width <= m.x + 1 && m.x + m.width <= t.x + 1, 'order: logo and title, View as…, Light/Dark button, calendar tile');
+    assert(Math.abs(m.y + m.height / 2 - (v.y + v.height / 2)) < 12 && Math.abs(m.y + m.height / 2 - (t.y + t.height / 2)) < 30, 'on one line');
+    assert(t.x - (m.x + m.width) < 16, `the button sits right next to the tile (${t.x - (m.x + m.width)} px apart)`);
     for (const t of ['Home', 'Players', 'Money', 'History', 'Settings']) {
       await tab(page, t);
       assert((await page.getByText(/Updated (just now|\d+ min ago)/).count()) === 0, `no Updated line on ${t}`);
@@ -678,6 +682,77 @@ async function main() {
       await nextRow.click();
       await page.waitForTimeout(300);
       assert((await page.locator('.hv2-short').count()) === seq.filter((x) => !x.open).length - 1, 'one folded game opened');
+      await ctx.close();
+    }
+  });
+
+  await check('H header fits at 320 px, 360 px and 200% text: order kept, nothing past the edge', async () => {
+    for (const [w, big] of [[320, false], [360, false], [320, true], [390, true]]) {
+      const { ctx, page } = await openAdmin({ width: w });
+      if (big) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+      await page.waitForTimeout(300);
+      const r = await page.evaluate(() => {
+        const q = (s) => document.querySelector(s).getBoundingClientRect();
+        const vw = document.documentElement.clientWidth;
+        const v = [...document.querySelectorAll('.topbar-btn')].find((b) => b.textContent.includes('View as')).getBoundingClientRect();
+        const m = q('.topbar .mode-btn');
+        const t = q('.topbar .today');
+        return { vw, sw: document.documentElement.scrollWidth, v, m, t, right: Math.max(v.right, m.right, t.right) };
+      });
+      assert(r.sw <= r.vw + 1 && r.right <= r.vw + 1, `${w} big=${big}: past the edge (${r.right} > ${r.vw})`);
+      const sameRow = Math.abs(r.v.top - r.m.top) < 12;
+      if (sameRow) assert(r.v.right <= r.m.left + 1, `${w} big=${big}: View as… is left of the button`);
+      if (Math.abs(r.m.top - r.t.top) < 30) assert(r.m.right <= r.t.left + 1, `${w} big=${big}: the button is left of the tile`);
+      if (w >= 360 && !big) assert(sameRow && Math.abs(r.m.top - r.t.top) < 30, `${w}: all on one line`);
+      await ctx.close();
+    }
+  });
+
+  await check('F5 Home cards: tap a card to collapse it, tap the folded row to expand it (ADMIN_R2 on, with the new layout on and off)', async () => {
+    for (const v2 of [false, true]) {
+      const { ctx, page } = await openAdmin({ v2 });
+      await page.waitForTimeout(300);
+      const open = page.locator('.hv2-open');
+      const n0 = await open.count();
+      assert(n0 >= 1, `this week's cards start open (${n0})`);
+      const id = await open.first().getAttribute('data-game-open');
+      const shorts0 = await page.locator('.hv2-short').count();
+      // Tap an empty spot on the card (the date tile): it folds into a short row.
+      await open.first().locator('.tile').click();
+      await page.waitForTimeout(350);
+      assert((await page.locator('.hv2-open').count()) === n0 - 1, 'the card collapsed');
+      assert((await page.locator('.hv2-short').count()) === shorts0 + 1, 'it became a short row');
+      assert((await page.locator(`div#session-${id}.hv2-short`).count()) === 1, 'the same game');
+      // Tap the folded row: it opens again.
+      await page.locator(`div#session-${id}`).click();
+      await page.waitForTimeout(350);
+      assert((await page.locator('.hv2-open').count()) === n0 && (await page.locator(`article#session-${id}`).count()) === 1, 'the card expanded again');
+      // Tapping words on the card (the names) and an empty footer corner folds it too.
+      await page.locator(`article#session-${id} .players-count`).first().click();
+      await page.waitForTimeout(350);
+      assert((await page.locator(`article#session-${id}`).count()) === 0, 'tapping the "3 in" words folds it');
+      await page.locator(`div#session-${id}`).click();
+      await page.waitForTimeout(350);
+      await page.locator(`article#session-${id} .r2-foot`).click({ position: { x: 3, y: 20 } });
+      await page.waitForTimeout(350);
+      assert((await page.locator(`article#session-${id}`).count()) === 0, 'tapping the footer\'s empty edge folds it');
+      await page.locator(`div#session-${id}`).click();
+      await page.waitForTimeout(350);
+      // Controls do their own job and never fold the card: the gear, In/Out, the court switch.
+      const card = page.locator(`article#session-${id}`);
+      await card.locator('.game-menu .icon-round').click();
+      await page.keyboard.press('Escape');
+      await card.locator('.r2-paid').click();
+      await page.getByRole('dialog').waitFor();
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(350);
+      assert((await page.locator(`article#session-${id}`).count()) === 1, 'gear and the paid cell did not fold it');
+      // A folded game from a later week opens on a tap, and its footer is there.
+      const later = page.locator('.hv2-short').first();
+      const lid = (await later.getAttribute('data-session'));
+      await later.click();
+      await page.waitForTimeout(350);
+      assert((await page.locator(`article#session-${lid} .r2-foot`).count()) === 1, 'a later-week game opens with its footer');
       await ctx.close();
     }
   });

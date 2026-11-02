@@ -200,12 +200,19 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
         eyebrow="Organizer"
         title={r2 ? 'Admin' : d.group.name}
         action={
-          <>
-            {r2 && <ModeButton />}
+          r2 ? (
+            // Round 2: View as… first, then the Light/Dark button, so the button sits right next to the calendar tile.
+            <span className="r2-hdr-actions">
+              <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
+                View as…
+              </button>
+              <ModeButton />
+            </span>
+          ) : (
             <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
               View as…
             </button>
-          </>
+          )
         }
       />
       {tab !== 'settings' && !r2 && <UpdatedLine at={checkedAt} />}
