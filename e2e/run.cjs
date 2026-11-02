@@ -3316,7 +3316,9 @@ async function main() {
               document.documentElement.scrollHeight -
               (document.querySelector('details[data-section="alerts"]')?.getBoundingClientRect().height ?? 0) -
               (document.querySelector('[data-row="timeShiftAll"]')?.getBoundingClientRect().height ?? 0) -
-              (document.querySelector('[data-row="payAlwaysAll"]')?.getBoundingClientRect().height ?? 0),
+              (document.querySelector('[data-row="payAlwaysAll"]')?.getBoundingClientRect().height ?? 0) -
+              // The whole "Feature switches" section (its heading, New admin layout, the Nov 2 "No Venmo? note") came after the limit too.
+              (document.querySelector('details[data-section="switches"]')?.getBoundingClientRect().height ?? 0),
           );
           assert(h <= 2623 - 100, `Settings is ${h}px tall (was 2623px)`);
         }
