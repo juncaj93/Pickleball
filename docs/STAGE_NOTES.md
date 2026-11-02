@@ -1480,7 +1480,7 @@ deployment 6153a25f). Scenario list: `docs/AUDIT_SCENARIOS_payalways.md`.
   noted, not changed: the Waitlist cancel dialog says "This does not cancel your court"; the Money tab shows "Court due" for a game
   with no court; "Didn't open" is only on the API now (the court switch has no button for it); small text links (I paid, Drop out).
 
-### Preview (Mon Nov 2, 2026, about 12:10 AM Eastern)
+### Preview (Sun Nov 1, 2026, about 11:00 PM Eastern)
 - https://preview-pay-always.pickleball-club-9h0.pages.dev (deployment fd180065), branch claude/new-session-ejzdck merged with main
   4fb55a7. Fake database `pickleball-preview`, re-seeded after the tests. The Settings switch there is off: use `?payalways=on`,
   or flip Settings > Money > "Ask for payment on every game" on the preview's /admin.
