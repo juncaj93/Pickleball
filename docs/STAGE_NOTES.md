@@ -1412,3 +1412,16 @@ writes `pb_motion_admin_seen` in localStorage.
   `pickleball-preview`, MOTION_ADMIN on in the preview vars; `/admin?motionadmin=on` also works on any address). Not on production.
 - Ship plan (after "ship it"): back up and Time Travel bookmark first, merge to main, deploy from main with `MOTION_ADMIN = "off"`, Alex
   tests with `/admin?motionadmin=on`, then one line (`MOTION_ADMIN = "on"`) and a deploy in a quiet window.
+
+### Deploys (Sun Nov 1, 2026, on Alex's "ship it")
+- About 10:05 PM Eastern: PR #67 merged as 735af6c, production deployment `60c9ed3d` from main with `MOTION_ADMIN = "off"` (dark for everyone).
+  Before it: SQL export `live-before-motion-admin-2026-11-01.sql` (not committed, has phone numbers, in that session's scratch folder) and
+  Time Travel bookmark `000003e0-00000000-00005117-c23b95dd474c5b5c0c6a303660701faa`. Health checks 20 of 20 at 0 before and after.
+  Alex tested with `/admin?motionadmin=on` on his phone and approved.
+- About 10:09 PM Eastern: PR #68 merged as 199170c, production deployment `6153a25f` from main with `MOTION_ADMIN = "on"` for everyone (one line in
+  `wrangler.toml`, plus the new `docs/FEATURE_SWITCHES.md`; no code or data change). Before it: SQL export `live-before-motion-admin-on-2026-11-01.sql`
+  and the same Time Travel bookmark (nothing had been written in between). Health checks 20 of 20 at 0 after.
+- Rollback: `MOTION_ADMIN = "off"` and a deploy; or Pages deployment `60c9ed3d` (organizer motion off, same code); or `ab7da657` (commit ce26ca8,
+  before any organizer motion code). No data changed in any of these deploys, so no restore is needed.
+- The old `e2e/live-check.cjs` line "setup code is configured" fails on the live site because setup is finished (`setupEnabled` is false); it is
+  an old check from before setup and not related to motion.
