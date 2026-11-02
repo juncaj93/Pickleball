@@ -6,6 +6,7 @@ import { formatShortDate } from '../../../shared/time';
 import { holdLive } from '../../busy';
 import { isIOS } from '../../lib';
 import { CalendarPlusIcon, GearIcon, MessageIcon } from '../../ui';
+import { canMove } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { sessionTexts } from './textMenu';
 
@@ -30,12 +31,31 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
   const day = formatShortDate(s.startsAt, tz);
   const items = sessionTexts(ctx.d, s, Date.parse(ctx.d.now));
 
+  // Motion: the pop-up fades out fast (about 90 ms) instead of vanishing. Its content and place are kept until then
+  // (they are reset when it opens again), and it takes no taps while it fades.
+  const [fading, setFading] = useState(false);
+  const fadeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(fadeTimer.current), []);
   const close = (refocus = true) => {
+    if (canMove() && open) {
+      setFading(true);
+      clearTimeout(fadeTimer.current);
+      fadeTimer.current = setTimeout(() => setFading(false), 100);
+    } else {
+      setTexts(false);
+      setOpened(null);
+      setPlace('down');
+    }
     setOpen(false);
+    if (refocus) gear.current?.focus({ preventScroll: true });
+  };
+  const openMenu = () => {
+    clearTimeout(fadeTimer.current);
+    setFading(false);
     setTexts(false);
     setOpened(null);
     setPlace('down');
-    if (refocus) gear.current?.focus({ preventScroll: true });
+    setOpen(true);
   };
 
   // Measure with the pop-up drawn (hidden) under the gear, then choose. Runs again when the text list opens or the screen turns.
@@ -113,7 +133,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
   const menu = (
     <div
       ref={pop}
-      className={`menu-pop place-${place}`}
+      className={`menu-pop place-${place}${fading && !open ? ' m-fading' : ''}`}
       id={menuId}
       role="menu"
       aria-label={`Game menu for ${day}`}
@@ -180,11 +200,11 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => (open ? close() : openMenu())}
       >
         <GearIcon />
       </button>
-      {open && (place === 'sheet' ? createPortal(menu, document.body) : menu)}
+      {(open || fading) && (place === 'sheet' ? createPortal(menu, document.body) : menu)}
     </div>
   );
 }

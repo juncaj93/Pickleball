@@ -564,3 +564,352 @@ html[data-motion='on'] .m-empty-shadow {
   z-index: -1;
   animation: m-bounce-shadow 1100ms linear 1 both;
 }
+
+/* =====================================================================================================================
+   The ORGANIZER screens (the same "Balanced" package, switch MOTION_ADMIN). The shared pieces above (sheets, toast,
+   press on .btn, field focus, number rolls, the name flash, the ball pop) already apply here because the dashboard sets
+   <html data-motion="on"> too. Everything new below sits under html[data-motion='on'][data-motion-admin], which only
+   the organizer dashboard sets, so nothing here can touch a player screen. Nothing animates height, top, left or a big
+   shadow; every UI move is 120 to 200 ms. Reduce Motion: the global rule in styles.css turns every animation off.
+   ===================================================================================================================== */
+
+/* The native pull-down at the top of the page stays as it was on the organizer screens (our own pull is player only). */
+html[data-motion='on'][data-motion-admin],
+html[data-motion='on'][data-motion-admin] body {
+  overscroll-behavior-y: auto;
+}
+
+/* ---- 1. Loading: a pickleball bounces on a small shadow (drawn only after 250 ms, see LoadingBall in ui.tsx) ---- */
+.m-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 72px;
+  min-height: 160px;
+}
+.m-loading-ball {
+  display: block;
+  width: 44px;
+  height: 44px;
+  animation: m-ball-hop 620ms linear infinite;
+}
+.m-loading-ball .ball {
+  display: block;
+  width: 44px;
+  height: 44px;
+}
+.m-loading-shadow {
+  display: block;
+  width: 34px;
+  height: 7px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(0 0 0 / 45%), transparent);
+  animation: m-ball-hop-shadow 620ms linear infinite;
+}
+@keyframes m-ball-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.25, 0.7, 0.4, 1);
+  }
+  50% {
+    transform: translateY(-34px);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.75, 0.3);
+  }
+}
+@keyframes m-ball-hop-shadow {
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scaleX(0.6);
+    opacity: 0.22;
+  }
+}
+/* Once the data is here the cards cascade in, once per page open (the shared rule above handles the first level). */
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] {
+  animation: none;
+}
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > * {
+  animation: m-rise var(--t-enter) var(--ease-out) backwards;
+  animation-delay: 60ms;
+}
+html[data-motion='on'][data-motion-admin] main.m-cascade > :nth-child(2) { animation-delay: 45ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > :nth-child(3) { animation-delay: 90ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > :nth-child(n + 4) { animation-delay: 135ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(2) { animation-delay: 105ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(3) { animation-delay: 150ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(4) { animation-delay: 195ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(5) { animation-delay: 240ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(6) { animation-delay: 285ms; }
+html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(n + 7) { animation-delay: 330ms; }
+/* The old "everything fades in whenever it is drawn" rules are replaced: only the one first-load cascade plays, and the
+   expanders have their own ease (below). Without this, the cards would fade in again the moment the cascade ends. */
+html[data-motion='on'][data-motion-admin] section[aria-labelledby='sessions-title'] > .scard,
+html[data-motion='on'][data-motion-admin] .set-sect[open]:not(.m-opening-d) > .set-body {
+  animation: none;
+}
+/* The player-screen pull-to-refresh gap rule must not push the organizer page around. */
+html[data-motion='on'][data-motion-admin] main.page {
+  position: static;
+}
+
+/* ---- 2. Press: organizer cards sink about 1.5 percent and spring back; small buttons shrink too ---- */
+html[data-motion='on'][data-motion-admin] .admin-page .card {
+  transition: transform var(--t-tap) var(--ease-spring);
+}
+html[data-motion='on'][data-motion-admin] .admin-page .card:active:not(:has(button:active, a:active, summary:active, label:active, input:active, select:active)) {
+  transform: scale(0.985);
+}
+html[data-motion='on'][data-motion-admin] .icon-round,
+html[data-motion='on'][data-motion-admin] .paid-pill,
+html[data-motion='on'][data-motion-admin] .topbar-btn,
+html[data-motion='on'][data-motion-admin] .chip-btn {
+  transition: transform var(--t-tap) var(--ease-spring);
+}
+html[data-motion='on'][data-motion-admin] .icon-round:active,
+html[data-motion='on'][data-motion-admin] .paid-pill:active,
+html[data-motion='on'][data-motion-admin] .topbar-btn:active,
+html[data-motion='on'][data-motion-admin] .chip-btn:active {
+  transform: scale(0.95);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion='on'][data-motion-admin] .admin-page .card:active:not(:has(button:active, a:active, summary:active, label:active, input:active, select:active)),
+  html[data-motion='on'][data-motion-admin] .icon-round:active,
+  html[data-motion='on'][data-motion-admin] .paid-pill:active,
+  html[data-motion='on'][data-motion-admin] .topbar-btn:active,
+  html[data-motion='on'][data-motion-admin] .chip-btn:active {
+    transform: none;
+  }
+}
+
+/* ---- 3. Live changes (the 5-second refresh): the card blinks a light green and fades (0.8 s); the name flashes the
+        mint accent and fades (1 s, rule in ui.tsx + the shared .name-new); the paid pill flashes; the count rolls and
+        only the new circle pops (shared rules). Real changes only, never on first load, never behind a sheet or menu. ---- */
+html[data-motion='on'][data-motion-admin] .name-new {
+  animation-duration: 1000ms;
+}
+html[data-motion='on'][data-motion-admin] .scard.m-blink::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--primary);
+  opacity: 0;
+  pointer-events: none;
+  animation: m-card-blink 800ms ease-out;
+}
+@keyframes m-card-blink {
+  from {
+    opacity: 0.14;
+  }
+  to {
+    opacity: 0;
+  }
+}
+.paid-pill > span {
+  --flash-base: var(--fill);
+}
+.paid-pill[data-all-paid='yes'] > span {
+  --flash-base: var(--ok-bg);
+}
+html[data-motion='on'][data-motion-admin] .paid-pill.m-flash > span {
+  animation: m-pill-flash 1000ms ease-out;
+}
+@keyframes m-pill-flash {
+  from {
+    background-color: color-mix(in srgb, var(--primary) 35%, var(--flash-base));
+  }
+}
+/* The time under the date tile fades quickly when it changes. */
+html[data-motion='on'][data-motion-admin] .scard-time.m-time-fade {
+  animation: m-time-fade 240ms ease-out;
+}
+@keyframes m-time-fade {
+  from {
+    opacity: 0.15;
+  }
+}
+
+/* ---- 4. The gear pop-up: snaps open from its corner in 140 ms with a tiny spring; closes with a fast fade ---- */
+html[data-motion='on'][data-motion-admin] .menu-pop {
+  transform-origin: top right;
+  animation: m-menu-in 140ms var(--ease-spring) backwards;
+}
+html[data-motion='on'][data-motion-admin] .menu-pop.place-up {
+  transform-origin: bottom right;
+}
+html[data-motion='on'][data-motion-admin] .menu-pop.place-sheet {
+  transform-origin: bottom center;
+  animation: m-menu-sheet-in 140ms var(--ease-spring) backwards;
+}
+html[data-motion='on'][data-motion-admin] .menu-pop.m-fading {
+  animation: m-menu-out 90ms ease-in forwards;
+  pointer-events: none;
+}
+@keyframes m-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+@keyframes m-menu-sheet-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+}
+@keyframes m-menu-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---- 7. Save: a small spinning pickleball, then a green Saved with a check that pops ---- */
+.m-btn-ball {
+  display: inline-flex;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  animation: spin 0.6s linear infinite;
+}
+.m-btn-ball .ball {
+  width: 18px;
+  height: 18px;
+}
+html[data-motion='on'] .btn.m-saved,
+html[data-motion='on'] .btn.m-saved:disabled {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-edge);
+  opacity: 1;
+  transition: background-color var(--t-tap) var(--ease-out);
+}
+.m-saved-check {
+  flex: none;
+  animation: m-pop 260ms var(--ease-spring) backwards;
+}
+.m-saved-check path {
+  stroke-dasharray: 18;
+  animation: m-draw 240ms var(--ease-out) 60ms backwards;
+}
+
+/* ---- 8. Court switch: the highlight glides between the options (150 ms, transform only); the card edge color follows ---- */
+html[data-motion='on'] .court-switch {
+  position: relative;
+}
+html[data-motion='on'] .court-switch .cs-glide {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 3px;
+  /* Three equal cells with 2 px gaps inside 3 px of padding. */
+  width: calc((100% - 10px) / 3);
+  border-radius: 9px;
+  background: var(--sw-notbooked-bg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%);
+  transform: translateX(calc(var(--i, 0) * (100% + 2px)));
+  transition:
+    transform 150ms var(--ease-out),
+    background-color 150ms var(--ease-out);
+  pointer-events: none;
+}
+html[data-motion='on'] .court-switch[data-value='waitlist'] .cs-glide {
+  background: var(--sw-wait-bg);
+}
+html[data-motion='on'] .court-switch[data-value='booked'] .cs-glide {
+  background: var(--sw-booked-bg);
+}
+html[data-motion='on'] .court-switch button {
+  position: relative;
+  z-index: 1;
+}
+/* The glide supplies the color; the chosen button keeps its text color and weight. */
+html[data-motion='on'] .court-switch button[aria-pressed='true'] {
+  background: transparent;
+  box-shadow: none;
+}
+html[data-motion='on'][data-motion-admin] .admin-page .scard {
+  transition:
+    border-color 150ms var(--ease-out),
+    background-color 150ms var(--ease-out),
+    transform var(--t-tap) var(--ease-spring);
+}
+
+/* ---- 9. Toggles: the knob stretches as it slides, then settles (150 ms; the stretch uses the separate scale property) ---- */
+html[data-motion='on'] .switch {
+  transition: background-color 150ms var(--ease-out);
+}
+html[data-motion='on'] .switch::before {
+  transition: transform 150ms var(--ease-out);
+}
+html[data-motion='on'] .switch.m-stretch::before {
+  animation: m-knob-stretch 150ms var(--ease-out);
+}
+html[data-motion='on'] .switch:checked.m-stretch::before {
+  transform-origin: 0 50%;
+}
+html[data-motion='on'] .switch:not(:checked).m-stretch::before {
+  transform-origin: 100% 50%;
+}
+@keyframes m-knob-stretch {
+  50% {
+    scale: 1.35 1;
+  }
+}
+
+/* ---- 10. Bottom tab bar: the selected highlight glides to the tapped tab (200 ms, transform only) ---- */
+html[data-motion='on'] .tabbar ul {
+  position: relative;
+}
+html[data-motion='on'] .tabbar .tab-glide {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  list-style: none;
+  /* Five equal cells with 2 px gaps. */
+  width: calc((100% - 8px) / 5);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  transform: translateX(calc(var(--i, 0) * (100% + 2px)));
+  transition: transform 200ms var(--ease-out);
+  pointer-events: none;
+}
+html[data-motion='on'] .tabbar button {
+  z-index: 1;
+}
+html[data-motion='on'] .tabbar button[aria-current='page'] {
+  background: transparent;
+}
+
+/* ---- 14. Details and expanders: the content eases open and shut (opacity and a 4 px rise); src/motion.tsx sets the class ---- */
+html[data-motion='on'] details.m-opening-d[open] > :not(summary) {
+  animation: m-expand-in 170ms var(--ease-out) backwards;
+}
+html[data-motion='on'] details.m-closing-d > :not(summary) {
+  animation: m-expand-out 120ms ease-in forwards;
+}
+@keyframes m-expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes m-expand-out {
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* Reduce Motion (organizer screens only; the player screens are left exactly as they were): the dim behind a sheet is drawn by a pseudo-element the global rule in styles.css cannot reach. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion='on'][data-motion-admin] dialog.sheet[open]::backdrop,
+  html[data-motion='on'][data-motion-admin] dialog.sheet.m-closing::backdrop {
+    animation: none;
+  }
+}

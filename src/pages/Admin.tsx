@@ -1,4 +1,4 @@
-import { Fragment, type FormEvent, type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, Fragment, type FormEvent, type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
 import { courtCards } from './admin/doNow';
@@ -8,7 +8,8 @@ import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshO
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
-import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
+import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, LoadingBall, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
+import { canMove, rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
@@ -37,7 +38,8 @@ export function AdminApp() {
     return (
       <>
         <TopBar eyebrow="Organizer" title="Dashboard" />
-        <Spinner />
+        {/* The bouncing ball only when this phone already knows the organizer motion is on; otherwise the plain spinner, as before. */}
+        {rememberedAdminMotion() ? <LoadingBall /> : <Spinner />}
       </>
     );
   }
@@ -114,6 +116,24 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   const [sheet, setSheet] = useState<{ kind: SheetKind; sessionId: string } | null>(null);
   const [viewing, setViewing] = useState<{ id: string; name: string } | null>(null);
   const [pickViewAs, setPickViewAs] = useState(false);
+  // Motion (the MOTION_ADMIN switch). Visual only; with it off none of this does anything. The player demo (View as)
+  // looks after its own motion, so the organizer's steps back while it is showing.
+  useAdminMotion(d.motion === true, !viewing);
+  const motion = useMotion();
+  useSwitchStretch(motion);
+  useDetailsEase(motion);
+  // The first-load cascade plays once per page open (not on refreshes or tab changes).
+  const [cascade, setCascade] = useState(false);
+  const cascaded = useRef(false);
+  useLayoutEffect(() => {
+    if (cascaded.current || !motion) return undefined;
+    cascaded.current = true;
+    if (!canMove()) return undefined;
+    setCascade(true);
+    // Not cancelled by the next refresh: the cascade ends on its own, once.
+    const t = setTimeout(() => setCascade(false), 900);
+    return () => clearTimeout(t);
+  }, [motion]);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
   const todoCount = homeBadgeCount(d);
   // The organizer screens keep themselves fresh like the player side: one tiny "did anything change?" check every
@@ -177,7 +197,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
         }
       />
       {tab !== 'settings' && <UpdatedLine at={checkedAt} />}
-      <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}`}>
+      <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}${cascade ? ' m-cascade' : ''}`}>
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
@@ -186,6 +206,8 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
       </main>
       <nav className="tabbar" aria-label="Organizer sections">
         <ul>
+          {/* The highlight glides to the tapped tab (motion only; it sits over the cells, not in them). */}
+          {motion && <li className="tab-glide" aria-hidden="true" style={{ '--i': TABS.findIndex((t) => t.id === tab) } as CSSProperties} />}
           {TABS.map(({ id, label, Icon }) => (
             <li key={id}>
               <button

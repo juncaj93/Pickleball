@@ -42,6 +42,8 @@ export interface Env {
   TIME_SHIFT?: string;
   /** "Motion" (animations on the player screens): "on" for everyone; anything else is dark, except a phone with the private test switch. A wrangler.toml var. */
   MOTION?: string;
+  /** "Motion" on the organizer screens: "on" switches it on; anything else is dark, except a phone with the private test switch. A wrangler.toml var. */
+  MOTION_ADMIN?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

@@ -145,6 +145,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (timeShiftTest()) headers['X-Time-Shift'] = 'on';
   // The motion's private test switch for this phone (?motion=on, see server/motion.ts).
   if (motionTest()) headers['X-Motion'] = 'on';
+  // The organizer screens' own private motion switch (?motionadmin=on, see server/motion.ts).
+  if (motionAdminTest()) headers['X-Motion-Admin'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
   // Demo: the throwaway copy answers. Signing out always goes to the live site.
@@ -418,4 +420,18 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('motion');
   if (want === 'on') storageSet(MOTION_TEST_KEY, 'on');
   else if (want === 'off') storageRemove(MOTION_TEST_KEY);
+}
+
+/**
+ * The organizer screens' motion on this phone only, before it is on for everyone: open the site once with
+ * ?motionadmin=on (?motionadmin=off turns it back off). Remembered in this browser; nothing else changes.
+ */
+const MOTION_ADMIN_KEY = 'pb_motion_admin_test';
+export function motionAdminTest(): boolean {
+  return storageGet(MOTION_ADMIN_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('motionadmin');
+  if (want === 'on') storageSet(MOTION_ADMIN_KEY, 'on');
+  else if (want === 'off') storageRemove(MOTION_ADMIN_KEY);
 }
