@@ -6,6 +6,7 @@ import { MonthlyMoneyPage } from './MonthlyMoney';
 import { PaymentsManager } from './Sessions';
 import { unpaidPeople } from './textMenu';
 import { SmsDraft } from '../../ui';
+import { RollText } from '../../motion';
 
 /** A canceled game where someone's payment became credit. */
 const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
@@ -37,7 +38,9 @@ export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
   const session = (s: AdminSessionView, open: boolean) => (
     <details key={s.id} className="money-sess card" open={open || undefined} data-session={s.id}>
       <summary>
-        <span>{label(s)}</span>
+        <span>
+          <RollText text={label(s)} />
+        </span>
         {!s.state.flags.canceled && s.needsFinalize && <span className="owes-tag">finalize</span>}
         {!s.state.flags.canceled && s.paidCount < s.payableCount && <span className="owes-tag">{s.payableCount - s.paidCount} owe</span>}
       </summary>

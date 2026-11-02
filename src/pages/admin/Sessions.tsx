@@ -28,6 +28,7 @@ import { isPlayed, lateDropsAll } from './todo';
 import '../../credit-session.css';
 import '../../admin-cards.css';
 import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
+import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 
 export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set';
 
@@ -76,12 +77,19 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
   // "Time may shift": the court on the tile's border and the time under it (TIME_SHIFT).
   const ts: TsKind | null = tsKind(court.kind, false);
   const flip = useCourtFlip(`admin-${s.id}`, ts);
+  // Motion, live changes only: someone joined or dropped (the card blinks a light green), someone paid (the pill flashes).
+  const whoKey = s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => `${r.playerId}:${r.status}`).join(',');
+  const whoChanged = useLiveChanged(whoKey);
+  const paidFlash = useLiveChanged(s.paidCount);
+  const blink = whoChanged || paidFlash;
+  // The time under the date tile fades quickly when it changes (an Edit game save).
+  const timeFade = useJustChanged(start, 300);
   return (
-    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}`} data-court={court.kind} data-switch={switchValue} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
+    <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}${blink ? ' m-blink' : ''}`} data-court={court.kind} data-switch={switchValue} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       <div className="scard-main">
         <div className="scard-tilecol">
           <DateTile iso={s.startsAt} tz={tz} ts={tsClass(ts, flip)} />
-          <div className={`scard-time${tsClass(ts, flip)}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
+          <div className={`scard-time${tsClass(ts, flip)}${timeFade ? ' m-time-fade' : ''}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
             {tsTime(start, ts)}
           </div>
         </div>
@@ -124,12 +132,14 @@ export function SessionCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) 
               {inCount > 0 && (
                 <button
                   type="button"
-                  className="paid-pill"
+                  className={`paid-pill${paidFlash ? ' m-flash' : ''}`}
                   data-all-paid={s.paidCount === inCount ? 'yes' : undefined}
                   aria-label={`${s.paidCount} of ${inCount} paid. Open the players list.`}
                   onClick={() => ctx.open('roster', s.id)}
                 >
-                  <span>{s.paidCount} of {inCount} paid</span>
+                  <span>
+                    <RollText text={`${s.paidCount} of ${inCount} paid`} />
+                  </span>
                 </button>
               )}
               {cancelBy && <span className="cancel-by-soon">{cancelBy}</span>}

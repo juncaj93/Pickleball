@@ -1330,3 +1330,98 @@ unchanged Pay button re-popped on an amount change. Switch off: identical text, 
 - Rollback: Pages deployment `f98dbbc1` (motion off, same code) is the quickest; `d156b8e0` (commit dace600) is before the motion
   code. No data changed in either deploy, so no restore is needed.
 
+
+## Motion pass, organizer side (Sun Nov 1, 2026, night) - "Balanced" package, switch MOTION_ADMIN (OFF at ship)
+
+Visual layer only. No schema change, no API or money change, no text change. Started from main `ce26ca8` (src identical to the
+live deployment `ab7da657`; checked with the Cloudflare deployments list before any work). The player motion shipped first and the
+time shift release is live (`TIME_SHIFT = "on"`), so this reuses `src/motion.css` and `src/motion.tsx` (no second file).
+Preview only: nothing here is on production until Alex says "ship it".
+
+### The switch (a separate one, on purpose)
+- `MOTION_ADMIN` var in `wrangler.toml`: production `"off"` (dark), `[env.preview.vars]` `"on"`. Why not reuse `MOTION`: the player
+  `MOTION` is already `"on"` for everyone (switched on Sun Nov 1), so reusing it would have turned the organizer motion live the moment
+  this deployed, which is the opposite of "ship dark first".
+- Private on-switch for Alex's phone on the live site: open `pickleball.juncaj.net/admin?motionadmin=on` once (remembered on that
+  phone; `?motionadmin=off` ends it). It sends `X-Motion-Admin: on`, and `/api/admin/dashboard` answers `motion: true` for that phone only
+  (`server/motion.ts` `motionAdminFor`, one new boolean on the dashboard answer). `?motion=on` (the player switch) does NOT turn it on.
+- The dashboard sets `<html data-motion="on" data-motion-admin="on">` only while it is showing and the answer is yes (`useAdminMotion`
+  in `src/motion.tsx`). The shared pieces (sheets, toast, press, field focus, rolls, name flash, ball pop) already sit under
+  `data-motion`, so they just work here; everything new sits under `html[data-motion='on'][data-motion-admin]` or in a component
+  that only renders with the motion on. Off = the site behaves exactly like before (a layout test compares every card, button,
+  switch and tab with the switch on and off at 320 and 390 px, light and dark).
+- To turn it on for everyone: set `MOTION_ADMIN = "on"` in `wrangler.toml` and deploy, in a quiet window. To turn it all off again:
+  `MOTION_ADMIN = "off"` and deploy.
+
+### What moves (numbers are the spec's item numbers)
+- 1 Loading: a bouncing pickleball with holes and a small shadow, drawn only after 250 ms (a timer in `LoadingBall`, so it holds with
+  Reduce Motion too); the plain spinner when the switch is off. Cards then cascade in once per page open (rise 14 px, 45 ms apart).
+  The site's old "cards fade in whenever drawn" rule is off while the switch is on, so nothing replays when the cascade ends or on a tab change.
+- 2 Press: organizer cards sink 1.5 percent (not when a button or link inside is pressed), buttons 95 percent, gear and pill buttons 95 percent.
+- 3 Live changes (5-second refresh): the joined name flashes the mint accent (35 percent, 1 s), the count rolls, only the new circle
+  pops, the card blinks a light green (overlay fading over 0.8 s). A payment flashes the "x of y paid" pill and rolls its number.
+  Never on first load, never while a sheet or the gear menu is open, never moves the page.
+- 4 Gear pop-up: snaps open from its corner in 140 ms (tiny spring), closes with a 90 ms fade. It still never scrolls or moves the page.
+- 5 Sheets (all of them, one shared component): snap up in 180 ms over a dim, close in 150 ms, tap outside or swipe the top down closes.
+- 6 Field focus: mint border, label color follows (shared rule).
+- 7 Save (Edit game): spinning ball while saving, then a green "Saved" with a check that pops (360 ms), then the toast "Game saved"
+  comes up, then the sheet goes. A failed save never shows green and shows the existing error. The save itself is never held back:
+  only the closing waits. The time on the card fades quickly when it changes.
+- 8 Court switch: the highlight glides between the options (150 ms, transform only) and the card edge color fades (150 ms).
+  "Not booked" stays on two lines and the three segments keep their height.
+- 9 Toggles: the knob stretches as it slides and settles (150 ms, uses the separate `scale` property so the slide itself is untouched).
+- 10 Bottom tab bar: the highlight glides to the tapped tab (200 ms, transform only).
+- 11 Screen and tab changes: instant, nothing slides.
+- 12, 13 Money numbers (Collected, Court costs, Credits owed, Held, Membership, the big number, per-person Owes, Credit, held and credit
+  chips, the Money tab session labels) and the "N of 4 in" and "x of y paid" counts roll when they change, never on first load, and never
+  when moving to another month.
+- 14 Expanders (`<details>`): open and close ease with opacity and a 4 px rise (170 ms open, 120 ms close).
+- 15 Toasts: the shared raised card (white in light, dark raised card in dark), above the tab bar.
+- 16 Speed rule: every UI move is 120 to 200 ms; only the loading ball, the cascade and the rolls are longer.
+
+### Skipped or changed from the spec
+- A real time change still opens the existing "Moved" text step after Save (the sheet changes content instead of sliding away). A
+  status-only save slides the sheet away as in the spec.
+- 3: a payment flashes the "x of y paid" pill, not a name, because the organizer cards do not show payment next to names. A drop
+  rolls the count and blinks the card (there is no name left to flash).
+- The tab bar glide is 200 ms (the spec says 220 ms and also "120 to 200 ms"; the speed rule won).
+- Reduce Motion: the dim behind a sheet used to keep fading because the global reduce rule cannot reach that pseudo-element; it is now
+  off with Reduce Motion on the organizer screens only (the player screens are untouched; the reviewer caught a first version that leaked there).
+- Pull to refresh stays player only. The organizer page keeps the browser's own pull-down.
+
+### Fresh check
+A helper that did not write the code reviewed the diff and ran it (switch off vs main on 8 size and theme combinations: identical DOM,
+text, boxes and 18 computed properties; switch on at 320 and 390 px, light and dark; Reduce Motion; rapid taps; View as). No blockers.
+Found and fixed: the Reduce Motion backdrop rule also reached player sheets (now organizer only); closing the Edit sheet during the
+360 ms "Saved" skipped the "Moved" follow-up step (it now always follows, like with the motion off); a quick double tap on an expander
+ended closed instead of open (now matches the old result). Left as is: the paid pill text is now one text node (0.03 px wider with the
+switch off, text identical); the court switch text color changes at once while the highlight glides (under 150 ms); the Dashboard now
+writes `pb_motion_admin_seen` in localStorage.
+
+### Tests (Sun Nov 1, 2026)
+- Unit: 1,578 passed, 1 skipped, in 89 files (was 1,571 in 88; new `tests/motion-admin.test.ts`, 7: the var, dark by default, the player
+  MOTION does not switch it on, the private header, nothing else in the dashboard answer changes, a court change saves the same).
+- Browser, every file on its own, all green at the same counts as before: run 229, names 24, gates 32, alerts 52, court 84, held 81,
+  credit 153, suggest 35, popup 33, texts 52, circles 18, audit-stage3 3, cancel-reason 8, round2 25, want-in 4, double-tap 4,
+  dryrun-screens 6, do-now 13, live 26, banner 11, card-times 13, no-court 10, auto-credit 22, money-visible 12, admin-cleanup 35,
+  good-news 9, audit-player-flows 93, audit-player-look 133 (+12 known open), admin-audit 11, admin-sweep 6, time-shift 10, motion 22,
+  and the new `e2e/admin-motion.cjs` 28. No existing test was changed. `package.json` `test:e2e` now ends with `node e2e/admin-motion.cjs`.
+
+### Preview (Sun Nov 1, 2026)
+- Branch `claude/new-session-ftr39p`, Pages preview alias `https://preview-motion-admin.pickleball-club-9h0.pages.dev` (fake database
+  `pickleball-preview`, MOTION_ADMIN on in the preview vars; `/admin?motionadmin=on` also works on any address). Not on production.
+- Ship plan (after "ship it"): back up and Time Travel bookmark first, merge to main, deploy from main with `MOTION_ADMIN = "off"`, Alex
+  tests with `/admin?motionadmin=on`, then one line (`MOTION_ADMIN = "on"`) and a deploy in a quiet window.
+
+### Deploys (Sun Nov 1, 2026, on Alex's "ship it")
+- About 10:05 PM Eastern: PR #67 merged as 735af6c, production deployment `60c9ed3d` from main with `MOTION_ADMIN = "off"` (dark for everyone).
+  Before it: SQL export `live-before-motion-admin-2026-11-01.sql` (not committed, has phone numbers, in that session's scratch folder) and
+  Time Travel bookmark `000003e0-00000000-00005117-c23b95dd474c5b5c0c6a303660701faa`. Health checks 20 of 20 at 0 before and after.
+  Alex tested with `/admin?motionadmin=on` on his phone and approved.
+- About 10:09 PM Eastern: PR #68 merged as 199170c, production deployment `6153a25f` from main with `MOTION_ADMIN = "on"` for everyone (one line in
+  `wrangler.toml`, plus the new `docs/FEATURE_SWITCHES.md`; no code or data change). Before it: SQL export `live-before-motion-admin-on-2026-11-01.sql`
+  and the same Time Travel bookmark (nothing had been written in between). Health checks 20 of 20 at 0 after.
+- Rollback: `MOTION_ADMIN = "off"` and a deploy; or Pages deployment `60c9ed3d` (organizer motion off, same code); or `ab7da657` (commit ce26ca8,
+  before any organizer motion code). No data changed in any of these deploys, so no restore is needed.
+- The old `e2e/live-check.cjs` line "setup code is configured" fails on the live site because setup is finished (`setupEnabled` is false); it is
+  an old check from before setup and not related to motion.

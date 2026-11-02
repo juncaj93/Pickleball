@@ -9,6 +9,7 @@ import { ConfirmDialog, Notice, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { balanceOf, heldCents, isPlayed } from './todo';
 import '../../credit-admin.css';
+import { RollText } from '../../motion';
 
 const ENDED_TEXT: Record<NonNullable<CreditEntryView['endedReason']>, string> = {
   undone: 'undone',
@@ -50,14 +51,14 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
               </button>
               <span className="p-money">
                 {isMe ? null : owedCents > 0 ? (
-                  <span className="p-bal owes">Owes {formatPrice(owedCents)}</span>
+                  <span className="p-bal owes"><RollText text={`Owes ${formatPrice(owedCents)}`} /></span>
                 ) : creditCents > 0 ? (
-                  <span className="p-bal credit">Credit {formatPrice(creditCents)}</span>
+                  <span className="p-bal credit"><RollText text={`Credit ${formatPrice(creditCents)}`} /></span>
                 ) : (
                   <span className="p-bal zero">$0</span>
                 )}
-                {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held">{formatPrice(heldCents(ctx.d, p.id))} held</span>}
-                {!isMe && owedCents > 0 && pot > 0 && <span className="p-held p-pot">{formatPrice(pot)} credit</span>}
+                {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held"><RollText text={`${formatPrice(heldCents(ctx.d, p.id))} held`} /></span>}
+                {!isMe && owedCents > 0 && pot > 0 && <span className="p-held p-pot"><RollText text={`${formatPrice(pot)} credit`} /></span>}
                 {!isMe && ctx.d.refundRequests.some((r) => r.playerId === p.id) && <span className="p-held p-pot">refund requested</span>}
                 <span className="p-played">{p.played} played</span>
               </span>

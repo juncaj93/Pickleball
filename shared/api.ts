@@ -356,6 +356,8 @@ export interface RefundRequestView {
 }
 
 export interface AdminDashboard {
+  /** The MOTION_ADMIN switch (server/motion.ts): the organizer screens animate. Visual only; false or missing means they look exactly as before. */
+  motion?: boolean;
   /** The "did anything change?" stamp this load was drawn from (see /api/admin/version). */
   version: string;
   /** The moved-game notice is on for this screen: Confirmed x of y, Waiting on, the Edit game note (server/timeShift.ts). */
