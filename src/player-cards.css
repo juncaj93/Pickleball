@@ -984,9 +984,9 @@ a[href] {
 /* ---- A comment on a game (and a canceled game's reason): a pill when short, a soft tinted box when long ---- */
 .schedule .note-pill,
 .schedule .note-box {
-  /* A solid soft green tint (not a see-through mix), the same on every card. */
-  background: #e3ebe5;
-  color: var(--pc-ink);
+  /* The site's own soft tint and its text color (the "Regular" chip on the Players list), light and dark. */
+  background: var(--accent-soft);
+  color: var(--accent-text);
   overflow-wrap: anywhere;
 }
 .schedule .note-pill {
@@ -1012,13 +1012,8 @@ a[href] {
 .sched-tilecol .sched-when-col {
   display: contents;
 }
-:root[data-theme='dark'] .schedule .note-pill,
-:root[data-theme='dark'] .schedule .note-box {
-  background: #243a2e;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .schedule .note-pill,
-  :root:not([data-theme='light']) .schedule .note-box {
-    background: #243a2e;
-  }
+
+.schedule .st-canceled.note-pill,
+.schedule .st-canceled.note-box {
+  color: var(--accent-text);
 }

@@ -1569,6 +1569,8 @@ Nothing here is deployed to the live site. New switches: none (see "Why no switc
   at item 8); it was added from Alex's description. Admin cards are untouched. Tests: `extra games and comments` in
   `e2e/layout-polish.cjs` (normal tile, tag under the time inside its column, pill vs box, canceled reason, a normal game has
   none of it; 12 looks incl. 320 px, 200% text, light and dark); two old checks that expected the ink tile were updated.
+  Colors are the site's existing ones, with no new colors: the comment pill and box use `--accent-soft` / `--accent-text` (the
+  "Regular" chip), the EXTRA tag uses the existing extra/holiday chip colors; a test compares them with those names in light and dark.
 
 ### Items from "Later cleanup batch" (docs/AUDIT_SCENARIOS_player.md)
 L1 to L4 fixed (all layout-only). **L5 not done** (it is about a failed drop on a shared phone, not layout).

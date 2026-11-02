@@ -125,7 +125,22 @@ async function main() {
             stClass: st ? st.className : null,
           };
         };
-        return { short: info(ids.short), long: info(ids.long), none: info(ids.none), rain: info(S8), normal: info(normal) };
+        // The colors must be the site's existing ones: compare with probes painted from the existing color names.
+        const probe = (css) => {
+          const e = document.createElement('i');
+          e.style.cssText = css;
+          document.body.appendChild(e);
+          const v = getComputedStyle(e);
+          const out = { bg: v.backgroundColor, color: v.color };
+          e.remove();
+          return out;
+        };
+        const soft = probe('background:var(--accent-soft);color:var(--accent-text)');
+        const holiday = probe('background:var(--holiday-bg);color:var(--holiday-fg)');
+        const flagEl = document.querySelector('.extra-flag');
+        const noteEl = document.querySelector('.note-pill:not(.st-canceled), .note-box:not(.st-canceled)');
+        const tokens = { noteBgOk: noteEl && getComputedStyle(noteEl).backgroundColor === soft.bg, noteColorOk: noteEl && getComputedStyle(noteEl).color === soft.color, flagBgOk: flagEl && getComputedStyle(flagEl).backgroundColor === holiday.bg, flagColorOk: flagEl && getComputedStyle(flagEl).color === holiday.color };
+        return { short: info(ids.short), long: info(ids.long), none: info(ids.none), rain: info(S8), normal: info(normal), tokens };
       }, { ids: w.extras, S8: S[8], normal: S[1] });
       const bad = [];
       const nrm = f.normal;
@@ -141,6 +156,8 @@ async function main() {
       else if (f.long.noteRadius > 16 || f.long.noteBg === 'rgba(0, 0, 0, 0)') bad.push('long comment is not a tinted box');
       if (f.none.noteClass) bad.push('no comment, yet a note shows');
       if (f.rain && !/note-pill/.test(f.rain.stClass || '')) bad.push(`canceled reason "Rain" should be a pill: ${f.rain.stClass}`);
+      if (!f.tokens.noteBgOk || !f.tokens.noteColorOk) bad.push(`comment colors are not the site's accent tint/text: ${JSON.stringify(f.tokens)}`);
+      if (!f.tokens.flagBgOk || !f.tokens.flagColorOk) bad.push(`EXTRA tag colors are not the site's existing extra/holiday chip colors: ${JSON.stringify(f.tokens)}`);
       if (nrm.flag || nrm.noteClass) bad.push(`a normal game shows an EXTRA tag or a note: ${JSON.stringify(nrm)}`);
       // The long canceled reason (20 characters, "Thanksgiving week") is a soft box.
       const tg = await a.page.evaluate(() => [...document.querySelectorAll('.st-canceled')].map((e) => [e.textContent.trim(), e.className]));
