@@ -1583,3 +1583,11 @@ Pages preview alias `https://preview-admin-v2.pickleball-club-9h0.pages.dev`, br
 1. Merge to main, pull, `npm test`, confirm main equals live plus this change. 2. SQL export and Time Travel bookmark. 3. `npm run deploy`
 from main (no migration; ships OFF). 4. Read-only live check. 5. Alex tests with `/admin?adminv2=on`, then switches it on in Settings.
 Rollback: Settings switch off (no deploy); `ADMIN_V2 = "off"` and a deploy for everyone; previous Pages deployment for the code. No data restore needed.
+
+### Look pass to match the approved mockups (Mon Nov 2, 2026, after Alex tested the first preview)
+Target: `mockups/2_money.png` and `3_home.png`; each screen was rendered at 390 px, light and dark, and compared next to the mockup.
+- Home folded rows: date tile on the left (44 px, centered), bold "3 of 4 in · 8 PM" and one names line (or "Booking opens ..."), then the court pill, "In" and a chevron in fixed columns. Every row is 3.4rem tall, the same width and edge as the full cards, two lines at most, each cut off with an ellipsis. No button and no court sentence in a folded row; "Court still needs to be booked" and Book a court are only on the opened card.
+- Money: one control bar (month left, Who paid | Totals right). Chips are one line, one width, and only say Paid, Unpaid or Due (Court row: Due or Paid); the detail ("owes $11 · $3 credit used", "paid with credit $14", "self-marked") is the small line under the name, cut off with an ellipsis, whole line on tap. Name, chip and button columns line up on every row and under a closed game's chip and chevron. Game header: "Tue, Nov 3" with "2 of 4 paid · $14 each" under it and Remind N on the right; the separate "Each player pays" line is gone (a note shows only when it carries news: credit back, or not finalized yet).
+- History: the divider labels always show. First visit: "VIEWED" above the list, no NEW group. With new items: "New since <time> · N", then "VIEWED".
+- Tests: `e2e/admin-v2.cjs` is 27 checks now (adds: same-height folded rows in light and dark, chips, header text, court message only on the opened card, VIEWED on first visit).
+- Not changed: 320 px and 200 percent text. `e2e/admin-motion.cjs` check "2. press" fails the same way on untouched main today (checked in a clean copy), so it is older and not part of this change.

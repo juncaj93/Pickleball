@@ -126,11 +126,11 @@ function WhoPaid({ ctx }: { ctx: AdminCtx }) {
 const unpaidRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid') && r.paymentStatus === 'unpaid' && r.owesCents > 0);
 
 /** The one-line summary of a game: "1 of 3 paid", "5 played · $11 each", "canceled". */
-function gameSub(s: AdminSessionView): string {
+function gameSub(s: AdminSessionView, priceCents: number, open: boolean): string {
   if (s.state.flags.canceled) return 'canceled';
   if (s.finalized) return `${s.finalized.playedCount} played · $${s.finalized.priceCents / 100} each`;
-  if (s.payableCount > 0) return `${s.paidCount} of ${s.payableCount} paid`;
-  return '';
+  if (s.payableCount > 0) return `${s.paidCount} of ${s.payableCount} paid${open ? ` · ${formatPrice(priceCents)} each` : ''}`;
+  return open ? `${formatPrice(priceCents)} each` : '';
 }
 
 /** The chip on a game's line: what needs doing, most urgent first. */
@@ -153,7 +153,7 @@ const Chevron = () => (
 function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; s: AdminSessionView; open: boolean; onToggle: () => void; onRemind: () => void; sameDay: boolean }) {
   const tz = ctx.d.group.timezone;
   const date = formatShortDate(s.startsAt, tz);
-  const sub = gameSub(s);
+  const sub = gameSub(s, ctx.d.group.settings.pricePerPlayerCents, open);
   const chip = gameChip(s);
   const owed = unpaidRows(s).length;
   return (
@@ -189,7 +189,6 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
 function GameBody({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const { busy, run } = useAction(ctx);
-  const price = ctx.d.group.settings.pricePerPlayerCents;
   const fin = s.finalized;
   const played = isPlayed(s);
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
@@ -237,24 +236,15 @@ function GameBody({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
   return (
     <div className="mv2-body">
-      <p className="mv2-summary small muted" data-summary>
-        {fin ? (
-          <>
-            <span data-finalized-line>
-              Final price each {formatPrice(fin.priceCents)} · {fin.playedCount} played
-              {fin.creditBackCents > 0 ? ` · ${formatPrice(fin.creditBackCents)} back as credit` : ''}
-            </span>
-          </>
-        ) : (
-          <>
-            <span data-price-each>Each player pays {formatPrice(price)}</span>
-            {!played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now) && <span> · Not finalized yet. Finalize it from Home.</span>}
-          </>
-        )}
-      </p>
+      {(fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (
+        <p className="mv2-summary small muted" data-summary>
+          {fin ? <span data-finalized-line>{formatPrice(fin.creditBackCents)} back as credit</span> : <span>Not finalized yet. Finalize it from Home.</span>}
+        </p>
+      )}
       <ul className="mv2-rows" aria-label="Who paid">
         {rows.map((r) => {
-          const chip = payChip(r, s);
+          const base = payChip(r, s);
+          const chip = { tone: base.tone, label: r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid' };
           const acts = actionsOf(r);
           const selfMarked = r.selfPaid && r.paymentStatus === 'paid';
           const full = `${selfMarked ? 'self-marked · ' : ''}${payMoneyLine(r, s, tz)}`.replace(/ · $/, '');
@@ -263,7 +253,11 @@ function GameBody({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
             r.paymentStatus === 'paid' && r.paidAt
               ? selfMarked
                 ? 'self-marked'
-                : `${paidWithCredit ? 'paid with credit' : 'paid'} ${formatPrice(r.paymentAmountCents ?? 0)} ${formatShortDate(r.paidAt, tz)}`
+                : r.refundedAt
+                  ? payMoneyLine(r, s, tz)
+                  : paidWithCredit
+                    ? `paid with credit ${formatPrice(r.paymentAmountCents ?? 0)}`
+                    : `paid ${formatPrice(r.paymentAmountCents ?? 0)} · ${formatShortDate(r.paidAt, tz)}`
               : payMoneyLine(r, s, tz);
           return (
             <MoneyRow

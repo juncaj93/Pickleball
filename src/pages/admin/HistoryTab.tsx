@@ -275,12 +275,17 @@ function ActivityV2({
             </h3>
           </div>
           {list(fresh, 'New activity')}
+        </>
+      )}
+      {/* The divider labels always show: on a first visit there is no NEW group, but the list still sits under VIEWED. */}
+      {old.length > 0 && (
+        <>
           <div className="week-break hist-break" data-divider="viewed">
             <h3>Viewed</h3>
           </div>
+          {list(old, 'Viewed activity')}
         </>
       )}
-      {old.length > 0 && list(old, fresh.length ? 'Viewed activity' : 'Activity')}
       {more && (
         <button className="btn ghost block" disabled={busy} onClick={() => load(entries[entries.length - 1].createdAt)}>
           {busy ? 'Loading…' : 'Show older'}

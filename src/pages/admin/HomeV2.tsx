@@ -8,8 +8,6 @@ import { DateTile } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
 import { menuJustDismissed } from './menuDismiss';
-import { CourtReserveLink } from '../../ui';
-import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 
 /** Things inside a card that do their own job when tapped: a tap on them never folds the game. */
 const OWN_TAP =
@@ -89,7 +87,7 @@ export function HomeGame({
       </FoldArea>
     );
   }
-  return <ShortRow ctx={ctx} s={s} fx={fx} needsCourt={needsCourt} onToggle={onToggle} />;
+  return <ShortRow ctx={ctx} s={s} fx={fx} onToggle={onToggle} />;
 }
 
 /** Taps on empty space (not on a button, link or field, and not while selecting text) flip the game. */
@@ -115,7 +113,7 @@ function FoldArea({ onToggle, className, children, ...rest }: { onToggle: () => 
 }
 
 /** The folded game: date tile, "2 of 4 in" and the start time, names in small text, the court pill, "In" if you are, a chevron. */
-function ShortRow({ ctx, s, fx, needsCourt, onToggle }: { ctx: AdminCtx; s: AdminSessionView; fx: boolean; needsCourt: boolean; onToggle: () => void }) {
+function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView; fx: boolean; onToggle: () => void }) {
   const tz = ctx.d.group.timezone;
   const court = courtStatus(
     {
@@ -130,12 +128,13 @@ function ShortRow({ ctx, s, fx, needsCourt, onToggle }: { ctx: AdminCtx; s: Admi
   const switchValue = courtSwitchOf(s);
   const canceled = s.state.flags.canceled;
   const names = s.roster.filter((r) => r.status === 'confirmed').map((r) => r.name);
-  const waiting = s.roster.filter((r) => r.status === 'waitlisted').length;
   const me = ctx.d.me;
   const mine = !!me && s.roster.some((r) => r.playerId === me.id && r.status === 'confirmed');
   const ts = tsKind(court.kind, false);
   const start = tsTime(cardTime(s.startsAt, s.endsAt, tz).start, ts);
   const date = formatShortDate(s.startsAt, tz);
+  // The second line is always one line (it is cut off with an ellipsis): who is in, or when booking opens. Never a sentence or a button.
+  const second = canceled ? (s.cancelReason ?? 'Canceled') : court.kind === 'later' ? court.text : names.length > 0 ? names.join(', ') : 'Nobody in yet';
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {
@@ -164,33 +163,9 @@ function ShortRow({ ctx, s, fx, needsCourt, onToggle }: { ctx: AdminCtx; s: Admi
         <DateTile iso={s.startsAt} tz={tz} />
         <div className="hv2-main">
           <div className="hv2-count">
-            {canceled ? <strong>Canceled</strong> : <strong>{countText(names.length, ctx.d.group.settings.maxPlayers)}</strong>}
-            <span className="hv2-start"> · {start}</span>
+            <strong>{canceled ? 'Canceled' : `${countText(names.length, ctx.d.group.settings.maxPlayers)} · ${start}`}</strong>
           </div>
-          {(s.extra || s.note) && (
-            <div className="hv2-label small" data-short-label>
-              {s.extra && <span className="extra-tag">Extra game</span>} {s.note}
-            </div>
-          )}
-          {!canceled && names.length > 0 && (
-            <div className="hv2-names small muted">
-              {names.join(', ')}
-              {waiting > 0 ? ` · ${waiting} on the waitlist` : ''}
-            </div>
-          )}
-          {canceled && s.cancelReason && <div className="hv2-names small muted">{s.cancelReason}</div>}
-          {!canceled && court.kind === 'later' && <div className="hv2-sub small muted">{court.text}</div>}
-          {needsCourt && !canceled && (
-            <div className="hv2-need small">
-              Court still needs to be booked
-              {/* The same link as the Book a court pill; a tap on it never opens or folds the row. */}
-              <span className="hv2-book" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-                <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-                  Book a court
-                </CourtReserveLink>
-              </span>
-            </div>
-          )}
+          <div className="hv2-names">{second}</div>
         </div>
         <div className="hv2-side">
           {canceled ? <span className="hv2-pill off">Canceled</span> : <span className={`hv2-pill sw-${switchValue}`}>{SWITCH_LABEL[switchValue]}</span>}

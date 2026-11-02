@@ -193,7 +193,8 @@ async function main() {
     const { ctx, page } = await openAdmin();
     await tab(page, 'History');
     await page.locator('ul.activity-list li').first().waitFor();
-    assert((await page.locator('[data-divider]').count()) === 0, 'first visit: no divider');
+    assert((await page.locator('[data-divider="new"]').count()) === 0, 'first visit: no NEW group');
+    assert((await page.locator('[data-divider="viewed"]').innerText()).trim().toLowerCase() === 'viewed', 'first visit: the VIEWED divider still shows above the list');
     await tab(page, 'Home'); // leaving the tab marks the visit
     await sleep(1100);
     await join('Julian', B);
@@ -211,7 +212,7 @@ async function main() {
     await tab(page, 'Money');
     await tab(page, 'History');
     await page.locator('ul.activity-list li').first().waitFor();
-    assert((await page.locator('[data-divider]').count()) === 0, 'next visit: nothing new');
+    assert((await page.locator('[data-divider="new"]').count()) === 0 && (await page.locator('[data-divider="viewed"]').count()) === 1, 'next visit: nothing new, VIEWED divider only');
     await shot(page, 'history-390-light');
     await ctx.close();
   });
@@ -293,6 +294,22 @@ async function main() {
     const court = boxes[boxes.length - 1];
     assert(Math.abs(court.chip.x - players[0].chip.x) <= 1.5 && Math.abs(court.btn.x - players[0].btn.x) <= 1.5, 'court row: same columns');
     void same;
+    await shot(page, 'money-who-390-light');
+    await ctx.close();
+  });
+
+  await check('2 Money: chips are one line, one width, and only say Paid, Unpaid or Due; detail is in the small second line; the header says "x of y paid · $14 each"', async () => {
+    const { ctx, page } = await openAdmin();
+    await tab(page, 'Money');
+    const g = page.locator(`.mv2-game[data-session="${A.id}"]`);
+    const chips = await g.locator('.mv2-row .chip').evaluateAll((els) => els.map((e) => ({ t: e.textContent.trim().replace(/^Court /, ''), h: Math.round(e.getBoundingClientRect().height), w: Math.round(e.getBoundingClientRect().width) })));
+    assert(chips.length >= 5, `chips ${chips.length}`);
+    assert(chips.every((c) => ['Paid', 'Unpaid', 'Due'].includes(c.t)), `words ${chips.map((c) => c.t)}`);
+    assert(chips.every((c) => c.w === chips[0].w && c.h === chips[0].h && c.h < 30), `one line, one width ${JSON.stringify(chips.slice(0, 3))}`);
+    assert((await g.locator('[data-summary]').count()) === 0 || !(await g.locator('[data-price-each]').count()), 'no separate "Each player pays" line');
+    assert(/^\d of \d paid · \$14 each$/.test((await g.locator('.mv2-sub').innerText()).trim()), `header "${await g.locator('.mv2-sub').innerText()}"`);
+    const hs = await g.locator('.mv2-row').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().height)));
+    assert(hs.every((h) => h === hs[0]), `rows are the same height ${hs}`);
     await shot(page, 'money-who-390-light');
     await ctx.close();
   });
@@ -411,10 +428,10 @@ async function main() {
     assert((await rows.count()) >= 3, 'short rows');
     const r = rows.first();
     const t = (await r.innerText()).replace(/\s+/g, ' ');
-    assert(/\d of 4 in · \d/.test(t) && /(Booked|Not booked|Waitlist)/.test(t), `row text "${t}"`);
+    assert(/\d+ (of 4 )?in · \d/.test(t) && /(Booked|Not booked|Waitlist)/.test(t), `row text "${t}"`);
     assert((await r.locator('.tile').count()) === 1 && (await r.locator('.hv2-chev').count()) === 1, 'tile and chevron');
     // A card keeps everything it had.
-    const c = page.locator('article.scard').first();
+    const c = page.locator(`article#session-${A.id}`);
     assert((await c.locator('.court-switch').count()) === 1 && (await c.locator('button.icon-round').count()) === 1 && (await c.locator('.paid-pill').count()) === 1, 'switch, gear, paid pill');
     assert((await page.getByText('+ Add game').count()) === 1 && (await page.getByText('Book a court').count()) >= 1, 'Add game and Book a court stay in the header');
     assert((await page.locator('.week-break').count()) >= 3, 'week labels stay');
@@ -452,21 +469,51 @@ async function main() {
     await ctx.close();
   });
 
-  await check('3 Home: "Court still needs to be booked" is on the game that needs it, with Book a court; the alert card is gone', async () => {
+  await check('3 Home: "Court still needs to be booked" and Book a court are ONLY on the opened card; folded rows have no sentence and no button; the alert card is gone', async () => {
     const { ctx, page } = await openAdmin();
     assert((await page.locator('[data-task="court_book"]').count()) === 0, 'no separate alert card');
-    const need = page.locator('.hv2-short .hv2-need').first();
-    assert((await need.count()) === 1, 'the short row says it');
-    const id = await need.locator('xpath=ancestor::div[@data-session]').getAttribute('data-session');
-    await page.locator(`#session-${id}.hv2-short`).click({ position: { x: 150, y: 8 } });
-    const card = page.locator(`article#session-${id}`);
-    await card.waitFor();
-    assert((await card.locator('[data-court-need]').count()) === 1, 'message on the card');
-    const link = card.locator('.court-need-btn a');
+    assert((await page.locator('.hv2-short a, .hv2-short button, .hv2-need, .hv2-book').count()) === 0, 'no button, link or court sentence in a folded row');
+    let found = null;
+    const ids = await page.locator('.hv2-short').evaluateAll((els) => els.map((e) => e.getAttribute('data-session')));
+    for (const id of ids) {
+      await page.locator(`#session-${id}.hv2-short`).click({ position: { x: 150, y: 8 } });
+      const card = page.locator(`article#session-${id}`);
+      await card.waitFor();
+      if ((await card.locator('[data-court-need]').count()) === 1) {
+        found = card;
+        break;
+      }
+      await card.locator('.scard-tilecol').click({ position: { x: 20, y: 70 } }).catch(() => {});
+      await page.waitForTimeout(150);
+    }
+    assert(found, 'a game that needs its court shows the message on its own card');
+    const link = found.locator('.court-need-btn a');
     assert((await link.count()) === 1 && /courtreserve/i.test(await link.getAttribute('href')) && (await link.getAttribute('target')) === '_blank', 'Book a court link opens CourtReserve in a new tab');
-    // Cash out and Do-this-now cards that are not about the court stay (the old layout's others are untouched code).
     await shot(page, 'home-open-need-390-light');
     await ctx.close();
+  });
+
+  await check('3 Home: every folded row has the same height and shows at most two lines (cut off, never wrapped)', async () => {
+    for (const scheme of ['light', 'dark']) {
+      const { ctx, page } = await openAdmin({ scheme });
+      await page.getByRole('button', { name: /Show all/ }).click();
+      const rows = await page.locator('.hv2-short').evaluateAll((els) =>
+        els.map((e) => {
+          const r = e.getBoundingClientRect();
+          const lines = [...e.querySelectorAll('.hv2-count, .hv2-names')].map((l) => ({ h: l.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(l).lineHeight) }));
+          const card = document.querySelector('article.scard') ? document.querySelector('article.scard').getBoundingClientRect() : null;
+          return { h: Math.round(r.height * 10) / 10, w: Math.round(r.width), left: Math.round(r.left), lines, cardW: card ? Math.round(card.width) : null, cardLeft: card ? Math.round(card.left) : null };
+        }),
+      );
+      assert(rows.length >= 6, `rows ${rows.length}`);
+      assert(rows.every((r) => r.h === rows[0].h), `same height ${rows.map((r) => r.h)}`);
+      assert(rows.every((r) => r.w === rows[0].w && r.left === rows[0].left), 'same width and left edge');
+      assert(rows.every((r) => r.lines.length === 2 && r.lines.every((l) => l.h <= l.lh + 1)), 'two single lines');
+      assert(rows[0].w === rows[0].cardW && rows[0].left === rows[0].cardLeft, `same width and edge as the full cards (${rows[0].w} vs ${rows[0].cardW})`);
+      if (scheme === 'light') await shot(page, 'home-rows-390-light');
+      else await shot(page, 'home-rows-390-dark');
+      await ctx.close();
+    }
   });
 
   await check('3 Home: tapping blank card space to close the gear pop-up does not fold the card; the keyboard can open and fold and keeps its place', async () => {
@@ -591,8 +638,8 @@ async function main() {
       const { ctx, page } = await openAdmin({ width: w, scheme });
       if (big) await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
       await page.waitForTimeout(300);
-      const wide = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1 && getComputedStyle(e).position !== 'fixed' && !e.closest('.week-break, .players-after, .tabbar')).slice(0, 4).map((e) => `${e.tagName}.${e.className}`));
-      // (The "+ Add game" and "Book a court" pills on the week line, the organizer's own I'm in on a full card, and the tab bar already overflow at 200% on 320 px with the switch off: not part of this change.)
+      const wide = await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 1 && getComputedStyle(e).position !== 'fixed' && !e.closest('.week-break, .players-after, .tabbar, .hv2-short')).slice(0, 4).map((e) => `${e.tagName}.${e.className}`));
+      // (The "+ Add game" and "Book a court" pills on the week line, the organizer's own I'm in on a full card, and the tab bar already overflow (a folded row clips its text at 200% on 320 px) at 200% on 320 px with the switch off: not part of this change.)
       assert(wide.length === 0, `Home ${w} ${scheme} big=${big}: overflow from ${wide}`);
       await tab(page, 'Money');
       await page.locator('.mv2-game').first().waitFor();

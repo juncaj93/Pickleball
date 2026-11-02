@@ -4160,49 +4160,59 @@ dialog.sheet[open]::backdrop {
   color: var(--accent-text);
 }
 
-/* Money (new layout): one slim control row, then a line per game, or the month's numbers on one screen. */
+/* Money (new layout): one slim control bar, then a line per game, or the month's numbers on one screen. */
 .money-v2 {
-  gap: 10px;
+  gap: 8px;
 }
+/* One bar holds both controls, like the mockup: the month on the left, Who paid | Totals on the right. */
 .mv2-controls {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  align-items: stretch;
+  gap: 6px;
+  padding: 3px;
+  background: var(--fill);
+  border-radius: var(--r-md);
+}
+.mv2-controls .month-picker,
+.mv2-controls .segmented.compact {
+  flex: 1 1 9rem;
+  min-width: 0;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
 }
 .mv2-controls .month-picker {
-  flex: 1 1 11rem;
-  min-width: 0;
+  grid-template-columns: 34px minmax(0, 1fr) 34px;
+  gap: 2px;
 }
-.mv2-controls .segmented.compact {
-  flex: 1 1 10rem;
-  padding: 3px;
-  border-radius: var(--r-md);
+.mv2-controls .month-picker .btn {
+  min-height: 44px;
 }
 .mv2-controls .segmented.compact button {
   padding: 4px 6px;
+  font-size: 0.86rem;
 }
 .mv2-games {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-/* The game's width decides the layout (so bigger text, which makes rem bigger, stacks the row instead of cutting it off). */
 .mv2-game {
   padding: 0;
+  overflow: hidden;
   container-type: inline-size;
 }
 .mv2-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto 2.5rem;
+  grid-template-columns: minmax(0, 1fr) auto 2.25rem;
   align-items: center;
   gap: 6px;
-  padding: 0 4px 0 14px;
-  min-height: 56px;
+  padding: 0 4px 0 12px;
+  min-height: 3.1rem;
 }
 .mv2-toggle {
   min-width: 0;
-  min-height: 56px;
+  min-height: 3.1rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -4217,9 +4227,12 @@ dialog.sheet[open]::backdrop {
 }
 .mv2-date {
   font-weight: 700;
+  font-size: 0.95rem;
+  line-height: 1.25;
 }
 .mv2-sub {
-  font-size: 0.85rem;
+  font-size: 0.76rem;
+  line-height: 1.25;
   color: var(--ink-2);
 }
 .mv2-headchip .chip {
@@ -4227,9 +4240,9 @@ dialog.sheet[open]::backdrop {
   justify-content: center;
 }
 .mv2-remind {
-  min-height: 44px;
-  padding: 6px 12px;
-  font-size: 0.85rem;
+  min-height: 36px;
+  padding: 4px 14px;
+  font-size: 0.82rem;
   white-space: nowrap;
 }
 .mv2-chev {
@@ -4251,35 +4264,48 @@ dialog.sheet[open]::backdrop {
 .mv2-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 8px 12px 12px;
   border-top: 1px solid var(--line);
 }
 .mv2-summary {
   margin: 0;
+  padding: 6px 12px 0;
 }
 .mv2-rows {
   list-style: none;
   margin: 0;
   padding: 0;
 }
-/* Narrow or big text: the name has a line to itself, the chip and the button share the line under it. */
+/* Every row is the same height and uses the same three columns: name | chip | button. */
 .mv2-row {
   display: grid;
-  grid-template-columns: 4.4rem minmax(0, 1fr);
+  grid-template-columns: 5.4rem minmax(0, 1fr);
   align-items: center;
   gap: 0 0.5rem;
-  padding: 6px 0;
-  border-top: 1px solid var(--line);
+  min-height: 3.2rem;
+  padding: 4px 12px;
 }
-.mv2-row:first-child {
-  border-top: 0;
+.mv2-row + .mv2-row {
+  box-shadow: inset 0 1px 0 var(--line);
 }
 .mv2-row .mv2-who {
   grid-column: 1 / -1;
 }
 .mv2-row .mv2-btncell {
   justify-self: end;
+  width: 5.6rem;
+}
+/* Wide enough (a normal phone): the name, the chip and the button share one line, in the same columns on every row. */
+@container (min-width: 20rem) {
+  .mv2-row {
+    grid-template-columns: minmax(0, 1fr) 5.4rem 5.6rem;
+  }
+  .mv2-row .mv2-who {
+    grid-column: auto;
+  }
+  .mv2-row .mv2-btncell {
+    width: auto;
+    justify-self: stretch;
+  }
 }
 .mv2-who {
   min-width: 0;
@@ -4297,14 +4323,19 @@ dialog.sheet[open]::backdrop {
   cursor: pointer;
 }
 .mv2-name {
-  line-height: 1.2;
-  overflow-wrap: anywhere;
+  max-width: 100%;
+  font-size: 0.93rem;
+  line-height: 1.25;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .mv2-line {
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.74rem;
   line-height: 1.25;
 }
 .mv2-row.expanded .mv2-line {
@@ -4314,27 +4345,26 @@ dialog.sheet[open]::backdrop {
 .mv2-chipcell {
   display: flex;
 }
+/* The chip is one line, the same width everywhere, and says only Paid, Unpaid or Due. */
 .mv2-row .chip {
   width: 100%;
   justify-content: center;
-  white-space: normal;
-  text-align: center;
-  line-height: 1.15;
+  white-space: nowrap;
+  line-height: 1.2;
   padding: 4px 6px;
+  font-size: 0.74rem;
 }
 .mv2-btncell {
   display: flex;
-  min-width: 4.9rem;
 }
 .mv2-btncell .btn,
 .mv2-extra .btn {
   width: 100%;
-  min-width: 4.9rem;
-  min-height: 44px;
-  padding: 6px 4px;
-  font-size: 0.85rem;
+  min-height: 36px;
+  padding: 4px;
+  font-size: 0.8rem;
   line-height: 1.1;
-  white-space: normal;
+  white-space: nowrap;
 }
 .mv2-extra {
   grid-column: 1 / -1;
@@ -4343,31 +4373,19 @@ dialog.sheet[open]::backdrop {
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  padding: 4px 0 2px;
+  padding: 2px 0 4px;
 }
 .mv2-extra .btn {
   width: auto;
-  min-width: 4.9rem;
+  min-width: 5.6rem;
   padding-inline: 12px;
 }
-/* Your court row: the same three columns in a quiet tinted box that reaches into the card's padding. */
+/* Your court row: the same three columns on a quiet tinted band, edge to edge like the mockup. */
 .mv2-row.court {
   background: var(--surface-2);
-  border: 1px solid var(--line-strong);
-  border-radius: var(--r-md);
-  margin: 8px -8px 0;
-  padding: 6px 8px;
 }
-@container (min-width: 17rem) {
-  .mv2-row {
-    grid-template-columns: minmax(0, 1fr) 4.4rem 4.9rem;
-  }
-  .mv2-row .mv2-who {
-    grid-column: auto;
-  }
-  .mv2-row .mv2-btncell {
-    justify-self: stretch;
-  }
+.mv2-body > .stack {
+  padding: 8px 12px 12px;
 }
 .mv2-remind-list {
   list-style: none;
@@ -4472,6 +4490,7 @@ dialog.sheet[open]::backdrop {
 
 /* Home (new layout): the top 2 games are full cards, later ones are short rows. Tap a tile or empty space to open or fold. */
 .hv2-open {
+  position: relative;
   display: flex;
   flex-direction: column;
 }
@@ -4497,9 +4516,8 @@ dialog.sheet[open]::backdrop {
   left: 8px;
   top: 8px;
 }
-.hv2-open {
-  position: relative;
-}
+/* A short row: the same card width, padding and gaps as the full cards, and the same height every time (3.6rem). Two lines at most,
+   each cut off with an ellipsis, so nothing ever wraps to a third line. */
 .hv2-short {
   --sw-notbooked-bg: #eaa31a;
   --sw-notbooked-fg: #2a1a00;
@@ -4508,11 +4526,13 @@ dialog.sheet[open]::backdrop {
   --sw-booked-bg: #1e6a48;
   --sw-booked-fg: #ffffff;
   display: grid;
-  grid-template-columns: 56px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  min-height: 72px;
+  gap: 10px;
+  height: 3.4rem;
+  padding: 0 12px;
+  box-sizing: border-box;
+  overflow: hidden;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -4538,49 +4558,69 @@ dialog.sheet[open]::backdrop {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
+/* The small date tile, centered. */
 .hv2-short .tile {
-  width: 56px;
+  width: 44px;
   box-sizing: border-box;
   align-self: center;
+  padding: 3px 0 4px;
+  border-radius: 10px;
+}
+.hv2-short .tile .dow,
+.hv2-short .tile .mon {
+  font-size: 0.56rem;
+}
+.hv2-short .tile .day {
+  font-size: 1.12rem;
+  margin: 1px 0;
 }
 .hv2-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+}
+.hv2-count,
+.hv2-names {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .hv2-count {
-  font-size: 1rem;
+  font-size: 0.97rem;
   line-height: 1.25;
 }
-.hv2-start {
-  font-weight: 600;
-}
 .hv2-names {
-  overflow-wrap: anywhere;
-  line-height: 1.3;
-}
-.hv2-sub {
-  line-height: 1.3;
-}
-.hv2-need {
-  color: var(--warn-fg);
-  font-weight: 600;
-  line-height: 1.3;
+  font-size: 0.82rem;
+  line-height: 1.25;
+  color: var(--ink-2);
 }
 .hv2-side {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 2.5rem 16px;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  white-space: nowrap;
+}
+.hv2-side > .hv2-pill {
+  grid-column: 1;
+  justify-self: end;
+}
+.hv2-side > .hv2-in {
+  grid-column: 2;
+  justify-self: center;
+}
+.hv2-side > .hv2-chev {
+  grid-column: 3;
 }
 .hv2-pill {
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   font-weight: 750;
   line-height: 1.2;
   white-space: nowrap;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 15%);
 }
 .hv2-pill.sw-not_booked {
   background: var(--sw-notbooked-bg);
@@ -4597,13 +4637,12 @@ dialog.sheet[open]::backdrop {
 .hv2-pill.off {
   background: var(--muted-bg);
   color: var(--muted-fg);
-  box-shadow: none;
 }
 .hv2-in {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-size: 0.82rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--ok-fg);
 }
@@ -4612,7 +4651,11 @@ dialog.sheet[open]::backdrop {
   place-items: center;
   color: var(--ink-2);
 }
-/* "Court still needs to be booked" on the game that needs the court, with the Book a court button under the card's content. */
+.hv2-chev svg {
+  width: 16px;
+  height: 16px;
+}
+/* "Court still needs to be booked" and the Book a court button live only on the opened card. */
 .court-need {
   color: var(--warn-fg);
   font-size: 0.88rem;
@@ -4637,53 +4680,43 @@ dialog.sheet[open]::backdrop {
     opacity: 1;
   }
 }
-/* Narrow screens or big text: the pill and the In mark stack so nothing is cut off. */
-@media (max-width: 359px) {
-  .hv2-side {
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 4px;
-  }
-}
-.mv2-controls .month-picker {
-  grid-template-columns: 40px minmax(0, 1fr) 40px;
-  gap: 2px;
-}
-/* A short row answers to its own width: when it is narrow (a small phone, or big text), the pill, the In mark and the chevron
-   move to a line under the text, so nothing is cut off. */
-.hv2-shortwrap {
-  container-type: inline-size;
-}
-@container (max-width: 17rem) {
-  .hv2-short {
-    grid-template-columns: 56px minmax(0, 1fr);
-    align-items: start;
-  }
-  .hv2-short .tile {
-    grid-row: 1 / span 2;
-  }
-  .hv2-short .hv2-side {
-    grid-column: 2;
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: flex-start;
-  }
-}
-.hv2-label {
-  line-height: 1.3;
-}
-.hv2-label .extra-tag {
-  margin-right: 4px;
-}
-.hv2-book {
-  display: block;
-  margin-top: 6px;
-}
-.hv2-book .btn {
-  min-height: 44px;
-}
 /* History (new layout): the two tabs wrap onto a second line at very large text instead of running off the screen. */
 .history-v2 .chips {
   flex-wrap: wrap;
+}
+/* Money (new layout): on a normal phone the game's top line uses the same columns as the rows under it, so a closed game's chip
+   sits over the Paid / Unpaid chips and its chevron over the buttons, like the mockup. */
+@container (min-width: 20rem) {
+  .mv2-head {
+    grid-template-columns: minmax(0, 1fr) 5.4rem 5.6rem;
+    gap: 0 0.5rem;
+    padding: 0 12px;
+  }
+  .mv2-head > * {
+    grid-row: 1;
+  }
+  .mv2-headchip {
+    grid-column: 2;
+    display: flex;
+  }
+  .mv2-headchip .chip {
+    width: 100%;
+    min-width: 0;
+    white-space: nowrap;
+    padding: 4px 6px;
+    font-size: 0.74rem;
+  }
+  .mv2-remind {
+    grid-column: 3;
+    width: 100%;
+    padding-inline: 4px;
+  }
+  .mv2-chev {
+    grid-column: 3;
+  }
+  .mv2-head:has(.mv2-remind) .mv2-chev {
+    grid-column: 2;
+    justify-self: end;
+    width: 2rem;
+  }
 }
