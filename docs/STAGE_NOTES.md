@@ -1591,3 +1591,22 @@ Target: `mockups/2_money.png` and `3_home.png`; each screen was rendered at 390 
 - History: the divider labels always show. First visit: "VIEWED" above the list, no NEW group. With new items: "New since <time> · N", then "VIEWED".
 - Tests: `e2e/admin-v2.cjs` is 27 checks now (adds: same-height folded rows in light and dark, chips, header text, court message only on the opened card, VIEWED on first visit).
 - Not changed: 320 px and 200 percent text. `e2e/admin-motion.cjs` check "2. press" fails the same way on untouched main today (checked in a clean copy), so it is older and not part of this change.
+
+### Deploy (Mon Nov 2, 2026, about 9:00 AM Eastern, a quiet window) - LIVE with ADMIN_V2 OFF for everyone
+- PR #72 merged as ebb375a (same tree as the tested 740e4a9). Production deployment `c0d807e3-2261-4bdd-a74f-5f6f155ebdb7`, branch main.
+  Live was a756dbe2 (ea2ff2f) before; main had nothing newer than notes. No migration.
+- Before it: read-only live check (20 health columns all 0, no `admin_v2_on` row, no hidden games); SQL export `live-before-admin-v2-2026-11-02.sql`
+  (251 INSERTs, has phone numbers, not committed, in the session scratch folder); Time Travel bookmark `00000465-00000000-00005117-c515609d17299a3bee7514f6d97234c9` (8:50 AM).
+- After it (read-only): the backup address serves the new bundle; /, /admin, /api/status, /api/group/version 200; organizer data answers 401 without a sign-in;
+  all 20 health columns 0; row counts identical to before (audit 139, credit_ledger 5, players 10, session_players 21, sessions 9, task_log 5, refund_requests 0,
+  migrations 16, credit total $70); no `admin_v2_on` row (off for everyone). pickleball.juncaj.net could not be reached from this session's network (as on earlier deploys).
+- Alex tests with pickleball.juncaj.net/admin?adminv2=on (that phone only; `?adminv2=off` ends it), then switches it on for everyone in
+  Settings > Feature switches > "New admin layout" (no deploy). He switches it on himself.
+- Turn it off: Settings > Feature switches > New admin layout (no deploy). Everyone incl. test links: `ADMIN_V2 = "off"` in wrangler.toml and a deploy.
+- Rollback: Settings switch off (instant). Code: Pages deployment `a756dbe2-44da-4eac-96ca-a5e747a0e890` (commit ea2ff2f, before this change). New code only writes
+  `sessions.note` (Label) and `task_log` rows (the switch, a hidden canceled game), which the old code ignores, so no data restore is needed. Whole database:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000465-00000000-00005117-c515609d17299a3bee7514f6d97234c9`.
+- Fresh pre-deploy reviewer (did not write the code): SHIP, no blockers. Noted and left: turning the layout off in Settings does not un-hide a game you removed from the
+  player screen (use Show again first, or reopen the game; `ADMIN_V2 = "off"` restores everything); the Settings row still shows if the kill switch is off.
+- Tests on the deployed code (ebb375a = 740e4a9): typecheck clean; unit 1,667 passed, 1 skipped (one run hit a 5-second timeout in `golden-wording` while the machine
+  was busy; it passes alone in 3 seconds); browser `admin-v2` 27 of 27.
