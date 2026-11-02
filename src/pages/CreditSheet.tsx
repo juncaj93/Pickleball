@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { motionOn, RollText, useMotion } from '../motion';
 import type { CreditView } from '../../shared/api';
 import { creditChanges } from '../../shared/credit';
 import { formatPrice, parseDollars } from '../../shared/money';
@@ -23,7 +24,8 @@ const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia
  * `startFrom` is what the screen showed before this chip appeared (a chip
  * that was not there fades in and counts up from it).
  */
-export function CreditChip({ credit, onOpen, startFrom }: { credit: CreditView; onOpen: () => void; startFrom?: number | null }) {
+export function CreditChip({ credit, onOpen, startFrom, enter, leave }: { credit: CreditView; onOpen: () => void; startFrom?: number | null; enter?: boolean; leave?: boolean }) {
+  const motion = useMotion();
   const pending = !!credit.pending;
   const target = credit.balanceCents;
   const [shown, setShown] = useState(() => (startFrom != null && startFrom < target && !reducedMotion() ? startFrom : target));
@@ -34,7 +36,8 @@ export function CreditChip({ credit, onOpen, startFrom }: { credit: CreditView; 
   useEffect(() => {
     const from = shownRef.current;
     if (from === target) return;
-    if (target < from || reducedMotion()) {
+    // With the motion on the number rolls (RollText below) instead of counting up.
+    if (target < from || reducedMotion() || motionOn()) {
       setShown(target);
       return;
     }
@@ -64,7 +67,7 @@ export function CreditChip({ credit, onOpen, startFrom }: { credit: CreditView; 
   return (
     <button
       type="button"
-      className={`credit-chip${pending ? ' pending' : ''}${pulse ? ' pulse' : ''}${fresh ? ' fresh' : ''}`}
+      className={`credit-chip${pending ? ' pending' : ''}${pulse ? ' pulse' : ''}${fresh ? ' fresh' : ''}${enter ? ' m-in' : ''}${leave ? ' m-out' : ''}`}
       data-credit-chip
       aria-label={`${formatPrice(target)} credit${pending ? ', cash out requested' : ''}. Open your credit`}
       onClick={onOpen}
@@ -75,7 +78,7 @@ export function CreditChip({ credit, onOpen, startFrom }: { credit: CreditView; 
       <span className="cc-amount" aria-hidden="true">
         {/* The finished number, invisible, holds the width so counting up never moves the chip. */}
         <span className="cc-ghost">{formatPrice(target)}</span>
-        <span className="cc-now">{text}</span>
+        <span className="cc-now">{motion ? <RollText text={formatPrice(target)} /> : text}</span>
       </span>
     </button>
   );
@@ -141,7 +144,9 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
     <Sheet open={open} title="Your credit" onClose={onClose}>
       <div className="stack credit-sheet" data-credit-sheet>
         <p className="credit-big" data-credit-balance>
-          <strong>{formatPrice(credit.balanceCents)} credit</strong>
+          <strong>
+            <RollText text={`${formatPrice(credit.balanceCents)} credit`} />
+          </strong>
         </p>
         {credit.pending ? (
           <div className="credit-pending" data-refund-pending>

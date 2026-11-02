@@ -27,6 +27,7 @@ import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, 
 import { cashOutOffer, loadPendingRequests, moneyPicture } from './credit';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
 import { timeShiftFor } from './timeShift';
+import { motionFor } from './motion';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -187,6 +188,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     me: me ? { id: me.id, name: me.display_name } : null,
     viewingAs: !!viewAsName,
     timeShift,
+    motion: motionFor(ctx),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions

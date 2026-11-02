@@ -40,6 +40,8 @@ export interface Env {
   GO_LINKS?: string;
   /** "Time may shift" (tilde times, court borders, the Still in notice, Confirmed x of y): on unless "off". A wrangler.toml var. */
   TIME_SHIFT?: string;
+  /** "Motion" (animations on the player screens): "on" for everyone; anything else is dark, except a phone with the private test switch. A wrangler.toml var. */
+  MOTION?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

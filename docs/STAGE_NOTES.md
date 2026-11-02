@@ -1240,3 +1240,83 @@ Previews now run on a practice database full of made-up players, so every tap on
 - Previews share ONE fake database, so two people testing at once see each other's taps. Re-seed when it gets messy.
 - A new migration must be applied to the preview database too: `npx wrangler d1 migrations apply pickleball-preview --remote --env preview`.
 - The flow in SITE_RULES ("test on the fake-data preview, then ship it") can now use real taps.
+
+
+## Motion pass, player side (Sun Nov 1, 2026) - "Balanced" package, switch MOTION (OFF at ship)
+
+Visual layer only. No schema change, no API or money change, no text change. Started from main 9800b74 (src identical to the
+live deployment `d156b8e0`, commit dace600; main is ahead of live only by the docs, tests and fake-data seed script of #62).
+Preview only: nothing here is on production until Alex says "ship it".
+
+### The switch (follows GO_LINKS and TIME_SHIFT)
+- `MOTION` var in `wrangler.toml`: production `"off"` (dark), `[env.preview.vars]` `"on"` (so the preview link shows it with no
+  steps). `"on"` = everyone. Anything else = dark for everyone.
+- Private on-switch for Alex's phone on the live site: open `pickleball.juncaj.net/?motion=on` once (remembered on that phone;
+  `?motion=off` ends it). It sends `X-Motion: on`, so the server answers `motion: true` for that phone only
+  (`server/motion.ts`, `shared/motion.ts`, one new boolean `motion` on `/api/group`). The organizer's View as demo always has it.
+- The player screen sets `<html data-motion="on">` only while it is showing and the answer is yes. Every new CSS rule sits under that
+  attribute (`src/motion.css`), and every new JS path checks `motionOn()`. The organizer screens never get the attribute, so
+  nothing admin animates. Off = the site behaves exactly like before (a layout test compares every card, button, chip and tile
+  position with the switch on and off at 320 and 390 px, light and dark).
+- To turn it on for everyone: set `MOTION = "on"` in `wrangler.toml` and deploy, in a quiet window. To turn it all off again:
+  `MOTION = "off"` and deploy. (`?motion=off` only ends the private test on a phone while it is still dark for everyone.)
+
+### What moves (numbers are the spec's item numbers)
+- One shared file `src/motion.css` (variables `--ease-out`, `--ease-spring`, `--t-tap` 120 ms, `--t-ui` 220 ms, `--t-enter` 240 ms) and a
+  tiny `src/motion.tsx` (switch, number roll, the I'm in morph, pull to refresh). No animation library.
+- 1 First load: skeleton shows only after 250 ms, slow sweep; cards cascade (rise 14 px, 45 ms apart) once per page open. The old
+  "everything fades in whenever it is drawn" rule is off while the switch is on, so nothing replays on a refresh or a filter tap.
+- 2 Press: cards sink 1.5 percent, buttons 95 percent, spring back.
+- 3 I'm in: the button's width and colors ease into the chip (220 ms, width and background on that one chip only), the tile check pops and
+  draws, the count rolls, only the new ball pops (1.3 then 1), no name flash for your own join, the credit chip slides in, Pay scales in.
+- 4 Toast: white raised card in light, dark raised card in dark (the `--raised` tokens), green check circle, springs up in 240 ms, holds
+  3 s, swipe down glides under the finger (dismisses past 36 px, glides back when let go early), sideways does nothing.
+- 5 Others join live: the name flashes the mint accent (`--primary` at 35 percent) and fades in 0.8 s, count rolls, new ball pops.
+- 6 Game on: 8 small balls pop out of the card once (400 ms) with the Game on toast. Never on page load (the first look at the page
+  never bursts), once per game. The old ripple is off while the switch is on.
+- 7 Pay to Paid: the chip eases from "$ due" to "Paid", the Paid chip pops, the old Pay button scales away.
+- 8 Drop out: the Undo ring drains over exactly the 5-second window (ring length = the toast's own timer), the chip eases back to
+  I'm in, the count rolls down, the CREDIT chip pops in and rolls at the same moment, Undo reverses all of it.
+- 9, 10 CREDIT chip pops in, rolls, fades out at $0. Money and count numbers roll everywhere they change (chips, Pay card, credit
+  sheet, buttons), never on first load. The rolling old number is drawn by CSS, so the page text stays the new number only.
+- 11 Sheets and pop-ups: snap up 180 ms over a fading dim; tap outside or drag the top (grabber area) down closes in 150 ms; the cash-out
+  prompt slides up and down the same way.
+- 13 Field focus: mint border, label color follows. 14 Light/dark: colors fade 200 ms, the icon turns 180 degrees.
+- 15 Pull to refresh (touch): at the very top, pull down, a spinning ball shows in the gap, the list shifts up to 34 px, past 64 px a
+  release refreshes at once (`load.quiet`, the same call the 5-second poll uses; the poll is untouched) and the ball hides.
+- 16 Empty screens: the ball bounces three times with a soft shadow, then rests.
+- 17, 18 No page or tab slides. Everything but the cascade, rolls, burst, toast hold, ring and bounce is 120 to 240 ms.
+
+### Skipped or changed from the spec
+- 12 Details and expanders: the player screens have no expanders today (no arrow, no details panel), so there was nothing to animate. No
+  panel content was touched.
+- 19 CREDIT box: the time shift release already replaced the box with plain "CREDIT $14" text, so that text is what animates. The old box
+  is gone.
+- Sheet swipe-to-close works from the top (grabber and title) of the sheet, not from the body, so it can never fight the sheet's own
+  scrolling or a text field.
+- Pull to refresh could only be tested with simulated touches in Chromium here, not on a real iPhone. It only starts at the top of the
+  page, never inside a sheet or on a field, and the switch is off for everyone first, so Alex tests it on his phone before it is on.
+  If Safari fights it, leave the switch off for everyone (or switch it off again with `MOTION = "off"` and a deploy).
+- The old "Pay" button scale-away is a short-lived copy of the button (decoration, no taps); the real button is gone at once.
+
+### Fresh check
+A helper that did not write the code reviewed the diff and ran it (switch off vs on at 320 and 390 px, light and dark; reduced
+motion; replays; pull to refresh with simulated touches). Found and fixed: a sheet dragged shut stayed pushed down when reopened;
+the Pay card's buttons and the CREDIT chip animated on first load; the pull's touchmove listener now exists only during a touch
+that could be a pull, is off with Reduce Motion, and ignores touches that start on a toast; the Paid chip popped twice and an
+unchanged Pay button re-popped on an amount change. Switch off: identical text, page height and element boxes, no `data-motion`.
+
+### Tests (Sun Nov 1, 2026)
+- Unit: 1,564 passed, 1 skipped (as before), in 87 files. New `tests/motion.test.ts` (7): the var, the private header, the demo,
+  nothing else in the answer changes, I'm in saves the same with the switch on or off.
+- Browser: every file run on its own, all green: run 229, names 24, gates 32, alerts 52, court 84, held 81, credit 153,
+  suggest 35, popup 33, texts 52, circles 18, audit-stage3 3, cancel-reason 8, round2 25, want-in 4, double-tap 4,
+  dryrun-screens 6, do-now 13, live 26, banner 11, card-times 13, no-court 10, auto-credit 22, money-visible 12,
+  admin-cleanup 35, good-news 9, audit-player-flows 93, audit-player-look 133 (+12 known open), admin-audit 11, admin-sweep 6,
+  time-shift 10, and the new `e2e/motion.cjs` 22 (switch off by default, private switch, cascade once and quiet after a refresh,
+  I'm in, Pay to Paid, toast look and swipe, Undo ring 5 s, Drop out, CREDIT chip, field focus, others join live, sheets,
+  theme button, empty bounce, pull to refresh, Reduce Motion, skeleton delay, and a geometry check that every card, button and
+  chip sits in the same place with the switch on and off at 320 and 390 px, light and dark). `run.cjs` once failed on a random id
+  that happened to contain "4837" in the page source (an old known kind of fluke) and passed on the rerun. No test was changed.
+  `package.json` `test:e2e` now ends with `node e2e/motion.cjs`.
+
