@@ -1331,7 +1331,7 @@ unchanged Pay button re-popped on an amount change. Switch off: identical text, 
   code. No data changed in either deploy, so no restore is needed.
 
 
-## Motion pass, organizer side (Mon Nov 2, 2026) - "Balanced" package, switch MOTION_ADMIN (OFF at ship)
+## Motion pass, organizer side (Sun Nov 1, 2026, night) - "Balanced" package, switch MOTION_ADMIN (OFF at ship)
 
 Visual layer only. No schema change, no API or money change, no text change. Started from main `ce26ca8` (src identical to the
 live deployment `ab7da657`; checked with the Cloudflare deployments list before any work). The player motion shipped first and the
@@ -1398,7 +1398,7 @@ ended closed instead of open (now matches the old result). Left as is: the paid 
 switch off, text identical); the court switch text color changes at once while the highlight glides (under 150 ms); the Dashboard now
 writes `pb_motion_admin_seen` in localStorage.
 
-### Tests (Mon Nov 2, 2026)
+### Tests (Sun Nov 1, 2026)
 - Unit: 1,578 passed, 1 skipped, in 89 files (was 1,571 in 88; new `tests/motion-admin.test.ts`, 7: the var, dark by default, the player
   MOTION does not switch it on, the private header, nothing else in the dashboard answer changes, a court change saves the same).
 - Browser, every file on its own, all green at the same counts as before: run 229, names 24, gates 32, alerts 52, court 84, held 81,
@@ -1407,7 +1407,7 @@ writes `pb_motion_admin_seen` in localStorage.
   good-news 9, audit-player-flows 93, audit-player-look 133 (+12 known open), admin-audit 11, admin-sweep 6, time-shift 10, motion 22,
   and the new `e2e/admin-motion.cjs` 28. No existing test was changed. `package.json` `test:e2e` now ends with `node e2e/admin-motion.cjs`.
 
-### Preview (Mon Nov 2, 2026)
+### Preview (Sun Nov 1, 2026)
 - Branch `claude/new-session-ftr39p`, Pages preview alias `https://preview-motion-admin.pickleball-club-9h0.pages.dev` (fake database
   `pickleball-preview`, MOTION_ADMIN on in the preview vars; `/admin?motionadmin=on` also works on any address). Not on production.
 - Ship plan (after "ship it"): back up and Time Travel bookmark first, merge to main, deploy from main with `MOTION_ADMIN = "off"`, Alex
