@@ -141,6 +141,17 @@ async function main() {
   const holidayGame = d.sessions.find((s) => s.holiday);
   const noHoliday = ahead.filter((s) => !s.holiday);
 
+  // Later weeks start folded (round 2): open a game's card, whatever week it is in.
+  const reveal = async (page, id) => {
+    const card = page.locator(`article#session-${id}`);
+    if (await card.count()) return card;
+    const all = page.locator('button', { hasText: /^Show all/ });
+    if (await all.count()) await all.click();
+    await page.locator(`div#session-${id}`).click();
+    await card.waitFor();
+    return card;
+  };
+
   // ---------------------------------------------------------------- the switch
   await check('S off by default: the old screens, exactly (no round 2 parts anywhere)', async () => {
     const { ctx, page } = await openAdmin({ r2: false });
@@ -218,7 +229,7 @@ async function main() {
   // ---------------------------------------------------------------- 1. home cards
   await check('1 Home card: tile+time left, switch with seats and names under it, gear right, 3 equal footer cells', async () => {
     const { ctx, page } = await openAdmin();
-    const card = page.locator(`article#session-${A.id}`);
+    const card = await reveal(page, A.id);
     const tile = await card.locator('.tile').boundingBox();
     const sw = await card.locator('.court-switch').boundingBox();
     const gear = await card.locator('.game-menu .icon-round').boundingBox();
@@ -236,7 +247,7 @@ async function main() {
 
   await check('1 Home footer: words In and Out (no check or X icons), $ circle with "1 of 4", clock with the cancel time', async () => {
     const { ctx, page } = await openAdmin();
-    const card = page.locator(`article#session-${A.id}`);
+    const card = await reveal(page, A.id);
     assert((await card.locator('.r2-seg button').allInnerTexts()).join('|') === 'In|Out', 'In | Out');
     assert((await card.locator('.r2-seg svg').count()) === 0, 'no icons in the toggle');
     assert((await card.locator('.r2-dol').innerText()) === '$', 'green $ circle');
@@ -250,7 +261,7 @@ async function main() {
 
   await check('1 Home footer: In / Out is the organizer\'s own seat (same rules), and the paid cell opens Players', async () => {
     const { ctx, page } = await openAdmin();
-    const card = page.locator(`article#session-${C.id}`);
+    const card = await reveal(page, C.id);
     assert((await card.locator('.r2-seg-out').getAttribute('aria-pressed')) === 'true', 'Out is the true one');
     await card.locator('.r2-seg-in').click();
     await page.waitForTimeout(600);
@@ -268,13 +279,14 @@ async function main() {
 
   await check('1 Book replaces "Book a court" everywhere in admin: blue Book with the arrow when a court is needed', async () => {
     const { ctx, page } = await openAdmin();
+    await reveal(page, C.id);
     const needing = page.locator('article.scard-r2 [data-court-need]');
     assert((await needing.count()) >= 1, 'a card that needs a court has the Book cell');
     const a = needing.first().locator('a');
     assert((await a.evaluate((e) => [...e.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join('').trim())) === 'Book' && (await a.locator('svg').count()) === 1, 'Book with an arrow');
     assert((await a.getAttribute('target')) === '_blank', 'opens CourtReserve in a new tab');
     // Cards that already have a court show the cancel time instead.
-    assert((await page.locator(`article#session-${A.id} [data-court-need]`).count()) === 0, 'booked game has no Book cell');
+    assert((await (await reveal(page, A.id)).locator('[data-court-need]').count()) === 0, 'booked game has no Book cell');
     for (const t of ['Home', 'Players', 'Money', 'History', 'Settings']) {
       await tab(page, t);
       assert((await page.getByText('Book a court').count()) === 0, `no "Book a court" on ${t}`);
@@ -286,8 +298,7 @@ async function main() {
 
   await check('1 Holiday: faint tab under the card with an outlined Yes; confirmed becomes plain "Name ✓"; Undo is in the gear menu', async () => {
     const { ctx, page } = await openAdmin();
-    await page.locator('button', { hasText: 'Show all' }).click().catch(() => {});
-    const card = page.locator(`article#session-${holidayGame.id}`);
+    const card = await reveal(page, holidayGame.id);
     await card.scrollIntoViewIfNeeded();
     const tabEl = page.locator(`#session-${holidayGame.id} ~ .r2-holiday-row .r2-holiday-tab`);
     assert((await tabEl.count()) === 1, 'tab under the card');
@@ -465,10 +476,17 @@ async function main() {
     await ctx.close();
   });
 
-  await check('2 Venmo link moved to Money (same setting), and is gone from Settings', async () => {
+  await check('2 Venmo link is in Settings > Money (next to "$14 each"), not on the Money tab and not in Settings > Group', async () => {
     const { ctx, page } = await openAdmin();
     await tab(page, 'Money');
-    const box = page.locator('[data-venmo-row] input');
+    assert((await page.locator('[data-venmo-row], [data-row="venmoUrl"]').count()) === 0, 'not on the Money tab');
+    await tab(page, 'Settings');
+    await page.locator('details[data-section="group"] > summary').click();
+    assert((await page.locator('details[data-section="group"] [data-row="venmoUrl"]').count()) === 0, 'not in Settings > Group');
+    const sect = page.locator('details[data-section="money"]');
+    assert((await sect.locator('summary').innerText()).includes('$14 each'), 'this is the section that shows $14 each');
+    await sect.locator('> summary').click();
+    const box = sect.locator('[data-row="venmoUrl"] input');
     assert((await box.inputValue()) === 'https://venmo.com/u/organizer', 'shows the saved link');
     await box.fill('https://venmo.com/u/newname');
     await box.blur();
@@ -477,16 +495,21 @@ async function main() {
     await box.fill('not a link');
     await box.blur();
     await page.waitForTimeout(300);
-    assert((await page.locator('[data-venmo-row] .field-error').count()) === 1, 'bad link is refused with a message');
+    assert((await sect.locator('[data-row="venmoUrl"] .field-error').count()) === 1, 'bad link is refused with a message');
     assert((await dash()).group.venmoUrl === 'https://venmo.com/u/newname', 'bad value was not saved');
     await box.fill('https://venmo.com/u/organizer');
     await box.blur();
     await page.waitForTimeout(900);
-    await tab(page, 'Settings');
-    await page.locator('details[data-section="group"] summary').click();
-    assert((await page.locator('[data-row="venmoUrl"]').count()) === 0, 'not in Settings');
-    assert((await page.locator('[data-row="organizerName"]').count()) === 1, 'the rest of Settings Group is untouched');
+    assert((await dash()).group.venmoUrl === 'https://venmo.com/u/organizer', 'put back');
+    assert((await page.locator('[data-row="organizerName"]').count()) === 1, 'the rest of Settings is untouched');
     await ctx.close();
+    // Off: the old place (Settings > Group) still has it.
+    const off = await openAdmin({ r2: false });
+    await tab(off.page, 'Settings');
+    await off.page.locator('details[data-section="group"] > summary').click();
+    assert((await off.page.locator('details[data-section="group"] [data-row="venmoUrl"]').count()) === 1, 'off: still in Settings > Group');
+    assert((await off.page.locator('details[data-section="money"] [data-row="venmoUrl"]').count()) === 0, 'off: not in Settings > Money');
+    await off.ctx.close();
   });
 
   // ---------------------------------------------------------------- 3. players
@@ -533,7 +556,7 @@ async function main() {
     assert(after.sessions.some((s) => s.roster.some((r) => r.name === target)), 'the player still has seats');
     // Add someone on a game: not offered.
     await tab(page, 'Home');
-    await page.locator(`article#session-${C.id} .game-menu .icon-round`).click();
+    await (await reveal(page, C.id)).locator('.game-menu .icon-round').click();
     await page.getByRole('menuitem', { name: 'Players' }).click();
     await page.getByRole('dialog').waitFor();
     assert(!(await page.getByRole('dialog').innerText()).includes(target) || !(await page.getByRole('dialog').locator('h3', { hasText: 'Add someone' }).count()), 'not offered under Add someone');
@@ -580,6 +603,85 @@ async function main() {
     await ctx.close();
   });
 
+  // ---------------------------------------------------------------- the four fixes after Alex's test
+  await check('F1 the court switch moves the instant it is tapped, the toast comes when the server answers, nothing is disabled', async () => {
+    const { ctx, page } = await openAdmin();
+    const card = await reveal(page, C.id);
+    await page.route('**/api/admin/sessions/*/court-status', async (route) => {
+      await sleep(1500);
+      await route.continue();
+    });
+    const t0 = Date.now();
+    await card.locator('.court-switch [data-seg="waitlist"]').click();
+    assert((await card.locator('.court-switch [data-seg="waitlist"]').getAttribute('aria-pressed')) === 'true', 'filled at once');
+    assert(Date.now() - t0 < 400, `took ${Date.now() - t0} ms`);
+    assert((await card.locator('.court-switch button:disabled').count()) === 0, 'no button is disabled while it saves');
+    assert((await card.getAttribute('data-switch')) === 'waitlist', 'the card itself follows at once');
+    assert((await page.locator('.toast, [role="status"]', { hasText: 'On the waitlist' }).count()) === 0, 'no toast before the server answers');
+    // A quick second tap while the first is still saving: the last tap wins.
+    await card.locator('.court-switch [data-seg="not_booked"]').click();
+    await page.waitForTimeout(3600);
+    assert((await page.getByText('Court not booked').count()) >= 1, 'the toast for the last tap shows when the server answers');
+    assert((await dash()).sessions.find((x) => x.id === C.id).bookingStatus !== 'booked', 'saved as the last tap');
+    assert((await card.locator('.court-switch [data-seg="not_booked"]').getAttribute('aria-pressed')) === 'true', 'still on the last tap');
+    await page.unroute('**/api/admin/sessions/*/court-status');
+    // The server fails: it snaps back and says so.
+    await page.route('**/api/admin/sessions/*/court-status', async (route) => {
+      await sleep(900);
+      await route.abort();
+    });
+    await card.locator('.court-switch [data-seg="booked"]').click();
+    assert((await card.locator('.court-switch [data-seg="booked"]').getAttribute('aria-pressed')) === 'true', 'moves first');
+    await page.waitForTimeout(2000);
+    assert((await card.locator('.court-switch [data-seg="not_booked"]').getAttribute('aria-pressed')) === 'true', 'snapped back');
+    assert((await page.getByText(/switch went back/).count()) >= 1, 'says it did not save');
+    assert((await dash()).sessions.find((x) => x.id === C.id).bookingStatus !== 'booked', 'nothing was saved');
+    await ctx.close();
+  });
+
+  await check('F3 History: Activity first and the default, Sessions second (round 2); off: Sessions first as before', async () => {
+    const { ctx, page } = await openAdmin();
+    await tab(page, 'History');
+    const chips = await page.locator('.history-head .chip-btn').allInnerTexts();
+    assert(chips.join('|') === 'Activity|Sessions', `order ${chips}`);
+    assert((await page.locator('.history-head .chip-btn[aria-pressed="true"]').innerText()) === 'Activity', 'Activity is selected');
+    assert((await page.locator('.activity-list').count()) === 1, 'the activity list is showing');
+    await page.locator('.history-head .chip-btn', { hasText: 'Sessions' }).click();
+    assert((await page.locator('.activity-list').count()) === 0, 'Sessions opens when tapped');
+    await ctx.close();
+    const off = await openAdmin({ r2: false });
+    await tab(off.page, 'History');
+    assert((await off.page.locator('.history-head .chip-btn').allInnerTexts()).join('|') === 'Sessions|Activity', 'off: old order');
+    assert((await off.page.locator('.history-head .chip-btn[aria-pressed="true"]').innerText()) === 'Sessions', 'off: Sessions first');
+    await off.ctx.close();
+  });
+
+  await check('F4 Home: only THIS WEEK starts expanded, later weeks start folded, a tap opens one; with the layout switch on too', async () => {
+    for (const v2 of [false, true]) {
+      const { ctx, page } = await openAdmin({ v2 });
+      await page.waitForTimeout(400);
+      const seq = await page.evaluate(() => {
+        const out = [];
+        let label = null;
+        for (const el of document.querySelector('section[aria-labelledby="sessions-title"]').children) {
+          if (el.classList.contains('week-break')) label = el.querySelector('h3')?.textContent.trim();
+          else if (el.matches('.r2-wrap, .hv2-open, .hv2-shortwrap, article.scard')) out.push({ label, open: !!el.querySelector('article.scard') || el.matches('article.scard') });
+        }
+        return out;
+      });
+      assert(seq.length >= 4, `cards seen ${seq.length}`);
+      const thisWeek = seq.filter((x) => x.label === 'This week');
+      assert(thisWeek.length >= 1 && thisWeek.every((x) => x.open), `this week is open ${JSON.stringify(thisWeek)}`);
+      assert(seq.filter((x) => x.label !== 'This week').every((x) => !x.open), `later weeks are folded ${JSON.stringify(seq)}`);
+      // The week named Next week is folded, and a tap opens it.
+      const nextRow = page.locator('.hv2-short').first();
+      await nextRow.click();
+      await page.waitForTimeout(300);
+      assert((await page.locator('.hv2-short').count()) === seq.filter((x) => !x.open).length - 1, 'one folded game opened');
+      await ctx.close();
+    }
+  });
+
   // ---------------------------------------------------------------- look
   await check('L no sideways scroll or cut-off at 320, 360 and 430, light and dark, and at 200% text (Home, Money, Players, History, Settings)', async () => {
     for (const [w, scheme, big] of [[320, 'light', false], [360, 'dark', false], [430, 'light', false], [320, 'light', true], [390, 'dark', true]]) {
@@ -623,7 +725,7 @@ async function main() {
 
   await check('L reduced motion and screen-reader names: footer buttons are named, the paid cell says what it opens', async () => {
     const { ctx, page } = await openAdmin({ extra: { reducedMotion: 'reduce' } });
-    const card = page.locator(`article#session-${A.id}`);
+    const card = await reveal(page, A.id);
     assert(/I'm in for/.test((await card.locator('.r2-seg-in').getAttribute('aria-label')) || ''), 'In has a name');
     assert(/Out of/.test((await card.locator('.r2-seg-out').getAttribute('aria-label')) || ''), 'Out has a name');
     assert(/of \d+ paid\. Open the players list/.test((await card.locator('[data-paid-cell]').getAttribute('aria-label')) || ''), 'paid cell named');

@@ -251,7 +251,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <Section id="group" title="Group" note={g.name} sections={sections}>
           {text('name', 'Group name', g.name, { maxLength: 60 }, { required: 'Enter a group name.' })}
           {text('organizerName', 'Your name', g.organizerName ?? '', { maxLength: 40 })}
-          {/* Round 2 (ADMIN_R2): the Venmo link row lives on the Money tab instead. */}
+          {/* Round 2 (ADMIN_R2): the Venmo link row lives in Settings > Money instead. */}
           {ctx.d.adminR2 !== true &&
             text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
               check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
@@ -269,6 +269,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           </p>
           {money('typicalCourtCostCents', 'Typical court cost', 'Only you see this')}
           {money('monthlyMembershipCents', 'Monthly membership', 'Only you see this')}
+          {ctx.d.adminR2 === true &&
+            text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
+              hint: 'The Pay button on the player screen opens this',
+              check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
+            })}
           <PayAlwaysRow ctx={ctx} auto={auto} />
         </Section>
 

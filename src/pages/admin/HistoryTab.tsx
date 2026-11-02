@@ -16,7 +16,19 @@ export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
 }
 
 function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
-  const [view, setView] = useState<'sessions' | 'activity'>('sessions');
+  // Admin screens, round 2 (ADMIN_R2): Activity first and the default, Sessions second.
+  const r2 = ctx.d.adminR2 === true;
+  const [view, setView] = useState<'sessions' | 'activity'>(r2 ? 'activity' : 'sessions');
+  const sessionsChip = (
+    <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
+      Sessions
+    </button>
+  );
+  const activityChip = (
+    <button className="chip-btn" aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
+      Activity
+    </button>
+  );
   return (
     <section className="stack history" aria-labelledby="history-title">
       <div className="history-head">
@@ -24,12 +36,8 @@ function HistoryTabClassic({ ctx }: { ctx: AdminCtx }) {
           History
         </h2>
         <div className="chips" role="group" aria-label="Show">
-          <button className="chip-btn" aria-pressed={view === 'sessions'} onClick={() => setView('sessions')}>
-            Sessions
-          </button>
-          <button className="chip-btn" aria-pressed={view === 'activity'} onClick={() => setView('activity')}>
-            Activity
-          </button>
+          {r2 ? activityChip : sessionsChip}
+          {r2 ? sessionsChip : activityChip}
         </div>
       </div>
       {view === 'sessions' ? <PastSessions ctx={ctx} /> : <Activity ctx={ctx} />}

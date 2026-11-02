@@ -9,13 +9,12 @@ import type { AdminCtx } from '../Admin';
 import { shiftMonth } from './MonthlyMoney';
 import { Chevron, currentMonth, GameBody, RemindList, shortMonth, Totals } from './MoneyV2';
 import { moneyGames, owedCentsOf, unpaidRows } from './moneyList';
-import { AutoInput, useAutosave } from './autosave';
 import '../../credit-admin.css';
 import '../../admin-r2.css';
 
 /**
  * Money, round 2 (ADMIN_R2): the slim control bar (month stepper, Who paid | Totals), then one tight list by date. Same money, same
- * totals and the same buttons as the other Money tabs; only the way it is shown changed. The Venmo link lives at the bottom.
+ * totals and the same buttons as the other Money tabs; only the way it is shown changed.
  */
 export function MoneyTabR2({ ctx }: { ctx: AdminCtx }) {
   const [view, setView] = useState<'who' | 'totals'>('who');
@@ -62,7 +61,6 @@ export function MoneyTabR2({ ctx }: { ctx: AdminCtx }) {
         </div>
       </div>
       {view === 'who' ? <WhoPaidR2 ctx={ctx} /> : <Totals ctx={ctx} month={month} />}
-      <VenmoRow ctx={ctx} />
     </section>
   );
 }
@@ -204,32 +202,6 @@ function WaitingR2({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
           </span>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** The Venmo link, moved here from Settings > Group. It saves itself like every Settings row, and it is the same setting. */
-function VenmoRow({ ctx }: { ctx: AdminCtx }) {
-  const auto = useAutosave(ctx);
-  return (
-    <div className="card r2m-venmo" data-venmo-row>
-      <AutoInput
-        auto={auto}
-        id="venmoUrl"
-        layout="field"
-        label="Venmo link"
-        hint="The Pay button on the player screen opens this"
-        initial={ctx.d.group.venmoUrl ?? ''}
-        parse={(t) => {
-          const v = t.trim();
-          if (v && !/^https?:\/\/\S+\.\S+/.test(v)) return { error: 'Enter a full link starting with https://' };
-          return { value: v || null };
-        }}
-        body={(value) => ({ venmoUrl: value })}
-        input={({ id, value, onChange, onBlur, invalid }) => (
-          <input id={id} type="url" inputMode="url" placeholder="https://venmo.com/u/" value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} aria-invalid={invalid || undefined} />
-        )}
-      />
     </div>
   );
 }

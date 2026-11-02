@@ -477,7 +477,6 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const v2 = ctx.d.adminV2 === true;
   // Round 2 (ADMIN_R2) also puts the Book button on the game's own card, so it needs the same list.
   const r2 = ctx.d.adminR2 === true;
-  const games = useOpenGames();
   const serverNow = useServerNow(ctx.d.now);
   const courtNeeded = v2 || r2 ? new Set(courtCards(ctx.d, serverNow, `${window.location.origin}/admin`).filter((c) => c.kind === 'book').map((c) => c.session.id)) : null;
   const [all, setAll] = useState(false);
@@ -494,6 +493,11 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   );
   // Home is upcoming only; played sessions live under History.
   const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs);
+  // Round 2: only THIS WEEK's games start open and every later week starts folded (a tap flips one). With nothing left this week, the first
+  // game opens so the screen is never all folded. (Without round 2: the top 2, as the new layout always did.)
+  const thisWeek = new Set(list.filter((s) => weekLabel(s.startsAt, nowMs, ctx.d.group.timezone) === 'This week').map((s) => s.id));
+  if (thisWeek.size === 0 && list[0]) thisWeek.add(list[0].id);
+  const games = useOpenGames(r2 ? (id) => thisWeek.has(id) : undefined);
   // (New layout: a game that needs its court booked is always listed, so its alert is never lost behind "Show all".)
   const shown = all ? list : list.filter((s, i) => i < 6 || courtNeeded?.has(s.id));
   const tz = ctx.d.group.timezone;
@@ -519,7 +523,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
               {i === 0 && pills}
             </div>
           )}
-          {v2 ? (
+          {v2 || r2 ? (
             <HomeGame ctx={ctx} s={s} open={games.isOpen(s.id, i)} fx={games.justToggled === s.id} needsCourt={courtNeeded!.has(s.id)} onToggle={() => games.toggle(s.id, i)} />
           ) : (
             <SessionCard ctx={ctx} s={s} courtNeed={r2 ? courtNeeded!.has(s.id) : undefined} />

@@ -1,14 +1,16 @@
 import type { AdminSessionView } from '../../../shared/api';
-import { courtStatus, courtSwitchOf } from '../../../shared/court';
+import { type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, localParts, weekFade } from '../../../shared/time';
-import { api, useNow } from '../../lib';
-import { CourtReserveLink, PlayersLine } from '../../ui';
+import { useRef, useState } from 'react';
+import { api, ApiError, useNow } from '../../lib';
+import { CourtReserveLink, PlayersLine, useToast } from '../../ui';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
 import type { AdminCtx } from '../Admin';
-import { CardSwitch, courtLine, ShortPanel, TimeCheck, useAction, useOrganizerInOut } from './Sessions';
+import { courtLine, ShortPanel, TimeCheck, useAction, useOrganizerInOut } from './Sessions';
+import { CourtSwitch } from './CourtSwitch';
 import { GameMenu } from './GameMenu';
 import { lateDropsAll } from './todo';
 import '../../admin-r2.css';
@@ -29,7 +31,9 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   );
   if (s.state.flags.canceled && s.cancelReason && s.courtState !== 'not_opened') court.text = `Canceled - ${s.cancelReason}`;
   const later = court.kind === 'later';
-  const switchValue = courtSwitchOf(s);
+  // The court switch answers the tap at once (see CardSwitchR2); this holds what was just tapped until the server's answer is drawn.
+  const [picked, setPicked] = useState<CourtSwitchValue | null>(null);
+  const switchValue = picked ?? courtSwitchOf(s);
   const canceled = s.state.flags.canceled;
   const showSwitch = !canceled && !s.state.flags.past && !s.state.flags.started;
   const start = cardTime(s.startsAt, s.endsAt, tz).start;
@@ -66,7 +70,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             <h2 id={`as-${s.id}`} className="sr-only">
               {formatShortDate(s.startsAt, tz)}, {formatTime(s.startsAt, tz)}
             </h2>
-            {showSwitch ? <CardSwitch ctx={ctx} s={s} value={switchValue} /> : <div className="court-line top-line">{courtLine(court)}</div>}
+            {showSwitch ? <CardSwitchR2 ctx={ctx} s={s} value={switchValue} onPicked={setPicked} /> : <div className="court-line top-line">{courtLine(court)}</div>}
             {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}
             {s.hiddenFromPlayers && canceled && ctx.d.adminV2 === true && (
               <div className="small muted hidden-tag" data-hidden-tag>
@@ -214,5 +218,50 @@ function HolidayTab({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * The court switch on a card, instant: the tapped segment is filled the moment it is tapped (and the card's own marks follow), the save
+ * goes out in the background, and the confirmation toast shows as soon as the server answers (not after the whole screen reloads).
+ * If the server refuses or cannot be reached, the switch snaps back and says so. Quick second taps are sent in order, the last one wins.
+ * Nothing is disabled while it saves. Same request, same rules as the old switch: only the waiting got shorter.
+ */
+function CardSwitchR2({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue; onPicked: (v: CourtSwitchValue | null) => void }) {
+  const toast = useToast();
+  const latest = useRef(0);
+  const chain = useRef<Promise<unknown>>(Promise.resolve());
+  return (
+    <CourtSwitch
+      value={value}
+      label={`Court status for ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}
+      onPick={(to) => {
+        const mine = ++latest.current;
+        onPicked(to);
+        const said = to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked';
+        chain.current = chain.current.then(async () => {
+          try {
+            await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to });
+            if (mine === latest.current) toast(said);
+          } catch (err) {
+            // Only the newest tap decides what the switch shows: a failure of an older one is reported but does not move it.
+            toast(err instanceof ApiError ? `${err.message} The switch went back.` : "That did not save, so the switch went back. Check your connection and try again.", 'error');
+            if (mine === latest.current) {
+              // Show what the server really has (an earlier quick tap may have saved), then let go of the tap.
+              await ctx.reload().catch(() => {});
+              if (mine === latest.current) onPicked(null);
+            }
+            return;
+          }
+          if (mine !== latest.current) return;
+          try {
+            await ctx.reload();
+          } catch {
+            /* the next refresh brings it */
+          }
+          if (mine === latest.current) onPicked(null);
+        });
+      }}
+    />
   );
 }
