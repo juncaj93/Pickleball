@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { type FormEvent, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { type CourtSwitch as CourtSwitchValue, courtSwitchOf } from '../../../shared/court';
 import { COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
@@ -44,13 +44,6 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const motion = useMotion();
   const toast = useToast();
   const [saved, setSaved] = useState(false);
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
   const started = s.state.flags.started;
   const over = s.state.flags.past;
   const startsAt = date && start ? fromLocalInputValue(`${date}T${start}`, tz) : null;
@@ -76,7 +69,8 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
       setSaved(true);
       await new Promise((r) => setTimeout(r, SAVED_SHOW_MS));
       toast(moved || timeChanged ? 'Game saved' : 'Court status saved');
-      if (alive.current) onDone(moved, statusChanged);
+      // Even if the sheet was closed during the Saved moment, the follow-up step (Moved text) still happens, as with the motion off.
+      onDone(moved, statusChanged);
     } else if (ok) onDone(moved, statusChanged);
     else if (moved) await ctx.reload(); // the move went through even though the switch did not
   }

@@ -381,6 +381,7 @@ export function useSwitchStretch(active: boolean) {
  */
 export function useDetailsEase(active: boolean) {
   useEffect(() => {
+    const closing = new WeakMap<HTMLDetailsElement, ReturnType<typeof setTimeout>>();
     if (!active) return undefined;
     const onClick = (e: MouseEvent) => {
       const t = e.target;
@@ -389,16 +390,24 @@ export function useDetailsEase(active: boolean) {
       const box = sum?.parentElement;
       if (!sum || !(box instanceof HTMLDetailsElement)) return;
       if (box.classList.contains('m-closing-d')) {
-        // Tapped again while closing: finish at once.
+        // Tapped again while closing: that is a close then an open, so it stays open (same result as with the motion off).
+        e.preventDefault();
+        clearTimeout(closing.get(box));
+        closing.delete(box);
+        box.classList.remove('m-closing-d');
         return;
       }
       if (box.open) {
         e.preventDefault();
         box.classList.add('m-closing-d');
-        setTimeout(() => {
-          box.open = false;
-          box.classList.remove('m-closing-d');
-        }, 120);
+        closing.set(
+          box,
+          setTimeout(() => {
+            closing.delete(box);
+            box.open = false;
+            box.classList.remove('m-closing-d');
+          }, 120),
+        );
       } else {
         box.classList.add('m-opening-d');
         setTimeout(() => box.classList.remove('m-opening-d'), 200);

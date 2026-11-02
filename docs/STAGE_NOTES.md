@@ -1386,5 +1386,5 @@ Preview only: nothing here is on production until Alex says "ship it".
   rolls the count and blinks the card (there is no name left to flash).
 - The tab bar glide is 200 ms (the spec says 220 ms and also "120 to 200 ms"; the speed rule won).
 - Reduce Motion: the dim behind a sheet used to keep fading because the global reduce rule cannot reach that pseudo-element; it is now
-  off with Reduce Motion (also on the player side; nothing else about the player screens changed).
+  off with Reduce Motion on the organizer screens only (the player screens are untouched; the reviewer caught a first version that leaked there).
 - Pull to refresh stays player only. The organizer page keeps the browser's own pull-down.

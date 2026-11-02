@@ -906,10 +906,10 @@ html[data-motion='on'] details.m-closing-d > :not(summary) {
   }
 }
 
-/* Reduce Motion: the dim behind a sheet is drawn by a pseudo-element the global rule in styles.css cannot reach. */
+/* Reduce Motion (organizer screens only; the player screens are left exactly as they were): the dim behind a sheet is drawn by a pseudo-element the global rule in styles.css cannot reach. */
 @media (prefers-reduced-motion: reduce) {
-  html[data-motion='on'] dialog.sheet[open]::backdrop,
-  html[data-motion='on'] dialog.sheet.m-closing::backdrop {
+  html[data-motion='on'][data-motion-admin] dialog.sheet[open]::backdrop,
+  html[data-motion='on'][data-motion-admin] dialog.sheet.m-closing::backdrop {
     animation: none;
   }
 }
