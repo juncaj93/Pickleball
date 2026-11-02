@@ -9,9 +9,10 @@ None of them touches money, seats, prices or the database: they only show or hid
 | `TIME_SHIFT` | `[vars]` | on | Moved-game look: tilde times, court borders, "Still in" notice, Confirmed x of y | `?timeshift=on` (also Settings, "Moved-game notice for everyone") | `TIME_SHIFT = "off"`, deploy |
 | `MOTION` | `[vars]` | on (since Sun Nov 1, 8:2x PM) | Animations on the PLAYER screens | `?motion=on` once per phone (`?motion=off` ends it) | `MOTION = "off"`, deploy |
 | `MOTION_ADMIN` | `[vars]` | on (since Sun Nov 1, about 10:10 PM) | Animations on the ORGANIZER screens (`/admin`). Separate from `MOTION` on purpose, so each side can be switched alone | `/admin?motionadmin=on` once per phone (`?motionadmin=off` ends it) | `MOTION_ADMIN = "off"`, deploy |
+| `PAY_ALWAYS` | `[vars]` + Settings | allowed; OFF for everyone (Settings > Money > "Ask for payment on every game" is off) | Pay, "$14 due" and I paid on Not booked and Waitlist games too (display only: no money rule changes) | `?payalways=on` once per phone (`?payalways=off` ends it) | Settings switch off (no deploy). Kill switch for everyone incl. test links: `PAY_ALWAYS = "off"`, deploy |
 
 ## Notes
-- Anything other than `"on"` counts as off (for `TIME_SHIFT`, anything other than `"off"` counts as on).
+- Anything other than `"on"` counts as off (for `TIME_SHIFT` and `PAY_ALWAYS`, anything other than `"off"` counts as on: those two are kill switches, and who sees them is a Settings switch).
 - The `[env.preview.vars]` block holds the same switches for preview links, which use the fake database. Production only reads `[vars]`.
 - The private test links only work while the switch is off for everyone. Once it is on, they change nothing.
 - Quiet windows for switching one on: Wed 6:00 AM to 6:00 PM, and Fri through Mon 6:00 PM (see SITE_RULES). Never in the hour after Alex texts the group.
