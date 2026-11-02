@@ -91,6 +91,7 @@ the Pay card at the top follows the same rule (one Pay button only: the row show
 |---|---|---|---|
 | Z1 | Same 40 random taps (join, drop, Mark paid, Use credit, Undo, court switch, cancel, reopen) with the switch off, on by test link, on by Settings | Identical pots, held money and seats; all 20 health checks 0 after every step | PASS |
 | Z2 | Banner text helper | "$ due" only where the card shows it | PASS |
+| Z3 | "Want in?" card, Yes, on a game with no court | Banner and answer card say "$11 due" only when the card shows it | FIXED (older bug, found by the fresh code review; e2e want-in and suggest green, checked on the preview both ways) |
 
 ## Questions for Alex (from the ASK rows)
 
