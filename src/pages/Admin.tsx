@@ -7,7 +7,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, 
 import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
-import { TopBar } from '../Shell';
+import { ModeButton, TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
@@ -142,6 +142,8 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   useSwitchStretch(motion);
   useDetailsEase(motion);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
+  // "Admin screens, round 2" (ADMIN_R2): Light/Dark button left of View as, "Admin" under ORGANIZER, no "Updated just now".
+  const r2 = d.adminR2 === true;
   const todoCount = homeBadgeCount(d);
   // The organizer screens keep themselves fresh like the player side: one tiny "did anything change?" check every
   // few seconds, the full load only when it did, and never while a sheet or pop-up is open or something is being typed.
@@ -196,14 +198,17 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
       <DemoBar tz={d.group.timezone} />
       <TopBar
         eyebrow="Organizer"
-        title={d.group.name}
+        title={r2 ? 'Admin' : d.group.name}
         action={
-          <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
-            View as…
-          </button>
+          <>
+            {r2 && <ModeButton />}
+            <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
+              View as…
+            </button>
+          </>
         }
       />
-      {tab !== 'settings' && <UpdatedLine at={checkedAt} />}
+      {tab !== 'settings' && !r2 && <UpdatedLine at={checkedAt} />}
       <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}`}>
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
@@ -241,7 +246,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
           <p className="small muted">Demo: taps work, nothing is saved.</p>
           <div className="name-grid">
             {d.players
-              .filter((p) => p.isActive)
+              .filter((p) => p.isActive && !p.adminHidden)
               .map((p) => (
                 <button
                   key={p.id}
@@ -302,7 +307,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
           ))}
         </section>
       )}
-      <DoNowCard ctx={ctx} hideBook={ctx.d.adminV2 === true} />
+      <DoNowCard ctx={ctx} hideBook={ctx.d.adminV2 === true || ctx.d.adminR2 === true} />
       {first.length > 0 && (
         <section className="stack" aria-label="After the game">
           {first.map((item) => (
@@ -470,9 +475,11 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
   // The new layout (ADMIN_V2): the top 2 games open as full cards, the rest as short rows (tap to open or fold).
   const v2 = ctx.d.adminV2 === true;
+  // Round 2 (ADMIN_R2) also puts the Book button on the game's own card, so it needs the same list.
+  const r2 = ctx.d.adminR2 === true;
   const games = useOpenGames();
   const serverNow = useServerNow(ctx.d.now);
-  const courtNeeded = v2 ? new Set(courtCards(ctx.d, serverNow, `${window.location.origin}/admin`).filter((c) => c.kind === 'book').map((c) => c.session.id)) : null;
+  const courtNeeded = v2 || r2 ? new Set(courtCards(ctx.d, serverNow, `${window.location.origin}/admin`).filter((c) => c.kind === 'book').map((c) => c.session.id)) : null;
   const [all, setAll] = useState(false);
   const [adding, setAdding] = useState(false);
   const pills = (
@@ -481,7 +488,7 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
         + Add game
       </button>
       <CourtReserveLink href={COURTRESERVE_BOOKING_URL} pill>
-        Book a court
+        {r2 ? 'Book' : 'Book a court'}
       </CourtReserveLink>
     </>
   );
@@ -508,14 +515,14 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
           {(i === 0 || weekStart(s.startsAt, tz) !== weekStart(shown[i - 1].startsAt, tz)) && (
             <div className="week-break">
               <h3>{weekLabel(s.startsAt, nowMs, tz)}</h3>
-              {/* "+ Add game" and "Book a court" ride on the first divider line, adding no height. */}
+              {/* "+ Add game" and "Book a court" (round 2: "Book") ride on the first divider line, adding no height. */}
               {i === 0 && pills}
             </div>
           )}
           {v2 ? (
             <HomeGame ctx={ctx} s={s} open={games.isOpen(s.id, i)} fx={games.justToggled === s.id} needsCourt={courtNeeded!.has(s.id)} onToggle={() => games.toggle(s.id, i)} />
           ) : (
-            <SessionCard ctx={ctx} s={s} />
+            <SessionCard ctx={ctx} s={s} courtNeed={r2 ? courtNeeded!.has(s.id) : undefined} />
           )}
         </Fragment>
       ))}

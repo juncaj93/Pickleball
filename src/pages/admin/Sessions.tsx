@@ -21,6 +21,7 @@ import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, cour
 import { type AdminCtx } from '../Admin';
 import { CourtSwitch } from './CourtSwitch';
 import { EditGameForm } from './EditGame';
+import { SessionCardR2 } from './CardR2';
 import { GameMenu } from './GameMenu';
 import { reach, reminderText } from './textMenu';
 import { markTask } from './DoNow';
@@ -57,8 +58,16 @@ export function useAction(ctx: AdminCtx) {
   return { busy, run };
 }
 
-/** `courtNeed` (new layout): this game is the one "Court still needs to be booked" is about, so its card says it and carries the Book a court button. */
+/**
+ * One organizer game card. `courtNeed` (new layout, or round 2): this game is the one "Court still needs to be booked" is
+ * about, so its card says it and carries the Book button. With "Admin screens, round 2" on, the card is drawn by CardR2.tsx.
+ */
 export function SessionCard({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSessionView; courtNeed?: boolean }) {
+  if (ctx.d.adminR2 === true) return <SessionCardR2 ctx={ctx} s={s} courtNeed={courtNeed} />;
+  return <SessionCardClassic ctx={ctx} s={s} courtNeed={courtNeed} />;
+}
+
+function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSessionView; courtNeed?: boolean }) {
   const tz = ctx.d.group.timezone;
   const now = useNow();
   const live = !s.state.flags.canceled && !s.state.flags.started;
@@ -175,7 +184,7 @@ export function SessionCard({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
  * "Confirmed 2 of 3" on a game whose start time changed after players were in, and "Waiting on Dan" with a
  * small Text button per person: it opens Messages with the text filled in (the organizer presses send). Nothing is sent by the site.
  */
-function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+export function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const c = s.timeCheck!;
   const body = stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
@@ -209,7 +218,7 @@ function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 }
 
 /** The gray reason line for a game that is canceled, played or already started. */
-function courtLine(court: { kind: string; text: string }) {
+export function courtLine(court: { kind: string; text: string }) {
   return (
     <div className="court-status">
       <CourtIcon kind={court.kind as CourtKind} />
@@ -219,7 +228,7 @@ function courtLine(court: { kind: string; text: string }) {
 }
 
 /** The card's one-tap switch. Shows the tap at once, saves it, and puts it back if the save fails. */
-function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue }) {
+export function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue }) {
   const { busy, run } = useAction(ctx);
   const [picked, setPicked] = useState<CourtSwitchValue | null>(null);
   const shown = picked ?? value;
@@ -243,7 +252,8 @@ function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionView; val
  * with a small "Out". Real sign-ups under their name from Settings, with the
  * same rules as everyone.
  */
-function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+/** The organizer's own seat on one game: are they in, and the one tap that flips it (same rules as everyone). */
+export function useOrganizerInOut(ctx: AdminCtx, s: AdminSessionView) {
   const { busy, run } = useAction(ctx);
   const toast = useToast();
   const me = ctx.d.me;
@@ -254,6 +264,17 @@ function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       const res = await api<{ result: string; position?: number }>('POST', `/api/admin/sessions/${s.id}/me`, { in: goingIn });
       toast(!goingIn ? "You're out" : res.result === 'waitlisted' || res.result === 'standby' ? `You're #${res.position} on the waitlist` : "You're in");
     });
+  return { busy, mine, day, set };
+}
+
+/**
+ * The organizer playing: a small gray "I'm in" at the right end of the
+ * players row (never a second green button), which turns into "✓ You're in"
+ * with a small "Out". Real sign-ups under their name from Settings, with the
+ * same rules as everyone.
+ */
+function OrganizerInOut({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, mine, day, set } = useOrganizerInOut(ctx, s);
   if (!mine) {
     return (
       <button className="btn small secondary me-in" disabled={busy} aria-label={`I'm in for ${day}`} onClick={() => set(true)}>
@@ -455,7 +476,7 @@ function CourtForNewTime({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       </div>
       {answer === false && (
         <CourtReserveLink href={COURTRESERVE_BOOKING_URL} small>
-          Book a court
+          {ctx.d.adminR2 === true ? 'Book' : 'Book a court'}
         </CourtReserveLink>
       )}
     </fieldset>
@@ -539,7 +560,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const act = (playerId: string, action: string, msg: string) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);
   const inRoster = new Set(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => r.playerId));
-  const others = ctx.d.players.filter((p) => p.isActive && !inRoster.has(p.id));
+  const others = ctx.d.players.filter((p) => p.isActive && !p.adminHidden && !inRoster.has(p.id));
   const full = s.confirmedCount >= ctx.d.group.settings.maxPlayers;
 
   return (

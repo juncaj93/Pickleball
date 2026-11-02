@@ -1,0 +1,539 @@
+/* "Admin screens, round 2" (ADMIN_R2). Layout only, and only when the switch is on: every rule here hangs off a class that the old
+   screens never use. Colors are the site's existing tokens (nothing new), so light and dark both follow the theme. */
+
+/* =========================================================================================================
+   Home cards: tile and time left; court switch, seats and names under it; gear right; one fixed 3-cell footer
+   ========================================================================================================= */
+.r2-wrap {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.card.scard.scard-r2 {
+  gap: 0;
+  padding: 10px 12px 0;
+}
+.card.scard.scard-r2.court-booked {
+  padding-left: 10px;
+}
+.r2-top {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.r2-mid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding-bottom: 8px;
+}
+.r2-mid .court-switch {
+  flex: none;
+}
+.r2-mid .court-line.top-line {
+  flex: none;
+  min-height: 34px;
+  justify-content: center;
+}
+.r2-mid .court-sub,
+.r2-mid .game-note,
+.r2-mid .late-line,
+.r2-mid .hidden-tag {
+  margin: 0;
+}
+.scard-r2 .players-top {
+  /* The In | Out toggle moved to the footer, so the count row is only as tall as its own text. */
+  min-height: 0;
+}
+.scard-r2 .players-line {
+  gap: 2px;
+}
+.r2-gear {
+  /* Lines up with the court switch (44 px tall); the gear itself is the same round button as before. */
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+.r2-gear .icon-round {
+  width: 40px;
+}
+
+/* ---- The footer: three equal cells, thin dividers ---- */
+.r2-foot {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 -12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 0 0 calc(var(--radius) - 1px) calc(var(--radius) - 1px);
+}
+.card.scard.scard-r2.court-booked .r2-foot {
+  margin-left: -10px;
+  border-bottom-left-radius: calc(var(--radius) - 7px);
+}
+.card.scard.scard-r2.court-needs .r2-foot,
+.card.scard.scard-r2.court-waitlist .r2-foot {
+  /* The 2 px border sits outside the padding: pull the footer over it so it still touches the edge. */
+  margin-inline: -12px;
+  margin-bottom: 0;
+}
+.r2-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 2px 6px;
+}
+.r2-cell + .r2-cell {
+  border-left: 1px solid var(--line);
+}
+
+/* In | Out as two plain words. The one that is true is filled. */
+.r2-seg {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 11px;
+  background: var(--fill);
+}
+.r2-seg button {
+  position: relative;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 750;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.r2-seg button::before {
+  /* 32 px to look at, 44 px to tap (up and down only, so In and Out never overlap). */
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.r2-seg button[aria-pressed='true'].r2-seg-in {
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+.r2-seg button[aria-pressed='true'].r2-seg-out {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+}
+.r2-seg button:disabled {
+  cursor: progress;
+}
+.r2-seg button:focus-visible,
+.r2-paid:focus-visible,
+.r2-yes:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* The green $ circle and "1 of 3". Tapping it opens the Players list, like the old paid pill. */
+.r2-paid {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.r2-dol {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-ink);
+  font-size: 0.74rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.r2-paid-text {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The cancel-by time: a clock and the time. Quiet gray, red inside the last 24 hours. */
+.r2-cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-2);
+  font-size: 0.84rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.r2-cancel.soon {
+  color: var(--danger-fg);
+}
+.r2-cancel svg {
+  flex: none;
+}
+
+/* Book (with the arrow the CourtReserve link already carries) when a court is needed. */
+.r2-book {
+  display: inline-flex;
+}
+.r2-book .btn.external {
+  position: relative;
+  min-height: 34px;
+  padding: 2px 14px;
+  border-radius: 10px;
+  font-size: 0.86rem;
+}
+.r2-book .btn.external::before {
+  content: '';
+  position: absolute;
+  inset: -5px -2px;
+}
+
+/* ---- Holiday: a faint tab under the card, bottom right. Confirmed: plain faint text, no tab. ---- */
+.r2-holiday-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 16px;
+}
+.r2-holiday-tab {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px 8px;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 2px 4px 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--holiday-fg) 28%, transparent);
+  border-top: 0;
+  border-radius: 0 0 10px 10px;
+  background: var(--holiday-bg);
+  color: var(--holiday-fg);
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.r2-yes {
+  position: relative;
+  min-height: 24px;
+  padding: 0 9px;
+  border: 1.5px solid color-mix(in srgb, var(--holiday-fg) 60%, transparent);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--holiday-fg);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.r2-yes::before {
+  content: '';
+  position: absolute;
+  inset: -10px -6px;
+}
+.r2-holiday-done {
+  margin: 3px 18px 0 0;
+  text-align: right;
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+/* Very big text, or a very narrow card: the tile and time sit in a row above the words, like the old card does. */
+@container pbwide (max-width: 19rem) {
+  .r2-top {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .r2-top .scard-tilecol {
+    grid-column: 1;
+    width: auto;
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .card.scard .r2-top .scard-tilecol .tile {
+    width: 56px;
+    flex: none;
+  }
+  .r2-top .scard-time {
+    text-align: left;
+    font-size: 0.9rem;
+  }
+  .r2-top .r2-mid {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .r2-top .r2-gear {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .r2-cancel {
+    flex-wrap: wrap;
+    justify-content: center;
+    white-space: normal;
+    font-size: 0.78rem;
+    text-align: center;
+  }
+}
+/* Big text on a narrow phone: the three footer cells stack. */
+@container pbwide (max-width: 15rem) {
+  .r2-foot {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .r2-cell + .r2-cell {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
+
+/* =========================================================================================================
+   Money: one tight list by date
+   ========================================================================================================= */
+.money-r2 {
+  gap: 6px;
+}
+/* The control bar is a little shorter than before. */
+.r2m-controls {
+  padding: 2px;
+  gap: 4px;
+}
+.r2m-controls .month-picker .btn,
+.r2m-controls .segmented.compact button {
+  position: relative;
+  min-height: 38px;
+}
+.r2m-controls .month-picker .btn::before,
+.r2m-controls .segmented.compact button::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
+.r2m-games {
+  gap: 5px;
+}
+.r2m-game {
+  padding: 0;
+  overflow: hidden;
+  container-type: inline-size;
+}
+.r2m-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 2rem;
+  align-items: center;
+  gap: 6px;
+  min-height: 46px;
+  padding: 0 4px 0 10px;
+}
+.r2m-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.r2m-toggle.static {
+  cursor: default;
+  grid-column: 1 / -1;
+}
+.r2m-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.r2m-sub {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.2;
+}
+.r2m-sub2 {
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+/* The small date tile: red weekday over the day number. */
+.r2m-tile {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 36px;
+  height: 38px;
+  border: 2px solid var(--tile-line);
+  border-radius: 11px;
+  background: var(--surface);
+  line-height: 1.02;
+}
+.r2m-tile i {
+  color: var(--cal-red);
+  font-size: 0.52rem;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+.r2m-tile b {
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 800;
+}
+.r2m-tile.waiting {
+  border-style: dashed;
+  border-color: var(--line-strong);
+}
+.r2m-tile.waiting i,
+.r2m-tile.waiting b {
+  color: var(--ink-2);
+}
+.r2m-tile.closed {
+  border-color: var(--line);
+}
+.r2m-tile.closed i,
+.r2m-tile.closed b {
+  color: var(--muted-fg);
+  opacity: 0.55;
+}
+/* Paid / owes bars: one short bar per person. Paid is blue until the game is finalized, then green. Still owing is amber. */
+.r2m-bars {
+  display: flex;
+  gap: 3px;
+  max-width: 100%;
+}
+.r2m-bars i {
+  flex: 0 1 20px;
+  min-width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--warn-edge);
+}
+.r2m-bars i.p {
+  background: var(--info-edge);
+}
+.r2m-bars.final i.p {
+  background: var(--ok-edge);
+}
+.r2m-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+.r2m-owed {
+  color: var(--warn-fg);
+  font-size: 0.98rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.r2m-allpaid {
+  color: var(--ok-fg);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+.r2m-closed {
+  padding: 3px 9px;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--muted-fg);
+  font-size: 0.7rem;
+  font-weight: 800;
+  opacity: 0.7;
+}
+.r2m-status .chip {
+  font-size: 0.72rem;
+  padding: 3px 9px;
+}
+/* A game that is waiting on its court, or closed: flat and quiet. */
+.r2m-game.later,
+.r2m-game.closed {
+  background: var(--surface-2);
+  box-shadow: none;
+}
+.r2m-game.later .r2m-sub {
+  color: var(--ink-2);
+}
+.r2m-game.closed .r2m-sub {
+  color: var(--muted-fg);
+  opacity: 0.6;
+}
+/* Remind is exactly Mark paid: same width, height and type. */
+.r2m-chev {
+  display: grid;
+  place-items: center;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.r2m-chev svg {
+  transition: transform var(--fast);
+}
+.r2m-game.open .r2m-chev svg {
+  transform: rotate(180deg);
+}
+.r2m-head .btn.r2m-remind {
+  width: 5.6rem;
+  min-height: 36px;
+  padding: 4px;
+  font-size: 0.8rem;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+.r2m-venmo {
+  padding: 10px 14px 12px;
+}
+
+/* =========================================================================================================
+   Players: names only (plus money), centered
+   ========================================================================================================= */
+.r2-players .player-row {
+  min-height: 52px;
+}
+.r2-players .player-open {
+  justify-content: center;
+}
+
+/* =========================================================================================================
+   History: what someone other than you did stands out
+   ========================================================================================================= */
+.activity-list > li.a-other {
+  margin: 0 -14px;
+  padding-inline: 14px;
+  background: var(--accent-soft);
+  box-shadow: inset 4px 0 0 var(--accent-text);
+}
+.activity-list > li.a-other .a-text {
+  font-weight: 650;
+}

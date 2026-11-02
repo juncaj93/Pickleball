@@ -13,6 +13,8 @@ import { motionAdminFor } from './motion';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
 import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
+import { adminHiddenPlayerIds, adminR2For, adminR2ForAll, setAdminHiddenPlayer, setAdminR2ForAll } from './adminR2';
+import { adminR2Allowed } from '../shared/adminR2';
 import { payNoteForAll, setPayNoteForAll } from './payNote';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
 import { HttpError } from './http';
@@ -79,6 +81,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const { sessions, rosters, ledger, reserved } = await moneyPictureOf(ctx, group);
   const organizerId = await organizerIdOf(ctx.db, group);
   const timeShift = await timeShiftFor(ctx, group.id);
+  // "Admin screens, round 2": on for this screen, and the names the organizer hid from the Players list and pickers (only read when on).
+  const adminR2 = await adminR2For(ctx, group.id);
+  const hiddenByOrganizer = adminR2 ? await adminHiddenPlayerIds(ctx.db, group.id) : new Set<string>();
   // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
   const potFor = (sessionId: string) => (r: RosterRow) =>
     seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
@@ -162,7 +167,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       openAccess: !!group.open_access,
       hasGroupWord: !!group.group_word_hash,
     },
-    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0 })),
+    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}) })),
     sessions: sessions.map((s) => ({
       ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
       hiddenFromPlayers: hiddenIds.has(s.id),
@@ -206,6 +211,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     adminV2: await adminV2For(ctx, group.id),
     payNoteForAll: await payNoteForAll(ctx.db, group.id),
     adminV2ForAll: await adminV2ForAll(ctx.db, group.id),
+    adminR2,
+    adminR2ForAll: await adminR2ForAll(ctx.db, group.id),
   };
 }
 
@@ -1467,6 +1474,36 @@ export async function setAdminV2(ctx: Ctx, body: Record<string, unknown>) {
   await setAdminV2ForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'admin_v2_on' : 'admin_v2_off', {}, ctx.nowIso);
   return { ok: true, on };
+}
+
+/** PUT /api/admin/admin-r2 { on }: Settings > Feature switches > "Admin screens, round 2". Display only: changes no money and no seat. */
+export async function setAdminR2(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setAdminR2ForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'admin_r2_on' : 'admin_r2_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * POST /api/admin/players/:id/admin-hide { hidden }: "Hide player" (and Unhide) in the round 2 admin screens.
+ * Soft: only the organizer's own Players list and pickers stop showing the name. Every seat, payment, credit and
+ * history row stays exactly as it is, and the player still works on their own screen. One task_log row, no schema change.
+ * Never the organizer's own player (they would lose their own I'm in). Unhide always works, even if the switch went off.
+ */
+export async function hidePlayerFromAdmin(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const id = v.id(ctx.params.id, 'player');
+  const hidden = v.bool(body.hidden, 'hidden');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(id, group.id).first<{ display_name: string }>();
+  if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
+  if (hidden) {
+    if (!adminR2Allowed(ctx.env.ADMIN_R2)) throw new HttpError(400, 'not_available', 'Hide player is not available right now.');
+    if (id === (await organizerIdOf(ctx.db, group))) throw new HttpError(400, 'cannot_hide_self', "You can't hide yourself.");
+  }
+  await setAdminHiddenPlayer(ctx.db, group.id, id, hidden, ctx.nowIso);
+  await audit(ctx.db, group.id, null, hidden ? 'player_admin_hidden' : 'player_admin_unhidden', { name: p.display_name }, ctx.nowIso);
+  return { ok: true, hidden };
 }
 
 /**

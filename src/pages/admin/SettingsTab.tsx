@@ -251,9 +251,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <Section id="group" title="Group" note={g.name} sections={sections}>
           {text('name', 'Group name', g.name, { maxLength: 60 }, { required: 'Enter a group name.' })}
           {text('organizerName', 'Your name', g.organizerName ?? '', { maxLength: 40 })}
-          {text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
-            check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
-          })}
+          {/* Round 2 (ADMIN_R2): the Venmo link row lives on the Money tab instead. */}
+          {ctx.d.adminR2 !== true &&
+            text('venmoUrl', 'Venmo link', g.venmoUrl ?? '', { type: 'url', inputMode: 'url', placeholder: 'https://venmo.com/u/' }, {
+              check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
+            })}
           {text('venueName', 'Venue name', g.venueName ?? '', { maxLength: 80, placeholder: DEFAULT_VENUE_NAME })}
           {text('venueAddress', 'Venue street address', g.venueAddress ?? '', { maxLength: 160, autoComplete: 'street-address' })}
           {whole('maxPlayers', 'Max players per game', `${SETTING_LIMITS.maxPlayers[0]} to ${SETTING_LIMITS.maxPlayers[1]}. Beyond it, people wait`)}
@@ -355,10 +357,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
 
         <Section id="advanced" title="Advanced" sections={sections}>
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
+          {ctx.d.adminR2 === true && <HiddenPlayers ctx={ctx} />}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
+          <AdminR2Row ctx={ctx} auto={auto} />
           <PayNoteRow ctx={ctx} auto={auto} />
         </Section>
       </div>
@@ -755,5 +759,81 @@ function AdminV2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       </label>
       <SaveProblem state={auto.rows.adminV2All} />
     </div>
+  );
+}
+
+/**
+ * "Admin screens, round 2": the new Home cards, Money list, Players list (with Hide player), History highlight and header.
+ * Display only: nothing that is saved, charged or sent changes. Off: only a phone opened with /admin?adminr2=on sees it
+ * (a private test). Saves itself, no deploy.
+ */
+function AdminR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.adminR2ForAll);
+  return (
+    <div className="set-row-wrap" data-row="adminR2All">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Admin screens, round 2 <SaveMark state={auto.rows.adminR2All} />
+          </span>
+          <span className="set-hint">New Home cards, Money, Players, History and header. Off: only phones opened with /admin?adminr2=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-admin-r2-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('adminR2All', { on: e.target.checked }, '/api/admin/admin-r2').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.adminR2All} />
+    </div>
+  );
+}
+
+/**
+ * Settings > Advanced > Hidden players (round 2): the names hidden with "Hide player", each with an Unhide button.
+ * Unhiding puts the name straight back on the Players list and the pickers; nothing else about them ever changed.
+ */
+function HiddenPlayers({ ctx }: { ctx: AdminCtx }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const hidden = ctx.d.players.filter((p) => p.adminHidden);
+  async function unhide(id: string, name: string) {
+    setBusy(id);
+    try {
+      await api('POST', `/api/admin/players/${id}/admin-hide`, { hidden: false });
+      await ctx.reload();
+      toast(`${name} is back on your Players list`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <details className="advanced hidden-players" data-hidden-players>
+      <summary>Hidden players{hidden.length > 0 ? ` (${hidden.length})` : ''}</summary>
+      {hidden.length === 0 ? (
+        <p className="small muted">Nobody is hidden. Hide someone from their Edit sheet on the Players tab.</p>
+      ) : (
+        <ul className="rows" aria-label="Hidden players">
+          {hidden.map((p) => (
+            <li key={p.id} data-hidden-player={p.name}>
+              <span className="who">
+                <strong>{p.name}</strong>
+              </span>
+              <button type="button" className="btn small secondary" disabled={busy === p.id} aria-label={`Unhide ${p.name}`} onClick={() => void unhide(p.id, p.name)}>
+                Unhide
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </details>
   );
 }

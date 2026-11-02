@@ -28,26 +28,30 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
   const shown = viewing ? ctx.d.players.find((p) => p.id === viewing) ?? null : null;
+  // Admin screens, round 2 (ADMIN_R2): no phone, days or Regular / Occasional on the list, and names the organizer hid are not listed.
+  const r2 = ctx.d.adminR2 === true;
+  const listed = r2 ? ctx.d.players.filter((p) => !p.adminHidden) : ctx.d.players;
   return (
     <>
-      <ul className="card player-list" aria-label="Players">
-        {ctx.d.players.map((p) => {
+      <ul className={`card player-list${r2 ? ' r2-players' : ''}`} aria-label="Players">
+        {listed.map((p) => {
           const { owedCents, creditCents } = balanceOf(ctx.d, p.id);
           // You pay the venue, so there is no player balance on your own row.
           const isMe = ctx.d.me?.id === p.id;
           const pot = ctx.d.creditLedger.find((l) => l.playerId === p.id)?.balanceCents ?? 0;
           const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
-          const second = [p.phone ? formatPhone(p.phone) : 'No phone', days, p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ');
+          const late = p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null;
+          const second = r2 ? (late ?? '') : [p.phone ? formatPhone(p.phone) : 'No phone', days, late].filter(Boolean).join(' · ');
           return (
             <li key={p.id} className="player-row" data-player={p.name}>
               <button className="player-open" onClick={() => setViewing(p.id)} aria-label={`${p.name}: money and sessions`}>
                 <span className="p-line1">
                   <strong className="p-name">{p.name}</strong>
-                  <span className={`p-pill ${p.isRegular ? 'reg' : 'occ'}`}>{p.isRegular ? 'Regular' : 'Occasional'}</span>
+                  {!r2 && <span className={`p-pill ${p.isRegular ? 'reg' : 'occ'}`}>{p.isRegular ? 'Regular' : 'Occasional'}</span>}
                   {p.isNew && <span className="new-tag">New</span>}
                   {!p.isActive && <span className="p-pill hidden-pill">Hidden</span>}
                 </span>
-                <span className="p-line2">{second}</span>
+                {second && <span className="p-line2">{second}</span>}
               </button>
               <span className="p-money">
                 {isMe ? null : owedCents > 0 ? (
@@ -305,6 +309,30 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [askRemove, setAskRemove] = useState(false);
+  // Admin screens, round 2: "Hide player" (soft). Never for yourself.
+  const canHide = ctx.d.adminR2 === true && !!player && ctx.d.me?.id !== player.id;
+
+  async function hidePlayer() {
+    if (!player) return;
+    setBusy(true);
+    try {
+      await api('POST', `/api/admin/players/${player.id}/admin-hide`, { hidden: true });
+      await ctx.reload();
+      toast(`${player.name} hidden. Unhide: Settings > Advanced > Hidden players`, 'ok', {
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void api('POST', `/api/admin/players/${player.id}/admin-hide`, { hidden: false }).then(() => ctx.reload(), () => toast("Couldn't unhide. Use Settings > Advanced > Hidden players.", 'error'));
+          },
+        },
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Could not hide.');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function remove() {
     if (!player) return;
@@ -411,6 +439,12 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       <button className="btn" type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save'}
       </button>
+      {canHide && (
+        <button type="button" className="btn secondary" data-hide-player disabled={busy} onClick={() => void hidePlayer()}>
+          Hide player
+        </button>
+      )}
+      {canHide && <p className="small muted">Hiding only takes the name off your Players list and pickers. Their games, money and history stay as they are. Unhide it in Settings, under Advanced.</p>}
       {player && (
         <button type="button" className="btn danger" disabled={busy} onClick={() => setAskRemove(true)}>
           Remove from list

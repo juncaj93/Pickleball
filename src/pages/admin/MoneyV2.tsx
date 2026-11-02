@@ -11,6 +11,7 @@ import { minus, monthName, shiftMonth, STATE_TEXT } from './MonthlyMoney';
 import { CreditBackList, payChip, payMoneyLine, useAction } from './Sessions';
 import { reminderText } from './textMenu';
 import { isPlayed } from './todo';
+import { unpaidRows } from './moneyList';
 import { reopenRequestedReason } from '../../../shared/credit';
 import '../../credit-admin.css';
 
@@ -20,7 +21,7 @@ type Tone = 'ok' | 'info' | 'warn' | 'muted';
 /** A canceled game where someone's payment became credit. */
 const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
 
-const currentMonth = (ctx: AdminCtx) => {
+export const currentMonth = (ctx: AdminCtx) => {
   const p = localParts(Date.parse(ctx.d.now), ctx.d.group.timezone);
   return `${p.year}-${String(p.month).padStart(2, '0')}`;
 };
@@ -81,7 +82,7 @@ export function MoneyTabV2({ ctx }: { ctx: AdminCtx }) {
 }
 
 /** "2026-11" as "Nov 2026". */
-function shortMonth(month: string): string {
+export function shortMonth(month: string): string {
   return monthName(month).replace(/^(\w{3})\w*/, '$1');
 }
 
@@ -122,8 +123,6 @@ function WhoPaid({ ctx }: { ctx: AdminCtx }) {
   );
 }
 
-/** Who still owes on this game: the same players the old "Payment reminder" button was for. */
-const unpaidRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid') && r.paymentStatus === 'unpaid' && r.owesCents > 0);
 
 /** The one-line summary of a game: "1 of 3 paid", "5 played · $11 each", "canceled". */
 function gameSub(s: AdminSessionView, priceCents: number, open: boolean): string {
@@ -144,7 +143,7 @@ function gameChip(s: AdminSessionView): { tone: Tone; label: string } | null {
   return null;
 }
 
-const Chevron = () => (
+export const Chevron = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="m7 10 5 5 5-5" />
   </svg>
@@ -186,14 +185,16 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
   );
 }
 
-function GameBody({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean }) {
   const tz = ctx.d.group.timezone;
   const { busy, run } = useAction(ctx);
   const fin = s.finalized;
   const played = isPlayed(s);
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   // The organizer is not a row of their own money: they pay the venue (the court row).
-  const rows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
+  const allRows = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.paymentStatus === 'paid'));
+  // Round 2 (ADMIN_R2): the people who still owe come first, then the people who paid (each group keeps its order). Same rows, same money.
+  const rows = r2 ? [...allRows.filter((r) => r.paymentStatus !== 'paid'), ...allRows.filter((r) => r.paymentStatus === 'paid')] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
@@ -282,9 +283,9 @@ function GameBody({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
             court
             attrs={{ 'data-court': s.id }}
             name={`Court ${formatPrice(s.court.costCents)}`}
-            short={myId ? (s.court.covered ? 'Northville, players cover' : `Northville, you pay ${formatPrice(s.court.yourShareCents)}`) : 'Add your name in Settings to mark paid'}
-            full={`You pay Northville Pickleball ${formatPrice(s.court.costCents)} · ${s.court.covered ? 'Players cover the court' : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}`}
-            chip={{ tone: s.court.paid ? 'ok' : 'warn', label: s.court.paid ? 'Paid' : 'Due', srPrefix: 'Court ' }}
+            short={r2 ? (myId ? '' : 'Add your name in Settings to mark paid') : myId ? (s.court.covered ? 'Northville, players cover' : `Northville, you pay ${formatPrice(s.court.yourShareCents)}`) : 'Add your name in Settings to mark paid'}
+            full={r2 ? '' : `You pay Northville Pickleball ${formatPrice(s.court.costCents)} · ${s.court.covered ? 'Players cover the court' : `Players cover ${formatPrice(s.court.playersCoverCents)}, your share ${formatPrice(s.court.yourShareCents)}`}`}
+            chip={{ tone: s.court.paid ? 'ok' : r2 ? 'muted' : 'warn', label: s.court.paid ? 'Paid' : 'Due', srPrefix: 'Court ' }}
             primary={myId ? { label: s.court.paid ? 'Unmark' : 'Mark paid', onClick: () => void setCourtPaid(!s.court!.paid) } : undefined}
             note={myId ? undefined : 'Add your name in Settings (Group > Your name) to mark this paid.'}
             extra={[]}
@@ -385,7 +386,7 @@ function MoneyRow({
  * "Remind N": the players who still owe on this game, each with their own Text button. It opens Messages with today's
  * prepared payment reminder for that one person (the organizer presses send there; the site sends nothing). Never a group text.
  */
-function RemindList({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+export function RemindList({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const [readied, setReadied] = useState<Set<string>>(new Set());
   const rows = unpaidRows(s);
   if (rows.length === 0) return <p className="muted">Everyone has paid.</p>;
@@ -424,7 +425,7 @@ function RemindList({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 // ---------- Totals ----------
 
 /** The same numbers and the same math as the old month card, in a two-column grid that fits one phone screen. */
-function Totals({ ctx, month }: { ctx: AdminCtx; month: string }) {
+export function Totals({ ctx, month }: { ctx: AdminCtx; month: string }) {
   const tz = ctx.d.group.timezone;
   const pretend = usePretend();
   const demo = useDemoVersion();
