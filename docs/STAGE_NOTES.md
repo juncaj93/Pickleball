@@ -1763,3 +1763,15 @@ Files: `shared/adminR2.ts`, `server/adminR2.ts`, `PUT /api/admin/admin-r2`, `adm
 The footer's In | Out now fills the moment it is tapped, and the seat count, the dots and the names on the card follow at once (round 2 only, `InOut` in `CardR2.tsx`). The save goes out in the background and the toast shows when the server
 answers (before, it waited for a whole reload and the two buttons were disabled). A failed save snaps everything back and says "It went back." Quick taps are sent in order, the last one wins. Same request (`POST /api/admin/sessions/:id/me`), same rules.
 Test: `F6 In / Out moves the instant it is tapped...` (a slowed server, three quick taps, then a failing server). `e2e/admin-r2.cjs` is 27 checks.
+
+### Deploy: admin screens round 2 (Mon Nov 2, 2026, about 4:15 PM Eastern, outside loud hours) - LIVE with ADMIN_R2 OFF for everyone
+- PR #75 merged as dc6428b (same tree as the tested branch 4ed22ad). Production deployment `278ee022-465e-4c22-8fb6-283a48ce2362`, branch main. No migration.
+  Live was `cd5a5dd6-8f6e-40a1-827f-20949dc84211` (commit 09547e3) before; main had nothing newer.
+- Before it: SQL export `live-before-admin-r2-2026-11-02.sql` (262 INSERTs, has phone numbers, not committed, in the session scratch folder) and Time Travel bookmark `000004c5-00000000-00005117-9e11ffebadcdf849d188deae9bdd5c5d` (4:13 PM).
+- After it (read-only, public endpoints only): the backup address serves the new bundle (it contains the adminr2 test link); /, /admin, /api/status, /api/group/version 200; organizer data and the new switch endpoint answer 401 without a sign-in; the group is the live "Pickleball Bros".
+  pickleball.juncaj.net could not be reached from this session's network (as on earlier deploys). No `admin_r2_on` row exists (nothing was switched on).
+- Alex tests with pickleball.juncaj.net/admin?adminr2=on (that phone only; `?adminr2=off` ends it), then switches it on for everyone in Settings > Feature switches > "Admin screens, round 2" (no deploy), in a quiet window.
+- Turn it off: Settings > Feature switches (no deploy). Everyone incl. test links: `ADMIN_R2 = "off"` in wrangler.toml and a deploy.
+- Rollback: Settings switch off (instant). Code: redeploy Pages deployment `cd5a5dd6-8f6e-40a1-827f-20949dc84211`. New code only writes `task_log` rows (the switch, hidden players), which the old code ignores, so no data restore is needed. Whole database:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=000004c5-00000000-00005117-9e11ffebadcdf849d188deae9bdd5c5d`.
+- Tests on the deployed code: type check clean; unit 1,707 passed, 1 skipped (95 files); `e2e/admin-r2.cjs` 27 of 27; old screens with the switch off passed apart from the known failures on main (admin-cleanup 2, admin-motion "press" 1).
