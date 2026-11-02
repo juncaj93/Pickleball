@@ -366,6 +366,10 @@ export interface AdminDashboard {
   timeShiftForAll?: boolean;
   /** Settings > "Ask for payment on every game" is on (for everyone). */
   payAlwaysForAll?: boolean;
+  /** The new organizer layout (History, Money, Home v2) is on for this screen (server/adminV2.ts). False or missing: the screens look exactly as before. */
+  adminV2?: boolean;
+  /** Settings > Feature switches > "New admin layout" is on (for everyone). */
+  adminV2ForAll?: boolean;
   group: {
     name: string;
     timezone: string;

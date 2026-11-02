@@ -629,25 +629,9 @@ html[data-motion='on'][data-motion-admin] body {
     opacity: 0.22;
   }
 }
-/* Once the data is here the cards cascade in, once per page open (the shared rule above handles the first level). */
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] {
-  animation: none;
-}
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > * {
-  animation: m-rise var(--t-enter) var(--ease-out) backwards;
-  animation-delay: 60ms;
-}
-html[data-motion='on'][data-motion-admin] main.m-cascade > :nth-child(2) { animation-delay: 45ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > :nth-child(3) { animation-delay: 90ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > :nth-child(n + 4) { animation-delay: 135ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(2) { animation-delay: 105ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(3) { animation-delay: 150ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(4) { animation-delay: 195ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(5) { animation-delay: 240ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(6) { animation-delay: 285ms; }
-html[data-motion='on'][data-motion-admin] main.m-cascade > section[aria-labelledby='sessions-title'] > :nth-child(n + 7) { animation-delay: 330ms; }
-/* The old "everything fades in whenever it is drawn" rules are replaced: only the one first-load cascade plays, and the
-   expanders have their own ease (below). Without this, the cards would fade in again the moment the cascade ends. */
+/* The organizer screens no longer rise in when a screen loads (Nov 2026): the soft placeholder cards show while loading, then the real cards
+   appear in place. */
+/* The old "everything fades in whenever it is drawn" rules are replaced; the expanders have their own ease (below). */
 html[data-motion='on'][data-motion-admin] section[aria-labelledby='sessions-title'] > .scard,
 html[data-motion='on'][data-motion-admin] .set-sect[open]:not(.m-opening-d) > .set-body {
   animation: none;

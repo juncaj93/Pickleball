@@ -1,0 +1,276 @@
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import type { AdminSessionView } from "../../../shared/api";
+import {
+  type CourtSwitch,
+  courtStatus,
+  courtSwitchOf,
+} from "../../../shared/court";
+import { countText } from "../../../shared/spots";
+import { cardTime, formatShortDate } from "../../../shared/time";
+import { tsKind, tsTime } from "../../timeShift";
+import { DateTile } from "../PlayerHome";
+import type { AdminCtx } from "../Admin";
+import { SessionCard } from "./Sessions";
+
+/** Things inside a card that do their own job when tapped: a tap on them never folds the game. */
+const OWN_TAP =
+  'button, a, input, select, textarea, label, summary, dialog, [role="button"], [role="switch"], [role="menu"], [role="menuitem"], [data-no-fold]';
+
+const SWITCH_LABEL: Record<CourtSwitch, string> = {
+  booked: "Booked",
+  waitlist: "Waitlist",
+  not_booked: "Not booked",
+};
+
+const Chevron = () => (
+  <svg
+    viewBox="0 0 24 24"
+    width="18"
+    height="18"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.4"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+  >
+    <path d="m9 6 6 6-6 6" />
+  </svg>
+);
+
+/** How the games are open or folded: the top 2 start open, a tap flips one game. Nothing is remembered (a reload starts over). */
+export function useOpenGames(): {
+  isOpen: (id: string, index: number) => boolean;
+  toggle: (id: string, index: number) => void;
+  justToggled: string | null;
+} {
+  const [over, setOver] = useState<Record<string, boolean>>({});
+  const [justToggled, setJust] = useState<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const isOpen = (id: string, index: number) => over[id] ?? index < 2;
+  const toggle = (id: string, index: number) => {
+    setOver((cur) => ({ ...cur, [id]: !(cur[id] ?? index < 2) }));
+    setJust(id);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setJust(null), 220);
+  };
+  return { isOpen, toggle, justToggled };
+}
+
+/**
+ * One game on Home in the new layout: the full card (exactly today's) when open, a short row when folded.
+ * Tap the date tile, or any empty space on the card or the row, to open or fold it.
+ */
+export function HomeGame({
+  ctx,
+  s,
+  open,
+  fx,
+  needsCourt,
+  onToggle,
+}: {
+  ctx: AdminCtx;
+  s: AdminSessionView;
+  open: boolean;
+  /** This game was just opened or folded: it fades in quickly (not with Reduce Motion). */
+  fx: boolean;
+  /** "Court still needs to be booked" belongs to this game (the separate alert card is gone). */
+  needsCourt: boolean;
+  onToggle: () => void;
+}) {
+  const date = formatShortDate(s.startsAt, ctx.d.group.timezone);
+  if (open) {
+    return (
+      <FoldArea
+        onToggle={onToggle}
+        className={`hv2-open${fx ? " hv2-fx" : ""}`}
+        data-game-open={s.id}
+      >
+        <button
+          type="button"
+          className="hv2-a11y"
+          aria-expanded="true"
+          onClick={onToggle}
+        >
+          Fold {date}
+        </button>
+        <SessionCard ctx={ctx} s={s} courtNeed={needsCourt} />
+      </FoldArea>
+    );
+  }
+  return (
+    <ShortRow
+      ctx={ctx}
+      s={s}
+      fx={fx}
+      needsCourt={needsCourt}
+      onToggle={onToggle}
+    />
+  );
+}
+
+/** Taps on empty space (not on a button, link or field, and not while selecting text) flip the game. */
+function FoldArea({
+  onToggle,
+  className,
+  children,
+  ...rest
+}: {
+  onToggle: () => void;
+  className: string;
+  children: ReactNode;
+  "data-game-open": string;
+}) {
+  return (
+    <div
+      className={className}
+      {...rest}
+      onClick={(e: MouseEvent<HTMLDivElement>) => {
+        const t = e.target as Element;
+        // Pop-ups drawn elsewhere on the page still bubble here through React: only real taps inside the card count.
+        if (!e.currentTarget.contains(t)) return;
+        if (t.closest(OWN_TAP)) return;
+        if (window.getSelection()?.toString()) return;
+        onToggle();
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** The folded game: date tile, "2 of 4 in" and the start time, names in small text, the court pill, "In" if you are, a chevron. */
+function ShortRow({
+  ctx,
+  s,
+  fx,
+  needsCourt,
+  onToggle,
+}: {
+  ctx: AdminCtx;
+  s: AdminSessionView;
+  fx: boolean;
+  needsCourt: boolean;
+  onToggle: () => void;
+}) {
+  const tz = ctx.d.group.timezone;
+  const court = courtStatus(
+    {
+      ...s,
+      canceled: s.state.flags.canceled,
+      started: s.state.flags.started,
+      past: s.state.flags.past,
+      bookingOpen: s.state.flags.bookingWindowOpen,
+    },
+    tz,
+  );
+  const switchValue = courtSwitchOf(s);
+  const canceled = s.state.flags.canceled;
+  const names = s.roster
+    .filter((r) => r.status === "confirmed")
+    .map((r) => r.name);
+  const waiting = s.roster.filter((r) => r.status === "waitlisted").length;
+  const me = ctx.d.me;
+  const mine =
+    !!me &&
+    s.roster.some((r) => r.playerId === me.id && r.status === "confirmed");
+  const ts = tsKind(court.kind, false);
+  const start = tsTime(cardTime(s.startsAt, s.endsAt, tz).start, ts);
+  const date = formatShortDate(s.startsAt, tz);
+  const key = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onToggle();
+    }
+  };
+  return (
+    <div className="hv2-shortwrap">
+      <div
+        id={`session-${s.id}`}
+        className={`card hv2-short${fx ? " hv2-fx" : ""}`}
+        role="button"
+        tabIndex={0}
+        aria-expanded="false"
+        aria-label={`${date}, ${canceled ? "canceled" : `${countText(names.length, ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you're in" : ""}. Open.`}
+        data-session={s.id}
+        data-court={court.kind}
+        data-switch={switchValue}
+        onClick={() => {
+          if (window.getSelection()?.toString()) return;
+          onToggle();
+        }}
+        onKeyDown={key}
+      >
+        <DateTile iso={s.startsAt} tz={tz} />
+        <div className="hv2-main">
+          <div className="hv2-count">
+            {canceled ? (
+              <strong>Canceled</strong>
+            ) : (
+              <strong>
+                {countText(names.length, ctx.d.group.settings.maxPlayers)}
+              </strong>
+            )}
+            <span className="hv2-start"> · {start}</span>
+          </div>
+          {!canceled && names.length > 0 && (
+            <div className="hv2-names small muted">
+              {names.join(", ")}
+              {waiting > 0 ? ` · ${waiting} on the waitlist` : ""}
+            </div>
+          )}
+          {canceled && s.cancelReason && (
+            <div className="hv2-names small muted">{s.cancelReason}</div>
+          )}
+          {!canceled && court.kind === "later" && (
+            <div className="hv2-sub small muted">{court.text}</div>
+          )}
+          {needsCourt && !canceled && (
+            <div className="hv2-need small">Court still needs to be booked</div>
+          )}
+        </div>
+        <div className="hv2-side">
+          {canceled ? (
+            <span className="hv2-pill off">Canceled</span>
+          ) : (
+            <span className={`hv2-pill sw-${switchValue}`}>
+              {SWITCH_LABEL[switchValue]}
+            </span>
+          )}
+          {mine && !canceled && (
+            <span className="hv2-in">
+              <svg
+                viewBox="0 0 12 12"
+                width="12"
+                height="12"
+                aria-hidden="true"
+              >
+                <path
+                  d="m2.6 6.3 2.2 2.2 4.6-4.8"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.9"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              In
+            </span>
+          )}
+          <span className="hv2-chev" aria-hidden="true">
+            <Chevron />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}

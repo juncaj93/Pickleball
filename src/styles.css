@@ -4149,3 +4149,524 @@ dialog.sheet[open]::backdrop {
   background: var(--raised);
   border-color: var(--raised-line);
 }
+
+/* ---------- New admin layout (ADMIN_V2) ---------- */
+
+/* History: the NEW / VIEWED dividers are the site's own week dividers; a long "New since Sun, Nov 1, 8:30 PM" may wrap on a narrow phone. */
+.hist-break h3 {
+  white-space: normal;
+}
+.hist-break.is-new h3 {
+  color: var(--accent-text);
+}
+
+/* Money (new layout): one slim control row, then a line per game, or the month's numbers on one screen. */
+.money-v2 {
+  gap: 10px;
+}
+.mv2-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: stretch;
+}
+.mv2-controls .month-picker {
+  flex: 1 1 11rem;
+  min-width: 0;
+}
+.mv2-controls .segmented.compact {
+  flex: 1 1 10rem;
+  padding: 3px;
+  border-radius: var(--r-md);
+}
+.mv2-controls .segmented.compact button {
+  padding: 4px 6px;
+}
+.mv2-games {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+/* The game's width decides the layout (so bigger text, which makes rem bigger, stacks the row instead of cutting it off). */
+.mv2-game {
+  padding: 0;
+  container-type: inline-size;
+}
+.mv2-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 2.5rem;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px 0 14px;
+  min-height: 56px;
+}
+.mv2-toggle {
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mv2-date {
+  font-weight: 700;
+}
+.mv2-sub {
+  font-size: 0.85rem;
+  color: var(--ink-2);
+}
+.mv2-headchip .chip {
+  min-width: 4.4rem;
+  justify-content: center;
+}
+.mv2-remind {
+  min-height: 44px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.mv2-chev {
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.mv2-chev svg {
+  transition: transform var(--fast);
+}
+.mv2-game.open .mv2-chev svg {
+  transform: rotate(180deg);
+}
+.mv2-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--line);
+}
+.mv2-summary {
+  margin: 0;
+}
+.mv2-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+/* Narrow or big text: the name has a line to itself, the chip and the button share the line under it. */
+.mv2-row {
+  display: grid;
+  grid-template-columns: 4.4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0 0.5rem;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+}
+.mv2-row:first-child {
+  border-top: 0;
+}
+.mv2-row .mv2-who {
+  grid-column: 1 / -1;
+}
+.mv2-row .mv2-btncell {
+  justify-self: end;
+}
+.mv2-who {
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mv2-name {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.mv2-line {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+.mv2-row.expanded .mv2-line {
+  white-space: normal;
+  overflow: visible;
+}
+.mv2-chipcell {
+  display: flex;
+}
+.mv2-row .chip {
+  width: 100%;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.15;
+  padding: 4px 6px;
+}
+.mv2-btncell {
+  display: flex;
+  min-width: 4.9rem;
+}
+.mv2-btncell .btn,
+.mv2-extra .btn {
+  width: 100%;
+  min-width: 4.9rem;
+  min-height: 44px;
+  padding: 6px 4px;
+  font-size: 0.85rem;
+  line-height: 1.1;
+  white-space: normal;
+}
+.mv2-extra {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 2px;
+}
+.mv2-extra .btn {
+  width: auto;
+  min-width: 4.9rem;
+  padding-inline: 12px;
+}
+/* Your court row: the same three columns in a quiet tinted box that reaches into the card's padding. */
+.mv2-row.court {
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-md);
+  margin: 8px -8px 0;
+  padding: 6px 8px;
+}
+@container (min-width: 17rem) {
+  .mv2-row {
+    grid-template-columns: minmax(0, 1fr) 4.4rem 4.9rem;
+  }
+  .mv2-row .mv2-who {
+    grid-column: auto;
+  }
+  .mv2-row .mv2-btncell {
+    justify-self: stretch;
+  }
+}
+.mv2-remind-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mv2-remind-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  min-height: 52px;
+  border-bottom: 1px solid var(--line);
+}
+.mv2-remind-list > li:last-child {
+  border-bottom: 0;
+}
+.mv2-remind-who {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mv2-remind-list .btn {
+  min-height: 44px;
+  min-width: 4.9rem;
+}
+
+/* Totals: the big number, then the six numbers in two columns. */
+.mv2-totals {
+  padding: 0;
+  overflow: hidden;
+}
+.mv2-left {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px;
+}
+.mv2-left .big-amount {
+  display: block;
+  font-size: 2.2rem;
+}
+.mv2-totals.surplus .big-amount {
+  color: var(--ok-fg);
+}
+.mv2-totals.short .big-amount {
+  color: var(--warn-fg);
+}
+.mv2-left .bottom-line {
+  margin: 0;
+  max-width: 55%;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+.mv2-grid {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-top: 1px solid var(--line);
+}
+.mv2-cell {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+}
+.mv2-cell:nth-child(odd) {
+  border-right: 1px solid var(--line);
+}
+.mv2-cell:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+.mv2-cell dt {
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.mv2-cell dd {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.mv2-cell.mv2-held dd {
+  color: var(--info-fg);
+}
+.mv2-note {
+  margin: 0;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+  font-size: 0.8rem;
+  line-height: 1.3;
+  color: var(--ink-2);
+}
+
+/* Home (new layout): the top 2 games are full cards, later ones are short rows. Tap a tile or empty space to open or fold. */
+.hv2-open {
+  display: flex;
+  flex-direction: column;
+}
+.hv2-open > .scard {
+  cursor: default;
+}
+/* A real button for keyboards and screen readers (the tap on the tile does the same for a finger). Shown only while focused. */
+.hv2-a11y {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  z-index: 2;
+}
+.hv2-a11y:focus {
+  left: 8px;
+  top: 8px;
+}
+.hv2-open {
+  position: relative;
+}
+.hv2-short {
+  --sw-notbooked-bg: #eaa31a;
+  --sw-notbooked-fg: #2a1a00;
+  --sw-wait-bg: #1c4f94;
+  --sw-wait-fg: #ffffff;
+  --sw-booked-bg: #1e6a48;
+  --sw-booked-fg: #ffffff;
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  min-height: 72px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+:root[data-theme='dark'] .hv2-short {
+  --sw-notbooked-bg: #e0a83e;
+  --sw-notbooked-fg: #1c1300;
+  --sw-wait-bg: #6fa3ea;
+  --sw-wait-fg: #0a1424;
+  --sw-booked-bg: #4cc27a;
+  --sw-booked-fg: #06200f;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .hv2-short {
+    --sw-notbooked-bg: #e0a83e;
+    --sw-notbooked-fg: #1c1300;
+    --sw-wait-bg: #6fa3ea;
+    --sw-wait-fg: #0a1424;
+    --sw-booked-bg: #4cc27a;
+    --sw-booked-fg: #06200f;
+  }
+}
+.hv2-short:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.hv2-short .tile {
+  width: 56px;
+  box-sizing: border-box;
+  align-self: center;
+}
+.hv2-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hv2-count {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+.hv2-start {
+  font-weight: 600;
+}
+.hv2-names {
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+.hv2-sub {
+  line-height: 1.3;
+}
+.hv2-need {
+  color: var(--warn-fg);
+  font-weight: 600;
+  line-height: 1.3;
+}
+.hv2-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.hv2-pill {
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 15%);
+}
+.hv2-pill.sw-not_booked {
+  background: var(--sw-notbooked-bg);
+  color: var(--sw-notbooked-fg);
+}
+.hv2-pill.sw-waitlist {
+  background: var(--sw-wait-bg);
+  color: var(--sw-wait-fg);
+}
+.hv2-pill.sw-booked {
+  background: var(--sw-booked-bg);
+  color: var(--sw-booked-fg);
+}
+.hv2-pill.off {
+  background: var(--muted-bg);
+  color: var(--muted-fg);
+  box-shadow: none;
+}
+.hv2-in {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ok-fg);
+}
+.hv2-chev {
+  display: grid;
+  place-items: center;
+  color: var(--ink-2);
+}
+/* "Court still needs to be booked" on the game that needs the court, with the Book a court button under the card's content. */
+.court-need {
+  color: var(--warn-fg);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.court-need-btn .btn {
+  width: 100%;
+  min-height: 44px;
+}
+/* Open or fold in 160 ms: a quick fade, no movement. Reduce Motion: no animation at all. */
+@media (prefers-reduced-motion: no-preference) {
+  .hv2-fx {
+    animation: hv2-fade 160ms ease-out;
+  }
+}
+@keyframes hv2-fade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Narrow screens or big text: the pill and the In mark stack so nothing is cut off. */
+@media (max-width: 359px) {
+  .hv2-side {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
+  }
+}
+.mv2-controls .month-picker {
+  grid-template-columns: 40px minmax(0, 1fr) 40px;
+  gap: 2px;
+}
+/* A short row answers to its own width: when it is narrow (a small phone, or big text), the pill, the In mark and the chevron
+   move to a line under the text, so nothing is cut off. */
+.hv2-shortwrap {
+  container-type: inline-size;
+}
+@container (max-width: 17rem) {
+  .hv2-short {
+    grid-template-columns: 56px minmax(0, 1fr);
+    align-items: start;
+  }
+  .hv2-short .tile {
+    grid-row: 1 / span 2;
+  }
+  .hv2-short .hv2-side {
+    grid-column: 2;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+  }
+}

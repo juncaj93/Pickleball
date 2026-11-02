@@ -1,4 +1,4 @@
-/* Motion on the ORGANIZER screens (Nov 2026): the MOTION_ADMIN switch, loading ball, cascade, card press, live changes,
+/* Motion on the ORGANIZER screens (Nov 2026): the MOTION_ADMIN switch, loading placeholders, no rise, card press, live changes,
  * gear pop-up, sheets, field focus, the Save flow, the court switch glide, toggles, the tab bar glide, money and count
  * rolls, expanders, toasts, reduced motion and "nothing shifts".
  *
@@ -160,20 +160,20 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- 1. loading, cascade
-  await check('1. loading ball: not drawn for the first 250 ms (no flash on a fast load), then bounces until the data is here', async () => {
+  await check('1. loading: not drawn for the first 250 ms (no flash on a fast load), then the soft placeholder cards (the player shimmer) until the data is here', async () => {
     const fast = await browser.newContext(phone(390, 'light'));
     await post(fast.request, '/api/admin/login', { pin: PIN });
     const p1 = await fast.newPage();
     await p1.addInitScript(() => localStorage.setItem('pb_motion_admin_test', 'on'));
-    let sawBall = false;
-    await p1.exposeFunction('sawBall', () => (sawBall = true));
+    let sawSkel = false;
+    await p1.exposeFunction('sawSkel', () => (sawSkel = true));
     await p1.addInitScript(() => {
-      new MutationObserver(() => document.querySelector('.m-loading-ball') && window.sawBall()).observe(document, { childList: true, subtree: true });
+      new MutationObserver(() => document.querySelector('.skel') && window.sawSkel()).observe(document, { childList: true, subtree: true });
     });
     await p1.goto(`${BASE}/admin`);
     await p1.locator('article.scard').first().waitFor();
     await fast.close();
-    assert(!sawBall, 'a fast load never draws the ball');
+    assert(!sawSkel, 'a fast load never draws the placeholders');
     const slow = await browser.newContext(phone(390, 'light'));
     await post(slow.request, '/api/admin/login', { pin: PIN });
     const p2 = await slow.newPage();
@@ -183,15 +183,14 @@ async function main() {
       await route.continue();
     });
     await p2.goto(`${BASE}/admin`);
-    await p2.locator('.m-loading').waitFor({ state: 'attached' });
-    assert((await p2.locator('.m-loading-ball').count()) === 0, 'not drawn at first');
+    await p2.locator('.admin-loading').waitFor({ state: 'attached' });
+    assert((await p2.locator('.skel').count()) === 0, 'not drawn at first');
     await p2.waitForTimeout(500);
-    assert((await p2.locator('.m-loading-ball').count()) === 1 && (await p2.locator('.m-loading-shadow').count()) === 1, 'ball and shadow after 250 ms');
-    const anim = await p2.evaluate(() => getComputedStyle(document.querySelector('.m-loading-ball')).animationName + '/' + getComputedStyle(document.querySelector('.m-loading-ball')).animationIterationCount);
-    assert(anim === 'm-ball-hop/infinite', `bounces until loaded (${anim})`);
-    assert((await p2.locator('.m-loading-ball svg.ball .ball-holes circle').count()) >= 5, 'a ball with holes');
+    assert((await p2.locator('.skel').count()) > 3 && (await p2.locator('.m-loading-ball').count()) === 0, 'placeholders after 250 ms, no ball');
+    const anim = await p2.evaluate(() => getComputedStyle(document.querySelector('.skel')).animationName);
+    assert(anim === 'skel-shimmer', `shimmers until loaded (${anim})`);
     await p2.locator('article.scard').first().waitFor({ timeout: 8000 });
-    assert((await p2.locator('.m-loading').count()) === 0, 'gone when loaded');
+    assert((await p2.locator('.skel').count()) === 0, 'gone when loaded');
     await slow.close();
   });
 
@@ -209,24 +208,21 @@ async function main() {
     await ctx.close();
   });
 
-  await check('1. cascade: cards rise about 14 px, 40 to 60 ms apart, once; then nothing animates, also across a refresh and a tab change', async () => {
+  await check('1. no rise: cards appear in place when a screen loads, and nothing animates after, also across a refresh and a tab change', async () => {
     const { ctx, page } = await openAdmin();
     const early = await page.evaluate(() => ({
       cls: document.querySelector('main').className,
-      cards: [...document.querySelectorAll("section[aria-labelledby='sessions-title'] > *")].slice(0, 4).map((e) => getComputedStyle(e).animationName + '/' + getComputedStyle(e).animationDelay),
+      cards: [...document.querySelectorAll("section[aria-labelledby='sessions-title'] > *")].slice(0, 4).map((e) => getComputedStyle(e).animationName),
     }));
-    assert(/m-cascade/.test(early.cls), `cascade class ${early.cls}`);
-    assert(early.cards.every((c) => c.startsWith('m-rise')), `cards rise ${early.cards}`);
-    const delays = early.cards.map((c) => parseFloat(c.split('/')[1]));
-    assert(delays[2] - delays[1] >= 0.03 && delays[2] - delays[1] <= 0.06, `40 to 60 ms apart ${delays}`);
+    assert(!/m-cascade/.test(early.cls), `no cascade class ${early.cls}`);
+    assert(early.cards.every((c) => c === 'none'), `cards do not rise ${early.cards}`);
     await settle(page);
-    assert(!(await page.evaluate(() => document.querySelector('main').className)).includes('m-cascade'), 'cascade class gone');
     assert((await idle(page)).length === 0, `quiet after load: ${await names(page)}`);
     await page.waitForTimeout(6500); // a couple of 5-second checks with nothing changed
     assert((await idle(page)).length === 0, `quiet after unchanged refreshes: ${await names(page)}`);
     await page.locator('.tabbar button', { hasText: 'Players' }).click();
     await page.waitForTimeout(60);
-    assert(!(await names(page)).includes('m-rise'), 'no cascade on a tab change');
+    assert(!(await names(page)).includes('m-rise'), 'no rise on a tab change');
     await ctx.close();
   });
 

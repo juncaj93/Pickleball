@@ -8,12 +8,12 @@ import type { AdminCtx } from '../Admin';
 import { RollText } from '../../motion';
 import '../../credit-admin.css';
 
-const STATE_TEXT = { played: '', not_finalized: 'Not finalized yet, money held', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
+export const STATE_TEXT = { played: '', not_finalized: 'Not finalized yet, money held', canceled: 'Canceled, not counted', upcoming: 'Not played yet', not_played: 'Not played, not counted' };
 
 /** "−$48", but plain "$0" when there is nothing to take off. */
-const minus = (cents: number) => (cents === 0 ? formatPrice(0) : `−${formatPrice(cents)}`);
+export const minus = (cents: number) => (cents === 0 ? formatPrice(0) : `−${formatPrice(cents)}`);
 
-function shift(month: string, by: number): string {
+export function shiftMonth(month: string, by: number): string {
   const [y, m] = month.split('-').map(Number);
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -22,7 +22,7 @@ function shift(month: string, by: number): string {
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 /** "2026-10" as "October 2026". */
-function monthName(month: string): string {
+export function monthName(month: string): string {
   const [y, m] = month.split('-').map(Number);
   return `${MONTH_NAMES[m - 1]} ${y}`;
 }
@@ -53,7 +53,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
         )}
       </div>
       <div className="month-picker">
-        <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shift(x, -1))}>
+        <button className="btn small secondary" aria-label="Previous month" onClick={() => setMonth((x) => shiftMonth(x, -1))}>
           ‹
         </button>
         <label className="sr-only" htmlFor="mm-month">
@@ -78,7 +78,7 @@ export function MonthlyMoneyPage({ ctx, onBack }: { ctx: AdminCtx; onBack?: () =
             }}
           />
         </div>
-        <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shift(x, 1))}>
+        <button className="btn small secondary" aria-label="Next month" onClick={() => setMonth((x) => shiftMonth(x, 1))}>
           ›
         </button>
       </div>

@@ -8,8 +8,8 @@ import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshO
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { TopBar } from '../Shell';
-import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, LoadingBall, Notice, PeopleIcon, Sheet, Spinner, useToast } from '../ui';
-import { canMove, rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
+import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
+import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
@@ -19,6 +19,7 @@ import { DoNowCard, useServerNow } from './admin/DoNow';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
+import { HomeGame, useOpenGames } from './admin/HomeV2';
 import { HistoryTab } from './admin/HistoryTab';
 
 type Tab = 'home' | 'players' | 'money' | 'history' | 'settings';
@@ -38,8 +39,8 @@ export function AdminApp() {
     return (
       <>
         <TopBar eyebrow="Organizer" title="Dashboard" />
-        {/* The bouncing ball only when this phone already knows the organizer motion is on; otherwise the plain spinner, as before. */}
-        {rememberedAdminMotion() ? <LoadingBall /> : <Spinner />}
+        {/* The soft placeholder cards (the same shimmer the player page uses) only when this phone already knows the organizer motion is on; otherwise the plain spinner, as before. */}
+        {rememberedAdminMotion() ? <AdminLoading /> : <Spinner />}
       </>
     );
   }
@@ -55,6 +56,24 @@ export function AdminApp() {
     );
   }
   return <Dashboard d={load.data!} reload={load.reload} quiet={load.quiet} live={!pretend} />;
+}
+
+/**
+ * The first load, with the organizer motion on: soft placeholder cards (the same shimmer the player page uses), not drawn
+ * at all if the data is here within 250 ms. The real cards then appear in place: nothing rises or slides in.
+ */
+function AdminLoading() {
+  const [late, setLate] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setLate(true), 250);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <main className="page stack-lg admin-page admin-loading" role="status">
+      <span className="sr-only">Loading…</span>
+      {late && <ScheduleSkeleton />}
+    </main>
+  );
 }
 
 function Login({ onDone }: { onDone: () => Promise<void> }) {
@@ -122,18 +141,6 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   const motion = useMotion();
   useSwitchStretch(motion);
   useDetailsEase(motion);
-  // The first-load cascade plays once per page open (not on refreshes or tab changes).
-  const [cascade, setCascade] = useState(false);
-  const cascaded = useRef(false);
-  useLayoutEffect(() => {
-    if (cascaded.current || !motion) return undefined;
-    cascaded.current = true;
-    if (!canMove()) return undefined;
-    setCascade(true);
-    // Not cancelled by the next refresh: the cascade ends on its own, once.
-    const t = setTimeout(() => setCascade(false), 900);
-    return () => clearTimeout(t);
-  }, [motion]);
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
   const todoCount = homeBadgeCount(d);
   // The organizer screens keep themselves fresh like the player side: one tiny "did anything change?" check every
@@ -197,7 +204,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
         }
       />
       {tab !== 'settings' && <UpdatedLine at={checkedAt} />}
-      <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}${cascade ? ' m-cascade' : ''}`}>
+      <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}`}>
         {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
@@ -294,7 +301,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
           ))}
         </section>
       )}
-      <DoNowCard ctx={ctx} />
+      <DoNowCard ctx={ctx} hideBook={ctx.d.adminV2 === true} />
       {first.length > 0 && (
         <section className="stack" aria-label="After the game">
           {first.map((item) => (
@@ -460,6 +467,11 @@ function HiddenSessions({ ctx }: { ctx: AdminCtx }) {
 
 function SessionsSection({ ctx }: { ctx: AdminCtx }) {
   const nowMs = useNow();
+  // The new layout (ADMIN_V2): the top 2 games open as full cards, the rest as short rows (tap to open or fold).
+  const v2 = ctx.d.adminV2 === true;
+  const games = useOpenGames();
+  const serverNow = useServerNow(ctx.d.now);
+  const courtNeeded = v2 ? new Set(courtCards(ctx.d, serverNow, `${window.location.origin}/admin`).filter((c) => c.kind === 'book').map((c) => c.session.id)) : null;
   const [all, setAll] = useState(false);
   const [adding, setAdding] = useState(false);
   const pills = (
@@ -498,7 +510,11 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
               {i === 0 && pills}
             </div>
           )}
-          <SessionCard ctx={ctx} s={s} />
+          {v2 ? (
+            <HomeGame ctx={ctx} s={s} open={games.isOpen(s.id, i)} fx={games.justToggled === s.id} needsCourt={courtNeeded!.has(s.id)} onToggle={() => games.toggle(s.id, i)} />
+          ) : (
+            <SessionCard ctx={ctx} s={s} />
+          )}
         </Fragment>
       ))}
       {list.length > shown.length && (

@@ -143,6 +143,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} changed the PIN`;
     case 'player_link_rotated':
       return `${who} replaced the player link`;
+    case 'admin_v2_on':
+      return `${who} switched the new admin layout on`;
+    case 'admin_v2_off':
+      return `${who} switched the new admin layout off`;
     default:
       return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
   }

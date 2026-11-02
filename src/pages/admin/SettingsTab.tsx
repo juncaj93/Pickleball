@@ -356,6 +356,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <Section id="advanced" title="Advanced" sections={sections}>
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
         </Section>
+
+        <Section id="switches" title="Feature switches" note={ctx.d.adminV2ForAll ? 'New layout on' : undefined} sections={sections}>
+          <AdminV2Row ctx={ctx} auto={auto} />
+        </Section>
       </div>
 
       <div className="card set-list">
@@ -684,6 +688,38 @@ function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.timeShiftAll} />
+    </div>
+  );
+}
+
+/**
+ * "New admin layout": the organizer's History, Money and Home screens, version 2. Display only: nothing that is saved,
+ * charged or sent changes. Off: only a phone opened with /admin?adminv2=on sees it (a private test). Saves itself, no deploy.
+ */
+function AdminV2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.adminV2ForAll);
+  return (
+    <div className="set-row-wrap" data-row="adminV2All">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            New admin layout <SaveMark state={auto.rows.adminV2All} />
+          </span>
+          <span className="set-hint">New History, Money and Home screens. Off: only phones opened with /admin?adminv2=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-admin-v2-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('adminV2All', { on: e.target.checked }, '/api/admin/admin-v2').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.adminV2All} />
     </div>
   );
 }
