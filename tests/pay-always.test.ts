@@ -278,7 +278,7 @@ describe('M: sign up on every court status with every credit amount', () => {
           const v = await shown(w, 'Blair');
           const mine = sOf(v, g.id).mine!;
           expect(mine.oweCents).toBe(hidden ? 0 : owe);
-          expect(hidesPay(await view(w, 'Blair'), sOf(await view(w, 'Blair'), g.id))).toBe(hidden && court !== 'booked');
+          expect(hidesPay(await view(w, 'Blair'), sOf(await view(w, 'Blair'), g.id))).toBe(hidden);
           const text = card(v, g.id);
           if (owe === 0) {
             // Exact or extra credit: "Paid with credit" with Undo, exactly as on a booked game. No Pay.
