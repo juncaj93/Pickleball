@@ -427,3 +427,44 @@ html[data-kb] body:has(.tabbar) dialog.sheet {
     align-self: flex-start;
   }
 }
+
+/* ---------- 12. New admin layout (ADMIN_V2), Home short rows at big text ---------- */
+/* Normal text: the row is one fixed height with the names cut by "..." (that is its design). With big text the court pill,
+   "In" and the arrow would squeeze the count to a few pixels, so they drop to a line of their own under the words, and the
+   count and names wrap instead of being cut off. */
+@container pbwide (max-width: 17rem) {
+  .hv2-short {
+    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-areas:
+      'tile main'
+      'side side';
+    height: auto;
+    min-height: 3.4rem;
+    padding-block: 8px;
+    row-gap: 6px;
+    overflow: visible;
+  }
+  .hv2-short > .tile {
+    grid-area: tile;
+  }
+  .hv2-short > .hv2-main {
+    grid-area: main;
+  }
+  .hv2-short > .hv2-side {
+    grid-area: side;
+    justify-self: end;
+  }
+  .hv2-count,
+  .hv2-names {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+}
+
+/* ---------- 13. History > Activity: a long name with no spaces wraps instead of pushing the page wider ---------- */
+.a-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

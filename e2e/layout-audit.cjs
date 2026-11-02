@@ -30,6 +30,8 @@ function audit(opts) {
   // Past the screen edge (sideways). Things inside a box that scrolls sideways on purpose are skipped.
   for (const e of els) {
     if (e.closest('[data-allow-wide]')) continue;
+    // A button parked far off screen on purpose (shown only when a keyboard focuses it).
+    if (e.getBoundingClientRect().right < -1000) continue;
     const r = e.getBoundingClientRect();
     if (r.right > vw + 1 || r.left < -1) {
       // A parent that hides what is past its edge makes this look fine (e.g. a clipped animation); only report if the element's own text is drawn.

@@ -23,7 +23,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function startSite({ port, name, token, root = ROOT }) {
   const BASE = `http://localhost:${port}`;
-  const dbFile = path.join(ROOT, '.data', `${name}.sqlite`);
+  const dbFile = path.join(ROOT, '.data', `${name}-${port}.sqlite`);
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   rmSync(dbFile, { force: true });
   // A server already answering on this port would be used silently (with an old database): refuse.

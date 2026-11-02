@@ -357,8 +357,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={ctx.d.adminV2ForAll ? 'New layout on' : undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
+          <PayNoteRow ctx={ctx} auto={auto} />
         </Section>
       </div>
 
@@ -688,6 +689,39 @@ function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.timeShiftAll} />
+    </div>
+  );
+}
+
+/**
+ * "No Venmo? note": a small note on the player screen, a couple of seconds after Pay is tapped, when the Venmo app did
+ * not open ("No Venmo? Pay Alex directly"). Display only. Off: only a phone opened with ?paynote=on sees it (a private
+ * test). Saves itself, no deploy.
+ */
+function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.payNoteForAll);
+  return (
+    <div className="set-row-wrap" data-row="payNoteAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            No Venmo? note <SaveMark state={auto.rows.payNoteAll} />
+          </span>
+          <span className="set-hint">Tells a player without the Venmo app to pay you directly. Off: only phones opened with ?paynote=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-pay-note-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('payNoteAll', { on: e.target.checked }, '/api/admin/pay-note').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.payNoteAll} />
     </div>
   );
 }

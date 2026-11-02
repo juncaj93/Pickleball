@@ -852,12 +852,13 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
  * After Pay is tapped on a phone, wait about 2 seconds: if the Venmo app did not take over the screen, say so with a
  * small note ("No Venmo? Pay Alex directly"). The Pay button and its link are not touched. See src/venmoFallback.ts.
  */
-function useNoVenmoNote(organizerName: string | null) {
+function useNoVenmoNote(organizerName: string | null, enabled: boolean) {
   const toast = useToast();
   const stop = useRef<(() => void) | null>(null);
   useEffect(() => () => stop.current?.(), []);
   return (pay: { url: string | null; appUrl: string | null }) => {
-    if (!venmoHandsOffToApp(pay)) return;
+    // Off (Settings > Feature switches): Pay behaves exactly as it always did.
+    if (!enabled || !venmoHandsOffToApp(pay)) return;
     stop.current?.();
     stop.current = watchVenmoLaunch(() => toast(noVenmoMessage(organizerName), 'ok', { stayMs: NO_VENMO_STAY_MS }));
   };
@@ -976,7 +977,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
-  const watchNoVenmo = useNoVenmoNote(g.group.organizerName);
+  const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   let potLeft = g.credit.usableCents;
@@ -1246,7 +1247,7 @@ function RowPay({
   const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
   const credit = useCredit(onChanged);
   const payTap = usePayTapped(s.id);
-  const watchNoVenmo = useNoVenmoNote(g.group.organizerName);
+  const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   const busy = paid.busy || credit.busy;
   if (mine.paymentStatus === 'paid') {
     const amount = mine.shareCents;

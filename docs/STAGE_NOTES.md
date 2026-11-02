@@ -1679,10 +1679,22 @@ slip); it is kept exactly as it was.
 - `e2e/audit-player-look.cjs`: the 12 "OPEN" checks about big text and the header are real checks now (0 open).
 - Unit: `tests/venmo-fallback.test.ts` (7), `tests/keyboard.test.ts` (6).
 
-### Why no switch
-Every change is layout or a safety fix. At normal text size nothing moves (see above). The Pay note shows only when the Venmo
-app fails to open. A switch for the CSS is not possible (it would need two copies of every style); a switch for the Pay note
-would be a small add if Alex wants one (question in the report).
+### The Pay note has a switch (PAY_NOTE), the layout does not
+- **PAY_NOTE** (Alex said yes, Mon Nov 2): `[vars]` kill switch + Settings > Feature switches (collapsed section) > "No Venmo? note",
+  OFF at ship. Private test link `?paynote=on` / `?paynote=off` (header `X-Pay-Note`, that phone only). "On for everyone" is one
+  `task_log` row (`pay_note_on`), logged in Activity, and moves both change stamps so open phones pick it up. Display only.
+  Files: `shared/payNote.ts`, `server/payNote.ts`, `PUT /api/admin/pay-note`, `payNote` on `/api/group`, `payNoteForAll` on the
+  dashboard, `PayNoteRow` in `SettingsTab.tsx`, `docs/FEATURE_SWITCHES.md`. Tests: `tests/pay-note.test.ts` (9) and two checks in
+  `e2e/layout-polish.cjs` (off at ship = no note even with no app; private link on one phone only; Settings on for everyone and off
+  again; the row sits in the collapsed section).
+- The layout rules have no switch (plain CSS that only acts when text is big or a name is long; at normal text nothing moves).
+
+### Merged with admin screens v2 (main 3f6fc1a, Mon Nov 2)
+`e2e/layout-polish.cjs` runs the organizer checks with the new admin layout OFF and ON (`LAYOUT_ADMIN_V2=on`): 80 of 80 both ways.
+Fixed for the new layout: Home short rows (`.hv2-short`) at big text (the court pill, "In" and the arrow drop under the words, the
+count and names wrap), and History > Activity (a long name with no spaces pushed the page 48 px wider). Left as v2 designed it: at
+normal text a short row cuts the names, and at 320 px (and a long "Not booked" pill) also the count line, with "..."; the test allows
+that at 100% text only. Tell Alex if he wants the count never cut.
 
 ### Not tested for real here (needs a phone)
 - The iPhone keyboard (tested with a stand-in for the phone's "visible area": the keyboard test shrinks it by 300 px).

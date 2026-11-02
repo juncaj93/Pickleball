@@ -124,6 +124,8 @@ export interface GroupView {
   motion?: boolean;
   /** "Ask for payment on every game" is on for this screen (server/payAlways.ts): Pay shows on games with no court booked too. False or missing: hidden there, as before. */
   payAlways?: boolean;
+  /** "No Venmo? Pay Alex directly" is on for this screen (server/payNote.ts). False or missing: Pay behaves exactly as before. */
+  payNote?: boolean;
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -372,6 +374,8 @@ export interface AdminDashboard {
   adminV2?: boolean;
   /** Settings > Feature switches > "New admin layout" is on (for everyone). */
   adminV2ForAll?: boolean;
+  /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
+  payNoteForAll?: boolean;
   group: {
     name: string;
     timezone: string;

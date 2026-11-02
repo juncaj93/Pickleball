@@ -113,6 +113,7 @@ route('PUT', '/api/admin/alerts', alerts.updateAlerts);
 route('PUT', '/api/admin/time-shift', admin.setTimeShift);
 route('PUT', '/api/admin/pay-always', admin.setPayAlways);
 route('PUT', '/api/admin/admin-v2', admin.setAdminV2);
+route('PUT', '/api/admin/pay-note', admin.setPayNote);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
 route('POST', '/api/admin/alerts/smart-test', (ctx) => tasks.smartTestAlert(ctx));
 route('POST', '/api/admin/sessions/:id/task-mark', tasks.taskMark);

@@ -48,13 +48,17 @@ async function main() {
   const { BASE } = await L.startSite({ port: PORT, name: 'layout-polish', token: TOKEN });
   const w = await L.seed({ BASE, token: TOKEN });
   const { browser, post, S, idOf } = w;
+  // The organizer screens come in two layouts: LAYOUT_ADMIN_V2=on runs everything with "New admin layout" switched on for everyone.
+  const ADMIN_V2 = process.env.LAYOUT_ADMIN_V2 === 'on';
+  if (ADMIN_V2) await w.ok(await w.put(w.areq, '/api/admin/admin-v2', { on: true }), 'admin v2 on');
+  console.log(`New admin layout: ${ADMIN_V2 ? 'ON' : 'OFF'}`);
   const phone = (width, scheme, extra = {}) => ({ viewport: { width, height: 800 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, userAgent: L.UA, colorScheme: scheme, ...extra });
   const shot = async (page, file) => {
     if (SHOTS) await page.screenshot({ path: path.join(SHOTS, file), fullPage: true }).catch(() => {});
   };
 
   /** One player's phone with the whole schedule open and no one-time banners in the way. */
-  async function openPlayer(name, width, scheme, pct, extra = {}) {
+  async function openPlayer(name, width, scheme, pct, extra = {}, query = '') {
     const ctx = await browser.newContext(phone(width, scheme, extra));
     await ctx.route('https://venmo.com/**', (r) => r.abort());
     await post(ctx.request, '/api/me', { playerId: idOf(name) });
@@ -64,7 +68,7 @@ async function main() {
       } catch {}
     });
     const page = await ctx.newPage();
-    await page.goto(BASE);
+    await page.goto(BASE + query);
     await page.locator('.schedule article, .empty-mine').first().waitFor();
     const more = page.getByRole('button', { name: /^More sessions/ });
     if (await more.count()) {
@@ -391,11 +395,22 @@ async function main() {
     await page.waitForTimeout(450);
     return { ctx, page };
   }
+  /** The first gear button of a live game. With the new admin layout only the top 2 games are open cards (and may be canceled ones), so folded rows are opened until a live card is there. */
+  async function gearBtn(page) {
+    const gear = page.locator('article.scard:not(.court-off) .game-menu > button');
+    for (let i = 0; i < 8 && (await gear.count()) === 0; i++) {
+      const row = page.locator('.hv2-short:not(:has(.hv2-pill.off))').first();
+      if (!(await row.count())) break;
+      await row.click();
+      await page.waitForTimeout(250);
+    }
+    return gear.first();
+  }
   const goTab = async (page, label) => {
     await page.locator('nav.tabbar').getByRole('button', { name: new RegExp(`^${label}`) }).click();
     await page.waitForTimeout(450);
   };
-  const ADMIN_ELLIPSIS = [...ELLIPSIS_OK];
+  const ADMIN_ELLIPSIS = [...ELLIPSIS_OK, '.hv2-names'];
   for (const l of LOOKS) {
     for (const tab of ['Home', 'Players', 'Money', 'History', 'Settings']) {
       await check(`organizer ${tab}, ${tag(l)}: no sideways scroll, nothing cut off, overlapping or past the edge`, async () => {
@@ -405,7 +420,7 @@ async function main() {
           for (let i = 0; i < 4; i++) for (const b of await a.page.locator('button[aria-expanded="false"]').all()) await b.click().catch(() => {});
           await a.page.waitForTimeout(300);
         }
-        const probs = [...(await a.page.evaluate(audit, { allowEllipsis: ADMIN_ELLIPSIS })), ...(await a.page.evaluate(midWordBreaks, { sel: 'h1, h2, .btn, button', skipWordsLongerThan: 18 }))];
+        const probs = [...(await a.page.evaluate(audit, { allowEllipsis: l.pct === 100 ? [...ADMIN_ELLIPSIS, '.hv2-count'] : ADMIN_ELLIPSIS })), ...(await a.page.evaluate(midWordBreaks, { sel: 'h1, h2, .btn, button', skipWordsLongerThan: 18 }))];
         if (l.pct === 200 && l.scheme === 'light') await shot(a.page, `admin-${tab}-${l.width}.png`);
         await a.ctx.close();
         none(probs);
@@ -418,7 +433,7 @@ async function main() {
   for (const l of SHEET_LOOKS) {
     await check(`organizer gear menu, ${tag(l)}: every row whole, on screen, above the tab bar`, async () => {
       const a = await openAdmin(l.width, l.scheme, l.pct);
-      const gear = a.page.locator('article.scard:not(.court-off) .game-menu > button').first();
+      const gear = (await gearBtn(a.page));
       await gear.scrollIntoViewIfNeeded();
       await gear.click();
       await a.page.locator('.menu-pop').waitFor();
@@ -438,7 +453,7 @@ async function main() {
     for (const [rowName, what] of [['Edit game', 'Edit game sheet'], ['Players', 'Players sheet'], ['Cancel session', 'Cancel question']]) {
       await check(`organizer ${what}, ${tag(l)}: whole, nothing cut off or overlapping, scrolls to its last button`, async () => {
         const a = await openAdmin(l.width, l.scheme, l.pct);
-        const gear = a.page.locator('article.scard:not(.court-off) .game-menu > button').first();
+        const gear = (await gearBtn(a.page));
         await gear.scrollIntoViewIfNeeded();
         await gear.click();
         await a.page.locator('.menu-pop').getByRole('menuitem', { name: new RegExp(`^${rowName}`) }).first().click();
@@ -478,7 +493,7 @@ async function main() {
         // Organizer: Edit game and Players sheets.
         for (const rowName of ['Edit game', 'Players']) {
           const o = await openAdmin(ctxOpts.width, 'light', pct, ctxOpts.extra);
-          const gear = o.page.locator('article.scard:not(.court-off) .game-menu > button').first();
+          const gear = (await gearBtn(o.page));
           await gear.scrollIntoViewIfNeeded();
           await gear.click();
           await o.page.locator('.menu-pop').getByRole('menuitem', { name: new RegExp(`^${rowName}`) }).first().click();
@@ -518,7 +533,7 @@ async function main() {
         await page.locator('section[aria-labelledby="sessions-title"]').waitFor();
         await page.evaluate((x) => (window.__layoutW = x), l.width);
         await bigText(page, pct);
-        const gear = page.locator('article.scard:not(.court-off) .game-menu > button').first();
+        const gear = await gearBtn(page);
         await gear.scrollIntoViewIfNeeded();
         await gear.click();
         await page.locator('.menu-pop').getByRole('menuitem', { name: /^Edit game/ }).first().click();
@@ -555,6 +570,59 @@ async function main() {
     }
   }
 
+  /* ---------------- the switch for the Pay note: OFF at ship, a private link, Settings for everyone ---------------- */
+  await check('Pay note switch: off at ship (no app, still no note); ?paynote=on shows it on that phone only; ?paynote=off ends it; Settings turns it on for everyone and off again', async () => {
+    await w.clock('2026-11-02T09:00:00-05:00');
+    const note = (page) => page.locator('.pop', { hasText: 'No Venmo?' });
+    const tap = async (page) => {
+      await page.locator(`#row-${S[1]} a.pay-btn`).first().click();
+      await page.waitForTimeout(2900);
+      return note(page).count();
+    };
+    // OFF: the Pay link works as always and no note ever shows.
+    let a = await openPlayer('Ryan', 390, 'light', 100);
+    assert((await tap(a.page)) === 0, 'the note showed with the switch off');
+    await a.ctx.close();
+    // The private link: that phone only.
+    a = await openPlayer('Ryan', 390, 'light', 100, {}, '/?paynote=on');
+    assert((await tap(a.page)) === 1, 'the private link should show the note');
+    const other = await openPlayer('Wren', 390, 'light', 100);
+    assert(!(await other.page.evaluate(() => localStorage.getItem('pb_pay_note'))), 'another phone is not switched on');
+    await other.ctx.close();
+    await a.page.goto(BASE + '/?paynote=off');
+    await a.page.locator('.schedule article').first().waitFor();
+    assert((await tap(a.page)) === 0, '?paynote=off should end the private test');
+    await a.ctx.close();
+    // Settings > Feature switches: for everyone, no deploy.
+    await w.ok(await w.put(w.areq, '/api/admin/pay-note', { on: true }), 'pay note on');
+    a = await openPlayer('Ryan', 390, 'light', 100);
+    assert((await tap(a.page)) === 1, 'Settings on should show the note for everyone');
+    await a.ctx.close();
+    await w.ok(await w.put(w.areq, '/api/admin/pay-note', { on: false }), 'pay note off');
+    a = await openPlayer('Ryan', 390, 'light', 100);
+    assert((await tap(a.page)) === 0, 'Settings off again: no note');
+    await a.ctx.close();
+  });
+
+  /* ---------------- the row in Settings > Feature switches (collapsed section) ---------------- */
+  await check('Settings > Feature switches (collapsed) holds the "No Venmo? note" switch, off at ship; flipping it saves and shows in the section note', async () => {
+    const o = await openAdmin(390, 'light', 100);
+    await o.page.locator('nav.tabbar').getByRole('button', { name: /^Settings/ }).click();
+    const sect = o.page.locator('details.set-sect', { hasText: 'Feature switches' });
+    await sect.waitFor();
+    assert((await sect.evaluate((d) => d.open)) === false, 'Feature switches starts collapsed');
+    await sect.locator('summary').click();
+    const sw = sect.locator('[data-pay-note-all]');
+    assert(!(await sw.isChecked()), 'off at ship');
+    await sw.click();
+    await sect.locator('[data-row="payNoteAll"] .save-mark.saved').waitFor();
+    assert((await w.dash()).payNoteForAll === true, 'saved on the server');
+    await sw.click();
+    await o.page.waitForTimeout(600);
+    assert((await w.dash()).payNoteForAll === false, 'switched off again');
+    await o.ctx.close();
+  });
+
   /* ---------------- 8: Pay button fallback ("No Venmo? Pay Alex directly") ---------------- */
   for (const where of ['card', 'Pay card']) {
     await check(`Pay fallback (${where}): no app = the note shows once, then fades; app opened = never shows; Pay link unchanged`, async () => {
@@ -563,7 +631,7 @@ async function main() {
       const payLink = (page) => (where === 'Pay card' ? page.locator('.pay-card a.btn').first() : page.locator(`#row-${S[1]} a.pay-btn`).first());
       const note = (page) => page.locator('.pop', { hasText: 'No Venmo?' });
       // 1. No Venmo app: the page stays in view.
-      let a = await openPlayer('Ryan', 390, 'light', 100);
+      let a = await openPlayer('Ryan', 390, 'light', 100, {}, '/?paynote=on');
       const link = payLink(a.page);
       await link.waitFor();
       const href = await link.getAttribute('href');
@@ -587,7 +655,7 @@ async function main() {
       await note(a.page).waitFor({ state: 'detached', timeout: 2000 });
       await a.ctx.close();
       // 2. The app opens: the page goes hidden within the wait. Nothing shows, even after coming back.
-      a = await openPlayer('Ryan', 390, 'light', 100);
+      a = await openPlayer('Ryan', 390, 'light', 100, {}, '/?paynote=on');
       await payLink(a.page).click();
       await a.page.evaluate(() => {
         Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
