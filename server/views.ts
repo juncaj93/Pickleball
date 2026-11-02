@@ -77,7 +77,7 @@ export function playerSessionView(
   // money on it (nothing comes back), and the dialog and banner say so.
   const feeCents = settings.pricePerPlayerCents;
   const lateWindow =
-    lateFees && !isOrganizer && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
+    lateFees && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
   const dropOwes = lateWindow && dropLeavesShort(confirmed.length, waitlist.length);
   const openFee = mine ? lateFeeKind(mine, session, isOrganizer) : null;
   const ownRow: PlayerSessionView['mine'] = mine
@@ -104,7 +104,7 @@ export function playerSessionView(
         // Once that credit is all spent the "Your $14 is now credit. Request refund" line would point at nothing, so it goes.
         creditBackCents: pot.hasCredit === false ? 0 : pot.seat.backCents,
         ...(lateWindow
-          ? { lateDrop: { cancelByAt: new Date(lateFeeCutoffMs(session.starts_at)).toISOString(), owes: dropOwes, paid: paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0, feeCents } }
+          ? { lateDrop: { cancelByAt: new Date(lateFeeCutoffMs(session.starts_at)).toISOString(), owes: dropOwes, paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents } }
           : {}),
         lateFee: openFee ? { kind: openFee, oweCents: mine.payment_status === 'unpaid' ? Math.max(0, feeCents - pot.seat.usedCents - pot.seat.cashCents) : 0 } : null,
       }

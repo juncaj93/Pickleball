@@ -441,12 +441,6 @@ function ChangeText({ ctx, s, canceled, askCourt }: { ctx: AdminCtx; s: AdminSes
   if (late) {
     return (
       <div className="stack" data-late-cancel={late.feeKept ? 'fee_kept' : 'waived'}>
-        {!late.feeKept && (
-          <label className="field">
-            Reason (optional)
-            <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={120} placeholder="Rain in the forecast" />
-          </label>
-        )}
         <EditableDraft to={`${late.to} · ${late.reach.count}`} who={late.reach} initial={late.body} name={late.feeKept ? 'canceled_fee_kept' : 'canceled_today'} openLabel="Text the players who were in" onOpen={() => void markTask(s.id, 'canceled_text').then(ctx.reload, () => {})} />
         {!late.feeKept && <CreditBackList s={s} />}
         <h3 className="section-title">Text the players</h3>

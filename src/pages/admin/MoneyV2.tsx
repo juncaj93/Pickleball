@@ -198,7 +198,9 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   // Your own late drop shows too (Clear only: your seat's payment is the court payment).
   const allRows = s.roster.filter((r) => (r.isOrganizer ? !!r.lateFee : r.status === 'confirmed' || r.paymentStatus === 'paid' || !!r.lateFee) && (!s.state.flags.canceled || !!r.lateFee));
   // Round 2 (ADMIN_R2): the people who still owe come first, then the people who paid (each group keeps its order). Same rows, same money.
-  const rows = r2 ? [...allRows.filter((r) => r.paymentStatus !== 'paid'), ...allRows.filter((r) => r.paymentStatus === 'paid')] : allRows;
+  // A late fee reads paid or not from the debt itself (your own row's payment is the court payment, never the debt).
+  const isPaid = (r: AdminRosterEntry) => (r.lateFee ? r.lateFee.paid : r.paymentStatus === 'paid');
+  const rows = r2 ? [...allRows.filter((r) => !isPaid(r)), ...allRows.filter((r) => isPaid(r))] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
@@ -272,7 +274,7 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
       <ul className="mv2-rows" aria-label="Who paid">
         {rows.map((r) => {
           const base = payChip(r, s);
-          const chip = { tone: base.tone, label: r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid' };
+          const chip = r.lateFee ? { tone: (r.lateFee.paid ? base.tone : 'warn') as Tone, label: r.lateFee.paid ? 'Paid' : 'Unpaid' } : { tone: base.tone, label: r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid' };
           const acts = actionsOf(r);
           const selfMarked = r.selfPaid && r.paymentStatus === 'paid';
           const feeLine = lateFeeLine(r);

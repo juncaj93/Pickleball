@@ -375,6 +375,7 @@ async function main() {
     const gid = await addGameIn(7, 'Org test');
     for (const n of ['Nathan', 'Mitchel', 'Brandon']) await join(n, { id: gid });
     await post(areq, `/api/admin/sessions/${gid}/me`, { in: true });
+    await post(areq, `/api/admin/sessions/${gid}/payment`, { playerId: idOf('Alex'), paid: true });
     const out = await post(areq, `/api/admin/sessions/${gid}/me`, { in: false }, { 'X-Late-Fees': 'on' });
     assert((await out.json()).lateFee, 'no debt');
     const { ctx, page } = await openAdmin({ width: 360, scheme: 'dark' });
@@ -385,6 +386,7 @@ async function main() {
     await r.waitFor({ timeout: 8000 });
     const rt = squash(await r.innerText());
     assert(/late drop \(you\) · owes \$14/.test(rt) && /Clear/.test(rt) && !/Mark paid/.test(rt), `row: ${rt}`);
+    assert(/Unpaid/.test(rt) && !/\bPaid\b/.test(rt), `chip on your own debt: ${rt}`);
     await r.locator('.mv2-btncell button').click();
     await page.waitForTimeout(900);
     const g = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();

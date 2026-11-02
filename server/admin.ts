@@ -423,6 +423,7 @@ async function cancelWithMoney(ctx: Ctx, group: GroupRow, session: SessionRow, c
  * cost counts as charged in Money (the venue charged it), kept with the cancel in the Activity log like before.
  */
 async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, reason: string | null) {
+  const organizerId = await organizerIdOf(ctx.db, group);
   const [cancel] = await ctx.db.batch([
     ctx.db
       .prepare(
@@ -438,13 +439,22 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
            AND (SELECT canceled_at FROM sessions WHERE id = ?2) = ?1 AND (SELECT canceled_by FROM sessions WHERE id = ?2) = '${FEE_KEPT}'`,
       )
       .bind(ctx.nowIso, session.id),
+    // The organizer never owes on a cancel: their own open late drop ends here (their seat's court payment is untouched).
+    ctx.db
+      .prepare(
+        `UPDATE session_players SET late_drop_done_at = ?1, updated_at = ?1
+         WHERE session_id = ?2 AND player_id = ?3 AND ${OPEN_LATE_DROP('session_players')}
+           AND (SELECT canceled_at FROM sessions WHERE id = ?2) = ?1 AND (SELECT canceled_by FROM sessions WHERE id = ?2) = '${FEE_KEPT}'`,
+      )
+      .bind(ctx.nowIso, session.id, organizerId ?? ''),
+    finishLateDropClear(ctx.db, session.id, ctx.nowIso, organizerId ?? ''),
     // Anyone NOT in (a paid waitlist seat, a seat that left with money still on it) gets it back as credit, exactly as
     // on any cancel. Seats that owe (everyone in, open late drops) are open late fees, which these statements skip.
     ...seatMoneyBackStatements(ctx.db, {
       groupId: group.id,
       sessionId: session.id,
       playerId: null,
-      organizerId: await organizerIdOf(ctx.db, group),
+      organizerId,
       reason: 'canceled',
       nowIso: ctx.nowIso,
       when: (sp) => `(SELECT status FROM sessions WHERE id = ${sp}.session_id) = 'canceled'`,
@@ -462,7 +472,10 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
   const chargedCents = courtCostOf(session, settingsOf(group));
   await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, venueWaived: false, feeKept: true, ...(reason ? { reason } : {}) }, ctx.nowIso);
   const fresh = (await getSession(ctx.db, group.id, session.id))!;
-  const organizerId = await organizerIdOf(ctx.db, group);
+  const orgRow = organizerId ? (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === organizerId) : undefined;
+  if (orgRow && orgRow.status === 'withdrawn' && orgRow.late_drop_done_at === ctx.nowIso && orgRow.late_drop_at) {
+    await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: orgRow.display_name, playerId: orgRow.player_id, why: 'canceled', amountCents: 0 }, ctx.nowIso);
+  }
   for (const r of await loadRoster(ctx.db, session.id)) {
     if (r.status === 'confirmed' && lateFeeKind(r, fresh, r.player_id === organizerId)) await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso);
   }
