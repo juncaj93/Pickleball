@@ -46,7 +46,7 @@ export function useServerNow(serverNow: string): number {
   return Date.parse(serverNow) + Math.max(0, tick - loadedAt);
 }
 
-export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
+export function DoNowCard({ ctx, hideBook }: { ctx: AdminCtx; hideBook?: boolean }) {
   const nowMs = useServerNow(ctx.d.now);
   const [more, setMore] = useState(false);
   const adminUrl = `${window.location.origin}/admin`;
@@ -79,7 +79,8 @@ export function DoNowCard({ ctx }: { ctx: AdminCtx }) {
   };
   const tasks = all.filter((t) => !(t.kind === 'night' && dismissed[t.id] === nightToken(ctx, t)));
   // Games never marked Booked: one court card each ("Court still needs to be booked", or after the game day "Did you guys play?").
-  const courts = courtCards(ctx.d, nowMs, adminUrl);
+  // hideBook (new layout): "Court still needs to be booked" lives on its game's own card instead of up here.
+  const courts = courtCards(ctx.d, nowMs, adminUrl).filter((c) => !(hideBook && c.kind === 'book'));
   if (tasks.length === 0 && courts.length === 0) return null;
   const [first, ...rest] = tasks;
   return (

@@ -35,6 +35,7 @@ import { applyPayment } from './admin';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 import { changeStamp } from './stamp';
+import { hiddenFromPlayers } from './hideGame';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -91,6 +92,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
   const timeShift = await timeShiftFor(ctx, group.id);
+  // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
+  const hiddenIds = await hiddenFromPlayers(ctx, group.id, sessions);
 
   const owed: GroupView['owed'] = [];
   let suggestion: GroupView['suggestion'] = null;
@@ -194,7 +197,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     sessions: sessions
-      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs)
+      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs && !hiddenIds.has(s.id))
       .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift)),
     owed,
     payDue: owed.filter((o) => {

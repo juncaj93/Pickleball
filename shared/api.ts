@@ -273,6 +273,8 @@ export interface AdminSessionView {
   /** A one-off game the organizer added, with its optional note. */
   extra: boolean;
   note: string | null;
+  /** A canceled game the organizer removed from the player screen (server/hideGame.ts). Still shown on organizer screens. */
+  hiddenFromPlayers?: boolean;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;
@@ -366,6 +368,10 @@ export interface AdminDashboard {
   timeShiftForAll?: boolean;
   /** Settings > "Ask for payment on every game" is on (for everyone). */
   payAlwaysForAll?: boolean;
+  /** The new organizer layout (History, Money, Home v2) is on for this screen (server/adminV2.ts). False or missing: the screens look exactly as before. */
+  adminV2?: boolean;
+  /** Settings > Feature switches > "New admin layout" is on (for everyone). */
+  adminV2ForAll?: boolean;
   group: {
     name: string;
     timezone: string;
