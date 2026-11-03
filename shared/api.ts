@@ -344,6 +344,8 @@ export interface AdminPlayer {
   played: number;
   /** Admin screens round 2 only: the organizer hid this name from the Players list and pickers (nothing else about them changed). */
   adminHidden?: boolean;
+  /** Admin screens round 3 only: money they have paid for games they played, ever, in cents (the Players page "$108 spent"). */
+  spentCents?: number;
 }
 
 /** One line in History > Activity. */
@@ -403,6 +405,10 @@ export interface AdminDashboard {
   adminR2?: boolean;
   /** Settings > Feature switches > "Admin screens, round 2" is on (for everyone). */
   adminR2ForAll?: boolean;
+  /** "Admin screens, round 3" (Edit game, Add game, Settings clean-up, Players layout) is on for this screen (server/adminR3.ts); it also needs round 2 on. False or missing: the screens look exactly as before. */
+  adminR3?: boolean;
+  /** Settings > Feature switches > "Admin screens, round 3" is on (for everyone). */
+  adminR3ForAll?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts): the cancel question asks "Did the venue waive the fee?". */
   lateFees?: boolean;
   /** Settings > Feature switches > "Late drops owe $14" is on (for everyone). */

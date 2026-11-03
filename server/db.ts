@@ -52,6 +52,8 @@ export interface Env {
   ADMIN_V2?: string;
   /** "Admin screens, round 2" (organizer Home cards, Money, Players, History, header): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminr2=on (server/adminR2.ts). A wrangler.toml var. */
   ADMIN_R2?: string;
+  /** "Admin screens, round 3" (organizer Edit game, Add game, Settings clean-up, Players layout): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminr3=on (server/adminR3.ts). Needs round 2 on too. A wrangler.toml var. */
+  ADMIN_R3?: string;
   /** "Late drops owe $14": the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?latefees=on (server/lateFees.ts). A wrangler.toml var. Changes money. */
   LATE_FEES?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */

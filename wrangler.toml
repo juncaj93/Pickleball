@@ -41,6 +41,11 @@ PAY_NOTE = "on"
 # opened once with /admin?adminr2=on (the private test switch). "off" = the kill switch: nobody, not even the test link.
 # Needs a deploy.
 ADMIN_R2 = "on"
+# "Admin screens, round 3" (organizer Edit game and Add game forms, the Settings clean-up, the Players page layout). "on" here
+# only ALLOWS it; who sees it is Settings > Feature switches > "Admin screens, round 3" (off at ship = nobody), plus a phone
+# opened once with /admin?adminr3=on (the private test switch). It also needs round 2 on. "off" = the kill switch: nobody,
+# not even the test link. Display only. Needs a deploy.
+ADMIN_R3 = "on"
 # "Late drops owe $14" (CHANGES MONEY: a late drop that leaves a game below 4 owes unless someone takes the spot; a no-show
 # with fewer than 4 played owes; a late cancel asks "Did the venue waive the fee?"). "on" here only ALLOWS it; who gets it
 # is Settings > Feature switches > "Late drops owe $14" (off at ship = nobody), plus a phone opened once with ?latefees=on
@@ -63,6 +68,7 @@ PAY_ALWAYS = "on"
 ADMIN_V2 = "on"
 PAY_NOTE = "on"
 ADMIN_R2 = "on"
+ADMIN_R3 = "on"
 LATE_FEES = "on"
 
 [[env.preview.d1_databases]]

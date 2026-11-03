@@ -1963,3 +1963,33 @@ confirmed seats in games that are on. Fixed in that one place (plus the Home car
 - To ship: as before (Wed Nov 4 6:00 AM Eastern or later and only after "ship it"): merge to main, full tests on main, SQL export and Time Travel bookmark,
   `npm run deploy` from main, LATE_FEES stays OFF, read-only live check. Rollback: Pages deployment 76053686-2f55-4612-b630-72df79c12d2c (commit 0edf850,
   live now) or, for the whole database, the bookmark taken at deploy time. No migration, no data change.
+
+## Admin zip 2: Edit game, Add game, Settings cleanup, Players layout (ADMIN_R3), built Tue Nov 3, 2026 (NOT shipped yet)
+
+Built on main at `0edf850` (the late-fees merge, so its "Late drops owe $14" row is kept in Feature switches). Ships OFF behind
+`ADMIN_R3` (see `FEATURE_SWITCHES.md`). Admin only, display only, no schema change, no new color.
+
+### What changed (only when the switch is on)
+1. Edit game: no "Court" label (the switch keeps its screen-reader name), tighter spacing; the sheet is 452 px tall on a 520 px
+   budget at 360 x 640 (before: 522 px, 1 px over).
+2. Add game: Start and End are drop-downs in 30-minute steps on the 12-hour clock (6:00 AM to 11:30 PM; an off-step usual time such
+   as 7:15 PM is kept as its own choice so opening the form never changes it); the date is the calendar picker only.
+3. Settings: see the switch row in `FEATURE_SWITCHES.md`. Toggle rows moved into Feature switches move first, confirm with a toast
+   after, and snap back with a toast if the save fails (the old rows keep their old behavior when the switch is off).
+4. Players: `src/pages/admin/PlayersR3.tsx` + `src/admin-r3.css`. Data: played = the all-time count the page already had; held =
+   `heldCents()` (what Home and the old row call "$28 held"); credit = the credit pot; spent = new, worked out on the server in
+   `server/adminR3.ts` (`spentByPlayer`) from existing rows (no schema change), same per-seat math as Money's "Collected" for a played game; late-drop fees, no-show fees and fee-kept cancels are NOT counted as spent.
+   Why on the server: the dashboard only carries the last 90 days of games but "played" counts every game ever, so a phone-side
+   sum would drift apart from "played" after 90 days.
+- Round 3 only shows when round 2 is also on (it rearranges round 2 screens), on the server (`adminR3For`).
+
+### Not shown on the new Players row any more (all still reachable)
+Owes $X, "refund requested", late-drop count, the New tag, and the Refund credit balance / Mark refunded / Undo buttons. They are
+still in the sheet that opens when you tap the name (money and sessions, credit section), on Home, and on Money.
+
+### Tests
+- `tests/admin-r3.test.ts` (11): switch rules, kill switch, header needs round 2, spent math ($14 paid, $11 final, $3 back),
+  the dashboard is identical with it on or off apart from the switch fields and spent, reading it writes nothing, no migration.
+- `e2e/admin-r3.cjs` (14): off = old screens, Players rows equal height and no scrolling at 360 x 640 (also dark, 320, 430, 200% text),
+  pills only when not zero, gear = same Edit sheet with a 44 px tap area, Edit game no Court label and fits, Add game 30-minute
+  options and saving a 7:30 PM game, Settings order, the moved switches keep their state and still flip, snap back on failure.

@@ -155,6 +155,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (adminV2Test()) headers['X-Admin-V2'] = 'on';
   // "Admin screens, round 2", private test switch for this phone (/admin?adminr2=on, see server/adminR2.ts).
   if (adminR2Test()) headers['X-Admin-R2'] = 'on';
+  // "Admin screens, round 3", private test switch for this phone (/admin?adminr3=on, see server/adminR3.ts).
+  if (adminR3Test()) headers['X-Admin-R3'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -492,6 +494,17 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('adminr2');
   if (want === 'on') storageSet(ADMIN_R2_KEY, 'on');
   else if (want === 'off') storageRemove(ADMIN_R2_KEY);
+}
+
+const ADMIN_R3_KEY = 'pb_admin_r3';
+/** "Admin screens, round 3" on this phone only: open /admin once with ?adminr3=on (?adminr3=off ends it). Remembered in this browser. */
+export function adminR3Test(): boolean {
+  return storageGet(ADMIN_R3_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('adminr3');
+  if (want === 'on') storageSet(ADMIN_R3_KEY, 'on');
+  else if (want === 'off') storageRemove(ADMIN_R3_KEY);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
+import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
@@ -127,6 +127,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const [pinMsg, setPinMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const sections = useOpenSections();
   const a = ctx.d.alerts;
+  // Admin screens, round 3 (ADMIN_R3): Appearance and First session date are gone, the two switch rows moved into Feature
+  // switches, Access and Change PIN moved into Advanced. Same settings, same saves; only where they are shown changes.
+  const r3 = ctx.d.adminR3 === true;
 
   async function changePin(e: FormEvent) {
     e.preventDefault();
@@ -206,6 +209,77 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     />
   );
 
+  // Access and Change PIN: one body each, shown as their own section (as before) or, with round 3, inside Advanced.
+  const accessBody = (
+    <>
+    <div className="set-row-wrap" data-row="openAccess">
+      <label className="check">
+        <input
+          type="checkbox"
+          checked={openAccess}
+          onChange={(e) => {
+            setOpenAccess(e.target.checked);
+            void auto.save('openAccess', { openAccess: e.target.checked });
+          }}
+        />
+        <span>
+          Anyone with the site address can use it <SaveMark state={auto.rows.openAccess} />
+        </span>
+      </label>
+      <SaveProblem state={auto.rows.openAccess} />
+    </div>
+    {openAccess && (
+      <AutoInput
+        auto={auto}
+        id="groupWord"
+        layout="field"
+        label="Group word (optional)"
+        hint={g.hasGroupWord ? 'Set. Type to change.' : 'Asked once per phone'}
+        initial=""
+        parse={(t) => (t.trim().length >= 2 ? { value: t.trim() } : { error: 'The group word needs at least 2 letters.' })}
+        body={(value) => ({ groupWord: value })}
+        input={textBox({ autoCapitalize: 'none', autoComplete: 'off', maxLength: 40 })}
+      />
+    )}
+    {openAccess && g.hasGroupWord && (
+      <button type="button" className="btn small ghost" onClick={() => void auto.save('groupWord', { groupWord: null })}>
+        Remove the group word
+      </button>
+    )}
+    {g.openAccess ? (
+      <details className="advanced">
+        <summary>Old private link</summary>
+        <code className="link">{g.privateLink}</code>
+        <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
+          Replace private link
+        </button>
+      </details>
+    ) : (
+      <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
+        Replace link
+      </button>
+    )}
+    </>
+  );
+  const pinBody = (
+    <>
+    <form className="stack" onSubmit={changePin}>
+      <label className="field">
+        Current PIN
+        <input type="password" inputMode="numeric" autoComplete="current-password" value={curPin} onChange={(e) => setCurPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
+      </label>
+      <label className="field">
+        New PIN (6–12 digits)
+        <input type="password" inputMode="numeric" autoComplete="new-password" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
+      </label>
+      {pinMsg && <Notice tone={pinMsg.ok ? 'ok' : 'danger'}>{pinMsg.text}</Notice>}
+      <button className="btn secondary" type="submit" disabled={curPin.length < 6 || newPin.length < 6}>
+        Change PIN
+      </button>
+    </form>
+    </>
+  );
+
   return (
     <>
       {/* The things used most, in one compact card. */}
@@ -219,6 +293,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             Copy
           </button>
         </div>
+        {!r3 && (
         <div className="set-line">
           <span className="set-label">
             <strong>Appearance</strong>
@@ -244,6 +319,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             ))}
           </div>
         </div>
+        )}
       </section>
 
       {/* Every row saves itself; there is no Save button. */}
@@ -274,10 +350,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               hint: 'Where Pay sends players',
               check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
             })}
-          <PayAlwaysRow ctx={ctx} auto={auto} />
+          {!r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
         </Section>
 
         <Section id="schedule" title="Schedule" note={`Tue & Thu ${minutesLabel(g.settings.defaultStartMinutes)}`} sections={sections}>
+          {!r3 && (
           <div className="set-row-wrap" data-row="firstSessionDate">
             <div className="set-row">
               <label className="set-label" htmlFor="set-first-date">
@@ -300,61 +377,18 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             </div>
             <SaveProblem state={auto.rows.firstSessionDate} />
           </div>
+          )}
           <UsualTimeRow ctx={ctx} />
           {whole('checkInHours', 'Day-before check-in (hours before play)')}
           {whole('lastCallHours', 'Last call (hours before play)')}
-          <TimeShiftRow ctx={ctx} auto={auto} />
+          {!r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
         </Section>
 
-        <Section id="access" title="Access" note={g.openAccess ? 'Open' : 'Link only'} sections={sections}>
-          <div className="set-row-wrap" data-row="openAccess">
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={openAccess}
-                onChange={(e) => {
-                  setOpenAccess(e.target.checked);
-                  void auto.save('openAccess', { openAccess: e.target.checked });
-                }}
-              />
-              <span>
-                Anyone with the site address can use it <SaveMark state={auto.rows.openAccess} />
-              </span>
-            </label>
-            <SaveProblem state={auto.rows.openAccess} />
-          </div>
-          {openAccess && (
-            <AutoInput
-              auto={auto}
-              id="groupWord"
-              layout="field"
-              label="Group word (optional)"
-              hint={g.hasGroupWord ? 'Set. Type to change.' : 'Asked once per phone'}
-              initial=""
-              parse={(t) => (t.trim().length >= 2 ? { value: t.trim() } : { error: 'The group word needs at least 2 letters.' })}
-              body={(value) => ({ groupWord: value })}
-              input={textBox({ autoCapitalize: 'none', autoComplete: 'off', maxLength: 40 })}
-            />
-          )}
-          {openAccess && g.hasGroupWord && (
-            <button type="button" className="btn small ghost" onClick={() => void auto.save('groupWord', { groupWord: null })}>
-              Remove the group word
-            </button>
-          )}
-          {g.openAccess ? (
-            <details className="advanced">
-              <summary>Old private link</summary>
-              <code className="link">{g.privateLink}</code>
-              <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
-                Replace private link
-              </button>
-            </details>
-          ) : (
-            <button type="button" className="btn small ghost" onClick={() => setAskRotate(true)}>
-              Replace link
-            </button>
-          )}
-        </Section>
+        {!r3 && (
+          <Section id="access" title="Access" note={g.openAccess ? 'Open' : 'Link only'} sections={sections}>
+            {accessBody}
+          </Section>
+        )}
 
         <Section id="alerts" title="Alerts" note={!a.connected ? 'Not connected' : a.enabled ? 'On' : 'Off'} sections={sections}>
           <AlertsBody ctx={ctx} auto={auto} />
@@ -363,33 +397,41 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <Section id="advanced" title="Advanced" sections={sections}>
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
           {ctx.d.adminR2 === true && <HiddenPlayers ctx={ctx} />}
+          {r3 && (
+            <details className="advanced" data-adv="access">
+              <summary>
+                <span>
+                  Access<span className="set-note"> · {g.openAccess ? 'Open' : 'Link only'}</span>
+                </span>
+              </summary>
+              {accessBody}
+            </details>
+          )}
+          {r3 && (
+            <details className="advanced" data-adv="pin">
+              <summary>Change PIN</summary>
+              {pinBody}
+            </details>
+          )}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
           <AdminR2Row ctx={ctx} auto={auto} />
+          <AdminR3Row ctx={ctx} auto={auto} />
           <PayNoteRow ctx={ctx} auto={auto} />
           <LateFeesRow ctx={ctx} auto={auto} />
+          {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
+          {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
         </Section>
       </div>
 
       <div className="card set-list">
-        <Section id="pin" title="Change PIN" sections={sections}>
-          <form className="stack" onSubmit={changePin}>
-            <label className="field">
-              Current PIN
-              <input type="password" inputMode="numeric" autoComplete="current-password" value={curPin} onChange={(e) => setCurPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
-            </label>
-            <label className="field">
-              New PIN (6–12 digits)
-              <input type="password" inputMode="numeric" autoComplete="new-password" value={newPin} onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))} maxLength={12} />
-            </label>
-            {pinMsg && <Notice tone={pinMsg.ok ? 'ok' : 'danger'}>{pinMsg.text}</Notice>}
-            <button className="btn secondary" type="submit" disabled={curPin.length < 6 || newPin.length < 6}>
-              Change PIN
-            </button>
-          </form>
-        </Section>
+        {!r3 && (
+          <Section id="pin" title="Change PIN" sections={sections}>
+            {pinBody}
+          </Section>
+        )}
         <Section id="backup" title="Backup" sections={sections}>
           <a className="btn" href="/api/admin/backup" download>
             Download backup file
@@ -449,6 +491,7 @@ const ALERT_SWITCHES: { key: Exclude<AlertKey, 'enabled'>; label: string }[] = [
  */
 function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   const a = ctx.d.alerts;
+  const r3 = ctx.d.adminR3 === true;
   const tz = ctx.d.group.timezone;
   const [on, setOn] = useState<Record<AlertKey, boolean>>({
     enabled: a.enabled,
@@ -525,29 +568,48 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       {a.lastOk === false && a.lastError && <p className="set-hint alert-why">{a.lastError}</p>}
       {row('enabled', 'Telegram alerts to me', false)}
       <div className="alert-subs">{ALERT_SWITCHES.map((s) => row(s.key, s.label, true))}</div>
-      <div className="alert-test">
-        <button type="button" className="btn small secondary" onClick={sendTest} disabled={test?.status === 'sending'}>
-          {test?.status === 'sending' ? 'Sending…' : 'Send test alert'}
-        </button>
-        {test?.status === 'sent' && (
-          <span className="alert-result ok" role="status">
-            ✓ Sent to Telegram
-          </span>
-        )}
-      </div>
-      {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
-      <div className="alert-test">
-        <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending' || !on.enabled || !on.smartAlerts}>
-          {smartTest?.status === 'sending' ? 'Sending…' : 'Send TEST smart alert'}
-        </button>
-        {smartTest?.status === 'sent' && (
-          <span className="alert-result ok" role="status">
-            ✓ Sent to Telegram
-          </span>
-        )}
-      </div>
-      {smartTest?.status === 'failed' && <Notice tone="danger">{smartTest.message}</Notice>}
-      <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount). Smart alerts say what to do next (night before, booking day, after the game), checked every 5 minutes, and stay quiet once you tap the button on Home.</p>
+      {r3 ? (
+        <>
+          {/* Round 3 (ADMIN_R3): one button. It sends the smart-alert test (a short test message, with the link to the next game). */}
+          <div className="alert-test">
+            <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending'}>
+              {smartTest?.status === 'sending' ? 'Sending…' : 'Test smart alert'}
+            </button>
+            {smartTest?.status === 'sent' && (
+              <span className="alert-result ok" role="status">
+                ✓ Sent to Telegram
+              </span>
+            )}
+          </div>
+          {smartTest?.status === 'failed' && <Notice tone="danger">{smartTest.message}</Notice>}
+        </>
+      ) : (
+        <>
+          <div className="alert-test">
+            <button type="button" className="btn small secondary" onClick={sendTest} disabled={test?.status === 'sending'}>
+              {test?.status === 'sending' ? 'Sending…' : 'Send test alert'}
+            </button>
+            {test?.status === 'sent' && (
+              <span className="alert-result ok" role="status">
+                ✓ Sent to Telegram
+              </span>
+            )}
+          </div>
+          {test?.status === 'failed' && <Notice tone="danger">{test.message}</Notice>}
+          <div className="alert-test">
+            <button type="button" className="btn small secondary" data-smart-test onClick={sendSmartTest} disabled={smartTest?.status === 'sending' || !on.enabled || !on.smartAlerts}>
+              {smartTest?.status === 'sending' ? 'Sending…' : 'Send TEST smart alert'}
+            </button>
+            {smartTest?.status === 'sent' && (
+              <span className="alert-result ok" role="status">
+                ✓ Sent to Telegram
+              </span>
+            )}
+          </div>
+          {smartTest?.status === 'failed' && <Notice tone="danger">{smartTest.message}</Notice>}
+          <p className="set-hint">Only you get these. Player names and game times only (a refund request also says the amount). Smart alerts say what to do next (night before, booking day, after the game), checked every 5 minutes, and stay quiet once you tap the button on Home.</p>
+        </>
+      )}
     </>
   );
 }
@@ -639,12 +701,41 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
 }
 
 /**
+ * Round 3 switch behavior (ADMIN_R3): the switch moves the instant it is tapped, the toast confirms once the server has it,
+ * and a failed save snaps the switch back (with a short toast). `snap` false = exactly the old behavior (no toast, no snap back).
+ */
+function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, path: string, label: string, snap: boolean) {
+  const toast = useToast();
+  const [on, setOn] = useState(initial);
+  // What the server last confirmed: a failed save always snaps back to this (so two quick failing taps cannot leave it wrong).
+  const confirmed = useRef(initial);
+  const flip = (next: boolean) => {
+    setOn(next);
+    void auto.save(key, { on: next }, path).then((ok) => {
+      if (snap) {
+        if (ok) {
+          confirmed.current = next;
+          toast(`${label} ${next ? 'on' : 'off'}`);
+        } else {
+          setOn(confirmed.current);
+          // The switch is back where it was, so no "tap to retry" line (a retry would save a value the switch no longer shows).
+          auto.clear(key);
+          toast("That didn't save. The switch is back where it was.", 'error');
+        }
+      }
+      return ctx.reload();
+    });
+  };
+  return { on, flip };
+}
+
+/**
  * "Ask for payment on every game": players who are in see Pay on every game, Booked, Waitlist or Not booked.
  * Off: Pay waits for Court booked, except on a phone that opened the site with ?payalways=on (a private test).
  * Saves itself. It only changes what the player screen shows; no money moves.
  */
 function PayAlwaysRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.payAlwaysForAll);
+  const { on, flip } = useFlip(!!ctx.d.payAlwaysForAll, ctx, auto, 'payAlwaysAll', '/api/admin/pay-always', 'Payment on every game', ctx.d.adminR3 === true);
   return (
     <div className="set-row-wrap" data-row="payAlwaysAll">
       <label className="set-row">
@@ -660,10 +751,7 @@ function PayAlwaysRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           className="switch"
           checked={on}
           data-pay-always-all
-          onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('payAlwaysAll', { on: e.target.checked }, '/api/admin/pay-always').then(() => ctx.reload());
-          }}
+          onChange={(e) => flip(e.target.checked)}
         />
       </label>
       <SaveProblem state={auto.rows.payAlwaysAll} />
@@ -676,7 +764,7 @@ function PayAlwaysRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * Off: only a phone that opened the site with ?timeshift=on sees it (a private test). Saves itself; no money moves.
  */
 function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.timeShiftForAll);
+  const { on, flip } = useFlip(!!ctx.d.timeShiftForAll, ctx, auto, 'timeShiftAll', '/api/admin/time-shift', 'Moved-game notice', ctx.d.adminR3 === true);
   return (
     <div className="set-row-wrap" data-row="timeShiftAll">
       <label className="set-row">
@@ -692,10 +780,7 @@ function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           className="switch"
           checked={on}
           data-time-shift-all
-          onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('timeShiftAll', { on: e.target.checked }, '/api/admin/time-shift').then(() => ctx.reload());
-          }}
+          onChange={(e) => flip(e.target.checked)}
         />
       </label>
       <SaveProblem state={auto.rows.timeShiftAll} />
@@ -830,6 +915,36 @@ function AdminR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.adminR2All} />
+    </div>
+  );
+}
+
+/**
+ * "Admin screens, round 3": the new Edit game and Add game forms, the Settings clean-up and the Players page layout.
+ * Needs round 2 on as well. Display only: nothing that is saved, charged or sent changes. Off: only a phone opened with
+ * /admin?adminr3=on sees it (a private test). Saves itself, no deploy.
+ */
+function AdminR3Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const { on, flip } = useFlip(!!ctx.d.adminR3ForAll, ctx, auto, 'adminR3All', '/api/admin/admin-r3', 'Admin screens, round 3', true);
+  return (
+    <div className="set-row-wrap" data-row="adminR3All">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Admin screens, round 3 <SaveMark state={auto.rows.adminR3All} />
+          </span>
+          <span className="set-hint">New Edit game, Add game, Settings order and Players list. Needs round 2 on. Off: only phones opened with /admin?adminr3=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-admin-r3-all
+          onChange={(e) => flip(e.target.checked)}
+        />
+      </label>
+      <SaveProblem state={auto.rows.adminR3All} />
     </div>
   );
 }
