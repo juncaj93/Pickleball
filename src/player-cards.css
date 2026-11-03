@@ -1032,3 +1032,46 @@ a[href] {
 .schedule.pf1 .tier-later .tonight-tag {
   font-size: min(0.64rem, 13.5cqw);
 }
+
+/* ---- PAY_SHEET: the small sheet a Pay button opens ----
+   Same colors as the Pay card's buttons (the --pc-* tokens, light and dark): a filled green button, its outline twin, a gray
+   line, and an outline "I paid". The two top buttons are always the same height, even when one wraps to two lines. */
+.pay-sheet {
+  display: grid;
+  gap: 10px;
+}
+.pay-sheet .btn {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 2px solid var(--pc-btn, var(--primary));
+  background: var(--pc-btn, var(--primary));
+  color: var(--pc-btn-ink, var(--primary-ink));
+  font-weight: 750;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.pay-sheet .btn.outline {
+  background: transparent;
+  color: var(--pc-green, var(--primary));
+  border-color: var(--pc-green-line, var(--primary));
+}
+.pay-sheet .pay-alt {
+  margin: 2px 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--pc-muted, var(--ink-2));
+}
+.pay-sheet .pay-pair {
+  display: grid;
+  grid-auto-rows: 1fr;
+  gap: 10px;
+}
+.pay-sheet .pay-pair > .btn {
+  height: 100%;
+}

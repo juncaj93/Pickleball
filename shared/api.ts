@@ -124,7 +124,7 @@ export interface CreditView {
 }
 
 export interface GroupView {
-  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; priceCents: number; maxPlayers: number; usualMinutes: number };
+  group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; /** Apple Pay / Zelle number for the Pay sheet; "" = none to show; missing = the default. */ zellePhone?: string; priceCents: number; maxPlayers: number; usualMinutes: number };
   players: { id: string; name: string }[];
   me: { id: string; name: string } | null;
   /** True when the organizer is looking through this player's eyes. */
@@ -139,6 +139,8 @@ export interface GroupView {
   payNote?: boolean;
   /** "Player screen small fixes, round 1" is on for this screen (server/playerFix1.ts): Pay and I paid on tonight's card, a roomier TONIGHT tag. False or missing: the screen looks exactly as before. */
   playerFix1?: boolean;
+  /** "Pay sheet" is on for this screen (server/paySheet.ts): Pay opens a small sheet. False or missing: Pay behaves exactly as before. */
+  paySheet?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -413,6 +415,8 @@ export interface AdminDashboard {
   payNoteForAll?: boolean;
   /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */
   playerFix1ForAll?: boolean;
+  /** Settings > Feature switches > "Pay sheet" is on (for everyone). */
+  paySheetForAll?: boolean;
   group: {
     name: string;
     timezone: string;
@@ -420,6 +424,8 @@ export interface AdminDashboard {
     organizerName: string | null;
     venueName: string | null;
     venueAddress: string | null;
+    /** Settings > Money: the Apple Pay / Zelle number on the Pay sheet ("" = none shown). */
+    zellePhone?: string;
     firstSessionDate: string | null;
     settings: GroupSettings;
     /** What to send players: the plain site address when open, else the private link. */

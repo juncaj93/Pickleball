@@ -51,6 +51,11 @@ LATE_FEES = "on"
 # > "Player screen fixes" (off at ship = nobody), plus a phone opened once with ?playerfix1=on (the private test switch).
 # "off" = the kill switch: nobody, not even the test link. Display only: no money rule changes. Needs a deploy.
 PLAYER_FIX1 = "on"
+# "Pay sheet" (Pay opens a small bottom sheet: Pay with the Venmo app, Copy Venmo @handle, Apple Pay / Zelle / cash line,
+# I paid; it replaces the "No Venmo? note" while on). "on" here only ALLOWS it; who sees it is Settings > Feature
+# switches > "Pay sheet" (off at ship = nobody), plus a phone opened once with ?paysheet=on (the private test switch).
+# "off" = the kill switch: nobody, not even the test link. Display only: no money rule changes. Needs a deploy.
+PAY_SHEET = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -70,6 +75,7 @@ PAY_NOTE = "on"
 ADMIN_R2 = "on"
 LATE_FEES = "on"
 PLAYER_FIX1 = "on"
+PAY_SHEET = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

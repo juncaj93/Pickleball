@@ -64,6 +64,23 @@ export function normalizeSettings(input: unknown): GroupSettings {
   return out;
 }
 
+/** The Apple Pay / Zelle number shown on the Pay sheet when Settings > Money has none saved. Blank in Settings means "show no number". */
+export const DEFAULT_ZELLE_PHONE = '248-247-9231';
+
+/**
+ * The Apple Pay / Zelle number, kept inside the group's settings_json (no table or column of its own). Nothing saved: the
+ * default above. Saved blank: "" (the Pay sheet then leaves the number out).
+ */
+export function zellePhoneOf(settingsJson: string | null | undefined): string {
+  try {
+    const v = (JSON.parse(settingsJson || '{}') as { zellePhone?: unknown }).zellePhone;
+    if (typeof v === 'string') return v.trim();
+  } catch {
+    /* an unreadable settings value: the default */
+  }
+  return DEFAULT_ZELLE_PHONE;
+}
+
 export const DEFAULT_VENUE_NAME = 'Northville Pickleball Club';
 /** The site's name: header fallback, browser tab, Home Screen icon. The group's own name lives in Settings. */
 export const SITE_NAME = 'Pickleball Bros';

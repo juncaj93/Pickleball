@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { SITE_NAME } from '../../shared/settings';
+import { DEFAULT_ZELLE_PHONE, SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
-import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
+import { formatPrice, parseVenmoHandle, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
@@ -20,7 +20,7 @@ import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
-import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
+import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
@@ -920,6 +920,76 @@ function useNoVenmoNote(organizerName: string | null, enabled: boolean) {
   };
 }
 
+/**
+ * PAY_SHEET: the small bottom sheet a Pay button opens. Title with the amount, the Venmo app link (the same link Pay always
+ * had), a button that copies the organizer's Venmo handle (so nobody is left on an "invalid address" page), one gray line for
+ * Apple Pay / Zelle / cash, and "I paid" (the same action as the card's own). Nothing else.
+ */
+function PaySheet({
+  g,
+  open,
+  onClose,
+  cents,
+  pay,
+  onTapPay,
+  onPaid,
+  busy,
+}: {
+  g: GroupView;
+  open: boolean;
+  onClose: () => void;
+  cents: number;
+  pay: { url: string | null; appUrl: string | null };
+  onTapPay: () => void;
+  onPaid: () => void;
+  busy: boolean;
+}) {
+  const toast = useToast();
+  const first = (g.group.organizerName ?? '').trim().split(/\s+/)[0] || 'the organizer';
+  const parsed = parseVenmoHandle(g.group.venmoUrl);
+  const handle = parsed.ok && parsed.handle && !parsed.handle.startsWith('id:') ? parsed.handle : null;
+  const zelle = (g.group.zellePhone ?? DEFAULT_ZELLE_PHONE).trim();
+  return (
+    <Sheet open={open} title={`Pay ${first} ${formatPrice(cents)}`} onClose={onClose}>
+      <div className="pay-sheet" data-pay-sheet>
+        <div className="pay-pair">
+          <a
+            className="btn"
+            href={pay.url ?? undefined}
+            data-app-href={pay.appUrl ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Pay ${formatPrice(cents)} with the Venmo app`}
+            onClick={(e) => {
+              onTapPay();
+              openVenmo(e, pay);
+            }}
+          >
+            Have the Venmo app? Click here
+          </a>
+          {handle && (
+            <button
+              className="btn outline"
+              data-copy-venmo
+              onClick={async () => {
+                onTapPay();
+                const copied = await copyText(`@${handle}`);
+                toast(copied ? `Copied @${handle}` : "Couldn't copy.", copied ? 'ok' : 'error');
+              }}
+            >
+              Copy Venmo @{handle}
+            </button>
+          )}
+        </div>
+        {zelle && <p className="pay-alt">No Venmo? Apple Pay or Zelle {zelle}, or cash.</p>}
+        <button className="btn outline" data-sheet-paid disabled={busy} onClick={onPaid}>
+          {busy ? 'Saving…' : 'I paid'}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
 function usePayTapped(key: string, alsoKeys: string[] = []) {
   const storeKey = `pb_pay_tapped_${key}`;
   const read = () => {
@@ -1090,6 +1160,9 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   // PLAYER_FIX1 on: tonight's game card has its own Pay too, so a tap here also counts for each game's own card.
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'), g.playerFix1 ? due.map((o) => o.sessionId) : []);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
+  // PAY_SHEET: Pay opens a small sheet instead of jumping straight into the Venmo app.
+  const [sheet, setSheet] = useState(false);
+  const sheetOn = !!g.paySheet && !!pay.url;
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   let potLeft = g.credit.usableCents;
@@ -1161,6 +1234,11 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
             rel="noopener noreferrer"
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
             onClick={(e) => {
+              if (sheetOn) {
+                e.preventDefault();
+                setSheet(true);
+                return;
+              }
               payTap.mark();
               watchNoVenmo(pay);
               openVenmo(e, pay);
@@ -1183,6 +1261,21 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
           </button>
           {!creditCovers && creditBtn}
         </>
+      )}
+      {sheetOn && (
+        <PaySheet
+          g={g}
+          open={sheet}
+          onClose={() => setSheet(false)}
+          cents={total}
+          pay={pay}
+          onTapPay={payTap.mark}
+          busy={busy}
+          onPaid={() => {
+            setSheet(false);
+            void paid.set(true);
+          }}
+        />
       )}
       {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
@@ -1370,6 +1463,8 @@ function RowPay({
   const payTap = usePayTapped(s.id);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   const busy = paid.busy || credit.busy || paid.blocked || credit.blocked;
+  // PAY_SHEET: Pay opens a small sheet instead of jumping straight into the Venmo app.
+  const [sheet, setSheet] = useState(false);
   // PLAYER_FIX1 off: the card at the top takes over the buttons on game day, as always.
   const chipOnly = onTop && !g.playerFix1;
   if (mine.paymentStatus === 'paid') {
@@ -1467,6 +1562,11 @@ function RowPay({
       rel="noopener noreferrer"
       aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
       onClick={(e) => {
+        if (g.paySheet) {
+          e.preventDefault();
+          setSheet(true);
+          return;
+        }
         payTap.mark();
         watchNoVenmo(pay);
         openVenmo(e, pay);
@@ -1486,6 +1586,21 @@ function RowPay({
   );
   return (
     <>
+      {g.paySheet && pay.url && (
+        <PaySheet
+          g={g}
+          open={sheet}
+          onClose={() => setSheet(false)}
+          cents={mine.oweCents}
+          pay={pay}
+          onTapPay={payTap.mark}
+          busy={busy}
+          onPaid={() => {
+            setSheet(false);
+            void paid.set(true);
+          }}
+        />
+      )}
       <div className="sched-money pay-line">
         {creditChip}
         {chip}

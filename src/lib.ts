@@ -153,6 +153,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (payNoteTest()) headers['X-Pay-Note'] = 'on';
   // "Player screen small fixes, round 1", private test switch for this phone (?playerfix1=on, see server/playerFix1.ts).
   if (playerFix1Test()) headers['X-Player-Fix1'] = 'on';
+  // "Pay sheet", private test switch for this phone (?paysheet=on, see server/paySheet.ts).
+  if (paySheetTest()) headers['X-Pay-Sheet'] = 'on';
   // "New admin layout", private test switch for this phone (/admin?adminv2=on, see server/adminV2.ts).
   if (adminV2Test()) headers['X-Admin-V2'] = 'on';
   // "Admin screens, round 2", private test switch for this phone (/admin?adminr2=on, see server/adminR2.ts).
@@ -465,6 +467,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('playerfix1');
   if (want === 'on') storageSet(PLAYER_FIX1_KEY, 'on');
   else if (want === 'off') storageRemove(PLAYER_FIX1_KEY);
+}
+
+/**
+ * The Pay sheet on this phone only, before it is on for everyone: open the site once with ?paysheet=on
+ * (?paysheet=off turns it back off). Remembered in this browser; nothing else changes.
+ */
+const PAY_SHEET_KEY = 'pb_pay_sheet';
+export function paySheetTest(): boolean {
+  return storageGet(PAY_SHEET_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('paysheet');
+  if (want === 'on') storageSet(PAY_SHEET_KEY, 'on');
+  else if (want === 'off') storageRemove(PAY_SHEET_KEY);
 }
 
 /**
