@@ -986,7 +986,12 @@ function PaySheet({
           )}
         </div>
         {zelle && <p className="pay-alt">No Venmo? Apple Pay or Zelle {zelle}, or cash.</p>}
-        <button className="btn outline" data-sheet-paid disabled={busy} onClick={onPaid}>
+        <button className="btn paid-soft" data-sheet-paid disabled={busy} onClick={onPaid}>
+          {!saving && (
+            <svg className="paid-check" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+              <path d="M4.5 10.5l3.5 3.5 7.5-8" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
           {saving ? 'Saving…' : 'I paid'}
         </button>
       </div>

@@ -310,6 +310,8 @@ async function main() {
         green: [cs(btns[0]).backgroundColor, cs(btns[0]).color],
         outline: [cs(btns[1]).backgroundColor, cs(btns[1]).color, cs(btns[1]).borderTopColor],
         paid: [cs(btns[2]).backgroundColor, p.height],
+        paidCheck: btns[2].querySelectorAll('svg.paid-check').length,
+        paidSize: [p.width, p.height],
         title: cs(d.querySelector('h2')).fontSize,
         dw: d.getBoundingClientRect().width,
         scroll: d.scrollWidth - d.clientWidth,
@@ -326,9 +328,10 @@ async function main() {
           for (const from of ['top', 'card']) {
             const m = await openSheet(a.page, from);
             titles.push(m.title);
+            assert(m.paidSize[0] === m.gw && m.paidSize[1] >= 52, `${from}: the I paid button is not the same width or too short: ${m.paidSize}`);
             assert(Math.abs(m.gh - m.ch) < 1 && Math.abs(m.gw - m.cw) < 1, `${from}: unequal buttons: ${m.gw}x${m.gh} vs ${m.cw}x${m.ch}`);
             assert(m.scroll <= 0 && m.within, `${from}: sheet scrolls sideways or leaves the screen: ${JSON.stringify(m)}`);
-            assert(m.outline[0] === 'rgba(0, 0, 0, 0)' && m.paid[0] === 'rgba(0, 0, 0, 0)' && m.green[0] !== m.outline[0], `${from}: colors: ${JSON.stringify(m)}`);
+            assert(m.outline[0] === 'rgba(0, 0, 0, 0)' && m.paid[0] !== 'rgba(0, 0, 0, 0)' && m.paid[0] !== m.green[0] && m.paid[0] !== m.outline[0] && m.paidCheck === 1 && m.green[0] !== m.outline[0], `${from}: colors: ${JSON.stringify(m)}`);
             const problems = await a.page.evaluate(audit, { scope: 'dialog.sheet[open]', allowEllipsis: [] });
             if (SHOTS) await a.page.screenshot({ path: path.join(SHOTS, `paysheet-${from}-${width}-${scheme}-${pct}.png`) }).catch(() => {});
             assert(problems.length === 0, `${from}: layout problems (${problems.length}): ${[...new Set(problems)].slice(0, 4).join(' | ')}`);

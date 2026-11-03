@@ -1086,3 +1086,14 @@ a[href] {
 html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
   animation: none;
 }
+
+/* The sheet's "I paid": a soft green fill (the site's own light green tint) with a check mark, so it does not read as the
+   outlined "Copy Venmo" button above it. Same size: the 2px border stays, in the fill's own color. */
+.pay-sheet .btn.paid-soft {
+  background: var(--pc-ok-bg);
+  border-color: var(--pc-ok-bg);
+  color: var(--pc-green);
+}
+.pay-sheet .btn.paid-soft .paid-check {
+  flex: none;
+}
