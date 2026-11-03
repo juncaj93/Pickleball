@@ -163,6 +163,7 @@ async function main() {
     assert((await page.getByRole('button', { name: 'Add a person' }).count()) === 1, 'Add a person below the list');
     await tab(page, 'Settings');
     assert((await page.getByText('Appearance').count()) === 1, 'Appearance row is back');
+    assert((await page.locator('.set-top').count()) === 1 && (await page.getByRole('button', { name: 'Copy', exact: true }).count()) === 1, 'Player link card with Copy is back');
     await page.locator('details[data-section="schedule"] summary').click();
     assert((await page.locator('[data-row="firstSessionDate"]').count()) === 1, 'First session date is back');
     assert((await page.locator('[data-row="timeShiftAll"]').count()) === 1, 'Moved-game notice in Schedule');
@@ -350,6 +351,9 @@ async function main() {
     await tab(page, 'Settings');
     await page.evaluate(() => document.querySelectorAll('details').forEach((x) => (x.open = true)));
     assert((await page.getByText('Appearance').count()) === 0, 'no Appearance row');
+    assert((await page.locator('.set-top').count()) === 0, 'no top card at all');
+    assert((await page.getByText('Player link').count()) === 0 && (await page.getByRole('button', { name: 'Copy', exact: true }).count()) === 0, 'Player link card and its Copy button are gone');
+    assert((await page.locator('[data-section="group"]').first().evaluate((e) => e.closest('main, .page').firstElementChild.contains(e) || e.closest('.set-list') === e.closest('.page').firstElementChild)), 'Settings now starts with the settings list');
     assert((await page.locator('[data-row="firstSessionDate"]').count()) === 0, 'no First session date');
     assert((await page.locator('[data-row="venmoUrl"]').count()) === 1, 'exactly one Venmo link');
     assert((await page.locator('details[data-section="money"] [data-row="venmoUrl"]').count()) === 1, 'the Venmo link is in Money');

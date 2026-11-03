@@ -283,44 +283,47 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   return (
     <>
       {/* The things used most, in one compact card. */}
-      <section className="card set-top" aria-label="Quick settings">
-        <div className="set-line">
-          <span className="set-label">
-            <strong>Player link</strong>
-            <code className="set-link">{g.playerLink.replace(/^https?:\/\//, '')}</code>
-          </span>
-          <button className="btn small" onClick={async () => ((await copyText(g.playerLink)) ? toast('Link copied') : toast("Couldn't copy", 'error'))}>
-            Copy
-          </button>
-        </div>
-        {!r3 && (
-        <div className="set-line">
-          <span className="set-label">
-            <strong>Appearance</strong>
-          </span>
-          <div className="segmented compact" role="group" aria-label="Light or dark">
-            {(
-              [
-                ['system', 'Auto'],
-                ['light', 'Light'],
-                ['dark', 'Dark'],
-              ] as const
-            ).map(([v, label]) => (
-              <button
-                key={v}
-                aria-pressed={theme === v}
-                onClick={() => {
-                  setTheme(v);
-                  setThemeChoice(v);
-                }}
-              >
-                {label}
-              </button>
-            ))}
+      {/* Round 3 (ADMIN_R3): this card (Player link + Copy, and the Appearance row) is gone, so the page starts with the settings. */}
+      {!r3 && (
+        <section className="card set-top" aria-label="Quick settings">
+          <div className="set-line">
+            <span className="set-label">
+              <strong>Player link</strong>
+              <code className="set-link">{g.playerLink.replace(/^https?:\/\//, '')}</code>
+            </span>
+            <button className="btn small" onClick={async () => ((await copyText(g.playerLink)) ? toast('Link copied') : toast("Couldn't copy", 'error'))}>
+              Copy
+            </button>
           </div>
-        </div>
-        )}
-      </section>
+          {!r3 && (
+          <div className="set-line">
+            <span className="set-label">
+              <strong>Appearance</strong>
+            </span>
+            <div className="segmented compact" role="group" aria-label="Light or dark">
+              {(
+                [
+                  ['system', 'Auto'],
+                  ['light', 'Light'],
+                  ['dark', 'Dark'],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  aria-pressed={theme === v}
+                  onClick={() => {
+                    setTheme(v);
+                    setThemeChoice(v);
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          )}
+        </section>
+      )}
 
       {/* Every row saves itself; there is no Save button. */}
       <div className="card set-list" role="group" aria-label="Group settings">

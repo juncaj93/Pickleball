@@ -1974,7 +1974,7 @@ Built on main at `0edf850` (the late-fees merge, so its "Late drops owe $14" row
    budget at 360 x 640 (before: 522 px, 1 px over).
 2. Add game: Start and End are drop-downs in 30-minute steps on the 12-hour clock (6:00 AM to 11:30 PM; an off-step usual time such
    as 7:15 PM is kept as its own choice so opening the form never changes it); the date is the calendar picker only.
-3. Settings: see the switch row in `FEATURE_SWITCHES.md`. Toggle rows moved into Feature switches move first, confirm with a toast
+3. Settings: see the switch row in `FEATURE_SWITCHES.md`. (Added Nov 3 at Alex's request: the top "Player link" card with Copy is deleted, not moved. Checked first: nothing depends on it. The link itself is still built from `group.playerLink` for the texts, the private test links are plain `?adminr3=on` style addresses, and the other Copy buttons (Setup, player screen) are separate.) Toggle rows moved into Feature switches move first, confirm with a toast
    after, and snap back with a toast if the save fails (the old rows keep their old behavior when the switch is off).
 4. Players: `src/pages/admin/PlayersR3.tsx` + `src/admin-r3.css`. Data: played = the all-time count the page already had; held =
    `heldCents()` (what Home and the old row call "$28 held"); credit = the credit pot; spent = new, worked out on the server in
