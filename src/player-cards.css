@@ -1017,3 +1017,72 @@ a[href] {
 .schedule .st-canceled.note-box {
   color: var(--accent-text);
 }
+
+/* ---- PLAYER_FIX1: the TONIGHT tag gets room around its word ----
+   Off, nothing here applies (the .pf1 class is only on the list when the switch is on for that phone). The pill was exactly
+   as wide as the word. Now it has side padding and a little air above and below, and its size follows the tile's own
+   width (cqw, the same trick the weekday and date numbers use), so it also fits with Larger Text. Same colors, same shape. */
+.schedule.pf1 .tonight-tag {
+  margin: 0;
+  padding: 0.42em 0.7em;
+  border-radius: 8px;
+  font-size: min(0.72rem, 13cqw);
+  letter-spacing: 0.04em;
+}
+.schedule.pf1 .tier-later .tonight-tag {
+  font-size: min(0.64rem, 13.5cqw);
+}
+
+/* ---- PAY_SHEET: the small sheet a Pay button opens ----
+   Same colors as the Pay card's buttons (the --pc-* tokens, light and dark): a filled green button, its outline twin, a gray
+   line, and an outline "I paid". The two top buttons are always the same height, even when one wraps to two lines. */
+.pay-sheet {
+  display: grid;
+  gap: 10px;
+}
+.pay-sheet .btn {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 52px;
+  padding: 10px 16px;
+  border-radius: 14px;
+  border: 2px solid var(--pc-btn, var(--primary));
+  background: var(--pc-btn, var(--primary));
+  color: var(--pc-btn-ink, var(--primary-ink));
+  font-weight: 750;
+  font-size: 1.05rem;
+  line-height: 1.2;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+.pay-sheet .btn.outline {
+  background: transparent;
+  color: var(--pc-green, var(--primary));
+  border-color: var(--pc-green-line, var(--primary));
+}
+.pay-sheet .pay-alt {
+  margin: 2px 0;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--pc-muted, var(--ink-2));
+}
+.pay-sheet .pay-pair {
+  display: grid;
+  grid-auto-rows: 1fr;
+  gap: 10px;
+}
+.pay-sheet .pay-pair > .btn {
+  height: 100%;
+}
+/* The sheet is the same wherever it is opened from (a game card sits inside rules that cap widths; the Pay card has its own
+   bigger heading and a pop-in for its buttons). */
+.schedule .sched-body > dialog.sheet {
+  max-width: 640px;
+}
+.pay-card dialog.sheet .sheet-head h2 {
+  font-size: 1.15rem;
+}
+html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
+  animation: none;
+}

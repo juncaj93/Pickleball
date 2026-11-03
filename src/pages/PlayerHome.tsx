@@ -1,7 +1,7 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { SITE_NAME } from '../../shared/settings';
+import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { DEFAULT_ZELLE_NUMBER, SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
-import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
+import { formatPrice, parseVenmoHandle, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
 import { creditBackNote } from '../../shared/pricing';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
@@ -20,7 +20,7 @@ import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
-import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, SpotDots, Spinner, useToast } from '../ui';
+import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
@@ -559,7 +559,7 @@ export function PlayerHome({
               view!.suggestion && <SuggestionCard key={view!.suggestion.sessionId} g={view!} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
-            <div className="schedule">
+            <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
               {/* Nothing to list (My games with no games): the switch still has a line of its own. */}
               {g.sessions.length > 0 && rows.length === 0 && (
                 <div className="week-break tier-next filter-only">
@@ -871,10 +871,15 @@ function FeeNotices({ g }: { g: GroupView }) {
  * "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. "I paid" sends the
  * amount the screen showed for each game, so a price that changed in the meantime is refused, not recorded.
  */
-function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>) {
+function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>, guard = false) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const ids = owed.map((o) => o.sessionId);
+  // `guard` is PLAYER_FIX1: only then can the same game have buttons in two places, so only then do they take turns.
+  const blocked = useMoneyInFlight(guard ? ids : []);
   async function set(paid: boolean) {
+    if (guard && ids.some((id) => inFlight.has(id))) return;
+    const done = guard ? moneyStarted(ids) : () => {};
     setBusy(true);
     const release = holdLive();
     try {
@@ -887,10 +892,12 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
       await onChanged();
     } finally {
       setBusy(false);
+      done();
       release();
     }
   }
-  return { busy, set };
+  // `busy` is this button's own "Saving…"; `blocked` only disables (the other card is saving this game).
+  return { busy, blocked, set };
 }
 
 /**
@@ -913,26 +920,150 @@ function useNoVenmoNote(organizerName: string | null, enabled: boolean) {
   };
 }
 
-function usePayTapped(key: string) {
+/**
+ * PAY_SHEET: the small bottom sheet a Pay button opens. Title with the amount, the Venmo app link (the same link Pay always
+ * had), a button that copies the organizer's Venmo handle (so nobody is left on an "invalid address" page), one gray line for
+ * Apple Pay / Zelle / cash, and "I paid" (the same action as the card's own). Nothing else.
+ */
+function PaySheet({
+  g,
+  open,
+  onClose,
+  cents,
+  pay,
+  onTapPay,
+  onPaid,
+  busy,
+  saving,
+}: {
+  g: GroupView;
+  open: boolean;
+  onClose: () => void;
+  cents: number;
+  pay: { url: string | null; appUrl: string | null };
+  onTapPay: () => void;
+  onPaid: () => void;
+  /** Something about this game is being saved (the button is off). */
+  busy: boolean;
+  /** This button's own save (its label says so). */
+  saving: boolean;
+}) {
+  const toast = useToast();
+  const first = (g.group.organizerName ?? '').trim().split(/\s+/)[0] || 'the organizer';
+  const parsed = parseVenmoHandle(g.group.venmoUrl);
+  const handle = parsed.ok && parsed.handle && !parsed.handle.startsWith('id:') ? parsed.handle : null;
+  const zelle = (g.group.zelleNumber ?? DEFAULT_ZELLE_NUMBER).trim();
+  return (
+    <Sheet open={open} title={`Pay ${first} ${formatPrice(cents)}`} onClose={onClose}>
+      <div className="pay-sheet" data-pay-sheet>
+        <div className="pay-pair">
+          <a
+            className="btn"
+            href={pay.url ?? undefined}
+            data-app-href={pay.appUrl ?? undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Pay ${formatPrice(cents)} with the Venmo app`}
+            onClick={(e) => {
+              onTapPay();
+              openVenmo(e, pay);
+            }}
+          >
+            Have the Venmo app? Click here
+          </a>
+          {handle && (
+            <button
+              className="btn outline"
+              data-copy-venmo
+              onClick={async () => {
+                onTapPay();
+                const copied = await copyText(`@${handle}`);
+                toast(copied ? `Copied @${handle}` : "Couldn't copy.", copied ? 'ok' : 'error');
+              }}
+            >
+              Copy Venmo @{handle}
+            </button>
+          )}
+        </div>
+        {zelle && <p className="pay-alt">No Venmo? Apple Pay or Zelle {zelle}, or cash.</p>}
+        <button className="btn outline" data-sheet-paid disabled={busy} onClick={onPaid}>
+          {saving ? 'Saving…' : 'I paid'}
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+function usePayTapped(key: string, alsoKeys: string[] = []) {
   const storeKey = `pb_pay_tapped_${key}`;
   const read = () => {
     try {
-      return localStorage.getItem(storeKey) === '1';
+      return localStorage.getItem(storeKey) === '1' || tappedThisVisit.has(storeKey);
     } catch {
-      return false;
+      return tappedThisVisit.has(storeKey);
     }
   };
   const [tapped, setTapped] = useState(read);
   useEffect(() => setTapped(read()), [storeKey]);
+  // Two Pay buttons for the same game (the card at the top and the game card) stay in step: a tap on one is seen by the other.
+  useEffect(() => {
+    const onTap = () => setTapped(read());
+    window.addEventListener(PAY_TAPPED_EVENT, onTap);
+    return () => window.removeEventListener(PAY_TAPPED_EVENT, onTap);
+  }, [storeKey]);
   function mark() {
-    setTapped(true);
-    try {
-      localStorage.setItem(storeKey, '1');
-    } catch {
-      /* the button simply shows for this visit */
+    for (const k of [storeKey, ...alsoKeys.map((id) => `pb_pay_tapped_${id}`)]) {
+      tappedThisVisit.add(k);
+      try {
+        localStorage.setItem(k, '1');
+      } catch {
+        /* the button simply shows for this visit */
+      }
     }
+    setTapped(true);
+    window.dispatchEvent(new Event(PAY_TAPPED_EVENT));
   }
   return { tapped, mark };
+}
+
+const PAY_TAPPED_EVENT = 'pb-pay-tapped';
+/** Taps made in this visit, for a phone that will not keep localStorage. */
+const tappedThisVisit = new Set<string>();
+
+/**
+ * Games whose money tap (I paid, Didn't pay?, Use credit, Undo) is being saved right now. The same game can have its
+ * buttons in two places (the card at the top and the game card, PLAYER_FIX1), so the other place waits instead of
+ * sending a second request. Only games with buttons in two places are ever affected.
+ */
+const inFlight = new Map<string, number>();
+const inFlightWatchers = new Set<() => void>();
+let inFlightVersion = 0;
+function moneyStarted(ids: string[]): () => void {
+  const touch = () => {
+    inFlightVersion++;
+    inFlightWatchers.forEach((w) => w());
+  };
+  for (const id of ids) inFlight.set(id, (inFlight.get(id) ?? 0) + 1);
+  touch();
+  return () => {
+    for (const id of ids) {
+      const n = (inFlight.get(id) ?? 1) - 1;
+      if (n <= 0) inFlight.delete(id);
+      else inFlight.set(id, n);
+    }
+    touch();
+  };
+}
+function useMoneyInFlight(ids: string[]): boolean {
+  useSyncExternalStore(
+    (cb) => {
+      inFlightWatchers.add(cb);
+      return () => void inFlightWatchers.delete(cb);
+    },
+    () => inFlightVersion,
+    () => 0,
+  );
+  return ids.some((id) => inFlight.has(id));
 }
 
 /**
@@ -940,14 +1071,16 @@ function usePayTapped(key: string) {
  * when they tap. One call per game, earliest first; it stops when a call fails
  * or the credit is used up.
  */
-function useCredit(onChanged: () => Promise<void>) {
+function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard = false) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const blocked = useMoneyInFlight(guard ? gameIds : []);
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   async function use(sessionIds: string[], owedCents: number, potCents: number) {
-    if (working.current) return;
+    if (working.current || (guard && sessionIds.some((id) => inFlight.has(id)))) return;
     working.current = true;
+    const done = guard ? moneyStarted(sessionIds) : () => {};
     setBusy(true);
     const release = holdLive();
     let used = 0;
@@ -977,13 +1110,15 @@ function useCredit(onChanged: () => Promise<void>) {
     } finally {
       working.current = false;
       setBusy(false);
+      done();
       release();
     }
   }
   /** "Undo" under "Paid with credit": the credit goes back, the game is owed again. */
   async function undo(sessionId: string) {
-    if (working.current) return;
+    if (working.current || (guard && inFlight.has(sessionId))) return;
     working.current = true;
+    const done = guard ? moneyStarted([sessionId]) : () => {};
     setBusy(true);
     const release = holdLive();
     try {
@@ -997,10 +1132,11 @@ function useCredit(onChanged: () => Promise<void>) {
     } finally {
       working.current = false;
       setBusy(false);
+      done();
       release();
     }
   }
-  return { busy, use, undo };
+  return { busy, blocked, use, undo };
 }
 
 /**
@@ -1023,10 +1159,14 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
-  const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
-  const credit = useCredit(onChanged);
-  const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
+  const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged, !!g.playerFix1);
+  const credit = useCredit(onChanged, due.map((o) => o.sessionId), !!g.playerFix1);
+  // PLAYER_FIX1 on: tonight's game card has its own Pay too, so a tap here also counts for each game's own card.
+  const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'), g.playerFix1 ? due.map((o) => o.sessionId) : []);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
+  // PAY_SHEET: Pay opens a small sheet instead of jumping straight into the Venmo app.
+  const [sheet, setSheet] = useState(false);
+  const sheetOn = !!g.paySheet && !!pay.url;
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   let potLeft = g.credit.usableCents;
@@ -1039,7 +1179,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const showCredit = g.credit.usableCents > 0 && covered > 0;
   // Whenever there is credit to use, "Use credit" is the filled button and Pay is its outline twin (same as on the cards).
   const creditCovers = showCredit;
-  const busy = paid.busy || credit.busy;
+  const busy = paid.busy || credit.busy || paid.blocked || credit.blocked;
   const creditBtn = showCredit && (
     <button
       className={`btn block ${creditCovers ? 'big' : 'secondary'}`}
@@ -1098,6 +1238,11 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
             rel="noopener noreferrer"
             aria-label={`Pay ${formatPrice(total)} with Venmo`}
             onClick={(e) => {
+              if (sheetOn) {
+                e.preventDefault();
+                setSheet(true);
+                return;
+              }
               payTap.mark();
               watchNoVenmo(pay);
               openVenmo(e, pay);
@@ -1120,6 +1265,22 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
           </button>
           {!creditCovers && creditBtn}
         </>
+      )}
+      {sheetOn && (
+        <PaySheet
+          g={g}
+          open={sheet}
+          onClose={() => setSheet(false)}
+          cents={total}
+          pay={pay}
+          onTapPay={payTap.mark}
+          busy={busy}
+          saving={paid.busy}
+          onPaid={() => {
+            setSheet(false);
+            void paid.set(true);
+          }}
+        />
       )}
       {!pay.url && <p className="small muted">Pay {who} however you usually do.</p>}
       {pay.url && !pay.prefilled && (
@@ -1284,7 +1445,9 @@ function countLine(s: PlayerSessionView): string {
  * the green "Paid" pill with the quiet links on the same line) and one line of
  * small links ("I paid", "Drop out"). `drop` is the "Drop out" link. On game
  * day after 8:00 AM the card at the top takes over the buttons and this shows
- * only the chip. In the flat LATER rows the money line is the right column.
+ * only the chip, unless PLAYER_FIX1 is on: then tonight's card has the same Pay and
+ * "I paid" as every later card, and the top card keeps its own. In the flat LATER
+ * rows the money line is the right column.
  */
 function RowPay({
   g,
@@ -1300,11 +1463,15 @@ function RowPay({
   drop: ReactNode;
 }) {
   const mine = s.mine!;
-  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
-  const credit = useCredit(onChanged);
+  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged, !!g.playerFix1);
+  const credit = useCredit(onChanged, [s.id], !!g.playerFix1);
   const payTap = usePayTapped(s.id);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
-  const busy = paid.busy || credit.busy;
+  const busy = paid.busy || credit.busy || paid.blocked || credit.blocked;
+  // PAY_SHEET: Pay opens a small sheet instead of jumping straight into the Venmo app.
+  const [sheet, setSheet] = useState(false);
+  // PLAYER_FIX1 off: the card at the top takes over the buttons on game day, as always.
+  const chipOnly = onTop && !g.playerFix1;
   if (mine.paymentStatus === 'paid') {
     const amount = mine.shareCents;
     return (
@@ -1315,12 +1482,12 @@ function RowPay({
         <span className="inline-links">
           {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
           {mine.paidWithCredit && (
-            <button className="link-btn quiet-link" data-undo-credit disabled={credit.busy} onClick={() => credit.undo(s.id)}>
+            <button className="link-btn quiet-link" data-undo-credit disabled={credit.busy || credit.blocked || paid.blocked} onClick={() => credit.undo(s.id)}>
               Undo
             </button>
           )}
           {mine.selfPaid && !mine.paidWithCredit && (
-            <button className="link-btn quiet-link didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
+            <button className="link-btn quiet-link didnt-pay" disabled={paid.busy || paid.blocked || credit.blocked} onClick={() => paid.set(false)}>
               Didn't pay?
             </button>
           )}
@@ -1365,7 +1532,7 @@ function RowPay({
       )}
     </span>
   );
-  if (onTop) {
+  if (chipOnly) {
     return (
       <div className="sched-money stacked">
         {left ? (
@@ -1400,6 +1567,11 @@ function RowPay({
       rel="noopener noreferrer"
       aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
       onClick={(e) => {
+        if (g.paySheet) {
+          e.preventDefault();
+          setSheet(true);
+          return;
+        }
         payTap.mark();
         watchNoVenmo(pay);
         openVenmo(e, pay);
@@ -1419,6 +1591,22 @@ function RowPay({
   );
   return (
     <>
+      {g.paySheet && pay.url && (
+        <PaySheet
+          g={g}
+          open={sheet}
+          onClose={() => setSheet(false)}
+          cents={mine.oweCents}
+          pay={pay}
+          onTapPay={payTap.mark}
+          busy={busy}
+          saving={paid.busy}
+          onPaid={() => {
+            setSheet(false);
+            void paid.set(true);
+          }}
+        />
+      )}
       <div className="sched-money pay-line">
         {creditChip}
         {chip}

@@ -1,6 +1,6 @@
 import type { CreditEntryView, GroupView } from '../shared/api';
 import { sessionCalendar } from '../shared/calendar';
-import { DEFAULT_VENUE_NAME } from '../shared/settings';
+import { DEFAULT_VENUE_NAME, zelleNumberOf } from '../shared/settings';
 import { joinOutcome } from '../shared/spots';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { PAY_FROM_HOUR } from '../shared/money';
@@ -79,6 +79,8 @@ import { timeShiftFor } from './timeShift';
 import { motionFor } from './motion';
 import { payAlwaysFor } from './payAlways';
 import { payNoteFor } from './payNote';
+import { playerFix1For } from './playerFix1';
+import { paySheetFor } from './paySheet';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -243,6 +245,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       timezone: group.timezone,
       venmoUrl: group.venmo_url,
       organizerName: group.organizer_name,
+      // The Apple Pay / Zelle number on the Pay sheet (Settings > Money).
+      zelleNumber: zelleNumberOf(group.settings_json),
       priceCents: settings.pricePerPlayerCents,
       maxPlayers: settings.maxPlayers,
       // The usual game length (Settings > Schedule): a card shows only the start time unless a game runs a different length.
@@ -255,6 +259,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     motion: motionFor(ctx),
     payAlways: await payAlwaysFor(ctx, group.id),
     payNote: await payNoteFor(ctx, group.id),
+    playerFix1: await playerFix1For(ctx, group.id),
+    paySheet: await paySheetFor(ctx, group.id),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
