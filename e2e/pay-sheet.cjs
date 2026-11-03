@@ -276,6 +276,12 @@ async function main() {
   });
   await check('game day with both Pay buttons (Player screen fixes on): each opens its own sheet, I paid in either updates both cards', async () => {
     const a = await open('Ryan', { query: '/?paysheet=on&playerfix1=on' });
+    // The top card's own sheet first (closed with its X), then the game card's.
+    await a.page.locator('section.pay-card').getByRole('link', { name: /Pay \$14 with Venmo/ }).click();
+    await sheet(a.page).waitFor();
+    assert((await sheet(a.page).locator('h2').innerText()) === 'Pay Alex $14', 'the top card\'s sheet');
+    await sheet(a.page).getByRole('button', { name: 'Close' }).click();
+    await a.page.locator('dialog.sheet[open]').waitFor({ state: 'detached' });
     await row(a.page, S[1]).locator('a.pay-btn').click();
     await sheet(a.page).waitFor();
     assert((await sheet(a.page).locator('h2').innerText()) === 'Pay Alex $14', 'the card\'s sheet');
@@ -288,39 +294,71 @@ async function main() {
   });
 
   /* ---- Looks ---- */
+  /** Opens the sheet from the top card or from tonight's game card, then measures it. */
+  const openSheet = async (page, from) => {
+    const link = from === 'top' ? page.locator('section.pay-card').getByRole('link', { name: /Pay \$14 with Venmo/ }) : row(page, S[1]).locator('a.pay-btn');
+    await link.click();
+    await sheet(page).waitFor();
+    await page.waitForTimeout(400);
+    return page.evaluate(() => {
+      const d = document.querySelector('dialog.sheet[open]');
+      const btns = [...d.querySelectorAll('.sheet-body .btn')];
+      const [g, c, p] = btns.map((b) => b.getBoundingClientRect());
+      const cs = (el) => getComputedStyle(el);
+      return {
+        gh: g.height, ch: c.height, gw: g.width, cw: c.width,
+        green: [cs(btns[0]).backgroundColor, cs(btns[0]).color],
+        outline: [cs(btns[1]).backgroundColor, cs(btns[1]).color, cs(btns[1]).borderTopColor],
+        paid: [cs(btns[2]).backgroundColor, p.height],
+        title: cs(d.querySelector('h2')).fontSize,
+        dw: d.getBoundingClientRect().width,
+        scroll: d.scrollWidth - d.clientWidth,
+        within: d.getBoundingClientRect().left >= -1 && d.getBoundingClientRect().right <= innerWidth + 1,
+      };
+    });
+  };
   for (const width of [320, 360, 430]) {
     for (const scheme of ['light', 'dark']) {
       for (const pct of [100, 200]) {
-        await check(`sheet look, ${width}px ${scheme} text ${pct}%: the two buttons are the same height, nothing cut off or past the edge, no sideways scroll`, async () => {
-          const a = await open('Ryan', { width, scheme, pct, query: '/?paysheet=on' });
-          await a.page.locator('section.pay-card').getByRole('link', { name: /Pay \$14 with Venmo/ }).click();
-          await sheet(a.page).waitFor();
-          await a.page.waitForTimeout(400);
-          const m = await a.page.evaluate(() => {
-            const d = document.querySelector('dialog.sheet[open]');
-            const [g, c, p] = [...d.querySelectorAll('.sheet-body .btn')].map((b) => b.getBoundingClientRect());
-            const gray = d.querySelector('.pay-alt').getBoundingClientRect();
-            const cs = (el) => getComputedStyle(el);
-            const btns = [...d.querySelectorAll('.sheet-body .btn')];
-            return {
-              gh: g.height, ch: c.height, ph: p.height, gw: g.width, cw: c.width, gray: gray.height,
-              green: [cs(btns[0]).backgroundColor, cs(btns[0]).color],
-              outline: [cs(btns[1]).backgroundColor, cs(btns[1]).color, cs(btns[1]).borderTopColor],
-              scroll: d.scrollWidth - d.clientWidth,
-              within: d.getBoundingClientRect().left >= -1 && d.getBoundingClientRect().right <= innerWidth + 1,
-            };
-          });
-          assert(Math.abs(m.gh - m.ch) < 1 && Math.abs(m.gw - m.cw) < 1, `unequal buttons: ${m.gw}x${m.gh} vs ${m.cw}x${m.ch}`);
-          assert(m.scroll <= 0 && m.within, `sheet scrolls sideways or leaves the screen: ${JSON.stringify(m)}`);
-          assert(m.outline[0] === 'rgba(0, 0, 0, 0)' && m.green[0] !== m.outline[0], `colors: ${JSON.stringify(m)}`);
-          const problems = await a.page.evaluate(audit, { scope: 'dialog.sheet[open]', allowEllipsis: [] });
-          if (SHOTS) await a.page.screenshot({ path: path.join(SHOTS, `paysheet-${width}-${scheme}-${pct}.png`) }).catch(() => {});
+        await check(`sheet look, ${width}px ${scheme} text ${pct}%, from the top card and from the game card: the two buttons are the same height, outline and filled as the Pay card, nothing cut off or past the edge, no sideways scroll`, async () => {
+          const a = await open('Ryan', { width, scheme, pct, query: '/?paysheet=on&playerfix1=on' });
+          const titles = [];
+          for (const from of ['top', 'card']) {
+            const m = await openSheet(a.page, from);
+            titles.push(m.title);
+            assert(Math.abs(m.gh - m.ch) < 1 && Math.abs(m.gw - m.cw) < 1, `${from}: unequal buttons: ${m.gw}x${m.gh} vs ${m.cw}x${m.ch}`);
+            assert(m.scroll <= 0 && m.within, `${from}: sheet scrolls sideways or leaves the screen: ${JSON.stringify(m)}`);
+            assert(m.outline[0] === 'rgba(0, 0, 0, 0)' && m.paid[0] === 'rgba(0, 0, 0, 0)' && m.green[0] !== m.outline[0], `${from}: colors: ${JSON.stringify(m)}`);
+            const problems = await a.page.evaluate(audit, { scope: 'dialog.sheet[open]', allowEllipsis: [] });
+            if (SHOTS) await a.page.screenshot({ path: path.join(SHOTS, `paysheet-${from}-${width}-${scheme}-${pct}.png`) }).catch(() => {});
+            assert(problems.length === 0, `${from}: layout problems (${problems.length}): ${[...new Set(problems)].slice(0, 4).join(' | ')}`);
+            await sheet(a.page).getByRole('button', { name: 'Close' }).click();
+            await a.page.locator('dialog.sheet[open]').waitFor({ state: 'detached' });
+          }
+          assert(titles[0] === titles[1], `the title is a different size in the two places: ${titles}`);
           await a.ctx.close();
-          assert(problems.length === 0, `layout problems (${problems.length}): ${[...new Set(problems)].slice(0, 4).join(' | ')}`);
         });
       }
     }
   }
+  await check('on a wide screen (800 px) the sheet is the same width from the top card and from the game card, and not wider than 640 px', async () => {
+    const ctx = await browser.newContext({ viewport: { width: 800, height: 900 }, userAgent: L.UA, colorScheme: 'light' });
+    await ctx.route('https://venmo.com/**', (r) => r.abort());
+    await post(ctx.request, '/api/me', { playerId: idOf('Ryan') });
+    await ctx.addInitScript(() => localStorage.setItem('pb_games_filter', 'all'));
+    const page = await ctx.newPage();
+    await page.goto(BASE + '/?paysheet=on&playerfix1=on');
+    await page.locator('section.pay-card').waitFor();
+    const widths = [];
+    for (const from of ['top', 'card']) {
+      const m = await openSheet(page, from);
+      widths.push(Math.round(m.dw));
+      await sheet(page).getByRole('button', { name: 'Close' }).click();
+      await page.locator('dialog.sheet[open]').waitFor({ state: 'detached' });
+    }
+    await ctx.close();
+    assert(widths[0] === widths[1] && widths[0] <= 640, `widths: ${widths}`);
+  });
 
   await check('looking at the sheet and copying moved no money: every seat, payment and credit entry is as before', async () => {
     assert(sameBooks(before, await moneyNow()), 'the books changed');

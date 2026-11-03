@@ -934,6 +934,7 @@ function PaySheet({
   onTapPay,
   onPaid,
   busy,
+  saving,
 }: {
   g: GroupView;
   open: boolean;
@@ -942,7 +943,10 @@ function PaySheet({
   pay: { url: string | null; appUrl: string | null };
   onTapPay: () => void;
   onPaid: () => void;
+  /** Something about this game is being saved (the button is off). */
   busy: boolean;
+  /** This button's own save (its label says so). */
+  saving: boolean;
 }) {
   const toast = useToast();
   const first = (g.group.organizerName ?? '').trim().split(/\s+/)[0] || 'the organizer';
@@ -983,7 +987,7 @@ function PaySheet({
         </div>
         {zelle && <p className="pay-alt">No Venmo? Apple Pay or Zelle {zelle}, or cash.</p>}
         <button className="btn outline" data-sheet-paid disabled={busy} onClick={onPaid}>
-          {busy ? 'Saving…' : 'I paid'}
+          {saving ? 'Saving…' : 'I paid'}
         </button>
       </div>
     </Sheet>
@@ -1271,6 +1275,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
           pay={pay}
           onTapPay={payTap.mark}
           busy={busy}
+          saving={paid.busy}
           onPaid={() => {
             setSheet(false);
             void paid.set(true);
@@ -1595,6 +1600,7 @@ function RowPay({
           pay={pay}
           onTapPay={payTap.mark}
           busy={busy}
+          saving={paid.busy}
           onPaid={() => {
             setSheet(false);
             void paid.set(true);

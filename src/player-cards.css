@@ -1075,3 +1075,14 @@ a[href] {
 .pay-sheet .pay-pair > .btn {
   height: 100%;
 }
+/* The sheet is the same wherever it is opened from (a game card sits inside rules that cap widths; the Pay card has its own
+   bigger heading and a pop-in for its buttons). */
+.schedule .sched-body > dialog.sheet {
+  max-width: 640px;
+}
+.pay-card dialog.sheet .sheet-head h2 {
+  font-size: 1.15rem;
+}
+html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
+  animation: none;
+}

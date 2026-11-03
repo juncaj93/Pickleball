@@ -1379,7 +1379,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     group.id,
     null,
     'settings_updated',
-    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings },
+    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings, ...(zelleRaw === undefined ? {} : { zellePhone: zelleRaw }) },
     ctx.nowIso,
   );
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(storedSettings), first_session_date: firstSessionDate }, ctx.nowMs);
