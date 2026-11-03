@@ -95,13 +95,30 @@ export function fillTexts(d: AdminDashboard, s: AdminSessionView, nowMs: number)
 
 // ---------- Payment reminders ----------
 
-/** Games a player owes for now: unpaid and confirmed, from the day-before check-in on (plus `extra`). */
+/**
+ * A late-fee debt this seat really owes (LATE_FEES on only, shared/lateFees.ts): a late drop that left the game short, a
+ * no-show, or a seat in a game canceled late with the fee kept. Unpaid with something left to pay, never the organizer's own.
+ * A paid one (the money stays on the game) and a cleared one are not owed, so they get no reminder.
+ */
+export function owesLateFee(d: Pick<AdminDashboard, 'lateFees'>, r: AdminRosterEntry): boolean {
+  return d.lateFees === true && !!r.lateFee && !r.isOrganizer && r.paymentStatus === 'unpaid' && r.shareCents !== null && r.owesCents > 0;
+}
+
+/**
+ * Games a player owes for now: unpaid and confirmed, from the day-before check-in on (plus `extra`). With LATE_FEES on, a
+ * late-fee debt counts too, at once and whatever the game's state (a seat that left, a game canceled late): it is owed now.
+ * Several games add up to one total in the text.
+ */
 export function owedGames(d: AdminDashboard, playerId: string, extra?: AdminSessionView) {
   const nowMs = Date.parse(d.now);
   const games: { s: AdminSessionView; cents: number }[] = [];
   for (const s of d.sessions) {
-    if (s.state.flags.canceled) continue;
     const r = s.roster.find((x) => x.playerId === playerId);
+    if (r && owesLateFee(d, r)) {
+      games.push({ s, cents: r.owesCents });
+      continue;
+    }
+    if (s.state.flags.canceled) continue;
     if (!r || r.isOrganizer || r.status !== 'confirmed' || r.paymentStatus !== 'unpaid' || r.shareCents === null || r.owesCents <= 0) continue;
     if (s.id !== extra?.id && nowMs < Date.parse(s.startsAt) - d.group.settings.checkInHours * 3600_000) continue;
     games.push({ s, cents: r.owesCents });
