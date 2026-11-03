@@ -1913,3 +1913,53 @@ Alex's answers: "(did not play)" on the Pay card is fine; debts show on the Pay 
   `live-before-late-fees-2026-11-02.sql` (274 INSERTs, has phone numbers, not committed, in this session's scratch folder) and
   Time Travel bookmark `000004e7-00000000-00005117-5cbc7d22b8e829a7f0404216f256f54e` (6:58 PM). Live before: deployment
   `278ee022-465e-4c22-8fb6-283a48ce2362` (commit dc6428b).
+
+### Deploy (Mon Nov 2, 2026, 7:59 PM Eastern) - LIVE with LATE_FEES OFF for everyone
+- Alex chose to ship tonight (inside loud hours) because the switch ships OFF and players see no change. PR #77 merged as 0edf850 (same tree
+  as the tested branch e9a70e3). Production deployment `76053686-2f55-4612-b630-72df79c12d2c`, branch main, commit 0edf850. No migration,
+  no database change, the clock Worker and the 7:00 PM smart alert untouched (that tick ran before the deploy and wrote 2 alert-log rows).
+- Tests on main before the deploy: type check clean; unit 1,760 passed, 1 skipped, 0 failed; browser, every file one by one: all green
+  except the 3 known ones (admin-cleanup 2: the "2 of 3 paid" pill and the red cancel-by line; admin-motion 1: "press"). round2 passed.
+  late-fees 17 of 17.
+- Read-only live check after (backup address; pickleball.juncaj.net is not reachable from this session): /, /admin, /api/status,
+  /api/group/version 200; organizer data and the new switch endpoint 401 without a sign-in; `/api/group` answers `lateFees: false` (true only
+  with the private header) and no notices; the new bundle is served; 21 health columns all 0 (incl. `info_open_late_fees`); row counts as
+  before (audit 155, credit_ledger 5, players 10, seats 21, games 9, task_log 11, refund_requests 0, migrations 16); no `late_fees_on` row.
+  The sign-up page and the admin sign-in page are pixel-identical to before (360 light, 430 dark). Pay card, admin Home, Money and Settings
+  were compared on a LOCAL copy of tonight's backup, old code (dc6428b) against new (0edf850), same clock: the same words on every screen;
+  the only new thing is Settings > Feature switches > "Late drops owe $14", OFF. (The local copies were deleted afterwards.)
+- Turn it on later (quiet window, Alex): Settings > Feature switches > "Late drops owe $14". Private test: `?latefees=on` (writes real records:
+  use a test player on an extra game).
+- Rollback: code: redeploy Pages deployment `278ee022-465e-4c22-8fb6-283a48ce2362` (commit dc6428b). The new code writes nothing while the
+  switch is off, so no data restore is needed. If debts were ever made, Clear them before rolling back the code. Whole database:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=000004e7-00000000-00005117-5cbc7d22b8e829a7f0404216f256f54e` (6:58 PM).
+
+## Late fees: reminder texts for late-fee debts (Mon Nov 2, 2026, night) - on a preview, waiting for "ship it"
+
+Alex's list of texts (Nov 2) turned up a bug that had to be fixed before LATE_FEES can be switched on: the payment reminder for a late-fee
+debt read "Hey Blair, you owe $0 for pickleball", because the "who owes" helper (`owedGames` in `src/pages/admin/textMenu.ts`) only counted
+confirmed seats in games that are on. Fixed in that one place (plus the Home card's own filter in `src/pages/admin/suggestions.ts`):
+- With LATE_FEES on (the dashboard's `lateFees` flag), a late-fee debt that is really owed (unpaid, something left to pay, not the organizer)
+  counts at once, whatever the game's state: a late drop that left the game short, a no-show, or a seat in a game canceled late with the fee
+  kept. `owesLateFee()` is the one rule. A paid debt (the money stays on the game), a cleared debt, a drop that left 4 or more, and the
+  organizer's own debt get no reminder.
+- Money > Remind (one text per person), Remind all unpaid, the 7-day Home reminder card, and the reminders after a late cancel answered No
+  all use it, so each says $14. Owing a late drop AND another game in the check-in window gives one text with the total ("you owe $28 for
+  pickleball"). One game: "Hey Blair, you owe $14 for pickleball Tue Nov 3. Pay here: ...".
+- The 7-day card also looks at games canceled late (only through their debts) and at seats that left.
+- Switch off: nothing changes (the old behavior, including the old "$0" for a debt left over from testing, is kept as asked; a test pins it).
+- No database change. The old per-row Text in the classic (old layout) Money tab does not list late-fee rows; not touched.
+- Tests: `tests/late-fees.test.ts` 59 (6 new: the four cases, the total, paid / cleared / no-debt / organizer not reminded, switch off
+  unchanged; the five that matter fail on the old code). `e2e/late-fees.cjs` 19 (2 new: the Remind list's Text for a late-drop debtor says
+  $14 at 360 and 430 px, light and dark).
+- Fresh reviewer (did not write the code): SHIP, no bugs. Checked: amounts with partial credit, two debts for one player (one text, total),
+  paid / cleared / organizer / no-debt drop not reminded, no double counting, switch off identical to the old rules, no crash on missing fields.
+  Left as they are (already true for normal debts): a single debtor's 7-day card text shows that person's total across games, and a person owing on
+  two old games shows on both cards.
+- Tests: unit 1,766 passed, 1 skipped, 0 failed (96 files). Browser, every file one by one: all green except the known three (admin-cleanup 2,
+  admin-motion "press" 1; round2 passed); late-fees 19 of 19.
+- Preview Mon Nov 2, 10:04 PM Eastern: https://preview-late-fees.pickleball-club-9h0.pages.dev (deployment 07dd6145, branch at 590d01e), fake database
+  re-seeded (earlier test taps there are gone; the "Late-fee test" game starts 11 hours after the seed). Not on production.
+- To ship: as before (Wed Nov 4 6:00 AM Eastern or later and only after "ship it"): merge to main, full tests on main, SQL export and Time Travel bookmark,
+  `npm run deploy` from main, LATE_FEES stays OFF, read-only live check. Rollback: Pages deployment 76053686-2f55-4612-b630-72df79c12d2c (commit 0edf850,
+  live now) or, for the whole database, the bookmark taken at deploy time. No migration, no data change.

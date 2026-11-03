@@ -9,7 +9,7 @@ import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
 import { remindAllMessage, siteAddress } from '../../../shared/messages';
 import { formatShortDate, formatTimeRange, localParts } from '../../../shared/time';
 import { nightLastCallMs } from '../../../shared/tasks';
-import { owedGames, reminderText, sessionTexts, type TextItem } from './textMenu';
+import { owedGames, owesLateFee, reminderText, sessionTexts, type TextItem } from './textMenu';
 
 export type SuggestionKind = 'promoted' | 'need' | 'checkin' | 'final' | 'pay';
 
@@ -103,8 +103,16 @@ export function suggestions(d: AdminDashboard, nowMs: number): Suggestion[] {
       // Just finalized: the one-tap group note with the final price. Hidden after the tap; a redo (reopen) brings it back.
       const fin = sessionTexts(d, s, nowMs).find((i) => i.id === 'final');
       if (fin) pay.unshift(from(s, tz, 'final', fin, s.finalized.at));
-    } else if (!canceled && Date.parse(s.endsAt) <= nowMs && daysSince(s.startsAt, nowMs, tz) >= PAY_AFTER_DAYS) {
-      const owing = s.roster.filter((r) => !r.isOrganizer && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.shareCents !== null && owedGames(d, r.playerId).length > 0);
+    } else if ((!canceled || d.lateFees === true) && Date.parse(s.endsAt) <= nowMs && daysSince(s.startsAt, nowMs, tz) >= PAY_AFTER_DAYS) {
+      // A game canceled late with the fee kept only counts through its late-fee debts (LATE_FEES on); a seat that left counts the same way.
+      const owing = s.roster.filter(
+        (r) =>
+          !r.isOrganizer &&
+          r.paymentStatus === 'unpaid' &&
+          r.shareCents !== null &&
+          (canceled ? owesLateFee(d, r) : r.status === 'confirmed' || owesLateFee(d, r)) &&
+          owedGames(d, r.playerId).length > 0,
+      );
       if (owing.length === 0) continue;
       const phones = owing.filter((r) => r.phone).map((r) => r.phone!);
       const missing = owing.filter((r) => !r.phone).map((r) => r.name);

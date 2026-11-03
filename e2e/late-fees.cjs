@@ -205,6 +205,26 @@ async function main() {
     });
   }
 
+  for (const [scheme, width] of [
+    ['light', 360],
+    ['dark', 430],
+  ]) {
+    await check(`${scheme} ${width}px: Money > Remind lists Ryan (late drop) and his Text opens "you owe $14", never $0`, async () => {
+      const { ctx, page } = await openAdmin({ scheme, width });
+      await tab(page, 'Money');
+      const game = page.locator(`[data-session="${A.id}"]`).first();
+      if ((await game.getAttribute('data-open')) !== 'yes') await game.locator('.r2m-toggle').click();
+      await game.locator('[data-remind]').click();
+      const row = page.locator('[data-remind-row="Ryan"]');
+      await row.waitFor({ timeout: 8000 });
+      const href = decodeURIComponent(await row.getByRole('link', { name: /^Text/ }).getAttribute('href'));
+      assert(/Hey Ryan, you owe \$14 for pickleball \w{3} \w{3} \d+\. Pay here: /.test(href) && !/\$0/.test(href), `Ryan's reminder: ${href}`);
+      assert(/owes \$14/.test(squash(await row.innerText())), `row: ${await row.innerText()}`);
+      await noSideScroll(page, 'Remind list');
+      await ctx.close();
+    });
+  }
+
   await check('Clear (Sub found) from the Home card: the debt ends, Ryan gets $14 back as nothing owed, History says why', async () => {
     const { ctx, page } = await openAdmin();
     const card = page.locator('article', { hasText: 'Late drop' }).filter({ has: page.locator('[data-find-sub]') }).first();

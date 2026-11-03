@@ -11,7 +11,8 @@ import { creditChanges } from '../shared/credit';
 import { dropLeavesShort, FEE_KEPT, feeClearedNotice, LATE_FEES_HEADER, lateDropDialogText, lateDropToast, lateFeeKind, lateFeesAllowed } from '../shared/lateFees';
 import type { GroupView } from '../shared/api';
 import { OPEN_FEE } from '../server/lateFees';
-import { backOutTexts, confirmedReach, lateCancelText, sessionTexts } from '../src/pages/admin/textMenu';
+import { backOutTexts, confirmedReach, lateCancelText, owedGames as owedGamesOf, reminderText, sessionTexts, unpaidPeople } from '../src/pages/admin/textMenu';
+import { suggestions } from '../src/pages/admin/suggestions';
 import { unpaidRows } from '../src/pages/admin/moneyList';
 import { smsHref } from '../shared/messages';
 import { type Client, HOUR, PIN, setupGroup, TestApp, withoutIds } from './harness';
@@ -1044,5 +1045,179 @@ describe('4. the text after a late cancel follows the venue answer', () => {
     await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true });
     const d = await dash(w);
     expect(lateCancelText(d, d.sessions.find((x: any) => x.id === g.id), '')).toBeNull();
+  });
+});
+
+// ---------- reminder texts for late-fee debts (Alex, Nov 2 night): never "you owe $0" ----------
+
+const owedFor = (d: any, id: string) => owedGamesOf(d, id).reduce((n: number, g: any) => n + g.cents, 0);
+
+describe('reminder texts for late-fee debts', () => {
+  const ONE = 'Hey Blair, you owe $14 for pickleball Tue Oct 27. Pay here: club.example';
+  const phoneOf = (d: any, name: string) => d.players.find((p: any) => p.name === name).phone as string;
+
+  async function blairDropsLate(w: W, others: string[] = ['Casey', 'Devon', 'Emery']) {
+    const g = await game(w);
+    await join(w, g.id, ['Blair', ...others]);
+    at(w, g.start, 5);
+    await drop(w, g.id, 'Blair');
+    return g;
+  }
+
+  it('1. the Money > Remind list text for a late-drop debtor says $14 (never $0), one text per person who owes', async () => {
+    const w = await world();
+    const g = await blairDropsLate(w);
+    const d = await dash(w);
+    const s = d.sessions.find((x: any) => x.id === g.id);
+    expect(reminderText(d, w.byName.Blair, 'Blair', s)).toBe(ONE);
+    const rows = unpaidRows(s);
+    expect(rows.map((r: any) => r.name).sort()).toEqual(['Blair', 'Casey', 'Devon', 'Emery']);
+    for (const r of rows) expect(reminderText(d, r.playerId, r.name, s), r.name).toBe(`Hey ${r.name}, you owe $14 for pickleball Tue Oct 27. Pay here: club.example`);
+  });
+
+  it('2. "Remind all unpaid" includes the late-drop debtor; a paid or cleared debt, a no-debt drop and the organizer are not reminded', async () => {
+    const w = await world();
+    await blairDropsLate(w);
+    const d = await dash(w);
+    const all = unpaidPeople(d);
+    expect(all.count).toBe(4);
+    expect(all.phones).toContain(phoneOf(d, 'Blair'));
+    expect(all.body).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: club.example");
+    // Paid: the money stays on the game, nothing is owed, no reminder.
+    const w2 = await world();
+    const g2 = await game(w2);
+    await join(w2, g2.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w2, g2.id, 'Blair');
+    at(w2, g2.start, 5);
+    await drop(w2, g2.id, 'Blair');
+    const d2 = await dash(w2);
+    expect((await rowOf(w2, g2.id, 'Blair')).lateFee).toMatchObject({ paid: true });
+    expect(unpaidPeople(d2).phones).not.toContain(phoneOf(d2, 'Blair'));
+    expect(unpaidPeople(d2).count).toBe(3);
+    // Cleared by a sub: no debt, no reminder.
+    const w3 = await world();
+    const g3 = await blairDropsLate(w3);
+    await join(w3, g3.id, ['Frankie']);
+    const d3 = await dash(w3);
+    expect(unpaidPeople(d3).phones).not.toContain(phoneOf(d3, 'Blair'));
+    // A late drop that leaves 4 or more is no debt: no reminder.
+    const w4 = await world();
+    const g4 = await game(w4);
+    await join(w4, g4.id, ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie']);
+    at(w4, g4.start, 5);
+    await drop(w4, g4.id, 'Blair');
+    const d4 = await dash(w4);
+    expect(unpaidPeople(d4).phones).not.toContain(phoneOf(d4, 'Blair'));
+    // The organizer's own late drop is never texted to themselves.
+    const w5 = await world();
+    const g5 = await game(w5);
+    expect((await admin(w5, 'POST', `/api/admin/sessions/${g5.id}/me`, { in: true })).status).toBe(200);
+    await join(w5, g5.id, ['Blair', 'Casey', 'Devon']);
+    at(w5, g5.start, 4);
+    await admin(w5, 'POST', `/api/admin/sessions/${g5.id}/me`, { in: false });
+    const d5 = await dash(w5);
+    expect((await rowOf(w5, g5.id, ORG)).lateFee).toBeTruthy();
+    expect(unpaidPeople(d5).phones).not.toContain(phoneOf(d5, ORG));
+    expect(unpaidPeople(d5).count).toBe(3);
+  });
+
+  it('3. the 7-day Home reminder card includes the late-drop debtor', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    for (const n of ['Casey', 'Devon', 'Emery']) await markPaid(w, g.id, n);
+    at(w, g.start, 5);
+    await drop(w, g.id, 'Blair');
+    w.app.now = g.start + 8 * 24 * HOUR;
+    const d = await dash(w);
+    const card = suggestions(d, Date.parse(d.now)).find((c) => c.kind === 'pay' && c.sessionId === g.id)!;
+    expect(card).toBeTruthy();
+    expect(card.who).toBe('1 player (Blair)');
+    expect(card.body).toBe(ONE);
+    expect(card.phones).toEqual([phoneOf(d, 'Blair')]);
+    // Two debtors: the group reminder, both numbers.
+    const w2 = await world();
+    const g2 = await game(w2);
+    await join(w2, g2.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w2, g2.id, 'Devon');
+    await markPaid(w2, g2.id, 'Emery');
+    at(w2, g2.start, 5);
+    await drop(w2, g2.id, 'Blair');
+    await drop(w2, g2.id, 'Casey');
+    w2.app.now = g2.start + 8 * 24 * HOUR;
+    const d2 = await dash(w2);
+    const card2 = suggestions(d2, Date.parse(d2.now)).find((c) => c.kind === 'pay' && c.sessionId === g2.id)!;
+    expect(card2.body).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: club.example");
+    expect(card2.phones.sort()).toEqual([phoneOf(d2, 'Blair'), phoneOf(d2, 'Casey')].sort());
+  });
+
+  it('4. after a late cancel answered No, every player who owes gets a text that says $14 (Remind list, Remind all, 7-day card)', async () => {
+    const w = await world();
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await markPaid(w, g.id, 'Emery');
+    at(w, g.start, 4);
+    expect((await admin(w, 'POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false })).status).toBe(200);
+    let d = await dash(w);
+    const s = d.sessions.find((x: any) => x.id === g.id);
+    for (const n of ['Blair', 'Casey', 'Devon']) expect(reminderText(d, w.byName[n], n, s), n).toBe(`Hey ${n}, you owe $14 for pickleball Tue Oct 27. Pay here: club.example`);
+    expect(unpaidRows(s).map((r: any) => r.name).sort()).toEqual(['Blair', 'Casey', 'Devon']);
+    // Emery already paid (the money stays): no reminder.
+    expect(unpaidPeople(d).count).toBe(3);
+    expect(unpaidPeople(d).phones).not.toContain(phoneOf(d, 'Emery'));
+    // A week later the Home card reminds exactly those three.
+    w.app.now = g.start + 8 * 24 * HOUR;
+    d = await dash(w);
+    const card = suggestions(d, Date.parse(d.now)).find((c) => c.kind === 'pay' && c.sessionId === g.id)!;
+    expect(card.body).toBe("Hey, looks like you haven't paid for pickleball yet. Pay here: club.example");
+    expect(card.phones.sort()).toEqual(['Blair', 'Casey', 'Devon'].map((n) => phoneOf(d, n)).sort());
+    // Yes (venue waived): nobody owes, nobody is reminded.
+    const w2 = await world();
+    const g2 = await game(w2);
+    await join(w2, g2.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w2, g2.start, 4);
+    await admin(w2, 'POST', `/api/admin/sessions/${g2.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: true });
+    expect(unpaidPeople(await dash(w2)).count).toBe(0);
+  });
+
+  it('total: someone who owes for a late drop AND another game gets one text with the total', async () => {
+    const w = await world();
+    const a = await game(w, 0);
+    const b = await game(w, 1);
+    await join(w, a.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    await join(w, b.id, ['Blair']);
+    at(w, a.start, 5);
+    await drop(w, a.id, 'Blair');
+    // Thursday's game is a day away: it is owed now too.
+    w.app.now = b.start - 20 * HOUR;
+    const d = await dash(w);
+    expect(owedFor(d, w.byName.Blair)).toBe(2800);
+    expect(reminderText(d, w.byName.Blair, 'Blair')).toBe('Hey Blair, you owe $28 for pickleball. Pay here: club.example');
+    // Without the Thursday game in the window it is the late drop alone, with its date.
+    const w2 = await world();
+    const a2 = await game(w2, 0);
+    await join(w2, a2.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w2, a2.start, 5);
+    await drop(w2, a2.id, 'Blair');
+    expect(reminderText(await dash(w2), w2.byName.Blair, 'Blair')).toBe(ONE);
+  });
+
+  it('switch off: nothing changes (the debt is not counted, as before)', async () => {
+    const w = await world({ mode: 'off' });
+    const g = await game(w);
+    await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    at(w, g.start, 5);
+    // The private header makes this one drop a late-fee drop; the organizer's screen below has the switch off.
+    const blair = await phone(w, 'Blair');
+    expect((await blair.call('POST', `/api/sessions/${g.id}/withdraw`, {}, { [LATE_FEES_HEADER]: 'on' })).data.lateFee).toBeTruthy();
+    const d = await dash(w);
+    expect(d.lateFees).toBe(false);
+    expect(unpaidPeople(d).phones).not.toContain(phoneOf(d, 'Blair'));
+    expect(unpaidPeople(d).count).toBe(3);
+    expect(reminderText(d, w.byName.Blair, 'Blair')).toBe('Hey Blair, you owe $0 for pickleball. Pay here: club.example');
+    w.app.now = g.start + 8 * 24 * HOUR;
+    const d2 = await dash(w);
+    const card = suggestions(d2, Date.parse(d2.now)).find((c) => c.kind === 'pay' && c.sessionId === g.id)!;
+    expect(card.phones).not.toContain(phoneOf(d2, 'Blair'));
   });
 });
