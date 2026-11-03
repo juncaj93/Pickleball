@@ -987,6 +987,7 @@ function useMoneyInFlight(ids: string[]): boolean {
       return () => void inFlightWatchers.delete(cb);
     },
     () => inFlightVersion,
+    () => 0,
   );
   return ids.some((id) => inFlight.has(id));
 }
