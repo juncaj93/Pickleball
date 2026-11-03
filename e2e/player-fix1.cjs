@@ -227,7 +227,9 @@ async function main() {
     await r.getByRole('button', { name: "Didn't pay?" }).click();
     await a.page.locator('section.pay-card').waitFor({ timeout: 8000 });
     assert((await ryanSeat()).selfPaid === false, 'server: not paid again');
-    assert((await r.locator('a.pay-btn').count()) === 1 && /\$14 due/.test(await r.innerText()), 'the card owes again with its Pay');
+    await r.locator('a.pay-btn').waitFor({ timeout: 8000 });
+    await r.getByText(/\$14 due/).first().waitFor({ timeout: 8000 });
+    assert((await r.locator('a.pay-btn').count()) === 1, 'the card owes again with its Pay');
     await a.ctx.close();
   });
   await check('I paid on the top card: the same record, and tonight\'s card reads Paid $14 as well', async () => {
