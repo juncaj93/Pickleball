@@ -871,15 +871,15 @@ function FeeNotices({ g }: { g: GroupView }) {
  * "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. "I paid" sends the
  * amount the screen showed for each game, so a price that changed in the meantime is refused, not recorded.
  */
-function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>) {
+function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>, guard = false) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const ids = owed.map((o) => o.sessionId);
-  const elsewhere = useMoneyInFlight(ids);
+  // `guard` is PLAYER_FIX1: only then can the same game have buttons in two places, so only then do they take turns.
+  const blocked = useMoneyInFlight(guard ? ids : []);
   async function set(paid: boolean) {
-    // The same game can have buttons in two places (the card at the top and the game card): one tap at a time.
-    if (inFlight.size && ids.some((id) => inFlight.has(id))) return;
-    const done = moneyStarted(ids);
+    if (guard && ids.some((id) => inFlight.has(id))) return;
+    const done = guard ? moneyStarted(ids) : () => {};
     setBusy(true);
     const release = holdLive();
     try {
@@ -896,7 +896,8 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
       release();
     }
   }
-  return { busy: busy || elsewhere, set };
+  // `busy` is this button's own "Saving…"; `blocked` only disables (the other card is saving this game).
+  return { busy, blocked, set };
 }
 
 /**
@@ -995,16 +996,16 @@ function useMoneyInFlight(ids: string[]): boolean {
  * when they tap. One call per game, earliest first; it stops when a call fails
  * or the credit is used up.
  */
-function useCredit(onChanged: () => Promise<void>, gameIds: string[] = []) {
+function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard = false) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  const elsewhere = useMoneyInFlight(gameIds);
+  const blocked = useMoneyInFlight(guard ? gameIds : []);
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   async function use(sessionIds: string[], owedCents: number, potCents: number) {
-    if (working.current || sessionIds.some((id) => inFlight.has(id))) return;
+    if (working.current || (guard && sessionIds.some((id) => inFlight.has(id)))) return;
     working.current = true;
-    const done = moneyStarted(sessionIds);
+    const done = guard ? moneyStarted(sessionIds) : () => {};
     setBusy(true);
     const release = holdLive();
     let used = 0;
@@ -1040,9 +1041,9 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = []) {
   }
   /** "Undo" under "Paid with credit": the credit goes back, the game is owed again. */
   async function undo(sessionId: string) {
-    if (working.current || inFlight.has(sessionId)) return;
+    if (working.current || (guard && inFlight.has(sessionId))) return;
     working.current = true;
-    const done = moneyStarted([sessionId]);
+    const done = guard ? moneyStarted([sessionId]) : () => {};
     setBusy(true);
     const release = holdLive();
     try {
@@ -1060,7 +1061,7 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = []) {
       release();
     }
   }
-  return { busy: busy || elsewhere, use, undo };
+  return { busy, blocked, use, undo };
 }
 
 /**
@@ -1083,8 +1084,8 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
     g.me?.name,
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
-  const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
-  const credit = useCredit(onChanged, due.map((o) => o.sessionId));
+  const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged, !!g.playerFix1);
+  const credit = useCredit(onChanged, due.map((o) => o.sessionId), !!g.playerFix1);
   // PLAYER_FIX1 on: tonight's game card has its own Pay too, so a tap here also counts for each game's own card.
   const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'), g.playerFix1 ? due.map((o) => o.sessionId) : []);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
@@ -1100,7 +1101,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const showCredit = g.credit.usableCents > 0 && covered > 0;
   // Whenever there is credit to use, "Use credit" is the filled button and Pay is its outline twin (same as on the cards).
   const creditCovers = showCredit;
-  const busy = paid.busy || credit.busy;
+  const busy = paid.busy || credit.busy || paid.blocked || credit.blocked;
   const creditBtn = showCredit && (
     <button
       className={`btn block ${creditCovers ? 'big' : 'secondary'}`}
@@ -1363,11 +1364,11 @@ function RowPay({
   drop: ReactNode;
 }) {
   const mine = s.mine!;
-  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
-  const credit = useCredit(onChanged, [s.id]);
+  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged, !!g.playerFix1);
+  const credit = useCredit(onChanged, [s.id], !!g.playerFix1);
   const payTap = usePayTapped(s.id);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
-  const busy = paid.busy || credit.busy;
+  const busy = paid.busy || credit.busy || paid.blocked || credit.blocked;
   // PLAYER_FIX1 off: the card at the top takes over the buttons on game day, as always.
   const chipOnly = onTop && !g.playerFix1;
   if (mine.paymentStatus === 'paid') {
@@ -1380,12 +1381,12 @@ function RowPay({
         <span className="inline-links">
           {/* Credit use can be taken back; only their own "I paid" can be undone here, the organizer's stays. */}
           {mine.paidWithCredit && (
-            <button className="link-btn quiet-link" data-undo-credit disabled={credit.busy} onClick={() => credit.undo(s.id)}>
+            <button className="link-btn quiet-link" data-undo-credit disabled={credit.busy || credit.blocked || paid.blocked} onClick={() => credit.undo(s.id)}>
               Undo
             </button>
           )}
           {mine.selfPaid && !mine.paidWithCredit && (
-            <button className="link-btn quiet-link didnt-pay" disabled={paid.busy} onClick={() => paid.set(false)}>
+            <button className="link-btn quiet-link didnt-pay" disabled={paid.busy || paid.blocked || credit.blocked} onClick={() => paid.set(false)}>
               Didn't pay?
             </button>
           )}
