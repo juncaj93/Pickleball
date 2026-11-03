@@ -16,6 +16,7 @@ import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
 import { adminHiddenPlayerIds, adminR2For, adminR2ForAll, setAdminHiddenPlayer, setAdminR2ForAll } from './adminR2';
 import { adminR2Allowed } from '../shared/adminR2';
 import { payNoteForAll, setPayNoteForAll } from './payNote';
+import { playerFix1ForAll, setPlayerFix1ForAll } from './playerFix1';
 import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_DROP, setLateFeesForAll } from './lateFees';
 import { FEE_KEPT, lateFeeKind, type LateFeeClearWhy } from '../shared/lateFees';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
@@ -212,6 +213,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     payAlwaysForAll: await payAlwaysForAll(ctx.db, group.id),
     adminV2: await adminV2For(ctx, group.id),
     payNoteForAll: await payNoteForAll(ctx.db, group.id),
+    playerFix1ForAll: await playerFix1ForAll(ctx.db, group.id),
     adminV2ForAll: await adminV2ForAll(ctx.db, group.id),
     adminR2,
     adminR2ForAll: await adminR2ForAll(ctx.db, group.id),
@@ -1654,6 +1656,15 @@ export async function setPayNote(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setPayNoteForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'pay_note_on' : 'pay_note_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/player-fix1 { on }: Settings > Feature switches > "Player screen fixes". Display only: changes no money and no seat. */
+export async function setPlayerFix1(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setPlayerFix1ForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'player_fix1_on' : 'player_fix1_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

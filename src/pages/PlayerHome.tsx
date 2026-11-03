@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, venmoNote, venmoPayUrl } from '../../shared/money';
@@ -559,7 +559,7 @@ export function PlayerHome({
               view!.suggestion && <SuggestionCard key={view!.suggestion.sessionId} g={view!} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
-            <div className="schedule">
+            <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
               {/* Nothing to list (My games with no games): the switch still has a line of its own. */}
               {g.sessions.length > 0 && rows.length === 0 && (
                 <div className="week-break tier-next filter-only">
@@ -874,7 +874,12 @@ function FeeNotices({ g }: { g: GroupView }) {
 function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const ids = owed.map((o) => o.sessionId);
+  const elsewhere = useMoneyInFlight(ids);
   async function set(paid: boolean) {
+    // The same game can have buttons in two places (the card at the top and the game card): one tap at a time.
+    if (inFlight.size && ids.some((id) => inFlight.has(id))) return;
+    const done = moneyStarted(ids);
     setBusy(true);
     const release = holdLive();
     try {
@@ -887,10 +892,11 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
       await onChanged();
     } finally {
       setBusy(false);
+      done();
       release();
     }
   }
-  return { busy, set };
+  return { busy: busy || elsewhere, set };
 }
 
 /**
@@ -913,26 +919,75 @@ function useNoVenmoNote(organizerName: string | null, enabled: boolean) {
   };
 }
 
-function usePayTapped(key: string) {
+function usePayTapped(key: string, alsoKeys: string[] = []) {
   const storeKey = `pb_pay_tapped_${key}`;
   const read = () => {
     try {
-      return localStorage.getItem(storeKey) === '1';
+      return localStorage.getItem(storeKey) === '1' || tappedThisVisit.has(storeKey);
     } catch {
-      return false;
+      return tappedThisVisit.has(storeKey);
     }
   };
   const [tapped, setTapped] = useState(read);
   useEffect(() => setTapped(read()), [storeKey]);
+  // Two Pay buttons for the same game (the card at the top and the game card) stay in step: a tap on one is seen by the other.
+  useEffect(() => {
+    const onTap = () => setTapped(read());
+    window.addEventListener(PAY_TAPPED_EVENT, onTap);
+    return () => window.removeEventListener(PAY_TAPPED_EVENT, onTap);
+  }, [storeKey]);
   function mark() {
-    setTapped(true);
-    try {
-      localStorage.setItem(storeKey, '1');
-    } catch {
-      /* the button simply shows for this visit */
+    for (const k of [storeKey, ...alsoKeys.map((id) => `pb_pay_tapped_${id}`)]) {
+      tappedThisVisit.add(k);
+      try {
+        localStorage.setItem(k, '1');
+      } catch {
+        /* the button simply shows for this visit */
+      }
     }
+    setTapped(true);
+    window.dispatchEvent(new Event(PAY_TAPPED_EVENT));
   }
   return { tapped, mark };
+}
+
+const PAY_TAPPED_EVENT = 'pb-pay-tapped';
+/** Taps made in this visit, for a phone that will not keep localStorage. */
+const tappedThisVisit = new Set<string>();
+
+/**
+ * Games whose money tap (I paid, Didn't pay?, Use credit, Undo) is being saved right now. The same game can have its
+ * buttons in two places (the card at the top and the game card, PLAYER_FIX1), so the other place waits instead of
+ * sending a second request. Only games with buttons in two places are ever affected.
+ */
+const inFlight = new Map<string, number>();
+const inFlightWatchers = new Set<() => void>();
+let inFlightVersion = 0;
+function moneyStarted(ids: string[]): () => void {
+  const touch = () => {
+    inFlightVersion++;
+    inFlightWatchers.forEach((w) => w());
+  };
+  for (const id of ids) inFlight.set(id, (inFlight.get(id) ?? 0) + 1);
+  touch();
+  return () => {
+    for (const id of ids) {
+      const n = (inFlight.get(id) ?? 1) - 1;
+      if (n <= 0) inFlight.delete(id);
+      else inFlight.set(id, n);
+    }
+    touch();
+  };
+}
+function useMoneyInFlight(ids: string[]): boolean {
+  useSyncExternalStore(
+    (cb) => {
+      inFlightWatchers.add(cb);
+      return () => void inFlightWatchers.delete(cb);
+    },
+    () => inFlightVersion,
+  );
+  return ids.some((id) => inFlight.has(id));
 }
 
 /**
@@ -940,14 +995,16 @@ function usePayTapped(key: string) {
  * when they tap. One call per game, earliest first; it stops when a call fails
  * or the credit is used up.
  */
-function useCredit(onChanged: () => Promise<void>) {
+function useCredit(onChanged: () => Promise<void>, gameIds: string[] = []) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const elsewhere = useMoneyInFlight(gameIds);
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   async function use(sessionIds: string[], owedCents: number, potCents: number) {
-    if (working.current) return;
+    if (working.current || sessionIds.some((id) => inFlight.has(id))) return;
     working.current = true;
+    const done = moneyStarted(sessionIds);
     setBusy(true);
     const release = holdLive();
     let used = 0;
@@ -977,13 +1034,15 @@ function useCredit(onChanged: () => Promise<void>) {
     } finally {
       working.current = false;
       setBusy(false);
+      done();
       release();
     }
   }
   /** "Undo" under "Paid with credit": the credit goes back, the game is owed again. */
   async function undo(sessionId: string) {
-    if (working.current) return;
+    if (working.current || inFlight.has(sessionId)) return;
     working.current = true;
+    const done = moneyStarted([sessionId]);
     setBusy(true);
     const release = holdLive();
     try {
@@ -997,10 +1056,11 @@ function useCredit(onChanged: () => Promise<void>) {
     } finally {
       working.current = false;
       setBusy(false);
+      done();
       release();
     }
   }
-  return { busy, use, undo };
+  return { busy: busy || elsewhere, use, undo };
 }
 
 /**
@@ -1024,8 +1084,9 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   );
   const pay = venmoPayUrl(g.group.venmoUrl, total, note);
   const paid = usePaid(due.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged);
-  const credit = useCredit(onChanged);
-  const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'));
+  const credit = useCredit(onChanged, due.map((o) => o.sessionId));
+  // PLAYER_FIX1 on: tonight's game card has its own Pay too, so a tap here also counts for each game's own card.
+  const payTap = usePayTapped(due.map((o) => o.sessionId).join('_'), g.playerFix1 ? due.map((o) => o.sessionId) : []);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   // Spend the pot on the earliest game first; each game takes the smaller of what is left and what it costs.
   const dueByDate = [...due].sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
@@ -1284,7 +1345,9 @@ function countLine(s: PlayerSessionView): string {
  * the green "Paid" pill with the quiet links on the same line) and one line of
  * small links ("I paid", "Drop out"). `drop` is the "Drop out" link. On game
  * day after 8:00 AM the card at the top takes over the buttons and this shows
- * only the chip. In the flat LATER rows the money line is the right column.
+ * only the chip, unless PLAYER_FIX1 is on: then tonight's card has the same Pay and
+ * "I paid" as every later card, and the top card keeps its own. In the flat LATER
+ * rows the money line is the right column.
  */
 function RowPay({
   g,
@@ -1301,10 +1364,12 @@ function RowPay({
 }) {
   const mine = s.mine!;
   const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged);
-  const credit = useCredit(onChanged);
+  const credit = useCredit(onChanged, [s.id]);
   const payTap = usePayTapped(s.id);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
   const busy = paid.busy || credit.busy;
+  // PLAYER_FIX1 off: the card at the top takes over the buttons on game day, as always.
+  const chipOnly = onTop && !g.playerFix1;
   if (mine.paymentStatus === 'paid') {
     const amount = mine.shareCents;
     return (
@@ -1365,7 +1430,7 @@ function RowPay({
       )}
     </span>
   );
-  if (onTop) {
+  if (chipOnly) {
     return (
       <div className="sched-money stacked">
         {left ? (

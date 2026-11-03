@@ -46,7 +46,7 @@ function localApi(setupToken: string): Plugin {
             headers,
             body: req.method === 'GET' || req.method === 'HEAD' ? undefined : Buffer.concat(chunks),
           });
-          const response: Response = await handleApi(request, { DB: db, SETUP_TOKEN: setupToken, CRON_SECRET: process.env.CRON_SECRET, GO_LINKS: process.env.GO_LINKS, MOTION: process.env.MOTION, MOTION_ADMIN: process.env.MOTION_ADMIN, PAY_ALWAYS: process.env.PAY_ALWAYS, ADMIN_V2: process.env.ADMIN_V2, ADMIN_R2: process.env.ADMIN_R2, LATE_FEES: process.env.LATE_FEES }, Date.now() + clockOffsetMs);
+          const response: Response = await handleApi(request, { DB: db, SETUP_TOKEN: setupToken, CRON_SECRET: process.env.CRON_SECRET, GO_LINKS: process.env.GO_LINKS, MOTION: process.env.MOTION, MOTION_ADMIN: process.env.MOTION_ADMIN, PAY_ALWAYS: process.env.PAY_ALWAYS, ADMIN_V2: process.env.ADMIN_V2, ADMIN_R2: process.env.ADMIN_R2, LATE_FEES: process.env.LATE_FEES, PLAYER_FIX1: process.env.PLAYER_FIX1 }, Date.now() + clockOffsetMs);
           res.statusCode = response.status;
           response.headers.forEach((value, key) => {
             if (key.toLowerCase() !== 'set-cookie') res.setHeader(key, value);

@@ -365,10 +365,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           {ctx.d.adminR2 === true && <HiddenPlayers ctx={ctx} />}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
           <AdminR2Row ctx={ctx} auto={auto} />
           <PayNoteRow ctx={ctx} auto={auto} />
+          <PlayerFix1Row ctx={ctx} auto={auto} />
           <LateFeesRow ctx={ctx} auto={auto} />
         </Section>
       </div>
@@ -765,6 +766,39 @@ function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.payNoteAll} />
+    </div>
+  );
+}
+
+/**
+ * "Player screen fixes": on game day, Pay and "I paid" also sit on tonight's game card (the "Tonight: you owe" card at
+ * the top stays), and the blue TONIGHT tag gets more room. Display only. Off: only a phone opened with ?playerfix1=on
+ * sees it (a private test). Saves itself, no deploy.
+ */
+function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.playerFix1ForAll);
+  return (
+    <div className="set-row-wrap" data-row="playerFix1All">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Player screen fixes <SaveMark state={auto.rows.playerFix1All} />
+          </span>
+          <span className="set-hint">Pay and I paid on tonight's game card too, and a roomier TONIGHT tag. Off: only phones opened with ?playerfix1=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-player-fix1-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('playerFix1All', { on: e.target.checked }, '/api/admin/player-fix1').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.playerFix1All} />
     </div>
   );
 }

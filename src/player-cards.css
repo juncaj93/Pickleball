@@ -1017,3 +1017,19 @@ a[href] {
 .schedule .st-canceled.note-box {
   color: var(--accent-text);
 }
+
+/* ---- PLAYER_FIX1: the TONIGHT tag gets room around its word ----
+   Off, nothing here applies (the .pf1 class is only on the list when the switch is on for that phone). The pill was exactly
+   as wide as the word. Now it has side padding and a little air above and below, and its size follows the tile's own
+   width (cqw, the same trick the weekday and date numbers use), so it also fits with Larger Text. Same colors, same shape. */
+.schedule.pf1 .tonight-tag {
+  margin: 0;
+  padding: 0.42em 0.7em;
+  border-radius: 8px;
+  font-size: min(0.72rem, 13cqw);
+  letter-spacing: 0.04em;
+}
+.schedule.pf1 .tier-later .tonight-tag {
+  border-radius: 6px;
+  font-size: min(0.64rem, 13.5cqw);
+}

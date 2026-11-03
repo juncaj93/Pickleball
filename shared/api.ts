@@ -137,6 +137,8 @@ export interface GroupView {
   payAlways?: boolean;
   /** "No Venmo? Pay Alex directly" is on for this screen (server/payNote.ts). False or missing: Pay behaves exactly as before. */
   payNote?: boolean;
+  /** "Player screen small fixes, round 1" is on for this screen (server/playerFix1.ts): Pay and I paid on tonight's card, a roomier TONIGHT tag. False or missing: the screen looks exactly as before. */
+  playerFix1?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -409,6 +411,8 @@ export interface AdminDashboard {
   lateFeesForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
+  /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */
+  playerFix1ForAll?: boolean;
   group: {
     name: string;
     timezone: string;

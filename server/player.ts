@@ -79,6 +79,7 @@ import { timeShiftFor } from './timeShift';
 import { motionFor } from './motion';
 import { payAlwaysFor } from './payAlways';
 import { payNoteFor } from './payNote';
+import { playerFix1For } from './playerFix1';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
 import { applyPayment } from './admin';
@@ -255,6 +256,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     motion: motionFor(ctx),
     payAlways: await payAlwaysFor(ctx, group.id),
     payNote: await payNoteFor(ctx, group.id),
+    playerFix1: await playerFix1For(ctx, group.id),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,

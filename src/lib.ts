@@ -151,6 +151,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (payAlwaysTest()) headers['X-Pay-Always'] = 'on';
   // "No Venmo? Pay Alex directly" note, private test switch for this phone (?paynote=on, see server/payNote.ts).
   if (payNoteTest()) headers['X-Pay-Note'] = 'on';
+  // "Player screen small fixes, round 1", private test switch for this phone (?playerfix1=on, see server/playerFix1.ts).
+  if (playerFix1Test()) headers['X-Player-Fix1'] = 'on';
   // "New admin layout", private test switch for this phone (/admin?adminv2=on, see server/adminV2.ts).
   if (adminV2Test()) headers['X-Admin-V2'] = 'on';
   // "Admin screens, round 2", private test switch for this phone (/admin?adminr2=on, see server/adminR2.ts).
@@ -449,6 +451,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('paynote');
   if (want === 'on') storageSet(PAY_NOTE_KEY, 'on');
   else if (want === 'off') storageRemove(PAY_NOTE_KEY);
+}
+
+/**
+ * "Player screen small fixes, round 1" on this phone only, before it is on for everyone: open the site once with
+ * ?playerfix1=on (?playerfix1=off turns it back off). Remembered in this browser; nothing else changes.
+ */
+const PLAYER_FIX1_KEY = 'pb_player_fix1';
+export function playerFix1Test(): boolean {
+  return storageGet(PLAYER_FIX1_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('playerfix1');
+  if (want === 'on') storageSet(PLAYER_FIX1_KEY, 'on');
+  else if (want === 'off') storageRemove(PLAYER_FIX1_KEY);
 }
 
 /**

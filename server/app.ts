@@ -118,6 +118,7 @@ route('PUT', '/api/admin/admin-v2', admin.setAdminV2);
 route('PUT', '/api/admin/admin-r2', admin.setAdminR2);
 route('POST', '/api/admin/players/:id/admin-hide', admin.hidePlayerFromAdmin);
 route('PUT', '/api/admin/pay-note', admin.setPayNote);
+route('PUT', '/api/admin/player-fix1', admin.setPlayerFix1);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
 route('POST', '/api/admin/alerts/smart-test', (ctx) => tasks.smartTestAlert(ctx));
 route('POST', '/api/admin/sessions/:id/task-mark', tasks.taskMark);
