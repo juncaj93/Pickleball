@@ -1933,3 +1933,22 @@ Alex's answers: "(did not play)" on the Pay card is fine; debts show on the Pay 
 - Rollback: code: redeploy Pages deployment `278ee022-465e-4c22-8fb6-283a48ce2362` (commit dc6428b). The new code writes nothing while the
   switch is off, so no data restore is needed. If debts were ever made, Clear them before rolling back the code. Whole database:
   `npx wrangler d1 time-travel restore pickleball --bookmark=000004e7-00000000-00005117-5cbc7d22b8e829a7f0404216f256f54e` (6:58 PM).
+
+## Late fees: reminder texts for late-fee debts (Mon Nov 2, 2026, night) - on a preview, waiting for "ship it"
+
+Alex's list of texts (Nov 2) turned up a bug that had to be fixed before LATE_FEES can be switched on: the payment reminder for a late-fee
+debt read "Hey Blair, you owe $0 for pickleball", because the "who owes" helper (`owedGames` in `src/pages/admin/textMenu.ts`) only counted
+confirmed seats in games that are on. Fixed in that one place (plus the Home card's own filter in `src/pages/admin/suggestions.ts`):
+- With LATE_FEES on (the dashboard's `lateFees` flag), a late-fee debt that is really owed (unpaid, something left to pay, not the organizer)
+  counts at once, whatever the game's state: a late drop that left the game short, a no-show, or a seat in a game canceled late with the fee
+  kept. `owesLateFee()` is the one rule. A paid debt (the money stays on the game), a cleared debt, a drop that left 4 or more, and the
+  organizer's own debt get no reminder.
+- Money > Remind (one text per person), Remind all unpaid, the 7-day Home reminder card, and the reminders after a late cancel answered No
+  all use it, so each says $14. Owing a late drop AND another game in the check-in window gives one text with the total ("you owe $28 for
+  pickleball"). One game: "Hey Blair, you owe $14 for pickleball Tue Nov 3. Pay here: ...".
+- The 7-day card also looks at games canceled late (only through their debts) and at seats that left.
+- Switch off: nothing changes (the old behavior, including the old "$0" for a debt left over from testing, is kept as asked; a test pins it).
+- No database change. The old per-row Text in the classic (old layout) Money tab does not list late-fee rows; not touched.
+- Tests: `tests/late-fees.test.ts` 59 (6 new: the four cases, the total, paid / cleared / no-debt / organizer not reminded, switch off
+  unchanged; the five that matter fail on the old code). `e2e/late-fees.cjs` 19 (2 new: the Remind list's Text for a late-drop debtor says
+  $14 at 360 and 430 px, light and dark).
