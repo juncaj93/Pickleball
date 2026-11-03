@@ -1963,3 +1963,26 @@ confirmed seats in games that are on. Fixed in that one place (plus the Home car
 - To ship: as before (Wed Nov 4 6:00 AM Eastern or later and only after "ship it"): merge to main, full tests on main, SQL export and Time Travel bookmark,
   `npm run deploy` from main, LATE_FEES stays OFF, read-only live check. Rollback: Pages deployment 76053686-2f55-4612-b630-72df79c12d2c (commit 0edf850,
   live now) or, for the whole database, the bookmark taken at deploy time. No migration, no data change.
+
+### Deploy: reminder texts for late-fee debts (Tue Nov 3, 2026, 9:21 AM Eastern) - LIVE with LATE_FEES OFF for everyone
+- Alex made a one-time exception to the loud hours (quiet morning, all 4 players for tonight confirmed, switch OFF so players see no change; cutoff 2:00 PM).
+  PR #78 merged as d570182 (same tree as the tested branch 298c6a8). Production deployment `1568f40c-124e-48a0-bb31-c55dcf514b8e`, branch main, commit
+  d570182. Live was `76053686-2f55-4612-b630-72df79c12d2c` (commit 0edf850). No migration, no database change; the clock Worker and the alerts were not touched.
+- Before it (8:08 AM): live health checks all 0, no `late_fees_on` row, no late-fee History lines; row counts audit 162, credit_ledger 5, players 10, seats 22,
+  games 10, task_log 13, refund_requests 0, migrations 16. SQL export `live-before-reminder-fix-2026-11-03.sql` (287 INSERTs, has phone numbers, not committed, in
+  this session's scratch folder) and Time Travel bookmark `0000058d-00000000-00005118-246988de539bc60ec448f363e294a6df` (8:08 AM).
+- Fresh reviewer on the final diff (git diff 0edf850..298c6a8): SHIP. Only 5 files changed (no server, schema, wrangler.toml, clock or alert code); with the switch off
+  the helpers matched the old code on 24,000 random cases and 3 real flows; with it on they matched an independent model on 4,000 random dashboards.
+- Tests on main: type check clean; unit 1,766 passed, 1 skipped, 0 failed. Browser, every file one by one: all green except known failures. Known: admin-cleanup 2
+  (the "2 of 3 paid" pill; the other is time dependent: the red cancel-by line this time was instead the "Do this now ... Court still needs to be booked" check),
+  admin-motion "press" 1. round2 passed. NEW at this hour: pay-always 4 failed (light and dark "$14 due, Pay and I paid", I paid, 360 px fit). I ran pay-always and
+  admin-cleanup on the code that was live (0edf850) at the same hour: the very same checks fail there. Cause: tonight's game is on game day, so after 8:00 AM the Pay
+  button moves to the top Pay card and those tests look for it on the game row. A test assumption about the hour, not a site bug and not this change. late-fees 19 of 19.
+- Read-only live check after (backup address; pickleball.juncaj.net is not reachable from this session): /, /admin, /api/status, /api/group/version 200; organizer data and
+  the switch endpoint 401 without a sign-in; `/api/group` answers `lateFees: false` (true only with the private header), no notices; the new bundle is served and has the
+  "Late drops owe $14" row; 21 health columns all 0; row counts identical to before the deploy; no `late_fees_on` row. The sign-up page and the admin sign-in page are pixel-identical
+  before and after (360 light, 430 dark). Pay card, admin Home, Money and Settings > Feature switches were compared on a LOCAL copy of this morning's backup, old code against new,
+  same clock: the same words on every screen, and "Late drops owe $14" is present and OFF on both. (Local copies deleted afterwards.)
+- Rollback: redeploy Pages deployment `76053686-2f55-4612-b630-72df79c12d2c` (commit 0edf850). The new code writes nothing, so no data restore is needed. Whole database:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=0000058d-00000000-00005118-246988de539bc60ec448f363e294a6df`.
+- Switching LATE_FEES on is Alex's call, in a quiet window: Settings > Feature switches > "Late drops owe $14".
