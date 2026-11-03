@@ -1952,3 +1952,14 @@ confirmed seats in games that are on. Fixed in that one place (plus the Home car
 - Tests: `tests/late-fees.test.ts` 59 (6 new: the four cases, the total, paid / cleared / no-debt / organizer not reminded, switch off
   unchanged; the five that matter fail on the old code). `e2e/late-fees.cjs` 19 (2 new: the Remind list's Text for a late-drop debtor says
   $14 at 360 and 430 px, light and dark).
+- Fresh reviewer (did not write the code): SHIP, no bugs. Checked: amounts with partial credit, two debts for one player (one text, total),
+  paid / cleared / organizer / no-debt drop not reminded, no double counting, switch off identical to the old rules, no crash on missing fields.
+  Left as they are (already true for normal debts): a single debtor's 7-day card text shows that person's total across games, and a person owing on
+  two old games shows on both cards.
+- Tests: unit 1,766 passed, 1 skipped, 0 failed (96 files). Browser, every file one by one: all green except the known three (admin-cleanup 2,
+  admin-motion "press" 1; round2 passed); late-fees 19 of 19.
+- Preview Mon Nov 2, 10:04 PM Eastern: https://preview-late-fees.pickleball-club-9h0.pages.dev (deployment 07dd6145, branch at 590d01e), fake database
+  re-seeded (earlier test taps there are gone; the "Late-fee test" game starts 11 hours after the seed). Not on production.
+- To ship: as before (Wed Nov 4 6:00 AM Eastern or later and only after "ship it"): merge to main, full tests on main, SQL export and Time Travel bookmark,
+  `npm run deploy` from main, LATE_FEES stays OFF, read-only live check. Rollback: Pages deployment 76053686-2f55-4612-b630-72df79c12d2c (commit 0edf850,
+  live now) or, for the whole database, the bookmark taken at deploy time. No migration, no data change.
