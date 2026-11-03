@@ -1,0 +1,158 @@
+/* =========================================================================================================
+   "Admin screens, round 3" (ADMIN_R3): Edit game, Add game, Settings, Players. Only existing tokens (no new colors).
+   Everything here is scoped to a class that only shows up while the switch is on, so with it off nothing changes.
+   ========================================================================================================= */
+
+/* ---- Players: two lines a row, the same height everywhere, a round gear, "Add a person" as the last row ---- */
+.r3-players {
+  padding: 0;
+  overflow: hidden;
+}
+.r3-players .player-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 6px 0 16px;
+  background: var(--surface);
+  border: 0;
+}
+/* Very subtle zebra: every other row takes the page's existing "a hair off white" tint (--surface-2, no new color). */
+.r3-players .player-row:nth-child(even) {
+  background: var(--surface-2);
+}
+.r3-players .player-row.r3-add {
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  min-height: 46px;
+  padding-right: 16px;
+}
+.r3-players .r3-open {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+}
+.r3-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.2;
+}
+.r3-sub {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0 6px;
+  min-width: 0;
+  max-width: 100%;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.r3-stats {
+  /* The pills never wrap to a third line (every row stays the same height): a long stats line gives way first. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.r3-pill {
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  padding: 0 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex: none;
+}
+.r3-held {
+  color: var(--info-fg);
+  background: var(--info-bg);
+}
+.r3-credit {
+  color: var(--ok-fg);
+  background: var(--ok-bg);
+}
+.r3-players .r3-gear {
+  flex: none;
+}
+.r3-players .r3-gear::after {
+  background: var(--fill);
+}
+.r3-add-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 700;
+  color: var(--accent-text);
+  cursor: pointer;
+  text-align: left;
+}
+.r3-plus {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: var(--primary-ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.r3-add-btn:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+@media (max-width: 340px) {
+  .r3-players .player-row {
+    padding-left: 12px;
+  }
+  .r3-pill {
+    padding: 0 6px;
+  }
+}
+/* The Players page is meant to fit one small screen with no scrolling: less empty space under the card than the other tabs
+   (just enough to clear the floating tab bar). Larger Text still scrolls as it needs to. */
+.page.has-tabs.admin-page:has(.r3-players) {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+}
+
+/* ---- Edit game: the whole sheet fits a 360 x 640 screen without scrolling (normal text; Larger Text may scroll) ---- */
+.sheet-body:has(.edit-game-r3) {
+  padding-top: 10px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+}
+.edit-game-r3 {
+  gap: 8px;
+}
+.edit-game-r3 .field {
+  gap: 4px;
+}
+.edit-game-r3 input[type='date'],
+.edit-game-r3 input[type='time'] {
+  min-height: 44px;
+}
+.edit-game-r3 .time-pair {
+  gap: 10px;
+}
+
+/* ---- Add game: the 30-minute time boxes sit side by side like the old time boxes ---- */
+.add-game .time-pair select {
+  min-height: 46px;
+}

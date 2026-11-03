@@ -10,6 +10,7 @@ import type { AdminCtx } from '../Admin';
 import { balanceOf, heldCents, isPlayed } from './todo';
 import '../../credit-admin.css';
 import { RollText } from '../../motion';
+import { PlayersListR3 } from './PlayersR3';
 
 const ENDED_TEXT: Record<NonNullable<CreditEntryView['endedReason']>, string> = {
   undone: 'undone',
@@ -31,52 +32,60 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   // Admin screens, round 2 (ADMIN_R2): no phone, days or Regular / Occasional on the list, and names the organizer hid are not listed.
   const r2 = ctx.d.adminR2 === true;
   const listed = r2 ? ctx.d.players.filter((p) => !p.adminHidden) : ctx.d.players;
+  // Admin screens, round 3 (ADMIN_R3): the two-line rows with the round gear and "Add a person" as the last row. Same Edit sheet.
+  const r3 = ctx.d.adminR3 === true;
   return (
     <>
-      <ul className={`card player-list${r2 ? ' r2-players' : ''}`} aria-label="Players">
-        {listed.map((p) => {
-          const { owedCents, creditCents } = balanceOf(ctx.d, p.id);
-          // You pay the venue, so there is no player balance on your own row.
-          const isMe = ctx.d.me?.id === p.id;
-          const pot = ctx.d.creditLedger.find((l) => l.playerId === p.id)?.balanceCents ?? 0;
-          const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
-          const late = p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null;
-          const second = r2 ? (late ?? '') : [p.phone ? formatPhone(p.phone) : 'No phone', days, late].filter(Boolean).join(' · ');
-          return (
-            <li key={p.id} className="player-row" data-player={p.name}>
-              <button className="player-open" onClick={() => setViewing(p.id)} aria-label={`${p.name}: money and sessions`}>
-                <span className="p-line1">
-                  <strong className="p-name">{p.name}</strong>
-                  {!r2 && <span className={`p-pill ${p.isRegular ? 'reg' : 'occ'}`}>{p.isRegular ? 'Regular' : 'Occasional'}</span>}
-                  {p.isNew && <span className="new-tag">New</span>}
-                  {!p.isActive && <span className="p-pill hidden-pill">Hidden</span>}
-                </span>
-                {second && <span className="p-line2">{second}</span>}
-              </button>
-              <span className="p-money">
-                {isMe ? null : owedCents > 0 ? (
-                  <span className="p-bal owes"><RollText text={`Owes ${formatPrice(owedCents)}`} /></span>
-                ) : creditCents > 0 ? (
-                  <span className="p-bal credit"><RollText text={`Credit ${formatPrice(creditCents)}`} /></span>
-                ) : (
-                  <span className="p-bal zero">$0</span>
-                )}
-                {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held"><RollText text={`${formatPrice(heldCents(ctx.d, p.id))} held`} /></span>}
-                {!isMe && owedCents > 0 && pot > 0 && <span className="p-held p-pot"><RollText text={`${formatPrice(pot)} credit`} /></span>}
-                {!isMe && ctx.d.refundRequests.some((r) => r.playerId === p.id) && <span className="p-held p-pot">refund requested</span>}
-                <span className="p-played">{p.played} played</span>
-              </span>
-              <button className="btn small secondary p-edit" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
-                Edit
-              </button>
-              {!isMe && <CreditActions ctx={ctx} player={p} />}
-            </li>
-          );
-        })}
-      </ul>
-      <button className="btn block" onClick={() => setEditing('new')}>
-        Add a person
-      </button>
+      {r3 ? (
+        <PlayersListR3 ctx={ctx} players={listed} onView={setViewing} onEdit={setEditing} onAdd={() => setEditing('new')} />
+      ) : (
+        <>
+          <ul className={`card player-list${r2 ? ' r2-players' : ''}`} aria-label="Players">
+            {listed.map((p) => {
+              const { owedCents, creditCents } = balanceOf(ctx.d, p.id);
+              // You pay the venue, so there is no player balance on your own row.
+              const isMe = ctx.d.me?.id === p.id;
+              const pot = ctx.d.creditLedger.find((l) => l.playerId === p.id)?.balanceCents ?? 0;
+              const days = p.usualDays.length ? p.usualDays.map((d) => (d === 2 ? 'Tue' : 'Thu')).join(' ') : null;
+              const late = p.lateDrops > 0 ? `${p.lateDrops} late drop${p.lateDrops === 1 ? '' : 's'}` : null;
+              const second = r2 ? (late ?? '') : [p.phone ? formatPhone(p.phone) : 'No phone', days, late].filter(Boolean).join(' · ');
+              return (
+                <li key={p.id} className="player-row" data-player={p.name}>
+                  <button className="player-open" onClick={() => setViewing(p.id)} aria-label={`${p.name}: money and sessions`}>
+                    <span className="p-line1">
+                      <strong className="p-name">{p.name}</strong>
+                      {!r2 && <span className={`p-pill ${p.isRegular ? 'reg' : 'occ'}`}>{p.isRegular ? 'Regular' : 'Occasional'}</span>}
+                      {p.isNew && <span className="new-tag">New</span>}
+                      {!p.isActive && <span className="p-pill hidden-pill">Hidden</span>}
+                    </span>
+                    {second && <span className="p-line2">{second}</span>}
+                  </button>
+                  <span className="p-money">
+                    {isMe ? null : owedCents > 0 ? (
+                      <span className="p-bal owes"><RollText text={`Owes ${formatPrice(owedCents)}`} /></span>
+                    ) : creditCents > 0 ? (
+                      <span className="p-bal credit"><RollText text={`Credit ${formatPrice(creditCents)}`} /></span>
+                    ) : (
+                      <span className="p-bal zero">$0</span>
+                    )}
+                    {!isMe && heldCents(ctx.d, p.id) > 0 && <span className="p-held"><RollText text={`${formatPrice(heldCents(ctx.d, p.id))} held`} /></span>}
+                    {!isMe && owedCents > 0 && pot > 0 && <span className="p-held p-pot"><RollText text={`${formatPrice(pot)} credit`} /></span>}
+                    {!isMe && ctx.d.refundRequests.some((r) => r.playerId === p.id) && <span className="p-held p-pot">refund requested</span>}
+                    <span className="p-played">{p.played} played</span>
+                  </span>
+                  <button className="btn small secondary p-edit" onClick={() => setEditing(p)} aria-label={`Edit ${p.name}`}>
+                    Edit
+                  </button>
+                  {!isMe && <CreditActions ctx={ctx} player={p} />}
+                </li>
+              );
+            })}
+          </ul>
+          <button className="btn block" onClick={() => setEditing('new')}>
+            Add a person
+          </button>
+        </>
+      )}
       <Sheet open={!!editing} title={editing === 'new' ? 'Add a person' : `Edit ${editing?.name ?? ''}`} onClose={() => setEditing(null)}>
         {editing && <PlayerForm ctx={ctx} player={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />}
       </Sheet>

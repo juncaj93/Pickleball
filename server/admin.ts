@@ -15,6 +15,7 @@ import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
 import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
 import { adminHiddenPlayerIds, adminR2For, adminR2ForAll, setAdminHiddenPlayer, setAdminR2ForAll } from './adminR2';
 import { adminR2Allowed } from '../shared/adminR2';
+import { adminR3For, adminR3ForAll, setAdminR3ForAll, spentByPlayer } from './adminR3';
 import { payNoteForAll, setPayNoteForAll } from './payNote';
 import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_DROP, setLateFeesForAll } from './lateFees';
 import { FEE_KEPT, lateFeeKind, type LateFeeClearWhy } from '../shared/lateFees';
@@ -86,6 +87,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   // "Admin screens, round 2": on for this screen, and the names the organizer hid from the Players list and pickers (only read when on).
   const adminR2 = await adminR2For(ctx, group.id);
   const hiddenByOrganizer = adminR2 ? await adminHiddenPlayerIds(ctx.db, group.id) : new Set<string>();
+  // "Admin screens, round 3": on for this screen. Only then is each player's "spent" worked out (read only, for the Players page).
+  const adminR3 = await adminR3For(ctx, group.id);
+  const spent = adminR3 ? await spentByPlayer(ctx.db, group.id, organizerId).catch(() => new Map<string, number>()) : new Map<string, number>();
   // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
   const potFor = (sessionId: string) => (r: RosterRow) =>
     seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
@@ -169,7 +173,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       openAccess: !!group.open_access,
       hasGroupWord: !!group.group_word_hash,
     },
-    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}) })),
+    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR3 ? { spentCents: spent.get(p.id) ?? 0 } : {}), ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}) })),
     sessions: sessions.map((s) => ({
       ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
       hiddenFromPlayers: hiddenIds.has(s.id),
@@ -215,6 +219,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     adminV2ForAll: await adminV2ForAll(ctx.db, group.id),
     adminR2,
     adminR2ForAll: await adminR2ForAll(ctx.db, group.id),
+    adminR3,
+    adminR3ForAll: await adminR3ForAll(ctx.db, group.id),
     lateFees: await lateFeesFor(ctx, group.id),
     lateFeesForAll: await lateFeesForAll(ctx.db, group.id),
   };
@@ -1672,6 +1678,15 @@ export async function setAdminR2(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setAdminR2ForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'admin_r2_on' : 'admin_r2_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/admin-r3 { on }: Settings > Feature switches > "Admin screens, round 3". Display only: changes no money and no seat. */
+export async function setAdminR3(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setAdminR3ForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'admin_r3_on' : 'admin_r3_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

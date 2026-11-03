@@ -1,3 +1,4 @@
+import '../../admin-r3.css';
 import { type FormEvent, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { type CourtSwitch as CourtSwitchValue, courtSwitchOf } from '../../../shared/court';
@@ -82,11 +83,13 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
     else if (moved) await ctx.reload(); // the move went through even though the switch did not
   }
 
+  // Admin screens, round 3 (ADMIN_R3): no "Court" label above the switch, tighter spacing so the sheet fits one small phone screen.
+  const r3 = ctx.d.adminR3 === true;
   return (
-    <form className="stack edit-game" onSubmit={submit}>
+    <form className={`stack edit-game${r3 ? ' edit-game-r3' : ''}`} onSubmit={submit}>
       {!over && (
         <div className="field">
-          <span id="edit-court-label">Court</span>
+          {!r3 && <span id="edit-court-label">Court</span>}
           <CourtSwitch value={status} onPick={setStatus} label="Court status" />
         </div>
       )}

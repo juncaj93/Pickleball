@@ -182,6 +182,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} switched the admin screens round 2 on`;
     case 'admin_r2_off':
       return `${who} switched the admin screens round 2 off`;
+    case 'admin_r3_on':
+      return `${who} switched the admin screens round 3 on`;
+    case 'admin_r3_off':
+      return `${who} switched the admin screens round 3 off`;
     case 'player_admin_hidden':
       return `${who} hid ${player} from the Players list`;
     case 'player_admin_unhidden':

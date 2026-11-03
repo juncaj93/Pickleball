@@ -581,9 +581,36 @@ function quickDates(nowMs: number, tz: string): { iso: string; label: string }[]
   }).sort((a, b) => a.iso.localeCompare(b.iso));
 }
 
+/**
+ * A time box in 30-minute steps (6:00 AM, 6:30 AM, ... 11:30 PM), shown on the 12-hour clock. The value is the same "HH:MM"
+ * the plain time box gave. A time that is not on a half hour (a usual time of 7:15 PM from Settings) is kept as its own
+ * choice so opening this form never quietly changes it.
+ */
+function HalfHourSelect({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const slots: string[] = [];
+  for (let m = 6 * 60; m <= 23 * 60 + 30; m += 30) slots.push(`${pad2(Math.floor(m / 60))}:${pad2(m % 60)}`);
+  if (/^\d{2}:\d{2}$/.test(value) && !slots.includes(value)) slots.push(value);
+  slots.sort();
+  const show = (hhmm: string) => {
+    const h = Number(hhmm.slice(0, 2));
+    return `${h % 12 === 0 ? 12 : h % 12}:${hhmm.slice(3)} ${h < 12 ? 'AM' : 'PM'}`;
+  };
+  return (
+    <select value={value} aria-label={label} onChange={(e) => onChange(e.target.value)} required>
+      {slots.map((t) => (
+        <option key={t} value={t}>
+          {show(t)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 /** "+ Add game": a one-off game on any date. Same rules as every session after that. */
 function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   const tz = ctx.d.group.timezone;
+  // Admin screens, round 3 (ADMIN_R3): start and end in 30-minute steps, and a calendar date picker only (no suggested-day chips).
+  const r3 = ctx.d.adminR3 === true;
   const toast = useToast();
   const chips = quickDates(Date.parse(ctx.d.now), tz);
   const [date, setDate] = useState(chips[0].iso);
@@ -614,25 +641,40 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   }
   return (
     <form className="stack add-game" onSubmit={add}>
-      <div className="field">
-        <span id="add-date-label">Date</span>
-        <div className="chips" role="group" aria-labelledby="add-date-label">
-          {chips.map((c) => (
-            <button type="button" key={c.iso} className="chip-btn" aria-pressed={date === c.iso} onClick={() => setDate(c.iso)}>
-              {c.label}
-            </button>
-          ))}
+      {r3 ? (
+        <label className="field">
+          Date
+          <input type="date" data-add-date value={date} onChange={(e) => setDate(e.target.value)} required />
+        </label>
+      ) : (
+        <div className="field">
+          <span id="add-date-label">Date</span>
+          <div className="chips" role="group" aria-labelledby="add-date-label">
+            {chips.map((c) => (
+              <button type="button" key={c.iso} className="chip-btn" aria-pressed={date === c.iso} onClick={() => setDate(c.iso)}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+          <input type="date" aria-label="Pick a date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </div>
-        <input type="date" aria-label="Pick a date" value={date} onChange={(e) => setDate(e.target.value)} required />
-      </div>
+      )}
       <div className="time-pair">
         <label className="field">
           Start
-          <input type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+          {r3 ? (
+            <HalfHourSelect value={start} onChange={setStart} label="Start time" />
+          ) : (
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} required />
+          )}
         </label>
         <label className="field">
           End
-          <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
+          {r3 ? (
+            <HalfHourSelect value={end} onChange={setEnd} label="End time" />
+          ) : (
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
+          )}
         </label>
       </div>
       <label className="field">
