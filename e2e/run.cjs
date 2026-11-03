@@ -3317,6 +3317,8 @@ async function main() {
               (document.querySelector('details[data-section="alerts"]')?.getBoundingClientRect().height ?? 0) -
               (document.querySelector('[data-row="timeShiftAll"]')?.getBoundingClientRect().height ?? 0) -
               (document.querySelector('[data-row="payAlwaysAll"]')?.getBoundingClientRect().height ?? 0) -
+              // The Nov 3 "Apple Pay / Zelle number" row (Pay sheet) came after the limit too.
+              (document.querySelector('[data-row="zelleNumber"]')?.getBoundingClientRect().height ?? 0) -
               // The whole "Feature switches" section (its heading, New admin layout, the Nov 2 "No Venmo? note") came after the limit too.
               (document.querySelector('details[data-section="switches"]')?.getBoundingClientRect().height ?? 0),
           );

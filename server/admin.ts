@@ -1,7 +1,7 @@
 import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents } from '../shared/money';
-import { DEFAULT_VENUE_NAME, normalizeSettings, zellePhoneOf } from '../shared/settings';
+import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
 import { reopenBlockers, sqlText } from './finalize';
 import { pendingRequestViews } from './creditActions';
@@ -164,7 +164,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       organizerName: group.organizer_name,
       venueName: group.venue_name,
       venueAddress: group.venue_address,
-      zellePhone: zellePhoneOf(group.settings_json),
+      zelleNumber: zelleNumberOf(group.settings_json),
       firstSessionDate: group.first_session_date,
       settings,
       playerLink: playerLinkFor(ctx, group),
@@ -1353,18 +1353,18 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   // The Apple Pay / Zelle number lives inside settings_json (normalizeSettings only keeps the numbers, so it is put back here).
   let zelleRaw: string | undefined = (() => {
     try {
-      const z = (JSON.parse(group.settings_json || '{}') as { zellePhone?: unknown }).zellePhone;
+      const z = (JSON.parse(group.settings_json || '{}') as { zelleNumber?: unknown }).zelleNumber;
       return typeof z === 'string' ? z : undefined;
     } catch {
       return undefined;
     }
   })();
-  if (body.zellePhone !== undefined) {
-    const z = v.optionalText(body.zellePhone, 'zellePhone', 24);
-    if (z !== null && !/^[0-9+().\s-]{7,24}$/.test(z)) throw new HttpError(400, 'invalid_zellePhone', 'Enter a phone number, like 248-555-0123.');
+  if (body.zelleNumber !== undefined) {
+    const z = v.optionalText(body.zelleNumber, 'zelleNumber', 24);
+    if (z !== null && !/^[0-9+().\s-]{7,24}$/.test(z)) throw new HttpError(400, 'invalid_zelleNumber', 'Enter a phone number, like 248-555-0123.');
     zelleRaw = z ?? '';
   }
-  const storedSettings = zelleRaw === undefined ? settings : { ...settings, zellePhone: zelleRaw };
+  const storedSettings = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
   const oldMax = settingsOf(group).maxPlayers;
   await ctx.db
     .prepare(
@@ -1379,7 +1379,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     group.id,
     null,
     'settings_updated',
-    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings, ...(zelleRaw === undefined ? {} : { zellePhone: zelleRaw }) },
+    { name, venmoUrl, organizerName, venueName, venueAddress, firstSessionDate, openAccess, groupWordSet: !!wordHash, settings, ...(zelleRaw === undefined ? {} : { zelleNumber: zelleRaw }) },
     ctx.nowIso,
   );
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(storedSettings), first_session_date: firstSessionDate }, ctx.nowMs);

@@ -224,7 +224,7 @@ async function main() {
     const money = page.locator('details.set-sect', { hasText: 'Money' }).first();
     await money.waitFor();
     if (!(await money.evaluate((d) => d.open))) await money.locator('summary').click();
-    const box = money.locator('[data-row="zellePhone"] input');
+    const box = money.locator('[data-row="zelleNumber"] input');
     assert((await box.inputValue()) === '248-247-9231', `default: ${await box.inputValue()}`);
     await box.fill('313-555-0142');
     await box.blur();
@@ -250,7 +250,7 @@ async function main() {
     await box.fill('248-247-9231');
     await box.blur();
     await page.waitForTimeout(900);
-    assert((await dash()).group.zellePhone === '248-247-9231', 'back to the default number');
+    assert((await dash()).group.zelleNumber === '248-247-9231', 'back to the default number');
     await ctx.close();
   });
 

@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
-import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_PHONE, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
+import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
@@ -181,7 +181,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   );
   /** A text setting. Empty saves as "not set", unless it's required. */
   const text = (
-    key: 'name' | 'organizerName' | 'venmoUrl' | 'venueName' | 'venueAddress' | 'zellePhone',
+    key: 'name' | 'organizerName' | 'venmoUrl' | 'venueName' | 'venueAddress' | 'zelleNumber',
     label: string,
     initial: string,
     box: Parameters<typeof textBox>[0],
@@ -274,8 +274,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               hint: 'Where Pay sends players',
               check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
             })}
-          {text('zellePhone', 'Apple Pay / Zelle number', g.zellePhone ?? DEFAULT_ZELLE_PHONE, { type: 'tel', inputMode: 'tel', maxLength: 24, placeholder: DEFAULT_ZELLE_PHONE }, {
-            hint: 'On the Pay sheet, for players without Venmo. Blank hides it',
+          {text('zelleNumber', 'Apple Pay / Zelle number', g.zelleNumber ?? DEFAULT_ZELLE_NUMBER, { type: 'tel', inputMode: 'tel', maxLength: 24, placeholder: DEFAULT_ZELLE_NUMBER }, {
+            hint: 'Shown on the Pay sheet',
             check: (t) => (/^[0-9+().\s-]{7,24}$/.test(t) ? null : 'Enter a phone number, like 248-555-0123.'),
           })}
           <PayAlwaysRow ctx={ctx} auto={auto} />

@@ -1,6 +1,6 @@
 import type { CreditEntryView, GroupView } from '../shared/api';
 import { sessionCalendar } from '../shared/calendar';
-import { DEFAULT_VENUE_NAME, zellePhoneOf } from '../shared/settings';
+import { DEFAULT_VENUE_NAME, zelleNumberOf } from '../shared/settings';
 import { joinOutcome } from '../shared/spots';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { PAY_FROM_HOUR } from '../shared/money';
@@ -246,7 +246,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       venmoUrl: group.venmo_url,
       organizerName: group.organizer_name,
       // The Apple Pay / Zelle number on the Pay sheet (Settings > Money).
-      zellePhone: zellePhoneOf(group.settings_json),
+      zelleNumber: zelleNumberOf(group.settings_json),
       priceCents: settings.pricePerPlayerCents,
       maxPlayers: settings.maxPlayers,
       // The usual game length (Settings > Schedule): a card shows only the start time unless a game runs a different length.
