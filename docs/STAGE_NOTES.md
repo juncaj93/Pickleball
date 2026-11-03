@@ -1913,3 +1913,23 @@ Alex's answers: "(did not play)" on the Pay card is fine; debts show on the Pay 
   `live-before-late-fees-2026-11-02.sql` (274 INSERTs, has phone numbers, not committed, in this session's scratch folder) and
   Time Travel bookmark `000004e7-00000000-00005117-5cbc7d22b8e829a7f0404216f256f54e` (6:58 PM). Live before: deployment
   `278ee022-465e-4c22-8fb6-283a48ce2362` (commit dc6428b).
+
+### Deploy (Mon Nov 2, 2026, 7:59 PM Eastern) - LIVE with LATE_FEES OFF for everyone
+- Alex chose to ship tonight (inside loud hours) because the switch ships OFF and players see no change. PR #77 merged as 0edf850 (same tree
+  as the tested branch e9a70e3). Production deployment `76053686-2f55-4612-b630-72df79c12d2c`, branch main, commit 0edf850. No migration,
+  no database change, the clock Worker and the 7:00 PM smart alert untouched (that tick ran before the deploy and wrote 2 alert-log rows).
+- Tests on main before the deploy: type check clean; unit 1,760 passed, 1 skipped, 0 failed; browser, every file one by one: all green
+  except the 3 known ones (admin-cleanup 2: the "2 of 3 paid" pill and the red cancel-by line; admin-motion 1: "press"). round2 passed.
+  late-fees 17 of 17.
+- Read-only live check after (backup address; pickleball.juncaj.net is not reachable from this session): /, /admin, /api/status,
+  /api/group/version 200; organizer data and the new switch endpoint 401 without a sign-in; `/api/group` answers `lateFees: false` (true only
+  with the private header) and no notices; the new bundle is served; 21 health columns all 0 (incl. `info_open_late_fees`); row counts as
+  before (audit 155, credit_ledger 5, players 10, seats 21, games 9, task_log 11, refund_requests 0, migrations 16); no `late_fees_on` row.
+  The sign-up page and the admin sign-in page are pixel-identical to before (360 light, 430 dark). Pay card, admin Home, Money and Settings
+  were compared on a LOCAL copy of tonight's backup, old code (dc6428b) against new (0edf850), same clock: the same words on every screen;
+  the only new thing is Settings > Feature switches > "Late drops owe $14", OFF. (The local copies were deleted afterwards.)
+- Turn it on later (quiet window, Alex): Settings > Feature switches > "Late drops owe $14". Private test: `?latefees=on` (writes real records:
+  use a test player on an extra game).
+- Rollback: code: redeploy Pages deployment `278ee022-465e-4c22-8fb6-283a48ce2362` (commit dc6428b). The new code writes nothing while the
+  switch is off, so no data restore is needed. If debts were ever made, Clear them before rolling back the code. Whole database:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=000004e7-00000000-00005117-5cbc7d22b8e829a7f0404216f256f54e` (6:58 PM).
