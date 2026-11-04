@@ -2137,6 +2137,17 @@ $56, court $48, net +$8, but the bottom line read "Nothing played yet". 13. LATE
 - New `e2e/late-fee-split.cjs` (6, added to `npm run test:e2e`): Settings row off at ship, title on one line at 320 / 360 / 430, light and dark; the real
   cancel at 360 light and 430 dark (also with texts round 2); switch off = $14.
 
+- Unit: 1,920 passed, 1 skipped, 0 failed (102 files). Type check and production build clean.
+- Browser, one file at a time: late-fee-split 6, late-fees 19, texts-r2 14, cancel-reason 8, do-now 13, credit 153, admin-r2 27, admin-v2 27, admin-r3 15,
+  pay-always 12, pay-sheet 23, texts 52, round2 25, run 229, player-fix1 30 all green. Known failures as on main: admin-cleanup 2, admin-motion "press" 1. In the
+  first pass run (4) and player-fix1 (1) failed; both pass alone on this branch and on a clean main (one-offs from the run order, as noted before).
+
+### Cancel, then Reopen (Alex's question, Nov 4; read in the code and run, nothing changed)
+Nobody loses a spot: every seat keeps its status (in stays in, waitlist keeps its order). Money: an early cancel, or a late one the venue waived, turns what
+was paid (cash or credit) into credit; Reopen puts those seats back to "$14 due" and the credit stays in the pot, so each of them taps Use credit (or Pay). A
+late cancel with the fee kept moved no money, so after Reopen paid stays paid. Proposed (not built): on Reopen, put each seat's credit back on it
+automatically, up to the price, the way I'm in does.
+
 ### Fresh reviewer (did not write the code)
 Round 1 found three real bugs, all fixed with a test each: (1) a split game reopened and canceled again at a lower price kept $2 too much from a seat whose cash
 was held (8 in: Casey should get $7 back, got $5); (2) an "I paid" at the split price still unconfirmed at Reopen could end as a $9 payment on a $14 game (Reopen
