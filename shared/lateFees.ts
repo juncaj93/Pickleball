@@ -19,8 +19,56 @@
 // "court paid", so their debt never reads a payment: it is simply owed until a sub or Clear ends it. They never owe on a
 // late cancel or as a no-show (they pay the venue).
 
+import { finalPrice } from './pricing';
+
 /** sessions.canceled_by for "Did the venue waive the fee?" answered No: no money moved, everyone signed up still owes. */
 export const FEE_KEPT = 'organizer_fee_kept';
+
+// ---------- "Late-cancel fee split" (LATE_FEE_SPLIT, Alex, Nov 4) ----------
+// A cancel inside the 12 hours with the venue fee kept used to leave everyone signed up owing the flat $14, which
+// over-collects with 5 or more in (6 in: 5 others x $14 = $70 for a $48 court). With the split on, each person signed up
+// at the moment of the cancel owes the SAME price a played game would have: finalPrice(flat, N), N = everyone confirmed
+// (the organizer counted when they are in, as Finalize counts them), never above the flat price. 4 or fewer: unchanged.
+// Someone who already put more than that on the seat gets the difference back as credit at once.
+// Stored with no schema change: sessions.final_price_cents (the split price) and final_played_count (N) on the canceled
+// game. Every other reader of those two columns only reads them when finalized_at is set, and a canceled game is never
+// finalized, so nothing else sees them. Late drops, no-shows, subs and the waived answer are untouched.
+
+/** The phone-only test switch header (/admin?latefeesplit=on): only the organizer's cancel uses it. */
+export const LATE_FEE_SPLIT_HEADER = 'X-Late-Fee-Split';
+
+/** The LATE_FEE_SPLIT kill switch (a wrangler.toml var): allowed unless it says "off". Who gets it is Settings' call. */
+export function lateFeeSplitAllowed(flag: string | undefined | null): boolean {
+  return (flag ?? 'on').trim().toLowerCase() !== 'off';
+}
+
+/** The split price for a fee-kept cancel with `signedUp` in, or null when it changes nothing (4 or fewer, or no lower price). */
+export function feeSplitPrice(flatCents: number, signedUp: number): number | null {
+  if (signedUp <= FEE_MIN_PLAYERS) return null;
+  const p = finalPrice(flatCents, signedUp);
+  return p < flatCents ? p : null;
+}
+
+export interface SplitGame {
+  status: string;
+  canceled_by: string | null;
+  finalized_at: string | null;
+  final_price_cents?: number | null;
+  final_played_count?: number | null;
+}
+
+/** The split on a game canceled late with the fee kept: { count, priceCents }, or null (not split). */
+export function feeSplitOf(game: SplitGame): { count: number; priceCents: number } | null {
+  if (game.status !== 'canceled' || game.canceled_by !== FEE_KEPT || game.finalized_at) return null;
+  if (game.final_price_cents === null || game.final_price_cents === undefined) return null;
+  return { count: game.final_played_count ?? 0, priceCents: game.final_price_cents };
+}
+
+/** What an open late fee costs: the split price for a seat in a split fee-kept cancel, the flat price for every other kind. */
+export function lateFeePriceCents(kind: LateFeeKind | null, game: SplitGame, flatCents: number): number {
+  if (kind === 'canceled_late') return feeSplitOf(game)?.priceCents ?? flatCents;
+  return flatCents;
+}
 
 /** Fewer than this many playing means someone who sat out owes. */
 export const FEE_MIN_PLAYERS = 4;

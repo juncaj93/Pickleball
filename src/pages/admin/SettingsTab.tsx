@@ -422,7 +422,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           )}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
           <AdminR2Row ctx={ctx} auto={auto} />
           <AdminR3Row ctx={ctx} auto={auto} />
@@ -431,6 +431,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <PaySheetRow ctx={ctx} auto={auto} />
           <LateFeesRow ctx={ctx} auto={auto} />
           <TextsR2Row ctx={ctx} auto={auto} />
+          <LateFeeSplitRow ctx={ctx} auto={auto} />
           {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
           {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
         </Section>
@@ -927,6 +928,41 @@ function TextsR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.textsR2All} />
+    </div>
+  );
+}
+
+/**
+ * "Late-cancel fee split" (LATE_FEE_SPLIT, shared/lateFees.ts). CHANGES MONEY: a cancel inside 12 hours where the venue kept the
+ * fee, with 5 or more in, prices every seat like a played game (6 in: $9 each, $5 back as credit to anyone who paid $14).
+ * Needs "Late drops owe $14" on. Off: only a phone opened with /admin?latefeesplit=on splits it. Saves itself, no deploy.
+ */
+function LateFeeSplitRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.lateFeeSplitForAll);
+  return (
+    <div className="set-row-wrap" data-row="lateFeeSplitAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Late-cancel fee split <SaveMark state={auto.rows.lateFeeSplitAll} />
+          </span>
+          <span className="set-hint">
+            Venue keeps the fee on a late cancel with 5 or more in: everyone owes the played-game price (6 in: $9), extra comes back as credit. Needs late fees on. Off: everyone owes $14
+          </span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-late-fee-split-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('lateFeeSplitAll', { on: e.target.checked }, '/api/admin/late-fee-split').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.lateFeeSplitAll} />
     </div>
   );
 }

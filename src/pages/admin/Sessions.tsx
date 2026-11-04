@@ -14,6 +14,7 @@ import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shar
 import { DateTile, HolidayPill } from '../PlayerHome';
 import { ClearChoices, EditableDraft, lateFeeLine, PlayersText } from './LateFees';
 import { lateCancelText } from './textMenu';
+import { feeSplitPrice } from '../../../shared/lateFees';
 import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, formatShortDate, weekFade } from '../../../shared/time';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
@@ -752,7 +753,9 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
         <>
           {s.canceledBy === 'organizer_fee_kept' ? (
             <Notice tone="warn" title="Canceled late">
-              The venue did not waive the fee: everyone who was in owes their {formatPrice(price)}.
+              {s.feeSplit
+                ? `The venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.`
+                : `The venue did not waive the fee: everyone who was in owes their ${formatPrice(price)}.`}
             </Notice>
           ) : (
             <Notice tone="muted" title="Session canceled">
@@ -919,6 +922,9 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const [reason, setReason] = useState('');
   // Late fees on (shared/lateFees.ts rule 5): the question is "Did the venue waive the fee?", with no default.
   const askWaived = askCharge && ctx.d.lateFees === true;
+  // "Late-cancel fee split" (LATE_FEE_SPLIT): with 5 or more in, No prices every seat like a played game (shared/lateFees.ts).
+  const flat = ctx.d.group.settings.pricePerPlayerCents;
+  const splitCents = askWaived && ctx.d.lateFeeSplit === true ? feeSplitPrice(flat, s.confirmedCount) : null;
   // TEXTS_R2: it starts on No (the venue gives almost no grace, so a late cancel normally keeps the fee). Yes still works exactly as before.
   const [waived, setWaived] = useState<boolean | null>(ctx.d.textsR2 === true ? false : null);
   const [waivedError, setWaivedError] = useState(false);
@@ -975,11 +981,17 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                     </button>
                   </div>
                   <p className="small muted">
-                    {waived === false
-                      ? 'No: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
-                      : waived === true
-                        ? 'Yes: everyone gets their money back as credit, nobody owes.'
-                        : 'Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up still owes $14.'}
+                    {splitCents !== null
+                      ? waived === false
+                        ? `No: the fee is kept. ${s.confirmedCount} are in, so everyone signed up owes ${formatPrice(splitCents)} (anything paid above that comes back as credit). Late drops still owe ${formatPrice(flat)}.`
+                        : waived === true
+                          ? 'Yes: everyone gets their money back as credit, nobody owes.'
+                          : `Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up owes ${formatPrice(splitCents)}.`
+                      : waived === false
+                        ? 'No: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
+                        : waived === true
+                          ? 'Yes: everyone gets their money back as credit, nobody owes.'
+                          : 'Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up still owes $14.'}
                   </p>
                   {waivedError && <span className="field-error">Pick Yes or No.</span>}
                 </fieldset>

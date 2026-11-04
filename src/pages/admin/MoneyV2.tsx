@@ -263,7 +263,7 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
     <div className="mv2-body">
       {s.state.flags.canceled && (
         <p className="mv2-summary small muted" data-summary>
-          {s.canceledBy === 'organizer_fee_kept' ? 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.' : 'Canceled. Only late fees are left on it.'}
+          {s.canceledBy === 'organizer_fee_kept' ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.') : 'Canceled. Only late fees are left on it.'}
         </p>
       )}
       {!s.state.flags.canceled && (fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (

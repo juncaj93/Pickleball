@@ -17,7 +17,7 @@ import { HttpError } from './http';
 import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
-import { FEE_KEPT, lateFeeKind } from '../shared/lateFees';
+import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -75,6 +75,10 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   let courts = 0;
   let creditsOwed = 0;
   let held = 0;
+  // Games canceled late with the fee split (LATE_FEE_SPLIT): the venue charged and the players paid a played-game price, so
+  // the bottom line counts them like a played game ("You covered $3"), not "Nothing played yet". Only split games, so with
+  // the switch off the page reads exactly as before.
+  let splitGames = 0;
   const sessions: MonthlyMoney['sessions'] = [];
   for (const s of results) {
     const roster = await loadRoster(ctx.db, s.id);
@@ -88,6 +92,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     // A game canceled late with the fee kept ("Did the venue waive the fee?" No): the venue charged, and what the players
     // paid toward it stays with the group, so it counts like a game that was played.
     const feeKept = s.status === 'canceled' && s.canceled_by === FEE_KEPT;
+    if (feeKept && feeSplitOf(s)) splitGames++;
     const claim = (r: (typeof roster)[number]) =>
       !lateFeeKind(r, s) &&
       isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: s.finalized_at && r.played === 0 ? false : null }, s.status === 'canceled');
@@ -140,7 +145,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     surplusCents: Math.max(0, net),
     coveredCents: Math.max(0, -net),
     membershipCents: settings.monthlyMembershipCents,
-    bottomLine: bottomLine(net, settings.monthlyMembershipCents, sessions.filter((x) => x.state === 'played').length),
+    bottomLine: bottomLine(net, settings.monthlyMembershipCents, sessions.filter((x) => x.state === 'played').length + splitGames),
     sessions,
   };
 }

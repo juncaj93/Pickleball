@@ -68,6 +68,12 @@ PAY_SHEET = "on"
 # everyone). "off" = the kill switch: nobody, not even the test link, and the clock sends the old alerts. No money rule, amount or game
 # rule depends on it. Needs a deploy.
 TEXTS_R2 = "on"
+# "Late-cancel fee split" (CHANGES MONEY: a cancel inside 12 hours where the venue kept the fee, with 5 or more in, prices every seat
+# like a played game instead of a flat $14; needs LATE_FEES on). "on" here only ALLOWS it; who gets it is Settings > Feature switches >
+# "Late-cancel fee split" (off at ship = nobody), plus a phone opened once with /admin?latefeesplit=on (the private test switch).
+# "off" = the kill switch: every new fee-kept cancel is a flat $14 again, not even the test link. Games already canceled keep
+# the price they were canceled with. Needs a deploy.
+LATE_FEE_SPLIT = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -90,6 +96,7 @@ LATE_FEES = "on"
 PLAYER_FIX1 = "on"
 PAY_SHEET = "on"
 TEXTS_R2 = "on"
+LATE_FEE_SPLIT = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

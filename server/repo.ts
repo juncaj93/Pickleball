@@ -5,7 +5,7 @@ import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
-import { lateFeeKind } from '../shared/lateFees';
+import { lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 import { OPEN_FEE } from './lateFees';
 import type { D1Database } from './db';
 
@@ -290,7 +290,11 @@ export function pricesFor(session: SessionRow, roster: RosterRow[], settings: Gr
   // An open late fee (shared/lateFees.ts) owes the flat price: a late drop that left the game short, a no-show with
   // fewer than 4 played, or a seat in a game canceled late that the venue charged. None exist unless LATE_FEES made
   // them. (Like every seat here, the organizer's is left for the caller to skip.)
-  for (const r of roster) if (lateFeeKind(r, session)) out.set(r.player_id, { cents: settings.pricePerPlayerCents });
+  // A seat in a game canceled late with the fee split (LATE_FEE_SPLIT) owes the split price stored on the game instead.
+  for (const r of roster) {
+    const kind = lateFeeKind(r, session);
+    if (kind) out.set(r.player_id, { cents: lateFeePriceCents(kind, session, settings.pricePerPlayerCents) });
+  }
   return out;
 }
 

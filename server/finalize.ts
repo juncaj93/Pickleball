@@ -56,12 +56,12 @@ export function sqlText(value: string): string {
 }
 
 /** The seats and the credit on them, as one string: finalize and reopen only go ahead if nothing changed since they looked. */
-const MONEY_STATE = (sessionId: string) =>
+export const MONEY_STATE = (sessionId: string) =>
   `(SELECT COALESCE(group_concat(x, '|'), '') FROM (SELECT id || ':' || status || ':' || payment_status || ':' || COALESCE(payment_amount_cents, '') || ':' || COALESCE(refunded_at, '') || ':' || COALESCE(self_paid_at, '') AS x
       FROM session_players WHERE session_id = ${sqlText(sessionId)} ORDER BY id))
    || '#' || (SELECT COUNT(*) || ':' || COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE session_id = ${sqlText(sessionId)} AND ended_at IS NULL)`;
 
-async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
+export async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
   return (await ctx.db.prepare(`SELECT ${MONEY_STATE(sessionId)} AS s`).first<{ s: string }>())?.s ?? '';
 }
 

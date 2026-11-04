@@ -25,7 +25,7 @@ import {
 } from './repo';
 import { bookingOpensMs } from '../shared/time';
 import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
-import { dropLeavesShort, FEE_KEPT, lateFeeCutoffMs, lateFeeKind } from '../shared/lateFees';
+import { dropLeavesShort, FEE_KEPT, feeSplitOf, lateFeeCutoffMs, lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 
 /** The organizer pays the venue, so their own player screen carries no share, Pay, credit or "paid". */
 const NO_MONEY = {
@@ -106,7 +106,14 @@ export function playerSessionView(
         ...(lateWindow
           ? { lateDrop: { cancelByAt: new Date(lateFeeCutoffMs(session.starts_at)).toISOString(), owes: dropOwes, paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents } }
           : {}),
-        lateFee: openFee ? { kind: openFee, oweCents: mine.payment_status === 'unpaid' ? Math.max(0, feeCents - pot.seat.usedCents - pot.seat.cashCents) : 0 } : null,
+        // A late cancel with the fee split owes the split price (shared/lateFees.ts); every other fee the flat price.
+        lateFee: openFee
+          ? {
+              kind: openFee,
+              oweCents: mine.payment_status === 'unpaid' ? Math.max(0, lateFeePriceCents(openFee, session, feeCents) - pot.seat.usedCents - pot.seat.cashCents) : 0,
+              ...(openFee === 'canceled_late' && feeSplitOf(session) ? { priceCents: feeSplitOf(session)!.priceCents } : {}),
+            }
+          : null,
       }
     : null;
   return {
@@ -337,6 +344,7 @@ export function adminSessionView(
     decisionAt: session.decision_at,
     canceledAt: session.canceled_at,
     canceledBy: session.canceled_by,
+    feeSplit: feeSplitOf(session),
     cancelReason: session.status === 'canceled' ? session.cancel_reason : null,
     state,
     roster: entries,

@@ -1961,7 +1961,7 @@ export function ScheduleRow({
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
           {s.canceled && (inSession || waiting) && mine.lateFee?.kind === 'canceled_late' ? (
             <p className="sched-sub" data-late-fee>
-              Canceled late. {mine.lateFee.oweCents > 0 ? `You still owe ${formatPrice(mine.lateFee.oweCents)}.` : `Your ${formatPrice(g.group.priceCents)} stays on this game.`}
+              Canceled late. {mine.lateFee.oweCents > 0 ? `You still owe ${formatPrice(mine.lateFee.oweCents)}.` : `Your ${formatPrice(mine.lateFee.priceCents ?? g.group.priceCents)} stays on this game.`}
             </p>
           ) : (
             s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>

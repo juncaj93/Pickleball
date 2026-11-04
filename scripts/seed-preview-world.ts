@@ -245,6 +245,19 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await orgPays('Kai', lg);
   summary.push('extra game "Late-fee test" 11 hours from the seed (already inside its 12-hour cancel-by): 4 in (Jordan, Lane, Morgan, Kai), Kai paid cash');
 
+  // 10. "Late-cancel fee split" (LATE_FEE_SPLIT): an extra game 10 hours from now (inside its 12-hour cancel-by), Booked, 6 in
+  //     (Orla the organizer + Avery, Indy, Jordan, Lane, Morgan). Indy, Lane and Morgan paid $14 cash; Avery and Jordan owe.
+  //     Cancel it and answer No to the venue question: each owes $9, the three who paid get $5 back as credit.
+  const splitStart = Math.ceil((N + 10 * HOUR) / (15 * 60_000)) * 15 * 60_000;
+  const splitGame = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(splitStart).toISOString(), endsAt: new Date(splitStart + 2 * HOUR).toISOString(), note: 'Fee split test' });
+  await refresh();
+  const sg = games().find((g) => g.id === splitGame.id);
+  await setCourt(sg, 'booked');
+  await w.org.ok('POST', `/api/admin/sessions/${sg.id}/me`, { in: true });
+  for (const n of ['Avery', 'Indy', 'Jordan', 'Lane', 'Morgan']) await join(n, sg);
+  for (const n of ['Indy', 'Lane', 'Morgan']) await orgPays(n, sg);
+  summary.push('extra game "Fee split test" 10 hours from the seed (inside its 12-hour cancel-by): 6 in (Orla, Avery, Indy, Jordan, Lane, Morgan), Indy, Lane, Morgan paid cash');
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -252,13 +265,40 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   backup.tables.player_devices = [];
   await w.settle();
 
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w);
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N);
   return { sql, summary };
 }
 
 /** Rows the backup format does not carry, cleared first so a re-seed starts clean (and no PIN lockout carries over). */
 function wipeExtras(): string {
   return ['organizer_alerts', 'login_attempts', 'rate_events', 'task_log', 'admin_sessions'].map((t) => `DELETE FROM ${t};`).join('\n') + '\n';
+}
+
+/**
+ * PREVIEW SWITCHES RULE (Nov 4): a preview behaves like live. The Settings > Feature switches rows that are ON for everyone
+ * on live are ON here from the seed (no ?something=on needed), plus the switch being built. A backup does not carry task_log,
+ * so they are written here. Keep this list equal to live: it is the one place to change. ON on live (Alex, Wed Nov 4):
+ * New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
+ * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Being built: Late-cancel fee split. MOTION and
+ * MOTION_ADMIN have no Settings row: they are wrangler.toml switches, "on" in [env.preview.vars] like every kill switch.
+ */
+export const PREVIEW_SWITCHES_ON = [
+  'admin_v2_on',
+  'admin_r2_on',
+  'admin_r3_on',
+  'pay_always_on',
+  'pay_note_on',
+  'time_shift_on',
+  'late_fees_on',
+  'player_fix1_on',
+  'pay_sheet_on',
+  'texts_r2_on',
+  'late_fee_split_on',
+] as const;
+
+function switchRows(nowMs: number): string {
+  const at = new Date(nowMs).toISOString();
+  return PREVIEW_SWITCHES_ON.map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

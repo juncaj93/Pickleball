@@ -2093,3 +2093,88 @@ never changes an alert; the text menu with the switch off is the old words, one 
 
 ### Change after Alex's answers (Wed Nov 4, 2026)
 Check-in and Need players: the back-out line and the join line say "tonight" when the game is tomorrow or today, and "early" for a game further out ("Need to back out? Do it early to avoid cancel fees." / "Want in? Join early, otherwise we'll have to cancel."). Everything else unchanged; the other answers (6:55 AM, fee-kept order, "tonight"/"today" on game night, #5 and #7 left as they are, no line for a paid dropper) needed no change. Unit 1,873 passed (100 files), `e2e/texts-r2.cjs` 14 of 14, `e2e/texts.cjs` 52 of 52. Same preview address, redeployed.
+
+## Late-cancel fee split (LATE_FEE_SPLIT) (Wed Nov 4, 2026) - built, tested, reviewed twice; on a preview, waiting for "ship it"
+
+Zip "latefeesplit" (START_HERE, SITE_RULES with the new PREVIEW SWITCHES RULE). Built on main `58e464d` (TEXTS_R2 merged). **Changes money.** Ships OFF behind
+ONE new switch `LATE_FEE_SPLIT` (needs `LATE_FEES` on): `wrangler.toml` kill switch (production and preview), Settings > Feature switches > "Late-cancel
+fee split" (one `task_log` row `late_fee_split_on`), private link `/admin?latefeesplit=on` (header `X-Late-Fee-Split`). **No schema change, no migration.**
+
+### What the site did before (read in the code, then run on it with the switch absent; Alex in, $14 flat, $48 court)
+1. 4 in, 1 leaves late: leaver owes $14 (late drop), the 3 others still owe $14 (game on). 2. 4 in, 2 leave: both leavers owe $14. 3. 5 in, 1 leaves: leaver
+owes nothing (credit back), game on at 4. 4. 5 in, 2 leave: first free, second owes $14. 5. 6 in, 3 leave: only the third owes $14. 6. 5 in, fee kept: each of
+the 4 others owes $14 (players cover $56 of $48, you cover $0). 7. 6 in, fee kept: 5 others x $14 = $70 for $48. 8. 6 in, waived: all $14 back as credit, nobody
+owes. 9. Unpaid: owes $14. 10. Waitlist: owes nothing, paid waitlist money comes back. 11. Subs clear the oldest late-drop debt. 12. Money (6 in, 4 paid): collected
+$56, court $48, net +$8, but the bottom line read "Nothing played yet". 13. LATE_FEES off: a late cancel gives everyone $14 credit.
+
+### The rule as built
+- A cancel inside the 12 hours answered **No** to "Did the venue waive the fee?", with the switch on for that tap: N = everyone confirmed at that moment (the
+  organizer counted when in, like Finalize; not the waitlist). N of 5 or more: every seat in owes `finalPrice($14, N)` (the played-game function): 5 $11, 6 $9,
+  7 $8, 8 $7, 9 $6, 10 $5. N of 4 or fewer: unchanged.
+- Stored on the canceled game: `sessions.final_price_cents` (the split price) and `final_played_count` (N). A canceled game is never finalized, and every other
+  reader of those columns reads them only when `finalized_at` is set (checked by both reviewers), so nothing else sees them.
+- Money moves in the cancel's own batch (`splitSeatStatements` in `server/credit.ts`): a seat keeps exactly the split price; above it comes back as credit, cash
+  first ("$5 back from Nov 3 (canceled)"), then held cash, then credit used on it (those credit entries end as 'canceled' and one new entry holds what stays). An
+  unpaid seat owes the split price minus credit on it. The batch goes ahead only if nothing on the game changed since it was read (Finalize's money check plus
+  the live credit ids, read before the seats), else "This game just changed. Look again." and nothing moves.
+- An "I paid" not confirmed at the cancel waits; Mark paid then applies the split to it (difference back once). Unmark: owes the split price.
+- After the cancel every seat is an ordinary seat at the split price, so Clear, Unmark, Use credit, I paid and Mark paid work unchanged (Clear gives back what is
+  left: $5 + $9 = $14, never more).
+- Reopen: a normal $14 game again. The split price goes; a seat paid $9 owes $5 (its cash held as a 'cash' pair, like a Reopen after Finalize), which the $5 they
+  got back covers with Use credit. Reopen waits while an "I paid" at the split price is not confirmed.
+- Late drops ($14 when they leave fewer than 4), no-shows, subs, the waived answer and the waitlist are untouched. With 5 or more in at a cancel there can be no
+  open late-drop debt (each new seat clears one).
+- Shown: cancel sheet "No: the fee is kept. 6 are in, so everyone signed up owes $9 (anything paid above that comes back as credit). Late drops still owe $14.";
+  the Heads up text says "your $9 share" (old and round 2 wording, otherwise the same words); the canceled card and Money notes "6 were in, so everyone who was in
+  owes $9"; History "canceled ... (venue did not waive the fee: 6 were in, everyone in owes $9)", "Casey got $5 back as credit ... (canceled late, fee split)",
+  "Blair owes their $9 (canceled late, fee not waived)"; the player's canceled card "Your $9 stays on this game."; per-game court: players cover $45, you $3.
+- Money month: split games count for the bottom line ("You covered $3 of the court costs" instead of "Nothing played yet"). Only split games, so off = as before.
+
+### Tests
+- New `tests/late-fee-split.test.ts` (35): cases 1 to 13 with the real pricing function, credit-paid, part credit, credit above the price, Use credit, I paid
+  confirm and Unmark, Clear, second tap, a payment landing mid-cancel, Reopen then Finalize, the switch (Settings, header, kill switch, needs LATE_FEES), texts.
+- `tests/late-fee-split-review.test.ts` (11) and `tests/late-fee-split-review2.test.ts` (8): written by the fresh reviewer. `tests/preview-seed.test.ts` +1.
+- New `e2e/late-fee-split.cjs` (6, added to `npm run test:e2e`): Settings row off at ship, title on one line at 320 / 360 / 430, light and dark; the real
+  cancel at 360 light and 430 dark (also with texts round 2); switch off = $14.
+
+- Unit: 1,920 passed, 1 skipped, 0 failed (102 files). Type check and production build clean.
+- Browser, one file at a time: late-fee-split 6, late-fees 19, texts-r2 14, cancel-reason 8, do-now 13, credit 153, admin-r2 27, admin-v2 27, admin-r3 15,
+  pay-always 12, pay-sheet 23, texts 52, round2 25, run 229, player-fix1 30 all green. Known failures as on main: admin-cleanup 2, admin-motion "press" 1. In the
+  first pass run (4) and player-fix1 (1) failed; both pass alone on this branch and on a clean main (one-offs from the run order, as noted before).
+
+### Cancel, then Reopen (Alex's question, Nov 4; read in the code and run, nothing changed)
+Nobody loses a spot: every seat keeps its status (in stays in, waitlist keeps its order). Money: an early cancel, or a late one the venue waived, turns what
+was paid (cash or credit) into credit; Reopen puts those seats back to "$14 due" and the credit stays in the pot, so each of them taps Use credit (or Pay). A
+late cancel with the fee kept moved no money, so after Reopen paid stays paid. Proposed (not built): on Reopen, put each seat's credit back on it
+automatically, up to the price, the way I'm in does. Alex (Wed Nov 4): do NOT build it, leave it as is (they tap Use credit). A later idea only.
+
+### Fresh reviewer (did not write the code)
+Round 1 found three real bugs, all fixed with a test each: (1) a split game reopened and canceled again at a lower price kept $2 too much from a seat whose cash
+was held (8 in: Casey should get $7 back, got $5); (2) an "I paid" at the split price still unconfirmed at Reopen could end as a $9 payment on a $14 game (Reopen
+now waits for it); (3) two narrow races (a payment between the reads; an equal credit swap) could leave a seat at the wrong amount (the check is read first and
+includes the credit ids). Also: the History data is unchanged with the switch off. Round 2 on the fixes: no money bug or race; a second Reopen tap at the same
+moment now answers "already done". Left for Alex: Unmark after a split keeps the $5 credit (a plain cancel has the same gap today).
+
+### Preview (Wed Nov 4, 2026, about 1:40 PM Eastern)
+https://preview-late-fee-split.pickleball-club-9h0.pages.dev (deployment 726246b5), fake database re-seeded. Switches on there from the seed, no link needed:
+"Late drops owe $14" and "Late-cancel fee split" (PREVIEW SWITCHES RULE; list in `scripts/seed-preview-world.ts` `PREVIEW_SWITCHES_ON`), plus every
+wrangler.toml switch. The live list of Settings switches that are on could not be read from here (live reads are blocked), so only LATE_FEES is copied (the brief
+says it is on). The "Fee split test" game is Wed Nov 4, 11:45 PM; after that, re-seed. Not on production.
+
+### To ship (after "ship it", quiet window only: Fri Nov 6 to Mon Nov 9 before 6:00 PM; NOT Wed 6:00 PM to Thu 11:00 PM)
+PR, full unit suite on main, SQL export and Time Travel bookmark, `npm run deploy` from main with the Settings row OFF, read-only live check (`/api/admin/dashboard`
+`lateFeeSplitForAll: false`, health checks 0). Rollback: Settings row off (no deploy); code: the Pages deployment live before it. If a split cancel was ever made,
+its seats are ordinary seats at the split price, so old code shows them correctly except the stored price (it would read $14 owed on an unpaid seat): Clear or
+settle those first.
+
+### Alex's answers (Wed Nov 4, about 3:00 PM Eastern)
+1. Cancel then Reopen: leave it (they tap Use credit). Auto credit on Reopen stays a later idea, not built.
+2. Live switches ON for everyone: New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Motion, Motion admin,
+   Moved-game notice (TIME_SHIFT), Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Every name exists in the code. MOTION and
+   MOTION_ADMIN are wrangler.toml switches only (no Settings row), already "on" in `[env.preview.vars]`, like every kill switch. The other ten are Settings rows
+   (task_log), which wrangler.toml only allows: `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts` now writes all ten plus `late_fee_split_on` on every
+   re-seed (`tests/preview-seed.test.ts` checks all eleven). On the running preview they were switched on through its own Settings endpoints (no re-seed, so
+   Alex's taps were kept). No redeploy was needed (no site code changed).
+3. Unmark keeping the $5: OK, written under known gaps in `FEATURE_SWITCHES.md` (with 4).
+4. Monthly Collected counts only what was paid: OK.
+- "Ship it" expected Fri Nov 6 morning. Do not deploy before then. Keep the preview up.

@@ -438,9 +438,19 @@ async function seatHoldsMoney(db: D1Database, sessionId: string, playerId: strin
 }
 
 /** History line when a drop or a Finalize leaves someone owing their $14 (shared/lateFees.ts). */
-export async function auditLateFeeOwed(db: D1Database, groupId: string, sessionId: string, playerId: string, kind: 'late_drop' | 'no_show' | 'canceled_late', nowIso: string, actor = 'organizer') {
+export async function auditLateFeeOwed(
+  db: D1Database,
+  groupId: string,
+  sessionId: string,
+  playerId: string,
+  kind: 'late_drop' | 'no_show' | 'canceled_late',
+  nowIso: string,
+  actor = 'organizer',
+  /** The price owed when it is not the usual $14 (a late cancel with the fee split): the History line says it. */
+  priceCents: number | null = null,
+) {
   const p = await db.prepare('SELECT display_name FROM players WHERE id = ?').bind(playerId).first<{ display_name: string }>();
-  await audit(db, groupId, sessionId, 'late_fee_owed', { player: p?.display_name ?? 'A player', playerId, kind }, nowIso, actor);
+  await audit(db, groupId, sessionId, 'late_fee_owed', { player: p?.display_name ?? 'A player', playerId, kind, ...(priceCents !== null ? { priceCents } : {}) }, nowIso, actor);
 }
 
 /**

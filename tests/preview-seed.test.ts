@@ -71,6 +71,17 @@ describe('fake-data preview seed', () => {
     expect(next.some((g) => g.status === 'canceled' && g.cancelReason === 'Court closed')).toBe(true);
   });
 
+  it('has the live-ON switches on from the seed, plus the one being built (PREVIEW SWITCHES RULE)', async () => {
+    const { dash } = await loaded();
+    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll'])
+      expect(dash[k], k).toBe(true);
+    // The "Fee split test" game: booked, inside its 12-hour cancel-by, 6 in, three paid.
+    const g = (dash.sessions as any[]).find((x) => x.note === 'Fee split test');
+    expect(g).toMatchObject({ bookingStatus: 'booked', confirmedCount: 6 });
+    expect(Date.parse(g.startsAt) - NOW).toBeLessThan(12 * 3_600_000);
+    expect(g.roster.filter((r: any) => r.paymentStatus === 'paid' && !r.isOrganizer)).toHaveLength(3);
+  });
+
   it('covers every money state', async () => {
     const { dash } = await loaded();
     const seats = (dash.sessions as any[]).flatMap((g) => g.roster.map((r: any) => ({ ...r, game: g })));
