@@ -368,7 +368,7 @@ export interface SplitSeat {
   paymentCents: number;
   /** The live credit entries used on the seat (not the 'cash' pairs). */
   used: { id: string; cents: number }[];
-  /** Live held cash on the seat (a 'cash' pair). Only Finalize and its Reopen make these, so a game canceled before it starts has none. */
+  /** Live held cash on the seat (a 'cash' pair): Finalize and its Reopen make these, and so does a Reopen of a split game. */
   heldCashCents: number;
 }
 
@@ -407,9 +407,12 @@ export function splitSeatStatements(
     // Holds the split price or less: they owe the rest. An unpaid seat whose credit is exactly the price is paid with it.
     return { statements: !seat.paid && holds > 0 && holds === priceCents ? [pay(holds)] : [], cashBackCents: 0, creditBackCents: 0 };
   }
-  const cashPart = seat.paid ? Math.max(0, seat.paymentCents - usedCents - seat.heldCashCents) : 0;
-  const fromCash = Math.min(cashPart, excess);
-  // Never more than the credit on the seat (held cash can't exist before a game starts; if it ever did, less comes back).
+  // Cash comes back first: the payment's own cash, then cash held against the seat (a 'cash' pair: a Reopen of a split
+  // game, or of a Finalize, makes these), then credit used on it.
+  const leftover = seat.paid ? Math.max(0, seat.paymentCents - usedCents - seat.heldCashCents) : 0;
+  const fromLeftover = Math.min(leftover, excess);
+  const fromHeld = Math.min(seat.heldCashCents, excess - fromLeftover);
+  const fromCash = fromLeftover + fromHeld;
   const fromCredit = Math.min(usedCents, excess - fromCash);
   const statements: D1PreparedStatement[] = [];
   if (fromCash > 0) {
@@ -422,6 +425,32 @@ export function splitSeatStatements(
         )
         .bind(newId(), groupId, seat.playerId, fromCash, sessionId, nowIso),
     );
+  }
+  if (fromHeld > 0) {
+    // The held cash pair(s) end (pot unchanged: a pair nets to nothing) and a smaller pair holds what stays on the seat.
+    statements.push(
+      db
+        .prepare(
+          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'canceled'
+           WHERE session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'cash'
+             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND ${sameSeat}) AND ${guard}`,
+        )
+        .bind(nowIso, sessionId, seat.playerId),
+    );
+    const keep = seat.heldCashCents - fromHeld;
+    if (keep > 0) {
+      for (const kind of ['kept', 'used'] as const) {
+        statements.push(
+          db
+            .prepare(
+              `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+               SELECT ?1, ?2, ?3, '${kind}', ?4, ?5, ?6, 'cash'
+               WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND reason = 'cash' AND ended_at = ?6 AND ended_reason = 'canceled') AND ${guard}`,
+            )
+            .bind(newId(), groupId, seat.playerId, keep, sessionId, nowIso),
+        );
+      }
+    }
   }
   if (fromCredit > 0 && seat.used.length) {
     const ids = seat.used.map((u) => sqlText(u.id)).join(', ');

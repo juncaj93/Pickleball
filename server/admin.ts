@@ -3,7 +3,7 @@ import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
-import { MONEY_STATE, moneyState, reopenBlockers, sqlText } from './finalize';
+import { MONEY_STATE, reopenBlockers, sqlText } from './finalize';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -358,14 +358,25 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     // (a canceled game is never finalized, so final_price_cents / final_played_count only ever hold the split), and a
     // seat left paid at the split price owes the difference again (unsplitStatements). Other cancels: as before.
     const wasSplit = !!feeSplitOf(session);
+    // An I paid nobody confirmed, at the split price (below $14): Reopen would leave it as a $9 claim on a $14 game, so the
+    // organizer confirms it (Mark paid) or clears it (Unmark) first, the same rule as Reopen after Finalize.
+    const flatCents = settingsOf(group).pricePerPlayerCents;
+    const unconfirmedShort = `SELECT 1 FROM session_players u WHERE u.session_id = ${sqlText(session.id)} AND u.status = 'confirmed' AND u.payment_status = 'paid'
+      AND u.refunded_at IS NULL AND u.self_paid_at IS NOT NULL AND COALESCE(u.payment_amount_cents, 0) < ${Math.trunc(flatCents)}`;
+    if (wasSplit) {
+      const { results: waiting } = await ctx.db
+        .prepare(`SELECT p.display_name AS name FROM session_players u JOIN players p ON p.id = u.player_id WHERE ${unconfirmedShort.replace(/^SELECT 1 FROM session_players u WHERE /, '')} ORDER BY p.display_name`)
+        .all<{ name: string }>();
+      if (waiting.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${waiting.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+    }
     const reopened = `(SELECT canceled_at FROM sessions WHERE id = ${sqlText(session.id)}) IS NULL AND (SELECT updated_at FROM sessions WHERE id = ${sqlText(session.id)}) = ${sqlText(ctx.nowIso)}`;
-    await ctx.db.batch([
+    const [opened] = await ctx.db.batch([
       ctx.db
         .prepare(
           `UPDATE sessions SET status = CASE WHEN booking_status = 'booked' THEN 'booked' ELSE 'planned' END,
              canceled_at = NULL, canceled_by = NULL, cancel_reason = NULL, admin_decision = NULL, decision_at = NULL,
              ${wasSplit ? 'final_price_cents = NULL, final_played_count = NULL, ' : ''}updated_at = ?
-           WHERE id = ? AND status = 'canceled'`,
+           WHERE id = ? AND status = 'canceled'${wasSplit ? ` AND NOT EXISTS (${unconfirmedShort})` : ''}`,
         )
         .bind(ctx.nowIso, session.id),
       ctx.db
@@ -373,11 +384,14 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
           `UPDATE session_players SET payment_status = CASE WHEN status = 'confirmed' THEN 'unpaid' ELSE 'not_applicable' END,
              paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, refunded_at = NULL, updated_at = ?1
            WHERE session_id = ?2 AND payment_status = 'paid' AND refunded_at IS NOT NULL
-             AND EXISTS (SELECT 1 FROM credit_ledger l WHERE l.kind = 'kept' AND l.session_id = session_players.session_id AND l.player_id = session_players.player_id AND l.ended_at IS NULL)`,
+             AND EXISTS (SELECT 1 FROM credit_ledger l WHERE l.kind = 'kept' AND l.session_id = session_players.session_id AND l.player_id = session_players.player_id AND l.ended_at IS NULL)${wasSplit ? `
+             AND ${reopened}` : ''}`,
         )
         .bind(ctx.nowIso, session.id),
       ...(wasSplit ? unsplitStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, ctx.nowIso, reopened) : []),
     ]);
+    // A split game whose reopen was stopped by an I paid landing at that moment: nothing moved (every statement above checks it).
+    if (wasSplit && opened.meta.changes !== 1) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
     // A reopened game is a normal game again: it shows to players (a hide only ever applies to a canceled game).
     await setHiddenFromPlayers(ctx.db, group.id, session.id, false, ctx.nowIso);
     await audit(ctx.db, group.id, session.id, 'session_reopened', {}, ctx.nowIso);
@@ -463,7 +477,7 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
       ? ctx.db
           .prepare(
             `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, final_price_cents = ?4, final_played_count = ?5, updated_at = ?1
-             WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL AND ${MONEY_STATE(session.id)} = ?6`,
+             WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL AND ${SPLIT_STATE(session.id)} = ?6`,
           )
           .bind(ctx.nowIso, reason, session.id, plan.priceCents, plan.count, plan.state)
       : ctx.db
@@ -544,7 +558,7 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
   }
   for (const r of await loadRoster(ctx.db, session.id)) {
     if (r.status === 'confirmed' && lateFeeKind(r, fresh, r.player_id === organizerId))
-      await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso, 'organizer', lateFeePriceCents('canceled_late', fresh, settingsOf(group).pricePerPlayerCents));
+      await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso, 'organizer', plan ? lateFeePriceCents('canceled_late', fresh, settingsOf(group).pricePerPlayerCents) : null);
   }
   return { ok: true, changed: true, feeKept: true, ...(plan ? { split: { count: plan.count, priceCents: plan.priceCents } } : {}) };
 }
@@ -555,11 +569,13 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
  * (that waits for Mark paid, which applies the split to it then).
  */
 async function splitPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organizerId: string | null) {
+  // The money state is read FIRST: anything that changes after it (a payment, a join, a drop, credit used or undone) makes
+  // the batch refuse, so the seats read below are never older than the check.
+  const state = (await ctx.db.prepare(`SELECT ${SPLIT_STATE(session.id)} AS s`).first<{ s: string }>())?.s ?? '';
   const roster = await loadRoster(ctx.db, session.id);
   const confirmed = roster.filter((r) => r.status === 'confirmed');
   const priceCents = feeSplitPrice(settingsOf(group).pricePerPlayerCents, confirmed.length);
   if (priceCents === null) return null;
-  const state = await moneyState(ctx, session.id);
   const seats: SplitSeat[] = [];
   for (const r of confirmed) {
     if (r.player_id === organizerId) continue;
@@ -568,6 +584,13 @@ async function splitPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organiz
   }
   return { priceCents, count: confirmed.length, state, seats };
 }
+
+/**
+ * The split's "nothing changed" check: Finalize's MONEY_STATE (every seat's status and payment, the count and sum of live
+ * credit on the game) plus the ids of those live credit rows, so an undo and a re-use of the same amount is a change too.
+ */
+const SPLIT_STATE = (sessionId: string) =>
+  `(${MONEY_STATE(sessionId)} || '#' || (SELECT COALESCE(group_concat(id, ','), '') FROM (SELECT id FROM credit_ledger WHERE session_id = ${sqlText(sessionId)} AND ended_at IS NULL ORDER BY id)))`;
 
 /** One seat's money as the split reads it. */
 async function splitSeatOf(ctx: Ctx, sessionId: string, r: RosterRow): Promise<SplitSeat> {
