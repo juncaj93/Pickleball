@@ -19,7 +19,7 @@ import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { finalPrice } from '../shared/pricing';
-import { adminHiddenGameIds, moneyReworkFor } from './moneyRework';
+import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -62,7 +62,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   // "Money page rework": a game the organizer hid from their lists is out of Totals too (nothing about it is deleted).
   const rework = await moneyReworkFor(ctx, group.id);
   const listHidden = rework ? await adminHiddenGameIds(ctx.db, group.id) : new Set<string>();
-  const results = allResults.filter((s) => !listHidden.has(s.id));
+  const results = allResults;
   // The organizer pays the venue themselves: their own row is never money from players.
   const organizerId = await organizerIdOf(ctx.db, group);
   // Credit that came back from games, split by the month of the game it came from (the oldest credit is spent
@@ -96,8 +96,11 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   let projPlayers = 0;
   const flat = settings.pricePerPlayerCents;
   const sessions: MonthlyMoney['sessions'] = [];
+  const creditSessionIds = new Set(ledger.map((e) => e.sessionId).filter((x): x is string => !!x));
   for (const s of results) {
     const roster = await loadRoster(ctx.db, s.id);
+    // A game hidden from the lists is out of Totals too, but only if it has no money in it (money is never hidden).
+    if (rework && listHidden.has(s.id) && !sessionHasMoney(s, roster, creditSessionIds, charges)) continue;
     const confirmed = roster.filter((r) => r.status === 'confirmed').length;
     const over = ctx.nowMs >= Date.parse(s.ends_at);
     const state: MonthlyMoney['sessions'][number]['state'] =

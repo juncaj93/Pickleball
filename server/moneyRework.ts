@@ -1,7 +1,9 @@
 import type { Ctx } from './context';
 import type { D1Database } from './db';
 import { newId } from './crypto';
-import { MONEY_REWORK_HEADER, moneyReworkAllowed } from '../shared/moneyRework';
+import { gameHasMoney, MONEY_REWORK_HEADER, moneyReworkAllowed } from '../shared/moneyRework';
+import { lateFeeKind } from '../shared/lateFees';
+import type { RosterRow, SessionRow } from './repo';
 
 // "Money page rework" (MONEY_REWORK): the organizer's Money page, Hide from list, Edit charge, the cancel sheet default, the tidied
 // Feature switches page and History. On for a request when:
@@ -63,4 +65,20 @@ export async function setAdminHiddenGame(db: D1Database, groupId: string, sessio
   if (hidden) {
     await db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, ?, ?, 'mark', ?)").bind(newId(), groupId, sessionId, HIDDEN_GAME_TASK, nowIso).run();
   }
+}
+
+/**
+ * Does this game have money in it (shared/moneyRework.ts gameHasMoney)? `creditSessionIds` is every game that has a credit entry
+ * (read once from the ledger), `charges` is loadCancelCharges. One answer for the hide button, the hide endpoint, the lists and Totals.
+ */
+export function sessionHasMoney(session: SessionRow, roster: RosterRow[], creditSessionIds: Set<string>, charges: Map<string, number>): boolean {
+  return gameHasMoney({
+    canceled: session.status === 'canceled',
+    booked: session.booking_status === 'booked',
+    confirmed: roster.filter((r) => r.status === 'confirmed').length,
+    finalized: !!session.finalized_at,
+    chargedCents: session.status === 'canceled' ? (charges.get(session.id) ?? 0) : 0,
+    creditEntries: creditSessionIds.has(session.id) ? 1 : 0,
+    seats: roster.map((r) => ({ paid: r.payment_status === 'paid', paidCents: r.payment_amount_cents ?? 0, lateFee: !!lateFeeKind(r, session) })),
+  });
 }

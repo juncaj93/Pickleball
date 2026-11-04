@@ -381,10 +381,11 @@ async function main() {
     await money(page);
     await page.locator('[data-month-box]').click();
     await page.locator('[data-month-option="2026-10"]').click();
-    const card = page.locator(`article.mrw-game[data-session="${testGame.id}"]`);
-    await card.waitFor();
-    if ((await card.getAttribute('data-open')) === 'no') await card.locator('.mrw-toggle').click();
-    await card.locator('[data-hide-from-list]').click();
+    // The test game was canceled early with nobody in: before today with nothing owed, so it sits in Previous games.
+    await page.locator('[data-fold="previous"] .mrw-fold-head').click();
+    const row = page.locator(`[data-fold="previous"] .mrw-prow[data-session="${testGame.id}"]`);
+    await row.locator('.mrw-prow-head').click();
+    await row.locator('[data-closed-body] [data-hide-from-list]').click();
     await page.locator('dialog[open]').getByText('Hide it').click();
     await page.waitForTimeout(900);
     assert((await page.locator(`[data-session="${testGame.id}"]`).count()) === 0, 'the game is gone from Money');
@@ -414,20 +415,33 @@ async function main() {
   await check('6 Hide from list on Home: in the gear menu, asks first, and the game leaves Home', async () => {
     const { ctx, page } = await openAdmin();
     await tab(page, 'Home');
-    const firstId = await page.locator('article.scard').first().getAttribute('id');
+    // The first card is a game with money in it (a booked court): no Hide in its menu.
     await page.locator('article.scard').first().locator('button[aria-label^="Game menu"]').click();
+    assert((await page.locator('[data-hide-from-list]').count()) === 0, 'a game with money in it has no Hide from list');
+    await page.keyboard.press('Escape');
+    // An empty, not-booked game (no money in it) can be hidden.
+    const empty = (await dash()).sessions.find((s) => !s.state.flags.canceled && s.bookingStatus !== 'booked' && s.confirmedCount === 0 && s.roster.length === 0 && Date.parse(s.startsAt) > NOW_MS);
+    assert(empty, 'an empty game exists');
+    let card = page.locator(`article#session-${empty.id}`);
+    if (!(await card.count())) {
+      const all = page.locator('button', { hasText: /^Show all/ });
+      if (await all.count()) await all.click();
+      await page.locator(`div#session-${empty.id}`).click();
+      card = page.locator(`article#session-${empty.id}`);
+      await card.waitFor();
+    }
+    await card.locator('button[aria-label^="Game menu"]').click();
     await page.locator('[data-hide-from-list]').click();
     const dlg = page.locator('dialog[open]');
     assert(/Nothing is deleted/.test(await dlg.innerText()), 'says nothing is deleted');
     await dlg.getByText('Go back').click();
-    assert((await page.locator(`[id="${firstId}"]`).count()) === 1, 'Go back changes nothing');
-    await page.locator('article.scard').first().locator('button[aria-label^="Game menu"]').click();
+    assert((await page.locator(`[id="session-${empty.id}"]`).count()) === 1, 'Go back changes nothing');
+    await card.locator('button[aria-label^="Game menu"]').click();
     await page.locator('[data-hide-from-list]').click();
     await page.locator('dialog[open]').getByText('Hide it').click();
     await page.waitForTimeout(900);
-    assert((await page.locator(`[id="${firstId}"]`).count()) === 0, 'hidden from Home');
-    const id = firstId.replace('session-', '');
-    await post(areq, `/api/admin/sessions/${id}/hide-from-list`, { hidden: false });
+    assert((await page.locator(`[id="session-${empty.id}"]`).count()) === 0, 'hidden from Home');
+    await post(areq, `/api/admin/sessions/${empty.id}/hide-from-list`, { hidden: false });
     await ctx.close();
   });
 
@@ -466,13 +480,18 @@ async function main() {
     await page.locator('[data-totals]').waitFor();
     await ctx.close();
   });
-  await check('7 a canceled game with nobody owing has Hide from list; a fee-kept one does not', async () => {
+  await check('6 money is never hidden: games with money in them (credit back, a booked court, payments) have no Hide from list; the server refuses too', async () => {
     const { ctx, page } = await openAdmin();
     await money(page);
+    await openAllCards(page);
+    assert((await page.locator('article.mrw-game [data-hide-from-list]').count()) === 0, 'no Hide on any open game with money in it');
     await page.locator('[data-fold="later"] .mrw-fold-head').click();
     const row = page.locator(`[data-fold="later"] .mrw-prow[data-session="${court.id}"]`);
     await row.locator('.mrw-prow-head').click();
-    assert((await row.locator('[data-closed-body] [data-hide-from-list]').count()) === 1, 'Hide from list on the closed game');
+    assert((await row.locator('[data-closed-body]').count()) === 1, 'the canceled game opened');
+    assert((await row.locator('[data-hide-from-list]').count()) === 0, 'it gave credit back, so it stays in Money');
+    const r = await post(areq, `/api/admin/sessions/${court.id}/hide-from-list`, { hidden: true });
+    assert(r.status() === 409 && (await r.json()).message === 'This game has money in it, so it stays in Money.', 'the server says so');
     await ctx.close();
   });
 

@@ -192,10 +192,10 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await w.org.ok('POST', `/api/admin/sessions/${pastBooked.id}/finalize`, { everyone: true });
   summary.push('past game, booked, finalized: 5 played, $11 each, $3 credit back to Avery, Blake, Casey, Drew, Emery');
 
-  // 1b. Past extras (only when there is room): a test game to hide (Kai and Lane in, nobody paid), and two fully paid previous games.
+  // 1b. Past extras (only when there is room): a test game to hide (canceled, no money in it), and two fully paid previous games.
   if (testGame && previous1 && previous2) {
-    await setCourt(testGame, 'booked');
-    for (const n of ['Kai', 'Lane']) await join(n, testGame);
+    // The test game: canceled early with nobody in and no charge, so no money is in it and it can be hidden.
+    await w.org.ok('POST', `/api/admin/sessions/${testGame.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Test game' });
     await setCourt(previous1, 'booked');
     for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray']) await join(n, previous1);
     await setCourt(previous2, 'booked');
@@ -207,7 +207,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     await w.org.ok('POST', `/api/admin/sessions/${previous1.id}/finalize`, { everyone: true });
     await at(Math.min(ms(previous2.endsAt) + 2 * HOUR, N));
     await w.org.ok('POST', `/api/admin/sessions/${previous2.id}/finalize`, { everyone: true });
-    summary.push('old "Test game" (booked, Kai and Lane in, nobody paid): the game to hide; "Sunday run" and "Monday run": played, 4 each, all paid $14 (fully paid previous games, court $48 each)');
+    summary.push('old "Test game" (canceled early, nobody in, no money): the game to hide; "Sunday run" and "Monday run": played, 4 each, all paid $14 (fully paid previous games, court $48 each)');
   }
 
   // 2. A past game that was never booked, 4 signed up, nobody answered "Did you guys play?" yet.

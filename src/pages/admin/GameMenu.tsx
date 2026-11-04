@@ -11,6 +11,7 @@ import type { AdminCtx } from '../Admin';
 import { sessionTexts } from './textMenu';
 import { noteMenuDismissed } from './menuDismiss';
 import { HideConfirm } from './MoneyReworkParts';
+import { canHide } from './moneyRework';
 
 /**
  * The gear's small pop-up, anchored next to the gear (not a full sheet):
@@ -227,7 +228,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               {hidden ? 'Show on player screen again' : 'Remove from player screen'}
             </button>
           )}
-          {ctx.d.moneyRework === true && s.hiddenFromList !== true && !(canceled && s.canceledBy === 'organizer_fee_kept') && !s.roster.some((r) => r.lateFee) && (
+          {ctx.d.moneyRework === true && s.hiddenFromList !== true && canHide(s) && (
             <button role="menuitem" className="menu-row" data-hide-from-list onClick={pick(() => setAskHide(true))}>
               <HideIcon />
               Hide from list

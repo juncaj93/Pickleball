@@ -149,8 +149,8 @@ describe('fake-data preview seed', () => {
     const dash = (await get('/api/admin/dashboard', cookie)).data;
     const games = dash.sessions as any[];
     const by = (note: string) => games.find((g) => g.note === note);
-    // The old test game: booked, two in, nobody paid.
-    expect(by('Test game')).toMatchObject({ confirmedCount: 2, paidCount: 0, bookingStatus: 'booked' });
+    // The old test game: canceled early, nobody in, no money (so it can be hidden).
+    expect(by('Test game')).toMatchObject({ confirmedCount: 0, status: 'canceled', roster: [], chargedCents: null });
     expect(Date.parse(by('Test game').endsAt)).toBeLessThan(wed);
     // Two previous games, played and finalized, everyone paid.
     for (const note of ['Sunday run', 'Monday run']) expect(by(note), note).toMatchObject({ payableCount: expect.any(Number), finalized: expect.anything() });

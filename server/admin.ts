@@ -24,7 +24,8 @@ import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_D
 import { FEE_KEPT, feeSplitOf, feeSplitPrice, lateFeeKind, lateFeePriceCents, type LateFeeClearWhy } from '../shared/lateFees';
 import { lateFeeSplitFor, lateFeeSplitForAll, lateFeeSplitSwitch, setLateFeeSplitForAll } from './lateFeeSplit';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
-import { adminHiddenGameIds, moneyReworkFor, moneyReworkForAll, setAdminHiddenGame, setMoneyReworkForAll } from './moneyRework';
+import { adminHiddenGameIds, moneyReworkFor, moneyReworkForAll, sessionHasMoney, setAdminHiddenGame, setMoneyReworkForAll } from './moneyRework';
+import { HAS_MONEY_MESSAGE } from '../shared/moneyRework';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
 import {
@@ -50,7 +51,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { creditBackLeft, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
+import { creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -102,7 +103,15 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const hiddenIds = await hiddenGameIds(ctx.db, group.id);
   // "Money page rework": on for this screen, and the games the organizer hid from their own lists (only read when on).
   const moneyRework = await moneyReworkFor(ctx, group.id);
-  const listHidden = moneyRework ? await adminHiddenGameIds(ctx.db, group.id) : new Set<string>();
+  // Money is never hidden: a game marked hidden that has money in it (before or since) stays in the lists and Totals.
+  const creditSessionIds = new Set(ledger.map((e) => e.sessionId).filter((x): x is string => !!x));
+  const markedHidden = moneyRework ? await adminHiddenGameIds(ctx.db, group.id) : new Set<string>();
+  const listHidden = new Set(
+    [...markedHidden].filter((id) => {
+      const row = sessions.find((s) => s.id === id);
+      return row ? !sessionHasMoney(row, rosters.get(id) ?? [], creditSessionIds, charges) : true;
+    }),
+  );
   const startsOf = new Map(
     (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
   );
@@ -241,7 +250,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     lateFeeSplitForAll: await lateFeeSplitForAll(ctx.db, group.id),
     moneyRework,
     moneyReworkForAll: await moneyReworkForAll(ctx.db, group.id),
-    ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, listHidden) } : {}),
+    ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges) } : {}),
   };
 }
 
@@ -1873,32 +1882,36 @@ export async function setMoneyRework(ctx: Ctx, body: Record<string, unknown>) {
  * The games the organizer hid from their own lists, for Settings > Advanced > Hidden games. Read from the games themselves (not the
  * 90-day dashboard window), so an old hidden game can always be restored. A short label says what the game was.
  */
-async function hiddenGamesView(ctx: Ctx, groupId: string, hidden: Set<string>): Promise<NonNullable<AdminDashboard['hiddenGames']>> {
+async function hiddenGamesView(ctx: Ctx, groupId: string, hidden: Set<string>, creditSessionIds: Set<string>, charges: Map<string, number>): Promise<NonNullable<AdminDashboard['hiddenGames']>> {
   if (hidden.size === 0) return [];
   const { results } = await ctx.db
-    .prepare('SELECT id, starts_at, status, note, cancel_reason FROM sessions WHERE group_id = ? ORDER BY starts_at DESC')
+    .prepare('SELECT * FROM sessions WHERE group_id = ? ORDER BY starts_at DESC')
     .bind(groupId)
-    .all<{ id: string; starts_at: string; status: string; note: string | null; cancel_reason: string | null }>();
-  return results
-    .filter((r) => hidden.has(r.id))
-    .map((r) => ({
-      id: r.id,
-      startsAt: r.starts_at,
-      label: r.status === 'canceled' ? (r.cancel_reason ? `Canceled - ${r.cancel_reason}` : 'Canceled') : (r.note ?? 'Game'),
-    }));
+    .all<SessionRow>();
+  const out: NonNullable<AdminDashboard['hiddenGames']> = [];
+  for (const r of results) {
+    if (!hidden.has(r.id)) continue;
+    // A marked game that has money in it is not hidden (money is never hidden): it is back in the lists, so it is not listed here.
+    if (sessionHasMoney(r, await loadRoster(ctx.db, r.id), creditSessionIds, charges)) continue;
+    out.push({ id: r.id, startsAt: r.starts_at, label: r.status === 'canceled' ? (r.cancel_reason ? `Canceled - ${r.cancel_reason}` : 'Canceled') : (r.note ?? 'Game') });
+  }
+  return out;
 }
 
 /**
- * POST /api/admin/sessions/:id/hide-from-list { hidden }: take a game off the organizer's Home and Money lists and out of Totals, or put it
- * back (Settings > Advanced > Hidden games > Restore). It only hides: seats, payments, credit and the Activity log are untouched and every
+ * POST /api/admin/sessions/:id/hide-from-list { hidden }: take a game with NO money in it (a test game, a canceled game nobody paid for) off the
+ * organizer's Home and Money lists, or put it back (Settings > Advanced > Hidden games > Restore). It only hides: seats, payments, credit and the Activity log are untouched and every
  * player screen is unchanged. One task_log row per hidden game (server/moneyRework.ts), no schema change. Needs MONEY_REWORK on.
  */
 export async function hideFromList(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   if (!(await moneyReworkFor(ctx, group.id))) throw new HttpError(409, 'not_available', 'This is not switched on.');
   const hidden = v.bool(body.hidden, 'hidden');
-  // A game with an open late fee (a late drop, a no-show, a late cancel the venue charged) has money owed on it that the lists must keep showing.
-  if (hidden && (await loadRoster(ctx.db, session.id)).some((r) => lateFeeKind(r, session))) throw new HttpError(409, 'late_fee_open', 'Someone still owes a late fee on this game. Clear it first, then hide the game.');
+  // Money is never hidden: a game with a payment, credit from it, somebody owing, a court to pay for, a late fee or a venue charge stays in Money.
+  if (hidden) {
+    const creditIds = new Set((await loadLedger(ctx.db, group.id)).map((e) => e.sessionId).filter((x): x is string => !!x));
+    if (sessionHasMoney(session, await loadRoster(ctx.db, session.id), creditIds, await loadCancelCharges(ctx.db, group.id))) throw new HttpError(409, 'has_money', HAS_MONEY_MESSAGE);
+  }
   const was = (await adminHiddenGameIds(ctx.db, group.id)).has(session.id);
   if (was === hidden) return { ok: true, changed: false, hidden };
   await setAdminHiddenGame(ctx.db, group.id, session.id, hidden, ctx.nowIso);

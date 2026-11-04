@@ -17,6 +17,7 @@ import '../../credit-admin.css';
 import { CLEAR_CHOICES } from '../../../shared/lateFees';
 import { lateFeeLine } from './LateFees';
 import { ChargeLine, ClosedBody, HideFromList, ReworkRows } from './MoneyReworkParts';
+import { canHide } from './moneyRework';
 
 type View = 'who' | 'totals';
 type Tone = 'ok' | 'info' | 'warn' | 'muted';
@@ -213,7 +214,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
   const feeRows = s.roster.some((r) => r.lateFee);
   if (s.state.flags.canceled && !feeRows) {
     // The Money page rework: the closed game's notice, Edit charge and Hide from list.
-    if (rework) return <ClosedBody ctx={ctx} s={s} hideable />;
+    if (rework) return <ClosedBody ctx={ctx} s={s} hideable={canHide(s)} />;
     return (
       <div className="mv2-body stack">
         <Notice tone="muted" title="Session canceled">
@@ -304,8 +305,8 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
             )}
           </div>
         )}
-        {/* A game where a late fee was kept never gets the button: money is owed on it. Anything else can be hidden. */}
-        {!feeKept && !rows.some((r) => r.lateFee) && (
+        {/* Money is never hidden: only a game with no money in it gets the button (the server checks the same rule). */}
+        {canHide(s) && (
           <div className="mrw-hide-row">
             <HideFromList ctx={ctx} s={s} variant="link" />
           </div>

@@ -254,66 +254,152 @@ describe('Canceled games count only if the venue charged', () => {
   });
 });
 
-describe('Hide from list never loses data', () => {
-  it('H1 hide and restore: only a flag moves; seats, payments, credit and the games table are untouched', async () => {
-    const { w, s0, month } = await playedGame();
+describe('Hide from list: only a game with no money in it, and it never loses data', () => {
+  /** Every number on the month (not the list of games under it): Totals are "identical" when these are. */
+  const numbers = (m: { sessions?: unknown }) => JSON.stringify({ ...m, sessions: undefined });
+  /** An empty, not-booked coming game: nobody in, no court, no money. */
+  const emptyGame = async (w: W) => (await upcoming(w)).find((s: any) => s.confirmedCount === 0 && s.bookingStatus !== 'booked')!;
+  const hide = (w: W, id: string, hidden = true) => call(w, 'POST', `/api/admin/sessions/${id}/hide-from-list`, { hidden });
+  /** A coming game canceled early with these players (who paid) and nothing else. */
+  async function canceledGame(players: string[], paid: string[], chargedCents?: number, hoursBefore = 30) {
+    const w = await world();
+    const s0 = await firstSession(w);
+    if (players.length) await fill(w, s0, players, paid);
+    w.app.now = Date.parse(s0.startsAt) - hoursBefore * HOUR;
+    await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/decision`, { decision: 'cancel', confirm: true, ...(chargedCents ? { chargedCents } : {}) }, on);
+    return { w, s0, month: monthOf(Date.parse(s0.startsAt)) };
+  }
+  const blocked = async (w: W, id: string) => {
+    const r = await hide(w, id);
+    expect(r.status, r.text).toBe(409);
+    expect(r.data.error).toBe('has_money');
+    expect(r.data.message).toBe('This game has money in it, so it stays in Money.');
+    expect((await dash(w, on)).sessions.find((s: any) => s.id === id).hiddenFromList).toBeUndefined();
+  };
+
+  it('H1 a no-money game (canceled early, nobody in) hides and restores; only a flag moves and Totals are identical before, while hidden, and after', async () => {
+    const { w, s0, month } = await canceledGame([], []);
     await dash(w); // the dashboard adds the coming games the clock has reached: take the picture after that
     const before = books(w);
-    const hide = await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
-    expect(hide.data).toMatchObject({ ok: true, changed: true, hidden: true });
+    const totals = async () => numbers(await money(w, month));
+    const t0 = await totals();
+    const r = await hide(w, s0.id);
+    expect(r.data).toMatchObject({ ok: true, changed: true, hidden: true });
     expect(books(w)).toBe(before);
     const d = await dash(w, on);
     expect(d.sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBe(true);
     expect(d.hiddenGames.map((h: any) => h.id)).toEqual([s0.id]);
-    // Out of Totals while hidden...
-    expect((await money(w, month)).rework).toMatchObject({ courtSessions: 0, courtCostCents: 0, collectedCents: 0 });
-    expect((await money(w, month)).sessions.some((x: any) => x.id === s0.id)).toBe(false);
-    // ...back in when restored.
-    const back = await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: false });
-    expect(back.data.changed).toBe(true);
+    expect(await totals()).toBe(t0); // no money in it, so Totals are the same
+    expect((await hide(w, s0.id, false)).data.changed).toBe(true);
     expect(books(w)).toBe(before);
-    expect((await money(w, month)).rework).toMatchObject({ courtSessions: 1, courtCostCents: 4800, collectedCents: 3300 });
+    expect(await totals()).toBe(t0);
     expect((await dash(w, on)).hiddenGames).toEqual([]);
   });
-  it('H2 a second hide is a no-op (one row per game)', async () => {
-    const { w, s0 } = await playedGame();
-    await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
-    const again = await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
-    expect(again.data.changed).toBe(false);
-    expect((await w.app.db.prepare("SELECT COUNT(*) AS n FROM task_log WHERE task = 'admin_hidden_game'").first<{ n: number }>())?.n).toBe(1);
+  it('H2 blocked when anyone paid', async () => {
+    const { w, s0 } = await canceledGame(['Blair'], ['Blair']); // paid, then canceled: it came back as credit, so a payment AND credit
+    await blocked(w, s0.id);
+    const w2 = await world();
+    const g = (await upcoming(w2))[0];
+    await fill(w2, g, ['Blair'], ['Blair']);
+    await blocked(w2, g.id);
   });
-  it('H3 a hidden game still shows on every player screen and in the old numbers (it is the organizer lists only)', async () => {
-    const { w, s0, month } = await playedGame();
-    const future = (await upcoming(w))[0];
-    await call(w, 'POST', `/api/admin/sessions/${future.id}/hide-from-list`, { hidden: true });
+  it('H3 blocked when anyone holds credit from the game, or used credit on it', async () => {
+    const { w, s0 } = await canceledGame(['Blair', 'Casey'], ['Blair']);
+    await blocked(w, s0.id);
+    // A game canceled where nobody paid: no credit exists, so it can be hidden.
+    const free = await canceledGame(['Blair', 'Casey'], []);
+    expect((await hide(free.w, free.s0.id)).status).toBe(200); // canceled early, nobody paid: nothing owed, no credit, no charge
+  });
+  it('H4 blocked when anyone owes: a seat in a game that is on owes $14', async () => {
+    const w = await world();
+    const g = (await upcoming(w))[1];
+    await (await playerPhone(w, 'Casey')).call('POST', `/api/sessions/${g.id}/join`, {});
+    await blocked(w, g.id);
+  });
+  it('H5 blocked when a court is booked (the court is money), even with nobody in', async () => {
+    const w = await world();
+    const g = (await upcoming(w))[2];
+    await w.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
+    await blocked(w, g.id);
+  });
+  it('H6 blocked when the venue charged a canceled game; allowed once Edit charge makes the charge $0', async () => {
+    const { w, s0, month } = await canceledGame([], [], 4800);
+    await blocked(w, s0.id);
+    expect((await money(w, month)).rework).toMatchObject({ courtSessions: 1, courtCostCents: 4800 });
+    // A test game after Edit charge sets it to $0: now there is no money in it.
+    expect((await call(w, 'POST', `/api/admin/sessions/${s0.id}/charge`, { charged: false })).status).toBe(200);
+    const before = numbers(await money(w, month));
+    expect((await hide(w, s0.id)).status).toBe(200);
+    expect(numbers(await money(w, month))).toBe(before);
+    expect((await dash(w, on)).hiddenGames.map((h: any) => h.id)).toEqual([s0.id]);
+  });
+  it('H7 blocked when a late fee is owed (canceled late, venue kept the fee) and when the game was finalized', async () => {
+    const w = await world();
+    await w.organizer.call('PUT', '/api/admin/late-fees', { on: true });
+    const s0 = await firstSession(w);
+    await fill(w, s0, ['Blair', 'Casey', 'Devon'], []);
+    w.app.now = Date.parse(s0.startsAt) - 6 * HOUR;
+    const c = await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false }, on);
+    expect(c.status, c.text).toBe(200);
+    await blocked(w, s0.id);
+    const { w: pw, s0: played } = await playedGame();
+    await blocked(pw, played.id);
+  });
+  it('H8 a game marked hidden that gains money is shown again, in the lists and in Totals (money is never hidden)', async () => {
+    const w = await world();
+    const g = await emptyGame(w);
+    const month = monthOf(Date.parse(g.startsAt));
+    expect((await hide(w, g.id)).status).toBe(200);
+    await w.organizer.call('POST', `/api/admin/sessions/${g.id}/booked`, {});
     const ph = await playerPhone(w, 'Blair');
-    const view = await ph.call('GET', '/api/group');
-    expect(JSON.stringify(view.data)).toContain(future.id);
-    // Off for this request: the game is a normal game again, in lists and numbers.
-    const d = await dash(w, {});
-    expect(d.sessions.find((s: any) => s.id === future.id).hiddenFromList).toBeUndefined();
-    const m = await money(w, month, {});
-    expect(m.courtCostCents).toBe(4800);
-    void s0;
+    await ph.call('POST', `/api/sessions/${g.id}/join`, {});
+    const d = await dash(w, on);
+    expect(d.sessions.find((s: any) => s.id === g.id).hiddenFromList).toBeUndefined();
+    expect(d.hiddenGames).toEqual([]);
+    expect((await money(w, month)).rework.projected.addedCourts).toBe(1);
   });
-  it('H4 the log says who hid what, and it is only for the organizer', async () => {
-    const { w, s0 } = await playedGame();
-    await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
-    await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: false });
+  it('H9 a second hide is a no-op (one row per game), and the log says who hid what', async () => {
+    const w = await world();
+    const g = await emptyGame(w);
+    await hide(w, g.id);
+    expect((await hide(w, g.id)).data.changed).toBe(false);
+    expect((await w.app.db.prepare("SELECT COUNT(*) AS n FROM task_log WHERE task = 'admin_hidden_game'").first<{ n: number }>())?.n).toBe(1);
+    await hide(w, g.id, false);
     const acts = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.map((e: { action: string }) => e.action);
     expect(acts).toContain('session_hidden_from_list');
     expect(acts).toContain('session_shown_in_list');
     const anon = w.app.client();
     anon.groupKey = w.groupKey;
-    expect((await anon.call('POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true }, on)).status).toBe(401);
+    expect((await anon.call('POST', `/api/admin/sessions/${g.id}/hide-from-list`, { hidden: true }, on)).status).toBe(401);
   });
-  it('H5 a hidden game with money owed keeps owing: the player still owes and the balance is unchanged', async () => {
-    const { w, s0 } = await playedGame();
-    const emery = () => dash(w).then((d: any) => d.sessions.find((s: any) => s.id === s0.id).roster.find((r: any) => r.name === 'Emery'));
-    const before = await emery();
-    await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
-    const after = await dash(w, on).then((d: any) => d.sessions.find((s: any) => s.id === s0.id).roster.find((r: any) => r.name === 'Emery'));
-    expect(after.owesCents).toBe(before.owesCents);
-    expect(after.owesCents).toBeGreaterThan(0);
+  it('H10 hiding is admin side only: players still see the game, and with the switch off it is a normal game again', async () => {
+    const w = await world();
+    const g = await emptyGame(w);
+    await hide(w, g.id);
+    const view = await (await playerPhone(w, 'Blair')).call('GET', '/api/group');
+    expect(JSON.stringify(view.data)).toContain(g.id);
+    expect((await dash(w, {})).sessions.find((s: any) => s.id === g.id).hiddenFromList).toBeUndefined();
+  });
+  it('H11 the player-side hide (Remove from player screen) and the admin-side hide are two separate marks: neither undoes the other', async () => {
+    const { w, s0 } = await canceledGame([], []);
+    await w.organizer.call('PUT', '/api/admin/admin-v2', { on: true });
+    const flags = async () => {
+      const sv = (await dash(w, on)).sessions.find((s: any) => s.id === s0.id);
+      return { player: sv.hiddenFromPlayers, list: sv.hiddenFromList };
+    };
+    const marks = () => w.app.db.raw.prepare("SELECT task FROM task_log WHERE session_id = ? ORDER BY task").all(s0.id).map((r: any) => r.task);
+    // Players first, then the lists.
+    expect((await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide`, { hidden: true })).status).toBe(200);
+    expect(await flags()).toEqual({ player: true, list: undefined });
+    expect((await hide(w, s0.id)).status).toBe(200);
+    expect(await flags()).toEqual({ player: true, list: true });
+    expect(marks()).toEqual(['admin_hidden_game', 'hidden_from_players']);
+    // Restoring the lists leaves the player-side hide alone.
+    await hide(w, s0.id, false);
+    expect(await flags()).toEqual({ player: true, list: undefined });
+    // And the other way round: hide the lists, show to players again, the list hide stays.
+    await hide(w, s0.id);
+    await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide`, { hidden: false });
+    expect(await flags()).toEqual({ player: false, list: true });
   });
 });

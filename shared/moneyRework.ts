@@ -10,3 +10,32 @@ export const MONEY_REWORK_HEADER = 'X-Money-Rework';
 export function moneyReworkAllowed(flag: string | undefined | null): boolean {
   return (flag ?? 'on').trim().toLowerCase() !== 'off';
 }
+
+// ---------- Money is never hidden ----------
+// "Hide from list" is only for a game with no money in it: a test game, or a canceled game nobody paid for. Any game with money in it
+// (a court to pay for, a payment, credit from it, somebody owing, a venue charge, a finalize) stays in Money and Totals no matter what.
+
+export const HAS_MONEY_MESSAGE = 'This game has money in it, so it stays in Money.';
+
+export interface MoneyFacts {
+  canceled: boolean;
+  /** The court is booked. */
+  booked: boolean;
+  /** People confirmed in (anyone in owes, and the court is the organizer's to pay). */
+  confirmed: number;
+  finalized: boolean;
+  /** What the venue charged for a canceled game (after any Edit charge), in cents. */
+  chargedCents: number;
+  /** Credit entries that came from this game (credit used on it, or given back from it), including ones since spent. */
+  creditEntries: number;
+  /** One per seat: anything paid (even if it came back as credit), or an open late fee. */
+  seats: { paid: boolean; paidCents: number; lateFee: boolean }[];
+}
+
+/** Does this game have any money in it? If so it cannot be hidden, and a hidden mark on it is ignored. */
+export function gameHasMoney(f: MoneyFacts): boolean {
+  if (f.finalized || f.chargedCents > 0 || f.creditEntries > 0) return true;
+  // A game that is on, with a court booked or anyone in, has a court to pay for and people who owe.
+  if (!f.canceled && (f.booked || f.confirmed > 0)) return true;
+  return f.seats.some((s) => s.paid || s.paidCents > 0 || s.lateFee);
+}

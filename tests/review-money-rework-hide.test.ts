@@ -49,40 +49,35 @@ const rows = (w: W) =>
   ]);
 
 describe('review: hide changes nothing but the flag', () => {
-  it('HD1 the whole dashboard (balances, held, owed, claims, refund requests) is identical before and after hiding, played game with credit and an unpaid player', async () => {
+  it('HD1 the whole dashboard (balances, held, owed, claims, refund requests) is identical before and after hiding a no-money game, with money elsewhere in the group', async () => {
     const w = await world();
     const s0 = await firstSession(w);
+    const empty = (await dash(w)).sessions.filter((s: any) => Date.parse(s.startsAt) > w.app.now)[2];
     await fill(w, s0, ['Blair', 'Casey', 'Devon', 'Emery'], ['Blair', 'Casey']);
     await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/me`, { in: true });
-    w.app.now = Date.parse(s0.endsAt) + HOUR;
     await dash(w);
-    expect((await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/finalize`, { everyone: true })).status).toBe(200);
     const beforeD = JSON.parse(stripped(await dash(w)));
     const before = JSON.stringify(beforeD);
     const tables = rows(w);
-    expect((await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true })).status).toBe(200);
+    expect((await call(w, 'POST', `/api/admin/sessions/${empty.id}/hide-from-list`, { hidden: true })).status).toBe(200);
     const afterD = JSON.parse(stripped(await dash(w)));
     const diff = Object.keys(beforeD).filter((k) => JSON.stringify(beforeD[k]) !== JSON.stringify(afterD[k]));
     expect(diff).toEqual([]);
     expect(rows(w)).toBe(tables);
-    expect((await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: false })).status).toBe(200);
+    expect((await call(w, 'POST', `/api/admin/sessions/${empty.id}/hide-from-list`, { hidden: false })).status).toBe(200);
     expect(stripped(await dash(w))).toBe(before);
     expect(rows(w)).toBe(tables);
   });
-  it('HD2 hide a canceled game, reopen it: the flag stays, nothing is lost, restore brings back the same dashboard', async () => {
+  it('HD2 hide a canceled game with no money, reopen it: the flag stays and nothing is lost; restore brings back the same dashboard', async () => {
     const w = await world();
     const s0 = await firstSession(w);
-    await fill(w, s0, ['Blair', 'Casey'], ['Blair']);
     w.app.now = Date.parse(s0.startsAt) - 20 * HOUR;
     await dash(w);
     await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/decision`, { decision: 'cancel', confirm: true }, on);
     await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
     const re = await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/decision`, { decision: 'reopen' }, on);
     expect(re.status, re.text).toBe(200);
-    const d = await dash(w);
-    expect(d.sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBe(true);
-    // Blair's $14 is owed again after reopen; still reads, still on the game.
-    expect(d.sessions.find((s: any) => s.id === s0.id).roster.find((r: any) => r.name === 'Blair').paymentStatus).toBeDefined();
+    expect((await dash(w)).sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBe(true);
     expect((await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: false })).data.changed).toBe(true);
     expect((await dash(w)).sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBeUndefined();
   });
@@ -110,15 +105,16 @@ describe('review: hide changes nothing but the flag', () => {
     await w.organizer.call('PUT', '/api/admin/money-rework', { on: true });
     expect((await dash(w, {})).sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBe(true);
   });
-  it('HD5 a hidden game keeps taking money: a player joins, pays, and the dashboard still shows it on the game', async () => {
+  it('HD5 a hidden game that then takes a player is shown again (money is never hidden): it is back in the lists and in Totals', async () => {
     const w = await world();
     const s0 = await firstSession(w);
-    await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/booked`, {});
     await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide-from-list`, { hidden: true });
+    expect((await dash(w)).sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBe(true);
     const j = await (await playerPhone(w, 'Blair')).call('POST', `/api/sessions/${s0.id}/join`, {});
     expect(j.status, j.text).toBe(200);
-    const sv = (await dash(w)).sessions.find((s: any) => s.id === s0.id);
-    expect(sv.roster.some((r: any) => r.name === 'Blair' && r.status === 'confirmed')).toBe(true);
+    const d = await dash(w);
+    expect(d.sessions.find((s: any) => s.id === s0.id).hiddenFromList).toBeUndefined();
+    expect(d.hiddenGames.map((h: any) => h.id)).not.toContain(s0.id);
     void monthOf;
   });
 });

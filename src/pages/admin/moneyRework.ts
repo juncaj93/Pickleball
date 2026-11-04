@@ -1,4 +1,5 @@
 import type { AdminSessionView } from '../../../shared/api';
+import { gameHasMoney } from '../../../shared/moneyRework';
 import { creditBack } from '../../../shared/pricing';
 import { localParts, zonedTimeToUtc } from '../../../shared/time';
 import { moneyGames, owedCentsOf } from './moneyList';
@@ -124,4 +125,20 @@ export function monthRowLabel(month: string): string {
 export function creditPerPlayerCents(s: AdminSessionView, flatCents: number): number {
   if (s.finalized) return 0;
   return creditBack(flatCents, s.confirmedCount);
+}
+
+/**
+ * Can this game be hidden? Only when no money is involved (shared/moneyRework.ts): nobody paid, no credit from it, nobody owes, no court to pay
+ * for and no venue charge (or a $0 charge after Edit charge). The server checks the same rule, so this only decides whether to show the option.
+ */
+export function canHide(s: AdminSessionView): boolean {
+  return !gameHasMoney({
+    canceled: s.state.flags.canceled,
+    booked: s.bookingStatus === 'booked',
+    confirmed: s.confirmedCount,
+    finalized: !!s.finalized,
+    chargedCents: s.state.flags.canceled ? (s.chargedCents ?? 0) : 0,
+    creditEntries: s.roster.some((r) => r.creditCents > 0 || r.creditBackCents > 0) ? 1 : 0,
+    seats: s.roster.map((r) => ({ paid: r.paymentStatus === 'paid', paidCents: r.paymentAmountCents ?? 0, lateFee: !!r.lateFee })),
+  });
 }
