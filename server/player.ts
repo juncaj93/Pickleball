@@ -239,6 +239,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     }
   }
 
+  // PAY_SHEET: the Apple Pay / Zelle number goes to a player's phone only when the sheet is on for that phone.
+  const paySheetOn = await paySheetFor(ctx, group.id);
   return {
     group: {
       name: group.name,
@@ -246,7 +248,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       venmoUrl: group.venmo_url,
       organizerName: group.organizer_name,
       // The Apple Pay / Zelle number on the Pay sheet (Settings > Money).
-      zelleNumber: zelleNumberOf(group.settings_json),
+      ...(paySheetOn ? { zelleNumber: zelleNumberOf(group.settings_json) } : {}),
       priceCents: settings.pricePerPlayerCents,
       maxPlayers: settings.maxPlayers,
       // The usual game length (Settings > Schedule): a card shows only the start time unless a game runs a different length.
@@ -260,7 +262,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     payAlways: await payAlwaysFor(ctx, group.id),
     payNote: await payNoteFor(ctx, group.id),
     playerFix1: await playerFix1For(ctx, group.id),
-    paySheet: await paySheetFor(ctx, group.id),
+    paySheet: paySheetOn,
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
