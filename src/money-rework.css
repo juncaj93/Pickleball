@@ -1,0 +1,660 @@
+/* Money page, reworked (MONEY_REWORK). Only the site's own tokens, so light and dark follow the theme. Layout follows the approved
+   mockup at 390 px: month box + Games | Totals on one row, cards with a date tile, a dot per player, white outlined Mark paid buttons,
+   a faint footer, and two Totals cards that never wrap at 360 px. */
+
+.money-rework {
+  gap: 10px;
+}
+
+/* ---------- Top row ---------- */
+.mrw-controls {
+  display: grid;
+  grid-template-columns: minmax(104px, 34%) minmax(0, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
+.mrw-monthwrap {
+  position: relative;
+  min-width: 0;
+}
+.mrw-month {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 46px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mrw-month[aria-expanded='true'] {
+  border-color: var(--line-strong);
+}
+.mrw-seg {
+  min-width: 0;
+}
+.mrw-seg button {
+  min-height: 40px;
+}
+
+/* The dropdown: right under the month box, rounded on all four corners, scrolls when long. */
+.mrw-monthpop {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 100%;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  max-height: min(280px, 52vh);
+  overflow-y: auto;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--raised);
+  border: 1px solid var(--raised-line);
+  border-radius: 14px;
+  box-shadow: var(--raised-shadow);
+}
+.mrw-monthrow {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+.mrw-monthrow.on {
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  font-weight: 750;
+}
+.mrw-monthcount {
+  color: var(--ink-2);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+.mrw-monthrow.on .mrw-monthcount {
+  color: var(--accent-text);
+}
+
+/* ---------- Game cards ---------- */
+.mrw-games {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mrw-game,
+.mrw-fold {
+  padding: 0;
+  overflow: hidden;
+}
+.mrw-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 0;
+}
+.mrw-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 8px 4px 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mrw-text {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.mrw-title {
+  min-width: 0;
+  font-size: 1rem;
+  font-weight: 750;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.mrw-time {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+.mrw-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mrw-dots i {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  background: transparent;
+}
+.mrw-dots i.p {
+  background: var(--ok-edge);
+  border-color: var(--ok-edge);
+}
+.mrw-right {
+  display: flex;
+  align-items: center;
+}
+/* The light gray Remind pill. */
+.mrw-remind {
+  appearance: none;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--fill);
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mrw-owed {
+  color: var(--warn-fg);
+  font-weight: 800;
+  font-size: 1rem;
+  white-space: nowrap;
+}
+.mrw-owed.small-owed {
+  font-size: 0.88rem;
+}
+.mrw-pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.mrw-pill.muted {
+  background: var(--muted-bg);
+  color: var(--muted-fg);
+}
+.mrw-pill.warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+.mrw-game.closed .mrw-title {
+  color: var(--muted-fg);
+}
+
+/* ---------- Player rows ---------- */
+.mrw-body {
+  padding: 0;
+  gap: 0;
+}
+.mrw-body > .mv2-summary {
+  margin: 0;
+  padding: 6px 12px;
+  border-top: 1px solid var(--line);
+}
+.mrw-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.mrw-row {
+  border-bottom: 1px solid var(--line);
+}
+.mrw-row:last-child {
+  border-bottom: 0;
+}
+.mrw-row.paid {
+  background: var(--ok-bg);
+}
+.mrw-row.credit {
+  background: var(--info-bg);
+}
+.mrw-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 4px 12px;
+}
+.mrw-who {
+  appearance: none;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 44px;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mrw-name {
+  font-size: 1rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.mrw-sub {
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.25;
+}
+.mrw-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.88rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.mrw-state.ok {
+  color: var(--ok-fg);
+}
+.mrw-state.credit {
+  color: var(--info-fg);
+}
+.mrw-undo {
+  appearance: none;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+/* White, outlined, never the one filled green button. */
+.mrw-mark {
+  appearance: none;
+  flex: none;
+  min-height: 44px;
+  min-width: 96px;
+  padding: 0 14px;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 750;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.mrw-mark:disabled,
+.mrw-undo:disabled,
+.mrw-remind:disabled {
+  opacity: 0.55;
+}
+.mrw-more {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 12px 10px;
+}
+.mrw-more-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* Faint three-part footer: price left, credit middle, court right. */
+.mrw-foot {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+.mrw-foot > :first-child {
+  text-align: left;
+}
+.mrw-foot-mid {
+  text-align: center;
+  color: var(--info-fg);
+  opacity: 0.85;
+}
+.mrw-foot > :last-child {
+  text-align: right;
+}
+
+.mrw-hide-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 12px 8px;
+}
+.mrw-hide-link {
+  appearance: none;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* A canceled game with nobody owing. */
+.mrw-closed {
+  padding: 4px 12px 12px;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+}
+.mrw-closed-note {
+  margin: 8px 0 0;
+  color: var(--ink-2);
+  font-size: 0.92rem;
+}
+.mrw-chargeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 12px;
+}
+.mrw-closed .mrw-chargeline {
+  padding: 0;
+}
+.mrw-closed .mrw-hide {
+  align-self: flex-end;
+}
+
+/* ---------- Previous games / Later games ---------- */
+.mrw-fold-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 0.95rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.mrw-fold-chev {
+  display: inline-flex;
+  color: var(--ink-2);
+}
+.mrw-fold.open .mrw-fold-chev svg {
+  transform: rotate(180deg);
+}
+.mrw-fold-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.mrw-prow {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.mrw-prow:last-child {
+  border-bottom: 0;
+}
+.mrw-prow-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 56px;
+  padding: 8px 14px 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.mrw-prow-head .mrw-title {
+  flex: 1 1 0;
+}
+.mrw-prow-check {
+  display: inline-flex;
+  color: var(--ok-fg);
+}
+
+/* ---------- Totals ---------- */
+.mrw-totals {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.mrw-card {
+  padding: 0;
+  overflow: hidden;
+}
+.mrw-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 14px 14px 8px;
+}
+.mrw-card-title {
+  margin: 0;
+  min-width: 0;
+  color: var(--ink-2);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.mrw-big {
+  font-family: var(--display);
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mrw-big.amber {
+  color: var(--warn-fg);
+}
+.mrw-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border-top: 1px solid var(--line);
+}
+.mrw-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 9px 10px 10px 14px;
+}
+.mrw-col + .mrw-col {
+  border-left: 1px solid var(--line);
+}
+.mrw-col dt {
+  color: var(--ink-2);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.mrw-col dd {
+  margin: 0;
+  font-size: 1.18rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.mrw-col dd.green {
+  color: var(--ok-fg);
+}
+.mrw-col small {
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.mrw-yours {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  white-space: nowrap;
+}
+.mrw-yours-label {
+  color: var(--ink-2);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mrw-dot {
+  color: var(--line-strong);
+  font-size: 0.7rem;
+}
+.mrw-yours-eq {
+  min-width: 0;
+  color: var(--ink-2);
+  font-size: 0.7rem;
+}
+.mrw-yours-total {
+  margin-left: auto;
+  font-family: var(--display);
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The narrowest phones: a touch smaller so every line stays on one line. */
+@media (max-width: 370px) {
+  .mrw-card-head {
+    padding-inline: 12px;
+  }
+  .mrw-card-title {
+    font-size: 0.74rem;
+    letter-spacing: 0.05em;
+  }
+  .mrw-big {
+    font-size: 1.75rem;
+  }
+  .mrw-col {
+    padding-inline: 10px 6px;
+  }
+  .mrw-col dd {
+    font-size: 1.05rem;
+  }
+  .mrw-yours {
+    padding-inline: 12px;
+    gap: 5px;
+  }
+  .mrw-yours-label {
+    font-size: 0.55rem;
+    letter-spacing: 0.04em;
+  }
+  .mrw-yours-eq {
+    font-size: 0.64rem;
+  }
+  .mrw-yours-total {
+    font-size: 1.3rem;
+  }
+}
+
+/* ---------- Settings: the tidied Feature switches page ---------- */
+.switches-tidy .set-row .set-name {
+  /* A little smaller on the narrowest phones so even "Ask for payment on every game" stays on one line at 320 px. */
+  font-size: clamp(0.82rem, 4.4vw, 0.95rem);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 650;
+}
+/* Only on the very narrowest phones (under 340 px) a long title may wrap cleanly onto a second line instead of being cut off. */
+@media (max-width: 339px) {
+  .switches-tidy .set-row .set-name {
+    white-space: normal;
+    text-overflow: clip;
+  }
+}
+/* The short explanation sits on its own lines under the title and wraps by word. */
+.switches-tidy .set-row .set-hint {
+  display: block;
+  margin: 2px 0 0;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+.switches-tidy .set-row-wrap {
+  padding: 4px 0;
+}
+.switches-tidy .set-row-wrap + .set-row-wrap,
+.switches-tidy .live-stable > .set-row-wrap:first-of-type {
+  border-top: 1px solid var(--line);
+}
+.switches-tidy .live-stable {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+}
+.switches-tidy .live-stable > summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 650;
+}
+.switches-tidy .live-stable[open] > summary {
+  margin-bottom: 2px;
+}
+.hidden-games .rows li {
+  gap: 10px;
+}

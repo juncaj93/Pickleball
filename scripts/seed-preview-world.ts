@@ -165,6 +165,20 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   const firstDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit' }).format(new Date(ms(pastBooked.startsAt)));
   await w.org.ok('PUT', '/api/admin/group', { firstSessionDate: firstDay });
 
+  // Extra PAST games for the Money page rework (the preview must show a test game to hide, and previous games that are fully paid).
+  // They sit after the first booked game and before the last past game, so they need about 4.5 days between those two (Thu to Tue); a
+  // Tue to Thu pair has no room, and then they are simply left out. All at the flat $14 with 4 in, so no credit comes back to anyone.
+  const roomForPast = ms(pastNeverBooked.startsAt) - ms(pastBooked.startsAt) >= 4.5 * DAY;
+  const pastExtra = async (days: number, note: string) => {
+    const start = ms(pastBooked.startsAt) + days * DAY;
+    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note });
+    await refresh();
+    return games().find((g) => g.id === made.id);
+  };
+  const testGame = roomForPast ? await pastExtra(1, 'Test game') : null;
+  const previous1 = roomForPast ? await pastExtra(3, 'Sunday run') : null;
+  const previous2 = roomForPast ? await pastExtra(4, 'Monday run') : null;
+
   const join = async (name: string, g: any) => (await w.pick(name)).ok('POST', `/api/sessions/${g.id}/join`, {});
   const orgPays = (name: string, g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[name], paid: true });
   const setCourt = (g: any, status: 'booked' | 'waitlist' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
@@ -177,6 +191,24 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await at(Math.min(ms(pastBooked.endsAt) + 2 * HOUR, N));
   await w.org.ok('POST', `/api/admin/sessions/${pastBooked.id}/finalize`, { everyone: true });
   summary.push('past game, booked, finalized: 5 played, $11 each, $3 credit back to Avery, Blake, Casey, Drew, Emery');
+
+  // 1b. Past extras (only when there is room): a test game to hide (Kai and Lane in, nobody paid), and two fully paid previous games.
+  if (testGame && previous1 && previous2) {
+    await setCourt(testGame, 'booked');
+    for (const n of ['Kai', 'Lane']) await join(n, testGame);
+    await setCourt(previous1, 'booked');
+    for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray']) await join(n, previous1);
+    await setCourt(previous2, 'booked');
+    await w.org.ok('POST', `/api/admin/sessions/${previous2.id}/me`, { in: true });
+    for (const n of ['Finley', 'Lane', 'Kai']) await join(n, previous2);
+    for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray']) await orgPays(n, previous1);
+    for (const n of ['Finley', 'Lane', 'Kai']) await orgPays(n, previous2);
+    await at(Math.min(ms(previous1.endsAt) + 2 * HOUR, N));
+    await w.org.ok('POST', `/api/admin/sessions/${previous1.id}/finalize`, { everyone: true });
+    await at(Math.min(ms(previous2.endsAt) + 2 * HOUR, N));
+    await w.org.ok('POST', `/api/admin/sessions/${previous2.id}/finalize`, { everyone: true });
+    summary.push('old "Test game" (booked, Kai and Lane in, nobody paid): the game to hide; "Sunday run" and "Monday run": played, 4 each, all paid $14 (fully paid previous games, court $48 each)');
+  }
 
   // 2. A past game that was never booked, 4 signed up, nobody answered "Did you guys play?" yet.
   await at(ms(pastNeverBooked.startsAt) - 2 * DAY);
@@ -258,6 +290,26 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   for (const n of ['Indy', 'Lane', 'Morgan']) await orgPays(n, sg);
   summary.push('extra game "Fee split test" 10 hours from the seed (inside its 12-hour cancel-by): 6 in (Orla, Avery, Indy, Jordan, Lane, Morgan), Indy, Lane, Morgan paid cash');
 
+  // 11. Money page rework: a game with 4 in and mixed payments ("Mixed payments": Lane and Morgan paid, Kai and Gray owe), and a game
+  //     where everyone has paid ("All paid": 4 of 4, which the Games tab moves to Previous games). Nobody here has credit to spend,
+  //     so no credit balance changes.
+  const upcomingExtra = async (hoursAhead: number, note: string) => {
+    const start = Math.ceil((N + hoursAhead * HOUR) / (30 * 60_000)) * 30 * 60_000;
+    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note });
+    await refresh();
+    const g = games().find((x) => x.id === made.id);
+    await setCourt(g, 'booked');
+    return g;
+  };
+  const mixed = await upcomingExtra(20, 'Mixed payments');
+  for (const n of ['Lane', 'Morgan', 'Kai', 'Gray']) await join(n, mixed);
+  for (const n of ['Lane', 'Morgan']) await orgPays(n, mixed);
+  const allPaid = await upcomingExtra(44, 'All paid');
+  for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await join(n, allPaid);
+  for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await orgPays(n, allPaid);
+  summary.push('extra game "Mixed payments" (Booked, 4 in): Lane and Morgan paid cash, Kai and Gray owe $14');
+  summary.push('extra game "All paid" (Booked, 4 of 4 paid): the Games tab files it under Previous games');
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -279,7 +331,8 @@ function wipeExtras(): string {
  * on live are ON here from the seed (no ?something=on needed), plus the switch being built. A backup does not carry task_log,
  * so they are written here. Keep this list equal to live: it is the one place to change. ON on live (Alex, Wed Nov 4):
  * New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
- * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Being built: Late-cancel fee split. MOTION and
+ * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Being built: Money page rework. (Late-cancel fee
+ * split is NOT on live yet, so it is not on here: Alex has not shipped it.) MOTION and
  * MOTION_ADMIN have no Settings row: they are wrangler.toml switches, "on" in [env.preview.vars] like every kill switch.
  */
 export const PREVIEW_SWITCHES_ON = [
@@ -293,7 +346,7 @@ export const PREVIEW_SWITCHES_ON = [
   'player_fix1_on',
   'pay_sheet_on',
   'texts_r2_on',
-  'late_fee_split_on',
+  'money_rework_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

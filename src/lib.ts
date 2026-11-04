@@ -165,6 +165,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (adminR2Test()) headers['X-Admin-R2'] = 'on';
   // "Admin screens, round 3", private test switch for this phone (/admin?adminr3=on, see server/adminR3.ts).
   if (adminR3Test()) headers['X-Admin-R3'] = 'on';
+  // "Money page rework", private test switch for this phone (/admin?moneyrework=on, see server/moneyRework.ts).
+  if (moneyReworkTest()) headers['X-Money-Rework'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -571,6 +573,21 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('adminr3');
   if (want === 'on') storageSet(ADMIN_R3_KEY, 'on');
   else if (want === 'off') storageRemove(ADMIN_R3_KEY);
+}
+
+/**
+ * "Money page rework" (the new Money page, Hide from list, Edit charge, the cancel sheet default, the tidier Feature switches and History)
+ * on this phone only, before it is on for everyone: open /admin once with ?moneyrework=on (?moneyrework=off turns it back off).
+ * Remembered in this browser; nothing else changes.
+ */
+const MONEY_REWORK_KEY = 'pb_money_rework';
+export function moneyReworkTest(): boolean {
+  return storageGet(MONEY_REWORK_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('moneyrework');
+  if (want === 'on') storageSet(MONEY_REWORK_KEY, 'on');
+  else if (want === 'off') storageRemove(MONEY_REWORK_KEY);
 }
 
 /**

@@ -10,6 +10,7 @@ import { canMove } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { sessionTexts } from './textMenu';
 import { noteMenuDismissed } from './menuDismiss';
+import { HideConfirm } from './MoneyReworkParts';
 
 /**
  * The gear's small pop-up, anchored next to the gear (not a full sheet):
@@ -23,6 +24,8 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
   const [open, setOpen] = useState(false);
   const [texts, setTexts] = useState(false);
   const [opened, setOpened] = useState<string | null>(null);
+  // The Money page rework: "Hide from list" asks first, and the question lives here, outside the pop-up that closes when it is picked.
+  const [askHide, setAskHide] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const pop = useRef<HTMLDivElement>(null);
   // Where it opens: under the gear when it fits, else above it, else as a panel just above the tab bar.
@@ -224,6 +227,12 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
               {hidden ? 'Show on player screen again' : 'Remove from player screen'}
             </button>
           )}
+          {ctx.d.moneyRework === true && s.hiddenFromList !== true && !(canceled && s.canceledBy === 'organizer_fee_kept') && !s.roster.some((r) => r.lateFee) && (
+            <button role="menuitem" className="menu-row" data-hide-from-list onClick={pick(() => setAskHide(true))}>
+              <HideIcon />
+              Hide from list
+            </button>
+          )}
           <button
             role="menuitem"
             className="menu-row danger"
@@ -250,6 +259,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
         <GearIcon />
       </button>
       {(open || fading) && (place === 'sheet' ? createPortal(menu, document.body) : menu)}
+      {ctx.d.moneyRework === true && <HideConfirm ctx={ctx} s={s} open={askHide} onClose={() => setAskHide(false)} />}
     </div>
   );
 }

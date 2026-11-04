@@ -16,6 +16,7 @@ import { reopenRequestedReason } from '../../../shared/credit';
 import '../../credit-admin.css';
 import { CLEAR_CHOICES } from '../../../shared/lateFees';
 import { lateFeeLine } from './LateFees';
+import { ChargeLine, ClosedBody, HideFromList, ReworkRows } from './MoneyReworkParts';
 
 type View = 'who' | 'totals';
 type Tone = 'ok' | 'info' | 'warn' | 'muted';
@@ -187,7 +188,7 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
   );
 }
 
-export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean }) {
+export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean; rework?: boolean }) {
   const tz = ctx.d.group.timezone;
   const { busy, run } = useAction(ctx);
   const fin = s.finalized;
@@ -200,7 +201,8 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
   // Round 2 (ADMIN_R2): the people who still owe come first, then the people who paid (each group keeps its order). Same rows, same money.
   // A late fee reads paid or not from the debt itself (your own row's payment is the court payment, never the debt).
   const isPaid = (r: AdminRosterEntry) => (r.lateFee ? r.lateFee.paid : r.paymentStatus === 'paid');
-  const rows = r2 ? [...allRows.filter((r) => !isPaid(r)), ...allRows.filter((r) => isPaid(r))] : allRows;
+  // The Money page rework sorts the same way: owing first, paid below.
+  const rows = r2 || rework ? [...allRows.filter((r) => !isPaid(r)), ...allRows.filter((r) => isPaid(r))] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
@@ -210,6 +212,8 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
 
   const feeRows = s.roster.some((r) => r.lateFee);
   if (s.state.flags.canceled && !feeRows) {
+    // The Money page rework: the closed game's notice, Edit charge and Hide from list.
+    if (rework) return <ClosedBody ctx={ctx} s={s} hideable />;
     return (
       <div className="mv2-body stack">
         <Notice tone="muted" title="Session canceled">
@@ -258,6 +262,57 @@ export function GameBody({ ctx, s, r2 }: { ctx: AdminCtx; s: AdminSessionView; r
     }
     return acts;
   };
+
+  // The Money page rework (MONEY_REWORK): the same rows and actions, drawn as the new cards. No separate court row: the card's footer says "Court $48".
+  if (rework) {
+    const lineOf = (r: AdminRosterEntry) => {
+      const selfMarked = r.selfPaid && r.paymentStatus === 'paid';
+      const feeLine = lateFeeLine(r);
+      const full = feeLine ?? `${selfMarked ? 'self-marked · ' : ''}${payMoneyLine(r, s, tz)}`.replace(/ · $/, '');
+      const short = feeLine ?? (selfMarked ? 'tapped I paid' : r.creditCents > 0 && r.paymentStatus !== 'paid' ? `credit ${formatPrice(r.creditCents)}, owes ${formatPrice(r.owesCents)}` : payMoneyLine(r, s, tz));
+      return { short, full };
+    };
+    const feeKept = s.state.flags.canceled && s.canceledBy === 'organizer_fee_kept';
+    return (
+      <div className="mv2-body mrw-body">
+        {s.state.flags.canceled && (
+          <p className="mv2-summary small muted" data-summary>
+            {feeKept ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.') : 'Canceled. Only late fees are left on it.'}
+          </p>
+        )}
+        {!s.state.flags.canceled && (fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (
+          <p className="mv2-summary small muted" data-summary>
+            {fin ? <span data-finalized-line>{formatPrice(fin.creditBackCents)} back as credit</span> : <span>Not finalized yet. Finalize it from Home.</span>}
+          </p>
+        )}
+        <ReworkRows rows={rows} actionsOf={actionsOf} isPaid={isPaid} lineOf={lineOf} busy={busy} />
+        {s.state.flags.canceled && <ChargeLine ctx={ctx} s={s} />}
+        {fin && (
+          <div className="stack" style={{ gap: 6 }}>
+            <button className="btn small secondary" disabled={busy || s.reopenBlockedBy.length > 0 || s.reopenRequestedBy.length > 0} data-reopen onClick={reopen}>
+              Reopen
+            </button>
+            {s.reopenBlockedBy.length > 0 && (
+              <p className="small muted" data-reopen-blocked>
+                Can't reopen: {s.reopenBlockedBy.join(' and ')} already used or got back credit from this game.
+              </p>
+            )}
+            {s.reopenBlockedBy.length === 0 && s.reopenRequestedBy.length > 0 && (
+              <p className="small muted" data-reopen-blocked>
+                {reopenRequestedReason(s.reopenRequestedBy)}
+              </p>
+            )}
+          </div>
+        )}
+        {/* A game where a late fee was kept never gets the button: money is owed on it. Anything else can be hidden. */}
+        {!feeKept && !rows.some((r) => r.lateFee) && (
+          <div className="mrw-hide-row">
+            <HideFromList ctx={ctx} s={s} variant="link" />
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="mv2-body">

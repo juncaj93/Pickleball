@@ -9,6 +9,7 @@ import { SmsDraft } from '../../ui';
 import { RollText } from '../../motion';
 import { MoneyTabV2 } from './MoneyV2';
 import { MoneyTabR2 } from './MoneyR2';
+import { MoneyTabRework } from './MoneyRework';
 
 /** A canceled game where someone's payment became credit. */
 const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
@@ -18,6 +19,8 @@ const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrga
  * session's payments (Mark paid, who played and the final price, Reopen).
  */
 export function MoneyTab({ ctx }: { ctx: AdminCtx }) {
+  // The Money page rework (MONEY_REWORK): Games and Totals with the month box. Off: exactly as before.
+  if (ctx.d.moneyRework === true) return <MoneyTabRework ctx={ctx} />;
   // Admin screens, round 2 (ADMIN_R2): one tight list by date. Off: exactly as before.
   if (ctx.d.adminR2 === true) return <MoneyTabR2 ctx={ctx} />;
   // The new layout (ADMIN_V2): one control row, Who paid | Totals. Off: exactly as before.

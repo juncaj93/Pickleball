@@ -62,7 +62,8 @@ export function heldCents(d: AdminDashboard, playerId?: string): number {
 export function buildTodo(d: AdminDashboard): TodoItem[] {
   const items: TodoItem[] = [];
   const nowMs = Date.parse(d.now);
-  const s = d.sessions;
+  // A game hidden from the list (Money page rework) raises no Needs attention card; nobody's balance changes (balanceOf and heldCents read every game).
+  const s = d.sessions.filter((x) => x.hiddenFromList !== true);
   for (const r of d.refundRequests) items.push({ kind: 'refund_request', request: r });
   // An unconfirmed I paid on a seat that left, or a canceled game: the organizer decides (paid: credit; not: cleared).
   for (const c of d.paymentClaims ?? []) items.push({ kind: 'payment_claim', claim: c });

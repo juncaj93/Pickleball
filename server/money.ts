@@ -18,6 +18,8 @@ import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
+import { finalPrice } from '../shared/pricing';
+import { adminHiddenGameIds, moneyReworkFor } from './moneyRework';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -53,10 +55,14 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   const from = new Date(zonedTimeToUtc(year, month, 1, 0, 0, tz)).toISOString();
   const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
 
-  const { results } = await ctx.db
+  const { results: allResults } = await ctx.db
     .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at')
     .bind(group.id, from, to)
     .all<SessionRow>();
+  // "Money page rework": a game the organizer hid from their lists is out of Totals too (nothing about it is deleted).
+  const rework = await moneyReworkFor(ctx, group.id);
+  const listHidden = rework ? await adminHiddenGameIds(ctx.db, group.id) : new Set<string>();
+  const results = allResults.filter((s) => !listHidden.has(s.id));
   // The organizer pays the venue themselves: their own row is never money from players.
   const organizerId = await organizerIdOf(ctx.db, group);
   // Credit that came back from games, split by the month of the game it came from (the oldest credit is spent
@@ -79,6 +85,16 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   // the bottom line counts them like a played game ("You covered $3"), not "Nothing played yet". Only split games, so with
   // the switch off the page reads exactly as before.
   let splitGames = 0;
+  // The reworked Totals (MONEY_REWORK) keep their own sums so the numbers above stay exactly as they were:
+  //  so far = a played game, or a canceled one the venue charged; projected adds games still to be paid for (booked and coming up, or
+  //  played and not finalized yet) at what their players would pay today.
+  let rwCourts = 0;
+  let rwCollected = 0;
+  let rwSessions = 0;
+  let projCourts = 0;
+  let projAdded = 0;
+  let projPlayers = 0;
+  const flat = settings.pricePerPlayerCents;
   const sessions: MonthlyMoney['sessions'] = [];
   for (const s of results) {
     const roster = await loadRoster(ctx.db, s.id);
@@ -120,6 +136,20 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     courts += charged;
     if (state === 'played' || feeKept) collected += kept;
     if (state === 'played') courts += cost;
+    if (rework) {
+      if (state === 'played' || (state === 'canceled' && charged > 0)) {
+        rwSessions++;
+        rwCourts += state === 'played' ? cost : charged;
+        rwCollected += kept;
+      } else if (state === 'not_finalized' || (state === 'upcoming' && s.status !== 'canceled' && s.booking_status === 'booked')) {
+        const inGame = roster.filter((r) => r.status === 'confirmed');
+        const others = inGame.filter((r) => r.player_id !== organizerId).length;
+        projAdded++;
+        projCourts += cost;
+        // Everyone in pays the final price for that many players (4 or more), the flat price below 4. The organizer plays but pays the venue.
+        projPlayers += others * finalPrice(flat, inGame.length);
+      }
+    }
     sessions.push({
       id: s.id,
       startsAt: s.starts_at,
@@ -134,6 +164,35 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     });
   }
   const net = collected - courts;
+  const reworkTotals = rework
+    ? (() => {
+        const p = localParts(ctx.nowMs, tz);
+        const isCurrent = p.year === year && p.month === month;
+        // Membership is a monthly fee: it counts for the current month, and for any other month that has a game the venue is owed for.
+        const membership = isCurrent || rwSessions + projAdded > 0 ? settings.monthlyMembershipCents : 0;
+        const split = (courtsCents: number, playersCents: number) => {
+          const yourCost = Math.max(0, courtsCents + membership - playersCents);
+          const courtPart = Math.max(0, courtsCents - playersCents);
+          return { yourCostCents: yourCost, yourCostCourtCents: courtPart, yourCostMembershipCents: yourCost - courtPart };
+        };
+        return {
+          courtSessions: rwSessions,
+          courtCostCents: rwCourts,
+          membershipCents: membership,
+          owedToVenueCents: rwCourts + membership,
+          collectedCents: rwCollected,
+          ...split(rwCourts, rwCollected),
+          projected: {
+            courtCount: rwSessions + projAdded,
+            addedCourts: projAdded,
+            courtCostCents: rwCourts + projCourts,
+            totalCents: rwCourts + projCourts + membership,
+            playersPayCents: rwCollected + projPlayers,
+            ...split(rwCourts + projCourts, rwCollected + projPlayers),
+          },
+        };
+      })()
+    : undefined;
   return {
     month: `${year}-${String(month).padStart(2, '0')}`,
     label: `${MONTHS[month - 1]} ${year}`,
@@ -147,5 +206,6 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     membershipCents: settings.monthlyMembershipCents,
     bottomLine: bottomLine(net, settings.monthlyMembershipCents, sessions.filter((x) => x.state === 'played').length + splitGames),
     sessions,
+    ...(reworkTotals ? { rework: reworkTotals } : {}),
   };
 }

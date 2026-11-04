@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { activityText, doneByOthers } from '../../../shared/activity';
+import { activityText, cleanActivity, doneByOthers, highlightNew } from '../../../shared/activity';
 import type { ActivityEntry, ActivityPage, AdminSessionView } from '../../../shared/api';
 import { formatDateTime, formatShortDate, formatTimeRange } from '../../../shared/time';
 import { api, ApiError, storageGet, storageSet } from '../../lib';
@@ -11,7 +11,8 @@ import { lateDropsAll } from './todo';
 /** History: played sessions, or everything anyone did, newest first. Organizer only. */
 export function HistoryTab({ ctx }: { ctx: AdminCtx }) {
   // The new layout (ADMIN_V2): Activity first, with a NEW / VIEWED divider. Off: exactly as before.
-  if (ctx.d.adminV2 === true) return <HistoryTabV2 ctx={ctx} />;
+  // (The Money page rework uses the same screen: its quieter Activity list lives there.)
+  if (ctx.d.adminV2 === true || ctx.d.moneyRework === true) return <HistoryTabV2 ctx={ctx} />;
   return <HistoryTabClassic ctx={ctx} />;
 }
 
@@ -270,15 +271,21 @@ function ActivityV2({
   if (error && !entries) return <ErrorState error={error} onRetry={() => load()} />;
   if (!entries) return <Spinner />;
   if (entries.length === 0) return <Empty>Nothing has happened yet.</Empty>;
+  // The Money page rework: no-op moves and exact duplicates are left out, names are filled in, and the green highlight is only for NEW
+  // activity by someone other than the organizer. Off: every entry as before (round 2's highlight for anything by someone else).
+  const rework = ctx.d.moneyRework === true;
+  const rows = rework ? cleanActivity(entries) : entries;
+  const nameOf = rework ? (id: string) => ctx.d.players.find((p) => p.id === id)?.name ?? null : undefined;
   const since = baseline ? Date.parse(baseline) : NaN;
-  const fresh = Number.isFinite(since) ? entries.filter((e) => Date.parse(e.createdAt) > since) : [];
-  const old = fresh.length ? entries.filter((e) => !fresh.includes(e)) : entries;
-  const list = (rows: ActivityEntry[], label: string) => (
+  const fresh = Number.isFinite(since) ? rows.filter((e) => Date.parse(e.createdAt) > since) : [];
+  const freshIds = new Set(fresh.map((e) => e.id));
+  const old = fresh.length ? rows.filter((e) => !freshIds.has(e.id)) : rows;
+  const list = (items: ActivityEntry[], label: string) => (
     <ul className="card activity-list" aria-label={label}>
-      {rows.map((e) => (
-        <li key={e.id} {...otherMark(ctx, e)}>
-          {otherNote(ctx, e)}
-          <span className="a-text">{activityText(e, tz, organizer)}</span>
+      {items.map((e) => (
+        <li key={e.id} {...(rework ? (highlightNew(e, freshIds.has(e.id)) ? { className: 'a-other', 'data-by-other': 'yes' } : {}) : otherMark(ctx, e))}>
+          {rework ? (highlightNew(e, freshIds.has(e.id)) ? <span className="sr-only">New, by someone else: </span> : null) : otherNote(ctx, e)}
+          <span className="a-text">{activityText(e, tz, organizer, nameOf ? { names: nameOf } : {})}</span>
           <time className="a-time" dateTime={e.createdAt}>
             {formatDateTime(e.createdAt, tz)}
           </time>

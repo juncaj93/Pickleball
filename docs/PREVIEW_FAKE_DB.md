@@ -50,7 +50,13 @@ Production is bound to the real database and was not changed.
 | Then | **Canceled** ("Court closed") | Finley, Gray, Harper paid $14 and got it back as credit |
 | Extra game "Late-fee test", 11 hours after the seed | **Booked**, already past its cancel-by (start minus 12 hours) | Jordan, Lane, Morgan, Kai in (Kai paid cash). Open the preview with `?latefees=on` as one of them and tap Drop out: it leaves 3, so they owe $14 unless someone takes the spot |
 | Extra game "Fee split test", 10 hours after the seed | **Booked**, already past its cancel-by | Orla, Avery, Indy, Jordan, Lane, Morgan in (6); Indy, Lane, Morgan paid cash. Gear menu > Cancel session > No: each owes $9, the three who paid get $5 back as credit |
+| Old "Test game" (Fri Oct 30 on a Wednesday seed) | Played date, never finalized | Kai and Lane in, nobody paid: the game to hide (Money page rework) |
+| "Sunday run", "Monday run" (Nov 1 and 2) | Played, finalized | 4 each, all paid $14, court $48: two fully paid previous games |
+| Extra game "Mixed payments" (20 hours after the seed) | **Booked**, 4 in | Lane and Morgan paid cash, Kai and Gray owe $14 |
+| Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: the Games tab files it under Previous games |
 | Everything after | Normal empty games | The site makes these by itself |
+
+The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.
 
 - Money states: credit left over for **Casey ($3)** and **Harper ($14)**, both in no
   upcoming game so you can tap I'm in and watch credit apply; **Gray** has a
@@ -62,7 +68,7 @@ Production is bound to the real database and was not changed.
 A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
 the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
 (Nov 4, as on live: New admin layout, Admin screens round 2 and 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
-Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2; plus the one being built, Late-cancel fee split). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2; plus the one being built, Money page rework. Late-cancel fee split is built but NOT on live, so it is off on the preview too). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
 When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it

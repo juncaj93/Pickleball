@@ -352,12 +352,13 @@ export async function audit(
 /**
  * What the venue still charged for a game the organizer canceled close to
  * play ("Were you charged?" answered Yes), by session id. It is kept in the
- * Activity log entry made when the game was canceled; the latest entry wins,
- * so canceling again after a reopen replaces it. Only amounts above $0.
+ * Activity log entry made when the game was canceled, or by a later "Edit charge"
+ * (action 'charge_edited', Money page rework); the latest entry wins, so canceling
+ * again after a reopen, or editing the charge, replaces it. Only amounts above $0.
  */
 export async function loadCancelCharges(db: D1Database, groupId: string): Promise<Map<string, number>> {
   const { results } = await db
-    .prepare("SELECT session_id, details_json FROM admin_audit_log WHERE group_id = ? AND action = 'session_canceled' AND session_id IS NOT NULL ORDER BY created_at, rowid")
+    .prepare("SELECT session_id, details_json FROM admin_audit_log WHERE group_id = ? AND action IN ('session_canceled', 'charge_edited') AND session_id IS NOT NULL ORDER BY created_at, rowid")
     .bind(groupId)
     .all<{ session_id: string; details_json: string }>();
   const out = new Map<string, number>();
