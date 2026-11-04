@@ -2094,7 +2094,7 @@ never changes an alert; the text menu with the switch off is the old words, one 
 ### Change after Alex's answers (Wed Nov 4, 2026)
 Check-in and Need players: the back-out line and the join line say "tonight" when the game is tomorrow or today, and "early" for a game further out ("Need to back out? Do it early to avoid cancel fees." / "Want in? Join early, otherwise we'll have to cancel."). Everything else unchanged; the other answers (6:55 AM, fee-kept order, "tonight"/"today" on game night, #5 and #7 left as they are, no line for a paid dropper) needed no change. Unit 1,873 passed (100 files), `e2e/texts-r2.cjs` 14 of 14, `e2e/texts.cjs` 52 of 52. Same preview address, redeployed.
 
-## Late-cancel fee split (LATE_FEE_SPLIT) (Wed Nov 4, 2026) - built, tested, reviewed twice; on a preview, waiting for "ship it"
+## Late-cancel fee split (LATE_FEE_SPLIT) (Wed Nov 4, 2026) - LIVE with the switch OFF for everyone (deployed Wed Nov 4, 3:47 PM Eastern)
 
 Zip "latefeesplit" (START_HERE, SITE_RULES with the new PREVIEW SWITCHES RULE). Built on main `58e464d` (TEXTS_R2 merged). **Changes money.** Ships OFF behind
 ONE new switch `LATE_FEE_SPLIT` (needs `LATE_FEES` on): `wrangler.toml` kill switch (production and preview), Settings > Feature switches > "Late-cancel
@@ -2178,3 +2178,19 @@ settle those first.
 3. Unmark keeping the $5: OK, written under known gaps in `FEATURE_SWITCHES.md` (with 4).
 4. Monthly Collected counts only what was paid: OK.
 - "Ship it" expected Fri Nov 6 morning. Do not deploy before then. Keep the preview up.
+
+### Deploy (Wed Nov 4, 2026, 3:47 PM Eastern) - LIVE with LATE_FEE_SPLIT OFF for everyone
+- Alex: "Ship it now" (Wed before 6:00 PM, a quiet window; replaces the earlier "not before Friday"). PR #82 merged as `4014f51` (same tree as the tested
+  branch `bb967c0`). Live before: Pages deployment `30dd77c6-e3de-419b-b384-03dab1fb5585` (commit 58e464d), so main equaled live.
+- Tests on main before the deploy: type check clean; unit 1,928 passed, 1 skipped, 0 failed (103 files); production build clean.
+- Restore points: SQL export `live-before-late-fee-split-2026-11-04.sql` (333 INSERTs, has phone numbers, not committed, in this session's scratch folder),
+  3:38 PM. Time Travel bookmark `00000716-00000000-00005119-50485a3498848e847b1cb21bf67115fa` (3:38 PM).
+- Production deployment `49be2ad5-94a9-4294-a9f8-2e830e37403d`, branch main, commit 4014f51. No migration, no database change, the clock Worker untouched.
+- Read-only live check after (backup address; pickleball.juncaj.net is not reachable from this session): /, /admin, /api/status, /api/group/version 200; the new
+  bundle `index-CYaPukY7.js` is served; `PUT /api/admin/late-fee-split` and the dashboard 401 without a sign-in; health checks all 0 (`info_open_late_fees` 0);
+  no `late_fee_split_on` row (OFF), `late_fees_on` present; no game holds a split price; row counts equal the export (players 11, games 11, seats 23,
+  credit_ledger 5, task_log 26, migrations 16).
+- Turn it on (Alex, Fri in a quiet window): Settings > Feature switches > "Late-cancel fee split". Private test first: `/admin?latefeesplit=on` (writes real records).
+- Rollback: Settings row off (no deploy). Code: redeploy Pages deployment `30dd77c6-e3de-419b-b384-03dab1fb5585` (commit 58e464d); with the switch off the new
+  code writes nothing new, so no data restore is needed. If a split cancel was ever made, settle or Clear those seats before rolling back the code. Whole
+  database: `npx wrangler d1 time-travel restore pickleball --bookmark=00000716-00000000-00005119-50485a3498848e847b1cb21bf67115fa` (3:38 PM).
