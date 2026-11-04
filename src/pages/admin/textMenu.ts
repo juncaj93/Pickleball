@@ -221,9 +221,10 @@ export function lateCancelText(d: AdminDashboard, s: AdminSessionView, reason: s
   // TEXTS_R2: the reason typed on the cancel sheet goes into both versions (it was dropped from the late-cancel ones).
   const why = r2 ? reason || s.cancelReason || '' : reason;
   if (s.canceledBy === 'organizer_fee_kept') {
+    // With the fee split (LATE_FEE_SPLIT) the share is the split price ("your $9 share"); the words are otherwise the same.
     const body = r2
-      ? canceledFeeKeptTextR2(s, d.group.timezone, nowMs, d.group.settings.pricePerPlayerCents, link, why)
-      : canceledFeeKeptMessage(d.group.settings.pricePerPlayerCents, link);
+      ? canceledFeeKeptTextR2(s, d.group.timezone, nowMs, s.feeSplit?.priceCents ?? d.group.settings.pricePerPlayerCents, link, why)
+      : canceledFeeKeptMessage(s.feeSplit?.priceCents ?? d.group.settings.pricePerPlayerCents, link);
     return { body, to: 'The players who were in', feeKept: true, reach: confirmedReach(d, s, true) };
   }
   return {

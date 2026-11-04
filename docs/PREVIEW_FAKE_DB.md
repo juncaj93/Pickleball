@@ -49,12 +49,20 @@ Production is bound to the real database and was not changed.
 | Then | **Booked and full (10 in)** with a real **standby** | Gray is the standby; Indy, Jordan, Finley paid; Morgan tapped I paid; the rest owe $14 |
 | Then | **Canceled** ("Court closed") | Finley, Gray, Harper paid $14 and got it back as credit |
 | Extra game "Late-fee test", 11 hours after the seed | **Booked**, already past its cancel-by (start minus 12 hours) | Jordan, Lane, Morgan, Kai in (Kai paid cash). Open the preview with `?latefees=on` as one of them and tap Drop out: it leaves 3, so they owe $14 unless someone takes the spot |
+| Extra game "Fee split test", 10 hours after the seed | **Booked**, already past its cancel-by | Orla, Avery, Indy, Jordan, Lane, Morgan in (6); Indy, Lane, Morgan paid cash. Gear menu > Cancel session > No: each owes $9, the three who paid get $5 back as credit |
 | Everything after | Normal empty games | The site makes these by itself |
 
 - Money states: credit left over for **Casey ($3)** and **Harper ($14)**, both in no
   upcoming game so you can tap I'm in and watch credit apply; **Gray** has a
   **$14 cash-out pending** (Home card with the Venmo button, then Mark refunded);
   players who owe $14; a paid player.
+
+## Switches on from the seed (PREVIEW SWITCHES RULE, Nov 4)
+
+A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
+the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
+(today: "Late drops owe $14" and "Late-cancel fee split"). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it
 

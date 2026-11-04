@@ -83,7 +83,7 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'session_added':
       return `${who} added a game${forDay}`;
     case 'session_canceled':
-      return `${who} canceled${day ? ` ${day}` : ' a session'}${d.feeKept === true ? ' (venue did not waive the fee: everyone in still owes)' : d.venueWaived === true ? ' (venue waived the fee)' : typeof d.chargedCents === 'number' && d.chargedCents > 0 ? ` (venue charged ${formatPrice(d.chargedCents)})` : ''}`;
+      return `${who} canceled${day ? ` ${day}` : ' a session'}${d.feeKept === true ? (splitOf(d) ? ` (venue did not waive the fee: ${splitOf(d)!.count} were in, everyone in owes ${formatPrice(splitOf(d)!.priceCents)})` : ' (venue did not waive the fee: everyone in still owes)') : d.venueWaived === true ? ' (venue waived the fee)' : typeof d.chargedCents === 'number' && d.chargedCents > 0 ? ` (venue charged ${formatPrice(d.chargedCents)})` : ''}`;
     case 'session_reopened':
       return `${who} reopened${day ? ` ${day}` : ' a session'}`;
     case 'session_rescheduled':
@@ -105,7 +105,7 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'finalize_reopened':
       return `${who} reopened the finalize${forDay}`;
     case 'credit_back':
-      return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? ' (canceled)' : d.reason === 'not_played' ? ' (did not play)' : ''}`;
+      return `${player} got ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'money'} back as credit${forDay}${d.reason === 'dropped' ? ' (dropped out)' : d.reason === 'canceled' ? (d.split === true ? ' (canceled late, fee split)' : ' (canceled)') : d.reason === 'not_played' ? ' (did not play)' : ''}`;
     case 'refund_requested':
       return `${player} asked for ${typeof d.amountCents === 'number' ? formatPrice(d.amountCents) : 'a'} refund of their credit`;
     case 'refund_request_canceled':
@@ -180,10 +180,14 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} switched the new admin layout off`;
     case 'late_fees_on':
       return `${who} switched "Late drops owe $14" on`;
+    case 'late_fee_split_on':
+      return `${who} switched "Late-cancel fee split" on`;
+    case 'late_fee_split_off':
+      return `${who} switched "Late-cancel fee split" off`;
     case 'late_fees_off':
       return `${who} switched "Late drops owe $14" off`;
     case 'late_fee_owed':
-      return `${player} owes ${d.kind === 'canceled_late' ? 'their $14 (canceled late, fee not waived)' : d.kind === 'no_show' ? 'their $14 (did not play, fewer than 4 played)' : 'their $14 (late drop, game short)'}${forDay}`;
+      return `${player} owes ${d.kind === 'canceled_late' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (canceled late, fee not waived)` : d.kind === 'no_show' ? 'their $14 (did not play, fewer than 4 played)' : 'their $14 (late drop, game short)'}${forDay}`;
     case 'late_fee_cleared':
       return d.why === 'sub'
         ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s $14 cleared${forDay}`
@@ -205,4 +209,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     default:
       return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
   }
+}
+
+/** The split on a "session_canceled" line (LATE_FEE_SPLIT): { count, priceCents }, or null. */
+function splitOf(d: Record<string, unknown>): { count: number; priceCents: number } | null {
+  const x = d.split as { count?: unknown; priceCents?: unknown } | undefined;
+  return x && typeof x.count === 'number' && typeof x.priceCents === 'number' ? { count: x.count, priceCents: x.priceCents } : null;
 }

@@ -155,6 +155,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (playerFix1Test()) headers['X-Player-Fix1'] = 'on';
   // "Texts and alerts, round 2", private test switch for this phone (/admin?textsr2=on, see server/textsR2.ts).
   if (textsR2Test()) headers['X-Texts-R2'] = 'on';
+  // "Late-cancel fee split", private test switch for this phone (/admin?latefeesplit=on, see server/lateFeeSplit.ts).
+  if (lateFeeSplitTest()) headers['X-Late-Fee-Split'] = 'on';
   // "Pay sheet", private test switch for this phone (?paysheet=on, see server/paySheet.ts).
   if (paySheetTest()) headers['X-Pay-Sheet'] = 'on';
   // "New admin layout", private test switch for this phone (/admin?adminv2=on, see server/adminV2.ts).
@@ -486,6 +488,21 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('textsr2');
   if (want === 'on') storageSet(TEXTS_R2_KEY, 'on');
   else if (want === 'off') storageRemove(TEXTS_R2_KEY);
+}
+
+/**
+ * "Late-cancel fee split" on this phone only, before it is on for everyone: open /admin?latefeesplit=on once
+ * (?latefeesplit=off turns it back off). Remembered in this browser. It CHANGES MONEY for this phone's taps: a cancel inside
+ * 12 hours answered "No" to the venue question, with 5 or more in, prices every seat like a played game. Needs late fees on.
+ */
+const LATE_FEE_SPLIT_KEY = 'pb_late_fee_split';
+export function lateFeeSplitTest(): boolean {
+  return storageGet(LATE_FEE_SPLIT_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('latefeesplit');
+  if (want === 'on') storageSet(LATE_FEE_SPLIT_KEY, 'on');
+  else if (want === 'off') storageRemove(LATE_FEE_SPLIT_KEY);
 }
 
 /**

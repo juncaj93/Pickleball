@@ -359,6 +359,131 @@ export function repriceStatements(db: D1Database, sessionId: string, flatCents: 
   ];
 }
 
+/** One seat's money as read for the late-cancel split (shared/lateFees.ts feeSplitPrice). */
+export interface SplitSeat {
+  playerId: string;
+  /** Paid and not settled (a confirmed payment; an unconfirmed I paid waits for Mark paid). */
+  paid: boolean;
+  /** The payment on the seat (cash plus credit) when paid. */
+  paymentCents: number;
+  /** The live credit entries used on the seat (not the 'cash' pairs). */
+  used: { id: string; cents: number }[];
+  /** Live held cash on the seat (a 'cash' pair). Only Finalize and its Reopen make these, so a game canceled before it starts has none. */
+  heldCashCents: number;
+}
+
+/**
+ * The late-cancel split (LATE_FEE_SPLIT) on one seat: the seat keeps exactly `priceCents` and the rest comes back to the
+ * player as credit, in the caller's batch, only while `guard` holds (the cancel this batch made, or the confirm it made).
+ * Afterwards the seat is an ordinary seat paid (or owing) at the split price, so every later path (Clear, Unmark, Use credit,
+ * I paid, a Reopen) works on it the way it works on any seat:
+ * - the cash part of the payment comes back first, as one 'kept' entry (reason 'canceled': "$5 back from Nov 3 (canceled)"),
+ *   and the payment is recorded as the split price;
+ * - if the credit on the seat alone is more than the split price, those credit entries go back to the pot (ended as
+ *   'canceled', the way a cancel returns them) and one new entry of exactly what still sits on the seat is used instead
+ *   (a ledger entry is never edited, only ended);
+ * - an unpaid seat whose credit now covers the split price is paid with it.
+ * Nothing moves when the seat holds the split price or less (they owe the rest). Returns the statements and what came back.
+ */
+export function splitSeatStatements(
+  db: D1Database,
+  args: { groupId: string; sessionId: string; seat: SplitSeat; priceCents: number; nowIso: string; guard: string },
+): { statements: D1PreparedStatement[]; cashBackCents: number; creditBackCents: number } {
+  const { groupId, sessionId, seat, priceCents, nowIso, guard } = args;
+  const usedCents = seat.used.reduce((s, u) => s + u.cents, 0);
+  const holds = seat.paid ? seat.paymentCents : usedCents + seat.heldCashCents;
+  const excess = holds - priceCents;
+  const sameSeat = seat.paid
+    ? `payment_status = 'paid' AND refunded_at IS NULL AND self_paid_at IS NULL AND COALESCE(payment_amount_cents, 0) = ${Math.trunc(seat.paymentCents)}`
+    : `payment_status = 'unpaid'`;
+  const pay = (cents: number) =>
+    db
+      .prepare(
+        `UPDATE session_players SET payment_status = 'paid', payment_amount_cents = ?1, paid_at = COALESCE(paid_at, ?2), self_paid_at = NULL, payment_updated_at = ?2, updated_at = ?2
+         WHERE session_id = ?3 AND player_id = ?4 AND status = 'confirmed' AND ${sameSeat} AND ${guard}`,
+      )
+      .bind(cents, nowIso, sessionId, seat.playerId);
+  if (excess <= 0) {
+    // Holds the split price or less: they owe the rest. An unpaid seat whose credit is exactly the price is paid with it.
+    return { statements: !seat.paid && holds > 0 && holds === priceCents ? [pay(holds)] : [], cashBackCents: 0, creditBackCents: 0 };
+  }
+  const cashPart = seat.paid ? Math.max(0, seat.paymentCents - usedCents - seat.heldCashCents) : 0;
+  const fromCash = Math.min(cashPart, excess);
+  // Never more than the credit on the seat (held cash can't exist before a game starts; if it ever did, less comes back).
+  const fromCredit = Math.min(usedCents, excess - fromCash);
+  const statements: D1PreparedStatement[] = [];
+  if (fromCash > 0) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+           SELECT ?1, ?2, ?3, 'kept', ?4, ?5, ?6, 'canceled'
+           WHERE EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND ${sameSeat}) AND ${guard}`,
+        )
+        .bind(newId(), groupId, seat.playerId, fromCash, sessionId, nowIso),
+    );
+  }
+  if (fromCredit > 0 && seat.used.length) {
+    const ids = seat.used.map((u) => sqlText(u.id)).join(', ');
+    const first = sqlText(seat.used[0].id);
+    statements.push(
+      db
+        .prepare(
+          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'canceled'
+           WHERE id IN (${ids}) AND ended_at IS NULL AND kind = 'used'
+             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND ${sameSeat}) AND ${guard}`,
+        )
+        .bind(nowIso, sessionId, seat.playerId),
+    );
+    const stays = usedCents - fromCredit;
+    if (stays > 0) {
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at)
+             SELECT ?1, ?2, ?3, 'used', ?4, ?5, ?6
+             WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE id = ${first} AND ended_at = ?6 AND ended_reason = 'canceled') AND ${guard}`,
+          )
+          .bind(newId(), groupId, seat.playerId, stays, sessionId, nowIso),
+      );
+    }
+  }
+  statements.push(pay(holds - fromCash - fromCredit));
+  return { statements, cashBackCents: fromCash, creditBackCents: fromCredit };
+}
+
+/**
+ * Reopening a game that was canceled with the fee split: it is a normal game at the flat price again. A seat left paid at
+ * the split price is short: its cash part is held against it as a 'cash' pair (the way a Reopen after Finalize holds it),
+ * the seat is unpaid again and owes only the difference (which they got back as credit and can Use). The credit on the seat
+ * stays on it. Only while `guard` holds (this batch reopened the game). Unconfirmed I paid seats are left as they are.
+ */
+export function unsplitStatements(db: D1Database, sessionId: string, flatCents: number, nowIso: string, guard: string): D1PreparedStatement[] {
+  const short = (sp: string) =>
+    `${sp}.session_id = ?2 AND ${sp}.status = 'confirmed' AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL AND ${sp}.self_paid_at IS NULL
+     AND COALESCE(${sp}.payment_amount_cents, 0) < ?3`;
+  const cash = (sp: string) => `(COALESCE(${sp}.payment_amount_cents, 0) - ${SEAT_USED(sp)} - ${SEAT_CASH(sp)})`;
+  const hold = (kind: 'kept' | 'used') =>
+    db
+      .prepare(
+        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+         SELECT ${SQL_ID}, s.group_id, sp.player_id, '${kind}', ${cash('sp')}, sp.session_id, ?1, 'cash'
+         FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+         WHERE ${short('sp')} AND ${cash('sp')} > 0 AND ${guard}`,
+      )
+      .bind(nowIso, sessionId, flatCents);
+  return [
+    hold('kept'),
+    hold('used'),
+    db
+      .prepare(
+        `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+         WHERE ${short('session_players')} AND ${guard}`,
+      )
+      .bind(nowIso, sessionId, flatCents),
+  ];
+}
+
 /**
  * Money from a seat comes back to the player as credit: a 'kept' entry with
  * its reason. With `settle`, the seat's payment is marked settled

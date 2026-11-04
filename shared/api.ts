@@ -80,7 +80,8 @@ export interface PlayerSessionView {
      */
     lateDrop?: { cancelByAt: string; owes: boolean; paid: boolean; feeCents: number };
     /** An open late fee on this seat (e.g. a game canceled late that the venue charged): what kind, and what is still owed. */
-    lateFee?: { kind: LateFeeKind; oweCents: number } | null;
+    /** priceCents: only for a late cancel with the fee split (LATE_FEE_SPLIT), what this seat's share is. */
+    lateFee?: { kind: LateFeeKind; oweCents: number; priceCents?: number } | null;
     /** Money from this session that came back to them as credit (they dropped out, it was canceled, they did not play, or they paid more than the final price). 0 once they have no credit left. */
     creditBackCents: number;
   };
@@ -279,6 +280,8 @@ export interface AdminSessionView {
   decisionAt: string | null;
   canceledAt: string | null;
   canceledBy: string | null;
+  /** Canceled late with the fee split (LATE_FEE_SPLIT): how many were in and what each person in owes. Null otherwise. */
+  feeSplit?: { count: number; priceCents: number } | null;
   /** Why the organizer canceled (up to 40 characters), or null. */
   cancelReason: string | null;
   state: SessionState;
@@ -421,6 +424,10 @@ export interface AdminDashboard {
   textsR2?: boolean;
   /** Settings > Feature switches > "Texts and alerts, round 2" is on (for everyone). */
   textsR2ForAll?: boolean;
+  /** "Late-cancel fee split" for this screen (server/lateFeeSplit.ts; the switch alone: it also needs lateFees). Missing: off. */
+  lateFeeSplit?: boolean;
+  /** "Late-cancel fee split" is on for everyone (Settings > Feature switches). */
+  lateFeeSplitForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */

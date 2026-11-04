@@ -3,7 +3,7 @@ import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '
 import { formatCents } from '../shared/money';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
-import { reopenBlockers, sqlText } from './finalize';
+import { MONEY_STATE, moneyState, reopenBlockers, sqlText } from './finalize';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -21,7 +21,8 @@ import { playerFix1ForAll, setPlayerFix1ForAll } from './playerFix1';
 import { setTextsR2ForAll, textsR2For, textsR2ForAll } from './textsR2';
 import { paySheetForAll, setPaySheetForAll } from './paySheet';
 import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_DROP, setLateFeesForAll } from './lateFees';
-import { FEE_KEPT, lateFeeKind, type LateFeeClearWhy } from '../shared/lateFees';
+import { FEE_KEPT, feeSplitOf, feeSplitPrice, lateFeeKind, lateFeePriceCents, type LateFeeClearWhy } from '../shared/lateFees';
+import { lateFeeSplitFor, lateFeeSplitForAll, lateFeeSplitSwitch, setLateFeeSplitForAll } from './lateFeeSplit';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
 import { HttpError } from './http';
 import type { D1PreparedStatement } from './db';
@@ -48,7 +49,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { creditBackLeft, creditBackStatements, repriceStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
+import { creditBackLeft, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -231,6 +232,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     lateFeesForAll: await lateFeesForAll(ctx.db, group.id),
     textsR2: await textsR2For(ctx, group.id),
     textsR2ForAll: await textsR2ForAll(ctx.db, group.id),
+    lateFeeSplit: await lateFeeSplitSwitch(ctx, group.id),
+    lateFeeSplitForAll: await lateFeeSplitForAll(ctx.db, group.id),
   };
 }
 
@@ -328,7 +331,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     const lateFees = askedCharge && (await lateFeesFor(ctx, group.id));
     if (lateFees) {
       if (typeof body.venueWaived !== 'boolean') throw new HttpError(400, 'answer_needed', 'Did the venue waive the fee or give you credit toward the next booking? Pick Yes or No.');
-      if (body.venueWaived === false) return cancelFeeKept(ctx, group, session, reason);
+      if (body.venueWaived === false) return cancelFeeKept(ctx, group, session, reason, await lateFeeSplitFor(ctx, group.id));
     }
     const chargedCents = askedCharge && !lateFees ? (v.cents(body.chargedCents, 'chargedCents') ?? 0) : 0;
     const { changed, returned, back } = await cancelWithMoney(
@@ -351,11 +354,17 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
     // One batch: the game opens again, and a payment that became credit is credit now, so they owe for the
     // reopened game again (and can use that credit).
+    // A game canceled with the fee split (LATE_FEE_SPLIT) is a normal game at the flat price again: the split price goes
+    // (a canceled game is never finalized, so final_price_cents / final_played_count only ever hold the split), and a
+    // seat left paid at the split price owes the difference again (unsplitStatements). Other cancels: as before.
+    const wasSplit = !!feeSplitOf(session);
+    const reopened = `(SELECT canceled_at FROM sessions WHERE id = ${sqlText(session.id)}) IS NULL AND (SELECT updated_at FROM sessions WHERE id = ${sqlText(session.id)}) = ${sqlText(ctx.nowIso)}`;
     await ctx.db.batch([
       ctx.db
         .prepare(
           `UPDATE sessions SET status = CASE WHEN booking_status = 'booked' THEN 'booked' ELSE 'planned' END,
-             canceled_at = NULL, canceled_by = NULL, cancel_reason = NULL, admin_decision = NULL, decision_at = NULL, updated_at = ?
+             canceled_at = NULL, canceled_by = NULL, cancel_reason = NULL, admin_decision = NULL, decision_at = NULL,
+             ${wasSplit ? 'final_price_cents = NULL, final_played_count = NULL, ' : ''}updated_at = ?
            WHERE id = ? AND status = 'canceled'`,
         )
         .bind(ctx.nowIso, session.id),
@@ -367,6 +376,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
              AND EXISTS (SELECT 1 FROM credit_ledger l WHERE l.kind = 'kept' AND l.session_id = session_players.session_id AND l.player_id = session_players.player_id AND l.ended_at IS NULL)`,
         )
         .bind(ctx.nowIso, session.id),
+      ...(wasSplit ? unsplitStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, ctx.nowIso, reopened) : []),
     ]);
     // A reopened game is a normal game again: it shows to players (a hide only ever applies to a canceled game).
     await setHiddenFromPlayers(ctx.db, group.id, session.id, false, ctx.nowIso);
@@ -436,15 +446,33 @@ async function cancelWithMoney(ctx: Ctx, group: GroupRow, session: SessionRow, c
  * credit stays spent, unpaid stays owed), and so do open late drops. Reopen makes it a normal game again. The court
  * cost counts as charged in Money (the venue charged it), kept with the cancel in the Activity log like before.
  */
-async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, reason: string | null) {
+async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, reason: string | null, split = false) {
   const organizerId = await organizerIdOf(ctx.db, group);
+  // The late-cancel split (LATE_FEE_SPLIT, shared/lateFees.ts): N = everyone confirmed right now (the organizer too when
+  // they are in, as Finalize counts them). With 5 or more, every seat in owes the price a played game would have, stored
+  // on the game (final_price_cents, final_played_count; it is never finalized), and whatever a seat holds above that
+  // comes back as credit in this same batch. The whole batch only goes ahead if no seat or credit on the game changed
+  // since it was read (the same check Finalize makes), so the amounts below are exactly right or nothing happens.
+  const plan = split ? await splitPlan(ctx, group, session, organizerId) : null;
+  const claimed = plan
+    ? `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND canceled_at = ${sqlText(ctx.nowIso)} AND canceled_by = '${FEE_KEPT}' AND final_price_cents = ${plan.priceCents} AND finalized_at IS NULL)`
+    : '';
+  const seatMoves = plan ? plan.seats.map((seat) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: plan.priceCents, nowIso: ctx.nowIso, guard: claimed })) : [];
   const [cancel] = await ctx.db.batch([
-    ctx.db
-      .prepare(
-        `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, updated_at = ?1
-         WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL`,
-      )
-      .bind(ctx.nowIso, reason, session.id),
+    plan
+      ? ctx.db
+          .prepare(
+            `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, final_price_cents = ?4, final_played_count = ?5, updated_at = ?1
+             WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL AND ${MONEY_STATE(session.id)} = ?6`,
+          )
+          .bind(ctx.nowIso, reason, session.id, plan.priceCents, plan.count, plan.state)
+      : ctx.db
+          .prepare(
+            `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, updated_at = ?1
+             WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL`,
+          )
+          .bind(ctx.nowIso, reason, session.id),
+    ...seatMoves.flatMap((m) => m.statements),
     // A fresh debt on every seat that is in (an old cleared mark from an earlier cancel and reopen does not carry over).
     ctx.db
       .prepare(
@@ -481,19 +509,80 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
   await invalidateSessionTokens(ctx.db, session.id, ctx.nowIso);
   const names = new Map((await loadRoster(ctx.db, session.id)).map((r) => [r.player_id, r.display_name]));
   for (const m of await moneyBackAt(ctx.db, session.id, null, 'canceled', ctx.nowIso)) {
-    if (m.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(m.playerId) ?? 'A player', playerId: m.playerId, amountCents: m.cashCents, reason: 'canceled' }, ctx.nowIso);
+    const splitSeat = !!plan?.seats.some((x) => x.playerId === m.playerId);
+    if (m.cashCents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(m.playerId) ?? 'A player', playerId: m.playerId, amountCents: m.cashCents, reason: 'canceled', ...(splitSeat ? { split: true } : {}) }, ctx.nowIso);
   }
   const chargedCents = courtCostOf(session, settingsOf(group));
-  await audit(ctx.db, group.id, session.id, 'session_canceled', { startsAt: session.starts_at, chargedCents, venueWaived: false, feeKept: true, ...(reason ? { reason } : {}) }, ctx.nowIso);
+  const splitBack = seatMoves.reduce((sum, m) => sum + m.cashBackCents + m.creditBackCents, 0);
+  await audit(
+    ctx.db,
+    group.id,
+    session.id,
+    'session_canceled',
+    {
+      startsAt: session.starts_at,
+      chargedCents,
+      venueWaived: false,
+      feeKept: true,
+      ...(plan ? { split: { count: plan.count, priceCents: plan.priceCents, creditBackCents: splitBack } } : {}),
+      ...(reason ? { reason } : {}),
+    },
+    ctx.nowIso,
+  );
+  // Credit that went back to the pot from a seat (it was paid with more credit than the split price): one line each,
+  // like the cash part above.
+  if (plan) {
+    for (let i = 0; i < plan.seats.length; i++) {
+      const cents = seatMoves[i].creditBackCents;
+      if (cents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(plan.seats[i].playerId) ?? 'A player', playerId: plan.seats[i].playerId, amountCents: cents, reason: 'canceled', split: true }, ctx.nowIso);
+    }
+  }
   const fresh = (await getSession(ctx.db, group.id, session.id))!;
   const orgRow = organizerId ? (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === organizerId) : undefined;
   if (orgRow && orgRow.status === 'withdrawn' && orgRow.late_drop_done_at === ctx.nowIso && orgRow.late_drop_at) {
     await audit(ctx.db, group.id, session.id, 'late_fee_cleared', { player: orgRow.display_name, playerId: orgRow.player_id, why: 'canceled', amountCents: 0 }, ctx.nowIso);
   }
   for (const r of await loadRoster(ctx.db, session.id)) {
-    if (r.status === 'confirmed' && lateFeeKind(r, fresh, r.player_id === organizerId)) await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso);
+    if (r.status === 'confirmed' && lateFeeKind(r, fresh, r.player_id === organizerId))
+      await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso, 'organizer', lateFeePriceCents('canceled_late', fresh, settingsOf(group).pricePerPlayerCents));
   }
-  return { ok: true, changed: true, feeKept: true };
+  return { ok: true, changed: true, feeKept: true, ...(plan ? { split: { count: plan.count, priceCents: plan.priceCents } } : {}) };
+}
+
+/**
+ * What the late-cancel split will do (null: nothing, 4 or fewer in). Read before the batch; MONEY_STATE `state` makes the
+ * batch refuse if anything changed since. Seats: every confirmed seat but the organizer's, except an unconfirmed I paid
+ * (that waits for Mark paid, which applies the split to it then).
+ */
+async function splitPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organizerId: string | null) {
+  const roster = await loadRoster(ctx.db, session.id);
+  const confirmed = roster.filter((r) => r.status === 'confirmed');
+  const priceCents = feeSplitPrice(settingsOf(group).pricePerPlayerCents, confirmed.length);
+  if (priceCents === null) return null;
+  const state = await moneyState(ctx, session.id);
+  const seats: SplitSeat[] = [];
+  for (const r of confirmed) {
+    if (r.player_id === organizerId) continue;
+    if (r.payment_status === 'paid' && !r.refunded_at && r.self_paid_at) continue;
+    seats.push(await splitSeatOf(ctx, session.id, r));
+  }
+  return { priceCents, count: confirmed.length, state, seats };
+}
+
+/** One seat's money as the split reads it. */
+async function splitSeatOf(ctx: Ctx, sessionId: string, r: RosterRow): Promise<SplitSeat> {
+  const { results } = await ctx.db
+    .prepare("SELECT id, amount_cents, reason FROM credit_ledger WHERE kind = 'used' AND session_id = ? AND player_id = ? AND ended_at IS NULL ORDER BY created_at, rowid")
+    .bind(sessionId, r.player_id)
+    .all<{ id: string; amount_cents: number; reason: string | null }>();
+  const paid = r.payment_status === 'paid' && !r.refunded_at;
+  return {
+    playerId: r.player_id,
+    paid,
+    paymentCents: paid ? (r.payment_amount_cents ?? 0) : 0,
+    used: results.filter((x) => x.reason !== 'cash').map((x) => ({ id: x.id, cents: x.amount_cents })),
+    heldCashCents: results.filter((x) => x.reason === 'cash').reduce((sum, x) => sum + x.amount_cents, 0),
+  };
 }
 
 /**
@@ -1036,6 +1125,19 @@ export async function applyPayment(
             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND self_paid_at IS NULL
               AND payment_updated_at = ${sqlText(ctx.nowIso)} AND payment_amount_cents = ${Number(row.payment_amount_cents ?? 0)})`,
         }),
+        // A game canceled late with the fee split (LATE_FEE_SPLIT): an I paid left waiting at the cancel is brought to
+        // the split price now that it is real money, the rest back as credit (the cancel skipped it, as Finalize does).
+        ...(fee === 'canceled_late' && feeSplitOf(session)
+          ? splitSeatStatements(ctx.db, {
+              groupId: group.id,
+              sessionId: session.id,
+              seat: { ...(await splitSeatOf(ctx, session.id, row)), paid: true, paymentCents: row.payment_amount_cents ?? 0 },
+              priceCents: feeSplitOf(session)!.priceCents,
+              nowIso: ctx.nowIso,
+              guard: `${confirmedNow} AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ${sqlText(session.id)} AND player_id = ${sqlText(playerId)} AND payment_updated_at = ${sqlText(ctx.nowIso)})
+                AND (SELECT COALESCE(final_price_cents, -1) FROM sessions WHERE id = ${sqlText(session.id)}) = ${feeSplitOf(session)!.priceCents}`,
+            }).statements
+          : []),
       ]);
       if (res.meta.changes !== 1) {
         // A second device confirmed it first: already as wanted.
@@ -1704,6 +1806,18 @@ export async function setTextsR2(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setTextsR2ForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'texts_r2_on' : 'texts_r2_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/late-fee-split { on }: Settings > Feature switches > "Late-cancel fee split". CHANGES MONEY for new fee-kept
+ * cancels only (shared/lateFees.ts); games already canceled keep the price they were canceled with.
+ */
+export async function setLateFeeSplit(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setLateFeeSplitForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'late_fee_split_on' : 'late_fee_split_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

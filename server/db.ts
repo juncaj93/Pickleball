@@ -62,6 +62,8 @@ export interface Env {
   TEXTS_R2?: string;
   /** "Late drops owe $14": the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?latefees=on (server/lateFees.ts). A wrangler.toml var. Changes money. */
   LATE_FEES?: string;
+  /** "Late-cancel fee split" (a fee-kept cancel inside 12 hours with 5 or more in prices like a played game): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?latefeesplit=on (server/lateFeeSplit.ts). A wrangler.toml var. */
+  LATE_FEE_SPLIT?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

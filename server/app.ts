@@ -121,6 +121,7 @@ route('POST', '/api/admin/players/:id/admin-hide', admin.hidePlayerFromAdmin);
 route('PUT', '/api/admin/pay-note', admin.setPayNote);
 route('PUT', '/api/admin/player-fix1', admin.setPlayerFix1);
 route('PUT', '/api/admin/texts-r2', admin.setTextsR2);
+route('PUT', '/api/admin/late-fee-split', admin.setLateFeeSplit);
 route('PUT', '/api/admin/pay-sheet', admin.setPaySheet);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));
 route('POST', '/api/admin/alerts/smart-test', (ctx) => tasks.smartTestAlert(ctx));
