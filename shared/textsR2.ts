@@ -79,10 +79,18 @@ function withReason(text: string, reason?: string | null): string {
 
 // ---------- Prefilled texts (open Messages, you press send) ----------
 
+/**
+ * "tonight" for a game tomorrow (or today): back out or join before tonight's cut-off. "early" for a game further out, where
+ * "tonight" would be wrong (Alex, Nov 4).
+ */
+function byWhen(iso: string, tz: string, nowMs: number): 'tonight' | 'early' {
+  return dayGap(iso, tz, nowMs) <= 1 ? 'tonight' : 'early';
+}
+
 /** 1. CHECK-IN, 4 or more in. Opens with no recipients. */
 export function checkInTextR2(s: SessionLike, tz: string, nowMs: number, signedUp: number, link: string): string {
   return lines(
-    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in so far. Want in? Join now.`, 'Need to back out? Do it tonight to avoid cancel fees.'],
+    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in so far. Want in? Join now.`, `Need to back out? Do it ${byWhen(s.startsAt, tz, nowMs)} to avoid cancel fees.`],
     link,
   );
 }
@@ -90,7 +98,7 @@ export function checkInTextR2(s: SessionLike, tz: string, nowMs: number, signedU
 /** 2. NEED PLAYERS, under 4 in (also FIND A SUB). Opens with no recipients. */
 export function needPlayersTextR2(s: SessionLike, tz: string, nowMs: number, signedUp: number, need: number, link: string): string {
   return lines(
-    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in, need ${need} more.`, "Want in? Join tonight, otherwise we'll have to cancel."],
+    [`Pickleball ${whenR2(s.startsAt, tz, nowMs)}!`, `${signedUp} in, need ${need} more.`, `Want in? Join ${byWhen(s.startsAt, tz, nowMs)}, otherwise we'll have to cancel.`],
     link,
   );
 }

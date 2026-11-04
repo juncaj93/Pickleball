@@ -85,11 +85,18 @@ describe('TEXTS_R2: the prefilled texts, exact words', () => {
       ['Pickleball tomorrow @ 8pm!', '5 in so far. Want in? Join now.', 'Need to back out? Do it tonight to avoid cancel fees.', '', LINK].join('\n'),
     );
     expect(checkInTextR2(THU_730, TZ, at('2026-11-04T17:00:00Z'), 4, LINK).split('\n')[0]).toBe('Pickleball tomorrow @ 7:30pm!');
+    // A game further out says "early", not "tonight".
+    const far = checkInTextR2(TUE, TZ, at('2026-10-28T16:00:00Z'), 5, LINK).split('\n');
+    expect(far.slice(0, 3)).toEqual(['Pickleball Tue Nov 3 @ 8pm!', '5 in so far. Want in? Join now.', 'Need to back out? Do it early to avoid cancel fees.']);
+    // Two days out is "further out"; tomorrow and game day keep "tonight".
+    expect(checkInTextR2(TUE, TZ, at('2026-11-01T17:00:00Z'), 5, LINK).split('\n')[2]).toBe('Need to back out? Do it early to avoid cancel fees.');
+    expect(checkInTextR2(TUE, TZ, TUE_NOON, 5, LINK).split('\n')[2]).toBe('Need to back out? Do it tonight to avoid cancel fees.');
   });
   it('2. need players (also Find a sub, with tonight / today)', () => {
     expect(needPlayersTextR2(TUE, TZ, MON_7PM, 3, 1, LINK)).toBe(
       ['Pickleball tomorrow @ 8pm!', '3 in, need 1 more.', "Want in? Join tonight, otherwise we'll have to cancel.", '', LINK].join('\n'),
     );
+    expect(needPlayersTextR2(TUE, TZ, at('2026-10-28T16:00:00Z'), 3, 1, LINK).split('\n').slice(0, 3)).toEqual(['Pickleball Tue Nov 3 @ 8pm!', '3 in, need 1 more.', "Want in? Join early, otherwise we'll have to cancel."]);
     expect(needPlayersTextR2(TUE, TZ, TUE_NOON, 2, 2, LINK).split('\n').slice(0, 2)).toEqual(['Pickleball tonight @ 8pm!', '2 in, need 2 more.']);
     expect(needPlayersTextR2({ startsAt: '2026-11-03T17:00:00.000Z' }, TZ, at('2026-11-03T13:00:00Z'), 0, 4, LINK).split('\n').slice(0, 2)).toEqual(['Pickleball today @ 12pm!', '0 in, need 4 more.']);
   });
@@ -303,7 +310,7 @@ describe('TEXTS_R2: the Text menu', () => {
     const items = sessionTexts(d, sessionOn(d, '2026-11-03'), Date.parse(d.now));
     expect(items.map((i) => i.id)).toEqual(['share', 'need']);
     expect(items[0].body).toBe(`Pickleball Tue Nov 3 @ 8pm!\nIn or out here:\n\n${LINK}`);
-    expect(items[1].body).toBe(`Pickleball Tue Nov 3 @ 8pm!\n2 in, need 2 more.\nWant in? Join tonight, otherwise we'll have to cancel.\n\n${LINK}`);
+    expect(items[1].body).toBe(`Pickleball Tue Nov 3 @ 8pm!\n2 in, need 2 more.\nWant in? Join early, otherwise we'll have to cancel.\n\n${LINK}`);
     for (const i of items) expect([i.chat, i.phones]).toEqual([true, []]);
   });
   it('ON, 4 in: the check-in opens with NO recipients (OFF it goes to the numbers)', async () => {
