@@ -312,6 +312,9 @@ async function main() {
         paid: [cs(btns[2]).backgroundColor, p.height],
         paidCheck: btns[2].querySelectorAll('svg.paid-check').length,
         paidSize: [p.width, p.height],
+        paidBorder: cs(btns[2]).borderTopColor,
+        paidCenter: p.left + p.width / 2,
+        sheetCenter: g.left + g.width / 2,
         title: cs(d.querySelector('h2')).fontSize,
         dw: d.getBoundingClientRect().width,
         scroll: d.scrollWidth - d.clientWidth,
@@ -328,7 +331,9 @@ async function main() {
           for (const from of ['top', 'card']) {
             const m = await openSheet(a.page, from);
             titles.push(m.title);
-            assert(m.paidSize[0] === m.gw && m.paidSize[1] >= 52, `${from}: the I paid button is not the same width or too short: ${m.paidSize}`);
+            assert(m.paidSize[0] >= m.gw / 2 - 1.5 && m.paidSize[0] <= m.gw * 0.62 && m.paidSize[1] >= 52, `${from}: the I paid button is not about half the width (half, or just wider when huge text needs it: ${m.paidSize[0]} vs ${m.gw}) or too short: ${m.paidSize}`);
+            assert(Math.abs(m.paidCenter - m.sheetCenter) <= 1.5, `${from}: the I paid button is not centered: ${m.paidCenter} vs ${m.sheetCenter}`);
+            assert(m.paidBorder !== 'rgba(0, 0, 0, 0)' && m.paidBorder !== m.paid[0] && m.paidBorder === m.outline[2], `${from}: the I paid outline is not the dark green outline: ${m.paidBorder} vs ${m.outline[2]}`);
             assert(Math.abs(m.gh - m.ch) < 1 && Math.abs(m.gw - m.cw) < 1, `${from}: unequal buttons: ${m.gw}x${m.gh} vs ${m.cw}x${m.ch}`);
             assert(m.scroll <= 0 && m.within, `${from}: sheet scrolls sideways or leaves the screen: ${JSON.stringify(m)}`);
             assert(m.outline[0] === 'rgba(0, 0, 0, 0)' && m.paid[0] !== 'rgba(0, 0, 0, 0)' && m.paid[0] !== m.green[0] && m.paid[0] !== m.outline[0] && m.paidCheck === 1 && m.green[0] !== m.outline[0], `${from}: colors: ${JSON.stringify(m)}`);

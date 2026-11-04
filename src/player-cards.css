@@ -1088,11 +1088,18 @@ html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
 }
 
 /* The sheet's "I paid": a soft green fill (the site's own light green tint) with a check mark, so it does not read as the
-   outlined "Copy Venmo" button above it. Same size: the 2px border stays, in the fill's own color. */
+   outlined "Copy Venmo" button above it. The 2px outline keeps the height the same. */
 .pay-sheet .btn.paid-soft {
+  /* Soft green fill, dark green outline (the same outline as the Copy button), half the width of the buttons above, centered. */
   background: var(--pc-ok-bg);
-  border-color: var(--pc-ok-bg);
+  border-color: var(--pc-green-line, var(--pc-green));
   color: var(--pc-green);
+  width: 50%;
+  /* With very big text the words never wrap: the button grows just enough to hold them. */
+  min-width: max-content;
+  max-width: 100%;
+  white-space: nowrap;
+  justify-self: center;
 }
 .pay-sheet .btn.paid-soft .paid-check {
   flex: none;
