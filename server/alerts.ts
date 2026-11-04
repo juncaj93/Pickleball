@@ -18,6 +18,7 @@ import { confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf, vi
 import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
 import { isAdminPage, linkText, ourAddress, type TextLink } from './telegram-links';
+import { textsR2ForAlerts } from './textsR2';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
@@ -296,12 +297,16 @@ export async function notifyCashOutUsed(ctx: Ctx, group: GroupRow, name: string,
   }
 }
 
-/** Call right after the tap. Sends at most one message, in the background. */
-export async function afterTap(ctx: Ctx, watch: AlertWatch | null): Promise<void> {
+/**
+ * Call right after the tap. Sends at most one message, in the background.
+ * `dropperOwesCents`: the person who dropped now owes this (late fees on and the drop created the debt). Only the TEXTS_R2
+ * wording says so; with that switch off the message is exactly what it always was.
+ */
+export async function afterTap(ctx: Ctx, watch: AlertWatch | null, dropperOwesCents: number | null = null): Promise<void> {
   if (!watch) return;
   try {
     const after = people(await loadRoster(ctx.db, watch.session.id));
-    const text = alertMessage({
+    const input = {
       actor: watch.actor,
       before: watch.before,
       after,
@@ -310,7 +315,10 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null): Promise<void
       nowMs: ctx.nowMs,
       timezone: watch.group.timezone,
       prefs: watch.prefs,
-    });
+    };
+    let text = alertMessage(input);
+    // The new wording is the same message with the game named by its day. It only costs a read when there is something to send.
+    if (text && (await textsR2ForAlerts(ctx, watch.group.id))) text = alertMessage({ ...input, textsR2: true, dropperOwesCents }) ?? text;
     if (text) ctx.waitUntil(deliver(ctx, watch.group.id, text, true));
   } catch {
     // An alert is never worth failing a tap over.

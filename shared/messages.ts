@@ -18,11 +18,6 @@ function when(s: SessionLike, tz: string) {
   };
 }
 
-export function confirmationMessage(name: string, s: SessionLike, tz: string, link: string): string {
-  const w = when(s, tz);
-  return `Hey ${name}! Are you still in for pickleball ${w.day}, ${w.date}, ${w.time}? Confirm or drop out here: ${link}`;
-}
-
 /** "Tue Nov 3": the short date the texts use. */
 export function textDay(iso: string, tz: string): string {
   return formatShortDate(iso, tz).replace(',', '');
@@ -33,34 +28,10 @@ export function siteAddress(link: string): string {
   return link.replace(/^https?:\/\//, '').replace(/[/?].*$/, '');
 }
 
-/**
- * The poll: "Pickleball Tue Nov 3, 8:00 to 10:00 PM. $14 each. In or out?
- * pickleball.juncaj.net" Uses the per-player price only, never the court cost.
- */
-export function pollMessage(s: SessionLike, tz: string, priceCents: number, site: string): string {
-  return `Pickleball ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. ${formatPrice(priceCents)} each. In or out? ${siteAddress(site)}`;
-}
-
-/** Poll while the organizer is on the venue's court waitlist. */
-export function courtWaitlistPollMessage(s: SessionLike, tz: string, site: string): string {
-  return `Pickleball ${textDay(s.startsAt, tz)}, ${formatTimeRange(s.startsAt, s.endsAt, tz)}. I'm on the court waitlist. Want in if it opens? ${siteAddress(site)}`;
-}
-
-/** The day-before group text, worded for how many are in. */
 /** A link straight to one session on the player screen: the player link plus ?s=<session id>. */
 export function sessionLink(playerLink: string, sessionId: string): string {
   const base = playerLink.replace(/\/$/, '');
   return `${base}${base.includes('?') ? '&' : base.match(/\/g\/[^/]+$/) ? '?' : '/?'}s=${sessionId}`;
-}
-
-export function replacementMessage(s: SessionLike, tz: string, link: string): string {
-  const w = when(s, tz);
-  return `A pickleball spot just opened for ${w.day}, ${w.date}, ${w.time}. First to claim it gets the spot: ${link}`;
-}
-
-export function bookingMessage(s: SessionLike, tz: string): string {
-  const w = when(s, tz);
-  return `Pickleball is planned for ${w.day}, ${w.date}, ${w.time}. I'm checking court bookings now.`;
 }
 
 export function deadlineAlertMessage(s: SessionLike, tz: string, deadlineIso: string): string {

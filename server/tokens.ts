@@ -139,7 +139,7 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
     outcome = 'withdrawn';
     if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late, ...(res.lateFee ? { owes: true } : {}) });
     if (res.lateFee) await auditLateFeeOwed(ctx.db, r.group.id, r.session.id, r.token.player_id, 'late_drop', ctx.nowIso);
-    await afterTap(ctx, watch);
+    await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? settingsOf(r.group).pricePerPlayerCents : null);
   } else {
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
     const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only', settingsOf(r.group).maxPlayers);

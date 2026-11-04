@@ -18,6 +18,7 @@ import { adminR2Allowed } from '../shared/adminR2';
 import { adminR3For, adminR3ForAll, setAdminR3ForAll, spentByPlayer } from './adminR3';
 import { payNoteForAll, setPayNoteForAll } from './payNote';
 import { playerFix1ForAll, setPlayerFix1ForAll } from './playerFix1';
+import { setTextsR2ForAll, textsR2For, textsR2ForAll } from './textsR2';
 import { paySheetForAll, setPaySheetForAll } from './paySheet';
 import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_DROP, setLateFeesForAll } from './lateFees';
 import { FEE_KEPT, lateFeeKind, type LateFeeClearWhy } from '../shared/lateFees';
@@ -228,6 +229,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     adminR3ForAll: await adminR3ForAll(ctx.db, group.id),
     lateFees: await lateFeesFor(ctx, group.id),
     lateFeesForAll: await lateFeesForAll(ctx.db, group.id),
+    textsR2: await textsR2For(ctx, group.id),
+    textsR2ForAll: await textsR2ForAll(ctx.db, group.id),
   };
 }
 
@@ -1689,6 +1692,18 @@ export async function setPlayerFix1(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setPlayerFix1ForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'player_fix1_on' : 'player_fix1_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/texts-r2 { on }: Settings > Feature switches > "Texts and alerts, round 2". New wording for the prefilled texts and
+ * the Telegram alerts, new alert timing, and the cancel sheet answering No by default. Changes no money, amount or game rule.
+ */
+export async function setTextsR2(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTextsR2ForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'texts_r2_on' : 'texts_r2_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

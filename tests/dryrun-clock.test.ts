@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { sessionCalendar } from '../shared/calendar';
 import { deadlineMs } from '../shared/cards';
-import { checkInMessage, dayWord, needPlayersMessage, pollMessage, shareMessage, textDay, textWhen, textWhenAt } from '../shared/messages';
+import { checkInMessage, dayWord, needPlayersMessage, shareMessage, textDay, textWhen, textWhenAt } from '../shared/messages';
 import { venmoNote } from '../shared/money';
 import { DEFAULT_SETTINGS } from '../shared/settings';
 import { formatDateTime, formatTime, formatTimeRange, localParts, playerDay, suggestDay, wantInTitle, weekLabel, weekTier, zonedTimeToUtc } from '../shared/time';
@@ -265,7 +265,6 @@ describe('texts for these days say the right day and 8:00 PM', () => {
     ctx.app.now = T.sun9pm;
     const s = await on(ctx, '2026-11-03');
     const link = 'pickleball.example';
-    expect(plain(pollMessage(s, TZ, 1400, `https://${link}`))).toBe(`Pickleball Tue Nov 3, 8:00 to 10:00 PM. $14 each. In or out? ${link}`);
     expect(plain(textWhen(s.startsAt, TZ))).toBe('Tue Nov 3, 8:00 PM');
     expect(plain(shareMessage(s, TZ, T.sun9pm, link))).toBe(`Pickleball Tue Nov 3, 8:00 PM. In or out here: ${link}`);
     expect(plain(shareMessage(s, TZ, T.sun130est, link))).toBe(`Pickleball Tue Nov 3, 8:00 PM. In or out here: ${link}`);

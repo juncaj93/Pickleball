@@ -6,7 +6,7 @@
 // Telegram is faked (TELEGRAM_FETCH); nothing is ever sent.
 import { describe, expect, it } from 'vitest';
 import { alertWhen } from '../shared/alerts';
-import { checkInMessage, confirmationMessage, dayWord, deadlineAlertMessage, needPlayersMessage, pollMessage, replacementMessage, shareMessage, textWhen, textWhenAt } from '../shared/messages';
+import { checkInMessage, dayWord, deadlineAlertMessage, needPlayersMessage, shareMessage, textWhen, textWhenAt } from '../shared/messages';
 import { formatTime, formatTimeRange, formatTimeShort, localParts, playerDay, suggestDay, weekLabel, weekTier } from '../shared/time';
 import { suggestions } from '../src/pages/admin/suggestions';
 import { buildTodo } from '../src/pages/admin/todo';
@@ -352,22 +352,16 @@ describe('calendar file and texts', () => {
     const link = 'pickleball.example';
     const nowMs = ctx.app.now;
     const texts = [
-      pollMessage(tue, TZ, 1400, `https://${link}`),
       shareMessage(tue, TZ, nowMs, link),
       needPlayersMessage(tue, TZ, nowMs, 2, link),
       checkInMessage(tue, TZ, nowMs, link),
-      confirmationMessage('Alex', tue, TZ, link),
-      replacementMessage(tue, TZ, link),
       deadlineAlertMessage(tue, TZ, tue.cancellationDeadlineAt),
       textWhen(tue.startsAt, TZ),
-      pollMessage(thu, TZ, 1400, `https://${link}`),
       shareMessage(thu, TZ, nowMs, link),
     ].map(plain);
-    expect(texts[0]).toBe(`Pickleball Tue Nov 3, 7:00 to 9:00 PM. $14 each. In or out? ${link}`);
-    expect(texts[1]).toBe(`Pickleball tomorrow, 7:00 PM. In or out here: ${link}`);
-    expect(texts[4]).toBe(`Hey Alex! Are you still in for pickleball Tuesday, Nov 3, 7:00 to 9:00 PM? Confirm or drop out here: ${link}`);
-    expect(texts[6]).toContain('The court cancellation deadline is Tue, Nov 3, 7:00 AM.');
-    expect(texts[8]).toBe(`Pickleball Thu Nov 5, 7:30 to 9:30 PM. $14 each. In or out? ${link}`);
+    expect(texts[0]).toBe(`Pickleball tomorrow, 7:00 PM. In or out here: ${link}`);
+    expect(texts[3]).toContain('The court cancellation deadline is Tue, Nov 3, 7:00 AM.');
+    expect(texts[5]).toBe(`Pickleball Thu Nov 5, 7:30 PM. In or out here: ${link}`);
     for (const t of texts) expect(t).not.toMatch(/8:00 PM|10:00 PM|8–10|8-10/);
     // The organizer's Text menu cards for these games.
     const d = await dash(ctx);

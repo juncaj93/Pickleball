@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { courtDisplay } from '../src/courtDisplay';
 import { cardWindows } from '../shared/cards';
-import {
-  confirmationMessage,
-  courtWaitlistPollMessage,
-  paymentMessage,
-  pollMessage,
-  replacementMessage,
-} from '../shared/messages';
+import { paymentMessage } from '../shared/messages';
 import { DEFAULT_SETTINGS } from '../shared/settings';
 import { firstSession, HOUR, playerPhone, setupGroup } from './harness';
 
@@ -183,12 +177,6 @@ describe('court waitlist', () => {
     expect((await dash(ctx)).sessions.some((x: any) => x.id === thu.id)).toBe(false);
   });
 
-  it('poll text for a court-waitlist session', () => {
-    const s = { startsAt: '2026-10-30T00:00:00.000Z', endsAt: '2026-10-30T02:00:00.000Z' };
-    expect(courtWaitlistPollMessage(s, TZ, 'https://pickleball.juncaj.net')).toBe(
-      "Pickleball Thu Oct 29, 8:00 to 10:00 PM. I'm on the court waitlist. Want in if it opens? pickleball.juncaj.net",
-    );
-  });
 });
 
 describe('player schedule data', () => {
@@ -283,11 +271,7 @@ describe('day-before and last-call cards', () => {
   it('no text ever says it was sent, or carries the court cost', () => {
     const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' };
     const all = [
-      pollMessage(s, TZ, 1400, 'L'),
-      courtWaitlistPollMessage(s, TZ, 'L'),
-      confirmationMessage('A', s, TZ, 'L'),
       paymentMessage('A', 1400, [s], TZ, 'L'),
-      replacementMessage(s, TZ, 'L'),
     ];
     for (const m of all) {
       expect(m).not.toMatch(/\bsent\b/i);

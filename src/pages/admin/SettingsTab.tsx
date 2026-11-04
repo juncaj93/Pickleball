@@ -422,7 +422,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           )}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
           <AdminR2Row ctx={ctx} auto={auto} />
           <AdminR3Row ctx={ctx} auto={auto} />
@@ -430,6 +430,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           <PlayerFix1Row ctx={ctx} auto={auto} />
           <PaySheetRow ctx={ctx} auto={auto} />
           <LateFeesRow ctx={ctx} auto={auto} />
+          <TextsR2Row ctx={ctx} auto={auto} />
           {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
           {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
         </Section>
@@ -892,6 +893,40 @@ function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.playerFix1All} />
+    </div>
+  );
+}
+
+/**
+ * "Texts and alerts, round 2": the new wording for every text the site prepares, the new wording and timing of the Telegram
+ * alerts, and the cancel sheet answering No to "Did the venue waive the fee?". No money rule changes. Off: only a phone opened
+ * with /admin?textsr2=on sees the new texts (a private test); the Telegram alerts change only when this is on for everyone.
+ * Saves itself, no deploy.
+ */
+function TextsR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.textsR2ForAll);
+  return (
+    <div className="set-row-wrap" data-row="textsR2All">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Texts and alerts, round 2 <SaveMark state={auto.rows.textsR2All} />
+          </span>
+          <span className="set-hint">New wording for texts and Telegram alerts, new alert times, cancel sheet starts on No. Off: only phones opened with /admin?textsr2=on get the new texts</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-texts-r2-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('textsR2All', { on: e.target.checked }, '/api/admin/texts-r2').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.textsR2All} />
     </div>
   );
 }

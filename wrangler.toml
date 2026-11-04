@@ -61,6 +61,13 @@ PLAYER_FIX1 = "on"
 # switches > "Pay sheet" (off at ship = nobody), plus a phone opened once with ?paysheet=on (the private test switch).
 # "off" = the kill switch: nobody, not even the test link. Display only: no money rule changes. Needs a deploy.
 PAY_SHEET = "on"
+# "Texts and alerts, round 2" (new wording for every prefilled text, new wording and timing for the Telegram alerts, the cancel sheet
+# answering No to "Did the venue waive the fee?" by default). "on" here only ALLOWS it; who gets it is Settings > Feature switches >
+# "Texts and alerts, round 2" (off at ship = nobody), plus a phone opened once with /admin?textsr2=on (the private test switch: it
+# changes the texts that phone opens and its cancel sheet; the Telegram alerts and the 5-minute clock change only when it is on for
+# everyone). "off" = the kill switch: nobody, not even the test link, and the clock sends the old alerts. No money rule, amount or game
+# rule depends on it. Needs a deploy.
+TEXTS_R2 = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -82,6 +89,7 @@ ADMIN_R3 = "on"
 LATE_FEES = "on"
 PLAYER_FIX1 = "on"
 PAY_SHEET = "on"
+TEXTS_R2 = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

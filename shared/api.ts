@@ -417,6 +417,10 @@ export interface AdminDashboard {
   lateFees?: boolean;
   /** Settings > Feature switches > "Late drops owe $14" is on (for everyone). */
   lateFeesForAll?: boolean;
+  /** "Texts and alerts, round 2" is on for this screen (server/textsR2.ts): the new wording of the prefilled texts, no recipients on the check-in, the cancel sheet answering No. False or missing: everything reads and works as before. */
+  textsR2?: boolean;
+  /** Settings > Feature switches > "Texts and alerts, round 2" is on (for everyone). */
+  textsR2ForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */

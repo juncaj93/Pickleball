@@ -2031,3 +2031,65 @@ The player screen's markup was compared with main's, 27 screens (3 players x 3 p
 - Fresh reviewers (did not write the code) for each part; every finding fixed (see above). Two earlier test-run failures were mine and are fixed (server-render fallback for the in-flight hook; the Zelle key was renamed `zelleNumber` because the privacy scans flag keys containing "phone").
 - Preview (fake database, re-seeded Tue Nov 3 about 11:00 AM): https://preview-player-fix1.pickleball-club-9h0.pages.dev (deployment c3261d96). Not on production. Tonight's fake game is Tue Nov 3, 8:00 PM, Court booked, Jordan owes $14 (also Avery owes $11): that is the game-day look.
 - To ship (never in loud hours; Wed Nov 4 6:00 AM Eastern or later, and only after "ship it"): PR, full unit suite, SQL export and Time Travel bookmark, `npm run deploy` from main with PLAYER_FIX1 and PAY_SHEET OFF, read-only live check. Rollback: Pages deployment `2bbbff84-880c-40cc-ae74-79ef1bac9e9f` (commit 20fc8a9, live now). No migration, no data change.
+
+## Texts and Telegram alerts, round 2 (TEXTS_R2) (Wed Nov 4, 2026) - built, tested, reviewed; on a preview, waiting for "ship it"
+
+Zip 3 (START_HERE, TEXT_AUDIT, SITE_RULES). Built on main `3348081` (the PLAYER_FIX1 / PAY_SHEET merge). Wording, timing and one default only: no money rule, amount
+or game rule, no schema change, no migration. Ships OFF behind ONE new switch `TEXTS_R2` (see `FEATURE_SWITCHES.md`): `wrangler.toml` kill switch (allows it, production and
+preview), Settings > Feature switches > "Texts and alerts, round 2" (off at ship, one `task_log` row `texts_r2_on`), private link `/admin?textsr2=on` (header `X-Texts-R2`).
+The switch is read in three places: the organizer screens (`d.textsR2`), the `/go/` text link (`textsR2For`), and the 5-minute clock (`cronTick` reads the same row in its
+existing first database trip, so no extra trip) plus the tap alerts (`textsR2ForAlerts`). **The private link changes only the texts and the cancel sheet on that phone. The
+Telegram alerts and the clock follow only the Settings switch for everyone** (they are not tied to a phone), so alert changes cannot be tried on one phone first.
+
+### A. Prefilled texts (all in `shared/textsR2.ts`; the old wording stays in `shared/messages.ts` untouched)
+1. Check-in, 2. Need players (also Find a sub), 3. Share, 4. Final price ("Thu Oct 29", "last night" / "yesterday"), 5. Spot opened, 6a. Canceled credit version (merges the old
+#5 and #16; any game; reason), 6b. Canceled fee-kept version (reason), 7. Moved (line breaks, reason), 8. Payment reminder ("yesterday" / "Tue Nov 3", several games = total),
+9. Remind all unpaid, 10. Still in? ("is confirmed @ 7:30pm"), 11. the two "Text the players" texts (their live words, line breaks only). Day words count calendar days in the
+group's zone (never 24-hour math), so midnight and the Nov 1 clock change are safe. Times read `8pm` / `7:30pm`. Every text ends with a blank line then `pickleball.juncaj.net`
+alone (11 and the CourtReserve texts have no site address, as before). No dashes (a test scans every text). Line breaks reach Messages as `%0A` (checked in unit tests for iPhone
+`sms:&body=` and Android `sms:?body=`, and on the real anchor in the browser test). **Not verified on a real iPhone** (no iPhone here): it is the first item in the phone test list.
+- Check-in now opens with NO recipients in the gear menu and on the Home cards too (before: the gear menu and the Home card went to everyone's numbers).
+- The cancel reason typed on the cancel sheet (`sessions.cancel_reason`) is now in both late-cancel texts and starts in the Reason box of the normal canceled text.
+- Removed (each checked unused by searching `src`, `server`, `shared`, `functions`; only tests called them): the poll ("In or out?" with the price), the court-waitlist poll,
+  "Are you still in?", "A pickleball spot just opened... First to claim it", "Pickleball is planned for... I'm checking court bookings now", and the unused duplicate Text button
+  component (`src/pages/admin/Texts.tsx`; the gear menu has its own). Their tests were deleted. **Left on purpose:** `deadlineAlertMessage` and "Text this alert to yourself"
+  (a screen still offers it with the switch off; it is hidden with the switch on, and the wording can be deleted once the switch is on for everyone), and the `/links` API with
+  `sessionLink` (not on Alex's list).
+### B. Cancel sheet
+With the switch on, "Did the venue waive the fee or give you credit toward the next booking?" starts on No, and the fee-kept text is ready after Cancel session. Yes still works as
+before. It only appears when "Late drops owe $14" is on and the cancel is inside 12 hours (as before); with late fees off the old "Were you charged for this court?" question is
+unchanged (it already defaults to No).
+### C. Telegram (clock brain `shared/tasks.ts`, tap alerts `shared/alerts.ts`)
+- #1 "Tomorrow: 5 players in. Text the group to confirm" / "Tomorrow: 3 players in, need a 4th. Text the group" (the link opens text 1 or 2). #2, #3 keep their words with "Tomorrow:".
+- #4 game-day check: not sent (the Home card still reads the same).
+- #5 heads-up at **6:55 AM**, not 6:58: the clock ticks every 5 minutes, so a 6:58 alert would go out at the 7:00 tick, after the court opened. An exact 6:58 would need a second
+  cron entry on the clock Worker (a separate Worker deploy that the switch cannot turn off, and the daylight-saving hour moves it): not cheap or safe. A missed tick still sends it up to an hour late.
+- #6 booking reminder (7:30 AM) is sent only while the game is Not booked: not for Booked, Waitlist or Canceled. **Checked #5 and #7 for the same status logic and left them:** #5 fires
+  before the court opens (a game already on Waitlist then is not a real case), and #7 "Check CourtReserve for an opening" is still useful for a Waitlist game (a waitlist is not a court).
+- #7 "no court yet" goes 30 minutes before cancel-by, never before 7:00 AM that day (8 PM game: 7:30 AM; 7 PM game: 7:00 AM). Never before its 24-hour window opens, so a 24-hour
+  cancel-by still gets its alert (found by a test). The Home "no court yet" card shows at the same time as its alert.
+- #8 finalize: "Tonight:" / "Today:". #9, #10 "Ryan dropped out of tomorrow's 8:00 PM game (...)" / "tonight's game", and with late fees on "Ryan owes $14." when the drop made a debt
+  (a drop by someone who had already paid says nothing about owing: their $14 stays on the game). #11 "Tomorrow's 8:00 PM game has 4 now, it's on." #12, #13 unchanged. #15 the test alert shows the new sample when the switch is on for everyone.
+- Quick check `mayAlertSoon` knows the two moved times (and the 24-hour window), proven by a full 5-minute sweep with a 24-hour cancel-by, a 6:30 AM game, a Waitlist game and a clock-change day.
+
+### OFF changes nothing (proof)
+`tests/texts-r2.test.ts`: every card, alert and quick check, every 5 minutes Oct 14 to Nov 27, is identical with `textsR2` false or missing; the existing golden-file and tick-speed
+tests (unchanged) still pass; 48 hours of real ticks through `/api/cron/tick` send the same six alerts word for word with the switch off, and with `TEXTS_R2 = "off"` even if Settings is on; a phone's private link
+never changes an alert; the text menu with the switch off is the old words, one line, to the numbers.
+
+### Tests
+- New `tests/texts-r2.test.ts` (see counts in the status below) and `e2e/texts-r2.cjs` (14, added to `npm run test:e2e`).
+- Six existing test files lost the lines that called the removed wording.
+- Known failures on main (not fixed): admin-cleanup 2, admin-motion "press" 1; eight other browser files fail on any day after Nov 3 because they assume the first real game has not happened.
+
+### Status (Wed Nov 4, 2026, about 10:50 AM Eastern)
+- Type check clean; production build clean. Unit: 1,873 passed, 1 skipped, 0 failed (100 files; before: 1,803 in 99; 73 new in `tests/texts-r2.test.ts`, 3 removed with the dead wording).
+- Browser, every file one by one: new `texts-r2` 14 of 14; `texts` 52, `cancel-reason` 8, `late-fees` 19, `do-now` 13, `alerts` 52, `player-fix1` 30, `pay-sheet` 23, `run` 229 all green. Known failures, not fixed: admin-cleanup 2 (same two fail on a clean `origin/main`), admin-motion "press" 1. The
+  files that assume the first real game has not happened fail for that same reason (circles, money-visible, good-news, audit-player-flows, admin-audit, motion, layout-polish; popup printed nothing). `run.cjs` (2) and `round2.cjs` (1) failed once while the unit suite ran at the same time and pass alone (229 and 25).
+- Fresh reviewer (did not write the code): no leak with the switch off, no high-severity bug. One real finding fixed: the Moved text named the old day as "Tue Nov 3" even when it was tomorrow. Left for Alex to decide: the fee-kept cancel text puts "Sorry about that!" before
+  "You can pay on the site:" so the address can end the text; a same-day finalize says "tonight" / "today"; #5 and #7 still fire for a Waitlist game.
+- Preview (fake database, re-seeded): https://preview-texts-r2.pickleball-club-9h0.pages.dev (deployment dae5d4f5, branch preview-texts-r2). Not on production. No Telegram secret exists on previews, so no alert can reach Alex's chat.
+- To ship (never in loud hours; quiet window Fri to Mon before 6:00 PM, or Wed 6:00 AM to 6:00 PM, and only after "ship it"): PR, full unit suite, SQL export and Time Travel bookmark, `npm run deploy` from main with TEXTS_R2 allowed and the Settings row OFF, read-only live check. Rollback: the Pages deployment live at that time. No migration, no data change.
+
+### Change after Alex's answers (Wed Nov 4, 2026)
+Check-in and Need players: the back-out line and the join line say "tonight" when the game is tomorrow or today, and "early" for a game further out ("Need to back out? Do it early to avoid cancel fees." / "Want in? Join early, otherwise we'll have to cancel."). Everything else unchanged; the other answers (6:55 AM, fee-kept order, "tonight"/"today" on game night, #5 and #7 left as they are, no line for a paid dropper) needed no change. Unit 1,873 passed (100 files), `e2e/texts-r2.cjs` 14 of 14, `e2e/texts.cjs` 52 of 52. Same preview address, redeployed.

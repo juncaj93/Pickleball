@@ -131,7 +131,7 @@ export function EditableDraft({
  * the waitlist, hidden players or the whole group).
  */
 export function PlayersText({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  const texts = backOutTexts();
+  const texts = backOutTexts(ctx.d.textsR2 === true);
   const [pick, setPick] = useState<BackOutText['id']>('court_canceled');
   const chosen = texts.find((t) => t.id === pick) ?? texts[0];
   const who = confirmedReach(ctx.d, s, false);

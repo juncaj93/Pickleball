@@ -18,6 +18,20 @@ import {
   shareMessage,
   siteAddress,
 } from '../../../shared/messages';
+import {
+  canceledCreditTextR2,
+  canceledFeeKeptTextR2,
+  checkInTextR2,
+  courtCanceledTextR2,
+  courtStillBookedTextR2,
+  finalTextR2,
+  movedTextR2,
+  needPlayersTextR2,
+  paymentTextR2,
+  promotedTextR2,
+  remindAllTextR2,
+  shareTextR2,
+} from '../../../shared/textsR2';
 
 export interface TextItem {
   id: 'share' | 'need' | 'checkin' | 'promoted' | 'canceled' | 'moved' | 'final';
@@ -54,10 +68,15 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   const me = d.me?.id ?? null;
   const items: TextItem[] = [];
   const signed = s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted');
+  // TEXTS_R2 on: the new wording (shared/textsR2.ts). Off: every word below is exactly as it was.
+  const r2 = d.textsR2 === true;
   // After the game: once finalized, the one post-game note for the group chat.
   if (Date.parse(s.startsAt) <= nowMs) {
     if (s.finalized && !s.state.flags.canceled) {
-      items.push({ id: 'final', label: 'Final price', body: finalMessage(s, tz, s.finalized.playedCount, s.finalized.priceCents, s.finalized.flatCents, link), ...GROUP });
+      const body = r2
+        ? finalTextR2(s, tz, nowMs, s.finalized.playedCount, s.finalized.priceCents, s.finalized.flatCents, link)
+        : finalMessage(s, tz, s.finalized.playedCount, s.finalized.priceCents, s.finalized.flatCents, link);
+      items.push({ id: 'final', label: 'Final price', body, ...GROUP });
     }
     return items;
   }
@@ -66,22 +85,26 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
     // Late fees on and canceled inside 12 hours: the text follows the venue answer (fee kept: confirmed players only).
     const late = lateCancelText(d, s, '');
     if (late) items.push({ id: 'canceled', label: 'Canceled', body: late.body, chat: false, phones: late.reach.phones, missing: late.reach.missing, who: `${late.to} · ${late.reach.count}` });
-    else items.push({ id: 'canceled', label: 'Canceled', body: canceledMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
+    else items.push({ id: 'canceled', label: 'Canceled', body: r2 ? canceledCreditTextR2(s, tz, nowMs, link, s.cancelReason) : canceledMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
     return items;
   }
   const n = s.confirmedCount;
   const confirmed = s.roster.filter((r) => r.status === 'confirmed');
 
   if (s.moved && s.plannedStartsAt) {
-    items.push({ id: 'moved', label: 'Moved', body: movedMessage(s, s.plannedStartsAt, tz, nowMs, link), ...toNumbers('Everyone signed up and waiting', signed, me) });
+    const body = r2 ? movedTextR2(s, s.plannedStartsAt, tz, nowMs, link) : movedMessage(s, s.plannedStartsAt, tz, nowMs, link);
+    items.push({ id: 'moved', label: 'Moved', body, ...toNumbers('Everyone signed up and waiting', signed, me) });
   }
-  items.push({ id: 'share', label: 'Share the game', body: shareMessage(s, tz, nowMs, link), ...GROUP });
-  if (n < 4) items.push({ id: 'need', label: 'Need players', body: needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
-  // 4 or more in: the Check-in goes to everyone signed up, the waitlist too.
-  if (n >= 4) items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
+  items.push({ id: 'share', label: 'Share the game', body: r2 ? shareTextR2(s, tz, nowMs, link) : shareMessage(s, tz, nowMs, link), ...GROUP });
+  if (n < 4) items.push({ id: 'need', label: 'Need players', body: r2 ? needPlayersTextR2(s, tz, nowMs, n, 4 - n, link) : needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
+  // 4 or more in: the Check-in goes to everyone signed up, the waitlist too. TEXTS_R2: it opens with NO recipients everywhere (you pick the group chat).
+  if (n >= 4) {
+    if (r2) items.push({ id: 'checkin', label: 'Check-in', body: checkInTextR2(s, tz, nowMs, n, link), ...GROUP });
+    else items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
+  }
   // A waitlisted player who moved in after a drop (above the max, someone left).
   for (const r of confirmed.filter((x) => x.promotionReason === 'spot_opened' && x.promotedAt && !x.promotionNotifiedAt && x.playerId !== me)) {
-    items.push({ id: 'promoted', label: `Spot opened: ${r.name}`, body: promotedMessage(s, tz, nowMs, link), ...toNumbers(r.name, [r], me) });
+    items.push({ id: 'promoted', label: `Spot opened: ${r.name}`, body: r2 ? promotedTextR2(s, tz, nowMs, link) : promotedMessage(s, tz, nowMs, link), ...toNumbers(r.name, [r], me) });
   }
   return items;
 }
@@ -129,7 +152,9 @@ export function owedGames(d: AdminDashboard, playerId: string, extra?: AdminSess
 /** "Hey Ryan, you owe $14 for pickleball Tue Nov 3. Pay here: ..." (the total, if more than one game). */
 export function reminderText(d: AdminDashboard, playerId: string, name: string, extra?: AdminSessionView): string {
   const games = owedGames(d, playerId, extra);
-  return paymentMessage(name, games.reduce((n, g) => n + g.cents, 0), games.map((g) => g.s), d.group.timezone, siteAddress(d.group.playerLink));
+  const total = games.reduce((n, g) => n + g.cents, 0);
+  if (d.textsR2 === true) return paymentTextR2(name, total, games.map((g) => g.s), d.group.timezone, Date.parse(d.now), siteAddress(d.group.playerLink));
+  return paymentMessage(name, total, games.map((g) => g.s), d.group.timezone, siteAddress(d.group.playerLink));
 }
 
 /** Everyone who owes right now, with their number, for "Remind all unpaid". */
@@ -139,8 +164,14 @@ export function unpaidPeople(d: AdminDashboard) {
     phones: owing.filter((p) => p.phone).map((p) => p.phone!),
     missing: owing.filter((p) => !p.phone).map((p) => p.name),
     count: owing.length,
-    body: remindAllMessage(siteAddress(d.group.playerLink)),
+    body: remindAllText(d),
   };
+}
+
+/** "Remind all unpaid": the group reminder (TEXTS_R2 on: the new wording). */
+export function remindAllText(d: Pick<AdminDashboard, 'group' | 'textsR2'>): string {
+  const link = siteAddress(d.group.playerLink);
+  return d.textsR2 === true ? remindAllTextR2(link) : remindAllMessage(link);
 }
 
 // ---------- "Text the players" (LATE_FEES on) ----------
@@ -165,10 +196,10 @@ export interface BackOutText {
 }
 
 /** The two texts for backing out of today's game, main one first. */
-export function backOutTexts(): BackOutText[] {
+export function backOutTexts(r2 = false): BackOutText[] {
   return [
-    { id: 'court_canceled', label: 'Court canceled', body: courtCanceledMessage() },
-    { id: 'court_booked', label: 'Court still booked (backup)', body: courtStillBookedMessage() },
+    { id: 'court_canceled', label: 'Court canceled', body: r2 ? courtCanceledTextR2() : courtCanceledMessage() },
+    { id: 'court_booked', label: 'Court still booked (backup)', body: r2 ? courtStillBookedTextR2() : courtStillBookedMessage() },
   ];
 }
 
@@ -185,11 +216,18 @@ export function canceledLate(s: AdminSessionView): boolean {
 export function lateCancelText(d: AdminDashboard, s: AdminSessionView, reason: string): { body: string; to: string; feeKept: boolean; reach: ReturnType<typeof reach> } | null {
   if (d.lateFees !== true || !canceledLate(s)) return null;
   const link = siteAddress(d.group.playerLink);
+  const nowMs = Date.parse(d.now);
+  const r2 = d.textsR2 === true;
+  // TEXTS_R2: the reason typed on the cancel sheet goes into both versions (it was dropped from the late-cancel ones).
+  const why = r2 ? reason || s.cancelReason || '' : reason;
   if (s.canceledBy === 'organizer_fee_kept') {
-    return { body: canceledFeeKeptMessage(d.group.settings.pricePerPlayerCents, link), to: 'The players who were in', feeKept: true, reach: confirmedReach(d, s, true) };
+    const body = r2
+      ? canceledFeeKeptTextR2(s, d.group.timezone, nowMs, d.group.settings.pricePerPlayerCents, link, why)
+      : canceledFeeKeptMessage(d.group.settings.pricePerPlayerCents, link);
+    return { body, to: 'The players who were in', feeKept: true, reach: confirmedReach(d, s, true) };
   }
   return {
-    body: canceledTodayMessage(link, reason),
+    body: r2 ? canceledCreditTextR2(s, d.group.timezone, nowMs, link, why) : canceledTodayMessage(link, reason),
     to: 'Everyone signed up and waiting',
     feeKept: false,
     reach: reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), d.me?.id ?? null),

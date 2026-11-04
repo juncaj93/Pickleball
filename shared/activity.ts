@@ -166,6 +166,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} switched "Player screen fixes" on`;
     case 'player_fix1_off':
       return `${who} switched "Player screen fixes" off`;
+    case 'texts_r2_on':
+      return `${who} switched "Texts and alerts, round 2" on`;
+    case 'texts_r2_off':
+      return `${who} switched "Texts and alerts, round 2" off`;
     case 'pay_sheet_on':
       return `${who} switched the Pay sheet on`;
     case 'pay_sheet_off':
