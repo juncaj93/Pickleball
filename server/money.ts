@@ -168,9 +168,11 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     ? (() => {
         const p = localParts(ctx.nowMs, tz);
         const isCurrent = p.year === year && p.month === month;
-        // Membership is a monthly fee: it counts for the current month, and for any other month that has a game the venue is owed for.
-        const membership = isCurrent || rwSessions + projAdded > 0 ? settings.monthlyMembershipCents : 0;
-        const split = (courtsCents: number, playersCents: number) => {
+        // Membership is a monthly fee: "so far" has it for the current month, or any month with a game the venue is already owed for; the
+        // projected card also has it for a month whose only games are still coming.
+        const soFarMembership = isCurrent || rwSessions > 0 ? settings.monthlyMembershipCents : 0;
+        const projMembership = isCurrent || rwSessions + projAdded > 0 ? settings.monthlyMembershipCents : 0;
+        const split = (courtsCents: number, playersCents: number, membership: number) => {
           const yourCost = Math.max(0, courtsCents + membership - playersCents);
           const courtPart = Math.max(0, courtsCents - playersCents);
           return { yourCostCents: yourCost, yourCostCourtCents: courtPart, yourCostMembershipCents: yourCost - courtPart };
@@ -178,17 +180,18 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
         return {
           courtSessions: rwSessions,
           courtCostCents: rwCourts,
-          membershipCents: membership,
-          owedToVenueCents: rwCourts + membership,
+          membershipCents: soFarMembership,
+          owedToVenueCents: rwCourts + soFarMembership,
           collectedCents: rwCollected,
-          ...split(rwCourts, rwCollected),
+          ...split(rwCourts, rwCollected, soFarMembership),
           projected: {
             courtCount: rwSessions + projAdded,
             addedCourts: projAdded,
             courtCostCents: rwCourts + projCourts,
-            totalCents: rwCourts + projCourts + membership,
+            membershipCents: projMembership,
+            totalCents: rwCourts + projCourts + projMembership,
             playersPayCents: rwCollected + projPlayers,
-            ...split(rwCourts + projCourts, rwCollected + projPlayers),
+            ...split(rwCourts + projCourts, rwCollected + projPlayers, projMembership),
           },
         };
       })()

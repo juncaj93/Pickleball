@@ -575,6 +575,7 @@ export interface MonthlyMoney {
       courtCount: number;
       addedCourts: number;
       courtCostCents: number;
+      membershipCents: number;
       totalCents: number;
       playersPayCents: number;
       yourCostCents: number;

@@ -190,7 +190,7 @@ describe('History: a quieter list', () => {
     const names = (pid: string) => (pid === 'abc' ? 'Casey' : null);
     const claim = entry('payment_claim_confirmed', { playerId: 'abc' });
     expect(activityText(claim, TZ, 'Alex', { names })).toContain("Casey's I paid");
-    expect(activityText(claim, TZ, 'Alex')).toContain('someone');
+    expect(activityText(claim, TZ, 'Alex')).toMatch(/^Alex: payment claim confirmed/); // off: the line it always was
     const done = entry('late_drop_done', { player: 'Blair', playerId: 'x' });
     expect(activityText(done, TZ, 'Alex', { names })).toContain("Blair's late drop");
     expect(activityText(entry('late_drop_done', {}), TZ, 'Alex', { names })).toContain('handled a late drop');

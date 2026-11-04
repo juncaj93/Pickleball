@@ -314,7 +314,7 @@ function TotalsRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
         </div>
         <dl className="mrw-cols">
           <Col label="Court costs" value={formatPrice(p.courtCostCents)} note={p.addedCourts > 0 ? `adds ${plural(p.addedCourts, 'court', 'courts')}` : 'no more courts'} data="court" />
-          <Col label="Membership" value={formatPrice(t.membershipCents)} note="monthly" data="membership" />
+          <Col label="Membership" value={formatPrice(p.membershipCents)} note="monthly" data="membership" />
           <Col label="Players pay" value={minus(p.playersPayCents)} note="from players" tone="green" data="players" />
         </dl>
         <div className="mrw-yours" data-yours="projected">

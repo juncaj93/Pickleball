@@ -208,9 +208,12 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
     case 'admin_r3_off':
       return `${who} switched the admin screens round 3 off`;
     case 'payment_claim_confirmed':
-      return `${who} confirmed ${player}'s I paid${forDay}`;
+      // The words with the player's name are the Money page rework's; without it this reads as it always did (the generic line below).
+      if (opts.names) return `${who} confirmed ${player}'s I paid${forDay}`;
+      return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
     case 'payment_claim_cleared':
-      return `${who} cleared ${player}'s I paid${forDay}`;
+      if (opts.names) return `${who} cleared ${player}'s I paid${forDay}`;
+      return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
     case 'session_hidden_from_list':
       return `${who} hid${day ? ` ${day}` : ' a game'} from the lists`;
     case 'session_shown_in_list':

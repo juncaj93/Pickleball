@@ -952,7 +952,8 @@ export async function lateDropDone(ctx: Ctx, body: Record<string, unknown>) {
   if (res.meta.changes === 0 && lateFeeKind((await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId) ?? { status: '', played: null, late_drop_at: null, late_drop_done_at: null, payment_status: '', refunded_at: null }, session)) {
     throw new HttpError(409, 'late_fee_open', 'They still owe their $14. Use Clear (or Mark paid on the Money tab).');
   }
-  const dropper = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>();
+  // The Money page rework names who it was in the log; with it off the entry is exactly what it always was.
+  const dropper = (await moneyReworkFor(ctx, group.id)) ? await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>() : null;
   await audit(ctx.db, group.id, session.id, 'late_drop_done', dropper ? { player: dropper.display_name, playerId } : {}, ctx.nowIso);
   return { ok: true };
 }
@@ -1896,6 +1897,8 @@ export async function hideFromList(ctx: Ctx, body: Record<string, unknown>) {
   const { group, session } = await adminSession(ctx);
   if (!(await moneyReworkFor(ctx, group.id))) throw new HttpError(409, 'not_available', 'This is not switched on.');
   const hidden = v.bool(body.hidden, 'hidden');
+  // A game with an open late fee (a late drop, a no-show, a late cancel the venue charged) has money owed on it that the lists must keep showing.
+  if (hidden && (await loadRoster(ctx.db, session.id)).some((r) => lateFeeKind(r, session))) throw new HttpError(409, 'late_fee_open', 'Someone still owes a late fee on this game. Clear it first, then hide the game.');
   const was = (await adminHiddenGameIds(ctx.db, group.id)).has(session.id);
   if (was === hidden) return { ok: true, changed: false, hidden };
   await setAdminHiddenGame(ctx.db, group.id, session.id, hidden, ctx.nowIso);
