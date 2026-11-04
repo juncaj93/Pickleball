@@ -1,6 +1,6 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
 import { parseDollars } from '../../../shared/money';
-import { DEFAULT_VENUE_NAME, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
+import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
@@ -55,7 +55,7 @@ const moneyBox = ({ id, value, onChange, onBlur, invalid }: { id: string; value:
   </span>
 );
 const textBox =
-  (extra: { type?: string; maxLength?: number; placeholder?: string; inputMode?: 'url'; autoComplete?: string; autoCapitalize?: string }) =>
+  (extra: { type?: string; maxLength?: number; placeholder?: string; inputMode?: 'url' | 'tel'; autoComplete?: string; autoCapitalize?: string }) =>
   ({ id, value, onChange, onBlur, invalid }: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => (
     <input id={id} type={extra.type ?? 'text'} {...extra} value={value} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} aria-invalid={invalid || undefined} />
   );
@@ -184,7 +184,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   );
   /** A text setting. Empty saves as "not set", unless it's required. */
   const text = (
-    key: 'name' | 'organizerName' | 'venmoUrl' | 'venueName' | 'venueAddress',
+    key: 'name' | 'organizerName' | 'venmoUrl' | 'venueName' | 'venueAddress' | 'zelleNumber',
     label: string,
     initial: string,
     box: Parameters<typeof textBox>[0],
@@ -353,6 +353,10 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               hint: 'Where Pay sends players',
               check: (t) => (/^https?:\/\/\S+\.\S+/.test(t) ? null : 'Enter a full link starting with https://'),
             })}
+          {text('zelleNumber', 'Apple Pay / Zelle number', g.zelleNumber ?? DEFAULT_ZELLE_NUMBER, { type: 'tel', inputMode: 'tel', maxLength: 24, placeholder: DEFAULT_ZELLE_NUMBER }, {
+            hint: 'Shown on the Pay sheet',
+            check: (t) => (/^[0-9+().\s-]{7,24}$/.test(t) ? null : 'Enter a phone number, like 248-555-0123.'),
+          })}
           {!r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
         </Section>
 
@@ -418,11 +422,13 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           )}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
+        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
           <AdminV2Row ctx={ctx} auto={auto} />
           <AdminR2Row ctx={ctx} auto={auto} />
           <AdminR3Row ctx={ctx} auto={auto} />
           <PayNoteRow ctx={ctx} auto={auto} />
+          <PlayerFix1Row ctx={ctx} auto={auto} />
+          <PaySheetRow ctx={ctx} auto={auto} />
           <LateFeesRow ctx={ctx} auto={auto} />
           {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
           {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
@@ -853,6 +859,72 @@ function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
         />
       </label>
       <SaveProblem state={auto.rows.payNoteAll} />
+    </div>
+  );
+}
+
+/**
+ * "Player screen fixes": on game day, Pay and "I paid" also sit on tonight's game card (the "Tonight: you owe" card at
+ * the top stays), and the blue TONIGHT tag gets more room. Display only. Off: only a phone opened with ?playerfix1=on
+ * sees it (a private test). Saves itself, no deploy.
+ */
+function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.playerFix1ForAll);
+  return (
+    <div className="set-row-wrap" data-row="playerFix1All">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Player screen fixes <SaveMark state={auto.rows.playerFix1All} />
+          </span>
+          <span className="set-hint">Pay and I paid on tonight's game card too, and a roomier TONIGHT tag. Off: only phones opened with ?playerfix1=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-player-fix1-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('playerFix1All', { on: e.target.checked }, '/api/admin/player-fix1').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.playerFix1All} />
+    </div>
+  );
+}
+
+/**
+ * "Pay sheet": a Pay button opens a small sheet (Pay with the Venmo app, Copy Venmo @handle, Apple Pay / Zelle / cash line,
+ * I paid) instead of jumping straight into the app. Display only. Off: only a phone opened with ?paysheet=on sees it (a
+ * private test). Saves itself, no deploy.
+ */
+function PaySheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const [on, setOn] = useState(!!ctx.d.paySheetForAll);
+  return (
+    <div className="set-row-wrap" data-row="paySheetAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Pay sheet <SaveMark state={auto.rows.paySheetAll} />
+          </span>
+          <span className="set-hint">Pay opens a small sheet: Venmo app, copy my Venmo, Zelle line, I paid. Off: only phones opened with ?paysheet=on</span>
+        </span>
+        <input
+          type="checkbox"
+          role="switch"
+          className="switch"
+          checked={on}
+          data-pay-sheet-all
+          onChange={(e) => {
+            setOn(e.target.checked);
+            void auto.save('paySheetAll', { on: e.target.checked }, '/api/admin/pay-sheet').then(() => ctx.reload());
+          }}
+        />
+      </label>
+      <SaveProblem state={auto.rows.paySheetAll} />
     </div>
   );
 }

@@ -48,6 +48,10 @@ export interface Env {
   PAY_ALWAYS?: string;
   /** "No Venmo? Pay Alex directly" note: the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?paynote=on (server/payNote.ts). A wrangler.toml var. */
   PAY_NOTE?: string;
+  /** "Player screen small fixes, round 1" (Pay on tonight's card, roomier TONIGHT tag): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?playerfix1=on (server/playerFix1.ts). A wrangler.toml var. */
+  PLAYER_FIX1?: string;
+  /** "Pay sheet" (Pay opens a small bottom sheet): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?paysheet=on (server/paySheet.ts). A wrangler.toml var. */
+  PAY_SHEET?: string;
   /** "New admin layout" (organizer History, Money, Home v2): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminv2=on (server/adminV2.ts). A wrangler.toml var. */
   ADMIN_V2?: string;
   /** "Admin screens, round 2" (organizer Home cards, Money, Players, History, header): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, ?adminr2=on (server/adminR2.ts). A wrangler.toml var. */

@@ -109,6 +109,14 @@ async function main() {
   async function open(who, { scheme = 'light', width = 393, query = '', ctx: reuse } = {}) {
     const ctx = reuse || (await browser.newContext(phone(scheme, width)));
     if (!reuse) await post(ctx.request, '/api/me', { playerId: idOf(who) });
+    // These checks look for Pay and I paid on tonight's own game card. On a game day after 8:00 AM that card shows them only
+    // with "Player screen fixes" (PLAYER_FIX1) on, so every phone here is opened with its private test switch on: the checks
+    // then pass on any day of the week, with the same Pay rules as before.
+    await ctx.addInitScript(() => {
+      try {
+        localStorage.setItem('pb_player_fix1', 'on');
+      } catch {}
+    });
     const page = await ctx.newPage();
     await page.goto(`${BASE}/${query}`);
     await page.locator('.schedule article.sched').first().waitFor();
