@@ -116,8 +116,9 @@ describe('Totals after a fee-kept cancel with the split on', () => {
 });
 
 describe('the 5-minute clock and a hidden game', () => {
-  const TZ_HOURS = 5 * 60_000;
-  async function run(hide: boolean) {
+  const FIVE = 5 * 60_000;
+  /** The ticks around the moment an empty, not-booked game's court booking opens (7:00 AM and the 7:30 AM reminder): hidden or not, optionally un-hidden again or joined by a player first. */
+  async function run(opts: { hide?: boolean; unhide?: boolean; join?: boolean }) {
     const app = new TestApp();
     const sent: string[] = [];
     app.env = {
@@ -136,26 +137,43 @@ describe('the 5-minute clock and a hidden game', () => {
     await w.organizer.call('PUT', '/api/admin/money-rework', { on: true });
     app.now = MONDAY_NOON;
     const d = (await w.organizer.call('GET', '/api/admin/dashboard')).data;
-    // An empty, not-booked game: nothing in it, so it has no money and may be hidden.
-    const g = d.sessions.filter((s: any) => Date.parse(s.startsAt) > app.now && s.confirmedCount === 0 && s.bookingStatus !== 'booked')[2];
-    if (hide) expect((await w.organizer.call('POST', `/api/admin/sessions/${g.id}/hide-from-list`, { hidden: true })).status).toBe(200);
-    // Every tick for the two days around it (both the 7 AM and the 7 PM alerts of that day fall inside).
-    const start = Date.parse(g.startsAt);
-    app.now = start - 30 * HOUR;
+    // The game whose court booking opens soon (7:00 AM, 14 days before it): its "book a court" and reminder alerts are what a hidden game must not send.
+    const g = d.sessions.find((s: any) => s.confirmedCount === 0 && s.bookingStatus !== 'booked' && Date.parse(s.bookingOpensAt) + 7 * HOUR > app.now && Date.parse(s.bookingOpensAt) < app.now + 48 * HOUR);
+    const hide = (hidden: boolean) => w.organizer.call('POST', `/api/admin/sessions/${g.id}/hide-from-list`, { hidden });
+    if (opts.hide) expect((await hide(true)).status).toBe(200);
+    if (opts.unhide) expect((await hide(false)).status).toBe(200);
+    if (opts.join) expect((await (await playerPhone(w, 'Blair')).call('POST', `/api/sessions/${g.id}/join`, {})).status).toBe(200);
+    await app.settle();
+    sent.length = 0;
+    // bookingOpensAt is midnight of that day; the alert says 7:00 AM.
+    const opens = Date.parse(g.bookingOpensAt) + 7 * HOUR;
+    app.now = opens - 2 * HOUR;
     const statuses = new Set<number>();
-    while (app.now <= start + 4 * HOUR) {
+    while (app.now <= opens + 4 * HOUR) {
       const r = await w.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': app.env.CRON_SECRET as string });
       await app.settle();
       statuses.add(r.status);
-      app.now += TZ_HOURS;
+      app.now += FIVE;
     }
-    return { sent, statuses, errors: 0 };
+    return { sent, statuses };
   }
-  it('K1 every tick answers 200, and a hidden game gets exactly the alerts it would have got anyway (no money, no oddities)', async () => {
-    const shown = await run(false);
-    const hidden = await run(true);
+  it('K1 not hidden: the game sends its usual alerts; hidden: it sends none, and every tick still answers 200', async () => {
+    const shown = await run({});
+    const hidden = await run({ hide: true });
+    expect(shown.sent.length).toBeGreaterThan(0);
     expect([...hidden.statuses]).toEqual([200]);
-    expect(hidden.sent).toEqual(shown.sent);
-    for (const t of hidden.sent) expect(t).not.toMatch(/\$|venmo|owes/i);
+    expect(hidden.sent).toEqual([]);
+    for (const t of shown.sent) expect(t).not.toMatch(/\$|venmo|owes/i);
+  });
+  it('K2 un-hiding makes the alerts normal again, exactly as if it had never been hidden', async () => {
+    const shown = await run({});
+    const back = await run({ hide: true, unhide: true });
+    expect(back.sent).toEqual(shown.sent);
+  });
+  it('K3 a hidden game that gains money (a player joins) sends alerts like any game', async () => {
+    const plain = await run({ join: true });
+    const gained = await run({ hide: true, join: true });
+    expect(plain.sent.length).toBeGreaterThan(0);
+    expect(gained.sent).toEqual(plain.sent);
   });
 });

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { activityText, cleanActivity, highlightNew } from '../shared/activity';
 import type { ActivityEntry, AdminSessionView } from '../shared/api';
 import { zonedTimeToUtc } from '../shared/time';
-import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthOf, monthRowLabel, shiftMonthKey, splitGames } from '../src/pages/admin/moneyRework';
+import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthOf, monthRows, monthRowLabel, shiftMonthKey, splitGames } from '../src/pages/admin/moneyRework';
 
 const TZ = 'America/Detroit';
 // Wed Nov 4, 2026, 6:00 PM Eastern: the day this was built.
@@ -40,14 +40,14 @@ const paidSeat = () => seat({ paymentStatus: 'paid', owesCents: 0 });
 const ids = (xs: { s: AdminSessionView }[]) => xs.map((g) => g.s.id);
 
 describe('Games tab: where each game sits', () => {
-  it('G1 current month: today and the next 7 days are the list, farther games wait in Later, earlier games are Previous', () => {
+  it('G1 current month: today and the next 7 days are the list, games farther out are not shown, earlier games are Previous', () => {
     const today = game(at(11, 4));
     const in7 = game(at(11, 11, 12)); // Wed Nov 11 noon: inside the 7-day window (ends before Nov 12 0:00)
     const later = game(at(11, 12));
     const past = game(at(11, 3), {}, [paidSeat(), paidSeat()]);
     const v = splitGames([today, in7, later, past], '2026-11', NOW, TZ);
     expect(ids(v.main)).toEqual([today.id, in7.id]);
-    expect(ids(v.later)).toEqual([later.id]);
+    expect([...v.main, ...v.previous].map((g) => g.s.id)).not.toContain(later.id);
     expect(ids(v.previous)).toEqual([past.id]);
   });
   it('G2 a fully paid game always goes to Previous, even if it is today; unpaid and partly paid stay on top', () => {
@@ -79,15 +79,14 @@ describe('Games tab: where each game sits', () => {
     const hidden = game(at(11, 5), { hiddenFromList: true });
     const v = splitGames([hidden, game(at(11, 6))], '2026-11', NOW, TZ);
     expect(ids(v.main)).not.toContain(hidden.id);
-    expect([...v.main, ...v.previous, ...v.later]).toHaveLength(1);
+    expect([...v.main, ...v.previous]).toHaveLength(1);
   });
-  it('G6 any other month: every game is in the list unless fully paid; nothing is "later"', () => {
+  it('G6 any other month: every game is in the list unless fully paid', () => {
     const oct = game(at(10, 20), {}, [seat(), paidSeat()]);
     const octPaid = game(at(10, 22), {}, [paidSeat(), paidSeat()]);
     const v = splitGames([oct, octPaid], '2026-10', NOW, TZ);
     expect(ids(v.main)).toEqual([oct.id]);
     expect(ids(v.previous)).toEqual([octPaid.id]);
-    expect(v.later).toHaveLength(0);
     const dec = game(at(12, 8));
     expect(ids(splitGames([dec], '2026-12', NOW, TZ).main)).toEqual([dec.id]);
   });
@@ -98,15 +97,26 @@ describe('Games tab: where each game sits', () => {
 });
 
 describe('Month dropdown', () => {
-  it('M1 newest first, the current month and four before it even with 0 games, with a count per month', () => {
-    const list = monthChoices([game(at(11, 5)), game(at(11, 6)), game(at(10, 20)), game(at(11, 7), { hiddenFromList: true })], NOW, TZ);
+  it('M1 EVERY month from the first one that had a game up to the current month, newest first, with a count each', () => {
+    const counts = { '2026-07': 3, '2026-09': 2, '2026-11': 4 };
+    const list = monthChoices([], NOW, TZ, counts);
     expect(list.map((m) => m.month)).toEqual(['2026-11', '2026-10', '2026-09', '2026-08', '2026-07']);
-    expect(list.map((m) => m.count)).toEqual([2, 1, 0, 0, 0]);
+    expect(list.map((m) => m.count)).toEqual([4, 0, 2, 0, 3]);
   });
-  it('M2 a later month with games is listed above the current one', () => {
-    expect(monthChoices([game(at(12, 3))], NOW, TZ)[0]).toEqual({ month: '2026-12', count: 1 });
+  it('M2 without server counts it counts the games on hand, never a hidden one; a later month with games is above the current one', () => {
+    const list = monthChoices([game(at(11, 5)), game(at(11, 6)), game(at(10, 20)), game(at(11, 7), { hiddenFromList: true }), game(at(12, 3))], NOW, TZ);
+    expect(list.map((m) => m.month)).toEqual(['2026-12', '2026-11', '2026-10']);
+    expect(list.map((m) => m.count)).toEqual([1, 2, 1]);
   });
-  it('M3 labels', () => {
+  it('M3 with no games at all, just the current month', () => {
+    expect(monthChoices([], NOW, TZ, {}).map((m) => m.month)).toEqual(['2026-11']);
+  });
+  it('M4 a year label row appears wherever the year changes', () => {
+    const now = zonedTimeToUtc(2027, 2, 10, 12, 0, TZ);
+    const rows = monthRows(monthChoices([], now, TZ, { '2026-11': 2, '2027-02': 1 }));
+    expect(rows.map((r) => (r.kind === 'year' ? `[${r.year}]` : r.month))).toEqual(['2027-02', '2027-01', '[2026]', '2026-12', '2026-11']);
+  });
+  it('M5 labels', () => {
     expect(monthBoxLabel('2026-11')).toBe('NOV 26');
     expect(monthRowLabel('2026-11')).toBe('Nov 2026');
     expect(monthOf(NOW, TZ)).toBe('2026-11');

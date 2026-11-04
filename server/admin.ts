@@ -250,7 +250,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     lateFeeSplitForAll: await lateFeeSplitForAll(ctx.db, group.id),
     moneyRework,
     moneyReworkForAll: await moneyReworkForAll(ctx.db, group.id),
-    ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges) } : {}),
+    ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
 
@@ -1876,6 +1876,32 @@ export async function setMoneyRework(ctx: Ctx, body: Record<string, unknown>) {
   await setMoneyReworkForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'money_rework_on' : 'money_rework_off', {}, ctx.nowIso);
   return { ok: true, on };
+}
+
+/**
+ * How many games each month holds on the Money page (the month dropdown), for EVERY month back to the first game the site had, not just the
+ * last 90 days the dashboard carries. A game counts when Money lists it: canceled, or a court booked, or somebody in; games before the first
+ * session date and games hidden from the lists are left out.
+ */
+async function gameMonthCounts(ctx: Ctx, group: GroupRow, hidden: Set<string>): Promise<Record<string, number>> {
+  const { results } = await ctx.db
+    .prepare(
+      `SELECT s.id, s.starts_at, s.status, s.booking_status, s.shown_early,
+              (SELECT COUNT(*) FROM session_players sp WHERE sp.session_id = s.id AND sp.status = 'confirmed') AS n
+       FROM sessions s WHERE s.group_id = ?`,
+    )
+    .bind(group.id)
+    .all<{ id: string; starts_at: string; status: string; booking_status: string; shown_early: number; n: number }>();
+  const from = visibleFrom(group);
+  const out: Record<string, number> = {};
+  for (const r of results) {
+    if (hidden.has(r.id) || !(r.starts_at >= from || Number(r.shown_early) === 1)) continue;
+    if (!(r.status === 'canceled' || r.booking_status === 'booked' || Number(r.n) > 0)) continue;
+    const p = localParts(Date.parse(r.starts_at), group.timezone);
+    const key = `${p.year}-${String(p.month).padStart(2, '0')}`;
+    out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
 }
 
 /**

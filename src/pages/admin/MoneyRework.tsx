@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminSessionView, MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { formatShortDate, formatTime, localParts } from '../../../shared/time';
@@ -8,7 +8,8 @@ import type { AdminCtx } from '../Admin';
 import { minus, monthName } from './MonthlyMoney';
 import { Chevron, currentMonth, GameBody, RemindList } from './MoneyV2';
 import { unpaidRows, owedCentsOf } from './moneyList';
-import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, type RwGame, splitGames } from './moneyRework';
+import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
+import { ReworkOpsProvider } from './ReworkOps';
 import '../../money-rework.css';
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -18,24 +19,29 @@ const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
  * and the next 7 days with a collapsed "Previous games" card; Totals shows what is owed to the venue and what it comes to by month's end.
  * Same money, same rules and the same buttons as the Money tabs before it; only the way it is shown changed.
  */
-export function MoneyTabRework({ ctx }: { ctx: AdminCtx }) {
+export function MoneyTabRework({ ctx: realCtx }: { ctx: AdminCtx }) {
   const [view, setView] = useState<'games' | 'totals'>('games');
-  const [month, setMonth] = useState(() => currentMonth(ctx));
+  const [month, setMonth] = useState(() => currentMonth(realCtx));
+  // Instant taps: `ctx` below already shows any tap whose save is still running (ReworkOps.tsx). Totals read the real data and follow the save.
   return (
-    <section className="stack money-rework" aria-label="Money">
-      <div className="mrw-controls">
-        <MonthBox ctx={ctx} month={month} onPick={setMonth} />
-        <div className="segmented mrw-seg" role="group" aria-label="Games or Totals">
-          <button type="button" aria-pressed={view === 'games'} onClick={() => setView('games')}>
-            Games
-          </button>
-          <button type="button" aria-pressed={view === 'totals'} onClick={() => setView('totals')}>
-            Totals
-          </button>
-        </div>
-      </div>
-      {view === 'games' ? <GamesRework ctx={ctx} month={month} /> : <TotalsRework ctx={ctx} month={month} />}
-    </section>
+    <ReworkOpsProvider ctx={realCtx}>
+      {(ctx) => (
+        <section className="stack money-rework" aria-label="Money">
+          <div className="mrw-controls">
+            <MonthBox ctx={ctx} month={month} onPick={setMonth} />
+            <div className="segmented mrw-seg" role="group" aria-label="Games or Totals">
+              <button type="button" aria-pressed={view === 'games'} onClick={() => setView('games')}>
+                Games
+              </button>
+              <button type="button" aria-pressed={view === 'totals'} onClick={() => setView('totals')}>
+                Totals
+              </button>
+            </div>
+          </div>
+          {view === 'games' ? <GamesRework ctx={ctx} month={month} /> : <TotalsRework ctx={realCtx} month={month} />}
+        </section>
+      )}
+    </ReworkOpsProvider>
   );
 }
 
@@ -51,7 +57,22 @@ function MonthBox({ ctx, month, onPick }: { ctx: AdminCtx; month: string; onPick
   const tz = ctx.d.group.timezone;
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
-  const choices = monthChoices(ctx.d.sessions, nowMs, tz);
+  const rows = monthRows(monthChoices(ctx.d.sessions, nowMs, tz, ctx.d.gameMonthCounts));
+  const pop = useRef<HTMLUListElement>(null);
+  // A thin fade at the bottom while there is more to scroll to (the scroll bar can hide on a phone).
+  const [more, setMore] = useState(false);
+  const measure = () => {
+    const el = pop.current;
+    if (el) setMore(el.scrollTop + el.clientHeight < el.scrollHeight - 2);
+  };
+  // Opens with the chosen month in view.
+  useLayoutEffect(() => {
+    const el = pop.current;
+    if (!open || !el) return;
+    const on = el.querySelector<HTMLElement>('.mrw-monthrow.on');
+    if (on) el.scrollTop = Math.max(0, on.offsetTop - 6);
+    measure();
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!open) return;
     const down = (e: Event) => {
@@ -73,25 +94,32 @@ function MonthBox({ ctx, month, onPick }: { ctx: AdminCtx; month: string; onPick
         {monthBoxLabel(month)}
       </button>
       {open && (
-        <ul className="mrw-monthpop" role="listbox" aria-label="Choose a month" data-month-pop>
-          {choices.map((c) => (
-            <li key={c.month} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={c.month === month}
-                className={`mrw-monthrow${c.month === month ? ' on' : ''}`}
-                data-month-option={c.month}
-                onClick={() => {
-                  onPick(c.month);
-                  setOpen(false);
-                }}
-              >
-                <span>{monthRowLabel(c.month)}</span>
-                <span className="mrw-monthcount">{c.count}</span>
-              </button>
-            </li>
-          ))}
+        <ul ref={pop} className={`mrw-monthpop${more ? ' more' : ''}`} role="listbox" aria-label="Choose a month" data-month-pop onScroll={measure}>
+          {rows.map((r) =>
+            r.kind === 'year' ? (
+              <li key={`y${r.year}`} role="presentation" className="mrw-monthyear" data-year-label>
+                {r.year}
+              </li>
+            ) : (
+              <li key={r.month} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={r.month === month}
+                  className={`mrw-monthrow${r.month === month ? ' on' : ''}`}
+                  data-month-option={r.month}
+                  onClick={() => {
+                    onPick(r.month);
+                    setOpen(false);
+                  }}
+                >
+                  <span>{monthRowLabel(r.month)}</span>
+                  <span className="mrw-monthcount">{r.count}</span>
+                </button>
+              </li>
+            ),
+          )}
+          <li role="presentation" aria-hidden="true" className="mrw-monthfade" />
         </ul>
       )}
     </div>
@@ -139,14 +167,14 @@ function GamesRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
   // The server's clock (the screen reloads at least every few minutes), so "today" always agrees with what the server counts.
   const nowMs = Date.parse(ctx.d.now);
   const tz = ctx.d.group.timezone;
-  const { main, previous, later } = splitGames(ctx.d.sessions, month, nowMs, tz);
+  const { main, previous } = splitGames(ctx.d.sessions, month, nowMs, tz);
   // The first game in the list starts open; a tap opens or folds any card. (Overrides only, so a game never moves on its own.)
   const [over, setOver] = useState<Record<string, boolean>>({});
   const firstId = main[0]?.s.id;
   const isOpen = (id: string) => over[id] ?? id === firstId;
   const toggle = (id: string) => setOver((cur) => ({ ...cur, [id]: !(cur[id] ?? id === firstId) }));
   const [remind, setRemind] = useState<string | null>(null);
-  const all = [...main, ...later, ...previous];
+  const all = [...main, ...previous];
   const remindSession = all.find((g) => g.s.id === remind)?.s ?? null;
   const sameDay = (s: AdminSessionView) => all.filter((g) => formatShortDate(g.s.startsAt, tz) === formatShortDate(s.startsAt, tz)).length > 1;
   if (all.length === 0) return <p className="muted small" data-no-games>No games in {monthName(month)}.</p>;
@@ -156,7 +184,6 @@ function GamesRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
         {main.map((g) => (
           <GameCard key={g.s.id} ctx={ctx} g={g} open={isOpen(g.s.id)} onToggle={() => toggle(g.s.id)} onRemind={() => setRemind(g.s.id)} sameDay={sameDay(g.s)} />
         ))}
-        {later.length > 0 && <FoldList ctx={ctx} id="later" title="Later games" games={later} sameDay={sameDay} />}
         {previous.length > 0 && <FoldList ctx={ctx} id="previous" title="Previous games" games={previous} sameDay={sameDay} />}
       </div>
       <Sheet open={!!remindSession} title={remindSession ? `Remind · ${formatShortDate(remindSession.startsAt, tz)}` : ''} onClose={() => setRemind(null)}>

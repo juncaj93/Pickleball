@@ -18,6 +18,8 @@ import { CLEAR_CHOICES } from '../../../shared/lateFees';
 import { lateFeeLine } from './LateFees';
 import { ChargeLine, ClosedBody, HideFromList, ReworkRows } from './MoneyReworkParts';
 import { canHide } from './moneyRework';
+import { useReworkBusy, useReworkRun } from './ReworkOps';
+import type { ReworkOp } from './reworkOptimistic';
 
 type View = 'who' | 'totals';
 type Tone = 'ok' | 'info' | 'warn' | 'muted';
@@ -191,7 +193,12 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
 
 export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean; rework?: boolean }) {
   const tz = ctx.d.group.timezone;
-  const { busy, run } = useAction(ctx);
+  const { busy: actionBusy, run: plainRun } = useAction(ctx);
+  // The Money page rework draws every tap at once and saves in the background (ReworkOps.tsx); everywhere else a tap waits as it always did.
+  const rwRun = useReworkRun(ctx);
+  const rwBusy = useReworkBusy();
+  const run = (fn: () => Promise<unknown>, success?: string, op?: ReworkOp) => (rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success));
+  const busy = rework && rwRun ? false : actionBusy;
   const fin = s.finalized;
   const played = isPlayed(s);
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
@@ -207,9 +214,9 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, { kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId });
   const setCourtPaid = (paid: boolean) => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
-  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.');
+  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.', { kind: 'reopen', sessionId: s.id });
 
   const feeRows = s.roster.some((r) => r.lateFee);
   if (s.state.flags.canceled && !feeRows) {
@@ -228,7 +235,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
 
   type Act = { label: string; onClick: () => void; attrs?: Record<string, string> };
   const clearFee = (r: AdminRosterEntry, why: string, label: string) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/late-fee`, { playerId: r.playerId, why }), `${r.name}: cleared (${label.toLowerCase()})`);
+    run(() => api('POST', `/api/admin/sessions/${s.id}/late-fee`, { playerId: r.playerId, why }), `${r.name}: cleared (${label.toLowerCase()})`, { kind: 'clear', sessionId: s.id, playerId: r.playerId });
   const actionsOf = (r: AdminRosterEntry): Act[] => {
     const acts: Act[] = [];
     if (r.lateFee && r.isOrganizer) {
@@ -257,7 +264,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
         acts.push({
           label: 'Unmark',
           attrs: { 'data-unmark-credit': r.name },
-          onClick: () => void run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`),
+          onClick: () => void run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, { kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }),
         });
       }
     }
@@ -281,16 +288,16 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
             {feeKept ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.') : 'Canceled. Only late fees are left on it.'}
           </p>
         )}
-        {!s.state.flags.canceled && (fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (
+        {!s.state.flags.canceled && fin && fin.creditBackCents > 0 && (
           <p className="mv2-summary small muted" data-summary>
-            {fin ? <span data-finalized-line>{formatPrice(fin.creditBackCents)} back as credit</span> : <span>Not finalized yet. Finalize it from Home.</span>}
+            <span data-finalized-line>{formatPrice(fin.creditBackCents)} back as credit</span>
           </p>
         )}
-        <ReworkRows rows={rows} actionsOf={actionsOf} isPaid={isPaid} lineOf={lineOf} busy={busy} />
+        <ReworkRows sessionId={s.id} rows={rows} actionsOf={actionsOf} isPaid={isPaid} lineOf={lineOf} busy={busy} />
         {s.state.flags.canceled && <ChargeLine ctx={ctx} s={s} />}
         {fin && (
           <div className="stack" style={{ gap: 6 }}>
-            <button className="btn small secondary" disabled={busy || s.reopenBlockedBy.length > 0 || s.reopenRequestedBy.length > 0} data-reopen onClick={reopen}>
+            <button className="btn small secondary" disabled={busy || rwBusy({ kind: 'reopen', sessionId: s.id }) || s.reopenBlockedBy.length > 0 || s.reopenRequestedBy.length > 0} data-reopen onClick={reopen}>
               Reopen
             </button>
             {s.reopenBlockedBy.length > 0 && (

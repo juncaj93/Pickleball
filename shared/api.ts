@@ -465,6 +465,8 @@ export interface AdminDashboard {
   hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
   /** "Money page rework" only: the games the organizer hid from their own lists (Settings > Advanced > Hidden games, each with Restore). */
   hiddenGames?: { id: string; startsAt: string; label: string }[];
+  /** "Money page rework" only: how many games Money lists in each month ("2026-11": 12), every month back to the first game. */
+  gameMonthCounts?: Record<string, number>;
   /**
    * The credit pot per player who has any history: `balanceCents` is the pot, `reservedCents` is held
    * for a pending refund request, `refundCents` is what "Refund credit balance" pays back now, and every entry, oldest first.

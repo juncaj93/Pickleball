@@ -13,7 +13,8 @@ import type { RosterRow, SessionRow } from './repo';
 // "On for everyone" is one row in task_log (kind 'mark', task 'money_rework_on', no game): no schema change, the same way the
 // other switches are stored.
 
-const ALL_TASK = 'money_rework_on';
+export const MONEY_REWORK_TASK = 'money_rework_on';
+const ALL_TASK = MONEY_REWORK_TASK;
 
 export async function moneyReworkForAll(db: D1Database, groupId: string): Promise<boolean> {
   const row = await db

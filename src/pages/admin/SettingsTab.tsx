@@ -1213,7 +1213,9 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
       {live.length > 0 && (
         <details className="advanced live-stable" data-live-stable>
           <summary>
-            Live and stable <span className="set-note">· {live.length}</span>
+            <span>
+              Live and stable<span className="set-note"> · {live.length}</span>
+            </span>
           </summary>
           {live.map((x) => x.node)}
         </details>
@@ -1246,7 +1248,9 @@ function HiddenGames({ ctx }: { ctx: AdminCtx }) {
   return (
     <details className="advanced hidden-games" data-hidden-games>
       <summary>
-        Hidden games<span className="set-note"> · {hidden.length}</span>
+        <span>
+          Hidden games<span className="set-note"> · {hidden.length}</span>
+        </span>
       </summary>
       {hidden.length === 0 ? (
         <p className="small muted">No games are hidden. Hide one from its card on Money, or the gear menu on Home.</p>

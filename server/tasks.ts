@@ -16,8 +16,11 @@ import type { D1Database } from './db';
 import { makeGoToken } from './go';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
-import { getSession, type GroupRow, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { getSession, type GroupRow, loadCancelCharges, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { loadLedger } from './credit';
 import { TEXTS_R2_TASK, textsR2ForAlerts } from './textsR2';
+import { HIDDEN_GAME_TASK, MONEY_REWORK_TASK, sessionHasMoney } from './moneyRework';
+import { moneyReworkAllowed } from '../shared/moneyRework';
 import * as v from './validate';
 
 const DAY_MS = 86_400_000;
@@ -214,7 +217,7 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   // One trip to the database for the group, both switches and the games: each separate call costs CPU on Cloudflare.
   // Each query finds the group the way getGroup does; the checks run in the same order as before.
   const theGroup = '(SELECT id FROM groups ORDER BY created_at LIMIT 1)';
-  const [groupRows, alertRows, offRows, sessionRows, textsR2Rows] = await ctx.db.batch([
+  const [groupRows, alertRows, offRows, sessionRows, textsR2Rows, reworkRows] = await ctx.db.batch([
     ctx.db.prepare('SELECT * FROM groups ORDER BY created_at LIMIT 1'),
     ctx.db.prepare(`SELECT * FROM organizer_alerts WHERE group_id = ${theGroup}`),
     ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND kind = 'off' LIMIT 1`),
@@ -222,6 +225,8 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     ctx.db.prepare(`SELECT * FROM sessions WHERE group_id = ${theGroup} AND ends_at > ? ORDER BY starts_at`).bind(new Date(ctx.nowMs - LOOK_BACK_MS).toISOString()),
     // TEXTS_R2 "on for everyone": read in the same trip (the clock follows the switch for everyone, never a phone's private link).
     ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND session_id IS NULL AND task = '${TEXTS_R2_TASK}' AND kind = 'mark' LIMIT 1`),
+    // MONEY_REWORK "on for everyone", same trip: a game hidden from the lists sends no alerts (the clock follows the switch for everyone).
+    ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND session_id IS NULL AND task = '${MONEY_REWORK_TASK}' AND kind = 'mark' LIMIT 1`),
   ]);
   const group = (groupRows.results[0] as unknown as GroupRow | undefined) ?? null;
   if (!group) return { ok: true, sent: 0, failed: 0, skipped: 'no_group' };
@@ -244,15 +249,23 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     .all<{ session_id: string; n: number }>();
   const countOf = new Map(counts.results.map((r) => [r.session_id, Number(r.n)]));
   const shownFrom = visibleFrom(group);
-  const sessions = rows.filter((s) => (s.starts_at >= shownFrom || Number(s.shown_early) === 1) && mayAlertSoon(rowFacts(s), countOf.get(s.id) ?? 0, ctx.nowMs, o));
-  if (sessions.length === 0) return { ok: true, sent: 0, failed: 0 };
-  const ids = sessions.map((s) => s.id);
+  const shown = rows.filter((s) => (s.starts_at >= shownFrom || Number(s.shown_early) === 1) && mayAlertSoon(rowFacts(s), countOf.get(s.id) ?? 0, ctx.nowMs, o));
+  if (shown.length === 0) return { ok: true, sent: 0, failed: 0 };
+  const ids = shown.map((s) => s.id);
   const marks = ids.map(() => '?').join(',');
   const logs = await ctx.db
     .prepare(`SELECT session_id, task, kind, at FROM task_log WHERE session_id IN (${marks})`)
     .bind(...ids)
     .all<{ session_id: string; task: string; kind: string; at: string }>();
   const markSet = new Set(logs.results.filter((r) => r.kind === 'mark').map((r) => `${r.session_id}:${r.task}`));
+  // A game the organizer hid from the lists (Money page rework) sends no booking, reminder or other clock alerts, but only while it has no
+  // money in it: a player joining, a court booked or a payment makes it a normal game again at once. Un-hiding does the same.
+  const hiddenQuiet =
+    reworkRows.results.length > 0 && moneyReworkAllowed(ctx.env.MONEY_REWORK)
+      ? await quietHiddenGames(ctx.db, group.id, shown.filter((s) => markSet.has(`${s.id}:${HIDDEN_GAME_TASK}`)))
+      : new Set<string>();
+  const sessions = shown.filter((s) => !hiddenQuiet.has(s.id));
+  if (sessions.length === 0) return { ok: true, sent: 0, failed: 0 };
   const bookedAt = new Map(logs.results.filter((r) => r.kind === 'mark' && r.task === COURT_BOOKED_MARK).map((r) => [r.session_id, r.at]));
   const sentSet = new Set(logs.results.filter((r) => r.kind === 'sent').map((r) => `${r.session_id}:${r.task}`));
   // Failed tries per alert: give up after MAX_TRIES, and wait RETRY_AFTER_MS between them.
@@ -317,6 +330,16 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
       .run();
   }
   return { ok: true, sent, failed };
+}
+
+/** Of these games (all marked hidden from the lists), the ones with no money in them: they stay quiet. Reads only when one is hidden. */
+async function quietHiddenGames(db: D1Database, groupId: string, hidden: SessionRow[]): Promise<Set<string>> {
+  const quiet = new Set<string>();
+  if (hidden.length === 0) return quiet;
+  const credit = new Set((await loadLedger(db, groupId)).map((e) => e.sessionId).filter((x): x is string => !!x));
+  const charges = await loadCancelCharges(db, groupId);
+  for (const s of hidden) if (!sessionHasMoney(s, await loadRoster(db, s.id), credit, charges)) quiet.add(s.id);
+  return quiet;
 }
 
 /**

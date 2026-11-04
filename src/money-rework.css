@@ -55,8 +55,14 @@
   min-width: 100%;
   width: max-content;
   max-width: calc(100vw - 32px);
-  max-height: min(280px, 52vh);
+  /* Exactly four months tall (4 rows of 44 px plus the padding); older months scroll inside it. */
+  max-height: calc(4 * 44px + 12px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
   margin: 0;
   padding: 6px;
   list-style: none;
@@ -64,6 +70,42 @@
   border: 1px solid var(--raised-line);
   border-radius: 14px;
   box-shadow: var(--raised-shadow);
+}
+/* A thin scroll bar that stays visible where the phone lets it, and a fade at the bottom while there is more below. */
+.mrw-monthpop::-webkit-scrollbar {
+  width: 6px;
+}
+.mrw-monthpop::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 3px;
+}
+.mrw-monthyear {
+  min-height: 28px;
+  padding: 8px 12px 0;
+  color: var(--ink-2);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.mrw-monthfade {
+  position: sticky;
+  bottom: -6px;
+  height: 0;
+  pointer-events: none;
+}
+.mrw-monthfade::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 34px;
+  opacity: 0;
+  transition: opacity 120ms;
+  background: linear-gradient(to bottom, transparent, var(--raised));
+}
+.mrw-monthpop.more .mrw-monthfade::before {
+  opacity: 1;
 }
 .mrw-monthrow {
   appearance: none;
@@ -657,4 +699,27 @@
 }
 .hidden-games .rows li {
   gap: 10px;
+}
+
+/* The Home gear menu: Hide from list on a game that has money in it is grayed out, with its one line. */
+.menu-row.disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.menu-note {
+  padding: 0 14px 8px 46px;
+  color: var(--ink-2);
+  font-size: 0.78rem;
+  line-height: 1.3;
+}
+
+/* Settings summaries that carry a count: the count sits right after the title, with room before the chevron. */
+.hidden-games > summary,
+.switches-tidy .live-stable > summary {
+  gap: 12px;
+}
+.hidden-games > summary .set-note,
+.switches-tidy .live-stable > summary .set-note {
+  margin-left: 0;
+  max-width: none;
 }

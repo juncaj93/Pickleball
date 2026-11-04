@@ -48,13 +48,11 @@ export interface GamesView {
   main: RwGame[];
   /** Fully paid games, canceled games with nothing owed, and anything before today with nothing owed. Most recent first. */
   previous: RwGame[];
-  /** Current month only: games after the 7-day window. */
-  later: RwGame[];
 }
 
 /**
  * Split one month's games into the three places the Games tab shows them.
- *  - The current month: today and the next 7 days are the main list, games further out wait in "Later games", games before today are
+ *  - The current month: today and the next 7 days are the main list, games further out are not shown, games before today are
  *    "Previous games" (unless somebody still owes for one, which stays on top so nobody is forgotten).
  *  - Any other month: every game is in the main list, except fully paid ones, which go to "Previous games".
  * A fully paid game always goes to "Previous games".
@@ -67,20 +65,18 @@ export function splitGames(sessions: AdminSessionView[], month: string, nowMs: n
   const windowEnd = zonedTimeToUtc(p.year, p.month, p.day + 8, 0, 0, tz);
   const main: RwGame[] = [];
   const previous: RwGame[] = [];
-  const later: RwGame[] = [];
   for (const g of all) {
     const start = Date.parse(g.s.startsAt);
     if (fullyPaid(g.s)) previous.push(g);
     else if (start < todayStart) (needsMoney(g.s) ? main : previous).push(g);
-    else if (current && start >= windowEnd) later.push(g);
+    else if (current && start >= windowEnd) continue; // beyond the 7 days: not on the Games tab (its money is in Totals)
     else main.push(g);
   }
   const byDate = (a: RwGame, b: RwGame) => Date.parse(a.s.startsAt) - Date.parse(b.s.startsAt);
   // Unpaid or partly paid sit on top; a game with nothing to pay follows, each group in date order.
   main.sort((a, b) => Number(needsMoney(b.s)) - Number(needsMoney(a.s)) || byDate(a, b));
   previous.sort((a, b) => byDate(b, a));
-  later.sort(byDate);
-  return { main, previous, later };
+  return { main, previous };
 }
 
 export interface MonthChoice {
@@ -90,22 +86,38 @@ export interface MonthChoice {
 }
 
 /**
- * The months in the dropdown, newest first: any month that has a listed game, plus the current month and the four before it (so the
- * list is never one line long), with how many games each one holds.
+ * The months in the dropdown, newest first: EVERY month from the first one that ever had a game up to the current month (or a later month
+ * that already has games), with how many games Money lists in each. `counts` is the server's count for every month; without it the
+ * count comes from the games on hand.
  */
-export function monthChoices(sessions: AdminSessionView[], nowMs: number, tz: string): MonthChoice[] {
-  const counts = new Map<string, number>();
-  for (const g of listedGames(sessions, nowMs)) {
-    const m = monthOf(Date.parse(g.s.startsAt), tz);
-    counts.set(m, (counts.get(m) ?? 0) + 1);
-  }
+export function monthChoices(sessions: AdminSessionView[], nowMs: number, tz: string, counts?: Record<string, number>): MonthChoice[] {
+  const by = new Map<string, number>();
+  if (counts) for (const [m, n] of Object.entries(counts)) by.set(m, n);
+  else
+    for (const g of listedGames(sessions, nowMs)) {
+      const m = monthOf(Date.parse(g.s.startsAt), tz);
+      by.set(m, (by.get(m) ?? 0) + 1);
+    }
   const current = monthOf(nowMs, tz);
-  for (let i = 0; i <= 4; i++) {
-    const m = shiftMonthKey(current, -i);
-    if (!counts.has(m)) counts.set(m, 0);
-  }
-  if (!counts.has(current)) counts.set(current, 0);
-  return [...counts].map(([month, count]) => ({ month, count })).sort((a, b) => b.month.localeCompare(a.month));
+  const withGames = [...by].filter(([, n]) => n > 0).map(([m]) => m).sort();
+  const first = withGames[0] && withGames[0] < current ? withGames[0] : current;
+  const last = withGames.length && withGames[withGames.length - 1] > current ? withGames[withGames.length - 1] : current;
+  const out: MonthChoice[] = [];
+  for (let m = last, guard = 0; m >= first && guard < 600; m = shiftMonthKey(m, -1), guard++) out.push({ month: m, count: by.get(m) ?? 0 });
+  return out;
+}
+
+export type MonthRow = { kind: 'month'; month: string; count: number } | { kind: 'year'; year: string };
+
+/** The dropdown's rows: the months, with a year label row wherever the year changes from the row above. */
+export function monthRows(choices: MonthChoice[]): MonthRow[] {
+  const rows: MonthRow[] = [];
+  choices.forEach((c, i) => {
+    const year = c.month.slice(0, 4);
+    if (i > 0 && year !== choices[i - 1].month.slice(0, 4)) rows.push({ kind: 'year', year });
+    rows.push({ kind: 'month', month: c.month, count: c.count });
+  });
+  return rows;
 }
 
 /** "NOV 26": the short month and two-digit year on the month box. */

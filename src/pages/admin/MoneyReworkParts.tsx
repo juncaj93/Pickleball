@@ -5,6 +5,7 @@ import { formatShortDate } from '../../../shared/time';
 import { api, ApiError } from '../../lib';
 import { ConfirmDialog, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import { useReworkBusy, useReworkRun } from './ReworkOps';
 import { CreditBackList, useAction } from './Sessions';
 import { owedCentsOf } from './moneyList';
 import '../../money-rework.css';
@@ -20,12 +21,14 @@ export type Act = { label: string; onClick: () => void; attrs?: Record<string, s
  * other action (Clear, Undo of a credit). Every action here is the one the older Money tab offered for that row, nothing new.
  */
 export function ReworkRows({
+  sessionId,
   rows,
   actionsOf,
   isPaid,
   lineOf,
   busy,
 }: {
+  sessionId: string;
   rows: AdminRosterEntry[];
   actionsOf: (r: AdminRosterEntry) => Act[];
   isPaid: (r: AdminRosterEntry) => boolean;
@@ -33,6 +36,8 @@ export function ReworkRows({
   busy: boolean;
 }) {
   const [tapped, setTapped] = useState<string | null>(null);
+  // While a save for a row is still running its buttons wait, so a second tap cannot double-save.
+  const rowBusy = useReworkBusy();
   return (
     <ul className="mrw-rows" aria-label="Who paid">
       {rows.map((r) => {
@@ -45,6 +50,7 @@ export function ReworkRows({
         const credit = paid && !r.lateFee && r.creditCents > 0 && r.creditCents >= (r.paymentAmountCents ?? 0);
         const part = !paid && r.creditCents > 0;
         const { short, full } = lineOf(r);
+        const wait = busy || rowBusy({ kind: 'paid', sessionId, playerId: r.playerId });
         const sub = r.lateFee || asked || part ? short : '';
         const open = tapped === r.playerId;
         const cls = asked ? '' : credit ? ' credit' : paid ? ' paid' : '';
@@ -67,12 +73,12 @@ export function ReworkRows({
                 </span>
               )}
               {inline && (
-                <button type="button" className="mrw-undo" disabled={busy} onClick={inline.onClick} {...inline.attrs}>
+                <button type="button" className="mrw-undo" disabled={wait} onClick={inline.onClick} {...inline.attrs}>
                   Undo
                 </button>
               )}
               {markPaid && (
-                <button type="button" className="mrw-mark" disabled={busy} onClick={markPaid.onClick} {...markPaid.attrs}>
+                <button type="button" className="mrw-mark" disabled={wait} onClick={markPaid.onClick} {...markPaid.attrs}>
                   Mark paid
                 </button>
               )}
@@ -83,7 +89,7 @@ export function ReworkRows({
                 {hidden.length > 0 && (
                   <span className="mrw-more-acts">
                     {hidden.map((a) => (
-                      <button key={a.label} type="button" className="btn small secondary" disabled={busy} onClick={a.onClick} {...a.attrs}>
+                      <button key={a.label} type="button" className="btn small secondary" disabled={wait} onClick={a.onClick} {...a.attrs}>
                         {a.label === 'Unmark' ? 'Undo' : a.label}
                       </button>
                     ))}
@@ -139,12 +145,12 @@ export function ChargeLine({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 
 function EditCharge({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; onDone: () => void }) {
   const { busy, run } = useAction(ctx);
+  const rw = useReworkRun(ctx);
   const was = venueCharged(s);
   const typical = s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents;
   const [charged, setCharged] = useState(was);
   const [amount, setAmount] = useState(() => String(((was ? (s.chargedCents ?? 0) : typical) / 100).toFixed(2)).replace(/\.00$/, ''));
   const [error, setError] = useState<string | null>(null);
-  const feeKept = s.canceledBy === 'organizer_fee_kept';
   return (
     <div className="stack" data-edit-charge-sheet>
       <fieldset className="charge-ask">
@@ -157,6 +163,9 @@ function EditCharge({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; on
             Yes
           </button>
         </div>
+        <p className="small muted" data-charge-note>
+          This only fixes Totals. What players owe or hold does not change.
+        </p>
         {charged && (
           <label className="field">
             Amount charged
@@ -173,10 +182,7 @@ function EditCharge({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; on
             {error && <span className="field-error">{error}</span>}
           </label>
         )}
-        <p className="small muted">
-          Only your Totals change: a Yes counts as this game's court cost. {feeKept ? 'Anyone who still owes keeps owing until you Clear it.' : 'Nobody’s money moves.'} Only you see this.
-        </p>
-      </fieldset>
+</fieldset>
       <button
         type="button"
         className="btn block"
@@ -189,7 +195,15 @@ function EditCharge({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; on
             if (c === null || c <= 0) return setError('Enter an amount like 48 or 48.50.');
             cents = c;
           }
-          const ok = await run(() => api('POST', `/api/admin/sessions/${s.id}/charge`, { charged, ...(cents !== undefined ? { cents } : {}) }), charged ? 'Charge saved' : 'Marked as not charged');
+          const save = () => api('POST', `/api/admin/sessions/${s.id}/charge`, { charged, ...(cents !== undefined ? { cents } : {}) });
+          const msg = charged ? 'Charge saved' : 'Marked as not charged';
+          if (rw) {
+            // Instant: the sheet closes and Totals follow now; the save runs in the background and puts it back if it fails.
+            onDone();
+            void rw({ kind: 'charge', sessionId: s.id, cents: charged ? (cents ?? 0) : 0 }, save, msg);
+            return;
+          }
+          const ok = await run(save, msg);
           if (ok) onDone();
         }}
       >
@@ -208,13 +222,22 @@ export function HideConfirm({ ctx, s, open, onClose }: { ctx: AdminCtx; s: Admin
   const [busy, setBusy] = useState(false);
   const day = formatShortDate(s.startsAt, ctx.d.group.timezone);
   const owed = owedCentsOf(s);
+  const rw = useReworkRun(ctx);
   async function hide() {
+    const save = () => api('POST', `/api/admin/sessions/${s.id}/hide-from-list`, { hidden: true });
+    const msg = `${day} is hidden. Restore it in Settings, Advanced, Hidden games.`;
+    if (rw) {
+      // On the Money page: gone at once, saved in the background, back (with an error) if the save fails.
+      onClose();
+      void rw({ kind: 'hide', sessionId: s.id }, save, msg);
+      return;
+    }
     setBusy(true);
     try {
-      await api('POST', `/api/admin/sessions/${s.id}/hide-from-list`, { hidden: true });
+      await save();
       await ctx.reload();
       onClose();
-      toast(`${day} is hidden. Restore it in Settings, Advanced, Hidden games.`);
+      toast(msg);
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {

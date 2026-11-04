@@ -63,6 +63,18 @@ async function main() {
     await sleep(500);
   }
   await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: NOW_MS }) });
+  // Older months for the month list: canceled games (Money lists those) back to Oct 2025, written straight into the local test file.
+  {
+    const { DatabaseSync } = require('node:sqlite');
+    const raw = new DatabaseSync(dbFile);
+    const gid = raw.prepare('SELECT id FROM groups LIMIT 1').get().id;
+    const ins = raw.prepare("INSERT INTO sessions (id, group_id, starts_at, ends_at, status, booking_status, created_at, updated_at, shown_early, canceled_at, canceled_by) VALUES (?, ?, ?, ?, 'canceled', 'needs_booking', ?, ?, 1, ?, 'organizer')");
+    ['2026-02-10', '2026-01-13', '2025-12-09', '2025-11-11', '2025-10-14'].forEach((day, i) => {
+      const start = `${day}T00:00:00.000Z`;
+      ins.run(`00000000-0000-4000-8000-00000000010${i}`, gid, start, `${day}T02:00:00.000Z`, '2025-10-01T00:00:00.000Z', '2025-10-01T00:00:00.000Z', '2025-10-01T00:00:00.000Z');
+    });
+    raw.close();
+  }
 
   const browser = await chromium.launch();
   const post = (req, url, data, headers = {}) => req.post(BASE + url, { data, headers: { Origin: BASE, ...headers } });
@@ -214,6 +226,186 @@ async function main() {
     await page.locator('[data-month-box]').click();
     await page.keyboard.press('Escape');
     assert((await page.locator('[data-month-pop]').count()) === 0, 'Escape closes it');
+    await ctx.close();
+  });
+  await check('1 month list: every month back to the first game, newest first, exactly 4 months tall, scrolls (bar and fade), year labels, opens on the chosen month', async () => {
+    const { ctx, page } = await openAdmin();
+    await money(page);
+    await page.locator('[data-month-box]').click();
+    const pop = page.locator('[data-month-pop]');
+    await pop.waitFor();
+    await page.waitForTimeout(250);
+    const m = await pop.evaluate((el) => {
+      const rows = [...el.querySelectorAll('.mrw-monthrow')].map((b) => ({ m: b.getAttribute('data-month-option'), t: b.innerText.replace(/\n/g, ' ').trim(), h: Math.round(b.getBoundingClientRect().height) }));
+      const cs = getComputedStyle(el);
+      return { rows, years: [...el.querySelectorAll('[data-year-label]')].map((y) => y.innerText.trim()), client: el.clientHeight, scroll: el.scrollHeight, maxH: cs.maxHeight, ovY: cs.overflowY, sb: cs.scrollbarWidth, more: el.classList.contains('more'), fade: getComputedStyle(el.querySelector('.mrw-monthfade'), '::before').opacity };
+    });
+    const months = m.rows.map((r) => r.m);
+    assert(months[0] === '2026-11' && months.at(-1) === '2025-10', `from Nov 2026 back to Oct 2025: ${months[0]} .. ${months.at(-1)}`);
+    assert(months.length === 14 && months.every((x, i) => i === 0 || x < months[i - 1]), `every month once, newest first: ${months.join(' ')}`);
+    assert(m.rows.every((r) => /^[A-Z][a-z]{2} \d{4}\s+\d+$/.test(r.t)), `each row has its count: ${m.rows[0].t}`);
+    const count = (mm) => Number(m.rows.find((r) => r.m === mm).t.match(/(\d+)$/)[1]);
+    const real = (await dash()).gameMonthCounts;
+    assert(count('2026-11') === real['2026-11'] && count('2026-10') === real['2026-10'] && count('2026-01') === 1 && count('2025-12') === 1, `counts match the server: Nov ${count('2026-11')}, Oct ${count('2026-10')}`);
+    assert(m.years.join() === '2025', `a year label where the year changes: ${m.years}`);
+    assert(m.rows.every((r) => r.h >= 44), 'every row is at least 44 px');
+    assert(m.maxH === '188px' && m.client <= 190 && m.scroll > m.client + 50 && m.ovY === 'auto', `four months tall, then it scrolls: ${m.maxH} client ${m.client} scroll ${m.scroll}`);
+    assert(m.sb === 'thin', 'a thin scroll bar');
+    assert(m.more && Number(m.fade) > 0.9, 'a fade at the bottom while there is more');
+    await shot(page, 'month-list-top');
+    await pop.evaluate((el) => (el.style.scrollBehavior = 'auto'));
+    await pop.evaluate((el) => (el.scrollTop = el.scrollHeight));
+    await page.waitForTimeout(250);
+    assert(!(await pop.evaluate((el) => el.classList.contains('more'))), 'at the bottom the fade is gone');
+    await shot(page, 'month-list-bottom');
+    // Choose an old month; reopening has it in view.
+    await page.locator('[data-month-option="2026-01"]').click();
+    await page.locator('[data-month-box]').click();
+    await page.waitForTimeout(250);
+    const vis = await pop.evaluate((el) => {
+      const on = el.querySelector('.mrw-monthrow.on');
+      const r = on.getBoundingClientRect();
+      const p = el.getBoundingClientRect();
+      return { top: r.top - p.top, bottom: p.bottom - r.bottom, text: on.innerText.replace(/\n/g, ' ') };
+    });
+    assert(vis.top >= -1 && vis.bottom >= -1, `the chosen month (${vis.text}) is in view when it opens`);
+    await ctx.close();
+    for (const scheme of ['dark', 'light']) {
+      const o = await openAdmin({ width: scheme === 'dark' ? 320 : 430, scheme });
+      await money(o.page);
+      await o.page.locator('[data-month-box]').click();
+      await o.page.locator('[data-month-pop]').waitFor();
+      await noOverflow(o.page, `month list ${scheme}`);
+      const box = await o.page.evaluate(() => {
+        const p = document.querySelector('[data-month-pop]').getBoundingClientRect();
+        return { right: p.right, w: innerWidth, left: p.left };
+      });
+      assert(box.right <= box.w + 1 && box.left >= -1, `the list fits the screen in ${scheme}`);
+      await shot(o.page, `month-list-${scheme}`);
+      await o.ctx.close();
+    }
+  });
+  await check('3 4 5 nothing extra on Games: no "Not finalized yet" line, no "Later games" card; the Hidden games count has room before the chevron', async () => {
+    const { ctx, page } = await openAdmin({ width: 360 });
+    await money(page);
+    await openAllCards(page);
+    const body = await page.locator('.money-rework').innerText();
+    assert(!/Not finalized yet|Finalize it from Home/i.test(body), 'the not-finalized line is gone');
+    assert((await page.locator('[data-fold="later"]').count()) === 0 && !/Later games/.test(body), 'no Later games card');
+    assert((await page.locator('[data-fold="previous"]').count()) === 1, 'Previous games is still there');
+    await ctx.close();
+    for (const [width, scheme] of [[320, 'dark'], [360, 'light'], [430, 'dark'], [390, 'light']]) {
+      const o = await openAdmin({ width, scheme });
+      await tab(o.page, 'Settings');
+      await o.page.locator('details[data-section="advanced"] > summary').click();
+      const sum = o.page.locator('[data-hidden-games] > summary');
+      const g = await sum.evaluate((el) => {
+        const note = el.querySelector('.set-note').getBoundingClientRect();
+        const title = el.firstElementChild.getBoundingClientRect();
+        const after = getComputedStyle(el, '::after');
+        const sr = el.getBoundingClientRect();
+        return { noteRight: note.right, titleRight: title.right, sumRight: sr.right, chevW: parseFloat(after.fontSize), text: el.innerText.replace(/\n/g, ' ').trim() };
+      });
+      // The count belongs to the title (a dot and the number right after it) and the chevron sits at the far edge, well clear of it.
+      assert(/^Hidden games · \d+/.test(g.text.replace('›', '').trim()) || /Hidden games\s+·\s+\d+/.test(g.text), `reads "Hidden games · n": ${g.text}`);
+      assert(g.sumRight - g.noteRight >= 20, `room between the count and the chevron at ${width} ${scheme}: ${Math.round(g.sumRight - g.noteRight)}px`);
+      await noOverflow(o.page, `settings ${width}`);
+      if (width === 320) await shot(o.page, 'hidden-games-count-320-dark');
+      await o.ctx.close();
+    }
+  });
+  const gamesCard = async (page, id) => {
+    await money(page);
+    const card = page.locator(`article.mrw-game[data-session="${id}"]`);
+    await card.waitFor();
+    if ((await card.getAttribute('data-open')) === 'no') await card.locator('.mrw-toggle').click();
+    return card;
+  };
+  const rowState = (card, name) => card.locator(`.mrw-row[data-pay-row="${name}"]`).evaluate((r, d) => ({ paid: r.getAttribute('data-paid'), dots: r.closest('article').querySelector('[data-dots]')?.getAttribute('data-dots'), title: r.closest('article').querySelector('.mrw-title').innerText, d }), 0);
+  const toastText = (page) => page.locator('.toast .toast-msg').allInnerTexts();
+  await check('2 instant taps: Mark paid and Undo change the screen the moment they are tapped; the toast waits for the server', async () => {
+    const { ctx, page } = await openAdmin();
+    const card = await gamesCard(page, mixed.id);
+    const paidBefore = (await dash()).sessions.find((s) => s.id === mixed.id).paidCount;
+    let requests = 0;
+    await page.route('**/api/admin/sessions/*/payment', async (route) => {
+      requests++;
+      await sleep(1500);
+      await route.continue();
+    });
+    const t0 = Date.now();
+    await card.locator('.mrw-row[data-pay-row="Kai"] .mrw-mark').click();
+    await page.waitForTimeout(150);
+    const fast = await rowState(card, 'Kai');
+    assert(Date.now() - t0 < 900, 'the tap itself is quick');
+    assert(fast.paid === 'yes', 'the row is paid at once');
+    assert(/^(.* · )?3 of 4 paid$/.test(fast.title.trim()) && fast.dots === '3/4', `title and dots at once: ${fast.title} ${fast.dots}`);
+    assert((await card.locator('.mrw-row[data-pay-row="Kai"]').getByRole('button', { name: 'Undo' }).count()) === 1, 'the button became Undo at once');
+    assert((await toastText(page)).length === 0, 'no toast yet: the server has not answered');
+    assert((await dash()).sessions.find((s) => s.id === mixed.id).paidCount === paidBefore, 'and the server really has not saved it yet');
+    await page.waitForTimeout(1900);
+    assert((await toastText(page)).some((t) => /Kai marked paid/.test(t)), `the toast comes when the server confirms: ${await toastText(page)}`);
+    assert((await dash()).sessions.find((s) => s.id === mixed.id).paidCount === paidBefore + 1, 'saved');
+    assert((await rowState(card, 'Kai')).paid === 'yes', 'and the screen did not change back');
+    // Undo, instantly too.
+    await page.waitForTimeout(3500);
+    await card.locator('.mrw-row[data-pay-row="Kai"]').getByRole('button', { name: 'Undo' }).click();
+    await page.waitForTimeout(150);
+    const undone = await rowState(card, 'Kai');
+    assert(undone.paid === 'no' && undone.dots === '2/4', `Undo at once: ${undone.paid} ${undone.dots}`);
+    await page.waitForTimeout(2200);
+    assert((await dash()).sessions.find((s) => s.id === mixed.id).paidCount === paidBefore, 'Undo saved');
+    assert(requests === 2, `two saves in all: ${requests}`);
+    await page.unroute('**/api/admin/sessions/*/payment');
+    await ctx.close();
+  });
+  await check('2 a failed save puts the screen back exactly as it was, with "Couldn\'t save, nothing changed"', async () => {
+    const { ctx, page } = await openAdmin();
+    const card = await gamesCard(page, mixed.id);
+    const before = await rowState(card, 'Gray');
+    const html0 = await card.evaluate((el) => el.innerHTML);
+    await page.route('**/api/admin/sessions/*/payment', async (route) => {
+      await sleep(900);
+      await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'server_error', message: 'Something went wrong. Try again.' }) });
+    });
+    await card.locator('.mrw-row[data-pay-row="Gray"] .mrw-mark').click();
+    await page.waitForTimeout(150);
+    assert((await rowState(card, 'Gray')).paid === 'yes', 'drawn at once');
+    await page.waitForTimeout(1600);
+    const after = await rowState(card, 'Gray');
+    assert(after.paid === before.paid && after.dots === before.dots && after.title === before.title, `back as it was: ${JSON.stringify(after)}`);
+    assert((await card.evaluate((el) => el.innerHTML)) === html0, 'the card is exactly as it was');
+    assert((await toastText(page)).includes("Couldn't save, nothing changed"), `error toast: ${await toastText(page)}`);
+    assert((await dash()).sessions.find((s) => s.id === mixed.id).roster.find((r) => r.name === 'Gray').paymentStatus === 'unpaid', 'nothing was saved');
+    await page.unroute('**/api/admin/sessions/*/payment');
+    await ctx.close();
+  });
+  await check('2 quick double taps save once and never flicker', async () => {
+    const { ctx, page } = await openAdmin();
+    const card = await gamesCard(page, mixed.id);
+    let requests = 0;
+    await page.route('**/api/admin/sessions/*/payment', async (route) => {
+      requests++;
+      await sleep(1100);
+      await route.continue();
+    });
+    const seen = [];
+    const poll = setInterval(() => {
+      rowState(card, 'Gray').then((r) => seen.push(r.paid)).catch(() => {});
+    }, 25);
+    const btn = card.locator('.mrw-row[data-pay-row="Gray"] .mrw-mark');
+    await btn.dblclick({ delay: 20 }).catch(() => {});
+    await card.locator('.mrw-row[data-pay-row="Gray"]').getByRole('button', { name: 'Undo' }).click({ timeout: 300 }).catch(() => {}); // a third tap on the new Undo while saving
+    await page.waitForTimeout(2600);
+    clearInterval(poll);
+    assert(requests === 1, `one save, not ${requests}`);
+    const flips = seen.filter((v, i) => i > 0 && v !== seen[i - 1]).length;
+    assert(flips <= 1 && seen.at(-1) === 'yes', `no flicker: ${[...new Set(seen)].join('>')} (${flips} changes)`);
+    assert((await dash()).sessions.find((s) => s.id === mixed.id).roster.find((r) => r.name === 'Gray').paymentStatus === 'paid', 'saved once, paid');
+    await page.unroute('**/api/admin/sessions/*/payment');
+    // put Gray back
+    const g = (await dash()).sessions.find((s) => s.id === mixed.id).roster.find((r) => r.name === 'Gray');
+    await post(areq, `/api/admin/sessions/${mixed.id}/payment`, { playerId: g.playerId, paid: false, seen: g.moneySeen });
     await ctx.close();
   });
   await check('2 Games: today and the next 7 days on top, a collapsed Previous games card with plain white rows and a green check', async () => {
@@ -446,27 +638,41 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- edit charge
-  await check('7 Edit charge on a canceled game: Yes counts the court in Totals, No takes it away; no money moves', async () => {
+  const openOctTestGame = async (page) => {
+    await money(page);
+    await page.locator('[data-month-box]').click();
+    await page.locator('[data-month-option="2026-10"]').click();
+    await page.locator('[data-fold="previous"] .mrw-fold-head').click();
+    const row = page.locator(`[data-fold="previous"] .mrw-prow[data-session="${testGame.id}"]`);
+    await row.locator('.mrw-prow-head').click();
+    return row;
+  };
+  await check('7 Edit charge on a canceled game: Yes counts the court in Totals, No takes it away; no money moves; one short line under the choice', async () => {
     const { ctx, page } = await openAdmin();
     const credit0 = JSON.stringify((await dash()).creditLedger);
-    const so = async () => (await moneyApi('2026-11')).rework;
+    const so = async () => (await moneyApi('2026-10')).rework;
     const was = await so();
-    await money(page);
-    await page.locator('[data-fold="later"] .mrw-fold-head').click();
-    const row = page.locator(`[data-fold="later"] .mrw-prow[data-session="${court.id}"]`);
-    await row.locator('.mrw-prow-head').click();
+    const row = await openOctTestGame(page);
     assert(/Venue charged:\s*No/.test(await row.locator('[data-charge-line]').innerText()), 'says No');
     await row.locator('[data-edit-charge]').click();
     const sheet = page.locator('dialog[open] [data-edit-charge-sheet]');
     await sheet.waitFor();
+    assert((await sheet.locator('[data-charge-note]').innerText()).trim() === 'This only fixes Totals. What players owe or hold does not change.', 'the one line');
+    assert((await sheet.locator('p').count()) === 1, 'and no other text');
+    const noteTop = await sheet.locator('[data-charge-note]').evaluate((e) => e.getBoundingClientRect().top);
+    const segBottom = await sheet.locator('.segmented').evaluate((e) => e.getBoundingClientRect().bottom);
+    assert(noteTop >= segBottom - 1, 'it sits under the Yes/No choice');
     await sheet.getByRole('button', { name: 'Yes' }).click();
     assert((await sheet.locator('input').inputValue()) === '48', 'amount starts at the usual court cost');
     await shot(page, 'edit-charge');
     await sheet.locator('[data-save-charge]').click();
+    assert((await page.locator('dialog[open] [data-edit-charge-sheet]').count()) === 0, 'the sheet closes at once');
     await page.waitForTimeout(900);
     assert(/Venue charged:\s*\$48/.test(await row.locator('[data-charge-line]').innerText()), 'now says $48');
     const yes = await so();
     assert(yes.courtCostCents === was.courtCostCents + 4800 && yes.courtSessions === was.courtSessions + 1, `Totals count the court: ${was.courtCostCents} -> ${yes.courtCostCents}`);
+    // Money is never hidden: with a charge on it the game can no longer be hidden.
+    assert((await row.locator('[data-hide-from-list]').count()) === 0, 'a charged game has no Hide from list');
     await row.locator('[data-edit-charge]').click();
     const sheet2 = page.locator('dialog[open] [data-edit-charge-sheet]');
     await sheet2.getByRole('button', { name: 'No' }).click();
@@ -474,24 +680,38 @@ async function main() {
     await page.waitForTimeout(900);
     const no = await so();
     assert(no.courtCostCents === was.courtCostCents && no.courtSessions === was.courtSessions, 'and No takes it away again');
+    assert((await row.locator('[data-hide-from-list]').count()) === 1, 'and Hide from list is back');
     assert(JSON.stringify((await dash()).creditLedger) === credit0, 'no credit moved');
-    // The Totals tab on the page follows.
-    await page.locator('.mrw-seg button', { hasText: 'Totals' }).click();
-    await page.locator('[data-totals]').waitFor();
     await ctx.close();
   });
-  await check('6 money is never hidden: games with money in them (credit back, a booked court, payments) have no Hide from list; the server refuses too', async () => {
+  await check('6 money is never hidden: games with money in them have no Hide from list on Money; the server refuses; Home shows it grayed out with one line on a canceled game', async () => {
     const { ctx, page } = await openAdmin();
     await money(page);
     await openAllCards(page);
     assert((await page.locator('article.mrw-game [data-hide-from-list]').count()) === 0, 'no Hide on any open game with money in it');
-    await page.locator('[data-fold="later"] .mrw-fold-head').click();
-    const row = page.locator(`[data-fold="later"] .mrw-prow[data-session="${court.id}"]`);
-    await row.locator('.mrw-prow-head').click();
-    assert((await row.locator('[data-closed-body]').count()) === 1, 'the canceled game opened');
-    assert((await row.locator('[data-hide-from-list]').count()) === 0, 'it gave credit back, so it stays in Money');
     const r = await post(areq, `/api/admin/sessions/${court.id}/hide-from-list`, { hidden: true });
     assert(r.status() === 409 && (await r.json()).message === 'This game has money in it, so it stays in Money.', 'the server says so');
+    // Home, the canceled game that gave credit back.
+    await tab(page, 'Home');
+    let card = page.locator(`article#session-${court.id}`);
+    if (!(await card.count())) {
+      const all = page.locator('button', { hasText: /^Show all/ });
+      if (await all.count()) await all.click();
+      await page.locator(`div#session-${court.id}`).click();
+      card = page.locator(`article#session-${court.id}`);
+      await card.waitFor();
+    }
+    await card.locator('button[aria-label^="Game menu"]').click();
+    const hide = page.locator('[data-hide-blocked]');
+    assert((await hide.count()) === 1 && (await hide.getAttribute('aria-disabled')) === 'true', 'the row is there and grayed out');
+    assert((await page.locator('[data-hide-blocked-note]').innerText()).trim() === 'This game has money in it, so it stays in Money', 'with its one line');
+    const op = await hide.evaluate((e) => getComputedStyle(e).opacity);
+    assert(Number(op) < 1, 'it looks grayed out');
+    await hide.click({ force: true });
+    assert((await page.locator('dialog[open]').count()) === 0, 'tapping it does nothing');
+    // The player-screen toggle stays its own row.
+    assert((await page.getByRole('menuitem', { name: /player screen/ }).count()) === 1, 'the player-screen toggle is separate');
+    await page.keyboard.press('Escape');
     await ctx.close();
   });
 
