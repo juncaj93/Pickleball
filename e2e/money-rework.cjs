@@ -177,10 +177,10 @@ async function main() {
   });
 
   // ---------------------------------------------------------------- the Money page
-  await check('1 top row: month box (NOV 26) then Games | Totals, equal widths, no arrows or carets', async () => {
+  await check('1 top row: month box (Nov 2026) then Games | Totals, equal widths, no arrows or carets', async () => {
     const { ctx, page } = await openAdmin({ width: 390 });
     await money(page);
-    assert((await page.locator('[data-month-box]').innerText()).trim() === 'NOV 26', 'month box text');
+    assert((await page.locator('[data-month-box]').innerText()).trim() === 'Nov 2026', 'month box text');
     const m = await page.evaluate(() => {
       const r = (s) => document.querySelector(s).getBoundingClientRect();
       const [g, t] = [...document.querySelectorAll('.mrw-seg button')].map((b) => b.getBoundingClientRect());
@@ -221,7 +221,7 @@ async function main() {
     assert(gc > r && gc > b, `selected month is green: ${g.onColor}`);
     await shot(page, 'month-dropdown');
     await page.locator('[data-month-option="2026-10"]').click();
-    assert((await page.locator('[data-month-box]').innerText()).trim() === 'OCT 26', 'picking a month changes the box');
+    assert((await page.locator('[data-month-box]').innerText()).trim() === 'Oct 2026', 'picking a month changes the box');
     assert((await page.locator('[data-month-pop]').count()) === 0, 'and closes the list');
     await page.locator('[data-month-box]').click();
     await page.keyboard.press('Escape');
@@ -908,12 +908,78 @@ async function main() {
       await ctx.close();
     }
   });
+  await check('9 month box: "Nov 2026" in the toggle\'s own type, soft 1 px outline, same height and corners as the toggle, no wrapping, light and dark, 320 / 360 / 430', async () => {
+    for (const [width, scheme] of [[320, 'light'], [360, 'dark'], [430, 'light'], [360, 'light'], [430, 'dark'], [320, 'dark']]) {
+      const { ctx, page } = await openAdmin({ width, scheme });
+      await money(page);
+      const m = await page.evaluate(() => {
+        const box = document.querySelector('[data-month-box]');
+        const tog = document.querySelector('.mrw-seg');
+        const tb = tog.querySelector('button');
+        const cs = getComputedStyle(box);
+        const ts = getComputedStyle(tb);
+        const line = parseFloat(cs.lineHeight) || parseFloat(cs.fontSize) * 1.2;
+        return {
+          text: box.innerText.trim(), size: cs.fontSize, weight: cs.fontWeight, ls: cs.letterSpacing, tt: cs.textTransform, bw: cs.borderTopWidth, bc: cs.borderTopColor, bg: cs.backgroundColor,
+          radius: cs.borderTopLeftRadius, tradius: getComputedStyle(tog).borderTopLeftRadius, h: box.getBoundingClientRect().height, th: tog.getBoundingClientRect().height,
+          tsize: ts.fontSize, tweight: ts.fontWeight, tfamily: ts.fontFamily === cs.fontFamily, lines: box.getBoundingClientRect().height <= line * 2 + 30 && box.scrollWidth <= box.clientWidth, extra: box.querySelectorAll('svg, img').length + (getComputedStyle(box, '::after').content !== 'none' ? 1 : 0),
+          w: box.getBoundingClientRect().width,
+        };
+      });
+      const tag = `${width} ${scheme}`;
+      assert(m.text === 'Nov 2026', `text ${m.text} (${tag})`);
+      assert(m.size === '15px' && m.weight === '600' && m.ls === 'normal' && m.tt === 'none', `type ${m.size}/${m.weight}/${m.ls}/${m.tt} (${tag})`);
+      assert(m.size === m.tsize && m.weight === m.tweight && m.tfamily, `same font as the toggle: ${m.size}/${m.weight} vs ${m.tsize}/${m.tweight} (${tag})`);
+      assert(m.bw === '1px', `1px outline (${tag})`);
+      if (scheme === 'light') {
+        assert(m.bc === 'rgb(220, 220, 213)' && m.bg === 'rgb(255, 255, 255)', `outline #dcdcd5 on white: ${m.bc} ${m.bg}`);
+      }
+      assert(Math.abs(m.h - m.th) <= 1.5, `same height as the toggle: ${m.h} vs ${m.th} (${tag})`);
+      assert(m.radius === m.tradius, `corners match the toggle: ${m.radius} vs ${m.tradius} (${tag})`);
+      assert(m.lines && m.extra === 0, `one line, no arrow or caret (${tag})`);
+      await noOverflow(page, `month box ${tag}`);
+      if (width === 360) await shot(page, `month-box-${scheme}`);
+      await page.locator('[data-month-box]').click();
+      const rows = await page.evaluate(() => [...document.querySelectorAll('.mrw-monthrow')].slice(0, 2).map((r) => ({ f: getComputedStyle(r).fontSize, w: getComputedStyle(r).fontWeight, t: r.innerText.replace(/\n/g, ' ').trim() })));
+      assert(rows.every((r) => r.f === '15px' && r.w === '600' && /^[A-Z][a-z]{2} \d{4}\s+\d+$/.test(r.t)), `dropdown rows keep the style: ${JSON.stringify(rows)}`);
+      await ctx.close();
+    }
+  });
+  await check('10 Mark paid: 14 px medium (500), 34 px high, 11 px corners, 1.5 px soft outline, white fill, never wraps, a 44 px tap area; names stay semibold; light and dark', async () => {
+    for (const [width, scheme] of [[320, 'light'], [360, 'dark'], [430, 'light'], [390, 'dark']]) {
+      const { ctx, page } = await openAdmin({ width, scheme });
+      await money(page);
+      await openAllCards(page);
+      const m = await page.evaluate(() => {
+        const out = [...document.querySelectorAll('.mrw-mark')].map((b) => {
+          const cs = getComputedStyle(b);
+          const before = getComputedStyle(b, '::before');
+          const r = b.getBoundingClientRect();
+          return { t: b.innerText.trim(), size: cs.fontSize, weight: cs.fontWeight, h: Math.round(r.height * 10) / 10, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, bc: cs.borderTopColor, bg: cs.backgroundColor, ws: cs.whiteSpace, one: b.scrollWidth <= b.clientWidth + 1, hit: r.height + parseFloat(before.top) * -2 };
+        });
+        const name = getComputedStyle(document.querySelector('.mrw-name')).fontWeight;
+        return { out, name };
+      });
+      const tag = `${width} ${scheme}`;
+      assert(m.out.length >= 8, `there are Mark paid buttons to check: ${m.out.length}`);
+      for (const b of m.out) {
+        assert(b.t === 'Mark paid' && b.size === '14px' && b.weight === '500', `type ${b.size}/${b.weight} (${tag})`);
+        assert(b.h === 34 && b.radius === '11px' && b.bw === '1.5px' && b.ws === 'nowrap' && b.one, `shape ${b.h}px ${b.radius} ${b.bw} ${b.ws} (${tag})`);
+        assert(b.hit >= 44, `tap area ${b.hit}px (${tag})`);
+        if (scheme === 'light') assert(b.bc === 'rgb(207, 210, 201)' && b.bg === 'rgb(255, 255, 255)', `outline #cfd2c9 on white: ${b.bc} ${b.bg}`);
+      }
+      assert(Number(m.name) >= 600, `names stay semibold or heavier: ${m.name}`);
+      await noOverflow(page, `mark paid ${tag}`);
+      if (width === 360) await shot(page, `mark-paid-${scheme}`);
+      await ctx.close();
+    }
+  });
   await check('Tap targets on the new Money page are at least 44 px', async () => {
     const { ctx, page } = await openAdmin({ width: 390 });
     await money(page);
     await openAllCards(page);
     const small = await page.evaluate(() =>
-      [...document.querySelectorAll('.mrw-month, .mrw-seg button, .mrw-mark, .mrw-undo, .mrw-remind, .mrw-toggle, .mrw-fold-head, .mrw-who, .mrw-hide-link')]
+      [...document.querySelectorAll('.mrw-month, .mrw-seg button, .mrw-undo, .mrw-remind, .mrw-toggle, .mrw-fold-head, .mrw-who, .mrw-hide-link')]
         .map((e) => ({ c: e.className, h: Math.round(e.getBoundingClientRect().height) }))
         .filter((x) => x.h > 0 && x.h < 40),
     );

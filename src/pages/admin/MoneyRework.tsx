@@ -48,7 +48,7 @@ export function MoneyTabRework({ ctx: realCtx }: { ctx: AdminCtx }) {
 // ---------- The month box ----------
 
 /**
- * "NOV 26": tap it and a small list drops straight under it (rounded on every corner, scrolls when long): "Nov 2026" and how many games
+ * "Nov 2026": tap it and a small list drops straight under it (rounded on every corner, scrolls when long): "Nov 2026" and how many games
  * that month holds, the chosen month in green. A tap outside, Escape, or picking a month closes it. No arrows, no carets.
  */
 function MonthBox({ ctx, month, onPick }: { ctx: AdminCtx; month: string; onPick: (m: string) => void }) {

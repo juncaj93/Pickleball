@@ -4,6 +4,19 @@
 
 .money-rework {
   gap: 10px;
+  /* Soft outlines: the month box and the Mark paid button. */
+  --mrw-box-line: #dcdcd5;
+  --mrw-btn-line: #cfd2c9;
+}
+:root[data-theme='dark'] .money-rework {
+  --mrw-box-line: var(--line-strong);
+  --mrw-btn-line: var(--line-strong);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .money-rework {
+    --mrw-box-line: var(--line-strong);
+    --mrw-btn-line: var(--line-strong);
+  }
 }
 
 /* ---------- Top row ---------- */
@@ -25,14 +38,16 @@
   width: 100%;
   min-height: 46px;
   padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 13px;
+  border: 1px solid var(--mrw-box-line);
+  border-radius: 11px;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: 0.95rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  /* The same type as the Games | Totals toggle: 15 px, semibold, normal case, no letter spacing. */
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -44,6 +59,8 @@
 }
 .mrw-seg button {
   min-height: 40px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 /* The dropdown: right under the month box, rounded on all four corners, scrolls when long. */
@@ -121,8 +138,8 @@
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 0.95rem;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
 }
@@ -346,19 +363,28 @@
 /* White, outlined, never the one filled green button. */
 .mrw-mark {
   appearance: none;
+  position: relative;
   flex: none;
-  min-height: 44px;
+  box-sizing: border-box;
+  height: 34px;
   min-width: 96px;
   padding: 0 14px;
-  border: 1.5px solid var(--line-strong);
+  border: 1.5px solid var(--mrw-btn-line);
   border-radius: 11px;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
-  font-size: 0.92rem;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
+}
+/* The button looks 34 px tall; the area that answers a tap is still 44 px. */
+.mrw-mark::before {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
 }
 .mrw-mark:disabled,
 .mrw-undo:disabled,

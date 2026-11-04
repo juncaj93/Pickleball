@@ -120,11 +120,9 @@ export function monthRows(choices: MonthChoice[]): MonthRow[] {
   return rows;
 }
 
-/** "NOV 26": the short month and two-digit year on the month box. */
+/** "Nov 2026": the month box (3-letter month, full year). */
 export function monthBoxLabel(month: string): string {
-  const [y, m] = month.split('-').map(Number);
-  const name = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'][m - 1];
-  return `${name} ${String(y % 100).padStart(2, '0')}`;
+  return monthRowLabel(month);
 }
 
 /** "Nov 2026" for a dropdown row. */

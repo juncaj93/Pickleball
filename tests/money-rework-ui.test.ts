@@ -117,7 +117,7 @@ describe('Month dropdown', () => {
     expect(rows.map((r) => (r.kind === 'year' ? `[${r.year}]` : r.month))).toEqual(['2027-02', '2027-01', '[2026]', '2026-12', '2026-11']);
   });
   it('M5 labels', () => {
-    expect(monthBoxLabel('2026-11')).toBe('NOV 26');
+    expect(monthBoxLabel('2026-11')).toBe('Nov 2026');
     expect(monthRowLabel('2026-11')).toBe('Nov 2026');
     expect(monthOf(NOW, TZ)).toBe('2026-11');
     expect(shiftMonthKey('2026-01', -1)).toBe('2025-12');
