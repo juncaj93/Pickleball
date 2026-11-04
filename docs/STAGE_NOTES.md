@@ -2146,7 +2146,7 @@ $56, court $48, net +$8, but the bottom line read "Nothing played yet". 13. LATE
 Nobody loses a spot: every seat keeps its status (in stays in, waitlist keeps its order). Money: an early cancel, or a late one the venue waived, turns what
 was paid (cash or credit) into credit; Reopen puts those seats back to "$14 due" and the credit stays in the pot, so each of them taps Use credit (or Pay). A
 late cancel with the fee kept moved no money, so after Reopen paid stays paid. Proposed (not built): on Reopen, put each seat's credit back on it
-automatically, up to the price, the way I'm in does.
+automatically, up to the price, the way I'm in does. Alex (Wed Nov 4): do NOT build it, leave it as is (they tap Use credit). A later idea only.
 
 ### Fresh reviewer (did not write the code)
 Round 1 found three real bugs, all fixed with a test each: (1) a split game reopened and canceled again at a lower price kept $2 too much from a seat whose cash
@@ -2166,3 +2166,15 @@ PR, full unit suite on main, SQL export and Time Travel bookmark, `npm run deplo
 `lateFeeSplitForAll: false`, health checks 0). Rollback: Settings row off (no deploy); code: the Pages deployment live before it. If a split cancel was ever made,
 its seats are ordinary seats at the split price, so old code shows them correctly except the stored price (it would read $14 owed on an unpaid seat): Clear or
 settle those first.
+
+### Alex's answers (Wed Nov 4, about 3:00 PM Eastern)
+1. Cancel then Reopen: leave it (they tap Use credit). Auto credit on Reopen stays a later idea, not built.
+2. Live switches ON for everyone: New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Motion, Motion admin,
+   Moved-game notice (TIME_SHIFT), Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Every name exists in the code. MOTION and
+   MOTION_ADMIN are wrangler.toml switches only (no Settings row), already "on" in `[env.preview.vars]`, like every kill switch. The other ten are Settings rows
+   (task_log), which wrangler.toml only allows: `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts` now writes all ten plus `late_fee_split_on` on every
+   re-seed (`tests/preview-seed.test.ts` checks all eleven). On the running preview they were switched on through its own Settings endpoints (no re-seed, so
+   Alex's taps were kept). No redeploy was needed (no site code changed).
+3. Unmark keeping the $5: OK, written under known gaps in `FEATURE_SWITCHES.md` (with 4).
+4. Monthly Collected counts only what was paid: OK.
+- "Ship it" expected Fri Nov 6 morning. Do not deploy before then. Keep the preview up.

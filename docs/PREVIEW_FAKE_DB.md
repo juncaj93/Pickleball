@@ -61,7 +61,8 @@ Production is bound to the real database and was not changed.
 
 A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
 the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
-(today: "Late drops owe $14" and "Late-cancel fee split"). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+(Nov 4, as on live: New admin layout, Admin screens round 2 and 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
+Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2; plus the one being built, Late-cancel fee split). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
 When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it

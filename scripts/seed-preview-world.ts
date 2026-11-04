@@ -277,11 +277,24 @@ function wipeExtras(): string {
 /**
  * PREVIEW SWITCHES RULE (Nov 4): a preview behaves like live. The Settings > Feature switches rows that are ON for everyone
  * on live are ON here from the seed (no ?something=on needed), plus the switch being built. A backup does not carry task_log,
- * so they are written here. Keep this list equal to live: it is the one place to change. Known ON on live (Nov 4): "Late drops
- * owe $14" (LATE_FEES). Being built: "Late-cancel fee split" (LATE_FEE_SPLIT). The wrangler.toml switches (GO_LINKS, TIME_SHIFT,
- * MOTION, MOTION_ADMIN, and every kill switch) are already "on" in [env.preview.vars].
+ * so they are written here. Keep this list equal to live: it is the one place to change. ON on live (Alex, Wed Nov 4):
+ * New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
+ * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Being built: Late-cancel fee split. MOTION and
+ * MOTION_ADMIN have no Settings row: they are wrangler.toml switches, "on" in [env.preview.vars] like every kill switch.
  */
-export const PREVIEW_SWITCHES_ON = ['late_fees_on', 'late_fee_split_on'] as const;
+export const PREVIEW_SWITCHES_ON = [
+  'admin_v2_on',
+  'admin_r2_on',
+  'admin_r3_on',
+  'pay_always_on',
+  'pay_note_on',
+  'time_shift_on',
+  'late_fees_on',
+  'player_fix1_on',
+  'pay_sheet_on',
+  'texts_r2_on',
+  'late_fee_split_on',
+] as const;
 
 function switchRows(nowMs: number): string {
   const at = new Date(nowMs).toISOString();
