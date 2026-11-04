@@ -2081,3 +2081,12 @@ never changes an alert; the text menu with the switch off is the old words, one 
 - New `tests/texts-r2.test.ts` (see counts in the status below) and `e2e/texts-r2.cjs` (14, added to `npm run test:e2e`).
 - Six existing test files lost the lines that called the removed wording.
 - Known failures on main (not fixed): admin-cleanup 2, admin-motion "press" 1; eight other browser files fail on any day after Nov 3 because they assume the first real game has not happened.
+
+### Status (Wed Nov 4, 2026, about 10:50 AM Eastern)
+- Type check clean; production build clean. Unit: 1,873 passed, 1 skipped, 0 failed (100 files; before: 1,803 in 99; 73 new in `tests/texts-r2.test.ts`, 3 removed with the dead wording).
+- Browser, every file one by one: new `texts-r2` 14 of 14; `texts` 52, `cancel-reason` 8, `late-fees` 19, `do-now` 13, `alerts` 52, `player-fix1` 30, `pay-sheet` 23, `run` 229 all green. Known failures, not fixed: admin-cleanup 2 (same two fail on a clean `origin/main`), admin-motion "press" 1. The
+  files that assume the first real game has not happened fail for that same reason (circles, money-visible, good-news, audit-player-flows, admin-audit, motion, layout-polish; popup printed nothing). `run.cjs` (2) and `round2.cjs` (1) failed once while the unit suite ran at the same time and pass alone (229 and 25).
+- Fresh reviewer (did not write the code): no leak with the switch off, no high-severity bug. One real finding fixed: the Moved text named the old day as "Tue Nov 3" even when it was tomorrow. Left for Alex to decide: the fee-kept cancel text puts "Sorry about that!" before
+  "You can pay on the site:" so the address can end the text; a same-day finalize says "tonight" / "today"; #5 and #7 still fire for a Waitlist game.
+- Preview (fake database, re-seeded): https://preview-texts-r2.pickleball-club-9h0.pages.dev (deployment dae5d4f5, branch preview-texts-r2). Not on production. No Telegram secret exists on previews, so no alert can reach Alex's chat.
+- To ship (never in loud hours; quiet window Fri to Mon before 6:00 PM, or Wed 6:00 AM to 6:00 PM, and only after "ship it"): PR, full unit suite, SQL export and Time Travel bookmark, `npm run deploy` from main with TEXTS_R2 allowed and the Settings row OFF, read-only live check. Rollback: the Pages deployment live at that time. No migration, no data change.
