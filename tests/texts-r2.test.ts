@@ -135,8 +135,11 @@ describe('TEXTS_R2: the prefilled texts, exact words', () => {
   });
   it('7. moved: line breaks and the reason', () => {
     const was = '2026-11-04T01:00:00.000Z'; // Tue Nov 3
-    expect(movedTextR2(THU_730, was, TZ, MON_7PM, LINK, 'Court swap')).toBe(['Pickleball Tue Nov 3 is moved to Thu Nov 5 @ 7:30pm. Court swap.', '', LINK].join('\n'));
-    expect(movedTextR2(THU_730, was, TZ, at('2026-11-05T17:00:00Z'), LINK)).toBe(['Pickleball Tue Nov 3 is moved to tonight @ 7:30pm.', '', LINK].join('\n'));
+    expect(movedTextR2(THU_730, was, TZ, MON_7PM, LINK, 'Court swap')).toBe(['Pickleball tomorrow is moved to Thu Nov 5 @ 7:30pm. Court swap.', '', LINK].join('\n'));
+    expect(movedTextR2(THU_730, was, TZ, at('2026-10-30T17:00:00Z'), LINK).split('\n')[0]).toBe('Pickleball Tue Nov 3 is moved to Thu Nov 5 @ 7:30pm.');
+    // Same day, new time, asked the night before: never the weekday date for tomorrow.
+    expect(movedTextR2({ startsAt: '2026-11-04T00:30:00.000Z' }, was, TZ, MON_7PM, LINK, 'Court swap').split('\n')[0]).toBe('Pickleball tomorrow is moved to 7:30pm. Court swap.');
+    expect(movedTextR2({ startsAt: '2026-11-04T00:30:00.000Z' }, was, TZ, TUE_NOON, LINK).split('\n')[0]).toBe('Pickleball tonight is moved to 7:30pm.');
   });
   it('8. payment reminder, one person: yesterday or a date; several games give the total', () => {
     expect(paymentTextR2('Ryan', 1400, [TUE], TZ, WED_NOON, LINK)).toBe(['Hey Ryan, you owe $14 for pickleball yesterday.', 'Pay here:', '', LINK].join('\n'));

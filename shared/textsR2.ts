@@ -137,9 +137,15 @@ export function canceledFeeKeptTextR2(s: SessionLike, tz: string, nowMs: number,
   );
 }
 
-/** 7. MOVED: the live words with line breaks and the reason. `was` is the game's original time. */
+/**
+ * 7. MOVED: the live words with line breaks and the reason. `was` is the game's original time. Both days follow the day-word
+ * rule ("Pickleball tomorrow is moved to Thu Nov 5 @ 7:30pm."); moved to a new time on the same day it reads
+ * "Pickleball tonight is moved to 7:30pm."
+ */
 export function movedTextR2(s: SessionLike, was: string, tz: string, nowMs: number, link: string, reason?: string | null): string {
-  return lines([withReason(`Pickleball ${textDay(was, tz)} is moved to ${whenR2(s.startsAt, tz, nowMs)}.`, reason)], link);
+  const sameDay = textDay(was, tz) === textDay(s.startsAt, tz);
+  const to = sameDay ? shortTime(s.startsAt, tz) : whenR2(s.startsAt, tz, nowMs);
+  return lines([withReason(`Pickleball ${dayWordR2(was, tz, nowMs)} is moved to ${to}.`, reason)], link);
 }
 
 /** 8. PAYMENT REMINDER, one person. One game names the day; several games give just the total. */
