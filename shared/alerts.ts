@@ -1,7 +1,9 @@
 // Telegram alerts to the organizer: which roster changes are worth a
 // message, and the message itself. Names and the game time only: never a
 // phone number, a Venmo name, or money (except the amount of a refund request).
+import { formatPrice } from './money';
 import { MIN_PLAYERS } from './spots';
+import { alertGame } from './textsR2';
 import { formatTime } from './time';
 
 /** The organizer's switches. All on unless turned off in Settings > Alerts. */
@@ -38,6 +40,13 @@ export interface AlertInput {
   nowMs: number;
   timezone: string;
   prefs: AlertPrefs;
+  /**
+   * TEXTS_R2 is on: the game is named "tomorrow's 8:00 PM game" / "tonight's game" instead of the date, and a drop that
+   * created a debt adds "[Name] owes $14". Off or missing: the words are exactly what they always were.
+   */
+  textsR2?: boolean;
+  /** TEXTS_R2 only: what the person who dropped now owes (late fees on and the drop created the debt), in cents. */
+  dropperOwesCents?: number | null;
 }
 
 /** "Thu Nov 5, 8:00 PM" */
@@ -86,7 +95,7 @@ export function alertMessage(a: AlertInput): string | null {
   const on = a.prefs.reachedMin && b < MIN_PLAYERS && n >= MIN_PLAYERS;
   if (!dropSoon && !short && !on) return null;
 
-  const when = alertWhen(a.startsAt, a.timezone);
+  const when = a.textsR2 === true ? alertGame(a.startsAt, a.timezone, a.nowMs, formatTime(a.startsAt, a.timezone)) : alertWhen(a.startsAt, a.timezone);
   const newlyIn = a.after.filter((p) => !was.has(p.playerId));
   const lines: string[] = [];
   if (dropped) {
@@ -94,8 +103,9 @@ export function alertMessage(a: AlertInput): string | null {
     lines.push(`${late}${a.actor.name} dropped out of ${when} (${alertLead(left)} before).`);
     if (newlyIn.length) lines.push(`${names(newlyIn)} moved up from the waitlist.`);
     lines.push(n < MIN_PLAYERS ? `${n} in now, under ${MIN_PLAYERS}.` : `${n} in now.`);
+    if (a.textsR2 === true && a.dropperOwesCents && a.dropperOwesCents > 0) lines.push(`${a.actor.name} owes ${formatPrice(a.dropperOwesCents)}.`);
   }
-  if (on) lines.push(`${when} has ${n} now, it's on.`);
+  if (on) lines.push(a.textsR2 === true ? `${when.charAt(0).toUpperCase()}${when.slice(1)} has ${n} now, it's on.` : `${when} has ${n} now, it's on.`);
   return lines.length ? lines.join(' ') : null;
 }
 

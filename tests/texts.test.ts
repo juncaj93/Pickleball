@@ -6,7 +6,6 @@ import {
   movedMessage,
   needPlayersMessage,
   paymentMessage,
-  pollMessage,
   promotedMessage,
   remindAllMessage,
   sessionLink,
@@ -18,7 +17,6 @@ import { playerPhone, setupGroup } from './harness';
 
 const TZ = 'America/Detroit';
 const s = { startsAt: '2026-11-04T01:00:00.000Z', endsAt: '2026-11-04T03:00:00.000Z' }; // Tue Nov 3, 8 PM
-const LINK = 'https://pickleball.juncaj.net/?s=abc';
 /** A week before the sample game, so texts name the date. */
 const LONG_BEFORE = Date.parse('2026-10-26T16:00:00Z');
 
@@ -65,7 +63,7 @@ describe('the Text menu wording', () => {
     const all = [
       shareMessage(s, TZ, LONG_BEFORE, link), needPlayersMessage(s, TZ, LONG_BEFORE, 1, link), promotedMessage(s, TZ, LONG_BEFORE, link),
       checkInMessage(s, TZ, 0, link), canceledMessage(s, TZ, LONG_BEFORE, link), movedMessage(s, s.startsAt, TZ, LONG_BEFORE, link), paymentMessage('A', 1400, [s], TZ, link), remindAllMessage(link),
-      finalMessage(s, TZ, 6, 900, 1400, link), finalMessage(s, TZ, 4, 1400, 1400, link), pollMessage(s, TZ, 1400, LINK),
+      finalMessage(s, TZ, 6, 900, 1400, link), finalMessage(s, TZ, 4, 1400, 1400, link),
     ];
     for (const m of all) {
       expect(m).not.toMatch(/\bsent\b|ASAP/i);

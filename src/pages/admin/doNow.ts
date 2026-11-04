@@ -20,6 +20,8 @@ export function taskSessionOfView(s: AdminSessionView, courtBookedAt: Record<str
     cancellationDeadlineAt: s.cancellationDeadlineAt,
     finalized: !!s.finalized,
     holiday: s.holiday,
+    // Only TEXTS_R2 reads this (same rule as the Waitlist court switch).
+    waitlisted: s.bookingStatus !== 'booked' && (s.bookingStatus === 'unavailable' || s.courtState === 'waitlist'),
   };
 }
 
@@ -30,6 +32,7 @@ export function dashboardTasks(d: AdminDashboard, nowMs: number, adminUrl: strin
     bookingLeadDays: d.group.settings.bookingLeadDays,
     defaultDeadlineHours: d.group.settings.defaultDeadlineHours,
     links: { admin: adminUrl, book: COURTRESERVE_BOOKING_URL, cancel: COURTRESERVE_CANCEL_URL },
+    ...(d.textsR2 === true ? { textsR2: true } : {}),
   });
 }
 

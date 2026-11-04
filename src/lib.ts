@@ -153,6 +153,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (payNoteTest()) headers['X-Pay-Note'] = 'on';
   // "Player screen small fixes, round 1", private test switch for this phone (?playerfix1=on, see server/playerFix1.ts).
   if (playerFix1Test()) headers['X-Player-Fix1'] = 'on';
+  // "Texts and alerts, round 2", private test switch for this phone (/admin?textsr2=on, see server/textsR2.ts).
+  if (textsR2Test()) headers['X-Texts-R2'] = 'on';
   // "Pay sheet", private test switch for this phone (?paysheet=on, see server/paySheet.ts).
   if (paySheetTest()) headers['X-Pay-Sheet'] = 'on';
   // "New admin layout", private test switch for this phone (/admin?adminv2=on, see server/adminV2.ts).
@@ -469,6 +471,21 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('playerfix1');
   if (want === 'on') storageSet(PLAYER_FIX1_KEY, 'on');
   else if (want === 'off') storageRemove(PLAYER_FIX1_KEY);
+}
+
+/**
+ * "Texts and alerts, round 2" on this phone only, before it is on for everyone: open /admin?textsr2=on once
+ * (?textsr2=off turns it back off). Remembered in this browser; nothing else changes. It changes the texts this phone opens and
+ * the cancel sheet's default. The Telegram alerts follow the switch for everyone only.
+ */
+const TEXTS_R2_KEY = 'pb_texts_r2';
+export function textsR2Test(): boolean {
+  return storageGet(TEXTS_R2_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('textsr2');
+  if (want === 'on') storageSet(TEXTS_R2_KEY, 'on');
+  else if (want === 'off') storageRemove(TEXTS_R2_KEY);
 }
 
 /**

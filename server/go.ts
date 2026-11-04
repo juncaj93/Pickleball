@@ -7,6 +7,8 @@
 // site address), and all it can save is that the text was opened.
 import { MIN_PLAYERS } from '../shared/spots';
 import { checkInMessage, needPlayersMessage, siteAddress } from '../shared/messages';
+import { checkInTextR2, needPlayersTextR2 } from '../shared/textsR2';
+import { textsR2For } from './textsR2';
 import { playerLinkFor } from './admin';
 import type { Ctx } from './context';
 import { HttpError } from './http';
@@ -87,7 +89,15 @@ export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   const n = confirmedOf(await loadRoster(ctx.db, session.id)).length;
   const link = siteAddress(playerLinkFor(ctx, group));
   const s = { startsAt: session.starts_at, endsAt: session.ends_at };
-  const text = n < MIN_PLAYERS ? needPlayersMessage(s, group.timezone, ctx.nowMs, MIN_PLAYERS - n, link) : checkInMessage(s, group.timezone, ctx.nowMs, link);
+  // TEXTS_R2 on (everyone, or this phone's private link): the new wording with line breaks. Off: the old words.
+  const r2 = await textsR2For(ctx, group.id);
+  const text = r2
+    ? n < MIN_PLAYERS
+      ? needPlayersTextR2(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
+      : checkInTextR2(s, group.timezone, ctx.nowMs, n, link)
+    : n < MIN_PLAYERS
+      ? needPlayersMessage(s, group.timezone, ctx.nowMs, MIN_PLAYERS - n, link)
+      : checkInMessage(s, group.timezone, ctx.nowMs, link);
   // Opening it counts as the organizer's tap on "Text the group" (not from Pretend or the demo).
   if (!ctx.env.SANDBOX && !read.test) {
     try {

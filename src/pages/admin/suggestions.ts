@@ -6,10 +6,9 @@
 // Which texts and what they say come from the Text menu (textMenu.ts); this
 // file decides WHEN each one is worth suggesting, and which cards to show.
 import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
-import { remindAllMessage, siteAddress } from '../../../shared/messages';
 import { formatShortDate, formatTimeRange, localParts } from '../../../shared/time';
 import { nightLastCallMs } from '../../../shared/tasks';
-import { owedGames, owesLateFee, reminderText, sessionTexts, type TextItem } from './textMenu';
+import { owedGames, owesLateFee, remindAllText, reminderText, sessionTexts, type TextItem } from './textMenu';
 
 export type SuggestionKind = 'promoted' | 'need' | 'checkin' | 'final' | 'pay';
 
@@ -116,7 +115,7 @@ export function suggestions(d: AdminDashboard, nowMs: number): Suggestion[] {
       if (owing.length === 0) continue;
       const phones = owing.filter((r) => r.phone).map((r) => r.phone!);
       const missing = owing.filter((r) => !r.phone).map((r) => r.name);
-      const body = owing.length === 1 ? reminderText(d, owing[0].playerId, owing[0].name) : remindAllMessage(siteAddress(d.group.playerLink));
+      const body = owing.length === 1 ? reminderText(d, owing[0].playerId, owing[0].name) : remindAllText(d);
       const card = from(s, tz, 'pay', { body, chat: false, phones, missing }, owing.map((r) => r.playerId).sort().join(','));
       if (owing.length === 1) card.who = `1 player (${owing[0].name})`;
       pay.push(card);

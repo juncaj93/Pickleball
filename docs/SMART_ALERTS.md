@@ -67,6 +67,30 @@ Existing games keep their times, and no day ever gets a second game.
 
 Not sent for canceled games, past games, the demo, or Pretend it's.
 
+## With "Texts and alerts, round 2" on (TEXTS_R2, switched on for everyone in Settings)
+
+Off at ship. Everything above is the OFF behavior and stays exactly as written. With the switch on for everyone, the clock (the
+`/api/cron/tick` the Worker knocks on) and the Home cards use `textsR2` in `shared/tasks.ts` and change like this. The clock
+Worker itself (`worker/cron.ts`) is not touched: it still only knocks every 5 minutes, and the site reads the switch in the same
+database trip it already makes.
+
+| Alert | OFF (today) | ON |
+| --- | --- | --- |
+| Night-before last call | "Tuesday: 5 players in. Text the group to confirm" | "Tomorrow: 5 players in. Text the group to confirm" / "Tomorrow: 3 players in, need a 4th. Text the group" (the link opens the new check-in / need-players text) |
+| Cancel warning, cancel follow-up | "Tuesday: ..." | "Tomorrow: ..." (same words after the day) |
+| Game-day check (45 min before cancel-by) | sent | **not sent** (the Home card still reads the same) |
+| Booking heads-up (game 14 days out, not booked) | 6:45 AM | **6:55 AM** (the clock ticks every 5 minutes, so an exact 6:58 is not possible; a missed tick still sends it up to an hour late) |
+| Booking reminder | 7:30 AM if the game is not Booked | 7:30 AM **only while the game is Not booked** (skips Booked, Waitlist and Canceled) |
+| No court yet (4 or more in) | 15 min after cancel-by (8:15 AM for an 8 PM game) | **30 min before cancel-by, never before 7:00 AM** (7:30 AM for an 8 PM game; 7:00 AM for a 7 PM game). Never before the 24-hour window opens. Words: "Tonight: 5 in, no court yet. Check CourtReserve for an opening" ("Today:" for a daytime game) |
+| Finalize | "Tuesday: finalize who played" | "Tonight: finalize who played" ("Today:" for a daytime game) |
+| Someone dropped / game fell below 4 | "Ryan dropped out of Tue Nov 3, 8:00 PM (9 hrs before). 3 in now, under 4." | "Ryan dropped out of tomorrow's 8:00 PM game (9 hrs before). 3 in now, under 4." ("tonight's game" on game day); with late fees on and a debt made: "... Ryan owes $14." |
+| Game reaches 4 | "Tue Nov 3, 8:00 PM has 4 now, it's on." | "Tomorrow's 8:00 PM game has 4 now, it's on." |
+| Test smart alert | sample "Tuesday: 3 players in, need a 4th. ..." | sample "Tomorrow: 3 players in, need a 4th. ..." |
+
+The Home "no court yet" card and the booking card appear at the same new times as their alerts. Refund requests and cash-out
+withdrawals are unchanged. Every alert is still sent once per game (whichever wording was live when it went), a missed one still
+goes out if it is less than an hour late, a tick sends at most 5, and nothing is sent for a canceled game.
+
 ## How it runs
 
 ```

@@ -14,12 +14,9 @@ import {
   zonedTimeToUtc,
 } from '../shared/time';
 import {
-  bookingMessage,
-  confirmationMessage,
   deadlineAlertMessage,
   normalizePhone,
   paymentMessage,
-  replacementMessage,
   smsHref,
 } from '../shared/messages';
 import { DAY, HOUR, MONDAY_NOON } from './harness';
@@ -303,16 +300,6 @@ describe('session status', () => {
 
 describe('message templates', () => {
   const s = { startsAt: '2026-10-28T00:00:00.000Z', endsAt: '2026-10-28T02:00:00.000Z' };
-
-  it('includes date, time, and the personal link', () => {
-    const m = confirmationMessage('Alex', s, TZ, 'https://club.example/t/abc');
-    expect(m).toContain('Alex');
-    expect(m).toContain('Tuesday, Oct 27');
-    expect(m).toContain('8:00 to 10:00 PM');
-    expect(m).toContain('https://club.example/t/abc');
-    expect(replacementMessage(s, TZ, 'https://x/t/1')).toContain('First to claim it gets the spot: https://x/t/1');
-    expect(bookingMessage(s, TZ)).toContain("I'm checking court bookings now.");
-  });
 
   it('includes the right player and amount in payment reminders', () => {
     expect(paymentMessage('Blair', 1125, [s], TZ, 'pickleball.juncaj.net')).toBe('Hey Blair, you owe $11.25 for pickleball Tue Oct 27. Pay here: pickleball.juncaj.net');

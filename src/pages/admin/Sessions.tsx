@@ -31,6 +31,7 @@ import { isPlayed, lateDropsAll } from './todo';
 import '../../credit-session.css';
 import '../../admin-cards.css';
 import { stillInText, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
+import { canceledCreditTextR2, movedTextR2, stillInTextR2 } from '../../../shared/textsR2';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 
 export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set' | 'players_text';
@@ -189,7 +190,8 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
 export function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
   const c = s.timeCheck!;
-  const body = stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
+  // TEXTS_R2: "Pickleball tomorrow is confirmed @ 7:30pm!" with line breaks. Off: the words as they were.
+  const body = ctx.d.textsR2 === true ? stillInTextR2(s.startsAt, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink)) : stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
   const one = c.waiting.length === 1 ? c.waiting[0] : null;
   return (
     <div className="ts-check" data-time-check>
@@ -371,7 +373,8 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
           Keep as is
         </button>
       </div>
-      {!passed && (
+      {/* TEXTS_R2: "Text this alert to yourself" is gone (almost never used). */}
+      {!passed && ctx.d.textsR2 !== true && (
         <details>
           <summary className="small" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>
             Text this alert to yourself
@@ -433,11 +436,20 @@ export function SessionSheets({
  */
 function ChangeText({ ctx, s, canceled, askCourt }: { ctx: AdminCtx; s: AdminSessionView; canceled: boolean; askCourt: boolean }) {
   const tz = ctx.d.group.timezone;
-  const [reason, setReason] = useState('');
+  const r2 = ctx.d.textsR2 === true;
+  // TEXTS_R2: the reason typed on the cancel sheet starts in this box, so it reaches the text.
+  const [reason, setReason] = useState(r2 && canceled ? (s.cancelReason ?? '') : '');
   const link = siteAddress(ctx.d.group.playerLink);
   // Late fees on and canceled inside 12 hours: the text follows the venue answer (shared/messages.ts). Off: as before.
   const late = canceled ? lateCancelText(ctx.d, s, reason) : null;
-  const body = canceled ? canceledMessage(s, tz, Date.parse(ctx.d.now), link, reason) : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, Date.parse(ctx.d.now), link, reason);
+  const nowMs = Date.parse(ctx.d.now);
+  const body = canceled
+    ? r2
+      ? canceledCreditTextR2(s, tz, nowMs, link, reason)
+      : canceledMessage(s, tz, nowMs, link, reason)
+    : r2
+      ? movedTextR2(s, s.plannedStartsAt ?? s.startsAt, tz, nowMs, link, reason)
+      : movedMessage(s, s.plannedStartsAt ?? s.startsAt, tz, nowMs, link, reason);
   if (late) {
     return (
       <div className="stack" data-late-cancel={late.feeKept ? 'fee_kept' : 'waived'}>
@@ -907,7 +919,8 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const [reason, setReason] = useState('');
   // Late fees on (shared/lateFees.ts rule 5): the question is "Did the venue waive the fee?", with no default.
   const askWaived = askCharge && ctx.d.lateFees === true;
-  const [waived, setWaived] = useState<boolean | null>(null);
+  // TEXTS_R2: it starts on No (the venue gives almost no grace, so a late cancel normally keeps the fee). Yes still works exactly as before.
+  const [waived, setWaived] = useState<boolean | null>(ctx.d.textsR2 === true ? false : null);
   const [waivedError, setWaivedError] = useState(false);
   return (
     <ConfirmDialog

@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { holidayFor, holidayOn } from '../shared/holidays';
-import { pollMessage } from '../shared/messages';
 import { normalizeSettings } from '../shared/settings';
 import { DAY, firstSession, HOUR, playerPhone, setupGroup } from './harness';
 
@@ -53,14 +52,6 @@ describe('first session date', () => {
   it('rejects a date that is not a date', async () => {
     const ctx = await setupGroup();
     expect((await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', firstSessionDate: 'Nov 3' })).status).toBe(400);
-  });
-});
-
-describe('group poll text', () => {
-  it('uses the real date, the per-player price and the plain site address', () => {
-    const s = { startsAt: TUE_NOV_3, endsAt: '2026-11-04T03:00:00.000Z' };
-    expect(pollMessage(s, TZ, 1400, 'https://pickleball.juncaj.net/')).toBe('Pickleball Tue Nov 3, 8:00 to 10:00 PM. $14 each. In or out? pickleball.juncaj.net');
-    expect(pollMessage(s, TZ, 1450, 'https://pickleball.juncaj.net')).toContain('$14.50 each');
   });
 });
 

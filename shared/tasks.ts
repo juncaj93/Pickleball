@@ -11,6 +11,7 @@
 import { MIN_PLAYERS } from './spots';
 import { formatTime, formatWeekday, localParts, zonedTimeToUtc } from './time';
 import { textDay } from './messages';
+import { dayLabelR2 } from './textsR2';
 
 /** What the task brain needs to know about one game. Nothing private. */
 export interface TaskSession {
@@ -28,6 +29,8 @@ export interface TaskSession {
   cancellationDeadlineAt: string | null;
   finalized: boolean;
   holiday: string | null;
+  /** The court is on the venue's waitlist (Waitlist, not Booked). Only TEXTS_R2 reads it: the booking reminder skips such a game. */
+  waitlisted?: boolean;
 }
 
 /** Taps the organizer made on the card, saved on the server. */
@@ -103,6 +106,12 @@ export interface TaskOptions {
   bookingLeadDays: number;
   defaultDeadlineHours: number;
   links: TaskLinks;
+  /**
+   * TEXTS_R2 is on (shared/textsR2.ts): "Tomorrow:" style day words, the booking heads-up at 6:55 AM, the booking reminder only
+   * for a game still "not booked", no game-day check, "no court yet" 30 minutes before cancel-by (never before 7:00 AM). Off or
+   * missing: every alert is exactly what it always was.
+   */
+  textsR2?: boolean;
 }
 
 /** A missed tick still sends an alert that came due within this long. */
@@ -136,6 +145,11 @@ export const BOOKING_HEADS_UP_BEFORE_OPEN_MIN = 15;
 export const BOOKING_FOLLOWUP_AFTER_OPEN_MIN = 30;
 /** Morning-of check for a game with 4 or more in and no court: this long after the cancellation deadline (7:15 AM for a 7:00 PM game). */
 export const NO_COURT_CHECK_AFTER_DEADLINE_MIN = 15;
+/** TEXTS_R2: the booking heads-up goes this long before the court opens (6:55 AM; the clock ticks every 5 minutes, so an exact 6:58 is not possible). */
+export const BOOKING_HEADS_UP_BEFORE_OPEN_MIN_R2 = 5;
+/** TEXTS_R2: "no court yet" goes this long BEFORE the cancellation deadline, but never earlier than the time below on that day. */
+export const NO_COURT_BEFORE_DEADLINE_MIN_R2 = 30;
+export const NO_COURT_NOT_BEFORE_R2 = { hour: 7, minute: 0 };
 /** "Has no court yet" items for games without a court: at most this many, soonest first. */
 export const NO_COURT_SHOWN = 2;
 
@@ -164,7 +178,7 @@ export function deadlineMsOf(s: Pick<TaskSession, 'startsAt' | 'cancellationDead
 }
 
 /** All of a game's task times, for the card, the alerts and the tests. */
-export function taskTimes(s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'cancellationDeadlineAt'>, o: Pick<TaskOptions, 'tz' | 'defaultDeadlineHours' | 'bookingLeadDays'>) {
+export function taskTimes(s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'cancellationDeadlineAt'>, o: Pick<TaskOptions, 'tz' | 'defaultDeadlineHours' | 'bookingLeadDays' | 'textsR2'>) {
   const deadline = deadlineMsOf(s, o.defaultDeadlineHours);
   const cancelWarning = wallShift(deadline, o.tz, -CANCEL_WARNING_BEFORE_DEADLINE_MIN);
   const courtOpens = dayAt(s.startsAt, o.tz, -o.bookingLeadDays, COURT_OPENS_TIME.hour, COURT_OPENS_TIME.minute);
@@ -174,14 +188,25 @@ export function taskTimes(s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'cancella
     cancelWarning,
     cancelFollowup: cancelWarning + CANCEL_FOLLOWUP_AFTER_WARNING_MIN * MIN_MS,
     gamedayCheck: wallShift(deadline, o.tz, -GAMEDAY_CHECK_BEFORE_DEADLINE_MIN),
-    noCourtCheck: deadline + NO_COURT_CHECK_AFTER_DEADLINE_MIN * MIN_MS,
+    noCourtCheck: o.textsR2 === true ? noCourtCheckR2(deadline, o.tz) : deadline + NO_COURT_CHECK_AFTER_DEADLINE_MIN * MIN_MS,
     finalize: Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS,
     courtOpens,
-    bookingHeadsUp: courtOpens - BOOKING_HEADS_UP_BEFORE_OPEN_MIN * MIN_MS,
+    bookingHeadsUp: courtOpens - (o.textsR2 === true ? BOOKING_HEADS_UP_BEFORE_OPEN_MIN_R2 : BOOKING_HEADS_UP_BEFORE_OPEN_MIN) * MIN_MS,
     bookingFollowup: courtOpens + BOOKING_FOLLOWUP_AFTER_OPEN_MIN * MIN_MS,
     /** The end of the day the court opens: the booking-day card shows until then. */
     bookingDayEnds: dayAt(s.startsAt, o.tz, -o.bookingLeadDays + 1, 0, 0),
   };
+}
+
+/**
+ * TEXTS_R2: 30 minutes before the cancellation deadline, but never earlier than 7:00 AM (on the day that moment falls on).
+ * An 8:00 AM deadline gives 7:30 AM; a 7:00 AM deadline (or earlier) gives 7:00 AM.
+ */
+export function noCourtCheckR2(deadlineMs: number, tz: string): number {
+  const before = wallShift(deadlineMs, tz, -NO_COURT_BEFORE_DEADLINE_MIN_R2);
+  const p = localParts(before, tz);
+  const floor = zonedTimeToUtc(p.year, p.month, p.day, NO_COURT_NOT_BEFORE_R2.hour, NO_COURT_NOT_BEFORE_R2.minute, tz);
+  return Math.max(before, floor);
 }
 
 function sameDay(aMs: number, bMs: number, tz: string): boolean {
@@ -195,6 +220,11 @@ export function dayLabel(startsAt: string, nowMs: number, tz: string): string {
   const start = Date.parse(startsAt);
   if (sameDay(start, nowMs, tz)) return localParts(start, tz).hour >= 17 ? 'Tonight' : 'Today';
   return formatWeekday(startsAt, tz);
+}
+
+/** The word that starts an alert and its card: "Tomorrow" (TEXTS_R2) or the weekday (as it always was). */
+function labelFor(startsAt: string, nowMs: number, o: Pick<TaskOptions, 'tz' | 'textsR2'>): string {
+  return o.textsR2 === true ? dayLabelR2(startsAt, o.tz, nowMs) : dayLabel(startsAt, nowMs, o.tz);
 }
 
 const players = (n: number) => `${n} ${n === 1 ? 'player' : 'players'}`;
@@ -262,7 +292,7 @@ function nightTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions):
   }
   const n = s.confirmedCount;
   const under = n < MIN_PLAYERS;
-  const text = `${dayLabel(s.startsAt, nowMs, o.tz)}: ${countLine(n)}`;
+  const text = `${labelFor(s.startsAt, nowMs, o)}: ${countLine(n)}`;
   const label = under ? 'Text the group' : 'Text the group to confirm';
   const alerts: TaskAlert[] = [];
   const link = o.links.go?.(s.id) ?? o.links.admin;
@@ -290,7 +320,7 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
   } else if (!s.booked || n >= MIN_PLAYERS) {
     return null;
   }
-  const day = dayLabel(s.startsAt, nowMs, o.tz);
+  const day = labelFor(s.startsAt, nowMs, o);
   const deadline = times.deadline;
   const gameDay = sameDay(start, nowMs, o.tz);
   const beforeDeadline = nowMs < deadline;
@@ -321,7 +351,8 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
   if (!s.canceled) {
     if (!courtDone) alertIf(alerts, s, 'cancel', opens, `${lead} Cancel court: ${o.links.cancel}`, true);
     alertIf(alerts, s, 'cancel_followup', times.cancelFollowup, `${day}: court canceled? Now cancel the session and text everyone: ${o.links.admin}`, true);
-    if (!courtDone && beforeDeadline) alertIf(alerts, s, 'gameday', times.gamedayCheck, `${text.replace(/\.$/, '')}: ${o.links.cancel}`, true);
+    // TEXTS_R2: the game-day check is gone (the cancel warning the night before and its follow-up are enough).
+    if (!courtDone && beforeDeadline && o.textsR2 !== true) alertIf(alerts, s, 'gameday', times.gamedayCheck, `${text.replace(/\.$/, '')}: ${o.links.cancel}`, true);
   }
   return { id: `cancel:${s.id}`, kind: 'cancel', sessionId: s.id, startsAt: s.startsAt, text, buttons: [], steps, alerts, rank: 0 };
 }
@@ -343,7 +374,8 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | null {
   const tail = `Book: ${o.links.book}\nThen set it to Booked: ${o.links.admin}`;
   const alerts: TaskAlert[] = [];
   alertIf(alerts, s, 'book', t.bookingHeadsUp, `${date} opens at ${opensAt}${holiday}. ${tail}`);
-  alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: ${date} opened at ${opensAt}${holiday}. ${tail}`);
+  // TEXTS_R2: the reminder goes only while the game is still "not booked" (it fired after a backup was booked and the game set to Waitlist).
+  if (o.textsR2 !== true || !s.waitlisted) alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: ${date} opened at ${opensAt}${holiday}. ${tail}`);
   return { id: `book:${s.id}`, kind: 'book', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o), bookedButton], steps: [], alerts, rank: 1 };
 }
 
@@ -357,9 +389,12 @@ function noCourtTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | nul
   if (s.canceled || s.booked || s.confirmedCount < MIN_PLAYERS || nowMs >= start) return null;
   const due = taskTimes(s, o).noCourtCheck;
   if (nowMs < due || start - nowMs > 24 * HOUR_MS) return null;
-  const text = `${dayLabel(s.startsAt, nowMs, o.tz)}: ${s.confirmedCount} in, no court yet. Check CourtReserve for an opening.`;
+  const text = `${labelFor(s.startsAt, nowMs, o)}: ${s.confirmedCount} in, no court yet. Check CourtReserve for an opening.`;
   const alerts: TaskAlert[] = [];
-  if (start - due <= 24 * HOUR_MS) alertIf(alerts, s, 'nocourt', due, `${text.replace(/\.$/, '')}: ${o.links.book}`);
+  // The alert exists when the old rule (15 minutes after the deadline) falls inside the 24 hours before the start, as it always did.
+  // TEXTS_R2 sends it at its own earlier time, but never before that 24-hour window opens (a 24-hour cancel-by still gets its alert).
+  const oldDue = taskTimes(s, { ...o, textsR2: false }).noCourtCheck;
+  if (start - oldDue <= 24 * HOUR_MS) alertIf(alerts, s, 'nocourt', o.textsR2 === true ? Math.max(due, start - 24 * HOUR_MS) : due, `${text.replace(/\.$/, '')}: ${o.links.book}`);
   return { id: `nocourt:${s.id}`, kind: 'nocourt', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o), bookedButton], steps: [], alerts, rank: 2 };
 }
 
@@ -368,7 +403,7 @@ function finalizeTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | nu
   if (s.canceled || s.finalized || s.confirmedCount < MIN_PLAYERS) return null;
   const due = taskTimes(s, o).finalize;
   if (nowMs < due) return null;
-  const text = `${formatWeekday(s.startsAt, o.tz)}: finalize who played.`;
+  const text = `${o.textsR2 === true ? labelFor(s.startsAt, nowMs, o) : formatWeekday(s.startsAt, o.tz)}: finalize who played.`;
   const alerts: TaskAlert[] = [];
   alertIf(alerts, s, 'finalize', due, `${text.replace(/\.$/, '')}: ${o.links.admin}`);
   return {
@@ -454,7 +489,7 @@ export function mayAlertSoon(
   s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'canceled' | 'booked' | 'finalized' | 'cancellationDeadlineAt'>,
   confirmedCount: number | null,
   nowMs: number,
-  o: Pick<TaskOptions, 'tz' | 'bookingLeadDays' | 'defaultDeadlineHours'>,
+  o: Pick<TaskOptions, 'tz' | 'bookingLeadDays' | 'defaultDeadlineHours' | 'textsR2'>,
 ): boolean {
   if (s.canceled) return false; // every alert is for a game still on
   const offsets = ZONE_OFFSETS_H[o.tz];
@@ -477,6 +512,16 @@ export function mayAlertSoon(
     return false;
   }
   if (enough && near(deadline + NO_COURT_CHECK_AFTER_DEADLINE_MIN * MIN_MS)) return true;
+  if (o.textsR2 === true && enough) {
+    // TEXTS_R2: "no court yet" is due 30 minutes before the deadline, or at 7:00 AM on that day if that is later.
+    const before = deadline - NO_COURT_BEFORE_DEADLINE_MIN_R2 * MIN_MS;
+    if (near(before) || near(start - 24 * HOUR_MS)) return true;
+    for (const h of offsets) {
+      const local = new Date(before + h * HOUR_MS);
+      const floor = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), NO_COURT_NOT_BEFORE_R2.hour, NO_COURT_NOT_BEFORE_R2.minute) - h * HOUR_MS;
+      if (near(floor)) return true;
+    }
+  }
   // Booking day: the court opens on the game's date minus the lead days, at the opening time, worked out with each offset the zone can have.
   for (const h of offsets) {
     const local = new Date(start + h * HOUR_MS);
