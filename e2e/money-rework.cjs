@@ -544,14 +544,16 @@ async function main() {
       await tidy.waitFor();
       const names = await tidy.locator('.set-name').evaluateAll((els) => els.map((e) => e.innerText.trim()));
       assert(names[0] === 'Money page rework', `newest first: ${names[0]}`);
-      assert(names[1] === 'Late-cancel fee split', `then the next newest (off): ${names[1]}`);
+      // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
       assert(/Live and stable/.test(await group.locator('summary').innerText()), 'its name');
       await group.locator('summary').click();
       const live = await group.locator('.set-name').evaluateAll((els) => els.map((e) => e.innerText.trim()));
-      assert(live[0] === 'Texts and alerts, round 2' && live.at(-1) === 'Ask for payment on every game' || live.includes('Moved-game notice for everyone'), `older switches in the group: ${live}`);
-      assert(!live.includes('Money page rework') && !live.includes('Late-cancel fee split'), 'the newest and any switch that is off stay out of the group');
+      assert(live[0] === 'Late-cancel fee split' && live[1] === 'Texts and alerts, round 2', `older switches in the group, newest first: ${live}`);
+      assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
+      assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
+      assert(names.length === 1 + live.length, `nothing else is listed: ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
@@ -642,6 +644,30 @@ async function main() {
     const lines = await page.locator('.activity-list > li .a-text').allInnerTexts();
     const mine = lines.filter((t) => t.includes(`gave ${gray.name} a spot`));
     assert(mine.length <= 1, `a move that changed nothing is hidden: ${mine.length} lines`);
+    await ctx.close();
+  });
+
+  // ---------------------------------------------------------------- the split (live since Wed Nov 4) is on in the preview
+  await check('Late-cancel fee split is ON from the seed (it is on live), and a fee-kept cancel with 6 in shows the right Totals', async () => {
+    const d = await dash();
+    assert(d.lateFeeSplitForAll === true && d.lateFeeSplit === true, 'the split switch is on from the seed');
+    const g = byNote(d, 'Fee split test');
+    const res = await post(areq, `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
+    assert(res.ok(), `cancel: ${await res.text()}`);
+    const sv = (await dash()).sessions.find((s) => s.id === g.id);
+    assert(sv.feeSplit && sv.feeSplit.count === 6 && sv.feeSplit.priceCents === 900, 'six in, 9 dollars each');
+    const month = g.startsAt.slice(0, 7);
+    const t = (await moneyApi(month)).rework;
+    // Indy, Lane and Morgan paid 14 and kept 9 each: collected 27 or more; the court the venue charged is 48, counted once.
+    assert(t.collectedCents >= 2700 && t.courtCostCents >= 4800, `collected and court: ${t.collectedCents} / ${t.courtCostCents}`);
+    for (const v of [t.collectedCents, t.yourCostCents, t.yourCostCourtCents, t.yourCostMembershipCents, t.projected.yourCostCents]) assert(v >= 0, 'no negative amounts');
+    const { ctx, page } = await openAdmin({ width: 360 });
+    await money(page);
+    await page.locator('.mrw-seg button', { hasText: 'Totals' }).click();
+    await page.locator('[data-totals]').waitFor();
+    const f = (c) => (c % 100 ? '$' + (c / 100).toFixed(2) : '$' + c / 100);
+    assert((await page.locator('[data-owed-total]').innerText()) === f(t.owedToVenueCents), 'screen equals the server');
+    await noOverflow(page, 'totals after the split cancel');
     await ctx.close();
   });
 

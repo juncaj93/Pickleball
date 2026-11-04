@@ -73,10 +73,9 @@ describe('fake-data preview seed', () => {
 
   it('has the live-ON switches on from the seed, plus the one being built (PREVIEW SWITCHES RULE)', async () => {
     const { dash } = await loaded();
-    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'moneyReworkForAll'])
+    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll'])
       expect(dash[k], k).toBe(true);
-    // Late-cancel fee split is built but NOT on live yet (Alex has not shipped it), so a preview does not have it on either.
-    expect(dash.lateFeeSplitForAll).toBe(false);
+    // Late-cancel fee split went live on Wed Nov 4 (Alex), so it is on in the preview too.
     // The "Fee split test" game: booked, inside its 12-hour cancel-by, 6 in, three paid.
     const g = (dash.sessions as any[]).find((x) => x.note === 'Fee split test');
     expect(g).toMatchObject({ bookingStatus: 'booked', confirmedCount: 6 });

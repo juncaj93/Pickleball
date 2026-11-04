@@ -331,8 +331,8 @@ function wipeExtras(): string {
  * on live are ON here from the seed (no ?something=on needed), plus the switch being built. A backup does not carry task_log,
  * so they are written here. Keep this list equal to live: it is the one place to change. ON on live (Alex, Wed Nov 4):
  * New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
- * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Being built: Money page rework. (Late-cancel fee
- * split is NOT on live yet, so it is not on here: Alex has not shipped it.) MOTION and
+ * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and (since Wed Nov 4, Alex) Late-cancel fee split.
+ * Being built: Money page rework. MOTION and
  * MOTION_ADMIN have no Settings row: they are wrangler.toml switches, "on" in [env.preview.vars] like every kill switch.
  */
 export const PREVIEW_SWITCHES_ON = [
@@ -346,6 +346,7 @@ export const PREVIEW_SWITCHES_ON = [
   'player_fix1_on',
   'pay_sheet_on',
   'texts_r2_on',
+  'late_fee_split_on',
   'money_rework_on',
 ] as const;
 
