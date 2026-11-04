@@ -93,9 +93,9 @@ async function main() {
   assert(testGame && court && lateGame && mixed, 'the fake world has the games this test needs');
 
   const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mobile/15E148 Safari/604.1';
-  const phone = (width, scheme = 'light', height = 800) => ({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA });
-  async function openAdmin({ width = 390, scheme = 'light', url = '/admin', height = 800 } = {}) {
-    const ctx = await browser.newContext(phone(width, scheme, height));
+  const phone = (width, scheme = 'light', height = 800, dpr = 1) => ({ viewport: { width, height }, deviceScaleFactor: dpr, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA });
+  async function openAdmin({ width = 390, scheme = 'light', url = '/admin', height = 800, dpr = 1 } = {}) {
+    const ctx = await browser.newContext(phone(width, scheme, height, dpr));
     await post(ctx.request, '/api/admin/login', { pin: PIN });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => {
@@ -947,7 +947,8 @@ async function main() {
   });
   await check('10 Mark paid: 14 px medium (500), 34 px high, 11 px corners, 1.5 px soft outline, white fill, never wraps, a 44 px tap area; names stay semibold; light and dark', async () => {
     for (const [width, scheme] of [[320, 'light'], [360, 'dark'], [430, 'light'], [390, 'dark']]) {
-      const { ctx, page } = await openAdmin({ width, scheme });
+      // A 2x screen, like a phone: a 1.5 px line only exists at 2x and up (at 1x the browser draws 1 px).
+      const { ctx, page } = await openAdmin({ width, scheme, dpr: 2 });
       await money(page);
       await openAllCards(page);
       const m = await page.evaluate(() => {
@@ -958,13 +959,16 @@ async function main() {
           return { t: b.innerText.trim(), size: cs.fontSize, weight: cs.fontWeight, h: Math.round(r.height * 10) / 10, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, bc: cs.borderTopColor, bg: cs.backgroundColor, ws: cs.whiteSpace, one: b.scrollWidth <= b.clientWidth + 1, hit: r.height + parseFloat(before.top) * -2 };
         });
         const name = getComputedStyle(document.querySelector('.mrw-name')).fontWeight;
-        return { out, name };
+        // The browser snaps a drawn line to whole device pixels (1.5 px shows as 1 px at 1x and 2x in this test browser), so the 1.5 px is read from the style itself.
+        let authored = '';
+        for (const sheet of document.styleSheets) for (const r of sheet.cssRules) if (r.selectorText === '.mrw-mark') authored = /border:\s*1\.5px/.test(r.style.cssText) ? '1.5px' : r.style.cssText;
+        return { out, name, dpr: window.devicePixelRatio, authored };
       });
       const tag = `${width} ${scheme}`;
       assert(m.out.length >= 8, `there are Mark paid buttons to check: ${m.out.length}`);
       for (const b of m.out) {
         assert(b.t === 'Mark paid' && b.size === '14px' && b.weight === '500', `type ${b.size}/${b.weight} (${tag})`);
-        assert(b.h === 34 && b.radius === '11px' && b.bw === '1.5px' && b.ws === 'nowrap' && b.one, `shape ${b.h}px ${b.radius} ${b.bw} ${b.ws} (${tag})`);
+        assert(b.h === 34 && b.radius === '11px' && parseFloat(b.bw) >= 1 && m.authored === '1.5px' && b.ws === 'nowrap' && b.one, `shape ${b.h}px ${b.radius} ${b.bw} ${b.ws} dpr ${m.dpr} (${tag})`);
         assert(b.hit >= 44, `tap area ${b.hit}px (${tag})`);
         if (scheme === 'light') assert(b.bc === 'rgb(207, 210, 201)' && b.bg === 'rgb(255, 255, 255)', `outline #cfd2c9 on white: ${b.bc} ${b.bg}`);
       }

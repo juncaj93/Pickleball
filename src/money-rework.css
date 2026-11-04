@@ -146,7 +146,6 @@
 .mrw-monthrow.on {
   color: var(--accent-text);
   background: var(--accent-soft);
-  font-weight: 750;
 }
 .mrw-monthcount {
   color: var(--ink-2);
