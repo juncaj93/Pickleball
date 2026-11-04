@@ -391,7 +391,11 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
       ...(wasSplit ? unsplitStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, ctx.nowIso, reopened) : []),
     ]);
     // A split game whose reopen was stopped by an I paid landing at that moment: nothing moved (every statement above checks it).
-    if (wasSplit && opened.meta.changes !== 1) throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+    if (wasSplit && opened.meta.changes !== 1) {
+      // A second Reopen tap that lost the race to the first: already open, nothing more to do.
+      if ((await getSession(ctx.db, group.id, session.id))?.status !== 'canceled') return { ok: true, changed: false };
+      throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+    }
     // A reopened game is a normal game again: it shows to players (a hide only ever applies to a canceled game).
     await setHiddenFromPlayers(ctx.db, group.id, session.id, false, ctx.nowIso);
     await audit(ctx.db, group.id, session.id, 'session_reopened', {}, ctx.nowIso);
