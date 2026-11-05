@@ -5,6 +5,7 @@ import { timeShiftForAll } from './timeShift';
 import { payAlwaysForAll } from './payAlways';
 import { payNoteForAll } from './payNote';
 import { playerFix1ForAll } from './playerFix1';
+import { instantTapsForAll } from './instantTaps';
 import { paySheetForAll } from './paySheet';
 import { lateFeesForAll } from './lateFees';
 import { hiddenGameIds } from './hideGame';
@@ -84,6 +85,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     (await paySheetForAll(ctx.db, group.id)) ? 'ps' : '',
     // The organizer turning "Late drops owe $14" on or off for everyone (the drop dialog's words follow it).
     (await lateFeesForAll(ctx.db, group.id)) ? 'lf' : '',
+    // The organizer turning "Instant taps" on or off for everyone (the screen then knows to draw taps at once).
+    (await instantTapsForAll(ctx.db, group.id)) ? 'it' : '',
     // The organizer removing a canceled game from the player screen (or putting it back).
     [...(await hiddenGameIds(ctx.db, group.id))].sort().join(','),
   ].join('|');

@@ -1,3 +1,5 @@
+import { useInstant } from '../../InstantTaps';
+import { opTap, useAction } from './action';
 import { type FormEvent, useState } from 'react';
 import type { AdminPlayer, AdminRosterEntry, AdminSessionView, CreditEntryView } from '../../../shared/api';
 import { creditEntryText } from '../../../shared/credit';
@@ -114,6 +116,8 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [, bump] = useState(0);
+  const instantOn = useInstant() !== null;
+  const instantAct = useAction(ctx);
   const ledger = ctx.d.creditLedger.find((l) => l.playerId === player.id);
   if (!ledger || ctx.d.me?.id === player.id) return null;
   // The usable balance: the pot minus a pending request (that one is answered from its Home card).
@@ -124,6 +128,15 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
   const pay = venmoRefundUrl(player.venmo ?? null, refundCents, CREDIT_NOTE);
   const tapped = refundCents > 0 && readOpenedCredit(player.id) === refundCents;
   async function mark(refunded: boolean) {
+    if (instantOn) {
+      // Instant taps (INSTANT_TAPS): the button shows it is working (the server decides what is refunded); a second tap is ignored.
+      const latest = [...ledger!.entries].reverse().find((e) => e.kind === 'refunded' && !e.endedAt);
+      return void (await instantAct.run(
+        () => api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false, ...(latest ? { ledgerId: latest.id } : {}) }),
+        refunded ? 'Credit marked refunded' : 'Credit refund undone',
+        { key: `refund:${player.id}`, what: refunded ? 'Mark refunded' : 'Undo' },
+      ));
+    }
     setBusy(true);
     try {
       // Undo names the refund this screen shows (the latest), so a second tap or a retry takes back nothing more.
@@ -203,12 +216,24 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const { owedCents, creditCents } = balanceOf(ctx.d, player.id);
+  const instantOn = useInstant() !== null;
+  const instantAct = useAction(ctx);
   const isMe = ctx.d.me?.id === player.id;
   const rows = ctx.d.sessions
     .map((s) => ({ s, r: s.roster.find((r) => r.playerId === player.id && (r.status === 'confirmed' || r.paymentStatus === 'paid')) }))
     .filter((x): x is { s: AdminSessionView; r: AdminRosterEntry } => !!x.r && !x.s.state.flags.canceled)
     .reverse();
   async function setPaid(s: AdminSessionView, paid: boolean) {
+    if (instantOn) {
+      // Instant taps (INSTANT_TAPS): drawn at once, the same way the Money page draws it; this row waits, the others still work.
+      const row = s.roster.find((r) => r.playerId === player.id);
+      const seen = row?.moneySeen;
+      return void (await instantAct.run(
+        () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid, ...(seen ? { seen } : {}), ...(paid && row && row.owesCents > 0 ? { cents: row.owesCents } : {}) }),
+        paid ? `${player.name} marked paid` : `${player.name} marked unpaid`,
+        opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: player.id }, paid ? 'Mark paid' : 'Unmark'),
+      ));
+    }
     setBusy(true);
     try {
       const row = s.roster.find((r) => r.playerId === player.id);

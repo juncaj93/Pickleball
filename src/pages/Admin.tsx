@@ -1,3 +1,5 @@
+import { InstantContext, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
+import { type ActOptions, opTap, useAction } from './admin/action';
 import { type CSSProperties, Fragment, type FormEvent, type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
@@ -34,7 +36,10 @@ export interface AdminCtx {
 export function AdminApp() {
   const pretend = usePretend();
   const demo = useDemoVersion();
-  const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend, demo]);
+  // Instant taps (INSTANT_TAPS): a poll that set off before a save never draws over it, and taps still saving are drawn in. Off: as before.
+  const tracker = useInstantTracker();
+  const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend, demo], tracker);
+  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
   useRefreshOnReturn(load.refresh);
   if (load.loading && !load.data && !load.error) {
     return (
@@ -56,7 +61,11 @@ export function AdminApp() {
       </>
     );
   }
-  return <Dashboard d={load.data!} reload={load.reload} quiet={load.quiet} live={!pretend} />;
+  return (
+    <InstantContext.Provider value={instant.store}>
+      <Dashboard d={instant.view!} reload={load.reload} quiet={load.quiet} live={!pretend} />
+    </InstantContext.Provider>
+  );
 }
 
 /**
@@ -350,7 +359,11 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   const tz = ctx.d.group.timezone;
   const toast = useToast();
   const [busy, setBusy] = useState(false);
-  async function act(fn: () => Promise<unknown>, msg: string) {
+  // Instant taps (INSTANT_TAPS): the shared helper (admin/action.ts). Off: exactly as before.
+  const instantAct = useAction(ctx);
+  const instantOn = useInstant() !== null;
+  async function act(fn: () => Promise<unknown>, msg: string, opts?: ActOptions) {
+    if (instantOn) return void (await instantAct.run(fn, msg, opts));
     setBusy(true);
     try {
       await fn();
@@ -382,7 +395,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 disabled={busy}
                 aria-label={`Mark ${r.name} paid for ${formatShortDate(r.session.startsAt, tz)}`}
                 onClick={() =>
-                  act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true, seen: r.seen, cents: r.cents }), `${r.name} marked paid`)
+                  act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true, seen: r.seen, cents: r.cents }), `${r.name} marked paid`, opTap({ kind: 'paid', sessionId: r.session.id, playerId: r.playerId }, 'Mark paid'))
                 }
               >
                 Mark paid

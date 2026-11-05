@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
   canceledMessage,
@@ -37,30 +37,8 @@ import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 
 export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' | 'moved' | 'moved_set' | 'players_text';
 
-export function useAction(ctx: AdminCtx) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
-  const working = useRef(false);
-  async function run(fn: () => Promise<unknown>, success?: string) {
-    if (working.current) return false;
-    working.current = true;
-    setBusy(true);
-    try {
-      await fn();
-      await ctx.reload();
-      if (success) toast(success);
-      return true;
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
-      return false;
-    } finally {
-      working.current = false;
-      setBusy(false);
-    }
-  }
-  return { busy, run };
-}
+export { useAction } from './action';
+import { opTap, useAction } from './action';
 
 /**
  * One organizer game card. `courtNeed` (new layout, or round 2): this game is the one "Court still needs to be booked" is
@@ -234,13 +212,14 @@ export function courtLine(court: { kind: string; text: string }) {
 
 /** The card's one-tap switch. Shows the tap at once, saves it, and puts it back if the save fails. */
 export function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionView; value: CourtSwitchValue }) {
-  const { busy, run } = useAction(ctx);
+  const { busy, run, pending } = useAction(ctx);
   const [picked, setPicked] = useState<CourtSwitchValue | null>(null);
   const shown = picked ?? value;
   return (
     <CourtSwitch
       value={shown}
-      disabled={busy}
+      // Instant taps: the switch shows the tap at once and waits (pending) while it saves, as it always did with `busy`.
+      disabled={busy || pending()}
       label={`Court status for ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}
       onPick={async (to) => {
         setPicked(to);
@@ -587,7 +566,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   useEffect(() => () => flushHold(), []);
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg);
+    run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg, { key: `roster:${playerId}` });
   const inRoster = new Set(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => r.playerId));
   const others = ctx.d.players.filter((p) => p.isActive && !p.adminHidden && !inRoster.has(p.id));
   const full = s.confirmedCount >= ctx.d.group.settings.maxPlayers;
@@ -714,14 +693,14 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const feeRows = s.roster.filter((r) => r.lateFee);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`);
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId }, paid ? 'Mark paid' : 'Unmark'));
   const price = ctx.d.group.settings.pricePerPlayerCents;
   const played = isPlayed(s);
   const fin = s.finalized;
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   const setCourtPaid = (paid: boolean) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
-  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.');
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due', { key: `court:${s.id}` });
+  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.', opTap({ kind: 'reopen', sessionId: s.id }, 'Reopen'));
 
   const moneyLine = (r: AdminRosterEntry) => payMoneyLine(r, s, tz);
 
@@ -866,7 +845,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                           className="btn small secondary"
                           disabled={busy}
                           data-unmark-credit={r.name}
-                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`)}
+                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit'))}
                         >
                           Unmark
                         </button>

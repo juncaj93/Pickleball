@@ -1,3 +1,5 @@
+import { useInstant } from '../../InstantTaps';
+import { useAction } from './action';
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { AdminSessionView } from '../../../shared/api';
@@ -140,7 +142,16 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
   // The new layout (ADMIN_V2): take a canceled game off the player screen, or put it back. It only hides: nothing is deleted.
   const toast = useToast();
   const hidden = s.hiddenFromPlayers === true;
+  // Instant taps (INSTANT_TAPS): both are certain, so they are drawn at once by the shared helper (action.ts). Off: as before.
+  const instantOn = useInstant() !== null;
+  const instantAct = useAction(ctx);
   const toggleHidden = async () => {
+    if (instantOn)
+      return void (await instantAct.run(
+        () => api('POST', `/api/admin/sessions/${s.id}/hide`, { hidden: !hidden }),
+        hidden ? `${day} shows on the player screen again` : `${day} is off the player screen. Money and history are untouched.`,
+        { key: `hide:${s.id}`, patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, hiddenFromPlayers: !hidden } : x)) }), what: hidden ? 'Show on player screen' : 'Remove from player screen' },
+      ));
     try {
       await api('POST', `/api/admin/sessions/${s.id}/hide`, { hidden: !hidden });
       await ctx.reload();
@@ -152,6 +163,7 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
 
   // Round 2 (ADMIN_R2): the holiday note's Undo lives here, not on the card.
   const undoHours = async () => {
+    if (instantOn) return void (await instantAct.run(() => api('POST', `/api/admin/sessions/${s.id}/holiday-hours`, { ok: false }), 'Undone', { key: `hours:${s.id}`, what: 'Undo hours' }));
     try {
       await api('POST', `/api/admin/sessions/${s.id}/holiday-hours`, { ok: false });
       await ctx.reload();

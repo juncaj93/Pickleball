@@ -66,6 +66,8 @@ export interface Env {
   LATE_FEE_SPLIT?: string;
   /** "Money page rework" (the reworked Money page, Hide from list, Edit charge, cancel sheet default, tidier Feature switches and History): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, /admin?moneyrework=on (server/moneyRework.ts). A wrangler.toml var. */
   MONEY_REWORK?: string;
+  /** "Instant taps" (the screen changes the instant a button is tapped, the save runs in the background, a failed save puts it back): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?instanttaps=on (server/instantTaps.ts). A wrangler.toml var. */
+  INSTANT_TAPS?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

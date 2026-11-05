@@ -1,3 +1,5 @@
+import { useInstant } from '../../InstantTaps';
+import { useAction } from './action';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarkName, Task, TaskButton, TaskStep } from '../../../shared/tasks';
 import { api, ApiError, isIOS, storageGet, storageSet, usePretend } from '../../lib';
@@ -263,7 +265,11 @@ function Action({ ctx, task, b, primary, nowMs }: { ctx: AdminCtx; task: Task; b
   const [busy, setBusy] = useState(false);
   const s = ctx.d.sessions.find((x) => x.id === task.sessionId)!;
   const cls = `btn small${primary ? '' : ' secondary'}`;
+  // Instant taps (INSTANT_TAPS): the shared helper (action.ts) shows this button working and keeps a second tap out. Off: as before.
+  const instantOn = useInstant() !== null;
+  const instantAct = useAction(ctx);
   async function run(fn: () => Promise<unknown>, msg: string | null) {
+    if (instantOn) return void (await instantAct.run(fn, msg ?? undefined, { key: `donow:${task.sessionId}:${b.id}`, what: b.label }));
     setBusy(true);
     try {
       await fn();

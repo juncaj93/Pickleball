@@ -123,6 +123,7 @@ route('PUT', '/api/admin/player-fix1', admin.setPlayerFix1);
 route('PUT', '/api/admin/texts-r2', admin.setTextsR2);
 route('PUT', '/api/admin/late-fee-split', admin.setLateFeeSplit);
 route('PUT', '/api/admin/money-rework', admin.setMoneyRework);
+route('PUT', '/api/admin/instant-taps', admin.setInstantTaps);
 route('POST', '/api/admin/sessions/:id/hide-from-list', admin.hideFromList);
 route('GET', '/api/admin/month-games', admin.monthGames);
 route('POST', '/api/admin/sessions/:id/charge', admin.setSessionCharge);

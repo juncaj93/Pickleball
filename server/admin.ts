@@ -24,6 +24,7 @@ import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_D
 import { FEE_KEPT, feeSplitOf, feeSplitPrice, lateFeeKind, lateFeePriceCents, type LateFeeClearWhy } from '../shared/lateFees';
 import { lateFeeSplitFor, lateFeeSplitForAll, lateFeeSplitSwitch, setLateFeeSplitForAll } from './lateFeeSplit';
 import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
+import { instantTapsFor, instantTapsForAll, setInstantTapsForAll } from './instantTaps';
 import { adminHiddenGameIds, moneyReworkFor, moneyReworkForAll, sessionHasMoney, setAdminHiddenGame, setMoneyReworkForAll } from './moneyRework';
 import { HAS_MONEY_MESSAGE } from '../shared/moneyRework';
 import { HttpError } from './http';
@@ -250,6 +251,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     lateFeeSplitForAll: await lateFeeSplitForAll(ctx.db, group.id),
     moneyRework,
     moneyReworkForAll: await moneyReworkForAll(ctx.db, group.id),
+    ...((await instantTapsFor(ctx, group.id)) ? { instantTaps: true } : {}),
+    instantTapsForAll: await instantTapsForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -1875,6 +1878,15 @@ export async function setMoneyRework(ctx: Ctx, body: Record<string, unknown>) {
   const on = v.bool(body.on, 'on');
   await setMoneyReworkForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'money_rework_on' : 'money_rework_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/instant-taps { on }: Settings > Feature switches > "Instant taps". Tap feedback only: changes no money, seat or credit. */
+export async function setInstantTaps(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setInstantTapsForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'instant_taps_on' : 'instant_taps_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

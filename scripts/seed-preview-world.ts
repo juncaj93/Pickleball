@@ -393,6 +393,7 @@ export const PREVIEW_SWITCHES_ON = [
   'texts_r2_on',
   'late_fee_split_on',
   'money_rework_on',
+  'instant_taps_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

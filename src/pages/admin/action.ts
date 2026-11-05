@@ -1,0 +1,65 @@
+import { useId, useRef, useState } from 'react';
+import type { AdminDashboard } from '../../../shared/api';
+import { ApiError } from '../../lib';
+import { useToast } from '../../ui';
+import { useInstant } from '../../InstantTaps';
+import type { AdminCtx } from '../Admin';
+import { applyOps, opKey, type ReworkOp } from './reworkOptimistic';
+
+/** Extras for one tap, used only with instant taps on (INSTANT_TAPS). */
+export interface ActOptions {
+  /** Which thing the tap changes, when one component has several (a row per player). A second tap on the same thing while it saves is ignored. */
+  key?: string;
+  /** What the screen shows at once, for a tap whose result is certain (Mark paid). Leave out where the server decides. */
+  patch?: (d: AdminDashboard) => AdminDashboard;
+  /** A few words for the error toast ("Mark paid"). */
+  what?: string;
+}
+
+/**
+ * The organizer screens' one "do this, then show the result" helper. Off (instant taps not on for this phone): exactly as it always was,
+ * the buttons wait for the save and the full reload, then the toast. On: the shared instant-tap helper (src/InstantTaps.tsx) runs it:
+ * a certain result is drawn at once, otherwise the tapped button shows a pressed look and a spinner; a second tap on the same thing is
+ * ignored, other taps still work and save in order, and a failure puts the screen back with a plain toast. `busy` stays false then, so
+ * nothing else on the screen is grayed out while one tap saves.
+ */
+export function useAction(ctx: AdminCtx) {
+  const toast = useToast();
+  const instant = useInstant<AdminDashboard>();
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
+  const working = useRef(false);
+  async function run(fn: () => Promise<unknown>, success?: string, opts: ActOptions = {}) {
+    if (instant) {
+      const res = await instant.run({ key: `act${id}:${opts.key ?? ''}`, patch: opts.patch ?? null, save: fn, saved: success, what: opts.what });
+      return res.status === 'ok';
+    }
+    if (working.current) return false;
+    working.current = true;
+    setBusy(true);
+    try {
+      await fn();
+      await ctx.reload();
+      if (success) toast(success);
+      return true;
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      return false;
+    } finally {
+      working.current = false;
+      setBusy(false);
+    }
+  }
+  /** Is a tap from this helper still saving? (`key` as passed to run; leave out for the default.) Always false with instant taps off. */
+  const pending = (key = '') => !!instant?.busy(`act${id}:${key}`);
+  return { busy, run, pending };
+}
+
+/**
+ * A money tap whose result is certain (Mark paid, Unmark, Undo credit, Clear, Reopen), drawn at once the same way the Money page draws
+ * it (reworkOptimistic.ts): one key per row, so a second tap on that row waits and another row still works.
+ */
+export function opTap(op: ReworkOp, what?: string): ActOptions {
+  return { key: opKey(op), patch: (d) => applyOps(d, [op]), what };
+}

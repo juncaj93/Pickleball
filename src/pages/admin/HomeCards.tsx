@@ -1,41 +1,20 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import type { AdminDashboard, AdminSessionView, RefundRequestView } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
 import { paymentClaimText, unconfirmedPaidWarning } from '../../../shared/credit';
 import { finalPreview } from '../../../shared/pricing';
 import { formatShortDate } from '../../../shared/time';
-import { api, ApiError, openVenmo, storageGet, storageSet } from '../../lib';
-import { Sheet, useToast } from '../../ui';
+import { api, openVenmo, storageGet, storageSet } from '../../lib';
+import { Sheet } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { tapsHeld, useTapsHeld } from './tapGuard';
+import { useAction } from './action';
 import '../../finalize.css';
 
 const CREDIT_NOTE = 'Pickleball credit refund';
 
-function useRun(ctx: AdminCtx) {
-  const toast = useToast();
-  const [busy, setBusy] = useState(false);
-  // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
-  const working = useRef(false);
-  async function run(fn: () => Promise<unknown>, msg: string) {
-    if (working.current) return false;
-    working.current = true;
-    setBusy(true);
-    try {
-      await fn();
-      await ctx.reload();
-      toast(msg);
-      return true;
-    } catch (err) {
-      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
-      return false;
-    } finally {
-      working.current = false;
-      setBusy(false);
-    }
-  }
-  return { busy, run };
-}
+// The same helper as every other organizer tap (it used to be a copy of it).
+const useRun = useAction;
 
 /**
  * After a game ends: "Thu, Oct 29 · 6 in", the preview line, a green
@@ -180,7 +159,13 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
   const pay = venmoRefundUrl(r.venmo, r.cents, CREDIT_NOTE);
   const tapped = readOpened(r.id);
   // The amount on the card goes along: if the player put part of it toward a game since, the server says look again.
-  const act = (action: 'refunded' | 'not_now', msg: string) => run(() => api('POST', `/api/admin/refund-requests/${r.id}`, action === 'refunded' ? { action, cents: r.cents } : { action }), msg);
+  // Instant taps: the card leaves at once (the answer is certain); a failed save brings it back.
+  const act = (action: 'refunded' | 'not_now', msg: string) =>
+    run(() => api('POST', `/api/admin/refund-requests/${r.id}`, action === 'refunded' ? { action, cents: r.cents } : { action }), msg, {
+      key: `refund:${r.id}`,
+      patch: (d) => ({ ...d, refundRequests: d.refundRequests.filter((x) => x.id !== r.id) }),
+      what: action === 'refunded' ? 'Mark refunded' : 'Not now',
+    });
   return (
     <article className="card stack refund-request" aria-label={`${r.name} requested a refund`} data-refund-request={r.name}>
       <h3>
@@ -224,7 +209,12 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
  */
 export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard['paymentClaims'][number] }) {
   const { busy, run } = useRun(ctx);
-  const answer = (paid: boolean, msg: string) => run(() => api('POST', `/api/admin/sessions/${c.sessionId}/claim`, { playerId: c.playerId, paid }), msg);
+  const answer = (paid: boolean, msg: string) =>
+    run(() => api('POST', `/api/admin/sessions/${c.sessionId}/claim`, { playerId: c.playerId, paid }), msg, {
+      key: `claim:${c.sessionId}:${c.playerId}`,
+      patch: (d) => ({ ...d, paymentClaims: (d.paymentClaims ?? []).filter((x) => !(x.sessionId === c.sessionId && x.playerId === c.playerId)) }),
+      what: paid ? 'Paid' : "Didn't pay",
+    });
   return (
     <article className="card stack payment-claim" aria-label={`${c.name} payment not confirmed`} data-payment-claim={c.name}>
       <h3>{paymentClaimText(c.name, c.cents, c.why, c.startsAt, ctx.d.group.timezone)}</h3>

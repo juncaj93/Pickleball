@@ -167,6 +167,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched the "No Venmo?" note on`;
     case 'pay_note_off':
       return `${who} switched the "No Venmo?" note off`;
+    case 'instant_taps_on':
+      return `${who} switched "Instant taps" on`;
+    case 'instant_taps_off':
+      return `${who} switched "Instant taps" off`;
     case 'player_fix1_on':
       return `${who} switched "Player screen fixes" on`;
     case 'player_fix1_off':
