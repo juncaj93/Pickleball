@@ -1,0 +1,43 @@
+/* Instant taps (INSTANT_TAPS): the button that was tapped, while the server decides (src/InstantTaps.tsx markPressed). Only ever set
+   while the switch is on, so with it off nothing here applies. It follows the button's own colors (currentColor), so it reads the same in
+   light and dark, and it keeps the button's size so nothing around it moves. */
+[data-tap-wait] {
+  position: relative;
+  transform: scale(0.97);
+  filter: saturate(0.85) brightness(0.96);
+  cursor: progress;
+  transition: transform 80ms ease-out;
+}
+/* The words step aside for the spinner (the text is hidden, the button keeps its color, so the spinner can use it). */
+[data-tap-wait],
+[data-tap-wait] * {
+  -webkit-text-fill-color: transparent;
+}
+[data-tap-wait] > * {
+  opacity: 0;
+}
+[data-tap-wait]::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  opacity: 0.9;
+  animation: tap-spin 0.7s linear infinite;
+  pointer-events: none;
+}
+@keyframes tap-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-tap-wait]::after {
+    animation-duration: 1.6s;
+  }
+}

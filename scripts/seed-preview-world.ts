@@ -331,7 +331,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   summary.push('extra game "Fee split test" 10 hours from the seed (inside its 12-hour cancel-by): 6 in (Orla, Avery, Indy, Jordan, Lane, Morgan), Indy, Lane, Morgan paid cash');
 
   // 11. Money page rework: a game with 4 in and mixed payments ("Mixed payments": Lane and Morgan paid, Kai and Gray owe), and a game
-  //     where everyone has paid ("All paid": 4 of 4, which the Games tab moves to Previous games). Nobody here has credit to spend,
+  //     where everyone has paid ("All paid": 4 of 4; it stays in the Games list until it is finalized, then moves to Previous games). Nobody here has credit to spend,
   //     so no credit balance changes.
   const upcomingExtra = async (hoursAhead: number, note: string) => {
     const start = Math.ceil((N + hoursAhead * HOUR) / (30 * 60_000)) * 30 * 60_000;
@@ -353,7 +353,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await orgPays('Indy', chase);
   summary.push('extra game "Owes, one no number" (Booked, 5 in): Indy paid; Kai, Lane and Morgan owe $14 with numbers; Reese owes $14 and has no number saved (Text all skips Reese)');
   summary.push('extra game "Mixed payments" (Booked, 4 in): Lane and Morgan paid cash, Kai and Gray owe $14');
-  summary.push('extra game "All paid" (Booked, 4 of 4 paid): the Games tab files it under Previous games');
+  summary.push('extra game "All paid" (Booked, 4 of 4 paid): stays in the Games list until finalized, then moves to Previous games');
 
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
@@ -393,6 +393,7 @@ export const PREVIEW_SWITCHES_ON = [
   'texts_r2_on',
   'late_fee_split_on',
   'money_rework_on',
+  'instant_taps_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

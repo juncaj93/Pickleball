@@ -40,6 +40,14 @@ export function fullyPaid(s: AdminSessionView): boolean {
   return !s.state.flags.canceled && s.payableCount > 0 && s.paidCount >= s.payableCount && owedCentsOf(s) === 0;
 }
 
+/**
+ * Done with: finalized (or, with instant taps, a Finalize tap still saving). A fully paid game moves to "Previous games" only then
+ * (Alex, Thu Nov 5): tonight's game where everyone already paid stays in the main list until it is played and finalized.
+ */
+export function finalizedForList(s: AdminSessionView): boolean {
+  return !!s.finalized || s.finalizing === true;
+}
+
 /** Does the game still need the organizer's eye on money (somebody owes, or it still has to be finalized)? */
 export function needsMoney(s: AdminSessionView): boolean {
   return owedCentsOf(s) > 0 || s.needsFinalize;
@@ -56,8 +64,8 @@ export interface GamesView {
  * Split one month's games into the three places the Games tab shows them.
  *  - The current month: today and the next 7 days are the main list, games further out are not shown, games before today are
  *    "Previous games" (unless somebody still owes for one, which stays on top so nobody is forgotten).
- *  - Any other month: every game is in the main list, except fully paid ones, which go to "Previous games".
- * A fully paid game always goes to "Previous games".
+ *  - Any other month: every game is in the main list, except fully paid finalized ones, which go to "Previous games".
+ * A fully paid game goes to "Previous games" once it is FINALIZED; until then it stays in the main list (after the games somebody owes for).
  */
 export function splitGames(sessions: AdminSessionView[], month: string, nowMs: number, tz: string): GamesView {
   const all = listedGames(sessions, nowMs).filter((g) => monthOf(Date.parse(g.s.startsAt), tz) === month);
@@ -69,9 +77,10 @@ export function splitGames(sessions: AdminSessionView[], month: string, nowMs: n
   const previous: RwGame[] = [];
   for (const g of all) {
     const start = Date.parse(g.s.startsAt);
-    if (fullyPaid(g.s)) previous.push(g);
-    else if (start < todayStart) (needsMoney(g.s) ? main : previous).push(g);
+    if (fullyPaid(g.s) && finalizedForList(g.s)) previous.push(g);
     else if (current && start >= windowEnd) continue; // beyond the 7 days: not on the Games tab (its money is in Totals)
+    else if (fullyPaid(g.s)) main.push(g); // everyone paid, not finalized yet: stays in the main list
+    else if (start < todayStart) (needsMoney(g.s) ? main : previous).push(g);
     else main.push(g);
   }
   const byDate = (a: RwGame, b: RwGame) => Date.parse(a.s.startsAt) - Date.parse(b.s.startsAt);

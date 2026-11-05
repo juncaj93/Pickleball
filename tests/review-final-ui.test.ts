@@ -108,16 +108,20 @@ describe('review-final: instant taps', () => {
     const payers = roster.filter((r) => !r.isOrganizer);
     return { id, startsAt, endsAt: new Date(Date.parse(startsAt) + 2 * HOUR).toISOString(), roster, payableCount: payers.length, paidCount: payers.filter((r) => r.paymentStatus === 'paid').length, confirmedCount: payers.length, finalized: null, needsFinalize: false, state: { flags: { canceled: false } }, court: { costCents: 4800 }, chargedCents: null } as unknown as AdminSessionView;
   };
-  it('G1 the tap that makes a game fully paid pulls it out of the open list and the NEXT game opens by itself under the finger', () => {
+  it('G1 the tap that makes a game fully paid keeps it in the list until it is finalized (Alex, Nov 5), so nothing opens under the finger', () => {
     const a = game('A', '2026-11-05T00:00:00.000Z', [seat('a1', { paymentStatus: 'paid', owesCents: 0 }), seat('a2')]);
     const b = game('B', '2026-11-06T00:00:00.000Z', [seat('b1'), seat('b2')]);
     const d: any = { now: NOW, sessions: [a, b] };
     const before = splitGames(d.sessions, '2026-11', Date.parse(NOW), 'America/Detroit');
     expect(before.main.map((g) => g.s.id)).toEqual(['A', 'B']);
     const after = splitGames(applyOps(d, [{ kind: 'paid', sessionId: 'A', playerId: 'a2' }]).sessions, '2026-11', Date.parse(NOW), 'America/Detroit');
-    // A is gone from the list at once; B is now main[0], and the list opens main[0] by default (MoneyRework.tsx firstId).
-    expect(after.main.map((g) => g.s.id)).toEqual(['B']);
-    expect(after.previous.map((g) => g.s.id)).toEqual(['A']);
+    // A is fully paid but not finalized: it stays in the list (after B, which still owes); nothing moves to Previous.
+    expect(after.main.map((g) => g.s.id)).toEqual(['B', 'A']);
+    expect(after.previous).toHaveLength(0);
+    // Once finalized, it goes to Previous games.
+    const done = splitGames(applyOps({ ...d, sessions: d.sessions.map((s: any) => (s.id === 'A' ? { ...s, finalized: { priceCents: 1400 } } : s)) }, [{ kind: 'paid', sessionId: 'A', playerId: 'a2' }]).sessions, '2026-11', Date.parse(NOW), 'America/Detroit');
+    expect(done.main.map((g) => g.s.id)).toEqual(['B']);
+    expect(done.previous.map((g) => g.s.id)).toEqual(['A']);
   });
 
   it('G2 two taps of different kinds on one row share a key, so the second is held', () => {

@@ -1,3 +1,5 @@
+import { actingWhoChanged, InstantContext, markPressed, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
+import { declinePatch, iPaidPatch, leaveWaitlistPatch } from '../playerPatches';
 import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DEFAULT_ZELLE_NUMBER, SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
@@ -224,7 +226,10 @@ export function PlayerHome({
     if (!viewAs) setPretend(null);
   }, [viewAs]);
   const demo = useDemoVersion();
-  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend, demo]);
+  // Instant taps (INSTANT_TAPS): a poll that set off before a save never draws over it, and certain taps still saving are drawn in.
+  const tracker = useInstantTracker();
+  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend, demo], tracker);
+  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -241,7 +246,7 @@ export function PlayerHome({
     if (load.data && groupKey && !viewAs) storageSet('pb_group_key', groupKey);
   }, [load.data, groupKey, viewAs]);
 
-  const g = load.data;
+  const g = instant.view;
   const toast = useToast();
 
   // ---- Motion (the MOTION switch). Visual only; with it off none of this does anything. ----
@@ -464,7 +469,7 @@ export function PlayerHome({
 
 
   return (
-    <>
+    <InstantContext.Provider value={instant.store}>
       {/* "View as...": a small bar of its own above the player's real screen. */}
       {viewAs && (
         <div className="demo-bars">
@@ -617,7 +622,7 @@ export function PlayerHome({
       </main>
       {cashOut && <CashOutPrompt key={cashOut.sessionId} sessionId={cashOut.sessionId} cents={cashOut.cents} onClose={() => setCashOut(null)} onChanged={load.reload} />}
       {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
-    </>
+    </InstantContext.Provider>
   );
 }
 
@@ -663,6 +668,8 @@ function NamePicker({
     setBusy(true);
     // A drop still waiting for Undo belongs to the name that tapped it: send it before the phone switches names.
     await settleHolds();
+    // Instant taps: a save still waiting in line belongs to the old name too; it is not sent as the new one.
+    actingWhoChanged();
     setBusy(false);
     if (demo) {
       const p = g.players.find((x) => x.id === playerId);
@@ -877,8 +884,31 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
   const ids = owed.map((o) => o.sessionId);
   // `guard` is PLAYER_FIX1: only then can the same game have buttons in two places, so only then do they take turns.
   const blocked = useMoneyInFlight(guard ? ids : []);
+  const instant = useInstant<GroupView>();
   async function set(paid: boolean) {
     if (guard && ids.some((id) => inFlight.has(id))) return;
+    if (instant) {
+      // Instant taps (INSTANT_TAPS): "I paid" is certain, so the card reads Paid at once and the Pay card goes; a failed save puts it
+      // back. "Didn't pay?" leaves the amount to the server: the button shows it is working until the answer.
+      const done = guard ? moneyStarted(ids) : () => {};
+      // One tap can cover several games (the "Tonight: you owe" card): if some went through and then one failed, say so plainly.
+      let went = 0;
+      await instant.run({
+        key: `paid:${ids.join(',')}`,
+        patch: paid ? iPaidPatch(ids) : null,
+        save: async () => {
+          for (const o of owed) {
+            await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
+            went++;
+          }
+        },
+        saved: paid ? 'Marked paid' : 'Marked not paid',
+        what: paid ? 'I paid' : "Didn't pay",
+        failText: () => (went > 0 ? `Saved for ${went} of ${owed.length} games; the rest didn't save. Tap again.` : null),
+      });
+      done();
+      return;
+    }
     const done = guard ? moneyStarted(ids) : () => {};
     setBusy(true);
     const release = holdLive();
@@ -1080,6 +1110,7 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const blocked = useMoneyInFlight(guard ? gameIds : []);
+  const instant = useInstant();
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
   async function use(sessionIds: string[], owedCents: number, potCents: number) {
@@ -1088,6 +1119,8 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
     const done = guard ? moneyStarted(sessionIds) : () => {};
     setBusy(true);
     const release = holdLive();
+    // Instant taps (INSTANT_TAPS): the server decides how much credit goes where, so the tapped button shows it is working.
+    const unmark = instant ? markPressed() : () => {};
     let used = 0;
     try {
       // A drop still waiting for Undo goes first, so the credit it gives back is there to use.
@@ -1105,6 +1138,7 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
       }
       // Games the credit never reached still count as owed.
       owedBefore = Math.max(owedBefore, owedCents);
+      unmark();
       if (used > 0) toast(creditUsedMessage(used, potBefore, owedBefore));
       else toast('No credit to use right now.');
       await onChanged();
@@ -1113,6 +1147,7 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
+      unmark();
       working.current = false;
       setBusy(false);
       done();
@@ -1126,8 +1161,10 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
     const done = guard ? moneyStarted([sessionId]) : () => {};
     setBusy(true);
     const release = holdLive();
+    const unmark = instant ? markPressed() : () => {};
     try {
       await api('POST', `/api/sessions/${sessionId}/undo-credit`, {});
+      unmark();
       toast('Credit put back');
       await onChanged();
     } catch (err) {
@@ -1135,6 +1172,7 @@ function useCredit(onChanged: () => Promise<void>, gameIds: string[] = [], guard
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
+      unmark();
       working.current = false;
       setBusy(false);
       done();
@@ -1315,6 +1353,7 @@ function SuggestionCard({
   joinToast: (sessionId: string, before: number, res: JoinResponse, noCourt?: boolean) => void;
 }) {
   const toast = useToast();
+  const instant = useInstant<GroupView>();
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
@@ -1326,8 +1365,16 @@ function SuggestionCard({
   const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
 
   async function answer(yes: boolean) {
+    if (instant && !yes) {
+      // Instant taps (INSTANT_TAPS): "No" is certain, so the question goes at once; a failed save brings it back.
+      await instant.run({ key: `suggest:${s.sessionId}`, patch: declinePatch(s.sessionId), save: () => api('POST', `/api/sessions/${s.sessionId}/decline`, {}), what: 'No thanks' });
+      return;
+    }
+    if (instant && busy) return;
     setBusy(true);
     const release = holdLive();
+    // Instant taps: "Yes" leaves the seat to the server (a spot, the waitlist), so the button shows it is working until the answer.
+    const unmark = instant ? markPressed() : () => {};
     try {
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
@@ -1344,6 +1391,7 @@ function SuggestionCard({
       if (isDemo(err)) toast(err.message);
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {
+      unmark();
       setBusy(false);
       release();
     }
@@ -1679,6 +1727,7 @@ export function ScheduleRow({
 }) {
   const tz = g.group.timezone;
   const toast = useToast();
+  const instantTaps = useInstant<GroupView>();
   const [busy, setBusy] = useState(false);
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
@@ -1696,8 +1745,19 @@ export function ScheduleRow({
   const rowRef = useRef<HTMLElement>(null);
   useStatusMorph(rowRef);
 
-  async function run(path: string, label: (data: any) => string) {
+  async function run(path: string, label: (data: any) => string, patch?: (v: GroupView) => GroupView) {
     if (working.current) return;
+    if (instantTaps) {
+      // Instant taps (INSTANT_TAPS): leaving the waitlist is certain (drawn at once); a drop sent now is the server's call (late
+      // fees, credit), so the tapped button shows it is working. A failed save puts the screen back with a plain toast.
+      working.current = true;
+      setAskOut(false);
+      const release = holdLive();
+      await instantTaps.run({ key: `seat:${s.id}`, patch: patch ?? null, save: () => api<any>('POST', `/api/sessions/${s.id}/${path}`, {}), saved: label, what: path === 'withdraw' ? (waiting ? 'Leave the list' : 'Drop out') : undefined });
+      working.current = false;
+      release();
+      return;
+    }
     working.current = true;
     setBusy(true);
     const release = holdLive();
@@ -1735,6 +1795,8 @@ export function ScheduleRow({
     setBusy(true);
     const release = holdLive();
     if (instant) setOverlay(s.id, 'join');
+    // Instant taps (INSTANT_TAPS): a full game, the waitlist or standby is the server's call, so the button shows it is working.
+    const unmark = !instant && instantTaps ? markPressed() : () => {};
     try {
       await sendDropsBeforeJoin(s.id);
       joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
@@ -1745,6 +1807,7 @@ export function ScheduleRow({
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
     } finally {
+      unmark();
       setOverlay(s.id, null);
       working.current = false;
       setBusy(false);
@@ -2007,7 +2070,7 @@ export function ScheduleRow({
           // From the notice the banner never says "dropped out": "You're out. $14 credit returned." (same money words).
           const lead = fromNotice ? "You're out." : undefined;
           setFromNotice(false);
-          if (waiting) void run('withdraw', () => "You're off the list");
+          if (waiting) void run('withdraw', () => "You're off the list", g.me ? leaveWaitlistPatch(s.id, g.me.name) : undefined);
           else dropOut(lead);
         }}
         onCancel={() => {

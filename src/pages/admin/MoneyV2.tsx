@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView, MonthlyMoney } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { formatPrice } from '../../../shared/money';
@@ -9,6 +9,9 @@ import { RollText } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { minus, monthName, shiftMonth, STATE_TEXT } from './MonthlyMoney';
 import { CreditBackList, payChip, payMoneyLine, useAction } from './Sessions';
+import { opTap } from './action';
+import { opKey } from './reworkOptimistic';
+import { useInstant } from '../../InstantTaps';
 import { reminderText } from './textMenu';
 import { isPlayed } from './todo';
 import { unpaidRows } from './moneyList';
@@ -193,11 +196,21 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
 
 export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean; rework?: boolean }) {
   const tz = ctx.d.group.timezone;
-  const { busy: actionBusy, run: plainRun } = useAction(ctx);
+  const { busy: actionBusy, run: plainRun, pending: plainPending } = useAction(ctx);
+  const instantOn = useInstant() !== null;
   // The Money page rework draws every tap at once and saves in the background (ReworkOps.tsx); everywhere else a tap waits as it always did.
   const rwRun = useReworkRun(ctx);
   const rwBusy = useReworkBusy();
-  const run = (fn: () => Promise<unknown>, success?: string, op?: ReworkOp) => (rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success));
+  // Instant taps: which group (owing or paid) each row was in when it was tapped, so it stays there while its save runs.
+  const groupAtTap = useRef(new Map<string, boolean>());
+  // Instant taps (INSTANT_TAPS) off the Money rework page: the same op is drawn at once by the shared helper (action.ts).
+  const run = (fn: () => Promise<unknown>, success?: string, op?: ReworkOp) => {
+    if (instantOn && op && 'playerId' in op) {
+      const r = s.roster.find((x) => x.playerId === op.playerId);
+      if (r && !groupAtTap.current.has(opKey(op))) groupAtTap.current.set(opKey(op), isPaid(r));
+    }
+    return rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success, op ? opTap(op) : undefined);
+  };
   const busy = rework && rwRun ? false : actionBusy;
   const fin = s.finalized;
   const played = isPlayed(s);
@@ -210,7 +223,22 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
   // A late fee reads paid or not from the debt itself (your own row's payment is the court payment, never the debt).
   const isPaid = (r: AdminRosterEntry) => (r.lateFee ? r.lateFee.paid : r.paymentStatus === 'paid');
   // The Money page rework sorts the same way: owing first, paid below.
-  const rows = r2 || rework ? [...allRows.filter((r) => !isPaid(r)), ...allRows.filter((r) => isPaid(r))] : allRows;
+  // Instant taps: a row whose tap is still saving keeps the place it had before the tap, so the next tap (or the second half of a double
+  // tap) lands on the same row and never on the person who slid into its spot. It moves once the server has confirmed.
+  // Only with instant taps on: off, rows move exactly as they did (the Money page as built in Zip 4).
+  const saving = (r: AdminRosterEntry) => {
+    const op: ReworkOp = { kind: 'paid', sessionId: s.id, playerId: r.playerId };
+    return instantOn && (rwBusy(op) || plainPending(opKey(op)));
+  };
+  const placed = (r: AdminRosterEntry) => {
+    const key = opKey({ kind: 'paid', sessionId: s.id, playerId: r.playerId });
+    if (!saving(r)) {
+      groupAtTap.current.delete(key);
+      return isPaid(r);
+    }
+    return groupAtTap.current.get(key) ?? isPaid(r);
+  };
+  const rows = r2 || rework ? [...allRows.filter((r) => !placed(r)), ...allRows.filter((r) => placed(r))] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).

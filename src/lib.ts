@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 export class ApiError extends Error {
   constructor(
@@ -167,6 +167,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (adminR3Test()) headers['X-Admin-R3'] = 'on';
   // "Money page rework", private test switch for this phone (/admin?moneyrework=on, see server/moneyRework.ts).
   if (moneyReworkTest()) headers['X-Money-Rework'] = 'on';
+  // "Instant taps", private test switch for this phone (?instanttaps=on or /admin?instanttaps=on, see server/instantTaps.ts).
+  if (instantTapsTest()) headers['X-Instant-Taps'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -197,14 +199,26 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
 }
 
 /** Load data with loading / error / retry states. */
-export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
+/**
+ * `tracker` (instant taps, src/instant.ts): with it switched on, an answer that set off before a newer one was drawn is thrown away,
+ * so a slow poll can never draw old data over a tap that just saved. Without it (or switched off) every answer is drawn, as always.
+ */
+export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = [], tracker?: { begin(): number; accept(n: number): boolean }) {
   const [data, setData] = useState<T | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [loading, setLoading] = useState(true);
+  const trackerRef = useRef(tracker);
+  trackerRef.current = tracker;
+  /** Load, and draw the answer unless a newer one is already on screen. */
+  const fetchDraw = async () => {
+    const n = trackerRef.current?.begin() ?? 0;
+    const value = await loader();
+    if (!trackerRef.current || trackerRef.current.accept(n)) setData(value);
+  };
   const reload = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await loader());
+      await fetchDraw();
       setError(null);
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'error', 'Something went wrong.'));
@@ -219,7 +233,7 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   /** Fetch again in the background: no spinner, and a failure keeps what's on screen. */
   const refresh = useCallback(async () => {
     try {
-      setData(await loader());
+      await fetchDraw();
       setError(null);
     } catch {
       /* offline for a moment: keep the screen as it is */
@@ -229,7 +243,7 @@ export function useLoad<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   /** Like refresh, but says whether it worked (live updates back off when it did not). */
   const quiet = useCallback(async () => {
     try {
-      setData(await loader());
+      await fetchDraw();
       setError(null);
       return true;
     } catch {
@@ -588,6 +602,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('moneyrework');
   if (want === 'on') storageSet(MONEY_REWORK_KEY, 'on');
   else if (want === 'off') storageRemove(MONEY_REWORK_KEY);
+}
+
+/**
+ * "Instant taps" on this phone only, before it is on for everyone: open the site (or /admin) once with ?instanttaps=on
+ * (?instanttaps=off turns it back off). Remembered in this browser; the server saves exactly the same things either way.
+ */
+const INSTANT_TAPS_KEY = 'pb_instant_taps';
+export function instantTapsTest(): boolean {
+  return storageGet(INSTANT_TAPS_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('instanttaps');
+  if (want === 'on') storageSet(INSTANT_TAPS_KEY, 'on');
+  else if (want === 'off') storageRemove(INSTANT_TAPS_KEY);
 }
 
 /**

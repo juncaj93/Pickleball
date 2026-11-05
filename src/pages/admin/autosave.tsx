@@ -6,6 +6,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { api, ApiError, isDemo } from '../../lib';
 import type { AdminCtx } from '../Admin';
+import { useInstant } from '../../InstantTaps';
 
 export type Parsed = { value: unknown } | { error: string };
 type RowState = { status: 'saving' | 'saved' } | { status: 'invalid'; message: string } | { status: 'failed'; retry: () => void };
@@ -15,27 +16,38 @@ const SAVED_SHOW_MS = 2000;
 
 /** One saver for the whole Settings page: each row reports its own state. */
 export function useAutosave(ctx: AdminCtx) {
+  // Instant taps (INSTANT_TAPS): Settings' saves go out one after another in the order they were made (the screen's one save line).
+  const instant = useInstant();
   const [rows, setRows] = useState<Record<string, RowState | undefined>>({});
   const fades = useRef<Record<string, number>>({});
+  /** How each row's last save ended (read right after a save: state waits for a redraw). */
+  const ended = useRef<Record<string, 'ok' | 'invalid' | 'failed'>>({});
   const set = (id: string, st: RowState | undefined) => setRows((r) => ({ ...r, [id]: st }));
 
   async function save(id: string, body: Record<string, unknown>, path = '/api/admin/group'): Promise<boolean> {
     window.clearTimeout(fades.current[id]);
     set(id, { status: 'saving' });
     try {
-      await api('PUT', path, body);
+      if (instant) await instant.line.add(() => api('PUT', path, body));
+      else await api('PUT', path, body);
       set(id, { status: 'saved' });
+      ended.current[id] = 'ok';
       fades.current[id] = window.setTimeout(() => setRows((r) => (r[id]?.status === 'saved' ? { ...r, [id]: undefined } : r)), SAVED_SHOW_MS);
       void ctx.reload();
       return true;
     } catch (err) {
       // The server said the value itself is wrong: show why, don't offer a retry.
-      if (err instanceof ApiError && (err.status === 400 || isDemo(err))) set(id, { status: 'invalid', message: err.message });
-      else set(id, { status: 'failed', retry: () => void save(id, body, path) });
+      if (err instanceof ApiError && (err.status === 400 || isDemo(err))) {
+        set(id, { status: 'invalid', message: err.message });
+        ended.current[id] = 'invalid';
+      } else {
+        set(id, { status: 'failed', retry: () => void save(id, body, path) });
+        ended.current[id] = 'failed';
+      }
       return false;
     }
   }
-  return { rows, save, invalid: (id: string, message: string) => set(id, { status: 'invalid', message }), clear: (id: string) => set(id, undefined) };
+  return { rows, save, instant: !!instant, failed: (id: string) => ended.current[id] === 'failed', invalid: (id: string, message: string) => set(id, { status: 'invalid', message }), clear: (id: string) => set(id, undefined) };
 }
 
 export type Autosave = ReturnType<typeof useAutosave>;
@@ -110,6 +122,8 @@ export function AutoInput({
     }
     const r = parse(now);
     if ('error' in r) return auto.invalid(id, r.error);
+    // A failed save keeps what was typed, with "Couldn't save. Tap to retry." under the box (Alex, Nov 5: never wipe what was typed),
+    // with instant taps on or off.
     if (await auto.save(id, body(r.value))) saved.current = now;
   }
   useEffect(() => () => window.clearTimeout(timer.current), []);

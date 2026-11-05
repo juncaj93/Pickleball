@@ -7,6 +7,7 @@ import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
 import { formatDateTime, formatShortDate, formatTime, localParts } from '../../../shared/time';
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
+import { useInstant } from '../../InstantTaps';
 import '../../money-rework.css';
 
 type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
@@ -120,6 +121,12 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const g = ctx.d.group;
   const auto = useAutosave(ctx);
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
+  // Instant taps (INSTANT_TAPS): what the server last confirmed, so a failed save goes back to exactly that (two quick failing flips
+  // cannot leave the screen wrong), and a second flip of the access box while it saves is ignored. Off: unused.
+  const confirmedAccess = useRef(g.openAccess);
+  const savingAccess = useRef(false);
+  const confirmedDate = useRef(g.firstSessionDate ?? '');
+  const latestDate = useRef(g.firstSessionDate ?? '');
   const [openAccess, setOpenAccess] = useState(g.openAccess);
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [askRotate, setAskRotate] = useState(false);
@@ -219,8 +226,19 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           type="checkbox"
           checked={openAccess}
           onChange={(e) => {
-            setOpenAccess(e.target.checked);
-            void auto.save('openAccess', { openAccess: e.target.checked });
+            const next = e.target.checked;
+            if (auto.instant && savingAccess.current) return;
+            setOpenAccess(next);
+            if (!auto.instant) return void auto.save('openAccess', { openAccess: next });
+            // Instant taps (INSTANT_TAPS): a failed save (any reason) puts the box back where the server has it.
+            savingAccess.current = true;
+            void auto.save('openAccess', { openAccess: next }).then((ok) => {
+              savingAccess.current = false;
+              if (ok) return void (confirmedAccess.current = next);
+              setOpenAccess(confirmedAccess.current);
+              auto.clear('openAccess');
+              toast("That didn't save. It's back to what it was.", 'error');
+            });
           }}
         />
         <span>
@@ -377,9 +395,22 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                 type="date"
                 value={firstDate}
                 onChange={(e) => {
-                  setFirstDate(e.target.value);
+                  const next = e.target.value;
+                  setFirstDate(next);
+                  latestDate.current = next;
                   // A date saves right away; a cleared box means "no first date".
-                  if (!e.target.value || /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) void auto.save('firstSessionDate', { firstSessionDate: e.target.value || null });
+                  if (!next || /^\d{4}-\d{2}-\d{2}$/.test(next))
+                    void auto.save('firstSessionDate', { firstSessionDate: next || null }).then((ok) => {
+                      if (!auto.instant) return;
+                      // Instant taps: a save that did not go through puts the box back to the date the server has.
+                      if (ok) confirmedDate.current = next;
+                      // Only while the box still shows this date: a later pick that is saving (or saved) is never undone.
+                      else if (latestDate.current === next) {
+                        setFirstDate(confirmedDate.current);
+                        auto.clear('firstSessionDate');
+                        toast("That didn't save. It's back to what it was.", 'error');
+                      }
+                    });
                 }}
               />
             </div>
@@ -430,7 +461,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -438,6 +469,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <InstantTapsRow ctx={ctx} auto={auto} />
               <MoneyReworkRow ctx={ctx} auto={auto} />
               <AdminV2Row ctx={ctx} auto={auto} />
               <AdminR2Row ctx={ctx} auto={auto} />
@@ -533,9 +565,27 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   const [smartTest, setSmartTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
   const [test, setTest] = useState<{ status: 'sending' } | { status: 'sent' } | { status: 'failed'; message: string } | null>(null);
 
+  // Instant taps (INSTANT_TAPS): a failed save puts the switch back where the server last had it, with a toast; a second flip of the
+  // same switch while it saves is ignored. Off: as before (the switch stays and "Tap to retry" shows).
+  const instant = useInstant();
+  const toast = useToast();
+  const confirmedAlerts = useRef(on);
+  const savingAlert = useRef(new Set<AlertKey>());
   function flip(key: AlertKey, value: boolean) {
+    if (instant && savingAlert.current.has(key)) return;
     setOn((cur) => ({ ...cur, [key]: value }));
-    void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts');
+    if (!instant) return void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts');
+    savingAlert.current.add(key);
+    void auto.save(`alert-${key}`, { [key]: value }, '/api/admin/alerts').then((ok) => {
+      savingAlert.current.delete(key);
+      if (ok) {
+        confirmedAlerts.current = { ...confirmedAlerts.current, [key]: value };
+        return;
+      }
+      setOn((cur) => ({ ...cur, [key]: confirmedAlerts.current[key] }));
+      auto.clear(`alert-${key}`);
+      toast("That didn't save. The switch is back where it was.", 'error');
+    });
   }
 
   async function sendTest() {
@@ -733,14 +783,21 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
  * Round 3 switch behavior (ADMIN_R3): the switch moves the instant it is tapped, the toast confirms once the server has it,
  * and a failed save snaps the switch back (with a short toast). `snap` false = exactly the old behavior (no toast, no snap back).
  */
-function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, path: string, label: string, snap: boolean) {
+function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, path: string, label: string, snapAsked: boolean) {
   const toast = useToast();
+  // Instant taps (INSTANT_TAPS): every switch snaps back on a failed save, with a toast, and a second flip while it saves is ignored.
+  const instant = useInstant();
+  const snap = snapAsked || !!instant;
   const [on, setOn] = useState(initial);
   // What the server last confirmed: a failed save always snaps back to this (so two quick failing taps cannot leave it wrong).
   const confirmed = useRef(initial);
+  const saving = useRef(false);
   const flip = (next: boolean) => {
+    if (instant && saving.current) return;
+    saving.current = true;
     setOn(next);
     void auto.save(key, { on: next }, path).then((ok) => {
+      saving.current = false;
       if (snap) {
         if (ok) {
           confirmed.current = next;
@@ -823,7 +880,7 @@ function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * Off: only phones opened with ?latefees=on (a private test). Saves itself, no deploy.
  */
 function LateFeesRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.lateFeesForAll);
+  const { on, flip } = useFlip(!!ctx.d.lateFeesForAll, ctx, auto, 'lateFeesAll', '/api/admin/late-fees', 'Late drops owe $14', false);
   return (
     <div className="set-row-wrap" data-row="lateFeesAll">
       <label className="set-row">
@@ -840,8 +897,7 @@ function LateFeesRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-late-fees-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('lateFeesAll', { on: e.target.checked }, '/api/admin/late-fees').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -856,7 +912,7 @@ function LateFeesRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * test). Saves itself, no deploy.
  */
 function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.payNoteForAll);
+  const { on, flip } = useFlip(!!ctx.d.payNoteForAll, ctx, auto, 'payNoteAll', '/api/admin/pay-note', 'No Venmo? note', false);
   return (
     <div className="set-row-wrap" data-row="payNoteAll">
       <label className="set-row">
@@ -873,8 +929,7 @@ function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-pay-note-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('payNoteAll', { on: e.target.checked }, '/api/admin/pay-note').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -889,7 +944,7 @@ function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * sees it (a private test). Saves itself, no deploy.
  */
 function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.playerFix1ForAll);
+  const { on, flip } = useFlip(!!ctx.d.playerFix1ForAll, ctx, auto, 'playerFix1All', '/api/admin/player-fix1', 'Player screen fixes', false);
   return (
     <div className="set-row-wrap" data-row="playerFix1All">
       <label className="set-row">
@@ -906,8 +961,7 @@ function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-player-fix1-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('playerFix1All', { on: e.target.checked }, '/api/admin/player-fix1').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -923,7 +977,7 @@ function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * Saves itself, no deploy.
  */
 function TextsR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.textsR2ForAll);
+  const { on, flip } = useFlip(!!ctx.d.textsR2ForAll, ctx, auto, 'textsR2All', '/api/admin/texts-r2', 'Texts and alerts, round 2', false);
   return (
     <div className="set-row-wrap" data-row="textsR2All">
       <label className="set-row">
@@ -940,8 +994,7 @@ function TextsR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-texts-r2-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('textsR2All', { on: e.target.checked }, '/api/admin/texts-r2').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -956,7 +1009,7 @@ function TextsR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * Needs "Late drops owe $14" on. Off: only a phone opened with /admin?latefeesplit=on splits it. Saves itself, no deploy.
  */
 function LateFeeSplitRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.lateFeeSplitForAll);
+  const { on, flip } = useFlip(!!ctx.d.lateFeeSplitForAll, ctx, auto, 'lateFeeSplitAll', '/api/admin/late-fee-split', 'Late-cancel fee split', false);
   return (
     <div className="set-row-wrap" data-row="lateFeeSplitAll">
       <label className="set-row">
@@ -973,8 +1026,7 @@ function LateFeeSplitRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-late-fee-split-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('lateFeeSplitAll', { on: e.target.checked }, '/api/admin/late-fee-split').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -989,7 +1041,7 @@ function LateFeeSplitRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * private test). Saves itself, no deploy.
  */
 function PaySheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.paySheetForAll);
+  const { on, flip } = useFlip(!!ctx.d.paySheetForAll, ctx, auto, 'paySheetAll', '/api/admin/pay-sheet', 'Pay sheet', false);
   return (
     <div className="set-row-wrap" data-row="paySheetAll">
       <label className="set-row">
@@ -1006,8 +1058,7 @@ function PaySheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-pay-sheet-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('paySheetAll', { on: e.target.checked }, '/api/admin/pay-sheet').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -1021,7 +1072,7 @@ function PaySheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * charged or sent changes. Off: only a phone opened with /admin?adminv2=on sees it (a private test). Saves itself, no deploy.
  */
 function AdminV2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.adminV2ForAll);
+  const { on, flip } = useFlip(!!ctx.d.adminV2ForAll, ctx, auto, 'adminV2All', '/api/admin/admin-v2', 'New admin layout', false);
   return (
     <div className="set-row-wrap" data-row="adminV2All">
       <label className="set-row">
@@ -1038,8 +1089,7 @@ function AdminV2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-admin-v2-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('adminV2All', { on: e.target.checked }, '/api/admin/admin-v2').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -1054,7 +1104,7 @@ function AdminV2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
  * (a private test). Saves itself, no deploy.
  */
 function AdminR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  const [on, setOn] = useState(!!ctx.d.adminR2ForAll);
+  const { on, flip } = useFlip(!!ctx.d.adminR2ForAll, ctx, auto, 'adminR2All', '/api/admin/admin-r2', 'Admin screens, round 2', false);
   return (
     <div className="set-row-wrap" data-row="adminR2All">
       <label className="set-row">
@@ -1071,8 +1121,7 @@ function AdminR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           checked={on}
           data-admin-r2-all
           onChange={(e) => {
-            setOn(e.target.checked);
-            void auto.save('adminR2All', { on: e.target.checked }, '/api/admin/admin-r2').then(() => ctx.reload());
+            flip(e.target.checked);
           }}
         />
       </label>
@@ -1179,6 +1228,29 @@ function MoneyReworkRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 
 /**
+ * "Instant taps" (INSTANT_TAPS, server/instantTaps.ts): a tapped button changes the screen at once and saves in the background; a failed
+ * save puts the screen back exactly and says what failed. Player and organizer screens. Tap feedback only. Off: only a phone opened with
+ * ?instanttaps=on gets it (a private test). Saves itself, no deploy.
+ */
+function InstantTapsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const { on, flip } = useFlip(!!ctx.d.instantTapsForAll, ctx, auto, 'instantTapsAll', '/api/admin/instant-taps', 'Instant taps', true);
+  return (
+    <div className="set-row-wrap" data-row="instantTapsAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Instant taps <SaveMark state={auto.rows.instantTapsAll} />
+          </span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? 'Buttons react at once, save in the background' : 'Buttons react at once and save in the background. Off: only phones opened with ?instanttaps=on'}</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} data-instant-taps-all onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows.instantTapsAll} />
+    </div>
+  );
+}
+
+/**
  * The Feature switches page when the Money page rework is on: newest switch first, switches that are off listed above, and every older
  * switch that is already on for everyone folded into one "Live and stable" group. Which group a row sits in is read once when the
  * page opens, so a row never jumps away while you are flipping it. No behavior change: each row is the same row, with the same switch.
@@ -1208,6 +1280,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <InstantTapsRow ctx={ctx} auto={auto} />
       <MoneyReworkRow ctx={ctx} auto={auto} />
       {rest.map((x) => x.node)}
       {live.length > 0 && (

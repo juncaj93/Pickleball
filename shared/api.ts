@@ -142,6 +142,8 @@ export interface GroupView {
   playerFix1?: boolean;
   /** "Pay sheet" is on for this screen (server/paySheet.ts): Pay opens a small sheet. False or missing: Pay behaves exactly as before. */
   paySheet?: boolean;
+  /** "Instant taps" is on for this screen (server/instantTaps.ts): taps draw at once and save in the background. Missing: every tap works exactly as before. */
+  instantTaps?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -309,6 +311,8 @@ export interface AdminSessionView {
   hiddenFromPlayers?: boolean;
   /** "Money page rework": the organizer hid this game from their own Home and Money lists and from Totals (server/moneyRework.ts). */
   hiddenFromList?: boolean;
+  /** Screen only, never sent by the server: a Finalize tap on this game is still saving (instant taps), so Money files it as finalized. */
+  finalizing?: boolean;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;
@@ -434,6 +438,10 @@ export interface AdminDashboard {
   moneyRework?: boolean;
   /** Settings > Feature switches > "Money page rework" is on (for everyone). */
   moneyReworkForAll?: boolean;
+  /** "Instant taps" is on for this screen (server/instantTaps.ts). Missing: every tap works exactly as before. */
+  instantTaps?: boolean;
+  /** Settings > Feature switches > "Instant taps" is on (for everyone). */
+  instantTapsForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */
