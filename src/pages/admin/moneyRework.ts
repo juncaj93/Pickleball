@@ -155,8 +155,23 @@ export function canHide(s: AdminSessionView): boolean {
   });
 }
 
-/** "Text all" on the Remind sheet shows only when at least 2 people owe on the game. */
-export const canTextAll = (s: AdminSessionView): boolean => unpaidRows(s).length >= 2;
+/**
+ * Who "Text all" is addressed to: the people who owe on this game right now (confirmed, unpaid, with something still owed, so never the
+ * waitlist, never someone who paid or whose credit covers it, never the organizer), split into the ones with a number and the ones without.
+ */
+export function textAllRecipients(s: AdminSessionView): { phones: string[]; missing: string[] } {
+  const owing = unpaidRows(s).filter((r) => r.status === 'confirmed');
+  return { phones: owing.filter((r) => !!r.phone).map((r) => r.phone as string), missing: owing.filter((r) => !r.phone).map((r) => r.name) };
+}
+
+/** "Text all" shows only when at least 2 of the people who owe have a number. */
+export const canTextAll = (s: AdminSessionView): boolean => textAllRecipients(s).phones.length >= 2;
+
+/** The note after "Text all" when someone owing has no number: "No number for Kai, texted the rest." */
+export function missingNumberNote(names: string[]): string {
+  const who = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+  return `No number for ${who}, texted the rest.`;
+}
 
 /** The price each person is asked for on this game: the final price once finalized, else the usual price. */
 export const gamePriceCents = (d: Pick<AdminDashboard, 'group'>, s: AdminSessionView): number => (s.finalized ? s.finalized.priceCents : d.group.settings.pricePerPlayerCents);

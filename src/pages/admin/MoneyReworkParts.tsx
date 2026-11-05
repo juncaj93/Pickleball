@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
+import { useRef, useState } from 'react';
+import type { AdminDashboard, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { formatShortDate } from '../../../shared/time';
 import { smsHref } from '../../../shared/messages';
@@ -9,7 +9,7 @@ import type { AdminCtx } from '../Admin';
 import { useReworkBusy, useReworkRun } from './ReworkOps';
 import { CreditBackList, useAction } from './Sessions';
 import { owedCentsOf, unpaidRows } from './moneyList';
-import { canTextAll, groupRemindText } from './moneyRework';
+import { canTextAll, groupRemindText, missingNumberNote, textAllRecipients } from './moneyRework';
 import { reminderText } from './textMenu';
 import '../../money-rework.css';
 
@@ -280,12 +280,20 @@ export function HideFromList({ ctx, s, variant }: { ctx: AdminCtx; s: AdminSessi
 
 /**
  * The Remind sheet on the Money page (Money page rework). One tight row per person who owes: name, a small "owes $14" under it, and a
- * Text button that opens Messages for that one person (the same text as before). With 2 or more owing, "Text all" sits in the header and
- * opens the group chat with nobody filled in. The site sends nothing; you press send in Messages.
+ * Text button that opens Messages for that one person. With 2 or more owing people who have a number, "Text all" sits in the header and
+ * opens ONE new message already addressed to all of them (the same way the one-person Text opens Messages, several numbers at once), with
+ * the group reminder. The list of numbers is built when the sheet opens and again at the tap, so someone who just paid is not texted; a
+ * person who owes but has no number is skipped, with a short note. The site sends nothing; you press send in Messages.
  */
 export function ReworkRemind({ ctx, s, open, onClose }: { ctx: AdminCtx; s: AdminSessionView | null; open: boolean; onClose: () => void }) {
+  const toast = useToast();
+  // The picture of the game the sheet has now; the tap on Text all reads the server again.
+  const latest = useRef(s);
+  latest.current = s;
+  const again = useRef(false);
   const rows = s ? unpaidRows(s) : [];
   const day = s ? formatShortDate(s.startsAt, ctx.d.group.timezone) : '';
+  const allHref = (g: AdminSessionView) => smsHref(textAllRecipients(g).phones, groupRemindText(ctx.d, g), isIOS);
   return (
     <Sheet
       open={open && !!s}
@@ -293,7 +301,40 @@ export function ReworkRemind({ ctx, s, open, onClose }: { ctx: AdminCtx; s: Admi
       onClose={onClose}
       headerAction={
         s && canTextAll(s) ? (
-          <a className="mrw-textall" data-text-all href={smsHref(null, groupRemindText(ctx.d, s), isIOS)}>
+          <a
+            className="mrw-textall"
+            data-text-all
+            href={allHref(s)}
+            onClick={async (e) => {
+              // The sheet is built from what the screen knew when it opened (live updates wait while a sheet is open), so at the tap the game is read
+              // again from the server: someone who just paid is left out. The tap we repeat ourselves below is let through.
+              if (again.current) {
+                again.current = false;
+                return;
+              }
+              e.preventDefault();
+              const link = e.currentTarget;
+              let g = latest.current;
+              try {
+                const now = await api<AdminDashboard>('GET', '/api/admin/dashboard');
+                g = now.sessions.find((x) => x.id === latest.current?.id) ?? g;
+              } catch {
+                /* offline: the picture the sheet has is the best there is */
+              }
+              const to = g ? textAllRecipients(g) : { phones: [], missing: [] };
+              if (!g || to.phones.length < 2) {
+                // Someone just paid, so fewer than two are left: nothing is opened. Their own Text button still works.
+                toast('Only one person still owes. Use their Text button.');
+                void ctx.reload();
+                return;
+              }
+              link.href = allHref(g);
+              if (to.missing.length > 0) toast(missingNumberNote(to.missing));
+              again.current = true;
+              link.click();
+              void ctx.reload();
+            }}
+          >
             Text all
           </a>
         ) : undefined

@@ -1021,9 +1021,13 @@ async function main() {
       assert(m.allH === 34 && m.allBg === purple && m.allColor === (scheme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(29, 20, 51)') && m.allSize === '14px' && m.allWeight === '600', `Text all ${m.allH} ${m.allBg} ${m.allColor} (${tag})`);
       assert(m.order, `Text all sits between the title and the close button (${tag})`);
       assert(m.fit, `no sideways overflow in the sheet (${tag})`);
-      // Group text: no recipients, the agreed message with line breaks.
-      assert(/^sms:[&?]?(&|\?)?body=/.test(m.allHref) && !/^sms:[0-9+(]/.test(m.allHref), `no recipients: ${m.allHref.slice(0, 20)}`);
-      const body = decodeURIComponent(m.allHref.replace(/^sms:[&?]*(?:body=)?/, '').replace(/^body=/, ''));
+      // Group text: one new message addressed to the people who owe (Kai and Gray, who both have numbers), the agreed words with line breaks.
+      const norm = (ph) => '+1' + ph.replace(/\D/g, '').slice(-10);
+      const players = (await dash()).players;
+      const want = ['Kai', 'Gray'].map((n) => norm(players.find((p) => p.name === n).phone)).sort();
+      const addr = ((/addresses=([^&]*)/.exec(m.allHref) ?? /^sms:([^?&]*)/.exec(m.allHref))[1] || '').split(',').filter(Boolean).sort();
+      assert(addr.join() === want.join(), `addressed to exactly Kai and Gray: ${addr} vs ${want}`);
+      const body = decodeURIComponent(/body=(.*)$/.exec(m.allHref)[1]);
       assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball\.\nIf you haven't paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
       // One person: same wording as before, name and amount.
       const one = decodeURIComponent(m.oneHref.replace(/^sms:[^&?]*[&?]body=/, ''));
@@ -1043,6 +1047,71 @@ async function main() {
     await ctx.close();
     const g2 = (await dash()).sessions.find((x) => x.id === mixed.id).roster.find((r) => r.name === 'Gray');
     await post(areq, `/api/admin/sessions/${mixed.id}/payment`, { playerId: g2.playerId, paid: false, seen: g2.moneySeen });
+  });
+  await check('Text all is addressed to everyone who owes with a number; the one with no number is skipped with a note; a just-paid player and the waitlist are left out', async () => {
+    const d = await dash();
+    const g = byNote(d, 'Owes, one no number');
+    assert(g, 'the fake game with a missing number exists');
+    const norm = (ph) => '+1' + ph.replace(/\D/g, '').slice(-10);
+    const phoneOf = (n) => d.players.find((p) => p.name === n).phone;
+    assert(!phoneOf('Reese'), 'Reese has no number saved');
+    const owing = g.roster.filter((r) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && !r.isOrganizer).map((r) => r.name).sort();
+    assert(owing.join() === 'Kai,Lane,Morgan,Reese', `four owe: ${owing}`);
+    const { ctx, page } = await openAdmin({ width: 360 });
+    const card = await gamesCard(page, g.id);
+    await card.locator('[data-remind]').click();
+    const dlg = page.locator('dialog[open]');
+    await dlg.locator('.mrw-remind-list').waitFor();
+    assert(/no number saved/.test(await dlg.locator('[data-remind-row="Reese"]').innerText()), 'Reese is listed as owing, with no number saved');
+    const hrefOf = () => dlg.locator('[data-text-all]').getAttribute('href');
+    const parts = (h) => ({ addr: ((/addresses=([^&]*)/.exec(h) ?? /^sms:([^?&]*)/.exec(h))[1] || '').split(',').filter(Boolean).sort(), body: decodeURIComponent(/body=(.*)$/.exec(h)[1]) });
+    const first = parts(await hrefOf());
+    assert(first.addr.join() === ['Kai', 'Lane', 'Morgan'].map((n) => norm(phoneOf(n))).sort().join(), `to Kai, Lane and Morgan only (not Reese, Indy who paid, or anyone on a waitlist): ${first.addr}`);
+    assert(first.body.startsWith("Hey everyone, quick reminder for ") && first.body.includes("your $14 yet"), 'the agreed message');
+    await shot(page, 'text-all-missing-number');
+    // Tapping it: the note names Reese. The click is recorded (and the page's own move to sms: stopped) so the link at the moment of the tap can be read.
+    await dlg.locator('[data-text-all]').evaluate((a) => {
+      window.__clicks = [];
+      a.addEventListener('click', (e) => {
+        window.__clicks.push(a.getAttribute('href'));
+        e.preventDefault();
+      }, true);
+    });
+    await dlg.locator('[data-text-all]').click();
+    await page.waitForFunction(() => window.__clicks.length >= 2, null, { timeout: 5000 });
+    assert((await toastText(page)).includes('No number for Reese, texted the rest.'), `toast: ${await toastText(page)}`);
+    // Morgan pays while the sheet is open (it does not refresh by itself). The link shown is still the old one, but the tap reads the game again.
+    const mo = g.roster.find((r) => r.name === 'Morgan');
+    await post(areq, `/api/admin/sessions/${g.id}/payment`, { playerId: mo.playerId, paid: true, seen: mo.moneySeen, cents: mo.owesCents });
+    await page.evaluate(() => (window.__clicks = []));
+    await page.waitForTimeout(3500); // let the first toast go
+    await dlg.locator('[data-text-all]').click();
+    await page.waitForFunction(() => window.__clicks.length >= 2, null, { timeout: 5000 });
+    const afterTap = parts(await page.evaluate(() => window.__clicks[window.__clicks.length - 1]));
+    assert(afterTap.addr.join() === ['Kai', 'Lane'].map((n) => norm(phoneOf(n))).sort().join(), `a just-paid player is left out at the tap: ${afterTap.addr}`);
+    assert(afterTap.body.includes('your $14 yet'), 'same message');
+    // The sheet refreshes after the tap; wait for it.
+    let now = parts(await hrefOf());
+    for (let tries = 0; now.addr.length !== 2 && tries < 20; tries++) {
+      await page.waitForTimeout(400);
+      now = parts(await hrefOf());
+    }
+    // Lane pays too: only Kai has a number and owes, so Text all is gone (the per-person Text buttons stay).
+    const la = g.roster.find((r) => r.name === 'Lane');
+    await post(areq, `/api/admin/sessions/${g.id}/payment`, { playerId: la.playerId, paid: true, seen: la.moneySeen, cents: la.owesCents });
+    // The tap reads the game again: only one is left, so nothing opens, a note says so, the sheet refreshes and Text all goes.
+    await page.evaluate(() => (window.__clicks = []));
+    await dlg.locator('[data-text-all]').click();
+    await page.waitForTimeout(400);
+    assert((await toastText(page)).some((t) => /Only one person still owes/.test(t)), `note: ${await toastText(page)}`);
+    assert((await page.evaluate(() => window.__clicks.length)) === 1, 'no second (opening) click was made');
+    await dlg.locator('[data-text-all]').waitFor({ state: 'detached', timeout: 8000 });
+    assert((await dlg.locator('.mrw-text-one').count()) >= 2, 'the per-person Text buttons still work');
+    await ctx.close();
+    for (const n of ['Morgan', 'Lane']) {
+      const r = (await dash()).sessions.find((x) => x.id === g.id).roster.find((x) => x.name === n);
+      await post(areq, `/api/admin/sessions/${g.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen });
+    }
   });
   await check('4 5 color tokens: credit is the softer blue, paid green and owes amber are unchanged, texting is purple, in light and dark', async () => {
     for (const scheme of ['light', 'dark']) {

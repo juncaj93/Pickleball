@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import { activityText, cleanActivity, highlightNew } from '../shared/activity';
 import type { ActivityEntry, AdminSessionView } from '../shared/api';
 import { zonedTimeToUtc } from '../shared/time';
-import { canTextAll, creditPerPlayerCents, fullyPaid, groupRemindText, monthBoxLabel, monthChoices, monthOf, monthRows, monthRowLabel, shiftMonthKey, splitGames } from '../src/pages/admin/moneyRework';
+import { smsHref } from '../shared/messages';
+import { applyOps } from '../src/pages/admin/reworkOptimistic';
+import { canTextAll, creditPerPlayerCents, fullyPaid, groupRemindText, missingNumberNote, textAllRecipients, monthBoxLabel, monthChoices, monthOf, monthRows, monthRowLabel, shiftMonthKey, splitGames } from '../src/pages/admin/moneyRework';
 
 const TZ = 'America/Detroit';
 // Wed Nov 4, 2026, 6:00 PM Eastern: the day this was built.
@@ -218,13 +220,17 @@ describe('History: a quieter list', () => {
 
 describe('Remind sheet: Text all', () => {
   const d = { now: new Date(NOW).toISOString(), group: { timezone: TZ, playerLink: 'https://pickleball.juncaj.net', settings: { pricePerPlayerCents: 1400 } } } as any;
-  it('R1 "Text all" shows only when at least 2 people owe', () => {
+  const num = (n: number) => `(313) 555-01${String(n).padStart(2, '0')}`;
+  const owes = (n: number, over: Record<string, unknown> = {}) => seat({ phone: num(n), ...over });
+  it('R1 "Text all" shows only when at least 2 of the people who owe have a number', () => {
     expect(canTextAll(game(at(11, 5), {}, []))).toBe(false);
-    expect(canTextAll(game(at(11, 5), {}, [seat()]))).toBe(false);
-    expect(canTextAll(game(at(11, 5), {}, [seat(), seat()]))).toBe(true);
+    expect(canTextAll(game(at(11, 5), {}, [owes(1)]))).toBe(false);
+    expect(canTextAll(game(at(11, 5), {}, [owes(1), owes(2)]))).toBe(true);
     // Paid people do not count, and neither does the organizer.
-    expect(canTextAll(game(at(11, 5), {}, [seat(), paidSeat(), paidSeat(), seat({ isOrganizer: true })]))).toBe(false);
-    expect(canTextAll(game(at(11, 5), {}, [seat(), paidSeat(), seat()]))).toBe(true);
+    expect(canTextAll(game(at(11, 5), {}, [owes(1), seat({ phone: num(2), paymentStatus: 'paid', owesCents: 0 }), seat({ phone: num(3), isOrganizer: true })]))).toBe(false);
+    // Two owe but only one has a number: hidden (the per-person Text buttons still work).
+    expect(canTextAll(game(at(11, 5), {}, [owes(1), seat(), seat({ phone: null })]))).toBe(false);
+    expect(canTextAll(game(at(11, 5), {}, [owes(1), owes(2), seat()]))).toBe(true);
   });
   it('R2 the message: two lines, a blank line, the site address alone on the last line', () => {
     const t = groupRemindText(d, game(at(11, 4, 12)));
@@ -247,5 +253,57 @@ describe('Remind sheet: Text all', () => {
     const { smsHref } = await import('../shared/messages');
     expect(smsHref(null, 'x', true)).toBe('sms:&body=x');
     expect(smsHref(null, 'x', false)).toBe('sms:?body=x');
+  });
+});
+
+describe('Text all: who Messages opens to', () => {
+  const num = (n: number) => `(313) 555-01${String(n).padStart(2, '0')}`;
+  const roster = () => [
+    seat({ name: 'Ann', phone: num(1) }),
+    seat({ name: 'Ben', phone: num(2) }),
+    seat({ name: 'Cam', phone: num(3) }),
+    seat({ name: 'Kai', phone: null }),
+    seat({ name: 'Paid', phone: num(4), paymentStatus: 'paid', owesCents: 0 }),
+    seat({ name: 'Credit', phone: num(5), owesCents: 0, creditCents: 1400 }),
+    seat({ name: 'Wait', phone: num(6), status: 'waitlisted' }),
+    seat({ name: 'Gone', phone: num(7), status: 'withdrawn' }),
+    seat({ name: 'Boss', phone: num(8), isOrganizer: true }),
+  ];
+  it('T1 the recipients are exactly the unpaid, confirmed people with numbers; the rest are never included', () => {
+    const to = textAllRecipients(game(at(11, 5), {}, roster()));
+    expect(to.phones).toEqual([num(1), num(2), num(3)]);
+    expect(to.missing).toEqual(['Kai']);
+  });
+  it('T2 a player who just paid is not texted (the list is rebuilt from the newest picture)', () => {
+    const d = { now: new Date(NOW).toISOString(), sessions: [game(at(11, 5), { id: 'g9' }, roster())] } as any;
+    const g = d.sessions[0];
+    const ben = g.roster.find((r: any) => r.name === 'Ben');
+    const after = applyOps(d, [{ kind: 'paid', sessionId: 'g9', playerId: ben.playerId }]);
+    expect(textAllRecipients(d.sessions[0]).phones).toContain(num(2));
+    expect(textAllRecipients(after.sessions[0]).phones).toEqual([num(1), num(3)]);
+  });
+  it('T3 a player without a number is skipped, and the note names them', () => {
+    expect(missingNumberNote(['Kai'])).toBe('No number for Kai, texted the rest.');
+    expect(missingNumberNote(['Kai', 'Lee'])).toBe('No number for Kai and Lee, texted the rest.');
+    expect(missingNumberNote(['Kai', 'Lee', 'Max'])).toBe('No number for Kai, Lee and Max, texted the rest.');
+  });
+  it('T4 waitlisted people are never included, even if something is shown as owed on their row', () => {
+    const g = game(at(11, 5), {}, [owes(1), owes(2), seat({ name: 'Wait', phone: num(6), status: 'waitlisted', owesCents: 1400 })]);
+    expect(textAllRecipients(g).phones).toEqual([num(1), num(2)]);
+    function owes(n: number) {
+      return seat({ phone: num(n) });
+    }
+  });
+  it('T5 Messages opens with ALL the numbers in one new message (the same way the one-person Text opens it), and the agreed words', () => {
+    const d = { now: new Date(NOW).toISOString(), group: { timezone: TZ, playerLink: 'https://pickleball.juncaj.net', settings: { pricePerPlayerCents: 1400 } } } as any;
+    const g = game(at(11, 4, 12), {}, roster());
+    const body = groupRemindText(d, g);
+    const phones = textAllRecipients(g).phones;
+    const ios = smsHref(phones, body, true);
+    expect(ios).toBe(`sms://open?addresses=+13135550101,+13135550102,+13135550103&body=${encodeURIComponent(body)}`);
+    expect(smsHref(phones, body, false)).toBe(`sms:+13135550101,+13135550102,+13135550103?body=${encodeURIComponent(body)}`);
+    expect(decodeURIComponent(ios.split('&body=')[1])).toBe("Hey everyone, quick reminder for today's pickleball.\nIf you haven't paid your $14 yet, please do it here:\n\npickleball.juncaj.net");
+    // One person alone keeps its own link: that number only.
+    expect(smsHref(num(1), 'x', true)).toBe('sms:+13135550101&body=x');
   });
 });

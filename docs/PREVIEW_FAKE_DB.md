@@ -53,6 +53,7 @@ Production is bound to the real database and was not changed.
 | Old "Test game" (Fri Oct 30 on a Wednesday seed) | Canceled early | Nobody in, no money, no venue charge: the one game that can be hidden (Money page rework). Games with money in them cannot be hidden |
 | "Sunday run", "Monday run" (Nov 1 and 2) | Played, finalized | 4 each, all paid $14, court $48: two fully paid previous games |
 | Extra game "Mixed payments" (20 hours after the seed) | **Booked**, 4 in | Lane and Morgan paid cash, Kai and Gray owe $14 |
+| Extra game "Owes, one no number" (68 hours after the seed) | **Booked**, 5 in | Indy paid; Kai, Lane, Morgan owe $14 and have numbers; Reese owes $14 and has NO phone number saved (Text all skips Reese) |
 | Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: the Games tab files it under Previous games |
 | Everything after | Normal empty games | The site makes these by itself |
 

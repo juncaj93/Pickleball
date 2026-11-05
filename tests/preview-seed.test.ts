@@ -48,7 +48,9 @@ describe('fake-data preview seed', () => {
     const { db, sql } = await loaded();
     const players = db.raw.prepare('SELECT display_name, phone_number FROM players').all() as { display_name: string; phone_number: string }[];
     expect(players.length).toBeGreaterThanOrEqual(8);
-    for (const p of players) expect(p.phone_number).toMatch(/^\(313\) 555-01\d\d$/);
+    // Every made-up player has a 313-555-01xx number, except the one saved with no number on purpose (for Text all).
+    for (const p of players) if (p.display_name !== 'Reese') expect(p.phone_number).toMatch(/^\(313\) 555-01\d\d$/);
+    expect(players.find((p) => p.display_name === 'Reese')?.phone_number ?? null).toBeNull();
     expect(sql).not.toMatch(/juncaj|mitchell/i);
     expect(sql).not.toMatch(/TELEGRAM|bot\d+:/i);
   });
@@ -160,6 +162,12 @@ describe('fake-data preview seed', () => {
     // A game with 5 in (credit comes back at 5): the first coming game, and a canceled one.
     expect(games.some((g) => Date.parse(g.startsAt) > wed && g.status !== 'canceled' && g.confirmedCount === 5)).toBe(true);
     expect(games.some((g) => g.status === 'canceled' && g.cancelReason === 'Court closed')).toBe(true);
+    // Text all: a game with three owing players who have numbers and one owing player with none (Reese), and one who paid.
+    const chase = by('Owes, one no number');
+    const owing = chase.roster.filter((r: any) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && !r.isOrganizer);
+    expect(owing.filter((r: any) => r.phone).map((r: any) => r.name).sort()).toEqual(['Kai', 'Lane', 'Morgan']);
+    expect(owing.filter((r: any) => !r.phone).map((r: any) => r.name)).toEqual(['Reese']);
+    expect(chase.paidCount).toBe(1);
     // Ten older months (Dec 2025 to Sep 2026), 2 to 4 played games each, so the Money page's month list scrolls well past four months.
     const counts = dash.gameMonthCounts as Record<string, number>;
     const old = ['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];

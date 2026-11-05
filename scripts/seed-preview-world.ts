@@ -115,6 +115,8 @@ class World {
 
 // ---- the cast: all made up --------------------------------------------------------------------------------
 const ORGANIZER = 'Organizer Orla';
+/** A made-up player with no phone number saved. */
+export const NO_NUMBER = 'Reese';
 const CAST = ['Avery', 'Blake', 'Casey', 'Drew', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jordan', 'Kai', 'Lane', 'Morgan'];
 
 export interface Seed {
@@ -141,6 +143,8 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     players,
   });
   await w.org.ok('PUT', '/api/admin/group', { organizerName: ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way' });
+  // One made-up player with NO phone number saved, for Text all on the Money page's Remind sheet (it skips a person with no number).
+  await w.org.ok('POST', '/api/admin/players', { name: NO_NUMBER });
   let dash = await w.org.ok('GET', '/api/admin/dashboard');
   w.groupKey = String(dash.group.privateLink).split('/g/')[1];
   for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
@@ -343,6 +347,11 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   const allPaid = await upcomingExtra(44, 'All paid');
   for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await join(n, allPaid);
   for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await orgPays(n, allPaid);
+  // 12. Text all on the Remind sheet: 5 in, Indy paid, Kai, Lane and Morgan owe $14 and have numbers, and Reese owes $14 with no number saved.
+  const chase = await upcomingExtra(68, 'Owes, one no number');
+  for (const n of ['Indy', 'Kai', 'Lane', 'Morgan', NO_NUMBER]) await join(n, chase);
+  await orgPays('Indy', chase);
+  summary.push('extra game "Owes, one no number" (Booked, 5 in): Indy paid; Kai, Lane and Morgan owe $14 with numbers; Reese owes $14 and has no number saved (Text all skips Reese)');
   summary.push('extra game "Mixed payments" (Booked, 4 in): Lane and Morgan paid cash, Kai and Gray owe $14');
   summary.push('extra game "All paid" (Booked, 4 of 4 paid): the Games tab files it under Previous games');
 
