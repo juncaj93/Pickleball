@@ -156,8 +156,8 @@ describe('fake-data preview seed', () => {
     // Two previous games, played and finalized, everyone paid.
     for (const note of ['Sunday run', 'Monday run']) expect(by(note), note).toMatchObject({ payableCount: expect.any(Number), finalized: expect.anything() });
     for (const note of ['Sunday run', 'Monday run']) expect(by(note).paidCount).toBe(by(note).payableCount);
-    // Mixed payments: 5 in (Christopher Vanderberg, the long name, is the fifth), 2 paid. All paid: 4 of 4.
-    expect(by('Mixed payments')).toMatchObject({ confirmedCount: 5, paidCount: 2, payableCount: 5 });
+    // Mixed payments: 4 in, 2 paid. All paid: 4 of 4.
+    expect(by('Mixed payments')).toMatchObject({ confirmedCount: 4, paidCount: 2, payableCount: 4 });
     expect(by('All paid')).toMatchObject({ confirmedCount: 4, paidCount: 4, payableCount: 4 });
     // A game with 5 in (credit comes back at 5): the first coming game, and a canceled one.
     expect(games.some((g) => Date.parse(g.startsAt) > wed && g.status !== 'canceled' && g.confirmedCount === 5)).toBe(true);

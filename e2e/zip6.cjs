@@ -325,9 +325,9 @@ async function main() {
     const dk = await dash({ 'X-Venmo-Request': 'on' });
     const game = byNote(dk, 'Mixed payments');
     const owing = game.roster.filter((r) => r.paymentStatus === 'unpaid' && r.owesCents > 0).map((r) => r.name).sort();
-    assert(owing.join(',') === ['Gray', 'Kai', LONG].sort().join(','), `who owes: ${owing}`);
+    assert(owing.join(',') === ['Gray', 'Kai'].join(','), `who owes: ${owing}`);
     const links = await card.locator('[data-venmo-request]').evaluateAll((els) => els.map((a) => ({ who: a.getAttribute('data-venmo-request'), href: a.getAttribute('href'), text: a.textContent, h: a.getBoundingClientRect().height, fs: getComputedStyle(a).fontSize, target: a.getAttribute('target') })));
-    assert(links.map((l) => l.who).sort().join(',') === ['Kai', LONG].sort().join(','), `links for: ${links.map((l) => l.who)}`);
+    assert(links.map((l) => l.who).join(',') === 'Kai', `links for: ${links.map((l) => l.who)}`);
     for (const l of links) {
       assert(l.text === 'Request ↗', `label: ${l.text}`);
       assert(Math.round(l.h) === 34 && l.fs === '13px', `size ${l.h} ${l.fs}`);
@@ -342,7 +342,10 @@ async function main() {
     const gray = card.locator('[data-pay-row="Gray"]');
     assert((await gray.locator('[data-venmo-request]').count()) === 0, 'no link for Gray');
     assert((await gray.locator('.mrw-mark').count()) === 1, 'Gray still has Mark paid');
-    const long = card.locator(`[data-pay-row="${LONG}"]`);
+    // The long name lives in the late-canceled "Fee split $11" game: its row must fit next to Request and Mark paid.
+    const splitCard = await openGame(page, 'Fee split $11');
+    const long = splitCard.locator(`[data-pay-row="${LONG}"]`);
+    assert((await long.locator('[data-venmo-request]').count()) === 1, 'the long name has a Request link');
     const box = await long.evaluate((li) => {
       const line = li.querySelector('.mrw-line').getBoundingClientRect();
       const btns = [...li.querySelectorAll('.vr-link, .mrw-mark')].map((b) => b.getBoundingClientRect());
@@ -363,7 +366,7 @@ async function main() {
       els.map((li) => ({ who: li.getAttribute('data-remind-row'), req: li.querySelector('.vr-link')?.textContent ?? null, reqColor: li.querySelector('.vr-link') ? getComputedStyle(li.querySelector('.vr-link')).color : null, text: li.querySelector('.mrw-text-one')?.textContent ?? null, textBorder: getComputedStyle(li.querySelector('.mrw-text-one')).borderColor })),
     );
     const by = Object.fromEntries(rows.map((r) => [r.who, r]));
-    assert(by.Kai.req === 'Venmo request ↗' && by[LONG].req === 'Venmo request ↗', 'full label on the sheet');
+    assert(by.Kai.req === 'Venmo request ↗', 'full label on the sheet');
     assert(by.Gray.req === null && by.Gray.text === 'Text', 'Gray has only Text');
     assert(by.Kai.reqColor !== by.Kai.textBorder, 'the link is blue, Text stays purple');
     await shot(page, 'remind-390-light');
@@ -432,7 +435,7 @@ async function main() {
     await shot(page, '320-adjust-sheet');
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
-    const card = await openGame(page, 'Mixed payments');
+    const card = await openGame(page, 'Fee split $11');
     await noSideScroll(page, 'money rows');
     assert((await overflowing(page, '.mrw-games')).length === 0, `money rows: ${await overflowing(page, '.mrw-games')}`);
     await shot(page, '320-money-rows');

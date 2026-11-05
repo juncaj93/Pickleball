@@ -126,7 +126,7 @@
   flex-wrap: wrap;
 }
 .mrw-remind-list > li:has(.vr-link) > .mrw-remind-who {
-  flex: 1 1 128px;
+  flex: 1 1 96px;
 }
 .mrw-remind-list > li:has(.vr-link) .mrw-remind-who .small {
   white-space: nowrap;

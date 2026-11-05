@@ -1376,8 +1376,6 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const d = ctx.d;
   // Newest first (the order the switches were built).
   const all: { key: string; on: boolean; node: ReactNode }[] = [
-    { key: 'motionPlayersAll', on: d.motionPlayersForAll !== false, node: <MotionRow key="motionPlayersAll" ctx={ctx} auto={auto} which="player" /> },
-    { key: 'motionAdminAll', on: d.motionAdminForAll !== false, node: <MotionRow key="motionAdminAll" ctx={ctx} auto={auto} which="admin" /> },
     { key: 'lateFeeSplitAll', on: !!d.lateFeeSplitForAll, node: <LateFeeSplitRow key="lateFeeSplitAll" ctx={ctx} auto={auto} /> },
     { key: 'textsR2All', on: !!d.textsR2ForAll, node: <TextsR2Row key="textsR2All" ctx={ctx} auto={auto} /> },
     { key: 'paySheetAll', on: !!d.paySheetForAll, node: <PaySheetRow key="paySheetAll" ctx={ctx} auto={auto} /> },
@@ -1393,6 +1391,9 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
           { key: 'timeShiftAll', on: !!d.timeShiftForAll, node: <TimeShiftRow key="timeShiftAll" ctx={ctx} auto={auto} /> },
         ]
       : []),
+    // The two animation switches are the oldest ones (Nov 1), so they sit last.
+    { key: 'motionPlayersAll', on: d.motionPlayersForAll !== false, node: <MotionRow key="motionPlayersAll" ctx={ctx} auto={auto} which="player" /> },
+    { key: 'motionAdminAll', on: d.motionAdminForAll !== false, node: <MotionRow key="motionAdminAll" ctx={ctx} auto={auto} which="admin" /> },
   ];
   const [stable] = useState(() => new Set(all.filter((x) => x.on).map((x) => x.key)));
   const live = all.filter((x) => stable.has(x.key));

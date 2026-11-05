@@ -353,7 +353,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     return g;
   };
   const mixed = await upcomingExtra(20, 'Mixed payments');
-  for (const n of ['Lane', 'Morgan', 'Kai', 'Gray', LONG_NAME]) await join(n, mixed);
+  for (const n of ['Lane', 'Morgan', 'Kai', 'Gray']) await join(n, mixed);
   for (const n of ['Lane', 'Morgan']) await orgPays(n, mixed);
   const allPaid = await upcomingExtra(44, 'All paid');
   for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await join(n, allPaid);
@@ -363,7 +363,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   for (const n of ['Indy', 'Kai', 'Lane', 'Morgan', NO_NUMBER]) await join(n, chase);
   await orgPays('Indy', chase);
   summary.push('extra game "Owes, one no number" (Booked, 5 in): Indy paid; Kai, Lane and Morgan owe $14 with numbers; Reese owes $14 and has no number saved (Text all skips Reese)');
-  summary.push('extra game "Mixed payments" (Booked, 5 in): Lane and Morgan paid cash; Kai (Venmo saved), Gray (none) and Christopher Vanderberg (long name, Venmo saved) owe $14');
+  summary.push('extra game "Mixed payments" (Booked, 4 in): Lane and Morgan paid cash; Kai (Venmo saved) and Gray (none) owe $14');
   summary.push('extra game "All paid" (Booked, 4 of 4 paid): stays in the Games list until finalized, then moves to Previous games');
 
   // 13. A late-canceled game with the fee split ($11 each): 5 in, Lane and Morgan paid $14 cash (and get $3 back as credit), Kai (Venmo saved),
@@ -372,7 +372,8 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await w.org.ok('PUT', '/api/admin/late-fee-split', { on: true });
   // A game at this exact time may already exist (the regular Tue/Thu slot), so try a few start times inside the 12 hours until one is free.
   let split11: any = null;
-  for (const hoursAhead of [8, 7, 9, 6, 5, 4]) {
+  // (Late enough that it never becomes the first game on the organizer's Home: the Money page tests look at the first card.)
+  for (const hoursAhead of [11.5, 10.5]) {
     try {
       split11 = await upcomingExtra(hoursAhead, 'Fee split $11');
       break;
