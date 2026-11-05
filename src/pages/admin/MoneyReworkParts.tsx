@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import type { AdminDashboard, AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { formatShortDate } from '../../../shared/time';
@@ -11,6 +11,7 @@ import { CreditBackList, useAction } from './Sessions';
 import { owedCentsOf, unpaidRows } from './moneyList';
 import { canTextAll, groupRemindText, missingNumberNote, textAllRecipients } from './moneyRework';
 import { reminderText } from './textMenu';
+import { RequestPair } from './VenmoLink';
 import '../../money-rework.css';
 
 // The reworked Money page's shared pieces (MONEY_REWORK): the player rows of an open game, the body of a canceled game with nobody
@@ -30,6 +31,7 @@ export function ReworkRows({
   isPaid,
   lineOf,
   busy,
+  requestFor,
 }: {
   sessionId: string;
   rows: AdminRosterEntry[];
@@ -37,6 +39,8 @@ export function ReworkRows({
   isPaid: (r: AdminRosterEntry) => boolean;
   lineOf: (r: AdminRosterEntry) => { short: string; full: string };
   busy: boolean;
+  /** The short "Request ↗" link for a row (VENMO_REQUEST), or nothing. */
+  requestFor?: (r: AdminRosterEntry) => ReactNode;
 }) {
   const [tapped, setTapped] = useState<string | null>(null);
   // While a save for a row is still running its buttons wait, so a second tap cannot double-save.
@@ -56,7 +60,9 @@ export function ReworkRows({
         const wait = busy || rowBusy({ kind: 'paid', sessionId, playerId: r.playerId });
         const sub = r.lateFee || asked || part ? short : '';
         const open = tapped === r.playerId;
-        const cls = asked ? '' : credit ? ' credit' : paid ? ' paid' : '';
+        // "Request ↗" (VENMO_REQUEST): only for someone who still owes, with Venmo saved; renders nothing otherwise.
+        const request = markPaid && !paid ? requestFor?.(r) : null;
+        const cls = (asked ? '' : credit ? ' credit' : paid ? ' paid' : '') + (request ? ' has-request' : '');
         // Part credit (unpaid) and "I paid" keep their second action inside the opened row so the line stays short.
         const inline = !asked && !part && paid ? undo : undefined;
         const hidden = [...(asked || part ? (undo ? [undo] : []) : []), ...extra];
@@ -80,10 +86,20 @@ export function ReworkRows({
                   Undo
                 </button>
               )}
-              {markPaid && (
-                <button type="button" className="mrw-mark" disabled={wait} onClick={markPaid.onClick} {...markPaid.attrs}>
-                  Mark paid
-                </button>
+              {request ? (
+                // With "Request ↗" the two buttons travel as one group, so on a very narrow phone they drop below the name together.
+                <span className="mrw-acts">
+                  {request}
+                  <button type="button" className="mrw-mark" disabled={wait} onClick={markPaid!.onClick} {...markPaid!.attrs}>
+                    Mark paid
+                  </button>
+                </span>
+              ) : (
+                markPaid && (
+                  <button type="button" className="mrw-mark" disabled={wait} onClick={markPaid.onClick} {...markPaid.attrs}>
+                    Mark paid
+                  </button>
+                )
               )}
             </div>
             {open && (
@@ -354,9 +370,11 @@ export function ReworkRemind({ ctx, s, open, onClose }: { ctx: AdminCtx; s: Admi
                     {r.phone ? '' : ' · no number saved'}
                   </span>
                 </span>
-                <a className="mrw-text-one" href={smsHref(r.phone, reminderText(ctx.d, r.playerId, r.name, s), isIOS)} aria-label={`Text ${r.name}`}>
-                  Text
-                </a>
+                <RequestPair ctx={ctx} s={s} r={r}>
+                  <a className="mrw-text-one" href={smsHref(r.phone, reminderText(ctx.d, r.playerId, r.name, s), isIOS)} aria-label={`Text ${r.name}`}>
+                    Text
+                  </a>
+                </RequestPair>
               </li>
             ))}
           </ul>

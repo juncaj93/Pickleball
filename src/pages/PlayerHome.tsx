@@ -8,6 +8,7 @@ import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFall
 import { creditBackNote } from '../../shared/pricing';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
+import { adjustedPlayerLine, latestAdjustment } from '../../shared/adjustCredit';
 import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
@@ -621,7 +622,7 @@ export function PlayerHome({
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
       {cashOut && <CashOutPrompt key={cashOut.sessionId} sessionId={cashOut.sessionId} cents={cashOut.cents} onClose={() => setCashOut(null)} onChanged={load.reload} />}
-      {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
+      {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} nowIso={g.now} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </InstantContext.Provider>
   );
 }
@@ -1246,6 +1247,8 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const detail = (o: (typeof due)[number]) =>
     [o.finalized && !o.lateFee ? 'final price' : null, o.creditCents > 0 ? `after your ${formatPrice(o.creditCents)} credit` : null].filter(Boolean).join(', ');
   // (On this card the amounts are already after any credit; each game's own line says what is left.)
+  // The organizer's latest hand adjustment to their credit (recent ones only), with the reason.
+  const adjustNote = latestAdjustment(g.credit.history, Date.parse(g.now));
   const who = g.group.organizerName ?? 'The organizer';
   return (
     <section className={`card pay-card${enter ? ' m-enter' : ''}`} aria-label="Payment">
@@ -1268,6 +1271,12 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
             {formatPrice(due[0].amountCents)}, {detail(due[0])}
           </p>
         )
+      )}
+      {adjustNote && (
+        <p className="small pay-adjusted" data-adjust-note>
+          <b>{adjustedPlayerLine(adjustNote.deltaCents)}</b>
+          {adjustNote.note && <span>{adjustNote.note}</span>}
+        </p>
       )}
       {/* Pay, and a quiet "I paid" right with it for anyone who paid another way (Apple Cash, cash). */}
       {pay.url ? (

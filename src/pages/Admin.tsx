@@ -18,6 +18,7 @@ import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { DoNowCard, useServerNow } from './admin/DoNow';
+import { OwedVenmoCards } from './admin/VenmoRequest';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
@@ -325,6 +326,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
         </section>
       )}
       <DoNowCard ctx={ctx} hideBook={ctx.d.adminV2 === true || ctx.d.adminR2 === true} />
+      <OwedVenmoCards ctx={ctx} />
       {first.length > 0 && (
         <section className="stack" aria-label="After the game">
           {first.map((item) => (

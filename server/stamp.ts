@@ -6,6 +6,7 @@ import { payAlwaysForAll } from './payAlways';
 import { payNoteForAll } from './payNote';
 import { playerFix1ForAll } from './playerFix1';
 import { instantTapsForAll } from './instantTaps';
+import { motionSetting } from './motion';
 import { paySheetForAll } from './paySheet';
 import { lateFeesForAll } from './lateFees';
 import { hiddenGameIds } from './hideGame';
@@ -87,6 +88,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     (await lateFeesForAll(ctx.db, group.id)) ? 'lf' : '',
     // The organizer turning "Instant taps" on or off for everyone (the screen then knows to draw taps at once).
     (await instantTapsForAll(ctx.db, group.id)) ? 'it' : '',
+    // The organizer changing the player animations in Settings (nothing is added until the row is first used).
+    (await motionSetting(ctx.db, group.id, 'player')) ?? '',
     // The organizer removing a canceled game from the player screen (or putting it back).
     [...(await hiddenGameIds(ctx.db, group.id))].sort().join(','),
   ].join('|');

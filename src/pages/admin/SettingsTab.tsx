@@ -461,7 +461,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -469,6 +469,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <AdjustCreditRow ctx={ctx} auto={auto} />
+              <VenmoRequestRow ctx={ctx} auto={auto} />
               <InstantTapsRow ctx={ctx} auto={auto} />
               <MoneyReworkRow ctx={ctx} auto={auto} />
               <AdminV2Row ctx={ctx} auto={auto} />
@@ -482,6 +484,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               <LateFeeSplitRow ctx={ctx} auto={auto} />
               {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
               {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
+              <MotionRow ctx={ctx} auto={auto} which="player" />
+              <MotionRow ctx={ctx} auto={auto} which="admin" />
             </>
           )}
         </Section>
@@ -1251,6 +1255,96 @@ function InstantTapsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 
 /**
+ * "Adjust credit" (ADJUST_CREDIT, server/adjustCredit.ts): the Players sheet gets an Adjust credit row (add or remove credit by hand, with a
+ * reason). Off: only a phone opened with /admin?adjustcredit=on. Saves itself, no deploy. Moves no credit by itself.
+ */
+function AdjustCreditRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const { on, flip } = useFlip(!!ctx.d.adjustCreditForAll, ctx, auto, 'adjustCreditAll', '/api/admin/adjust-credit-switch', 'Adjust credit', true);
+  return (
+    <div className="set-row-wrap" data-row="adjustCreditAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Adjust credit <SaveMark state={auto.rows.adjustCreditAll} />
+          </span>
+          <span className="set-hint">Add or remove a player's credit, with a reason</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} data-adjust-credit-all onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows.adjustCreditAll} />
+    </div>
+  );
+}
+
+/**
+ * "Venmo request" (VENMO_REQUEST, server/venmoRequest.ts): a blue "Venmo request" link per person who owes, only where a Venmo username is
+ * saved. Off: only a phone opened with /admin?venmorequest=on. Saves itself, no deploy. Only shows links.
+ */
+function VenmoRequestRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const { on, flip } = useFlip(!!ctx.d.venmoRequestForAll, ctx, auto, 'venmoRequestAll', '/api/admin/venmo-request-switch', 'Venmo request', true);
+  return (
+    <div className="set-row-wrap" data-row="venmoRequestAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Venmo request <SaveMark state={auto.rows.venmoRequestAll} />
+          </span>
+          <span className="set-hint">A Venmo request link for each person who owes</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} data-venmo-request-all onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows.venmoRequestAll} />
+    </div>
+  );
+}
+
+/**
+ * The two animation switches (MOTION for the player screens, MOTION_ADMIN for these organizer screens), moved here so every switch is
+ * on one page. Visual only. They start where wrangler.toml has them (both on); flipping a row works at once, no deploy, and the
+ * wrangler.toml value still decides when nobody has touched the row. Private test links stay: ?motion=on, /admin?motionadmin=on.
+ */
+function MotionRow({ ctx, auto, which }: { ctx: AdminCtx; auto: Autosave; which: 'player' | 'admin' }) {
+  const player = which === 'player';
+  const key = player ? 'motionPlayersAll' : 'motionAdminAll';
+  const initial = player ? ctx.d.motionPlayersForAll !== false : ctx.d.motionAdminForAll !== false;
+  const toast = useToast();
+  const [on, setOn] = useState(initial);
+  const confirmed = useRef(initial);
+  const saving = useRef(false);
+  const flip = (next: boolean) => {
+    if (saving.current) return;
+    saving.current = true;
+    setOn(next);
+    void auto.save(key, { which, on: next }, '/api/admin/motion-switch').then((ok) => {
+      saving.current = false;
+      if (ok) {
+        confirmed.current = next;
+        toast(`${player ? 'Player' : 'Organizer'} animations ${next ? 'on' : 'off'}`);
+      } else {
+        setOn(confirmed.current);
+        auto.clear(key);
+        toast("That didn't save. The switch is back where it was.", 'error');
+      }
+      return ctx.reload();
+    });
+  };
+  return (
+    <div className="set-row-wrap" data-row={key}>
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            {player ? 'Animations, players' : 'Animations, organizer'} <SaveMark state={auto.rows[key]} />
+          </span>
+          <span className="set-hint">{player ? 'Movement on the player screens' : 'Movement on these organizer screens'}</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} data-motion-switch={which} onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows[key]} />
+    </div>
+  );
+}
+
+/**
  * The Feature switches page when the Money page rework is on: newest switch first, switches that are off listed above, and every older
  * switch that is already on for everyone folded into one "Live and stable" group. Which group a row sits in is read once when the
  * page opens, so a row never jumps away while you are flipping it. No behavior change: each row is the same row, with the same switch.
@@ -1259,6 +1353,8 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const d = ctx.d;
   // Newest first (the order the switches were built).
   const all: { key: string; on: boolean; node: ReactNode }[] = [
+    { key: 'motionPlayersAll', on: d.motionPlayersForAll !== false, node: <MotionRow key="motionPlayersAll" ctx={ctx} auto={auto} which="player" /> },
+    { key: 'motionAdminAll', on: d.motionAdminForAll !== false, node: <MotionRow key="motionAdminAll" ctx={ctx} auto={auto} which="admin" /> },
     { key: 'lateFeeSplitAll', on: !!d.lateFeeSplitForAll, node: <LateFeeSplitRow key="lateFeeSplitAll" ctx={ctx} auto={auto} /> },
     { key: 'textsR2All', on: !!d.textsR2ForAll, node: <TextsR2Row key="textsR2All" ctx={ctx} auto={auto} /> },
     { key: 'paySheetAll', on: !!d.paySheetForAll, node: <PaySheetRow key="paySheetAll" ctx={ctx} auto={auto} /> },
@@ -1280,6 +1376,8 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <AdjustCreditRow ctx={ctx} auto={auto} />
+      <VenmoRequestRow ctx={ctx} auto={auto} />
       <InstantTapsRow ctx={ctx} auto={auto} />
       <MoneyReworkRow ctx={ctx} auto={auto} />
       {rest.map((x) => x.node)}

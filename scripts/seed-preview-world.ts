@@ -117,6 +117,10 @@ class World {
 const ORGANIZER = 'Organizer Orla';
 /** A made-up player with no phone number saved. */
 export const NO_NUMBER = 'Reese';
+/** A long made-up name (it must fit on a Money row next to "Request" and "Mark paid"). */
+export const LONG_NAME = 'Christopher Vanderberg';
+/** Made-up players with a Venmo username saved. Everyone else (Jordan, Gray, Morgan, Reese, ...) has none. */
+export const WITH_VENMO = ['Avery', 'Harper', 'Indy', 'Kai', 'Lane'];
 const CAST = ['Avery', 'Blake', 'Casey', 'Drew', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jordan', 'Kai', 'Lane', 'Morgan'];
 
 export interface Seed {
@@ -145,7 +149,14 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await w.org.ok('PUT', '/api/admin/group', { organizerName: ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way' });
   // One made-up player with NO phone number saved, for Text all on the Money page's Remind sheet (it skips a person with no number).
   await w.org.ok('POST', '/api/admin/players', { name: NO_NUMBER });
+  // Zip 6 (Venmo request, Adjust credit): a long made-up name, and Venmo usernames for some players (the rest have none saved), so the
+  // preview shows both a "Venmo request" link and "no Venmo saved". All fake names.
+  await w.org.ok('POST', '/api/admin/players', { name: LONG_NAME, phone: '(313) 555-0199', venmo: `@${LONG_NAME.split(' ')[0].toLowerCase()}-fake` });
   let dash = await w.org.ok('GET', '/api/admin/dashboard');
+  for (const name of WITH_VENMO) {
+    const p = (dash.players as any[]).find((x) => x.name === name);
+    await w.org.ok('PUT', `/api/admin/players/${p.id}`, { name, phone: p.phone, isRegular: p.isRegular, isActive: p.isActive, canReceiveSubstituteInvites: p.canReceiveSubstituteInvites, usualDays: p.usualDays, venmo: `@${name.toLowerCase()}-fake` });
+  }
   w.groupKey = String(dash.group.privateLink).split('/g/')[1];
   for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
 
@@ -342,7 +353,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     return g;
   };
   const mixed = await upcomingExtra(20, 'Mixed payments');
-  for (const n of ['Lane', 'Morgan', 'Kai', 'Gray']) await join(n, mixed);
+  for (const n of ['Lane', 'Morgan', 'Kai', 'Gray', LONG_NAME]) await join(n, mixed);
   for (const n of ['Lane', 'Morgan']) await orgPays(n, mixed);
   const allPaid = await upcomingExtra(44, 'All paid');
   for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await join(n, allPaid);
@@ -352,8 +363,29 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   for (const n of ['Indy', 'Kai', 'Lane', 'Morgan', NO_NUMBER]) await join(n, chase);
   await orgPays('Indy', chase);
   summary.push('extra game "Owes, one no number" (Booked, 5 in): Indy paid; Kai, Lane and Morgan owe $14 with numbers; Reese owes $14 and has no number saved (Text all skips Reese)');
-  summary.push('extra game "Mixed payments" (Booked, 4 in): Lane and Morgan paid cash, Kai and Gray owe $14');
+  summary.push('extra game "Mixed payments" (Booked, 5 in): Lane and Morgan paid cash; Kai (Venmo saved), Gray (none) and Christopher Vanderberg (long name, Venmo saved) owe $14');
   summary.push('extra game "All paid" (Booked, 4 of 4 paid): stays in the Games list until finalized, then moves to Previous games');
+
+  // 13. A late-canceled game with the fee split ($11 each): 5 in, Lane and Morgan paid $14 cash (and get $3 back as credit), Kai (Venmo saved),
+  //     Jordan (no Venmo) and the long-named player owe $11, not $14. Nothing else in the world uses these three at that moment.
+  await w.org.ok('PUT', '/api/admin/late-fees', { on: true });
+  await w.org.ok('PUT', '/api/admin/late-fee-split', { on: true });
+  // A game at this exact time may already exist (the regular Tue/Thu slot), so try a few start times inside the 12 hours until one is free.
+  let split11: any = null;
+  for (const hoursAhead of [8, 7, 9, 6, 5, 4]) {
+    try {
+      split11 = await upcomingExtra(hoursAhead, 'Fee split $11');
+      break;
+    } catch (err) {
+      if (!/game_exists/.test(String(err))) throw err;
+    }
+  }
+  if (!split11) throw new Error('no free start time for the "Fee split $11" game');
+  for (const n of ['Kai', LONG_NAME, 'Jordan', 'Lane', 'Morgan']) await join(n, split11);
+  for (const n of ['Lane', 'Morgan']) await orgPays(n, split11);
+  await w.org.ok('POST', `/api/admin/sessions/${split11.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
+  summary.push('extra game "Fee split $11" (canceled late, fee not waived, 5 in): Kai, Christopher Vanderberg and Jordan each owe $11; Lane and Morgan paid $14 and got $3 back as credit');
+  summary.push('Venmo usernames saved for Avery, Harper, Indy, Kai, Lane, Christopher Vanderberg; none for Jordan, Gray, Morgan, Reese (they show "no Venmo saved")');
 
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
@@ -394,6 +426,8 @@ export const PREVIEW_SWITCHES_ON = [
   'late_fee_split_on',
   'money_rework_on',
   'instant_taps_on',
+  'adjust_credit_on',
+  'venmo_request_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

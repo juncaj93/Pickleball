@@ -167,6 +167,27 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched the "No Venmo?" note on`;
     case 'pay_note_off':
       return `${who} switched the "No Venmo?" note off`;
+    case 'credit_adjusted': {
+      const delta = typeof d.deltaCents === 'number' ? d.deltaCents : 0;
+      const after = typeof d.balanceAfterCents === 'number' ? `, ${formatPrice(d.balanceAfterCents)} now` : '';
+      return `${player}: credit ${delta < 0 ? '-' : '+'}${formatPrice(Math.abs(delta))}${after}. Adjusted by organizer${typeof d.reason === 'string' && d.reason ? `. Reason: ${d.reason}` : ''}`;
+    }
+    case 'adjust_credit_on':
+      return `${who} switched "Adjust credit" on`;
+    case 'adjust_credit_off':
+      return `${who} switched "Adjust credit" off`;
+    case 'venmo_request_on':
+      return `${who} switched "Venmo request" on`;
+    case 'venmo_request_off':
+      return `${who} switched "Venmo request" off`;
+    case 'motion_on':
+      return `${who} switched the player animations on`;
+    case 'motion_off':
+      return `${who} switched the player animations off`;
+    case 'motion_admin_on':
+      return `${who} switched the organizer animations on`;
+    case 'motion_admin_off':
+      return `${who} switched the organizer animations off`;
     case 'instant_taps_on':
       return `${who} switched "Instant taps" on`;
     case 'instant_taps_off':

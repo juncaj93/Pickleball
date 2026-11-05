@@ -212,6 +212,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
             endedReason: (e.endedReason as CreditEntryView['endedReason']) ?? null,
             reason: e.reason ?? null,
             playedCount: e.playedCount ?? null,
+            ...(e.reason === 'adjusted' ? { note: e.note ?? '' } : {}),
             lateFee: e.sessionId ? (feeClears.get(`${e.sessionId}|${e.kind === 'used' ? e.endedAt : e.createdAt}`) ?? null) : null,
           }),
         )
@@ -259,7 +260,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     me: me ? { id: me.id, name: me.display_name } : null,
     viewingAs: !!viewAsName,
     timeShift,
-    motion: motionFor(ctx),
+    motion: await motionFor(ctx, group.id),
     payAlways: await payAlwaysFor(ctx, group.id),
     payNote: await payNoteFor(ctx, group.id),
     playerFix1: await playerFix1For(ctx, group.id),

@@ -13,6 +13,9 @@ import { balanceOf, heldCents, isPlayed } from './todo';
 import '../../credit-admin.css';
 import { RollText } from '../../motion';
 import { PlayersListR3 } from './PlayersR3';
+import { AdjustCreditRow, AdjustCreditSheet } from './AdjustCredit';
+import { signedPrice } from '../../../shared/adjustCredit';
+import { formatTime, formatWeekdayShort } from '../../../shared/time';
 
 const ENDED_TEXT: Record<NonNullable<CreditEntryView['endedReason']>, string> = {
   undone: 'undone',
@@ -30,6 +33,8 @@ const DAYS = [
 export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const [editing, setEditing] = useState<AdminPlayer | 'new' | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
+  // "Adjust credit" (ADJUST_CREDIT): the sheet it opens from the player's gear sheet.
+  const [adjusting, setAdjusting] = useState<AdminPlayer | null>(null);
   const shown = viewing ? ctx.d.players.find((p) => p.id === viewing) ?? null : null;
   // Admin screens, round 2 (ADMIN_R2): no phone, days or Regular / Occasional on the list, and names the organizer hid are not listed.
   const r2 = ctx.d.adminR2 === true;
@@ -89,8 +94,23 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
         </>
       )}
       <Sheet open={!!editing} title={editing === 'new' ? 'Add a person' : `Edit ${editing?.name ?? ''}`} onClose={() => setEditing(null)}>
-        {editing && <PlayerForm ctx={ctx} player={editing === 'new' ? null : editing} onDone={() => setEditing(null)} />}
+        {editing && (
+          <PlayerForm
+            ctx={ctx}
+            player={editing === 'new' ? null : editing}
+            onDone={() => setEditing(null)}
+            onAdjust={
+              ctx.d.adjustCredit === true && editing !== 'new' && ctx.d.me?.id !== editing.id
+                ? () => {
+                    setAdjusting(editing);
+                    setEditing(null);
+                  }
+                : undefined
+            }
+          />
+        )}
       </Sheet>
+      {ctx.d.adjustCredit === true && <AdjustCreditSheet ctx={ctx} player={adjusting} onClose={() => setAdjusting(null)} />}
       <Sheet open={!!shown} title={shown?.name ?? ''} onClose={() => setViewing(null)}>
         {shown && <PlayerMoney ctx={ctx} player={shown} />}
       </Sheet>
@@ -199,12 +219,27 @@ function CreditSection({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
       </p>
       <CreditActions ctx={ctx} player={player} />
       <ul className="credit-history" aria-label="Credit history" data-credit-history>
-        {[...ledger.entries].reverse().map((e) => (
+        {[...ledger.entries].reverse().map((e) =>
+          e.reason === 'adjusted' ? (
+            <li key={e.id} className={`adj-entry${e.endedAt ? ' ended' : ''}`} data-credit-entry={e.kind} data-adjusted="true" data-ended={e.endedAt ? 'true' : undefined}>
+              <span className="adj-top">
+                <span>
+                  {player.name}: credit {signedPrice(e.kind === 'kept' ? e.cents : -e.cents)}
+                </span>
+                {e.balanceAfterCents !== undefined && <span className="adj-now">{formatPrice(e.balanceAfterCents)} now</span>}
+              </span>
+              <span className="adj-meta">
+                Adjusted by organizer, {formatWeekdayShort(e.at, tz)} {formatTime(e.at, tz)}
+              </span>
+              {e.note && <span className="adj-meta">Reason: {e.note}</span>}
+            </li>
+          ) : (
           <li key={e.id} className={e.endedAt ? 'ended' : undefined} data-credit-entry={e.kind} data-ended={e.endedAt ? 'true' : undefined}>
             <span className="credit-line">{line(e)}</span>
             {e.endedAt && e.endedReason && <span className="credit-why"> · {ENDED_TEXT[e.endedReason]}</span>}
           </li>
-        ))}
+          ),
+        )}
       </ul>
     </section>
   );
@@ -332,7 +367,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
   );
 }
 
-function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlayer | null; onDone: () => void }) {
+function PlayerForm({ ctx, player, onDone, onAdjust }: { ctx: AdminCtx; player: AdminPlayer | null; onDone: () => void; onAdjust?: () => void }) {
   const toast = useToast();
   const [name, setName] = useState(player?.name ?? '');
   const [phone, setPhone] = useState(player?.phone ? formatPhone(player.phone) : '');
@@ -473,6 +508,7 @@ function PlayerForm({ ctx, player, onDone }: { ctx: AdminCtx; player: AdminPlaye
       <button className="btn" type="submit" disabled={busy}>
         {busy ? 'Saving…' : 'Save'}
       </button>
+      {player && onAdjust && <AdjustCreditRow player={player} ctx={ctx} onOpen={onAdjust} />}
       {canHide && (
         <button type="button" className="btn secondary" data-hide-player disabled={busy} onClick={() => void hidePlayer()}>
           Hide player

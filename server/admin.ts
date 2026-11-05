@@ -1,6 +1,7 @@
 import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
-import { formatCents } from '../shared/money';
+import { formatCents, formatPrice } from '../shared/money';
+import { usableFor } from './creditActions';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
 import { MONEY_STATE, reopenBlockers, sqlText } from './finalize';
@@ -9,7 +10,10 @@ import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTime
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
-import { motionAdminFor } from './motion';
+import { motionAdminFor, motionForAll, setMotionForAll } from './motion';
+import { adjustCreditFor, adjustCreditForAll, setAdjustCreditForAll } from './adjustCredit';
+import { setVenmoRequestForAll, venmoRequestFor, venmoRequestForAll } from './venmoRequest';
+import { adjustReasonColumn, cleanReason, planAdjust, signedPrice } from '../shared/adjustCredit';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
 import { setPayAlwaysForAll, payAlwaysForAll } from './payAlways';
 import { adminV2For, adminV2ForAll, setAdminV2ForAll } from './adminV2';
@@ -51,8 +55,8 @@ import {
   visibleFrom,
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
-import { CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
+import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
+import { adjustCreditEntry, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -139,6 +143,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
               endedReason: e.endedReason as CreditEntryView['endedReason'],
               reason: e.reason ?? null,
               playedCount: e.playedCount ?? null,
+              ...(e.reason === 'adjusted' ? { note: e.note ?? '', balanceAfterCents: balanceAfterEntry(ledger, e.id) } : {}),
             }),
           ),
       };
@@ -232,7 +237,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     version,
     timeShift,
     timeShiftForAll: await timeShiftForAll(ctx.db, group.id),
-    motion: motionAdminFor(ctx),
+    motion: await motionAdminFor(ctx, group.id),
+    motionPlayersForAll: await motionForAll(ctx, group.id, 'player'),
+    motionAdminForAll: await motionForAll(ctx, group.id, 'admin'),
     payAlwaysForAll: await payAlwaysForAll(ctx.db, group.id),
     adminV2: await adminV2For(ctx, group.id),
     payNoteForAll: await payNoteForAll(ctx.db, group.id),
@@ -253,6 +260,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     moneyReworkForAll: await moneyReworkForAll(ctx.db, group.id),
     ...((await instantTapsFor(ctx, group.id)) ? { instantTaps: true } : {}),
     instantTapsForAll: await instantTapsForAll(ctx.db, group.id),
+    ...((await adjustCreditFor(ctx, group.id)) ? { adjustCredit: true } : {}),
+    adjustCreditForAll: await adjustCreditForAll(ctx.db, group.id),
+    ...((await venmoRequestFor(ctx, group.id)) ? { venmoRequest: true } : {}),
+    venmoRequestForAll: await venmoRequestForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2117,4 +2128,68 @@ export async function hideFromPlayers(ctx: Ctx, body: Record<string, unknown>) {
   await setHiddenFromPlayers(ctx.db, group.id, session.id, hidden, ctx.nowIso);
   await audit(ctx.db, group.id, session.id, hidden ? 'session_hidden_from_players' : 'session_shown_to_players', {}, ctx.nowIso);
   return { ok: true, changed: true, hidden };
+}
+
+/** PUT /api/admin/adjust-credit-switch { on }: Settings > Feature switches > "Adjust credit". Shows or hides the row on the Players sheet; moves no credit. */
+export async function setAdjustCreditSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setAdjustCreditForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'adjust_credit_on' : 'adjust_credit_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/venmo-request-switch { on }: Settings > Feature switches > "Venmo request". Shows or hides links; sends and charges nothing. */
+export async function setVenmoRequestSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setVenmoRequestForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'venmo_request_on' : 'venmo_request_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/motion-switch { which: 'player' | 'admin', on }: Settings > Feature switches > the two animation rows. Visual only. */
+export async function setMotionSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const which = v.oneOf(body.which, 'which', ['player', 'admin'] as const);
+  const on = v.bool(body.on, 'on');
+  await setMotionForAll(ctx, group.id, which, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, `${which === 'player' ? 'motion' : 'motion_admin'}_${on ? 'on' : 'off'}`, {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * POST /api/admin/players/:id/credit-adjust { direction, cents, reason, seen }: add or remove credit on one player's pot by hand
+ * ("Adjust credit", ADJUST_CREDIT). Uses the existing credit ledger, whole dollars, a required reason, never below $0.
+ * `seen` is the pot the organizer's sheet showed: the entry only goes in while the pot is still exactly that, so a double tap or a
+ * stale screen adds nothing.
+ */
+export async function adjustPlayerCredit(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  if (!(await adjustCreditFor(ctx, group.id))) throw new HttpError(404, 'not_found', 'Adjust credit is not switched on.');
+  const playerId = v.id(ctx.params.id, 'player');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(playerId, group.id).first<{ display_name: string }>();
+  if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
+  if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'You pay the court, so you have no credit to adjust.');
+  const direction = v.oneOf(body.direction, 'direction', ['add', 'remove'] as const);
+  const cents = typeof body.cents === 'number' && Number.isInteger(body.cents) ? body.cents : null;
+  const seen = typeof body.seen === 'number' && Number.isInteger(body.seen) && body.seen >= 0 ? body.seen : null;
+  if (seen === null) throw new HttpError(400, 'bad_request', 'Look at their credit again, then try once more.');
+  const { potCents, reservedCents } = await usableFor(ctx, group, playerId);
+  if (potCents !== seen) throw new HttpError(409, 'credit_changed', 'Their credit just changed. Look again.');
+  const plan = planAdjust({ direction, cents, reason: cleanReason(body.reason), potCents, reservedCents, name: p.display_name });
+  if (!plan.ok) throw new HttpError(400, 'bad_adjustment', plan.error);
+  const note = cleanReason(body.reason);
+  const made = await adjustCreditEntry(ctx.db, {
+    groupId: group.id,
+    playerId,
+    kind: direction === 'add' ? 'kept' : 'used',
+    cents: cents as number,
+    seenCents: seen,
+    reasonColumn: adjustReasonColumn(note),
+    nowIso: ctx.nowIso,
+  });
+  if (!made.done) throw new HttpError(409, 'credit_changed', 'Their credit just changed. Look again.');
+  await audit(ctx.db, group.id, null, 'credit_adjusted', { player: p.display_name, playerId, deltaCents: plan.deltaCents, balanceAfterCents: plan.afterCents, reason: note, ledgerId: made.id }, ctx.nowIso);
+  return { ok: true, balanceCents: plan.afterCents, deltaCents: plan.deltaCents, text: `${p.display_name}: credit ${signedPrice(plan.deltaCents)}, ${formatPrice(plan.afterCents)} now` };
 }

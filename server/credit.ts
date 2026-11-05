@@ -6,6 +6,7 @@
 // creditActions.ts, finalize.ts); this file only reads and writes.
 
 import { type CreditKind, type CreditReason, type CreditRow, usedBySeat } from '../shared/credit';
+import { adjustNoteOf } from '../shared/adjustCredit';
 import { newId } from './crypto';
 import type { D1Database, D1PreparedStatement } from './db';
 import { HttpError } from './http';
@@ -61,8 +62,10 @@ export async function loadLedger(db: D1Database, groupId: string): Promise<Ledge
     createdAt: r.created_at,
     endedAt: r.ended_at,
     endedReason: r.ended_reason,
-    reason: (r.reason as CreditReason | null) ?? null,
+    // An adjustment keeps its why in the same column ("adjusted:<why>"); everywhere else it is plain reason 'adjusted' plus a note.
+    reason: adjustNoteOf(r.reason) !== null ? 'adjusted' : ((r.reason as CreditReason | null) ?? null),
     playedCount: r.played_count,
+    ...(adjustNoteOf(r.reason) !== null ? { note: adjustNoteOf(r.reason) as string } : {}),
   }));
 }
 
@@ -674,6 +677,29 @@ export async function refundCredit(
       : []),
   ]);
   return out[0].meta.changes === 1;
+}
+
+/**
+ * "Adjust credit" (ADJUST_CREDIT): the organizer adds ('kept') or removes ('used') credit on a player's pot by hand. One guarded insert,
+ * worked out inside the database: it only goes in while the pot is still exactly `seenCents` (the screen the organizer looked at; a second
+ * tap, a retry or another phone finds the pot changed and adds nothing), and a Remove only while the amount is within the pot minus what
+ * a pending cash-out request holds, so the pot can never go below $0. No game is attached (session_id empty); `reasonColumn` is
+ * "adjusted:<why>" (shared/adjustCredit.ts). Returns whether the entry went in.
+ */
+export async function adjustCreditEntry(
+  db: D1Database,
+  args: { groupId: string; playerId: string; kind: 'kept' | 'used'; cents: number; seenCents: number; reasonColumn: string; nowIso: string },
+): Promise<{ done: boolean; id: string }> {
+  const id = newId();
+  const out = await db
+    .prepare(
+      `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, five_cents, created_at, reason)
+       SELECT ?1, ?2, ?3, ?4, ?5, 0, ?6, ?7
+       WHERE MAX(0, ${POT('?3')}) = ?8 AND (?4 = 'kept' OR ?5 <= MAX(0, ${POT('?3')} - ${RESERVED('?3')}))`,
+    )
+    .bind(id, args.groupId, args.playerId, args.kind, args.cents, args.nowIso, args.reasonColumn, args.seenCents)
+    .run();
+  return { done: out.meta.changes === 1, id };
 }
 
 /**

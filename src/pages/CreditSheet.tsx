@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { motionOn, RollText, useMotion } from '../motion';
 import type { CreditView } from '../../shared/api';
 import { creditChanges } from '../../shared/credit';
+import { adjustedPlayerLine, latestAdjustment } from '../../shared/adjustCredit';
 import { formatPrice, parseDollars } from '../../shared/money';
 import { api, ApiError, isDemo } from '../lib';
 import { settleHolds } from '../hold';
@@ -89,7 +90,7 @@ export function CreditChip({ credit, onOpen, startFrom, enter, leave }: { credit
  * is reserved until the organizer answers), and one gray line. Opening Venmo
  * is the organizer's side; nothing here moves money by itself.
  */
-export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose, onChanged }: { open: boolean; credit: CreditView; tz: string; organizerName?: string; onClose: () => void; onChanged: () => Promise<void> }) {
+export function CreditSheet({ open, credit, tz, organizerName = 'Alex', nowIso, onClose, onChanged }: { open: boolean; credit: CreditView; tz: string; organizerName?: string; /** The server's now, for "recent" (an adjustment note shows for 14 days). */ nowIso?: string; onClose: () => void; onChanged: () => Promise<void> }) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [amount, setAmount] = useState('');
@@ -105,6 +106,8 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
   }, [open]);
   // Every change to their credit in plain words, newest first, returns included ("Oct 31: $14 returned from Nov 5 (you dropped)").
   const changes = creditChanges(credit.history, tz, organizerName, SHOW_CHANGES);
+  // The organizer's latest hand adjustment (a recent one), in plain words. Nothing extra shows when there is none.
+  const adjustment = latestAdjustment(credit.history, nowIso ? Date.parse(nowIso) : Date.now());
 
   async function run(fn: () => Promise<unknown>, done: string) {
     if (working.current) return;
@@ -148,6 +151,12 @@ export function CreditSheet({ open, credit, tz, organizerName = 'Alex', onClose,
             <RollText text={`${formatPrice(credit.balanceCents)} credit`} />
           </strong>
         </p>
+        {adjustment && (
+          <p className="credit-adjusted" data-adjust-note>
+            <b>{adjustedPlayerLine(adjustment.deltaCents)}</b>
+            {adjustment.note && <span>{adjustment.note}</span>}
+          </p>
+        )}
         {credit.pending ? (
           <div className="credit-pending" data-refund-pending>
             <span>

@@ -1,0 +1,161 @@
+/* "Venmo request" (VENMO_REQUEST): the blue link, the Home card per game, and the row label. Uses the tokens in styles.css only.
+   Blue is for these links (like the site's other blue links); purple stays for texting. */
+
+.vr-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 12px;
+  border: 1.5px solid var(--info-edge);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--info-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+}
+/* The link looks 36 px tall; the area that answers a tap is 44 px. */
+.vr-link::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+/* On a Money row, next to Mark paid: 13 px text, 34 px high ("Request ↗"). */
+.vr-link.vr-short {
+  height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 11px;
+}
+.vr-link.vr-short::before {
+  inset: -5px 0;
+}
+
+/* Remind sheet: the link and the purple Text button sit together. */
+.vr-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+/* Home: one card per game with people who owe. */
+.vr-cards {
+  gap: 10px;
+}
+.vr-card {
+  padding: 12px;
+}
+.vr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.vr-title-wrap {
+  min-width: 0;
+}
+.vr-title {
+  margin: 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+.vr-sub {
+  margin: 2px 0 0;
+}
+.vr-remind {
+  appearance: none;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid var(--tok-text-fill, #6a56a6);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--tok-text-fill, #6a56a6);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.vr-remind::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
+}
+.vr-rows {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.vr-rows > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 48px;
+  border-bottom: 1px solid var(--line);
+}
+.vr-rows > li:last-child {
+  border-bottom: 0;
+}
+.vr-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vr-none {
+  flex: none;
+  text-align: right;
+}
+
+/* Narrow phones (320 px): a name that would be squeezed to a few letters next to its buttons gets the full line, and the buttons drop below it. */
+.vr-pair {
+  margin-left: auto;
+}
+.mrw-remind-list > li:has(.vr-link) {
+  flex-wrap: wrap;
+}
+.mrw-remind-list > li:has(.vr-link) > .mrw-remind-who {
+  flex: 1 1 128px;
+}
+.mrw-remind-list > li:has(.vr-link) .mrw-remind-who .small {
+  white-space: nowrap;
+}
+.mv2-remind-list > li:has(.vr-link) {
+  flex-wrap: wrap;
+}
+.mrw-row.has-request .mrw-line {
+  flex-wrap: wrap;
+  row-gap: 0;
+}
+.mrw-row.has-request .mrw-who {
+  flex: 1 1 96px;
+}
+.mrw-acts {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
+  margin-left: auto;
+}
+
+/* Money (320 px and under, any game): "$28 owed" never splits in two, and the time of a same-day game sits on its own line above "2 of 5 paid". */
+.mrw-owed {
+  white-space: nowrap;
+}
+@media (max-width: 340px) {
+  .mrw-title > .mrw-time {
+    display: block;
+    color: var(--ink-2);
+  }
+}
