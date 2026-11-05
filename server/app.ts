@@ -126,6 +126,7 @@ route('PUT', '/api/admin/money-rework', admin.setMoneyRework);
 route('PUT', '/api/admin/instant-taps', admin.setInstantTaps);
 route('PUT', '/api/admin/adjust-credit-switch', admin.setAdjustCreditSwitch);
 route('PUT', '/api/admin/venmo-request-switch', admin.setVenmoRequestSwitch);
+route('PUT', '/api/admin/home-collapse-switch', admin.setHomeCollapseSwitch);
 route('PUT', '/api/admin/motion-switch', admin.setMotionSwitch);
 route('POST', '/api/admin/players/:id/credit-adjust', admin.adjustPlayerCredit);
 route('POST', '/api/admin/sessions/:id/hide-from-list', admin.hideFromList);

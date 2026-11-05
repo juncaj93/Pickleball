@@ -172,6 +172,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // "Adjust credit" and "Venmo request", private test switches for this phone (/admin?adjustcredit=on, /admin?venmorequest=on).
   if (adjustCreditTest()) headers['X-Adjust-Credit'] = 'on';
   if (venmoRequestTest()) headers['X-Venmo-Request'] = 'on';
+  // "Home collapse", private test switch for this phone (/?homecollapse=on, see server/homeCollapse.ts).
+  if (homeCollapseTest()) headers['X-Home-Collapse'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -633,6 +635,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('adjustcredit');
   if (want === 'on') storageSet(ADJUST_CREDIT_KEY, 'on');
   else if (want === 'off') storageRemove(ADJUST_CREDIT_KEY);
+}
+
+/**
+ * "Home collapse" on this phone only, before it is on for everyone: open the site once with ?homecollapse=on
+ * (?homecollapse=off turns it back off). Remembered in this browser; the player Home layout only.
+ */
+const HOME_COLLAPSE_KEY = 'pb_home_collapse';
+export function homeCollapseTest(): boolean {
+  return storageGet(HOME_COLLAPSE_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('homecollapse');
+  if (want === 'on') storageSet(HOME_COLLAPSE_KEY, 'on');
+  else if (want === 'off') storageRemove(HOME_COLLAPSE_KEY);
 }
 
 /**

@@ -2348,3 +2348,21 @@ Switch descriptions are their rows in `docs/FEATURE_SWITCHES.md`. Built on a Thu
   no button without a username, switch), `tests/motion-settings.test.ts` (unchanged until touched, rows, stamp). Seed test updated for the new fake games.
 - Browser: `e2e/zip6.cjs` (Settings rows, the sheet, the three Venmo placements, 390 / 360 / 320 px, light and dark) and `e2e/zip6-off.cjs` (today's main and this
   branch side by side with both switches off: every screen, sheet and tap identical apart from the four new Settings rows; needs `MAIN_DIR`, not in `npm run test:e2e`).
+
+### Added the same day (Alex): canceled game box, and Home collapse (`HOME_COLLAPSE`)
+- **Canceled game under LATER (no switch, visual only):** a canceled game in the LATER list was drawn as a full box with sharp corners (the rule that gives
+  a canceled card its thin border, `.schedule > .sched.off` in `src/player-cards.css`, also hit the flat LATER rows). Now `.schedule > .sched.tier-later.off`
+  is a flat row like its neighbors: no box, the same thin line, the same margins. The label's color and wording are untouched. Only LATER rows had the box:
+  canceled THIS WEEK / NEXT WEEK games are cards (rounded) on purpose, and the admin Home and Money canceled rows carry no such box (checked). Nothing canceled
+  = no rule matches = every screen looks as before (`e2e/zip6.cjs` checks the computed style and margins at 390 and 320 px, light and dark).
+- **Home collapse (own switch `HOME_COLLAPSE`, ships OFF, `/?homecollapse=on`, Settings row, ON in the preview):** see its row in `docs/FEATURE_SWITCHES.md`.
+  `src/pages/PlayerHome.tsx` (`collapse`, `laterGames`, `laterShown`): the rows are the games the site calls THIS WEEK or NEXT WEEK (`weekTier`, untouched);
+  later games are drawn only while the one button is open. With the switch off the old six-row list and "More sessions (N)" are exactly as before (`e2e/zip6-off.cjs`).
+
+### Independent review (a fresh reviewer who did not write the code)
+Found and fixed: (1) month Totals "Credits owed" moved after a hand adjustment (a Remove ate the oldest game's credit in the month split): hand adjustments
+are now left out of that split in both directions, test added (an Add then a Remove changes nothing); (2) a player whose credit was taken to $0 (no chip, no
+pay card) was never shown the note: Home now shows "Credit adjusted by organizer: -$5" and the reason (14 days) whenever there is no pay card to carry it;
+(3) the Adjust sheet kept using the old balance after a "Their credit just changed" answer: it now follows the screen and reloads. Accepted and said: the 320 px
+wrapping fixes for "$28 owed" and the same-day time on a Money card apply with the switches off too (CSS only, narrow phones only); the player change-stamp gained
+two always-present segments (`motion`, `hc`), so every open player screen reloads once after the deploy.

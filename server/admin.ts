@@ -12,6 +12,7 @@ import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
 import { motionAdminFor, motionForAll, setMotionForAll } from './motion';
 import { adjustCreditFor, adjustCreditForAll, setAdjustCreditForAll } from './adjustCredit';
+import { homeCollapseForAll, setHomeCollapseForAll } from './homeCollapse';
 import { setVenmoRequestForAll, venmoRequestFor, venmoRequestForAll } from './venmoRequest';
 import { adjustReasonColumn, cleanReason, planAdjust, signedPrice } from '../shared/adjustCredit';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
@@ -264,6 +265,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     adjustCreditForAll: await adjustCreditForAll(ctx.db, group.id),
     ...((await venmoRequestFor(ctx, group.id)) ? { venmoRequest: true } : {}),
     venmoRequestForAll: await venmoRequestForAll(ctx.db, group.id),
+    homeCollapseForAll: await homeCollapseForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2192,4 +2194,13 @@ export async function adjustPlayerCredit(ctx: Ctx, body: Record<string, unknown>
   if (!made.done) throw new HttpError(409, 'credit_changed', 'Their credit just changed. Look again.');
   await audit(ctx.db, group.id, null, 'credit_adjusted', { player: p.display_name, playerId, deltaCents: plan.deltaCents, balanceAfterCents: plan.afterCents, reason: note, ledgerId: made.id }, ctx.nowIso);
   return { ok: true, balanceCents: plan.afterCents, deltaCents: plan.deltaCents, text: `${p.display_name}: credit ${signedPrice(plan.deltaCents)}, ${formatPrice(plan.afterCents)} now` };
+}
+
+/** PUT /api/admin/home-collapse-switch { on }: Settings > Feature switches > "Home collapse". Player Home layout only; moves nothing. */
+export async function setHomeCollapseSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setHomeCollapseForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'home_collapse_on' : 'home_collapse_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }

@@ -43,8 +43,10 @@ function AdjustForm({ ctx, player, onClose }: { ctx: AdminCtx; player: AdminPlay
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const { busy, run } = useAction(ctx);
-  // The pot as this sheet was drawn: the server only saves while the pot is still exactly this.
+  // The pot as this sheet draws it right now: the server only saves while the pot is still exactly this. It follows the screen, so after a
+  // "Their credit just changed" answer (which reloads the screen) the next tap is built on the new credit.
   const seen = useRef(pot);
+  seen.current = pot;
   const cents = amount.trim() === '' ? null : parseDollars(amount);
   const typed = amount.trim() !== '';
   // The amount's own mistakes (a dummy reason keeps the reason out of it); the reason is only checked for the Save button.
@@ -60,6 +62,7 @@ function AdjustForm({ ctx, player, onClose }: { ctx: AdminCtx; player: AdminPlay
       { key: `adjust:${player.id}`, what: 'Adjust credit', press: true },
     );
     if (done) onClose();
+    else void ctx.reload();
   }
   return (
     <div className="stack adj-sheet" data-adjust-sheet>

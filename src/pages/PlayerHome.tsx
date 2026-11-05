@@ -234,6 +234,8 @@ export function PlayerHome({
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  // "Home collapse" (HOME_COLLAPSE): the later games' one button. Closed on every page load, never remembered.
+  const [laterOpen, setLaterOpen] = useState(false);
   const [creditOpen, setCreditOpen] = useState(false);
   // The "Want in?" answer ("You're in" + Done) lives here, so the game cards below can refresh at once.
   const [answered, setAnswered] = useState<{ sessionId: string; text: string; startsAt: string; endsAt: string } | null>(null);
@@ -437,7 +439,18 @@ export function PlayerHome({
   usePullToRefresh({ enabled: motion && canMove() && !!g && !choosing, onRefresh: load.quiet, ball: ptrBall, shift: mainRef });
   const mineOnly = filter === 'mine';
   const filtered = view ? (mineOnly ? view.sessions.filter(isMineGame) : view.sessions) : [];
-  const shownSessions = showAll || focusIndex >= SHOW_FIRST ? filtered : filtered.slice(0, SHOW_FIRST);
+  // "Home collapse" (HOME_COLLAPSE): THIS WEEK and NEXT WEEK as they are; every later game behind one button. A game opened from a shared
+  // link that is a later game opens the fold so the link still lands on it.
+  const recentAdjustment = view && g ? latestAdjustment(view.credit.history, Date.parse(g.now)) : null;
+  const collapse = g?.homeCollapse === true;
+  const isLater = (s: PlayerSessionView) => weekTier(s.startsAt, Date.parse(g!.now), g!.group.timezone) === 'later';
+  const laterGames = collapse && g ? filtered.filter(isLater) : [];
+  const laterShown = laterOpen || (focusIndex >= 0 && laterGames.some((s) => s.id === focusId));
+  const shownSessions = collapse
+    ? filtered.filter((s) => !isLater(s) || laterShown)
+    : showAll || focusIndex >= SHOW_FIRST
+      ? filtered
+      : filtered.slice(0, SHOW_FIRST);
   const rows = useFadeOut(shownSessions);
   useEffect(() => {
     if (!g || choosing || focusIndex < 0 || scrolled.current) return;
@@ -545,11 +558,19 @@ export function PlayerHome({
               onShowAll={() => {
                 // Can't make it on a game further down than the list shows: show it, then its drop question opens.
                 setShowAll(true);
+                setLaterOpen(true);
                 setFilter('all');
               }}
             />
             <FeeNotices g={view!} />
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
+            {/* The organizer's hand adjustment to this player's credit (recent ones): always told, even with no pay card and no credit chip (credit taken to $0). */}
+            {view!.payDue.length === 0 && recentAdjustment && (
+              <p className="credit-adjusted" data-adjust-note data-adjust-home>
+                <b>{adjustedPlayerLine(recentAdjustment.deltaCents)}</b>
+                {recentAdjustment.note && <span>{recentAdjustment.note}</span>}
+              </p>
+            )}
             {answered ? (
               <section className="card stack suggest" aria-label="Your answer">
                 <h2>{answered.text}</h2>
@@ -609,11 +630,27 @@ export function PlayerHome({
                 );
               })}
             </div>
-            {filtered.length > SHOW_FIRST && (
-              <button className="btn ghost block" onClick={() => setShowAll((v) => !v)}>
-                {showAll ? 'Show fewer' : `More sessions (${filtered.length - SHOW_FIRST})`}
-              </button>
-            )}
+            {collapse
+              ? laterGames.length > 0 && (
+                  <button
+                    className="btn ghost block"
+                    data-later-toggle
+                    aria-expanded={laterShown}
+                    onClick={(e) => {
+                      const btn = e.currentTarget;
+                      setLaterOpen(!laterShown);
+                      // Folding a long list leaves the button where the list was: bring it back into view.
+                      if (laterShown) requestAnimationFrame(() => btn.scrollIntoView({ block: 'nearest' }));
+                    }}
+                  >
+                    {laterShown ? 'Show fewer' : 'More sessions'}
+                  </button>
+                )
+              : filtered.length > SHOW_FIRST && (
+                  <button className="btn ghost block" onClick={() => setShowAll((v) => !v)}>
+                    {showAll ? 'Show fewer' : `More sessions (${filtered.length - SHOW_FIRST})`}
+                  </button>
+                )}
             {/* The end of the page: just a thin line and a little space. */}
             <div className="page-end" aria-hidden="true" />
           </>

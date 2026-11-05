@@ -96,6 +96,10 @@ ADJUST_CREDIT = "on"
 # with /admin?venmorequest=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Organizer screens
 # only; it only shows links (nothing is sent, charged or saved). Needs a deploy.
 VENMO_REQUEST = "on"
+# "Home collapse" (player Home: only THIS WEEK and NEXT WEEK show; every later game sits behind one "More sessions" button, collapsed on each load).
+# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Home collapse" (off at ship = nobody), plus a phone opened once with
+# /?homecollapse=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Player screens, display only. Needs a deploy.
+HOME_COLLAPSE = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -123,6 +127,7 @@ MONEY_REWORK = "on"
 INSTANT_TAPS = "on"
 ADJUST_CREDIT = "on"
 VENMO_REQUEST = "on"
+HOME_COLLAPSE = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

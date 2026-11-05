@@ -153,6 +153,12 @@
   box-shadow: none;
   border: 1px solid var(--pc-line);
 }
+/* A canceled game in the LATER list is a flat row like its neighbors (thin line under it, no box). The rule above boxes it for THIS WEEK and
+   NEXT WEEK cards, which stay cards. Label color and wording are untouched. */
+.schedule > .sched.tier-later.off {
+  border: 0;
+  border-bottom: 1px solid var(--pc-line);
+}
 .schedule > .sched.highlight {
   box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc-green-line) 22%, transparent);
 }

@@ -261,6 +261,25 @@ describe('Adjust credit: credit math everywhere else after an adjustment', () =>
     // The adjustment itself is still there, once, untouched.
     expect(ledgerRows(w, 'Blair').filter((r) => (r.reason ?? '').startsWith('adjusted:'))).toHaveLength(1);
   });
+  it('M3b the month Totals "Credits owed" does not move when credit is added or removed by hand (a hand adjustment belongs to no game or month)', async () => {
+    const w = await world();
+    const s = await firstGame(w);
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/court-status`, { status: 'booked' });
+    const names = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie'];
+    for (const n of names) await (await playerPhone(w, n)).call('POST', `/api/sessions/${s.id}/join`, {});
+    for (const n of names) await w.organizer.call('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: w.byName[n], paid: true });
+    w.app.now = Date.parse(s.endsAt) + HOUR;
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/finalize`, { everyone: true });
+    const month = s.startsAt.slice(0, 7);
+    const owed = async () => (await w.organizer.call('GET', `/api/admin/money?month=${month}`, undefined, on)).data.creditsOwedCents;
+    const before = await owed();
+    expect(before).toBe(1500); // 5 players got $3 back
+    expect((await adjust(w, 'Blair', body('add', 500, 300))).status).toBe(200);
+    expect(await owed()).toBe(before);
+    expect((await adjust(w, 'Blair', body('remove', 500, 800))).status).toBe(200);
+    expect(await owed()).toBe(before);
+    expect(await potOf(w, 'Blair')).toBe(300);
+  });
   it('M4 a pending cash-out request holds its credit: Remove cannot take it, Add works, and the cash-out amount is still payable', async () => {
     const w = await world();
     await adjust(w, 'Blair', body('add', 1400, 0));

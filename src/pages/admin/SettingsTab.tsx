@@ -461,7 +461,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -469,6 +469,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <HomeCollapseRow ctx={ctx} auto={auto} />
               <AdjustCreditRow ctx={ctx} auto={auto} />
               <VenmoRequestRow ctx={ctx} auto={auto} />
               <InstantTapsRow ctx={ctx} auto={auto} />
@@ -1277,6 +1278,28 @@ function AdjustCreditRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 
 /**
+ * "Home collapse" (HOME_COLLAPSE, server/homeCollapse.ts): the player Home shows only this week and next week; every later game sits behind
+ * one "More sessions" button. Off: only a phone opened with /?homecollapse=on. Saves itself, no deploy. Display only.
+ */
+function HomeCollapseRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const { on, flip } = useFlip(!!ctx.d.homeCollapseForAll, ctx, auto, 'homeCollapseAll', '/api/admin/home-collapse-switch', 'Home collapse', true);
+  return (
+    <div className="set-row-wrap" data-row="homeCollapseAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Home collapse <SaveMark state={auto.rows.homeCollapseAll} />
+          </span>
+          <span className="set-hint">Players see this and next week; later games fold</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} data-home-collapse-all onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows.homeCollapseAll} />
+    </div>
+  );
+}
+
+/**
  * "Venmo request" (VENMO_REQUEST, server/venmoRequest.ts): a blue "Venmo request" link per person who owes, only where a Venmo username is
  * saved. Off: only a phone opened with /admin?venmorequest=on. Saves itself, no deploy. Only shows links.
  */
@@ -1376,6 +1399,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <HomeCollapseRow ctx={ctx} auto={auto} />
       <AdjustCreditRow ctx={ctx} auto={auto} />
       <VenmoRequestRow ctx={ctx} auto={auto} />
       <InstantTapsRow ctx={ctx} auto={auto} />

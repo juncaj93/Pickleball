@@ -428,6 +428,7 @@ export const PREVIEW_SWITCHES_ON = [
   'instant_taps_on',
   'adjust_credit_on',
   'venmo_request_on',
+  'home_collapse_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

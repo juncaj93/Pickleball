@@ -68,7 +68,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   // Credit that came back from games, split by the month of the game it came from (the oldest credit is spent
   // first). The cash pairs (reason 'cash') net to nothing in the pot and are left out.
   const ledger = (await loadLedger(ctx.db, group.id)).filter((e) => e.playerId !== organizerId);
-  const keptLeft = keptRemaining(ledger.filter((e) => e.reason !== 'cash'));
+  // A hand adjustment (Adjust credit) belongs to no game, so no month's credit: it is left out of this split in both directions.
+  const keptLeft = keptRemaining(ledger.filter((e) => e.reason !== 'cash' && e.reason !== 'adjusted'));
   const owedBySession = new Map<string, number>();
   for (const e of ledger) {
     if (e.kind !== 'kept' || !e.sessionId || e.endedAt || e.reason === 'cash') continue;

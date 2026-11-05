@@ -2,7 +2,7 @@
  * this branch side by side on two copies of the same fake world, with the same pinned clock, and compares the rendered HTML of every
  * screen, player and organizer, light and dark, before and after the same taps (including the Players gear sheet, the Remind sheet and a
  * player's credit sheet). The only differences allowed are the four new rows in Settings > Feature switches (Adjust credit, Venmo request,
- * the two Animations rows).
+ * the two Animations rows, Home collapse).
  *
  *   MAIN_DIR=/path/to/main-worktree node e2e/zip6-off.cjs
  *
@@ -48,7 +48,7 @@ function diffAt(a, b) {
 async function site(dir, port, dbFile) {
   const server = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
     cwd: dir,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip6-off-setup-token-0123456789', DEV_CLOCK: '1', INSTANT_TAPS: '', ADJUST_CREDIT: '', VENMO_REQUEST: '', MOTION: '', MOTION_ADMIN: '' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip6-off-setup-token-0123456789', DEV_CLOCK: '1', INSTANT_TAPS: '', ADJUST_CREDIT: '', VENMO_REQUEST: '', HOME_COLLAPSE: '', MOTION: '', MOTION_ADMIN: '' },
     stdio: 'ignore',
     detached: true,
   });
@@ -162,9 +162,9 @@ async function main() {
     for (const t of ['Home', 'Players', 'Money', 'History']) await same(`organizer ${t}, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: t });
     // Settings: the new row (and its name in the note) is the one thing that may differ.
     await same(
-      `organizer Settings, ${scheme}: identical apart from the four new switch rows`,
+      `organizer Settings, ${scheme}: identical apart from the five new switch rows`,
       { who: 'admin', url: '/admin', scheme, tabName: 'Settings' },
-      (h) => h.replace(/<div class="set-row-wrap" data-row="(adjustCreditAll|venmoRequestAll|motionPlayersAll|motionAdminAll)">.*?<\/label><\/div>/gs, ''),
+      (h) => h.replace(/<div class="set-row-wrap" data-row="(adjustCreditAll|venmoRequestAll|homeCollapseAll|motionPlayersAll|motionAdminAll)">.*?<\/label><\/div>/gs, ''),
     );
   }
   // After taps (each on its own copy, so both sites start the same): the screen a tap leaves behind is the same too.

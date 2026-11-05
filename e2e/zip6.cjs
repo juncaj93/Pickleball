@@ -74,6 +74,7 @@ async function main() {
   // The preview has both new switches on for everyone; for these tests they start OFF so the private links are what turns them on.
   await put(areq, '/api/admin/adjust-credit-switch', { on: false });
   await put(areq, '/api/admin/venmo-request-switch', { on: false });
+  await put(areq, '/api/admin/home-collapse-switch', { on: false });
   const d0 = await dash();
   assert(d0.adjustCredit === undefined && d0.venmoRequest === undefined, 'both new switches start off');
   const byNote = (d, note) => d.sessions.find((s) => s.note === note);
@@ -109,12 +110,13 @@ async function main() {
     await page.waitForTimeout(600);
     return { ctx, page, errors };
   }
-  async function openPlayer(name, { width = 390, scheme = 'light', height = 800 } = {}) {
+  async function openPlayer(name, { width = 390, scheme = 'light', height = 800, query = '', filter = null } = {}) {
     const ctx = await browser.newContext(phone(width, scheme, height));
     await ctx.addInitScript(shift, NOW_MS - Date.now());
+    if (filter) await ctx.addInitScript((f) => localStorage.setItem('pb_games_filter', f), filter);
     await post(ctx.request, '/api/me', { playerId: nameId(d0, name) }, { 'X-Group-Key': String(d0.group.privateLink).split('/g/')[1] }).catch(() => {});
     const page = await ctx.newPage();
-    await page.goto(BASE + String(d0.group.privateLink).replace(/^https?:\/\/[^/]+/, ''));
+    await page.goto(BASE + String(d0.group.privateLink).replace(/^https?:\/\/[^/]+/, '') + query);
     await page.waitForTimeout(800);
     const picker = page.locator('button', { hasText: new RegExp(`^${name}$`) });
     if (await picker.count()) await picker.first().click().catch(() => {});
@@ -496,6 +498,146 @@ async function main() {
     }
     console.log(found.map((f) => `        ${f}`).join('\n'));
     assert(found.length === (Number(process.env.E2E_WRAPS) || 0), `${found.length} short labels wrap`);
+  });
+
+  // ---------------------------------------------------------------- canceled game in LATER: no box
+  const flatRow = (page) =>
+    page.evaluate(() => {
+      const css = (el) => {
+        const c = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return { top: c.borderTopWidth, right: c.borderRightWidth, bottom: c.borderBottomWidth, left: c.borderLeftWidth, bottomStyle: c.borderBottomStyle, radius: c.borderTopLeftRadius, shadow: c.boxShadow, l: Math.round(r.left), r: Math.round(r.right), w: Math.round(r.width), h: Math.round(r.height), color: getComputedStyle(el.querySelector('.st-canceled') || el).color, text: (el.querySelector('.st-canceled') || el).textContent };
+      };
+      const off = document.querySelector('.schedule > .sched.tier-later.off');
+      const sib = [...document.querySelectorAll('.schedule > .sched.tier-later:not(.off)')][0];
+      return { off: off ? css(off) : null, sib: sib ? css(sib) : null };
+    });
+  for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light'], [320, 'dark']]) {
+    await check(`a canceled game under LATER is a flat row like the others (${width} px, ${scheme}): no box, thin line, same margins, label unchanged`, async () => {
+      const p = await openPlayer('Jordan', { width, scheme, filter: 'all' });
+      // Today's Home lists the first six games and keeps the rest behind "More sessions (N)": open it.
+      await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().click();
+      await p.page.waitForTimeout(500);
+      await p.page.locator('.schedule > .sched.tier-later.off').first().scrollIntoViewIfNeeded();
+      const { off, sib } = await flatRow(p.page);
+      assert(off && sib, 'a canceled later row and a normal later row are both on the page');
+      assert(off.top === '0px' && off.left === '0px' && off.right === '0px', `no box edges: ${JSON.stringify(off)}`);
+      assert(off.bottom === '1px' && off.bottomStyle === 'solid', `thin line under it: ${off.bottom} ${off.bottomStyle}`);
+      assert(off.radius === '0px' && off.shadow === 'none', `no corners or shadow: ${off.radius} ${off.shadow}`);
+      assert(off.l === sib.l && off.r === sib.r, `same margins as the other rows: ${off.l}..${off.r} vs ${sib.l}..${sib.r}`);
+      assert(sib.bottom === off.bottom && sib.bottomStyle === off.bottomStyle, 'the same separator as its neighbors');
+      assert(/^Canceled/.test(off.text), `the label keeps its words: ${off.text}`);
+      await noSideScroll(p.page, 'player home');
+      await shot(p.page, `canceled-row-${width}-${scheme}`);
+      await p.ctx.close();
+    });
+  }
+  await check('a canceled game also reads flat in "My games" and "All games", and the Money/Home rows on the organizer side carry no such box', async () => {
+    const p = await openPlayer('Harper', { filter: 'mine' });
+    // Harper paid the canceled game, so it is one of Harper's games.
+    const mine = await flatRow(p.page);
+    if (mine.off) assert(mine.off.top === '0px' && mine.off.bottom === '1px', `My games: ${JSON.stringify(mine.off)}`);
+    await p.ctx.close();
+    const a = await openAdmin({ width: 390 });
+    await tab(a.page, 'Home');
+    const boxes = await a.page.evaluate(() => [...document.querySelectorAll('.scard, .card')].filter((c) => /cancel/i.test(c.getAttribute('data-court') || '') || c.className.includes('canceled')).map((c) => ({ cls: String(c.className).slice(0, 40), radius: getComputedStyle(c).borderTopLeftRadius })));
+    for (const b of boxes) assert(b.radius !== '0px', `an admin card with sharp corners: ${JSON.stringify(b)}`);
+    await shot(a.page, 'admin-home-canceled-390');
+    await a.ctx.close();
+  });
+
+  // ---------------------------------------------------------------- HOME_COLLAPSE
+  const laterIds = (d) => d.sessions.filter((s) => s.startsAt > '2026-11-16').map((s) => s.id);
+  await check('switch off: Home still shows its LATER list and "More sessions (N)" with a number', async () => {
+    const p = await openPlayer('Jordan', { filter: 'all' });
+    const label = (await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().innerText()).trim();
+    assert(/^More sessions \(\d+\)$/.test(label), `label: ${label}`);
+    await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().click();
+    await p.page.waitForTimeout(400);
+    assert((await p.page.locator('.schedule > .sched[data-tier="later"]').count()) > 0, 'later rows show after the old button is tapped');
+    assert((await p.page.locator('[data-later-toggle]').count()) === 0, 'no new button');
+    await p.ctx.close();
+  });
+  for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [320, 'light'], [320, 'dark']]) {
+    await check(`HOME_COLLAPSE on (${width} px, ${scheme}): only this and next week; one "More sessions" button with no number; collapsed again after a reload`, async () => {
+      const p = await openPlayer('Jordan', { width, scheme, filter: 'all', query: '?homecollapse=on' });
+      const tiers = await p.page.locator('.schedule > .sched').evaluateAll((els) => els.map((e) => e.getAttribute('data-tier')));
+      assert(tiers.length > 0 && tiers.every((t) => t === 'this' || t === 'next'), `only this and next week: ${tiers}`);
+      assert((await p.page.locator('.week-break.tier-later').count()) === 0, 'no LATER header');
+      const btn = p.page.locator('[data-later-toggle]');
+      assert((await btn.count()) === 1, 'exactly one button');
+      assert((await btn.innerText()).trim() === 'More sessions', `label: ${await btn.innerText()}`);
+      assert((await btn.getAttribute('aria-expanded')) === 'false', 'starts collapsed');
+      await btn.scrollIntoViewIfNeeded();
+      await shot(p.page, `collapse-closed-${width}-${scheme}`);
+      await btn.click();
+      await p.page.waitForTimeout(500);
+      const later = await p.page.locator('.schedule > .sched[data-tier="later"]').count();
+      assert(later > 0, 'the later games opened');
+      assert((await btn.innerText()).trim() === 'Show fewer', `label: ${await btn.innerText()}`);
+      assert((await p.page.locator('.week-break.tier-later').count()) === 1, 'in the old LATER row style (its header and rows)');
+      await shot(p.page, `collapse-open-${width}-${scheme}`);
+      await noSideScroll(p.page, 'player home open');
+      await btn.click();
+      await p.page.waitForTimeout(400);
+      assert((await p.page.locator('.schedule > .sched[data-tier="later"]').count()) === 0, 'Show fewer folds them again');
+      assert((await btn.innerText()).trim() === 'More sessions', 'label back');
+      await btn.click();
+      await p.page.reload();
+      await p.page.locator('.schedule article').first().waitFor();
+      assert((await p.page.locator('.schedule > .sched[data-tier="later"]').count()) === 0, 'collapsed again after a reload');
+      await p.ctx.close();
+    });
+  }
+  await check('HOME_COLLAPSE on: the count of later games opened equals every game after next week; no button when nothing is later', async () => {
+    const p = await openPlayer('Jordan', { filter: 'all', query: '?homecollapse=on' });
+    await p.page.locator('[data-later-toggle]').click();
+    await p.page.waitForTimeout(500);
+    const ids = await p.page.locator('.schedule > .sched[data-tier="later"]').evaluateAll((els) => els.map((e) => e.id.replace('row-', '')));
+    const g = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
+    const want = g.sessions.filter((s) => !s.state.flags.hidden).length;
+    assert(ids.length > 0 && ids.length <= want, `later rows: ${ids.length}`);
+    await p.ctx.close();
+    // Someone in no game with "My games": nothing is later, so there is no button at all.
+    const none = await openPlayer('Casey', { filter: 'mine', query: '?homecollapse=on' }).catch(() => null);
+    if (none) {
+      const later = await none.page.locator('.schedule > .sched[data-tier="later"]').count();
+      const btnCount = await none.page.locator('[data-later-toggle]').count();
+      assert(later === 0 && btnCount === 0, `no later games, no button (${later}, ${btnCount})`);
+      await none.ctx.close();
+    }
+  });
+  await check("HOME_COLLAPSE on: I'm in and Drop out work from inside the expanded list", async () => {
+    const p = await openPlayer('Jordan', { filter: 'all', query: '?homecollapse=on' });
+    await p.page.locator('[data-later-toggle]').click();
+    await p.page.waitForTimeout(500);
+    const row = p.page.locator('.schedule > .sched[data-tier="later"]:not(.off)').filter({ has: p.page.locator('[data-join]') }).first();
+    const id = (await row.getAttribute('id')).replace('row-', '');
+    await row.locator('[data-join]').click();
+    await p.page.waitForTimeout(1500);
+    assert((await p.page.locator(`#row-${id}`).getAttribute('data-mine')) === 'in', "the row shows I'm in");
+    const d = await dash();
+    const mine = d.sessions.find((s) => s.id === id).roster.find((r) => r.name === 'Jordan');
+    assert(mine && mine.status === 'confirmed', 'the server has Jordan in');
+    assert((await p.page.locator('[data-later-toggle]').innerText()).trim() === 'Show fewer', 'the list stayed open');
+    await p.ctx.close();
+  });
+  await check('HOME_COLLAPSE: the Settings row works and flips it on for everyone (no private link needed)', async () => {
+    const { ctx, page } = await openAdmin();
+    await tab(page, 'Settings');
+    for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
+    const sw = page.locator('[data-home-collapse-all]');
+    assert(!(await sw.isChecked()), 'starts off');
+    await sw.click();
+    await page.waitForTimeout(900);
+    assert((await dash()).homeCollapseForAll === true, 'on for everyone');
+    const p = await openPlayer('Jordan', { filter: 'all' });
+    assert((await p.page.locator('[data-later-toggle]').count()) === 1, 'players get it with no link');
+    await p.ctx.close();
+    await sw.click();
+    await page.waitForTimeout(900);
+    assert((await dash()).homeCollapseForAll === false, 'and off again');
+    await ctx.close();
   });
 
   await browser.close();
