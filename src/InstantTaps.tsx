@@ -126,7 +126,12 @@ export function markPressed(): () => void {
 }
 
 /** What the next save would act as (View as, the demo copy): a save that waited in line is not sent if this changed meanwhile. */
-const actingAs = () => `${demoOn() ? 'demo' : 'live'}|${viewingAs() ?? ''}`;
+let whoChanges = 0;
+/** The phone is switching names ("Not you?"): a save still waiting in line was tapped as the old name, so it is not sent. */
+export function actingWhoChanged() {
+  whoChanges++;
+}
+const actingAs = () => `${demoOn() ? 'demo' : 'live'}|${viewingAs() ?? ''}|${whoChanges}`;
 
 /**
  * The root of a screen's instant taps. `data` is what the server sent, `reload` loads it again. Gives back the data with every tap still

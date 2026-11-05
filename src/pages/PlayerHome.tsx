@@ -1,4 +1,4 @@
-import { InstantContext, markPressed, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
+import { actingWhoChanged, InstantContext, markPressed, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { declinePatch, iPaidPatch, leaveWaitlistPatch } from '../playerPatches';
 import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DEFAULT_ZELLE_NUMBER, SITE_NAME } from '../../shared/settings';
@@ -668,6 +668,8 @@ function NamePicker({
     setBusy(true);
     // A drop still waiting for Undo belongs to the name that tapped it: send it before the phone switches names.
     await settleHolds();
+    // Instant taps: a save still waiting in line belongs to the old name too; it is not sent as the new one.
+    actingWhoChanged();
     setBusy(false);
     if (demo) {
       const p = g.players.find((x) => x.id === playerId);

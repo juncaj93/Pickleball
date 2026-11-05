@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView, MonthlyMoney } from '../../../shared/api';
 import { smsHref } from '../../../shared/messages';
 import { formatPrice } from '../../../shared/money';
@@ -201,8 +201,16 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
   // The Money page rework draws every tap at once and saves in the background (ReworkOps.tsx); everywhere else a tap waits as it always did.
   const rwRun = useReworkRun(ctx);
   const rwBusy = useReworkBusy();
+  // Instant taps: which group (owing or paid) each row was in when it was tapped, so it stays there while its save runs.
+  const groupAtTap = useRef(new Map<string, boolean>());
   // Instant taps (INSTANT_TAPS) off the Money rework page: the same op is drawn at once by the shared helper (action.ts).
-  const run = (fn: () => Promise<unknown>, success?: string, op?: ReworkOp) => (rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success, op ? opTap(op) : undefined));
+  const run = (fn: () => Promise<unknown>, success?: string, op?: ReworkOp) => {
+    if (instantOn && op && 'playerId' in op) {
+      const r = s.roster.find((x) => x.playerId === op.playerId);
+      if (r && !groupAtTap.current.has(opKey(op))) groupAtTap.current.set(opKey(op), isPaid(r));
+    }
+    return rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success, op ? opTap(op) : undefined);
+  };
   const busy = rework && rwRun ? false : actionBusy;
   const fin = s.finalized;
   const played = isPlayed(s);
@@ -222,7 +230,14 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
     const op: ReworkOp = { kind: 'paid', sessionId: s.id, playerId: r.playerId };
     return instantOn && (rwBusy(op) || plainPending(opKey(op)));
   };
-  const placed = (r: AdminRosterEntry) => (saving(r) ? !isPaid(r) : isPaid(r));
+  const placed = (r: AdminRosterEntry) => {
+    const key = opKey({ kind: 'paid', sessionId: s.id, playerId: r.playerId });
+    if (!saving(r)) {
+      groupAtTap.current.delete(key);
+      return isPaid(r);
+    }
+    return groupAtTap.current.get(key) ?? isPaid(r);
+  };
   const rows = r2 || rework ? [...allRows.filter((r) => !placed(r)), ...allRows.filter((r) => placed(r))] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>

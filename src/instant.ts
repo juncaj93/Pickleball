@@ -80,11 +80,20 @@ export class SaveLine {
   /** Run `save` after every save handed in before it (a failed one does not stop the next). */
   add<R>(save: () => Promise<R>): Promise<R> {
     if (!this.ordered) return save();
-    const turn = this.chain.then(save);
-    const settled = turn.catch(() => undefined);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const cap = new Promise<void>((r) => (timer = setTimeout(r, SAVE_WAIT_MS)));
-    this.chain = Promise.race([settled, cap]).then(() => clearTimeout(timer));
+    // The next save may go when this one has answered, or SAVE_WAIT_MS after this one was SENT (its turn began), whichever is first.
+    // So a slow network keeps tap order (each save waits for the one before); only a save that never answers lets the next one go.
+    let next!: () => void;
+    const free = new Promise<void>((r) => (next = r));
+    const turn = this.chain.then(() => {
+      const timer = setTimeout(next, SAVE_WAIT_MS);
+      const p = Promise.resolve().then(save);
+      p.then(
+        () => (clearTimeout(timer), next()),
+        () => (clearTimeout(timer), next()),
+      );
+      return p;
+    });
+    this.chain = free;
     return turn;
   }
 }

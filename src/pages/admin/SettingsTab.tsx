@@ -126,6 +126,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const confirmedAccess = useRef(g.openAccess);
   const savingAccess = useRef(false);
   const confirmedDate = useRef(g.firstSessionDate ?? '');
+  const latestDate = useRef(g.firstSessionDate ?? '');
   const [openAccess, setOpenAccess] = useState(g.openAccess);
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [askRotate, setAskRotate] = useState(false);
@@ -396,13 +397,15 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                 onChange={(e) => {
                   const next = e.target.value;
                   setFirstDate(next);
+                  latestDate.current = next;
                   // A date saves right away; a cleared box means "no first date".
                   if (!next || /^\d{4}-\d{2}-\d{2}$/.test(next))
                     void auto.save('firstSessionDate', { firstSessionDate: next || null }).then((ok) => {
                       if (!auto.instant) return;
                       // Instant taps: a save that did not go through puts the box back to the date the server has.
                       if (ok) confirmedDate.current = next;
-                      else {
+                      // Only while the box still shows this date: a later pick that is saving (or saved) is never undone.
+                      else if (latestDate.current === next) {
                         setFirstDate(confirmedDate.current);
                         auto.clear('firstSessionDate');
                         toast("That didn't save. It's back to what it was.", 'error');
