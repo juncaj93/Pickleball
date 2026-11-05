@@ -36,7 +36,16 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const day = formatShortDate(s.startsAt, tz);
   // Right after "Yes, we played" this card scrolls in under the finger: taps wait until the screen settles.
   const finalize = (played: string[]) =>
-    tapsHeld() ? Promise.resolve(false) : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played }), `${day} is final`);
+    tapsHeld()
+      ? Promise.resolve(false)
+      : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played }), `${day} is final`, {
+          // Instant taps (INSTANT_TAPS): the price and the credit are the server's, so the button shows it is working; only where Money
+          // files the game moves at once (finalized games that are fully paid go to Previous games). A failed save moves it back.
+          key: `finalize:${s.id}`,
+          patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, finalizing: true } : x)) }),
+          press: true,
+          what: 'Finalize',
+        });
   return (
     <article className="card stack finalize-card" aria-label={`Finalize ${day}`} data-finalize={s.id} tabIndex={-1}>
       <div>

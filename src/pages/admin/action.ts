@@ -14,6 +14,8 @@ export interface ActOptions {
   patch?: (d: AdminDashboard) => AdminDashboard;
   /** A few words for the error toast ("Mark paid"). */
   what?: string;
+  /** Show the tapped button working (pressed look and spinner) even though a patch is drawn too. */
+  press?: boolean;
 }
 
 /**
@@ -32,7 +34,7 @@ export function useAction(ctx: AdminCtx) {
   const working = useRef(false);
   async function run(fn: () => Promise<unknown>, success?: string, opts: ActOptions = {}) {
     if (instant) {
-      const res = await instant.run({ key: `act${id}:${opts.key ?? ''}`, patch: opts.patch ?? null, save: fn, saved: success, what: opts.what });
+      const res = await instant.run({ key: `act${id}:${opts.key ?? success ?? ''}`, patch: opts.patch ?? null, save: fn, saved: success, what: opts.what, press: opts.press });
       return res.status === 'ok';
     }
     if (working.current) return false;
@@ -51,7 +53,7 @@ export function useAction(ctx: AdminCtx) {
       setBusy(false);
     }
   }
-  /** Is a tap from this helper still saving? (`key` as passed to run; leave out for the default.) Always false with instant taps off. */
+  /** Is a tap from this helper still saving? (`key` exactly as passed to run.) Always false with instant taps off. */
   const pending = (key = '') => !!instant?.busy(`act${id}:${key}`);
   return { busy, run, pending };
 }
@@ -61,5 +63,8 @@ export function useAction(ctx: AdminCtx) {
  * it (reworkOptimistic.ts): one key per row, so a second tap on that row waits and another row still works.
  */
 export function opTap(op: ReworkOp, what?: string): ActOptions {
-  return { key: opKey(op), patch: (d) => applyOps(d, [op]), what };
+  // Unmark and Unmark credit would have to work out what the person owes again (credit math): that is the server's to say, so those
+  // only show the tapped button working. Mark paid (owes nothing after), Clear (owes nothing), Reopen and Hide are certain.
+  const certain = op.kind === 'paid' || op.kind === 'clear' || op.kind === 'reopen' || op.kind === 'hide';
+  return { key: opKey(op), patch: certain ? (d) => applyOps(d, [op]) : undefined, what };
 }

@@ -46,19 +46,22 @@ describe('Games tab: where each game sits', () => {
     const today = game(at(11, 4));
     const in7 = game(at(11, 11, 12)); // Wed Nov 11 noon: inside the 7-day window (ends before Nov 12 0:00)
     const later = game(at(11, 12));
-    const past = game(at(11, 3), {}, [paidSeat(), paidSeat()]);
+    // Fully paid AND finalized (Alex, Nov 5: a fully paid game moves to Previous only once it is finalized).
+    const past = game(at(11, 3), { finalized: { priceCents: 1400 } }, [paidSeat(), paidSeat()]);
     const v = splitGames([today, in7, later, past], '2026-11', NOW, TZ);
     expect(ids(v.main)).toEqual([today.id, in7.id]);
     expect([...v.main, ...v.previous].map((g) => g.s.id)).not.toContain(later.id);
     expect(ids(v.previous)).toEqual([past.id]);
   });
-  it('G2 a fully paid game always goes to Previous, even if it is today; unpaid and partly paid stay on top', () => {
+  it('G2 a fully paid game goes to Previous only once it is finalized (Alex, Nov 5); not finalized it stays in the list, after the unpaid and partly paid', () => {
     const paid = game(at(11, 5), {}, [paidSeat(), paidSeat()]);
     const part = game(at(11, 6), {}, [paidSeat(), seat()]);
     const none = game(at(11, 7), {}, [seat(), seat()]);
     const v = splitGames([paid, part, none], '2026-11', NOW, TZ);
-    expect(ids(v.previous)).toEqual([paid.id]);
-    expect(ids(v.main)).toEqual([part.id, none.id]);
+    expect(v.previous).toHaveLength(0);
+    expect(ids(v.main)).toEqual([part.id, none.id, paid.id]);
+    const done = game(at(11, 3), { finalized: { priceCents: 1400 } }, [paidSeat(), paidSeat()]);
+    expect(ids(splitGames([done, paid], '2026-11', NOW, TZ).previous)).toEqual([done.id]);
     expect(fullyPaid(paid)).toBe(true);
     expect(fullyPaid(part)).toBe(false);
   });
@@ -83,11 +86,12 @@ describe('Games tab: where each game sits', () => {
     expect(ids(v.main)).not.toContain(hidden.id);
     expect([...v.main, ...v.previous]).toHaveLength(1);
   });
-  it('G6 any other month: every game is in the list unless fully paid', () => {
+  it('G6 any other month: every game is in the list unless fully paid and finalized', () => {
     const oct = game(at(10, 20), {}, [seat(), paidSeat()]);
-    const octPaid = game(at(10, 22), {}, [paidSeat(), paidSeat()]);
-    const v = splitGames([oct, octPaid], '2026-10', NOW, TZ);
-    expect(ids(v.main)).toEqual([oct.id]);
+    const octPaid = game(at(10, 22), { finalized: { priceCents: 1400 } }, [paidSeat(), paidSeat()]);
+    const octPaidOpen = game(at(10, 23), {}, [paidSeat(), paidSeat()]);
+    const v = splitGames([oct, octPaid, octPaidOpen], '2026-10', NOW, TZ);
+    expect(ids(v.main)).toEqual([oct.id, octPaidOpen.id]);
     expect(ids(v.previous)).toEqual([octPaid.id]);
     const dec = game(at(12, 8));
     expect(ids(splitGames([dec], '2026-12', NOW, TZ).main)).toEqual([dec.id]);

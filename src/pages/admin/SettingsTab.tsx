@@ -121,6 +121,11 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
   const g = ctx.d.group;
   const auto = useAutosave(ctx);
   const [firstDate, setFirstDate] = useState(g.firstSessionDate ?? '');
+  // Instant taps (INSTANT_TAPS): what the server last confirmed, so a failed save goes back to exactly that (two quick failing flips
+  // cannot leave the screen wrong), and a second flip of the access box while it saves is ignored. Off: unused.
+  const confirmedAccess = useRef(g.openAccess);
+  const savingAccess = useRef(false);
+  const confirmedDate = useRef(g.firstSessionDate ?? '');
   const [openAccess, setOpenAccess] = useState(g.openAccess);
   const [theme, setThemeChoice] = useState<ThemeChoice>(getTheme);
   const [askRotate, setAskRotate] = useState(false);
@@ -221,11 +226,15 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           checked={openAccess}
           onChange={(e) => {
             const next = e.target.checked;
+            if (auto.instant && savingAccess.current) return;
             setOpenAccess(next);
+            if (!auto.instant) return void auto.save('openAccess', { openAccess: next });
+            // Instant taps (INSTANT_TAPS): a failed save (any reason) puts the box back where the server has it.
+            savingAccess.current = true;
             void auto.save('openAccess', { openAccess: next }).then((ok) => {
-              // Instant taps (INSTANT_TAPS): a failed save puts the box back where the server has it. Off: as before.
-              if (ok || !auto.instant || !auto.failed('openAccess')) return;
-              setOpenAccess(!next);
+              savingAccess.current = false;
+              if (ok) return void (confirmedAccess.current = next);
+              setOpenAccess(confirmedAccess.current);
               auto.clear('openAccess');
               toast("That didn't save. It's back to what it was.", 'error');
             });
@@ -385,9 +394,20 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                 type="date"
                 value={firstDate}
                 onChange={(e) => {
-                  setFirstDate(e.target.value);
+                  const next = e.target.value;
+                  setFirstDate(next);
                   // A date saves right away; a cleared box means "no first date".
-                  if (!e.target.value || /^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) void auto.save('firstSessionDate', { firstSessionDate: e.target.value || null });
+                  if (!next || /^\d{4}-\d{2}-\d{2}$/.test(next))
+                    void auto.save('firstSessionDate', { firstSessionDate: next || null }).then((ok) => {
+                      if (!auto.instant) return;
+                      // Instant taps: a save that did not go through puts the box back to the date the server has.
+                      if (ok) confirmedDate.current = next;
+                      else {
+                        setFirstDate(confirmedDate.current);
+                        auto.clear('firstSessionDate');
+                        toast("That didn't save. It's back to what it was.", 'error');
+                      }
+                    });
                 }}
               />
             </div>

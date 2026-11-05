@@ -311,6 +311,8 @@ export interface AdminSessionView {
   hiddenFromPlayers?: boolean;
   /** "Money page rework": the organizer hid this game from their own Home and Money lists and from Totals (server/moneyRework.ts). */
   hiddenFromList?: boolean;
+  /** Screen only, never sent by the server: a Finalize tap on this game is still saving (instant taps), so Money files it as finalized. */
+  finalizing?: boolean;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;

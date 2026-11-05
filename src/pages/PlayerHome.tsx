@@ -889,14 +889,20 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
       // Instant taps (INSTANT_TAPS): "I paid" is certain, so the card reads Paid at once and the Pay card goes; a failed save puts it
       // back. "Didn't pay?" leaves the amount to the server: the button shows it is working until the answer.
       const done = guard ? moneyStarted(ids) : () => {};
+      // One tap can cover several games (the "Tonight: you owe" card): if some went through and then one failed, say so plainly.
+      let went = 0;
       await instant.run({
         key: `paid:${ids.join(',')}`,
         patch: paid ? iPaidPatch(ids) : null,
         save: async () => {
-          for (const o of owed) await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
+          for (const o of owed) {
+            await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
+            went++;
+          }
         },
         saved: paid ? 'Marked paid' : 'Marked not paid',
         what: paid ? 'I paid' : "Didn't pay",
+        failText: () => (went > 0 ? `Saved for ${went} of ${owed.length} games; the rest didn't save. Tap again.` : null),
       });
       done();
       return;

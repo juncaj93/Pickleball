@@ -54,7 +54,7 @@ Production is bound to the real database and was not changed.
 | "Sunday run", "Monday run" (Nov 1 and 2) | Played, finalized | 4 each, all paid $14, court $48: two fully paid previous games |
 | Extra game "Mixed payments" (20 hours after the seed) | **Booked**, 4 in | Lane and Morgan paid cash, Kai and Gray owe $14 |
 | Extra game "Owes, one no number" (68 hours after the seed) | **Booked**, 5 in | Indy paid; Kai, Lane, Morgan owe $14 and have numbers; Reese owes $14 and has NO phone number saved (Text all skips Reese) |
-| Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: the Games tab files it under Previous games |
+| Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: everyone paid but not played yet, so it stays in the Games list (it moves to Previous games once finalized) |
 | Everything after | Normal empty games | The site makes these by itself |
 
 The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.
@@ -69,7 +69,7 @@ The three old extra games only exist when the two latest played games are about 
 A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
 the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
 (Nov 4, as on live: New admin layout, Admin screens round 2 and 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
-Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (built in Zip 4, live with its row off; kept on in previews); plus the one being built, Instant taps (Thu Nov 5)). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); plus the one being built, Instant taps (Thu Nov 5)). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
 When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it

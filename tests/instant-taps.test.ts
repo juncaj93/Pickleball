@@ -197,7 +197,7 @@ describe('instant taps: the shared helper', () => {
   it('failure words are plain: the server reason, no signal, or nothing changed', () => {
     expect(failureWords({ status: 409, message: 'This game is full' })).toBe('This game is full');
     expect(failureWords({ status: 0, message: 'No signal, try again' }, 'I paid')).toBe("No signal. I paid didn't save, nothing changed.");
-    expect(failureWords({ status: 500, message: 'Something went wrong. Try again.' }, 'Mark paid')).toBe("Couldn't save mark paid. Nothing changed.");
+    expect(failureWords({ status: 500, message: 'Something went wrong. Try again.' }, 'Mark paid')).toBe("Mark paid didn't save. Nothing changed.");
     expect(failureWords(new Error('x'))).toBe("Couldn't save, nothing changed");
   });
 });

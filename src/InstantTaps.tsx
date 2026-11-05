@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './instant-taps.css';
-import { isDemo } from './lib';
+import { demoOn, isDemo, viewingAs } from './lib';
 import { useToast } from './ui';
 import { drawPatches, failureWords, LoadTracker, SaveLine, TapQueue, type TapResult } from './instant';
 
@@ -25,6 +25,10 @@ export interface InstantTap<R, T = any> {
   what?: string;
   /** Show no toast at all on a failure (the caller says it its own way). */
   quietFail?: boolean;
+  /** Show the tapped button working even though a patch is drawn too (the patch only moves something elsewhere). */
+  press?: boolean;
+  /** The words for a failure, when the caller knows better (part of a multi-game save went through). Return null for the usual words. */
+  failText?: (err: unknown) => string | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -51,42 +55,63 @@ export function useInstantTracker(): LoadTracker {
   return tracker.current;
 }
 
+// ---------- A double tap never lands on the next button ----------
+// A tap is drawn at once, so the screen can change under the finger (I paid takes the Pay card away and the next card slides up; a paid
+// Money row moves). The second half of a quick double tap then lands on a DIFFERENT button: it must not count (it could join a game,
+// pay or drop the wrong person). While instant taps is on, a click within 400 ms and 24 px of the click before it, on another button,
+// is stopped before the page sees it. Keyboard clicks (no pointer position) are never stopped. The same idea as ui.tsx DOUBLE_TAP.
+const DOUBLE_TAP_MS = 400;
+const DOUBLE_TAP_PX = 24;
+let guards = 0;
+let lastClick: { el: Element; at: number; x: number; y: number } | null = null;
+if (typeof document !== 'undefined') {
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (guards === 0 || e.detail === 0) return;
+      const el = e.target instanceof Element ? e.target.closest('button, a, [role="button"], input, label') : null;
+      if (!el) return;
+      const prev = lastClick;
+      const now = performance.now();
+      // A label and the switch inside it are one control (the browser clicks the switch for the label).
+      const same = prev && (prev.el === el || prev.el.contains(el) || el.contains(prev.el) || (prev.el instanceof HTMLLabelElement && prev.el.control === el));
+      if (prev && !same && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      lastClick = { el, at: now, x: e.clientX, y: e.clientY };
+    },
+    true,
+  );
+}
+/** Turn the page-wide double-tap guard on while a screen with instant taps on is showing. */
+function useDoubleTapGuard(on: boolean) {
+  useEffect(() => {
+    if (!on) return undefined;
+    guards++;
+    return () => {
+      guards--;
+    };
+  }, [on]);
+}
+
 // ---------- The button that was tapped shows it is working ----------
 // Where the server decides (a full game, fees, prices), nothing is drawn ahead; the button that was tapped gets a pressed look and a
 // small spinner at once (the same frame as the tap), until the server answers. Found from the click itself, so every button gets it
 // without each one being changed. Only ever set while instant taps is on (only the store calls it).
-let lastPressed: { el: HTMLElement; at: number; x: number; y: number } | null = null;
+let lastPressed: { el: HTMLElement; at: number } | null = null;
 if (typeof document !== 'undefined') {
   document.addEventListener(
     'click',
     (e) => {
       const el = e.target instanceof Element ? e.target.closest<HTMLElement>('button, a.btn, [role="button"]') : null;
-      lastPressed = el ? { el, at: performance.now(), x: e.clientX, y: e.clientY } : null;
+      lastPressed = el ? { el, at: performance.now() } : null;
     },
     true,
   );
 }
 
-// ---------- A double tap never lands on the next button ----------
-// A tap is drawn at once, so the row can change or move under the finger (Mark paid moves a paid row below the people who still owe).
-// The second half of a quick double tap then lands on a DIFFERENT button: it must not count (it would pay or drop the wrong person).
-// Same idea as the banner's double-tap guard (ui.tsx DOUBLE_TAP): within 400 ms and 24 px of the tap before it, on another thing.
-const DOUBLE_TAP_MS = 400;
-const DOUBLE_TAP_PX = 24;
-let lastRun: { key: string; at: number; x: number; y: number } | null = null;
-/** Is this tap (for `key`) the second half of a double tap whose first half went to another thing? Remembers it either way. */
-export function secondTapOnOther(key: string): boolean {
-  const p = lastPressed;
-  if (!p || performance.now() - p.at > 1000) return false;
-  const prev = lastRun;
-  lastRun = { key, at: p.at, x: p.x, y: p.y };
-  if (!prev || prev.key === key) return false;
-  if (p.at - prev.at < DOUBLE_TAP_MS && Math.hypot(p.x - prev.x, p.y - prev.y) < DOUBLE_TAP_PX) {
-    lastRun = prev;
-    return true;
-  }
-  return false;
-}
 /** Mark the button tapped just now as working. Returns the function that takes the mark off. */
 export function markPressed(): () => void {
   const p = lastPressed;
@@ -99,6 +124,9 @@ export function markPressed(): () => void {
     el.removeAttribute('aria-busy');
   };
 }
+
+/** What the next save would act as (View as, the demo copy): a save that waited in line is not sent if this changed meanwhile. */
+const actingAs = () => `${demoOn() ? 'demo' : 'live'}|${viewingAs() ?? ''}`;
 
 /**
  * The root of a screen's instant taps. `data` is what the server sent, `reload` loads it again. Gives back the data with every tap still
@@ -114,7 +142,12 @@ export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Pro
   const queue = useRef<TapQueue<Patch<T>> | null>(null);
   if (!queue.current) queue.current = new TapQueue<Patch<T>>(() => setTick((n) => n + 1), () => reloadRef.current(), tracker, line);
   const q = queue.current;
-  useEffect(() => () => q.dispose(), [q]);
+  // Watch the loads while mounted (attached again after React StrictMode's practice unmount).
+  useEffect(() => {
+    q.attach();
+    return () => q.dispose();
+  }, [q]);
+  useDoubleTapGuard(on);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const view = useMemo(() => (on && data !== null && q.size > 0 ? drawPatches(data, q.patches()) : data), [data, tick, on]);
   const store = useMemo<InstantStore<T>>(
@@ -123,16 +156,19 @@ export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Pro
       tracker,
       busy: (key) => q.busy(key),
       run: async <R,>(tap: InstantTap<R, T>) => {
-        if (q.busy(tap.key) || secondTapOnOther(tap.key)) return { status: 'ignored' } as TapResult<R>;
-        const unmark = tap.patch ? () => {} : markPressed();
-        const res = await q.run<R>({ key: tap.key, patch: tap.patch ?? null, save: tap.save });
+        if (q.busy(tap.key)) return { status: 'ignored' } as TapResult<R>;
+        const unmark = tap.patch && !tap.press ? () => {} : markPressed();
+        // Who this tap acts as, now. If the save waits in line and the screen changes meanwhile (View as ended, another name), it is not sent.
+        const as = actingAs();
+        const save = () => (actingAs() === as ? tap.save() : Promise.reject(Object.assign(new Error('Nothing was sent: the screen changed before it could save.'), { status: 409 })));
+        const res = await q.run<R>({ key: tap.key, patch: tap.patch ?? null, save });
         unmark();
         if (res.status === 'ok') {
           const msg = typeof tap.saved === 'function' ? tap.saved(res.value) : tap.saved;
           if (msg) toast(msg);
         } else if (res.status === 'failed' && !tap.quietFail) {
           if (isDemo(res.error)) toast((res.error as Error).message);
-          else toast(failureWords(res.error, tap.what), 'error');
+          else toast(tap.failText?.(res.error) ?? failureWords(res.error, tap.what), 'error');
         }
         return res;
       },

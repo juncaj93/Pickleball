@@ -2249,3 +2249,53 @@ main 4014f51 at the same hour (it reads the real clock and expects "tonight/tomo
 - Rollback: Settings > Feature switches > "Money page rework" off (no deploy; it ships off); `MONEY_REWORK = "off"` and a deploy; or Pages deployment `49be2ad5`
   (4014f51, the code before this). No data was changed by the deploy, so no restore is needed.
 - Alex switches it on himself in a quiet window (Friday). To try it first on one phone: `/admin?moneyrework=on`.
+
+## Instant taps (INSTANT_TAPS), built Thu Nov 5, 2026 - ships with the switch OFF (on a preview, waiting for "ship it")
+
+Spec: the "zip 5" brief (`START_HERE.md`), plus one Money page rule Alex added the same day (below). One PR. No database change, no migration.
+The full description of the switch is its row in `docs/FEATURE_SWITCHES.md`.
+
+### What it does (only with the switch on)
+A tapped button changes the screen in the same instant and the save runs in the background; a toast says it saved. A failed save (server
+error, no signal) puts the screen back exactly as it was and a red toast says what failed. Where the server decides (a full game, late-drop
+fees, prices, credit, Finalize, court and roster changes) nothing is guessed: the tapped button gets a pressed look and a small spinner at once.
+- One shared helper: `src/instant.ts` (pure: TapQueue, SaveLine, LoadTracker), `src/InstantTaps.tsx` (the screen root, the toast, the pressed
+  look, the page-wide double-tap guard), `src/pages/admin/action.ts` (the organizer's one "do this" helper, which replaced three copies),
+  `src/playerPatches.ts` (the player-side guesses, each tested against the server's next answer). The Money page's own instant taps (Zip 4,
+  `ReworkOps.tsx`) now run on the same helper; with the switch off they run exactly as built.
+- Safety rules, once for every screen: a second tap on the same thing while it saves does nothing; taps on different things still work and
+  reach the server in tap order (a save that never answers holds the next one at most 10 seconds); the second half of a quick double tap that
+  lands on a different button is stopped; a Money row whose save is running keeps its place; a 5-second refresh that set off before a save
+  is thrown away (`useLoad` with a tracker), and a saved tap's guess stays until fresh data is on screen (released after 15 seconds at the
+  latest); a save that waited in line is not sent if the screen changed meanwhile (View as ended, another name).
+- Settings: every switch snaps back to the server's value on a failed save, with a toast; text boxes and the first session date go back to
+  the saved value; a second flip while saving is ignored.
+
+### Money page rule (Alex, Thu Nov 5, under MONEY_REWORK which is ON live; no new switch)
+A fully paid game moves to "Previous games" only once it is FINALIZED. Tonight's game where everyone already paid stays in the main Games list
+(after the games somebody owes for) until it is played and finalized. Finalize moves it at once with instant taps on (a screen-only
+`finalizing` mark, never sent by the server). Within a card, unpaid players stay above paid players (as before). Touches only the Money page
+(`splitGames` in `src/pages/admin/moneyRework.ts`) and, with instant taps on, the Home Finalize button (pressed look). This rule is NOT behind
+INSTANT_TAPS: it applies as soon as this is deployed (the Money page rework is on for everyone).
+
+### Tests
+- New unit and API files: `tests/instant-taps.test.ts` (the helper: success, failure rollback, double tap, ordering, polls, offline reload),
+  `tests/instant-taps-api.test.ts` (the switch; the server saves exactly the same on or off; every player guess equals the server's next
+  answer), `tests/money-finalized-rule.test.ts`, `tests/review-instant-queue.test.ts` (the reviewer's). Older Money placement tests updated to
+  the new rule.
+- Browser: `e2e/instant-taps.cjs` (slow network 2.5 s and a failing network 500 / no signal on I'm in, Drop out, I paid, Mark paid and a
+  Settings switch: the screen changes at once, one request on a double tap, no flicker, exactly back on a failure, nothing saved; the pressed
+  look within 100 ms; dark mode; the toast clears the tab bar; the Money rule). `e2e/instant-taps-off.cjs` runs today's main and this branch
+  side by side on the same fake world and compares every screen's HTML with the switch off: identical apart from the new Settings row.
+
+### Independent review
+A fresh reviewer (did not write the code) found 7 issues, all fixed with tests: the "Anyone with the site address" box could end showing the
+opposite of the server after two quick failing flips (now snaps to the last confirmed value, and the first session date rolls back too); the
+double-tap guard did not cover every button (now one page-wide guard); "I paid" for several games said "Nothing changed" when some saved (now
+"Saved for 1 of 2 games"); a queued save could act as another screen after View as ended (now not sent); Money rows held their place with the
+switch off too (now only with it on); one stuck save could hold every later one (now 10 seconds at most); React's dev double mount turned off
+the "drop the guess on the next good refresh" rule (now attached in an effect). Also: no credit amount is guessed outside the Money page
+(Unmark and Unmark credit only show the button working); keyboard taps are never taken for a double tap.
+Known and accepted: if a save works but every refresh fails for 15 seconds, the guess is let go and the screen shows the older data until the
+next good refresh (the server has the tap; a second tap is refused by the server's own checks). The player stamp gained one switch, so every
+phone reloads once after the deploy.

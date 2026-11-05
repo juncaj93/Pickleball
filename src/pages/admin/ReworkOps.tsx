@@ -2,7 +2,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 import type { AdminSessionView } from '../../../shared/api';
 import { useToast } from '../../ui';
 import { SaveLine, TapQueue } from '../../instant';
-import { secondTapOnOther, useInstant } from '../../InstantTaps';
+import { useInstant } from '../../InstantTaps';
 import type { AdminCtx } from '../Admin';
 import { applyOps, opKey, type ReworkOp } from './reworkOptimistic';
 
@@ -34,7 +34,10 @@ export function ReworkOpsProvider({ ctx, children }: { ctx: AdminCtx; children: 
       : new TapQueue<ReworkOp>(() => setTick((n) => n + 1), () => reload.current(), null, new SaveLine(false));
   }
   const q = queue.current;
-  useEffect(() => () => q.dispose(), [q]);
+  useEffect(() => {
+    q.attach();
+    return () => q.dispose();
+  }, [q]);
   const busy = useCallback((k: string) => q.busy(k), [q]);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const ops = useMemo(() => q.patches(), [q, tick]);
@@ -60,8 +63,6 @@ export function useReworkRun(ctx: AdminCtx): ((op: ReworkOp, save: () => Promise
   const toast = useToast();
   if (!store) return null;
   return async (op, save, success) => {
-    // With instant taps on, the second half of a double tap that lands on another row (the paid row moved) is ignored.
-    if (store.instant && secondTapOnOther(opKey(op))) return false;
     const res = await store.queue.run({
       key: opKey(op),
       patch: op,

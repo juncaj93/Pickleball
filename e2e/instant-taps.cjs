@@ -99,7 +99,7 @@ async function main() {
 
   const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mobile/15E148 Safari/604.1';
   const phone = (width, scheme = 'light') => ({ viewport: { width, height: 860 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA });
-  const shiftClock = (ctx) =>
+  const shiftClock = (ctx, atMs = NOW_MS) =>
     ctx.addInitScript((delta) => {
       const Real = Date;
       class Shifted extends Real {
@@ -115,7 +115,7 @@ async function main() {
       try {
         localStorage.setItem('pb_games_filter', 'all');
       } catch {}
-    }, NOW_MS - Date.now());
+    }, atMs - Date.now());
   const watch = (page) => {
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
@@ -137,9 +137,9 @@ async function main() {
     await page.waitForTimeout(700);
     return { ctx, page, errors };
   }
-  async function openAdmin({ query = '?instanttaps=on', width = 390, scheme = 'light' } = {}) {
+  async function openAdmin({ query = '?instanttaps=on', width = 390, scheme = 'light', atMs = NOW_MS } = {}) {
     const ctx = await browser.newContext(phone(width, scheme));
-    await shiftClock(ctx);
+    await shiftClock(ctx, atMs);
     await post(ctx.request, '/api/admin/login', { pin: PIN });
     const page = await ctx.newPage();
     const errors = watch(page);
@@ -553,6 +553,49 @@ async function main() {
     await ctx.close();
     assert((await put(areq, '/api/admin/instant-taps', { on: false })).ok(), 'off');
     assert((await dash()).instantTaps === undefined, 'off again');
+  });
+
+  // ================================================================ Money rule (Alex, Nov 5): Previous games only once finalized
+  const allPaid = d0.sessions.find((s) => s.note === 'All paid');
+  await check('Money: a game everyone paid but not played yet ("All paid") stays in the Games list, not Previous games', async () => {
+    assert(allPaid && allPaid.paidCount === allPaid.payableCount && !allPaid.finalized, 'the All paid game');
+    const { ctx, page } = await openAdmin({ query: '' });
+    await tab(page, 'Money');
+    await page.locator('[data-month-box]').waitFor();
+    assert((await page.locator(`.mrw-games > article.mrw-game[data-session="${allPaid.id}"]`).count()) === 1, 'in the main list');
+    // Within a card, unpaid players stay above paid players (the Mixed payments game: Kai and Gray owe, Lane and Morgan paid).
+    const mixed = upcoming.find((x) => x.note === 'Mixed payments');
+    const card = page.locator(`article.mrw-game[data-session="${mixed.id}"]`);
+    if ((await card.getAttribute('data-open')) === 'no') await card.locator('.mrw-toggle').click();
+    const order = await card.locator('li').evaluateAll((ls) => ls.map((l) => ({ name: l.innerText.split('\n')[0].trim(), paid: /Paid/.test(l.innerText) })));
+    const firstPaid = order.findIndex((r) => r.paid);
+    assert(firstPaid > 0 && order.slice(firstPaid).every((r) => r.paid), `unpaid above paid: ${JSON.stringify(order)}`);
+    await shot(page, 'allpaid-in-list');
+    await ctx.close();
+  });
+  await check('Money: Finalize moves a fully paid game to Previous games at once (instant taps), and it stays there', async () => {
+    // After the "All paid" game: it now waits to be finalized on Home.
+    const after = Date.parse(allPaid.endsAt) + 60 * 60_000;
+    await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: after }) });
+    const { ctx, page, errors } = await openAdmin({ atMs: after });
+    const off = await network(page, /\/api\/admin\/sessions\/[^/]+\/finalize$/, 'slow');
+    const fin = page.locator(`[data-finalize="${allPaid.id}"]`);
+    await fin.waitFor();
+    await fin.locator('[data-everyone-played]').click();
+    await page.waitForTimeout(120);
+    assert((await page.locator('[data-tap-wait]').count()) === 1, 'the Finalize button shows it is working (the price is the server\'s)');
+    await tab(page, 'Money');
+    await page.locator('[data-month-box]').waitFor();
+    assert((await page.locator(`.mrw-games > article.mrw-game[data-session="${allPaid.id}"]`).count()) === 0, 'moved out of the main list the instant Finalize was tapped (before the server answered)');
+    await page.locator('[data-fold="previous"]').waitFor();
+    await sleep(SLOW_MS + 1500);
+    await off();
+    assert((await page.locator(`.mrw-games > article.mrw-game[data-session="${allPaid.id}"]`).count()) === 0, 'back in the main list after the save (flicker)');
+    const s = (await dash()).sessions.find((x) => x.id === allPaid.id);
+    assert(s.finalized, 'finalized on the server');
+    assert(errors.length === 0, errors.join(' | '));
+    await ctx.close();
+    await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: NOW_MS }) });
   });
 
   await browser.close();

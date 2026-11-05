@@ -1,3 +1,4 @@
+import { useInstant } from '../../InstantTaps';
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminSessionView, MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
@@ -24,9 +25,11 @@ const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 export function MoneyTabRework({ ctx: realCtx }: { ctx: AdminCtx }) {
   const [view, setView] = useState<'games' | 'totals'>('games');
   const [month, setMonth] = useState(() => currentMonth(realCtx));
+  const instantOn = useInstant() !== null;
   // Instant taps: `ctx` below already shows any tap whose save is still running (ReworkOps.tsx). Totals read the real data and follow the save.
   return (
-    <ReworkOpsProvider ctx={realCtx}>
+    // Keyed on instant taps, so the Money page's own queue follows the switch if it flips while the page is open.
+    <ReworkOpsProvider key={instantOn ? 'instant' : 'plain'} ctx={realCtx}>
       {(ctx) => (
         <section className="stack money-rework" aria-label="Money">
           <div className="mrw-controls">

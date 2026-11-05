@@ -443,10 +443,13 @@ async function main() {
     await money(page);
     assert((await page.locator('[data-fold="previous"]').count()) === 1, 'Previous games card');
     assert((await page.locator('[data-fold="previous"] .mrw-fold-rows').count()) === 0, 'collapsed');
-    // Nothing in the main list is a fully paid game (those moved to Previous games), and none is beyond 7 days.
+    // Nothing in the main list is a fully paid FINALIZED game (those moved to Previous games; Alex, Nov 5: a fully paid game that is not
+    // finalized yet stays in the list, like "All paid"), and none is beyond 7 days.
     const main = await page.evaluate(() => [...document.querySelectorAll('.mrw-games > article.mrw-game')].map((a) => a.getAttribute('data-session')));
-    const paidIds = d0.sessions.filter((s) => s.payableCount > 0 && s.paidCount === s.payableCount && !s.state.flags.canceled).map((s) => s.id);
-    for (const id of main) assert(!paidIds.includes(id), 'a fully paid game is in the main list');
+    const paidIds = d0.sessions.filter((s) => s.payableCount > 0 && s.paidCount === s.payableCount && !s.state.flags.canceled && s.finalized).map((s) => s.id);
+    for (const id of main) assert(!paidIds.includes(id), 'a fully paid finalized game is in the main list');
+    const allPaidGame = d0.sessions.find((s) => s.note === 'All paid');
+    if (allPaidGame) assert(main.includes(allPaidGame.id), '"All paid" (everyone paid, not played yet) stays in the main list');
     const weekEnd = NOW_MS + 8 * 24 * 3600_000;
     for (const id of main) {
       const s = d0.sessions.find((x) => x.id === id);

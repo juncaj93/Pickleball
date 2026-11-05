@@ -70,6 +70,9 @@ export class LoadTracker {
 }
 
 /** The order saves go to the server in: one at a time, in tap order. Several queues (the Money page and the rest of the screen) share one. */
+/** The longest a save waits for the one before it: a save that hangs (no answer at all) never holds the taps after it for longer. */
+export const SAVE_WAIT_MS = 10_000;
+
 export class SaveLine {
   private chain: Promise<unknown> = Promise.resolve();
   /** `ordered` false: each save goes at once, side by side (the Money page as built in Zip 4, with instant taps off). */
@@ -78,7 +81,10 @@ export class SaveLine {
   add<R>(save: () => Promise<R>): Promise<R> {
     if (!this.ordered) return save();
     const turn = this.chain.then(save);
-    this.chain = turn.catch(() => undefined);
+    const settled = turn.catch(() => undefined);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cap = new Promise<void>((r) => (timer = setTimeout(r, SAVE_WAIT_MS)));
+    this.chain = Promise.race([settled, cap]).then(() => clearTimeout(timer));
     return turn;
   }
 }
@@ -100,7 +106,7 @@ export class TapQueue<P> {
   private pending: PendingTap<P>[] = [];
   private flying = new Set<string>();
   private next = 1;
-  private stopWatching: () => void;
+  private stopWatching: (() => void) | null = null;
 
   constructor(
     private readonly onChange: () => void,
@@ -108,7 +114,12 @@ export class TapQueue<P> {
     private readonly tracker: LoadTracker | null = null,
     private readonly line: SaveLine = new SaveLine(),
   ) {
-    this.stopWatching = tracker ? tracker.onDrawn(() => this.dropConfirmed()) : () => {};
+    this.attach();
+  }
+
+  /** Watch the screen's loads (a saved tap's patch goes once fresh data is drawn). Safe to call again after dispose (React StrictMode). */
+  attach() {
+    if (!this.stopWatching && this.tracker) this.stopWatching = this.tracker.onDrawn(() => this.dropConfirmed());
   }
 
   /** The patches to draw, oldest tap first. */
@@ -127,7 +138,8 @@ export class TapQueue<P> {
   }
 
   dispose() {
-    this.stopWatching();
+    this.stopWatching?.();
+    this.stopWatching = null;
   }
 
   /**
@@ -206,5 +218,5 @@ export function failureWords(err: unknown, what?: string): string {
   const e = err as { status?: number; message?: string } | null;
   if (e && e.status === 0) return what ? `No signal. ${what} didn't save, nothing changed.` : 'No signal. Nothing changed.';
   if (e && typeof e.status === 'number' && e.status >= 400 && e.status < 500 && e.message) return e.message;
-  return what ? `Couldn't save ${what.toLowerCase()}. Nothing changed.` : "Couldn't save, nothing changed";
+  return what ? `${what} didn't save. Nothing changed.` : "Couldn't save, nothing changed";
 }

@@ -29,8 +29,9 @@ async function dash(w: W, headers: Record<string, string> = {}) {
 }
 const books = (w: W) =>
   JSON.stringify([
-    w.app.db.raw.prepare('SELECT status, payment_status, self_paid_at IS NOT NULL AS self_paid, payment_amount_cents FROM session_players ORDER BY session_id, player_id').all(),
-    w.app.db.raw.prepare('SELECT kind, amount_cents, reason, ended_at IS NOT NULL AS ended FROM credit_ledger ORDER BY kind, amount_cents').all(),
+    // By name and game time (the two worlds have different random ids).
+    w.app.db.raw.prepare('SELECT s.starts_at, p.display_name, sp.status, sp.payment_status, sp.self_paid_at IS NOT NULL AS self_paid, sp.payment_amount_cents FROM session_players sp JOIN players p ON p.id = sp.player_id JOIN sessions s ON s.id = sp.session_id ORDER BY s.starts_at, p.display_name').all(),
+    w.app.db.raw.prepare('SELECT c.kind, c.amount_cents, c.reason, c.ended_at IS NOT NULL AS ended, p.display_name FROM credit_ledger c JOIN players p ON p.id = c.player_id ORDER BY p.display_name, c.kind, c.amount_cents').all(),
   ]);
 /** The parts of a player's view a pay or seat tap can change. */
 const seat = (g: any, sid: string) => {

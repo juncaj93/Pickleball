@@ -10,6 +10,8 @@ import type { AdminCtx } from '../Admin';
 import { minus, monthName, shiftMonth, STATE_TEXT } from './MonthlyMoney';
 import { CreditBackList, payChip, payMoneyLine, useAction } from './Sessions';
 import { opTap } from './action';
+import { opKey } from './reworkOptimistic';
+import { useInstant } from '../../InstantTaps';
 import { reminderText } from './textMenu';
 import { isPlayed } from './todo';
 import { unpaidRows } from './moneyList';
@@ -194,7 +196,8 @@ function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; 
 
 export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessionView; r2?: boolean; rework?: boolean }) {
   const tz = ctx.d.group.timezone;
-  const { busy: actionBusy, run: plainRun } = useAction(ctx);
+  const { busy: actionBusy, run: plainRun, pending: plainPending } = useAction(ctx);
+  const instantOn = useInstant() !== null;
   // The Money page rework draws every tap at once and saves in the background (ReworkOps.tsx); everywhere else a tap waits as it always did.
   const rwRun = useReworkRun(ctx);
   const rwBusy = useReworkBusy();
@@ -214,7 +217,12 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
   // The Money page rework sorts the same way: owing first, paid below.
   // Instant taps: a row whose tap is still saving keeps the place it had before the tap, so the next tap (or the second half of a double
   // tap) lands on the same row and never on the person who slid into its spot. It moves once the server has confirmed.
-  const placed = (r: AdminRosterEntry) => (rwBusy({ kind: 'paid', sessionId: s.id, playerId: r.playerId }) ? !isPaid(r) : isPaid(r));
+  // Only with instant taps on: off, rows move exactly as they did (the Money page as built in Zip 4).
+  const saving = (r: AdminRosterEntry) => {
+    const op: ReworkOp = { kind: 'paid', sessionId: s.id, playerId: r.playerId };
+    return instantOn && (rwBusy(op) || plainPending(opKey(op)));
+  };
+  const placed = (r: AdminRosterEntry) => (saving(r) ? !isPaid(r) : isPaid(r));
   const rows = r2 || rework ? [...allRows.filter((r) => !placed(r)), ...allRows.filter((r) => placed(r))] : allRows;
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>

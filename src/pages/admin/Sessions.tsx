@@ -219,11 +219,11 @@ export function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionVi
     <CourtSwitch
       value={shown}
       // Instant taps: the switch shows the tap at once and waits (pending) while it saves, as it always did with `busy`.
-      disabled={busy || pending()}
+      disabled={busy || pending('court')}
       label={`Court status for ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}
       onPick={async (to) => {
         setPicked(to);
-        await run(() => api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to }), to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked');
+        await run(() => api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to }), to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked', { key: 'court' });
         setPicked(null);
       }}
     />
