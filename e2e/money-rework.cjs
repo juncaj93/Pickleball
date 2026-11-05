@@ -63,19 +63,6 @@ async function main() {
     await sleep(500);
   }
   await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: NOW_MS }) });
-  // Older months for the month list: canceled games (Money lists those) back to Oct 2025, written straight into the local test file.
-  {
-    const { DatabaseSync } = require('node:sqlite');
-    const raw = new DatabaseSync(dbFile);
-    const gid = raw.prepare('SELECT id FROM groups LIMIT 1').get().id;
-    const ins = raw.prepare("INSERT INTO sessions (id, group_id, starts_at, ends_at, status, booking_status, created_at, updated_at, shown_early, canceled_at, canceled_by) VALUES (?, ?, ?, ?, 'canceled', 'needs_booking', ?, ?, 1, ?, 'organizer')");
-    ['2026-02-10', '2026-01-13', '2025-12-09', '2025-11-11', '2025-10-14'].forEach((day, i) => {
-      const start = `${day}T00:00:00.000Z`;
-      ins.run(`00000000-0000-4000-8000-00000000010${i}`, gid, start, `${day}T02:00:00.000Z`, '2025-10-01T00:00:00.000Z', '2025-10-01T00:00:00.000Z', '2025-10-01T00:00:00.000Z');
-    });
-    raw.close();
-  }
-
   const browser = await chromium.launch();
   const post = (req, url, data, headers = {}) => req.post(BASE + url, { data, headers: { Origin: BASE, ...headers } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
@@ -241,12 +228,13 @@ async function main() {
       return { rows, years: [...el.querySelectorAll('[data-year-label]')].map((y) => y.innerText.trim()), client: el.clientHeight, scroll: el.scrollHeight, maxH: cs.maxHeight, ovY: cs.overflowY, sb: cs.scrollbarWidth, more: el.classList.contains('more'), fade: getComputedStyle(el.querySelector('.mrw-monthfade'), '::before').opacity };
     });
     const months = m.rows.map((r) => r.m);
-    assert(months[0] === '2026-11' && months.at(-1) === '2025-10', `from Nov 2026 back to Oct 2025: ${months[0]} .. ${months.at(-1)}`);
-    assert(months.length === 14 && months.every((x, i) => i === 0 || x < months[i - 1]), `every month once, newest first: ${months.join(' ')}`);
+    assert(months[0] === '2026-11' && months.at(-1) === '2025-12', `from Nov 2026 back to Dec 2025: ${months[0]} .. ${months.at(-1)}`);
+    assert(months.length === 12 && months.every((x, i) => i === 0 || x < months[i - 1]), `every month once, newest first: ${months.join(' ')}`);
     assert(m.rows.every((r) => /^[A-Z][a-z]{2} \d{4}\s+\d+$/.test(r.t)), `each row has its count: ${m.rows[0].t}`);
     const count = (mm) => Number(m.rows.find((r) => r.m === mm).t.match(/(\d+)$/)[1]);
     const real = (await dash()).gameMonthCounts;
-    assert(count('2026-11') === real['2026-11'] && count('2026-10') === real['2026-10'] && count('2026-01') === 1 && count('2025-12') === 1, `counts match the server: Nov ${count('2026-11')}, Oct ${count('2026-10')}`);
+    assert(months.every((x) => count(x) === (real[x] ?? 0)), `every count matches the server: ${months.map((x) => `${x}:${count(x)}`).join(' ')}`);
+    assert(['2025-12', '2026-01', '2026-05', '2026-09'].every((x) => count(x) >= 2 && count(x) <= 4), 'a few games in each older month');
     assert(m.years.join() === '2025', `a year label where the year changes: ${m.years}`);
     assert(m.rows.every((r) => r.h >= 44), 'every row is at least 44 px');
     assert(m.maxH === '188px' && m.client <= 190 && m.scroll > m.client + 50 && m.ovY === 'auto', `four months tall, then it scrolls: ${m.maxH} client ${m.client} scroll ${m.scroll}`);
@@ -924,6 +912,7 @@ async function main() {
           radius: cs.borderTopLeftRadius, tradius: getComputedStyle(tog).borderTopLeftRadius, h: box.getBoundingClientRect().height, th: tog.getBoundingClientRect().height,
           tsize: ts.fontSize, tweight: ts.fontWeight, tfamily: ts.fontFamily === cs.fontFamily, lines: box.getBoundingClientRect().height <= line * 2 + 30 && box.scrollWidth <= box.clientWidth, extra: box.querySelectorAll('svg, img').length + (getComputedStyle(box, '::after').content !== 'none' ? 1 : 0),
           w: box.getBoundingClientRect().width,
+          pill: Math.round(tb.getBoundingClientRect().height), pad: getComputedStyle(tog).paddingTop,
         };
       });
       const tag = `${width} ${scheme}`;
@@ -934,8 +923,9 @@ async function main() {
       if (scheme === 'light') {
         assert(m.bc === 'rgb(220, 220, 213)' && m.bg === 'rgb(255, 255, 255)', `outline #dcdcd5 on white: ${m.bc} ${m.bg}`);
       }
-      assert(Math.abs(m.h - m.th) <= 1.5, `same height as the toggle: ${m.h} vs ${m.th} (${tag})`);
-      assert(m.radius === m.tradius, `corners match the toggle: ${m.radius} vs ${m.tradius} (${tag})`);
+      assert(Math.abs(m.h - 42) <= 0.6 && Math.abs(m.th - 42) <= 0.6, `box and toggle track are both 42 px: ${m.h} / ${m.th} (${tag})`);
+      assert(m.radius === '14px', `box corners 14 px: ${m.radius} (${tag})`);
+      assert(m.pill === 36 && m.pad === '3px', `the white pill is 36 px inside a 3 px track: ${m.pill} ${m.pad} (${tag})`);
       assert(m.lines && m.extra === 0, `one line, no arrow or caret (${tag})`);
       await noOverflow(page, `month box ${tag}`);
       if (width === 360) await shot(page, `month-box-${scheme}`);
@@ -975,6 +965,119 @@ async function main() {
       assert(Number(m.name) >= 600, `names stay semibold or heavier: ${m.name}`);
       await noOverflow(page, `mark paid ${tag}`);
       if (width === 360) await shot(page, `mark-paid-${scheme}`);
+      await ctx.close();
+    }
+  });
+  await check('2 Remind button: solid purple, 38 px, 14 px / 600, 12 px corners, no outline, light and dark, 320 / 360 / 430', async () => {
+    for (const [width, scheme] of [[320, 'light'], [360, 'dark'], [430, 'light'], [320, 'dark'], [360, 'light'], [430, 'dark']]) {
+      const { ctx, page } = await openAdmin({ width, scheme });
+      await money(page);
+      const b = await page.locator('[data-remind]').first().evaluate((el) => {
+        const cs = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        return { bg: cs.backgroundColor, color: cs.color, h: r.height, size: cs.fontSize, weight: cs.fontWeight, radius: cs.borderTopLeftRadius, bw: cs.borderTopWidth, one: el.scrollWidth <= el.clientWidth + 1 && r.height < 40, text: el.innerText.trim() };
+      });
+      const tag = `${width} ${scheme}`;
+      const want = scheme === 'light' ? ['rgb(106, 86, 166)', 'rgb(255, 255, 255)'] : ['rgb(178, 160, 230)', 'rgb(29, 20, 51)'];
+      assert(b.bg === want[0] && b.color === want[1], `colors ${b.bg} on ${b.color} (${tag})`);
+      assert(b.h === 38 && b.size === '14px' && b.weight === '600' && b.radius === '12px' && b.bw === '0px' && b.one, `shape ${b.h} ${b.size}/${b.weight} ${b.radius} ${b.bw} (${tag})`);
+      assert(/^Remind \(\d+\)$/.test(b.text), `text ${b.text}`);
+      await noOverflow(page, `remind ${tag}`);
+      if (width === 360) await shot(page, `remind-button-${scheme}`);
+      await ctx.close();
+    }
+  });
+  await check('3 Remind sheet: no explanation, tight rows with name + "owes $14" + a Text button, "Text all" in the header only with 2 or more owing, right messages', async () => {
+    for (const [width, scheme] of [[360, 'light'], [320, 'dark'], [430, 'dark'], [430, 'light']]) {
+      const { ctx, page } = await openAdmin({ width, scheme });
+      const card = await gamesCard(page, mixed.id);
+      await card.locator('[data-remind]').click();
+      const dlg = page.locator('dialog[open]');
+      await dlg.locator('.mrw-remind-list').waitFor();
+      await page.waitForTimeout(350);
+      const tag = `${width} ${scheme}`;
+      const txt = await dlg.innerText();
+      assert(!/One text per person|Messages opens/i.test(txt), `the explanation is gone (${tag})`);
+      const m = await dlg.evaluate((el) => {
+        const rows = [...el.querySelectorAll('.mrw-remind-list > li')];
+        const all = el.querySelector('[data-text-all]');
+        const title = el.querySelector('h2').getBoundingClientRect();
+        const close = el.querySelector('.icon-btn').getBoundingClientRect();
+        const cs = (e) => getComputedStyle(e);
+        const one = rows[0].querySelector('.mrw-text-one');
+        return {
+          n: rows.length, rowH: rows.map((r) => Math.round(r.getBoundingClientRect().height)), small: rows.map((r) => r.querySelector('.small').innerText.trim()), names: rows.map((r) => r.querySelector('strong').innerText.trim()),
+          oneH: one.getBoundingClientRect().height, oneColor: cs(one).color, oneBg: cs(one).backgroundColor, oneBorder: cs(one).borderTopColor, oneSize: cs(one).fontSize, oneWeight: cs(one).fontWeight, oneRadius: cs(one).borderTopLeftRadius,
+          allH: all.getBoundingClientRect().height, allBg: cs(all).backgroundColor, allColor: cs(all).color, allSize: cs(all).fontSize, allWeight: cs(all).fontWeight,
+          order: title.right <= all.getBoundingClientRect().left + 1 && all.getBoundingClientRect().right <= close.left + 1, allHref: all.getAttribute('href'), oneHref: one.getAttribute('href'),
+          fit: el.scrollWidth <= el.clientWidth + 1,
+        };
+      });
+      assert(m.n === 2 && m.names.join() === 'Kai,Gray' || m.names.join() === 'Gray,Kai', `two people owe: ${m.names}`);
+      assert(m.small.every((t) => /^owes \$14$/.test(t)), `small "owes $14": ${m.small}`);
+      assert(m.rowH.every((h) => h >= 52 && h <= 60), `rows about 54 px: ${m.rowH} (${tag})`);
+      const purple = scheme === 'light' ? 'rgb(106, 86, 166)' : 'rgb(178, 160, 230)';
+      assert(m.oneH === 36 && m.oneColor === purple && m.oneBorder === purple && m.oneSize === '14px' && m.oneRadius === '12px', `Text button ${m.oneH} ${m.oneColor} ${m.oneBorder} (${tag})`);
+      assert(m.allH === 34 && m.allBg === purple && m.allColor === (scheme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(29, 20, 51)') && m.allSize === '14px' && m.allWeight === '600', `Text all ${m.allH} ${m.allBg} ${m.allColor} (${tag})`);
+      assert(m.order, `Text all sits between the title and the close button (${tag})`);
+      assert(m.fit, `no sideways overflow in the sheet (${tag})`);
+      // Group text: no recipients, the agreed message with line breaks.
+      assert(/^sms:[&?]?(&|\?)?body=/.test(m.allHref) && !/^sms:[0-9+(]/.test(m.allHref), `no recipients: ${m.allHref.slice(0, 20)}`);
+      const body = decodeURIComponent(m.allHref.replace(/^sms:[&?]*(?:body=)?/, '').replace(/^body=/, ''));
+      assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball\.\nIf you haven't paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
+      // One person: same wording as before, name and amount.
+      const one = decodeURIComponent(m.oneHref.replace(/^sms:[^&?]*[&?]body=/, ''));
+      assert(/^Hey (Kai|Gray), you owe \$14 for pickleball/.test(one), `one-person text: ${JSON.stringify(one.slice(0, 50))}`);
+      if (width === 360) await shot(page, `remind-sheet-${scheme}`);
+      await ctx.close();
+    }
+    // With only one person owing there is no "Text all".
+    const g = (await dash()).sessions.find((x) => x.id === mixed.id).roster.find((r) => r.name === 'Gray');
+    await post(areq, `/api/admin/sessions/${mixed.id}/payment`, { playerId: g.playerId, paid: true, seen: g.moneySeen, cents: g.owesCents });
+    const { ctx, page } = await openAdmin();
+    const card = await gamesCard(page, mixed.id);
+    await card.locator('[data-remind]').click();
+    await page.locator('dialog[open] .mrw-remind-list').waitFor();
+    assert((await page.locator('dialog[open] [data-text-all]').count()) === 0, 'no Text all with one person owing');
+    assert((await page.locator('dialog[open] .mrw-text-one').count()) === 1, 'the one-person Text is still there');
+    await ctx.close();
+    const g2 = (await dash()).sessions.find((x) => x.id === mixed.id).roster.find((r) => r.name === 'Gray');
+    await post(areq, `/api/admin/sessions/${mixed.id}/payment`, { playerId: g2.playerId, paid: false, seen: g2.moneySeen });
+  });
+  await check('4 5 color tokens: credit is the softer blue, paid green and owes amber are unchanged, texting is purple, in light and dark', async () => {
+    for (const scheme of ['light', 'dark']) {
+      const { ctx, page } = await openAdmin({ width: 360, scheme });
+      await money(page);
+      await openAllCards(page);
+      const m = await page.evaluate(() => {
+        const root = getComputedStyle(document.documentElement);
+        const tok = (n) => root.getPropertyValue(n).trim();
+        const probe = (css) => {
+          const e = document.createElement('i');
+          e.style.cssText = css;
+          document.body.appendChild(e);
+          const c = getComputedStyle(e);
+          const out = { color: c.color, bg: c.backgroundColor };
+          e.remove();
+          return out;
+        };
+        const cs = (sel, prop = 'color') => getComputedStyle(document.querySelector(sel))[prop === 'bg' ? 'backgroundColor' : prop];
+        return {
+          tokens: ['--tok-paid-fg', '--tok-paid-bg', '--tok-owes-fg', '--tok-owes-bg', '--tok-credit-fg', '--tok-credit-bg', '--tok-text-fill', '--tok-text-ink'].map(tok),
+          creditText: cs('.mrw-state.credit'), creditRow: cs('.mrw-row.credit', 'bg'), creditFoot: cs('.mrw-foot-mid'),
+          paidText: cs('.mrw-state.ok'), paidRow: cs('.mrw-row.paid', 'bg'), owed: cs('.mrw-owed'),
+          oldGreen: probe('color: var(--ok-fg); background: var(--ok-bg)'), oldAmber: probe('color: var(--warn-fg)'),
+          dot: cs('.mrw-dots i.p', 'bg'), oldDot: probe('background: var(--ok-edge)').bg,
+        };
+      });
+      const L = scheme === 'light';
+      assert(m.creditText === (L ? 'rgb(58, 79, 163)' : 'rgb(147, 166, 230)'), `credit text ${m.creditText} (${scheme})`);
+      assert(m.creditRow === (L ? 'rgb(233, 237, 246)' : 'rgb(32, 40, 64)'), `credit row ${m.creditRow} (${scheme})`);
+      assert(m.creditFoot === m.creditText, `"Credit: $3 per" is the credit blue (${scheme})`);
+      assert(m.paidText === m.oldGreen.color && m.paidRow === m.oldGreen.bg && m.dot === m.oldDot, `paid green is exactly the site's (${scheme})`);
+      assert(m.owed === m.oldAmber.color, `owes amber is exactly the site's (${scheme})`);
+      assert(m.tokens.every(Boolean), `all eight tokens are defined (${scheme}): ${m.tokens}`);
+      assert(m.tokens[6].toLowerCase() === (L ? '#6a56a6' : '#b2a0e6') && m.tokens[7].toLowerCase() === (L ? '#ffffff' : '#1d1433'), `texting purple (${scheme})`);
       await ctx.close();
     }
   });

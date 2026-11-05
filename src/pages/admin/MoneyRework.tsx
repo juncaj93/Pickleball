@@ -3,10 +3,11 @@ import type { AdminSessionView, MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { formatShortDate, formatTime, localParts } from '../../../shared/time';
 import { api, useDemoVersion, useLoad, usePretend } from '../../lib';
-import { ErrorState, Sheet, Spinner } from '../../ui';
+import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { minus, monthName } from './MonthlyMoney';
-import { Chevron, currentMonth, GameBody, RemindList } from './MoneyV2';
+import { Chevron, currentMonth, GameBody } from './MoneyV2';
+import { ReworkRemind } from './MoneyReworkParts';
 import { unpaidRows, owedCentsOf } from './moneyList';
 import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
 import { ReworkOpsProvider } from './ReworkOps';
@@ -186,9 +187,7 @@ function GamesRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
         ))}
         {previous.length > 0 && <FoldList ctx={ctx} id="previous" title="Previous games" games={previous} sameDay={sameDay} />}
       </div>
-      <Sheet open={!!remindSession} title={remindSession ? `Remind · ${formatShortDate(remindSession.startsAt, tz)}` : ''} onClose={() => setRemind(null)}>
-        {remindSession && <RemindList ctx={ctx} s={remindSession} />}
-      </Sheet>
+      <ReworkRemind ctx={ctx} s={remindSession} open={!!remindSession} onClose={() => setRemind(null)} />
     </>
   );
 }

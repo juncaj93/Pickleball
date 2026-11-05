@@ -127,8 +127,11 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
 
-  // Setup happens 12 days ago so there are past games to play and finish.
-  w.now = N - 12 * DAY;
+  // Setup happens about 11 months ago, so the Money page's month list has real older months to scroll through; the games of those months
+  // are played below. The clock then moves up to 12 days ago, where the rest of the world starts.
+  const nowDate = new Date(N);
+  const monthStartMs = (back: number) => Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth() - back, 1, 17);
+  w.now = monthStartMs(11);
   const players = [ORGANIZER, ...CAST].map((name, i) => ({ name, phone: `(313) 555-01${String(i).padStart(2, '0')}` }));
   await w.org.ok('POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
@@ -148,10 +151,43 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   };
   /** Move the fake clock forward to this moment (it never goes back). */
   const at = async (ms: number) => {
+    const before = w.now;
     w.now = Math.max(w.now, ms);
+    // Sign-ins last hours, not months: when the clock jumps a long way, the organizer signs in again and every phone picks its name again.
+    if (w.now - before > 6 * HOUR) {
+      await w.org.ok('POST', '/api/admin/login', { pin: previewPin() });
+      for (const phone of w.phones.values()) phone.cookies.clear();
+    }
     await refresh();
   };
   const ms = (iso: string) => Date.parse(iso);
+
+  // 0. Older months: from 11 months back to 2 months back, 2 to 4 games a month, each with 4 players, booked, all paid $14 and finalized at
+  //    the flat price (4 played = $14, so no credit moves). Real site code, a fake clock. Marked shown early so they stay listed after the
+  //    first session date is set below.
+  const perMonth = [2, 3, 4, 3, 2, 4, 3, 2, 3, 4];
+  let oldGames = 0;
+  for (let i = 0; i < perMonth.length; i++) {
+    const from = monthStartMs(11 - i);
+    const to = monthStartMs(10 - i);
+    await at(from - 5 * DAY); // the site makes games six weeks ahead, so this month's games exist now
+    const inMonth = games().filter((g) => ms(g.startsAt) >= from && ms(g.startsAt) < to);
+    const step = Math.max(1, Math.floor(inMonth.length / perMonth[i]));
+    const chosen = inMonth.filter((_, j) => j % step === 0).slice(0, perMonth[i]);
+    for (const [k, g] of chosen.entries()) {
+      const names = [0, 1, 2, 3].map((x) => CAST[(oldGames + k + x * 3) % CAST.length]);
+      await at(ms(g.startsAt) - 2 * DAY);
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'booked' });
+      for (const n of names) await (await w.pick(n)).ok('POST', `/api/sessions/${g.id}/join`, {});
+      for (const n of names) await w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[n], paid: true });
+      await at(ms(g.endsAt) + 2 * HOUR);
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+      w.db.raw.prepare('UPDATE sessions SET shown_early = 1 WHERE id = ?').run(g.id);
+      oldGames++;
+    }
+  }
+  if (oldGames > 0) summary.push(`${oldGames} older games over 10 months (Dec to Sep): 4 players each, all paid $14, finalized, court $48 (they fill the month list on Money)`);
+  await at(N - 12 * DAY);
 
   // Pick the games by position around "now".
   await refresh();

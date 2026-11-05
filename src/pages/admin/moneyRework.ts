@@ -1,8 +1,10 @@
-import type { AdminSessionView } from '../../../shared/api';
+import type { AdminDashboard, AdminSessionView } from '../../../shared/api';
+import { siteAddress } from '../../../shared/messages';
+import { remindGameGroupText } from '../../../shared/textsR2';
 import { gameHasMoney } from '../../../shared/moneyRework';
 import { creditBack } from '../../../shared/pricing';
 import { localParts, zonedTimeToUtc } from '../../../shared/time';
-import { moneyGames, owedCentsOf } from './moneyList';
+import { moneyGames, owedCentsOf, unpaidRows } from './moneyList';
 
 // The reworked Money page (MONEY_REWORK): which game sits where on the Games tab, and the small facts a card shows.
 // Pure functions of the data the page already has, so they are easy to test. Nothing here changes a total or a rule.
@@ -151,4 +153,15 @@ export function canHide(s: AdminSessionView): boolean {
     creditEntries: s.roster.some((r) => r.creditCents > 0 || r.creditBackCents > 0) ? 1 : 0,
     seats: s.roster.map((r) => ({ paid: r.paymentStatus === 'paid', paidCents: r.paymentAmountCents ?? 0, lateFee: !!r.lateFee })),
   });
+}
+
+/** "Text all" on the Remind sheet shows only when at least 2 people owe on the game. */
+export const canTextAll = (s: AdminSessionView): boolean => unpaidRows(s).length >= 2;
+
+/** The price each person is asked for on this game: the final price once finalized, else the usual price. */
+export const gamePriceCents = (d: Pick<AdminDashboard, 'group'>, s: AdminSessionView): number => (s.finalized ? s.finalized.priceCents : d.group.settings.pricePerPlayerCents);
+
+/** The "Text all" message for a game: one text for the group chat (no recipients), the site address alone on the last line. */
+export function groupRemindText(d: Pick<AdminDashboard, 'group' | 'now'>, s: AdminSessionView): string {
+  return remindGameGroupText(s.startsAt, d.group.timezone, Date.parse(d.now), gamePriceCents(d, s), siteAddress(d.group.playerLink));
 }

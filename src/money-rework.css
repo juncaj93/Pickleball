@@ -1,3 +1,32 @@
+/* Shared color tokens for the four meanings on the Money screens: paid (green), owes (amber), credit (blue), texting (purple). Each has a
+   light and a dark value. Paid and owes are the site's existing green and amber, unchanged; credit is a softer blue; texting is purple.
+   A later audit moves the rest of the site onto these. */
+:root {
+  --tok-paid-fg: var(--ok-fg);
+  --tok-paid-bg: var(--ok-bg);
+  --tok-paid-dot: var(--ok-edge);
+  --tok-owes-fg: var(--warn-fg);
+  --tok-owes-bg: var(--warn-bg);
+  --tok-credit-fg: #3a4fa3;
+  --tok-credit-bg: #e9edf6;
+  --tok-text-fill: #6a56a6;
+  --tok-text-ink: #ffffff;
+}
+:root[data-theme='dark'] {
+  --tok-credit-fg: #93a6e6;
+  --tok-credit-bg: #202840;
+  --tok-text-fill: #b2a0e6;
+  --tok-text-ink: #1d1433;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --tok-credit-fg: #93a6e6;
+    --tok-credit-bg: #202840;
+    --tok-text-fill: #b2a0e6;
+    --tok-text-ink: #1d1433;
+  }
+}
+
 /* Money page, reworked (MONEY_REWORK). Only the site's own tokens, so light and dark follow the theme. Layout follows the approved
    mockup at 390 px: month box + Games | Totals on one row, cards with a date tile, a dot per player, white outlined Mark paid buttons,
    a faint footer, and two Totals cards that never wrap at 360 px. */
@@ -24,7 +53,7 @@
   display: grid;
   grid-template-columns: minmax(104px, 34%) minmax(0, 1fr);
   gap: 10px;
-  align-items: stretch;
+  align-items: center;
 }
 .mrw-monthwrap {
   position: relative;
@@ -36,10 +65,11 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 46px;
+  height: 42px;
+  box-sizing: border-box;
   padding: 0 10px;
   border: 1px solid var(--mrw-box-line);
-  border-radius: 11px;
+  border-radius: 14px;
   background: var(--surface);
   color: var(--ink);
   font: inherit;
@@ -57,8 +87,16 @@
 .mrw-seg {
   min-width: 0;
 }
+.mrw-seg {
+  /* A 42 px track with 3 px around the white pill, so the pill is 36 px. */
+  box-sizing: border-box;
+  height: 42px;
+  padding: 3px;
+}
 .mrw-seg button {
-  min-height: 40px;
+  min-height: 36px;
+  height: 36px;
+  padding: 0 4px;
   font-size: 15px;
   font-weight: 600;
 }
@@ -219,30 +257,38 @@
   background: transparent;
 }
 .mrw-dots i.p {
-  background: var(--ok-edge);
-  border-color: var(--ok-edge);
+  background: var(--tok-paid-dot);
+  border-color: var(--tok-paid-dot);
 }
 .mrw-right {
   display: flex;
   align-items: center;
 }
-/* The light gray Remind pill. */
+/* The Remind button: solid purple (the texting color), 38 px high, no outline. */
 .mrw-remind {
   appearance: none;
-  min-height: 40px;
+  position: relative;
+  box-sizing: border-box;
+  height: 38px;
   padding: 0 14px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: var(--fill);
-  color: var(--ink-2);
+  border: 0;
+  border-radius: 12px;
+  background: var(--tok-text-fill);
+  color: var(--tok-text-ink);
   font: inherit;
-  font-size: 0.88rem;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
   cursor: pointer;
 }
+.mrw-remind::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
+}
 .mrw-owed {
-  color: var(--warn-fg);
+  color: var(--tok-owes-fg);
   font-weight: 800;
   font-size: 1rem;
   white-space: nowrap;
@@ -262,8 +308,8 @@
   color: var(--muted-fg);
 }
 .mrw-pill.warn {
-  background: var(--warn-bg);
-  color: var(--warn-fg);
+  background: var(--tok-owes-bg);
+  color: var(--tok-owes-fg);
 }
 .mrw-game.closed .mrw-title {
   color: var(--muted-fg);
@@ -292,10 +338,10 @@
   border-bottom: 0;
 }
 .mrw-row.paid {
-  background: var(--ok-bg);
+  background: var(--tok-paid-bg);
 }
 .mrw-row.credit {
-  background: var(--info-bg);
+  background: var(--tok-credit-bg);
 }
 .mrw-line {
   display: flex;
@@ -341,10 +387,10 @@
   white-space: nowrap;
 }
 .mrw-state.ok {
-  color: var(--ok-fg);
+  color: var(--tok-paid-fg);
 }
 .mrw-state.credit {
-  color: var(--info-fg);
+  color: var(--tok-credit-fg);
 }
 .mrw-undo {
   appearance: none;
@@ -419,7 +465,7 @@
 }
 .mrw-foot-mid {
   text-align: center;
-  color: var(--info-fg);
+  color: var(--tok-credit-fg);
   opacity: 0.85;
 }
 .mrw-foot > :last-child {
@@ -528,7 +574,7 @@
 }
 .mrw-prow-check {
   display: inline-flex;
-  color: var(--ok-fg);
+  color: var(--tok-paid-fg);
 }
 
 /* ---------- Totals ---------- */
@@ -569,7 +615,7 @@
   font-variant-numeric: tabular-nums;
 }
 .mrw-big.amber {
-  color: var(--warn-fg);
+  color: var(--tok-owes-fg);
 }
 .mrw-cols {
   display: grid;
@@ -603,7 +649,7 @@
   white-space: nowrap;
 }
 .mrw-col dd.green {
-  color: var(--ok-fg);
+  color: var(--tok-paid-fg);
 }
 .mrw-col small {
   color: var(--ink-2);
@@ -747,4 +793,82 @@
 .switches-tidy .live-stable > summary .set-note {
   margin-left: 0;
   max-width: none;
+}
+
+/* ---------- The Remind sheet ---------- */
+.mrw-textall {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 14px;
+  margin-left: auto;
+  margin-right: 6px;
+  border-radius: 12px;
+  background: var(--tok-text-fill);
+  color: var(--tok-text-ink);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.mrw-textall::before {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+.mrw-remind-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.mrw-remind-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 54px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.mrw-remind-list > li:last-child {
+  border-bottom: 0;
+}
+.mrw-remind-who {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.mrw-remind-who strong {
+  font-size: 1rem;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+.mrw-text-one {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  height: 36px;
+  min-width: 64px;
+  padding: 0 14px;
+  border: 1.5px solid var(--tok-text-fill);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--tok-text-fill);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+}
+.mrw-text-one::before {
+  content: '';
+  position: absolute;
+  inset: -4px 0;
 }

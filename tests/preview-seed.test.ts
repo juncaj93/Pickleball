@@ -160,6 +160,12 @@ describe('fake-data preview seed', () => {
     // A game with 5 in (credit comes back at 5): the first coming game, and a canceled one.
     expect(games.some((g) => Date.parse(g.startsAt) > wed && g.status !== 'canceled' && g.confirmedCount === 5)).toBe(true);
     expect(games.some((g) => g.status === 'canceled' && g.cancelReason === 'Court closed')).toBe(true);
+    // Ten older months (Dec 2025 to Sep 2026), 2 to 4 played games each, so the Money page's month list scrolls well past four months.
+    const counts = dash.gameMonthCounts as Record<string, number>;
+    const old = ['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
+    for (const m of old) expect(counts[m], m).toBeGreaterThanOrEqual(2);
+    for (const m of old) expect(counts[m], m).toBeLessThanOrEqual(4);
+    expect(Object.keys(counts).sort()[0]).toBe('2025-12');
     // Credit left is unchanged by the extra games.
     expect((dash.creditLedger as any[]).filter((l) => l.balanceCents > 0).map((l) => l.balanceCents).sort((a, b) => a - b)).toEqual([300, 1400, 1400]);
     // Still passes every live health check.

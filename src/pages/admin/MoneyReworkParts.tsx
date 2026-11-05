@@ -2,12 +2,15 @@ import { useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { formatShortDate } from '../../../shared/time';
-import { api, ApiError } from '../../lib';
+import { smsHref } from '../../../shared/messages';
+import { api, ApiError, isIOS } from '../../lib';
 import { ConfirmDialog, Sheet, useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { useReworkBusy, useReworkRun } from './ReworkOps';
 import { CreditBackList, useAction } from './Sessions';
-import { owedCentsOf } from './moneyList';
+import { owedCentsOf, unpaidRows } from './moneyList';
+import { canTextAll, groupRemindText } from './moneyRework';
+import { reminderText } from './textMenu';
 import '../../money-rework.css';
 
 // The reworked Money page's shared pieces (MONEY_REWORK): the player rows of an open game, the body of a canceled game with nobody
@@ -272,5 +275,51 @@ export function HideFromList({ ctx, s, variant }: { ctx: AdminCtx; s: AdminSessi
       </button>
       <HideConfirm ctx={ctx} s={s} open={ask} onClose={() => setAsk(false)} />
     </>
+  );
+}
+
+/**
+ * The Remind sheet on the Money page (Money page rework). One tight row per person who owes: name, a small "owes $14" under it, and a
+ * Text button that opens Messages for that one person (the same text as before). With 2 or more owing, "Text all" sits in the header and
+ * opens the group chat with nobody filled in. The site sends nothing; you press send in Messages.
+ */
+export function ReworkRemind({ ctx, s, open, onClose }: { ctx: AdminCtx; s: AdminSessionView | null; open: boolean; onClose: () => void }) {
+  const rows = s ? unpaidRows(s) : [];
+  const day = s ? formatShortDate(s.startsAt, ctx.d.group.timezone) : '';
+  return (
+    <Sheet
+      open={open && !!s}
+      title={s ? `Remind · ${day}` : ''}
+      onClose={onClose}
+      headerAction={
+        s && canTextAll(s) ? (
+          <a className="mrw-textall" data-text-all href={smsHref(null, groupRemindText(ctx.d, s), isIOS)}>
+            Text all
+          </a>
+        ) : undefined
+      }
+    >
+      {s &&
+        (rows.length === 0 ? (
+          <p className="muted">Everyone has paid.</p>
+        ) : (
+          <ul className="mrw-remind-list" aria-label="Players who owe">
+            {rows.map((r) => (
+              <li key={r.playerId} data-remind-row={r.name}>
+                <span className="mrw-remind-who">
+                  <strong>{r.name}</strong>
+                  <span className="small muted">
+                    owes {formatPrice(r.owesCents)}
+                    {r.phone ? '' : ' · no number saved'}
+                  </span>
+                </span>
+                <a className="mrw-text-one" href={smsHref(r.phone, reminderText(ctx.d, r.playerId, r.name, s), isIOS)} aria-label={`Text ${r.name}`}>
+                  Text
+                </a>
+              </li>
+            ))}
+          </ul>
+        ))}
+    </Sheet>
   );
 }

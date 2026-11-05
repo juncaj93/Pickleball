@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { activityText, cleanActivity, highlightNew } from '../shared/activity';
 import type { ActivityEntry, AdminSessionView } from '../shared/api';
 import { zonedTimeToUtc } from '../shared/time';
-import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthOf, monthRows, monthRowLabel, shiftMonthKey, splitGames } from '../src/pages/admin/moneyRework';
+import { canTextAll, creditPerPlayerCents, fullyPaid, groupRemindText, monthBoxLabel, monthChoices, monthOf, monthRows, monthRowLabel, shiftMonthKey, splitGames } from '../src/pages/admin/moneyRework';
 
 const TZ = 'America/Detroit';
 // Wed Nov 4, 2026, 6:00 PM Eastern: the day this was built.
@@ -213,5 +213,39 @@ describe('History: a quieter list', () => {
     expect(activityText(entry('session_hidden_from_list'), TZ, 'Alex')).toMatch(/hid .* from the lists/);
     expect(activityText(entry('session_shown_in_list'), TZ, 'Alex')).toMatch(/restored .* to the lists/);
     expect(activityText(entry('money_rework_on', {}, { sessionStartsAt: null }), TZ, 'Alex')).toBe('Alex switched the Money page rework on');
+  });
+});
+
+describe('Remind sheet: Text all', () => {
+  const d = { now: new Date(NOW).toISOString(), group: { timezone: TZ, playerLink: 'https://pickleball.juncaj.net', settings: { pricePerPlayerCents: 1400 } } } as any;
+  it('R1 "Text all" shows only when at least 2 people owe', () => {
+    expect(canTextAll(game(at(11, 5), {}, []))).toBe(false);
+    expect(canTextAll(game(at(11, 5), {}, [seat()]))).toBe(false);
+    expect(canTextAll(game(at(11, 5), {}, [seat(), seat()]))).toBe(true);
+    // Paid people do not count, and neither does the organizer.
+    expect(canTextAll(game(at(11, 5), {}, [seat(), paidSeat(), paidSeat(), seat({ isOrganizer: true })]))).toBe(false);
+    expect(canTextAll(game(at(11, 5), {}, [seat(), paidSeat(), seat()]))).toBe(true);
+  });
+  it('R2 the message: two lines, a blank line, the site address alone on the last line', () => {
+    const t = groupRemindText(d, game(at(11, 4, 12)));
+    expect(t).toBe("Hey everyone, quick reminder for today's pickleball.\nIf you haven't paid your $14 yet, please do it here:\n\npickleball.juncaj.net");
+    expect(t.split('\n')).toHaveLength(4);
+  });
+  it('R3 the day words are the same rule as every other text: today, tonight, tomorrow, yesterday, else the date', () => {
+    const say = (m: number, day: number, h: number) => groupRemindText(d, game(at(m, day, h))).split('\n')[0];
+    expect(say(11, 4, 12)).toBe("Hey everyone, quick reminder for today's pickleball.");
+    expect(say(11, 4, 19)).toBe("Hey everyone, quick reminder for tonight's pickleball.");
+    expect(say(11, 5, 19)).toBe("Hey everyone, quick reminder for tomorrow's pickleball.");
+    expect(say(11, 3, 19)).toBe("Hey everyone, quick reminder for yesterday's pickleball.");
+    expect(say(11, 10, 19)).toBe("Hey everyone, quick reminder for Tue Nov 10's pickleball.");
+  });
+  it('R4 the price is that game\'s: the usual price, or the final price once finalized', () => {
+    expect(groupRemindText(d, game(at(11, 5)))).toContain('your $14 yet');
+    expect(groupRemindText(d, game(at(11, 3), { finalized: { priceCents: 900 } }))).toContain('your $9 yet');
+  });
+  it('R5 there are no recipients in the link: it opens the group chat, you pick', async () => {
+    const { smsHref } = await import('../shared/messages');
+    expect(smsHref(null, 'x', true)).toBe('sms:&body=x');
+    expect(smsHref(null, 'x', false)).toBe('sms:?body=x');
   });
 });
