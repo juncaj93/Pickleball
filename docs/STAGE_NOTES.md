@@ -2220,3 +2220,17 @@ game, and "Owes, one no number" (Reese has no phone number) for Text all. Late-c
 Rollback: Settings > Feature switches > "Money page rework" off (no deploy); kill switch `MONEY_REWORK = "off"` and a deploy; or the previous Pages deployment
 (listed in the deploy notes). Nothing in this change writes new kinds of data except `task_log` marks (hide, switch) and `admin_audit_log` entries
 (`charge_edited`, `session_hidden_from_list`, `session_shown_in_list`), so no data restore is needed to undo it.
+
+### Final independent review and last tests (Wed Nov 4, about 9:30 PM Eastern, before the deploy window)
+A fresh reviewer (did not write the code) went over the final diff for money totals, hide rules, instant-tap rollback and Text all. Money totals, the
+hide rules and the instant-tap rollback were found correct (hand-computed totals, 40 random games with fees and the split, Eastern month edges, switch off
+byte-identical to main). It found three real bugs and one risk, all fixed with tests (`tests/review-final-*.test.ts`):
+1. Text all quoted $14 on a game canceled late with the fee split (each owes $11): it now quotes the price on the owing seats.
+2. Moving a hidden game to another day cleared its hide: the hide now survives the move.
+3. A month older than the dashboard's 90 days showed "No games" although the month list counted games: such a month now loads on its own
+   (`GET /api/admin/month-games`, organizer only, read only, needs the switch on).
+4. The last Mark paid on a card could pop the next game open under the finger: which game starts open is now decided once per month on screen.
+Last runs: unit and API 2059 passed, 1 skipped, 0 failed (110 files). Browser: money-rework 36/36, admin-r2 27, admin-v2 27, admin-r3 15, late-fees 19,
+late-fee-split 6, do-now 13, credit 153, cancel-reason 8. `e2e/texts-r2.cjs` shows 4 failures when run at night (10 of 14 pass): proven identical on untouched
+main 4014f51 at the same hour (it reads the real clock and expects "tonight/tomorrow" wording from the time of day), so not caused by this change.
+`tests/held-drop-fuzz.test.ts` seed 136 failed once under heavy CPU load and passes alone (twice) and in the final full run.
