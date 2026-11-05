@@ -87,6 +87,8 @@ async function main() {
       .replace(/(:r[0-9a-z]+:)/g, ':id:')
       .replace(/\/assets\/[^"']+/g, '/assets/x')
       .replace(/ dots-celebrate/g, '')
+      // The setup step above runs a few milliseconds apart on the two sites (its Activity entry shows the same minute).
+      .replace(/(datetime="[^"]+?)\.\d{3}Z"/g, '$1Z"')
       // The two sites run on two ports; the address shows up in links and texts.
       .replace(/localhost(:|%3A)530[12]/g, 'localhost$1PORT');
   async function screen(base, { who, url, scheme, tabName, before }) {
@@ -140,6 +142,20 @@ async function main() {
       if (x2 !== y2) throw new Error(diffAt(x2, y2));
     });
   };
+  // The Money rule Alex added on Nov 5 (a fully paid game moves to Previous games only once finalized) is NOT behind the switch: it applies
+  // on its own. The fake world's "All paid" game (everyone paid, not played yet) is the one game it moves, so for this comparison one of
+  // its players is unmarked on BOTH sites first; then the Money page must be identical too. The rule itself is tested in
+  // tests/money-finalized-rule.test.ts and e2e/instant-taps.cjs.
+  for (const base of [A, B]) {
+    const ctx = await browser.newContext();
+    await ctx.request.post(base + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: base } });
+    const d = await (await ctx.request.get(base + '/api/admin/dashboard')).json();
+    const g = d.sessions.find((s) => s.note === 'All paid');
+    const r = g.roster.find((x) => x.name === 'Indy');
+    const res = await ctx.request.post(base + `/api/admin/sessions/${g.id}/payment`, { data: { playerId: r.playerId, paid: false, seen: r.moneySeen }, headers: { Origin: base } });
+    if (!res.ok()) throw new Error(`unmark on ${base}: ${await res.text()}`);
+    await ctx.close();
+  }
   for (const scheme of ['light', 'dark']) {
     for (const who of ['Jordan', 'Harper', 'Avery']) await same(`player home, ${who}, ${scheme}: identical`, { who, url: '/', scheme });
     for (const t of ['Home', 'Players', 'Money', 'History']) await same(`organizer ${t}, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: t });

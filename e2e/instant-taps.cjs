@@ -563,9 +563,9 @@ async function main() {
     await tab(page, 'Money');
     await page.locator('[data-month-box]').waitFor();
     assert((await page.locator(`.mrw-games > article.mrw-game[data-session="${allPaid.id}"]`).count()) === 1, 'in the main list');
-    // Within a card, unpaid players stay above paid players (the Mixed payments game: Kai and Gray owe, Lane and Morgan paid).
-    const mixed = upcoming.find((x) => x.note === 'Mixed payments');
-    const card = page.locator(`article.mrw-game[data-session="${mixed.id}"]`);
+    // Within a card, unpaid players stay above paid players ("Owes, one no number": Indy paid; Kai, Lane, Morgan, Reese owe).
+    const owes = upcoming.find((x) => x.note === 'Owes, one no number');
+    const card = page.locator(`article.mrw-game[data-session="${owes.id}"]`);
     if ((await card.getAttribute('data-open')) === 'no') await card.locator('.mrw-toggle').click();
     const order = await card.locator('li').evaluateAll((ls) => ls.map((l) => ({ name: l.innerText.split('\n')[0].trim(), paid: /Paid/.test(l.innerText) })));
     const firstPaid = order.findIndex((r) => r.paid);

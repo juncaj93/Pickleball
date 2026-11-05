@@ -775,7 +775,8 @@ async function main() {
       const tidy = page.locator('[data-switches-tidy]');
       await tidy.waitFor();
       const names = await tidy.locator('.set-name').evaluateAll((els) => els.map((e) => e.innerText.trim()));
-      assert(names[0] === 'Money page rework', `newest first: ${names[0]}`);
+      // Instant taps (Zip 5, Nov 5) is the newest switch now; Money page rework right under it.
+      assert(names[0] === 'Instant taps' && names[1] === 'Money page rework', `newest first: ${names.slice(0, 2)}`);
       // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
@@ -785,7 +786,7 @@ async function main() {
       assert(live[0] === 'Late-cancel fee split' && live[1] === 'Texts and alerts, round 2', `older switches in the group, newest first: ${live}`);
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
-      assert(names.length === 1 + live.length, `nothing else is listed: ${names.length} vs ${live.length}`);
+      assert(names.length === 2 + live.length, `nothing else is listed (Instant taps and Money page rework sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
