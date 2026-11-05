@@ -541,7 +541,7 @@ async function main() {
       assert(dom.sofar === f(api.owedToVenueCents), `owed ${dom.sofar} vs ${f(api.owedToVenueCents)}`);
       assert(dom.proj === f(api.projected.totalCents), `projected ${dom.proj}`);
       assert(dom.yours[0] === f(api.yourCostCents) && dom.yours[1] === f(api.projected.yourCostCents), `your cost ${dom.yours}`);
-      assert(/^COURT COSTS|Court costs/i.test(dom.cols[0]) && /session/.test(dom.cols[0]) && /monthly/.test(dom.cols[1]) && /from players/.test(dom.cols[2]), `columns ${dom.cols}`);
+      assert(/^COURT COSTS|Court costs/i.test(dom.cols[0]) && /court/.test(dom.cols[0].split('|').slice(2).join(' ')) && /monthly/.test(dom.cols[1]) && /from players/.test(dom.cols[2]), `columns ${dom.cols}`);
       assert(dom.titles[0].toLowerCase() === 'owed to venue so far' && /^projected november total$/i.test(dom.titles[1]), `titles ${dom.titles}`);
       assert(dom.titleSize > dom.labelSize, `card titles (${dom.titleSize}px) are larger than column labels (${dom.labelSize}px)`);
       const [r, g, b] = dom.bigColor.match(/\d+/g).map(Number);

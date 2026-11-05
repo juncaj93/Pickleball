@@ -332,7 +332,7 @@ function TotalsRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
           </span>
         </div>
         <dl className="mrw-cols">
-          <Col label="Court costs" value={formatPrice(t.courtCostCents)} note={plural(t.courtSessions, 'session', 'sessions')} data="court" />
+          <Col label="Court costs" value={formatPrice(t.courtCostCents)} note={plural(t.courtSessions, 'court', 'courts')} data="court" />
           <Col label="Membership" value={formatPrice(t.membershipCents)} note="monthly" data="membership" />
           <Col label="Collected" value={minus(t.collectedCents)} note="from players" tone="green" data="collected" />
         </dl>
