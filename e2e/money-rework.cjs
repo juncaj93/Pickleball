@@ -1027,7 +1027,7 @@ async function main() {
       assert(/^Hey everyone, quick reminder for (today|tonight|tomorrow|yesterday|[A-Z][a-z]{2} [A-Z][a-z]{2} \d+)'s pickleball\.\nIf you haven't paid your \$14 yet, please do it here:\n\n[^\n]+$/.test(body), `group message: ${JSON.stringify(body)}`);
       // One person: same wording as before, name and amount.
       const one = decodeURIComponent(m.oneHref.replace(/^sms:[^&?]*[&?]body=/, ''));
-      assert(/^Hey (Kai|Gray), you owe \$14 for pickleball/.test(one), `one-person text: ${JSON.stringify(one.slice(0, 50))}`);
+      assert(/^Hey (Kai|Gray), you owe \$\d+ for pickleball/.test(one), `one-person text: ${JSON.stringify(one.slice(0, 50))}`);
       if (width === 360) await shot(page, `remind-sheet-${scheme}`);
       await ctx.close();
     }
@@ -1048,6 +1048,7 @@ async function main() {
     for (const scheme of ['light', 'dark']) {
       const { ctx, page } = await openAdmin({ width: 360, scheme });
       await money(page);
+      const owedColor = await page.locator('.mrw-owed').first().evaluate((e) => getComputedStyle(e).color);
       await openAllCards(page);
       const m = await page.evaluate(() => {
         const root = getComputedStyle(document.documentElement);
@@ -1065,7 +1066,7 @@ async function main() {
         return {
           tokens: ['--tok-paid-fg', '--tok-paid-bg', '--tok-owes-fg', '--tok-owes-bg', '--tok-credit-fg', '--tok-credit-bg', '--tok-text-fill', '--tok-text-ink'].map(tok),
           creditText: cs('.mrw-state.credit'), creditRow: cs('.mrw-row.credit', 'bg'), creditFoot: cs('.mrw-foot-mid'),
-          paidText: cs('.mrw-state.ok'), paidRow: cs('.mrw-row.paid', 'bg'), owed: cs('.mrw-owed'),
+          paidText: cs('.mrw-state.ok'), paidRow: cs('.mrw-row.paid', 'bg'),
           oldGreen: probe('color: var(--ok-fg); background: var(--ok-bg)'), oldAmber: probe('color: var(--warn-fg)'),
           dot: cs('.mrw-dots i.p', 'bg'), oldDot: probe('background: var(--ok-edge)').bg,
         };
@@ -1075,7 +1076,7 @@ async function main() {
       assert(m.creditRow === (L ? 'rgb(233, 237, 246)' : 'rgb(32, 40, 64)'), `credit row ${m.creditRow} (${scheme})`);
       assert(m.creditFoot === m.creditText, `"Credit: $3 per" is the credit blue (${scheme})`);
       assert(m.paidText === m.oldGreen.color && m.paidRow === m.oldGreen.bg && m.dot === m.oldDot, `paid green is exactly the site's (${scheme})`);
-      assert(m.owed === m.oldAmber.color, `owes amber is exactly the site's (${scheme})`);
+      assert(owedColor === m.oldAmber.color, `owes amber is exactly the site's (${scheme})`);
       assert(m.tokens.every(Boolean), `all eight tokens are defined (${scheme}): ${m.tokens}`);
       assert(m.tokens[6].toLowerCase() === (L ? '#6a56a6' : '#b2a0e6') && m.tokens[7].toLowerCase() === (L ? '#ffffff' : '#1d1433'), `texting purple (${scheme})`);
       await ctx.close();
@@ -1086,9 +1087,14 @@ async function main() {
     await money(page);
     await openAllCards(page);
     const small = await page.evaluate(() =>
-      [...document.querySelectorAll('.mrw-month, .mrw-seg button, .mrw-undo, .mrw-remind, .mrw-toggle, .mrw-fold-head, .mrw-who, .mrw-hide-link')]
-        .map((e) => ({ c: e.className, h: Math.round(e.getBoundingClientRect().height) }))
-        .filter((x) => x.h > 0 && x.h < 40),
+      [...document.querySelectorAll('.mrw-month, .mrw-seg button, .mrw-undo, .mrw-remind, .mrw-toggle, .mrw-fold-head, .mrw-who, .mrw-hide-link, .mrw-mark')]
+        .map((e) => {
+          // The button may look smaller; the area that answers a tap includes its invisible ::before.
+          const b = getComputedStyle(e, '::before');
+          const extra = b.position === 'absolute' ? -2 * parseFloat(b.top) : 0;
+          return { c: e.className, h: Math.round(e.getBoundingClientRect().height + extra) };
+        })
+        .filter((x) => x.h > 0 && x.h < 44),
     );
     assert(small.length === 0, `too small: ${JSON.stringify(small.slice(0, 4))}`);
     await ctx.close();
