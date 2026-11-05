@@ -178,7 +178,7 @@
 
 /* Canceled is a neutral gray pill (it was green; red is kept for deadlines, cancel actions and errors): light #4b5563 on a soft gray, dark #aab2ac on
    #262c28, the same gray family as Waitlist. The whole canceled row is dimmed: the date tile (weekday, number, month, time) to about 58 percent, and
-   the weekday loses its calendar red, so there is no red anywhere on the row. The words stay fully readable (4.5:1 or better). */
+   the weekday loses its calendar red (it takes the plain ink color), so there is no red anywhere on the row. The pill words stay fully readable (4.5:1 or better). */
 :root[data-color-cleanup] .schedule .st-canceled.note-pill,
 :root[data-color-cleanup] .schedule .st-canceled.note-box {
   background: var(--z7-cancel-bg);
@@ -188,7 +188,7 @@
   opacity: 0.58;
 }
 :root[data-color-cleanup] .schedule > .sched.off .ptile .dow {
-  color: var(--pc-muted);
+  color: var(--pc-ink);
 }
 
 /* Purple = texting only: every Text button. (Remind, Text all and the per-person Text on Money are already purple.) */
@@ -206,6 +206,10 @@
 /* Blue = links and credit: credit uses the blue tokens (header chip, "Credit $3 used", "+ credit" on the due chip). */
 :root[data-color-cleanup] .credit-chip .cc-label {
   color: var(--z7-credit-fg);
+}
+:root[data-color-cleanup] .credit-chip.pending .cc-label {
+  /* A pending cash-out keeps its amber "needs attention" label. */
+  color: var(--warn-fg, #9a6700);
 }
 :root[data-color-cleanup] .schedule .pchip.chip-credit-used {
   color: var(--z7-credit-fg);
@@ -242,4 +246,18 @@
 }
 :root[data-tonight-glow] .hv2-short .tile .day-tag.tomorrow {
   font-size: 0.4rem;
+}
+
+/* Player tiles with "Player screen fixes" on (a roomier tag): the word TOMORROW is wider than TONIGHT, so its band gets a smaller word and less
+   side room and always stays inside the tile (the date tile's own width, in cqw, as the tag already does). */
+:root[data-tonight-glow] .schedule.pf1 .tonight-tag.day-tag,
+:root[data-tonight-glow] .schedule.pf1 .tier-later .tonight-tag.day-tag {
+  margin: 0 3px;
+  padding: 0.42em 0.2em;
+  letter-spacing: 0;
+  font-size: min(0.68rem, 12cqw);
+}
+:root[data-tonight-glow] .schedule.pf1 .tonight-tag.day-tag.tomorrow,
+:root[data-tonight-glow] .schedule.pf1 .tier-later .tonight-tag.day-tag.tomorrow {
+  font-size: min(0.62rem, 10.6cqw);
 }

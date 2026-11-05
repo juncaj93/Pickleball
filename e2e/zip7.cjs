@@ -20,7 +20,8 @@ const NOW_ISO = '2026-11-05T17:00:00.000Z';
 const NOW_MS = Date.parse(NOW_ISO);
 const SHOTS = process.env.E2E_SHOTS || path.join(__dirname, 'screenshots');
 const PIN = /PIN `(\d{6})`/.exec(readFileSync(path.join(ROOT, 'docs/PREVIEW_FAKE_DB.md'), 'utf8'))[1];
-const ALL_ON = 'tonightglow=on&colorcleanup=on&playercards=on';
+// playerfix1=on too: it is ON on live and on the preview, and it gives the TONIGHT tag extra padding (the TOMORROW band must still fit).
+const ALL_ON = 'tonightglow=on&colorcleanup=on&playercards=on&playerfix1=on';
 
 let passed = 0;
 let failed = 0;
@@ -208,6 +209,7 @@ async function main() {
     await check(`A: the tags fit inside their tiles on every card at ${width} px, light and dark, no sideways scroll`, async () => {
       for (const scheme of ['light', 'dark']) {
         const p = await openPlayer('Jordan', { width, scheme, query: ALL_ON });
+        assert((await p.page.locator('.schedule.pf1').count()) === 1, 'Player screen fixes is on too');
         const bad = await p.page.evaluate(() =>
           [...document.querySelectorAll('.day-tag')].flatMap((t) => {
             const r = t.getBoundingClientRect();
