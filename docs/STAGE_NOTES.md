@@ -2320,7 +2320,9 @@ Switch descriptions are their rows in `docs/FEATURE_SWITCHES.md`. Built on a Thu
 - Organizer: the player's sheet shows "Harper: credit +$5 / $19 now / Adjusted by organizer, Thu 12:00 PM / Reason: ..." and the Activity log has a line.
 
 ### B. Venmo request (`VENMO_REQUEST`)
-- `shared/venmoRequest.ts`: `https://venmo.com/USER?txn=charge&amount=14&note=Pickleball%20Tue%20Nov%203`, real %20, one account per link, only for a saved
+- `shared/venmoRequest.ts` (changed after Alex's phone test, Thu Nov 5: the plain `venmo.com/USER?...` link showed "+" in the note): built like the player's Pay link,
+  `venmo://paycharge?txn=charge&recipients=USER&amount=14&note=Pickleball%20Tue%20Nov%203` on a phone with `https://venmo.com/?txn=charge&recipients=USER&...` as the fallback
+  (`openVenmo`, the same function Pay uses), real %20 encoded once, one account per link, only for a saved
   USERNAME (a player saved only as a Venmo id link has no button), nothing owed = no link. The amount is each person's `owesCents` at that moment.
 - Three places: the Remind sheet ("Venmo request ↗" before the purple Text), a Home card per game on its game day or after ("Thu game: 3 haven't paid",
   Remind, a request per person, "no Venmo saved" for the rest; a canceled-late game that still owes shows too, "$11 each"), and "Request ↗" next to Mark

@@ -4,8 +4,8 @@
 import { describe, expect, it } from 'vitest';
 import { activityText } from '../shared/activity';
 import { ADJUST_CREDIT_HEADER } from '../shared/adjustCredit';
-import { venmoNote } from '../shared/money';
-import { VENMO_REQUEST_HEADER, venmoRequestAllowed, venmoRequestUrl, venmoUsername } from '../shared/venmoRequest';
+import { venmoNote, venmoPayUrl } from '../shared/money';
+import { VENMO_REQUEST_HEADER, venmoRequestAllowed, venmoRequestLinks, venmoUsername } from '../shared/venmoRequest';
 import { unpaidRows } from '../src/pages/admin/moneyList';
 import { firstSession, PIN, playerPhone, setupGroup, TestApp } from './harness';
 
@@ -14,45 +14,62 @@ const TZ = 'America/Detroit';
 const TUE_NOV_3 = '2026-11-04T01:00:00.000Z';
 const on = { [VENMO_REQUEST_HEADER]: 'on' };
 
+/** The note as Venmo will show it: the link's note value decoded once, the way a phone decodes %20 (a "+" would stay a plus). */
+const noteOf = (link: string) => decodeURIComponent(/[?&]note=([^&]*)/.exec(link)![1]);
+
 describe('Venmo request link', () => {
-  it('V1 the exact format Alex tested: username, txn=charge, amount, note with %20 spaces', () => {
-    expect(venmoRequestUrl('Harper-K', 1400, TUE_NOV_3, TZ)).toBe('https://venmo.com/Harper-K?txn=charge&amount=14&note=Pickleball%20Tue%20Nov%203');
+  const L = (handle: string | null | undefined, cents: number, iso = TUE_NOV_3) => venmoRequestLinks(handle, cents, iso, TZ);
+
+  it('V1 built like the player Pay link: a venmo:// app link with a web fallback, txn=charge, one recipient', () => {
+    const l = L('Harper-K', 1400)!;
+    expect(l.appUrl).toBe('venmo://paycharge?txn=charge&recipients=Harper-K&amount=14&note=Pickleball%20Tue%20Nov%203');
+    expect(l.url).toBe('https://venmo.com/?txn=charge&recipients=Harper-K&amount=14&note=Pickleball%20Tue%20Nov%203');
   });
-  it('V2 the note is "Pickleball <weekday> <month> <day>" and never has a plus sign or a raw space', () => {
-    const url = venmoRequestUrl('kai', 1400, TUE_NOV_3, TZ) as string;
-    expect(venmoNote(TUE_NOV_3, TZ)).toBe('Pickleball Tue Nov 3');
-    expect(url).toContain('note=Pickleball%20Tue%20Nov%203');
-    expect(url).not.toMatch(/\+/);
-    expect(url).not.toMatch(/ /);
-    expect(new URL(url).searchParams.get('note')).toBe('Pickleball Tue Nov 3');
+  it('V1b the same shape as the Pay link the players use: only txn (pay vs charge) differs', () => {
+    const pay = venmoPayUrl('https://venmo.com/u/Harper-K', 1400, venmoNote(TUE_NOV_3, TZ));
+    const req = L('Harper-K', 1400)!;
+    expect(req.appUrl).toBe(pay.appUrl!.replace('txn=pay', 'txn=charge'));
+    expect(req.url).toBe(pay.url!.replace('txn=pay', 'txn=charge'));
+  });
+  it('V2 the note reads "Pickleball Tue Nov 3": real spaces, no plus sign, no %20 left in the text, encoded once (not twice)', () => {
+    for (const link of Object.values(L('kai', 1400)!)) {
+      expect(noteOf(link)).toBe('Pickleball Tue Nov 3');
+      expect(noteOf(link)).not.toMatch(/\+/);
+      expect(noteOf(link)).not.toMatch(/%20/);
+      expect(link).not.toMatch(/\+/); // nowhere in the link
+      expect(link).not.toMatch(/ /);
+      expect(link).not.toMatch(/%2520/); // not encoded twice
+      expect(link).toContain('note=Pickleball%20Tue%20Nov%203');
+    }
     // Thursday, and a date after midnight UTC but still the evening before in Eastern time.
-    expect(venmoRequestUrl('kai', 1400, '2026-11-06T01:00:00.000Z', TZ)).toContain('note=Pickleball%20Thu%20Nov%205');
+    expect(noteOf(L('kai', 1400, '2026-11-06T01:00:00.000Z')!.appUrl)).toBe('Pickleball Thu Nov 5');
   });
   it('V3 the amount is what THAT person owes: $14, $11 (fee split or part credit), $9, cents when there are cents', () => {
-    const amount = (cents: number) => new URL(venmoRequestUrl('kai', cents, TUE_NOV_3, TZ) as string).searchParams.get('amount');
+    const amount = (cents: number) => /[?&]amount=([^&]*)/.exec(L('kai', cents)!.appUrl)![1];
     expect(amount(1400)).toBe('14');
     expect(amount(1100)).toBe('11');
     expect(amount(900)).toBe('9');
     expect(amount(950)).toBe('9.50');
   });
   it('V4 no button without a Venmo username: nothing saved, only an id link, a bad name, or nothing owed', () => {
-    expect(venmoRequestUrl(null, 1400, TUE_NOV_3, TZ)).toBeNull();
-    expect(venmoRequestUrl(undefined, 1400, TUE_NOV_3, TZ)).toBeNull();
-    expect(venmoRequestUrl('', 1400, TUE_NOV_3, TZ)).toBeNull();
-    expect(venmoRequestUrl('id:1234567', 1400, TUE_NOV_3, TZ)).toBeNull();
-    expect(venmoRequestUrl('a b', 1400, TUE_NOV_3, TZ)).toBeNull();
-    expect(venmoRequestUrl('x', 1400, TUE_NOV_3, TZ)).toBeNull();
-    expect(venmoRequestUrl('kai', 0, TUE_NOV_3, TZ)).toBeNull();
+    expect(L(null, 1400)).toBeNull();
+    expect(L(undefined, 1400)).toBeNull();
+    expect(L('', 1400)).toBeNull();
+    expect(L('id:1234567', 1400)).toBeNull();
+    expect(L('a b', 1400)).toBeNull();
+    expect(L('x', 1400)).toBeNull();
+    expect(L('kai', 0)).toBeNull();
     expect(venmoUsername('Kai_99')).toBe('Kai_99');
     expect(venmoUsername('id:99999')).toBeNull();
   });
-  it('V5 one person per link: the link carries exactly one account, never a list (Venmo would turn that into a split)', () => {
-    const url = new URL(venmoRequestUrl('kai', 1400, TUE_NOV_3, TZ) as string);
-    expect(url.pathname).toBe('/kai');
-    expect(url.searchParams.has('recipients')).toBe(false);
-    expect([...url.searchParams.keys()].sort()).toEqual(['amount', 'note', 'txn']);
-    expect(url.searchParams.get('txn')).toBe('charge');
-    expect(url.pathname).not.toContain(',');
+  it('V5 one person per link: exactly one recipient, never a list (Venmo would turn that into a split)', () => {
+    for (const link of Object.values(L('kai', 1400)!)) {
+      expect(link.match(/recipients=/g)).toHaveLength(1);
+      expect(/recipients=([^&]*)/.exec(link)![1]).toBe('kai');
+      expect(/recipients=([^&]*)/.exec(link)![1]).not.toMatch(/[,;%]/);
+      expect([...link.matchAll(/[?&]([a-z]+)=/g)].map((m) => m[1]).sort()).toEqual(['amount', 'note', 'recipients', 'txn']);
+      expect(link).toContain('txn=charge');
+    }
   });
   it('V6 the var is allowed unless it says off', () => {
     expect(venmoRequestAllowed(undefined)).toBe(true);
@@ -145,9 +162,10 @@ describe('Venmo request: the amount is what each person owes right now', () => {
     const owes = Object.fromEntries(rows.map((r) => [r.name, r.owesCents]));
     expect(owes).toEqual({ Blair: 1100, Casey: 1400, Devon: 1400 });
     const handle = (n: string) => d2.players.find((p: any) => p.name === n).venmo;
-    const link = (n: string) => venmoRequestUrl(handle(n), owes[n], game.startsAt, d.group.timezone);
-    expect(new URL(link('Blair') as string).searchParams.get('amount')).toBe('11');
-    expect(new URL(link('Casey') as string).searchParams.get('amount')).toBe('14');
+    const link = (n: string) => venmoRequestLinks(handle(n), owes[n], game.startsAt, d.group.timezone)?.appUrl ?? null;
+    expect(/amount=([^&]*)/.exec(link('Blair') as string)![1]).toBe('11');
+    expect(/amount=([^&]*)/.exec(link('Casey') as string)![1]).toBe('14');
+    expect(noteOf(link('Casey') as string)).toMatch(/^Pickleball [A-Z][a-z]{2} [A-Z][a-z]{2} \d{1,2}$/);
     // Devon has no Venmo saved: no link at all.
     expect(handle('Devon')).toBeNull();
     expect(link('Devon')).toBeNull();

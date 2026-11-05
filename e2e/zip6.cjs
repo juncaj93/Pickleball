@@ -326,7 +326,7 @@ async function main() {
     const game = byNote(dk, 'Mixed payments');
     const owing = game.roster.filter((r) => r.paymentStatus === 'unpaid' && r.owesCents > 0).map((r) => r.name).sort();
     assert(owing.join(',') === ['Gray', 'Kai'].join(','), `who owes: ${owing}`);
-    const links = await card.locator('[data-venmo-request]').evaluateAll((els) => els.map((a) => ({ who: a.getAttribute('data-venmo-request'), href: a.getAttribute('href'), text: a.textContent, h: a.getBoundingClientRect().height, fs: getComputedStyle(a).fontSize, target: a.getAttribute('target') })));
+    const links = await card.locator('[data-venmo-request]').evaluateAll((els) => els.map((a) => ({ who: a.getAttribute('data-venmo-request'), href: a.getAttribute('href'), app: a.getAttribute('data-app-href'), text: a.textContent, h: a.getBoundingClientRect().height, fs: getComputedStyle(a).fontSize, target: a.getAttribute('target') })));
     assert(links.map((l) => l.who).join(',') === 'Kai', `links for: ${links.map((l) => l.who)}`);
     for (const l of links) {
       assert(l.text === 'Request ↗', `label: ${l.text}`);
@@ -336,8 +336,11 @@ async function main() {
     const kai = links.find((l) => l.who === 'Kai');
     const start = new Date(game.startsAt);
     const note = `Pickleball ${start.toLocaleDateString('en-US', { weekday: 'short', timeZone: 'America/Detroit' })} ${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Detroit' })}`;
-    assert(kai.href === `https://venmo.com/kai-fake?txn=charge&amount=14&note=${note.replace(/ /g, '%20')}`, `Kai link: ${kai.href}`);
-    assert(!kai.href.includes('+'), 'no plus signs');
+    // Built like the player's Pay link: the Venmo app link on a phone, the web link as the fallback; the note has real %20 spaces, never "+".
+    assert(kai.href === `https://venmo.com/?txn=charge&recipients=kai-fake&amount=14&note=${note.replace(/ /g, '%20')}`, `Kai web link: ${kai.href}`);
+    assert(kai.app === `venmo://paycharge?txn=charge&recipients=kai-fake&amount=14&note=${note.replace(/ /g, '%20')}`, `Kai app link: ${kai.app}`);
+    assert(!kai.href.includes('+') && !kai.app.includes('+'), 'no plus signs');
+    assert(decodeURIComponent(/note=([^&]*)/.exec(kai.app)[1]) === note, 'the note reads with real spaces');
     // Gray has no Venmo saved: no link on that row. Mark paid is still there on every owing row.
     const gray = card.locator('[data-pay-row="Gray"]');
     assert((await gray.locator('[data-venmo-request]').count()) === 0, 'no link for Gray');
