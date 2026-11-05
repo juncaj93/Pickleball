@@ -83,6 +83,20 @@ async function main() {
   const phone = (width, scheme = 'light', height = 800, dpr = 1) => ({ viewport: { width, height }, deviceScaleFactor: dpr, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA });
   async function openAdmin({ width = 390, scheme = 'light', url = '/admin', height = 800, dpr = 1 } = {}) {
     const ctx = await browser.newContext(phone(width, scheme, height, dpr));
+    // The server clock is pinned to Wed Nov 4, 6:00 PM Eastern; the phone follows it (time still runs), so nothing here depends on the hour this test is run.
+    await ctx.addInitScript((delta) => {
+      const Real = Date;
+      class Shifted extends Real {
+        constructor(...a) {
+          if (a.length === 0) super(Real.now() + delta);
+          else super(...a);
+        }
+        static now() {
+          return Real.now() + delta;
+        }
+      }
+      window.Date = Shifted;
+    }, NOW_MS - Date.now());
     await post(ctx.request, '/api/admin/login', { pin: PIN });
     const page = await ctx.newPage();
     page.on('pageerror', (e) => {
@@ -105,6 +119,17 @@ async function main() {
   const money = async (page) => {
     await tab(page, 'Money');
     await page.locator('[data-month-box]').waitFor();
+  };
+  // A Home game card, found whether it is folded (a row to tap) or already open (this week's games start open), after "Show all" if needed.
+  const openHomeCard = async (page, id) => {
+    let card = page.locator(`article#session-${id}`);
+    if (await card.count()) return card;
+    const all = page.locator('button', { hasText: /^Show all/ });
+    if (await all.count()) await all.click();
+    await page.locator(`[id="session-${id}"]`).first().waitFor();
+    if (!(await card.count())) await page.locator(`div#session-${id}`).click();
+    await card.waitFor();
+    return card;
   };
   const openAllCards = async (page) => {
     const cards = page.locator('article.mrw-game');
@@ -619,14 +644,7 @@ async function main() {
     // An empty, not-booked game (no money in it) can be hidden.
     const empty = (await dash()).sessions.find((s) => !s.state.flags.canceled && s.bookingStatus !== 'booked' && s.confirmedCount === 0 && s.roster.length === 0 && Date.parse(s.startsAt) > NOW_MS);
     assert(empty, 'an empty game exists');
-    let card = page.locator(`article#session-${empty.id}`);
-    if (!(await card.count())) {
-      const all = page.locator('button', { hasText: /^Show all/ });
-      if (await all.count()) await all.click();
-      await page.locator(`div#session-${empty.id}`).click();
-      card = page.locator(`article#session-${empty.id}`);
-      await card.waitFor();
-    }
+    let card = await openHomeCard(page, empty.id);
     await card.locator('button[aria-label^="Game menu"]').click();
     await page.locator('[data-hide-from-list]').click();
     const dlg = page.locator('dialog[open]');
@@ -698,14 +716,7 @@ async function main() {
     assert(r.status() === 409 && (await r.json()).message === 'This game has money in it, so it stays in Money.', 'the server says so');
     // Home, the canceled game that gave credit back.
     await tab(page, 'Home');
-    let card = page.locator(`article#session-${court.id}`);
-    if (!(await card.count())) {
-      const all = page.locator('button', { hasText: /^Show all/ });
-      if (await all.count()) await all.click();
-      await page.locator(`div#session-${court.id}`).click();
-      card = page.locator(`article#session-${court.id}`);
-      await card.waitFor();
-    }
+    let card = await openHomeCard(page, court.id);
     await card.locator('button[aria-label^="Game menu"]').click();
     const hide = page.locator('[data-hide-blocked]');
     assert((await hide.count()) === 1 && (await hide.getAttribute('aria-disabled')) === 'true', 'the row is there and grayed out');
@@ -725,14 +736,7 @@ async function main() {
     const { ctx, page } = await openAdmin();
     await tab(page, 'Home');
     const sheetFor = async (id) => {
-      let card = page.locator(`article#session-${id}`);
-      if (!(await card.count())) {
-        const all = page.locator('button', { hasText: /^Show all/ });
-        if (await all.count()) await all.click();
-        await page.locator(`div#session-${id}`).click();
-        card = page.locator(`article#session-${id}`);
-        await card.waitFor();
-      }
+      let card = await openHomeCard(page, id);
       await card.locator('button[aria-label^="Game menu"]').click();
       await page.getByRole('menuitem', { name: /Cancel session/ }).click();
       const dlg = page.locator('dialog[open]');
