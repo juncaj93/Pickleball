@@ -124,6 +124,7 @@ route('PUT', '/api/admin/texts-r2', admin.setTextsR2);
 route('PUT', '/api/admin/late-fee-split', admin.setLateFeeSplit);
 route('PUT', '/api/admin/money-rework', admin.setMoneyRework);
 route('POST', '/api/admin/sessions/:id/hide-from-list', admin.hideFromList);
+route('GET', '/api/admin/month-games', admin.monthGames);
 route('POST', '/api/admin/sessions/:id/charge', admin.setSessionCharge);
 route('PUT', '/api/admin/pay-sheet', admin.setPaySheet);
 route('POST', '/api/admin/alerts/test', (ctx) => alerts.testAlert(ctx));

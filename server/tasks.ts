@@ -126,7 +126,8 @@ export async function recordCourtBooked(db: D1Database, groupId: string, session
  */
 export async function resetTasksForNewDay(db: D1Database, sessionId: string): Promise<void> {
   try {
-    await db.prepare(`DELETE FROM task_log WHERE session_id = ? AND (kind IN ('sent', 'failed') OR (kind = 'mark' AND task <> ?))`).bind(sessionId, COURT_BOOKED_MARK).run();
+    // The court-booked mark stays, and so does "hidden from the lists" (Money page rework): moving a game does not un-hide it.
+    await db.prepare(`DELETE FROM task_log WHERE session_id = ? AND (kind IN ('sent', 'failed') OR (kind = 'mark' AND task <> ? AND task <> ?))`).bind(sessionId, COURT_BOOKED_MARK, HIDDEN_GAME_TASK).run();
   } catch {
     // Never worth failing the move over.
   }

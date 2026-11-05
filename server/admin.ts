@@ -5,7 +5,7 @@ import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/
 import { openSpots } from '../shared/spots';
 import { MONEY_STATE, reopenBlockers, sqlText } from './finalize';
 import { pendingRequestViews } from './creditActions';
-import { formatDateTime, formatShortDate, formatTimeRange, localParts } from '../shared/time';
+import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
@@ -1902,6 +1902,50 @@ async function gameMonthCounts(ctx: Ctx, group: GroupRow, hidden: Set<string>): 
     out[key] = (out[key] ?? 0) + 1;
   }
   return out;
+}
+
+/**
+ * GET /api/admin/month-games?month=2026-03 (Money page rework): the games of ONE month, drawn exactly like the dashboard's games, for months older
+ * than the dashboard's 90-day window, so every month in the month list can be opened. Read only. Games hidden from the lists (with no money) are marked.
+ */
+export async function monthGames(ctx: Ctx): Promise<{ month: string; sessions: AdminDashboard['sessions'] }> {
+  const group = await requireAdmin(ctx);
+  if (!(await moneyReworkFor(ctx, group.id))) throw new HttpError(409, 'not_available', 'This is not switched on.');
+  const m = /^(\d{4})-(\d{2})$/.exec(ctx.url.searchParams.get('month') ?? '');
+  if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) throw new HttpError(400, 'invalid_month', 'Pick a month.');
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const tz = group.timezone;
+  const from = new Date(zonedTimeToUtc(year, month, 1, 0, 0, tz)).toISOString();
+  const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
+  const settings = settingsOf(group);
+  const shownFrom = visibleFrom(group);
+  const { results } = await ctx.db
+    .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at')
+    .bind(group.id, from, to)
+    .all<SessionRow>();
+  const rows = results.filter((s) => s.starts_at >= shownFrom || Number(s.shown_early) === 1);
+  const players = await getPlayers(ctx.db, group.id);
+  const organizerId = await organizerIdOf(ctx.db, group);
+  const timeShift = await timeShiftFor(ctx, group.id);
+  const ledger = await loadLedger(ctx.db, group.id);
+  const charges = await loadCancelCharges(ctx.db, group.id);
+  const creditSessionIds = new Set(ledger.map((e) => e.sessionId).filter((x): x is string => !!x));
+  const marked = await adminHiddenGameIds(ctx.db, group.id);
+  const hiddenIds = await hiddenGameIds(ctx.db, group.id);
+  const potFor = (sessionId: string) => (r: RosterRow) => seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
+  const sessions: AdminDashboard['sessions'] = [];
+  for (const s of rows) {
+    const roster = await loadRoster(ctx.db, s.id);
+    const blockers = s.finalized_at ? await reopenBlockers(ctx, s.id) : { spent: [], requested: [] };
+    const hidden = marked.has(s.id) && !sessionHasMoney(s, roster, creditSessionIds, charges);
+    sessions.push({
+      ...adminSessionView(s, roster, players, ctx.nowMs, settings, tz, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers, timeShift),
+      hiddenFromPlayers: hiddenIds.has(s.id),
+      ...(hidden ? { hiddenFromList: true } : {}),
+    });
+  }
+  return { month: `${year}-${String(month).padStart(2, '0')}`, sessions };
 }
 
 /**

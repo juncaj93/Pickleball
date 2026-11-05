@@ -173,8 +173,17 @@ export function missingNumberNote(names: string[]): string {
   return `No number for ${who}, texted the rest.`;
 }
 
-/** The price each person is asked for on this game: the final price once finalized, else the usual price. */
-export const gamePriceCents = (d: Pick<AdminDashboard, 'group'>, s: AdminSessionView): number => (s.finalized ? s.finalized.priceCents : d.group.settings.pricePerPlayerCents);
+/**
+ * The price each person is asked for on this game: the price on the seats of the people who owe (the most common one), so a game canceled late
+ * with the fee split says $11, not $14. With nobody owing: the final price once finalized, else the usual price.
+ */
+export function gamePriceCents(d: Pick<AdminDashboard, 'group'>, s: AdminSessionView): number {
+  const counts = new Map<number, number>();
+  for (const r of unpaidRows(s)) if (r.shareCents !== null && r.shareCents > 0) counts.set(r.shareCents, (counts.get(r.shareCents) ?? 0) + 1);
+  const common = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
+  if (common) return common[0];
+  return s.finalized ? s.finalized.priceCents : d.group.settings.pricePerPlayerCents;
+}
 
 /** The "Text all" message for a game: one text for the group chat (no recipients), the site address alone on the last line. */
 export function groupRemindText(d: Pick<AdminDashboard, 'group' | 'now'>, s: AdminSessionView): string {

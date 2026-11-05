@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useRef, useState } from 'react';
+import type { AdminSessionView } from '../../../shared/api';
 import { useToast } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { applyOps, opKey, type ReworkOp } from './reworkOptimistic';
@@ -7,6 +8,8 @@ import { applyOps, opKey, type ReworkOp } from './reworkOptimistic';
 // of the screen's data with them already drawn (reworkOptimistic.ts). Other screens never see it.
 
 interface Store {
+  /** Draws the taps still saving on top of a list of games (for a month loaded on its own). */
+  patch: (sessions: AdminSessionView[]) => AdminSessionView[];
   start: (op: ReworkOp) => number;
   end: (id: number) => void;
   busy: (key: string) => boolean;
@@ -24,7 +27,10 @@ export function ReworkOpsProvider({ ctx, children }: { ctx: AdminCtx; children: 
   }, []);
   const end = useCallback((id: number) => setOps((cur) => cur.filter((o) => o.id !== id)), []);
   const keys = useMemo(() => new Set(ops.map((o) => opKey(o.op))), [ops]);
-  const store = useMemo<Store>(() => ({ start, end, busy: (k) => keys.has(k) }), [start, end, keys]);
+  const store = useMemo<Store>(
+    () => ({ start, end, busy: (k) => keys.has(k), patch: (sessions) => applyOps({ ...ctx.d, sessions }, ops.map((o) => o.op)).sessions }),
+    [start, end, keys, ctx.d, ops],
+  );
   const view = useMemo<AdminCtx>(() => ({ ...ctx, d: applyOps(ctx.d, ops.map((o) => o.op)) }), [ctx, ops]);
   return <OpsContext.Provider value={store}>{children(view)}</OpsContext.Provider>;
 }
@@ -64,4 +70,10 @@ export function useReworkRun(ctx: AdminCtx): ((op: ReworkOp, save: () => Promise
       flying.current.delete(key);
     }
   };
+}
+
+/** The same instant-tap picture for a list of games loaded on its own (an older month). Outside the Money page the list is returned as it is. */
+export function useReworkPatch(): (sessions: AdminSessionView[]) => AdminSessionView[] {
+  const store = useContext(OpsContext);
+  return store ? store.patch : (sessions) => sessions;
 }

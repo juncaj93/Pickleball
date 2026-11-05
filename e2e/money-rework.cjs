@@ -273,6 +273,23 @@ async function main() {
       await o.ctx.close();
     }
   });
+  await check('1 an older month (past the dashboard\'s 90 days) opens too: its games are there, matching the count in the month list', async () => {
+    const { ctx, page } = await openAdmin();
+    await money(page);
+    const real = (await dash()).gameMonthCounts;
+    for (const month of ['2025-12', '2026-03', '2026-06']) {
+      await page.locator('[data-month-box]').click();
+      await page.locator(`[data-month-option="${month}"]`).click();
+      await page.locator('[data-fold="previous"], [data-no-games]').first().waitFor();
+      assert((await page.locator('[data-no-games]').count()) === 0, `${month} does not say "No games" (the list counts ${real[month]})`);
+      await page.locator('[data-fold="previous"] .mrw-fold-head').click();
+      const rows = await page.locator('[data-fold="previous"] .mrw-prow').count();
+      assert(rows === real[month], `${month}: ${rows} games shown, the list says ${real[month]}`);
+      await page.locator('[data-fold="previous"] .mrw-prow-head').first().click();
+      assert((await page.locator('[data-fold="previous"] .mrw-prow.open .mrw-row').count()) >= 4, `${month}: a game opens to its four players`);
+    }
+    await ctx.close();
+  });
   await check('3 4 5 nothing extra on Games: no "Not finalized yet" line, no "Later games" card; the Hidden games count has room before the chevron', async () => {
     const { ctx, page } = await openAdmin({ width: 360 });
     await money(page);

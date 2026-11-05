@@ -3,6 +3,7 @@ import type { AdminSessionView, MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { formatShortDate, formatTime, localParts } from '../../../shared/time';
 import { api, useDemoVersion, useLoad, usePretend } from '../../lib';
+import { zonedTimeToUtc } from '../../../shared/time';
 import { ErrorState, Spinner } from '../../ui';
 import type { AdminCtx } from '../Admin';
 import { minus, monthName } from './MonthlyMoney';
@@ -10,7 +11,7 @@ import { Chevron, currentMonth, GameBody } from './MoneyV2';
 import { ReworkRemind } from './MoneyReworkParts';
 import { unpaidRows, owedCentsOf } from './moneyList';
 import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
-import { ReworkOpsProvider } from './ReworkOps';
+import { ReworkOpsProvider, useReworkPatch } from './ReworkOps';
 import '../../money-rework.css';
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -168,16 +169,29 @@ function GamesRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
   // The server's clock (the screen reloads at least every few minutes), so "today" always agrees with what the server counts.
   const nowMs = Date.parse(ctx.d.now);
   const tz = ctx.d.group.timezone;
-  const { main, previous } = splitGames(ctx.d.sessions, month, nowMs, tz);
+  // The dashboard carries about the last 90 days of games. A month that ended before that is loaded on its own, so every month in the list can be opened.
+  const older = zonedTimeToUtc(Number(month.slice(0, 4)), Number(month.slice(5)) + 1, 1, 0, 0, tz) < nowMs - 80 * 86_400_000;
+  const pretend = usePretend();
+  const demo = useDemoVersion();
+  const patch = useReworkPatch();
+  const loaded = useLoad(() => (older ? api<{ month: string; sessions: AdminSessionView[] }>('GET', `/api/admin/month-games?month=${month}`) : Promise.resolve(null)), [month, older, ctx.d.version, pretend, demo]);
+  const own = older && loaded.data?.month === month ? loaded.data.sessions : null;
+  const sessions = older ? (own ? patch(own) : []) : ctx.d.sessions;
+  const { main, previous } = splitGames(sessions, month, nowMs, tz);
   // The first game in the list starts open; a tap opens or folds any card. (Overrides only, so a game never moves on its own.)
   const [over, setOver] = useState<Record<string, boolean>>({});
-  const firstId = main[0]?.s.id;
+  // Which game starts open is decided once for this month on screen. When the last Mark paid on a card moves it to Previous games, the next
+  // game must not pop open under the finger.
+  const firstRef = useRef<{ month: string; id: string | undefined } | null>(null);
+  if (!firstRef.current || firstRef.current.month !== month) firstRef.current = { month, id: main[0]?.s.id };
+  const firstId = firstRef.current.id;
   const isOpen = (id: string) => over[id] ?? id === firstId;
   const toggle = (id: string) => setOver((cur) => ({ ...cur, [id]: !(cur[id] ?? id === firstId) }));
   const [remind, setRemind] = useState<string | null>(null);
   const all = [...main, ...previous];
   const remindSession = all.find((g) => g.s.id === remind)?.s ?? null;
   const sameDay = (s: AdminSessionView) => all.filter((g) => formatShortDate(g.s.startsAt, tz) === formatShortDate(s.startsAt, tz)).length > 1;
+  if (older && !own) return loaded.error ? <ErrorState error={loaded.error} onRetry={loaded.reload} /> : <Spinner />;
   if (all.length === 0) return <p className="muted small" data-no-games>No games in {monthName(month)}.</p>;
   return (
     <>
