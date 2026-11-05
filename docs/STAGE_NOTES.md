@@ -2300,3 +2300,23 @@ the "drop the guess on the next good refresh" rule (now attached in an effect). 
 Known and accepted: if a save works but every refresh fails for 15 seconds, the guess is let go and the screen shows the older data until the
 next good refresh (the server has the tap; a second tap is refused by the server's own checks). The player stamp gained one switch, so every
 phone reloads once after the deploy.
+
+### Deploy (Thu Nov 5, 2026, about 12:06 PM Eastern, on Alex's written "SHIP IT NOW, LOUD HOURS OK" at about 12:00 PM)
+- Last change before ship (Alex's answer): a Settings text box whose save fails keeps what was typed, with "Couldn't save. Tap to retry." (as
+  before); browser test added. Unit and API on the ship commit: 2109 passed, 1 skipped, 0 failed (123 files). Browser: instant-taps 19/19,
+  switch-OFF side by side with main 18/18 identical, admin-r3 15/15, admin-v2 27/27; the full browser run on the code before that last
+  change: no new failures (known ones unchanged; texts-r2 14/14 in the daytime).
+- PR #85 merged as `811c5c7`. Main equaled live before it (production `6edeadd4` = f0a2194). Production deployment
+  `6fde6dc0-d40f-438b-a7db-a19889cc571d` from main with `INSTANT_TAPS = "on"` (allowed) and the Settings row OFF (no `instant_taps_on` row).
+  No migration.
+- Before it: SQL export `live-before-instant-taps-2026-11-05.sql` (362 rows, not committed, has phone numbers, in this session's scratch folder),
+  taken 11:52 AM Eastern. Time Travel bookmark `0000081d-00000000-0000511a-7f65082f163368ea09df584ff02d8c07` (11:52 AM Eastern).
+  Integrity checks: all 21 columns 0 before and after.
+- Read-only live check (pickleball-club-9h0.pages.dev): `/`, `/admin`, `/api/status`, `/api/group/version` answer 200; `/api/admin/dashboard`,
+  `/api/admin/month-games` and `PUT /api/admin/instant-taps` answer 401 without a sign-in; the live script is the same file as the local build
+  (index-DLKG3Wl1.js, 552,980 bytes); the player view has no `instantTaps` (off for everyone) and the private header turns it on for that
+  request; row counts unchanged from the export (players 11, games 12, seats 23, credit 5); `money_rework_on` 1 row, `instant_taps_on` 0 rows.
+- Live with the deploy (not behind INSTANT_TAPS): the Money page rule, a fully paid game goes to Previous games only once finalized.
+- Rollback: Settings > Feature switches > "Instant taps" off (no deploy; it ships off); `INSTANT_TAPS = "off"` and a deploy; or Pages deployment
+  `6edeadd4` (f0a2194, the code before this; also undoes the Money rule). No data was changed by the deploy, so no restore is needed.
+- Alex tests on his phone with `/?instanttaps=on` (and `/admin?instanttaps=on`) and switches it on himself.
