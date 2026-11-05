@@ -461,7 +461,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -469,6 +469,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <TonightGlowRow ctx={ctx} auto={auto} />
+              <ColorCleanupRow ctx={ctx} auto={auto} />
+              <PlayerCardsRow ctx={ctx} auto={auto} />
               <HomeCollapseRow ctx={ctx} auto={auto} />
               <AdjustCreditRow ctx={ctx} auto={auto} />
               <VenmoRequestRow ctx={ctx} auto={auto} />
@@ -1278,6 +1281,37 @@ function AdjustCreditRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 
 /**
+ * Zip 7 switches (server/zip7.ts), all display only, all off at ship. Off: only a phone opened with ?tonightglow=on, ?colorcleanup=on or
+ * ?playercards=on. Each saves itself, no deploy.
+ */
+function Zip7Row({ ctx, auto, rowKey, path, name, hint, flag, dataAttr }: { ctx: AdminCtx; auto: Autosave; rowKey: string; path: string; name: string; hint: string; flag: boolean; dataAttr: string }) {
+  const { on, flip } = useFlip(flag, ctx, auto, rowKey, path, name, true);
+  return (
+    <div className="set-row-wrap" data-row={rowKey}>
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            {name} <SaveMark state={auto.rows[rowKey]} />
+          </span>
+          <span className="set-hint">{hint}</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} {...{ [dataAttr]: true }} onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows[rowKey]} />
+    </div>
+  );
+}
+function TonightGlowRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="tonightGlowAll" path="/api/admin/tonight-glow-switch" name="Tonight glow" hint="Green TONIGHT and TOMORROW tags, glowing badge" flag={!!ctx.d.tonightGlowForAll} dataAttr="data-tonight-glow-all" />;
+}
+function ColorCleanupRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="colorCleanupAll" path="/api/admin/color-cleanup-switch" name="Color cleanup" hint="One color system across the site" flag={!!ctx.d.colorCleanupForAll} dataAttr="data-color-cleanup-all" />;
+}
+function PlayerCardsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="playerCardsAll" path="/api/admin/player-cards-switch" name="Simpler player cards" hint="No court status on player cards" flag={!!ctx.d.playerCardsSimpleForAll} dataAttr="data-player-cards-all" />;
+}
+
+/**
  * "Home collapse" (HOME_COLLAPSE, server/homeCollapse.ts): the player Home shows only this week and next week; every later game sits behind
  * one "More sessions" button. Off: only a phone opened with /?homecollapse=on. Saves itself, no deploy. Display only.
  */
@@ -1400,7 +1434,10 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
-      <HomeCollapseRow ctx={ctx} auto={auto} />
+      <TonightGlowRow ctx={ctx} auto={auto} />
+              <ColorCleanupRow ctx={ctx} auto={auto} />
+              <PlayerCardsRow ctx={ctx} auto={auto} />
+              <HomeCollapseRow ctx={ctx} auto={auto} />
       <AdjustCreditRow ctx={ctx} auto={auto} />
       <VenmoRequestRow ctx={ctx} auto={auto} />
       <InstantTapsRow ctx={ctx} auto={auto} />

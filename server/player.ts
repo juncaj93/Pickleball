@@ -82,6 +82,7 @@ import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
 import { instantTapsFor } from './instantTaps';
 import { homeCollapseFor } from './homeCollapse';
+import { colorCleanupFor, playerCardsFor, tonightGlowFor } from './zip7';
 import { paySheetFor } from './paySheet';
 import { cancelRefundRequest, requestRefund, undoCreditUse, useCashOutOn, useCreditOn } from './creditActions';
 import { playerSessionView } from './views';
@@ -268,6 +269,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     paySheet: paySheetOn,
     ...((await instantTapsFor(ctx, group.id)) ? { instantTaps: true } : {}),
     ...((await homeCollapseFor(ctx, group.id)) ? { homeCollapse: true } : {}),
+    ...((await tonightGlowFor(ctx, group.id)) ? { tonightGlow: true } : {}),
+    ...((await colorCleanupFor(ctx, group.id)) ? { colorCleanup: true } : {}),
+    ...((await playerCardsFor(ctx, group.id)) ? { playerCardsSimple: true } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,

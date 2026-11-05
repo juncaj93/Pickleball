@@ -13,6 +13,7 @@ import { hashPin, newId, randomToken, verifyPin } from './crypto';
 import { motionAdminFor, motionForAll, setMotionForAll } from './motion';
 import { adjustCreditFor, adjustCreditForAll, setAdjustCreditForAll } from './adjustCredit';
 import { homeCollapseForAll, setHomeCollapseForAll } from './homeCollapse';
+import { colorCleanupFor, colorCleanupForAll, playerCardsFor, playerCardsForAll, setColorCleanupForAll, setPlayerCardsForAll, setTonightGlowForAll, tonightGlowFor, tonightGlowForAll } from './zip7';
 import { setVenmoRequestForAll, venmoRequestFor, venmoRequestForAll } from './venmoRequest';
 import { adjustReasonColumn, cleanReason, planAdjust, signedPrice } from '../shared/adjustCredit';
 import { setTimeShiftForAll, timeShiftFor, timeShiftForAll } from './timeShift';
@@ -266,6 +267,12 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await venmoRequestFor(ctx, group.id)) ? { venmoRequest: true } : {}),
     venmoRequestForAll: await venmoRequestForAll(ctx.db, group.id),
     homeCollapseForAll: await homeCollapseForAll(ctx.db, group.id),
+    ...((await tonightGlowFor(ctx, group.id)) ? { tonightGlow: true } : {}),
+    tonightGlowForAll: await tonightGlowForAll(ctx.db, group.id),
+    ...((await colorCleanupFor(ctx, group.id)) ? { colorCleanup: true } : {}),
+    colorCleanupForAll: await colorCleanupForAll(ctx.db, group.id),
+    ...((await playerCardsFor(ctx, group.id)) ? { playerCardsSimple: true } : {}),
+    playerCardsSimpleForAll: await playerCardsForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2202,5 +2209,32 @@ export async function setHomeCollapseSwitch(ctx: Ctx, body: Record<string, unkno
   const on = v.bool(body.on, 'on');
   await setHomeCollapseForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'home_collapse_on' : 'home_collapse_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/tonight-glow-switch { on }: Settings > Feature switches > "Tonight glow". Date tile tags and glow only; moves nothing. */
+export async function setTonightGlowSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTonightGlowForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'tonight_glow_on' : 'tonight_glow_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/color-cleanup-switch { on }: Settings > Feature switches > "Color cleanup". Colors and two Cancel sheet lines only; moves nothing. */
+export async function setColorCleanupSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setColorCleanupForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'color_cleanup_on' : 'color_cleanup_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/player-cards-switch { on }: Settings > Feature switches > "Simpler player cards". Player card layout only; moves nothing. */
+export async function setPlayerCardsSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setPlayerCardsForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'player_cards_on' : 'player_cards_off', {}, ctx.nowIso);
   return { ok: true, on };
 }

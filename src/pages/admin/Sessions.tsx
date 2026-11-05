@@ -12,6 +12,7 @@ import { CHARGE_ASK_HOURS, reopenRequestedReason } from '../../../shared/credit'
 import { formatPrice, parseDollars } from '../../../shared/money';
 import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL } from '../../../shared/settings';
 import { DateTile, HolidayPill } from '../PlayerHome';
+import { adminTileDay } from '../../zip7';
 import { ClearChoices, EditableDraft, lateFeeLine, PlayersText } from './LateFees';
 import { lateCancelText } from './textMenu';
 import { feeSplitPrice } from '../../../shared/lateFees';
@@ -80,7 +81,7 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
     <article id={`session-${s.id}`} tabIndex={-1} className={`card scard court-${court.kind}${blink ? ' m-blink' : ''}`} data-court={court.kind} data-switch={switchValue} data-fade={weekFade(s.startsAt, now, tz) || undefined} data-remind={s.state.flags.bookingPromptDue || undefined} aria-labelledby={`as-${s.id}`}>
       <div className="scard-main">
         <div className="scard-tilecol">
-          <DateTile iso={s.startsAt} tz={tz} ts={tsClass(ts, flip)} />
+          <DateTile iso={s.startsAt} tz={tz} ts={tsClass(ts, flip)} day={adminTileDay(ctx.d, s)} />
           <div className={`scard-time${tsClass(ts, flip)}${timeFade ? ' m-time-fade' : ''}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
             {tsTime(start, ts)}
           </div>
@@ -911,6 +912,9 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   // TEXTS_R2: it starts on No (the venue gives almost no grace, so a late cancel normally keeps the fee). Yes still works exactly as before.
   const [waived, setWaived] = useState<boolean | null>(rw || ctx.d.textsR2 === true ? false : null);
   const [waivedError, setWaivedError] = useState(false);
+  // COLOR_CLEANUP: shorter blurbs on this sheet. The long "fee is kept" line becomes one short sentence (the amounts are the same).
+  const cleanup = ctx.d.colorCleanup === true;
+  const keptLine = (lead: string) => (splitCents !== null ? `${lead}: the fee is kept. Everyone signed up owes ${formatPrice(splitCents)}.` : `${lead}: the fee is kept. Everyone signed up owes ${formatPrice(flat)}.`);
   return (
     <ConfirmDialog
       open
@@ -921,7 +925,8 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
             <p>Players can sign up again. Links from before the cancellation stay dead; prepare new ones if needed.</p>
           ) : (
             <>
-              <p>Players will see it as canceled, and reminders and payments stop for it.</p>
+              {/* COLOR_CLEANUP: the sheet is shorter, this line goes (the Cancel button says it all). */}
+              {!cleanup && <p>Players will see it as canceled, and reminders and payments stop for it.</p>}
               {/* After the start there is no court to cancel any more (and "Cancel by" is in the past). */}
               {!s.state.flags.started && (
                 <Notice tone="warn" title="This does not cancel your court">
@@ -993,8 +998,12 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                   <p className="small muted">
                     {waived === false
                       ? splitCents !== null
-                        ? `Yes: the fee is kept. ${s.confirmedCount} are in, so everyone signed up owes ${formatPrice(splitCents)} (anything paid above that comes back as credit). Late drops still owe ${formatPrice(flat)}.`
-                        : 'Yes: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
+                        ? cleanup
+                          ? keptLine('Yes')
+                          : `Yes: the fee is kept. ${s.confirmedCount} are in, so everyone signed up owes ${formatPrice(splitCents)} (anything paid above that comes back as credit). Late drops still owe ${formatPrice(flat)}.`
+                        : cleanup
+                          ? keptLine('Yes')
+                          : 'Yes: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
                       : 'No: everyone gets their money back as credit, nobody owes.'}
                   </p>
                 </fieldset>

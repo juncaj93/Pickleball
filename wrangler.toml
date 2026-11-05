@@ -101,6 +101,20 @@ VENMO_REQUEST = "on"
 # /?homecollapse=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Player screens, display only. Needs a deploy.
 HOME_COLLAPSE = "on"
 
+# "Tonight glow" (the date tile on player cards and the organizer Home says TONIGHT in a solid green band, with a slow green glow and a gentle light sweep on the
+# date badge only, or TOMORROW in a soft green band with no motion; Eastern time; Reduce Motion holds everything still). "on" here only ALLOWS it; who gets it is
+# Settings > Feature switches > "Tonight glow" (off at ship = nobody), plus a phone opened once with ?tonightglow=on (the private test switch). "off" = the kill
+# switch: nobody, not even the test link. Display only. Needs a deploy.
+TONIGHT_GLOW = "on"
+# "Color cleanup" (one color system: green in and paid, amber owes, blue links and credit, purple texting only, gray neutral, red cancel and errors; Waitlist and the
+# Extra game tag go gray, the Canceled pill turns red, two Cancel sheet lines get shorter). "on" here only ALLOWS it; who gets it is Settings > Feature switches >
+# "Color cleanup" (off at ship = nobody), plus a phone opened once with ?colorcleanup=on (works on /admin too). "off" = the kill switch. Display only. Needs a deploy.
+COLOR_CLEANUP = "on"
+# "Simpler player cards" (no "Court booked / Court not booked" words or dot on player cards; the calendar icon only next to "You're in"; one small "On the waitlist"
+# label only for a player who is on a waitlist). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Simpler player cards" (off at ship =
+# nobody), plus a phone opened once with ?playercards=on. "off" = the kill switch. Display only. Needs a deploy.
+PLAYER_CARDS_SIMPLE = "on"
+
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
 # tester on a preview link can't change real seats, payments or credit.
@@ -128,6 +142,9 @@ INSTANT_TAPS = "on"
 ADJUST_CREDIT = "on"
 VENMO_REQUEST = "on"
 HOME_COLLAPSE = "on"
+TONIGHT_GLOW = "on"
+COLOR_CLEANUP = "on"
+PLAYER_CARDS_SIMPLE = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

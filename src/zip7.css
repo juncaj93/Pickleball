@@ -1,0 +1,237 @@
+/* Zip 7: Tonight glow, Color cleanup, Simpler player cards.
+ *
+ * Every rule here starts with an <html> attribute (data-tonight-glow, data-color-cleanup, data-player-cards) that src/zip7.ts sets only while
+ * the matching switch is on for that screen. Switch off = no attribute = nothing in this file applies, so the site looks exactly as before.
+ * Loaded last (src/main.tsx), so with equal weight these rules win.
+ *
+ * The color system (Color cleanup): GREEN = in and paid. AMBER = owes or needs attention. BLUE = links and credit. PURPLE = texting only.
+ * GRAY = neutral. RED = deadlines, cancel, errors. Values are in one place: the --z7-* tokens below (light first, then dark twice: once for
+ * "Dark" picked in Settings, once for "follow the phone").
+ */
+
+:root {
+  /* Tonight / Tomorrow tags (Tonight glow) */
+  --z7-tonight-bg: #1f6b45;
+  --z7-tonight-ink: #ffffff;
+  --z7-tomorrow-bg: #dff0e6;
+  --z7-tomorrow-ink: #1f6b45;
+  --z7-glow: 47 143 91;
+  --z7-sweep: rgb(255 255 255 / 35%);
+  /* Color cleanup */
+  --z7-text-fill: #6a56a6;
+  --z7-text-ink: #ffffff;
+  --z7-credit-fg: #3a4fa3;
+  --z7-credit-bg: #e9edf6;
+  --z7-wait-bg: #4b5563;
+  --z7-wait-ink: #ffffff;
+  --z7-cancel-fg: #a11c1c;
+  --z7-cancel-bg: #fbe5e1;
+  --z7-gray-line: #b9bcb2;
+  --z7-gray-ink: #565d58;
+}
+:root[data-theme='dark'] {
+  --z7-tonight-bg: #4cc58a;
+  --z7-tonight-ink: #0d2a1b;
+  --z7-tomorrow-bg: #1c3a2a;
+  --z7-tomorrow-ink: #8be0b3;
+  --z7-glow: 76 197 138;
+  --z7-sweep: rgb(255 255 255 / 30%);
+  --z7-text-fill: #b2a0e6;
+  --z7-text-ink: #1d1433;
+  --z7-credit-fg: #93a6e6;
+  --z7-credit-bg: #202840;
+  --z7-wait-bg: #9aa3b0;
+  --z7-wait-ink: #14181c;
+  --z7-cancel-fg: #ffaba1;
+  --z7-cancel-bg: #3a1714;
+  --z7-gray-line: #5a615b;
+  --z7-gray-ink: #b3b9b5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --z7-tonight-bg: #4cc58a;
+    --z7-tonight-ink: #0d2a1b;
+    --z7-tomorrow-bg: #1c3a2a;
+    --z7-tomorrow-ink: #8be0b3;
+    --z7-glow: 76 197 138;
+    --z7-sweep: rgb(255 255 255 / 30%);
+    --z7-text-fill: #b2a0e6;
+    --z7-text-ink: #1d1433;
+    --z7-credit-fg: #93a6e6;
+    --z7-credit-bg: #202840;
+    --z7-wait-bg: #9aa3b0;
+    --z7-wait-ink: #14181c;
+    --z7-cancel-fg: #ffaba1;
+    --z7-cancel-bg: #3a1714;
+    --z7-gray-line: #5a615b;
+    --z7-gray-ink: #b3b9b5;
+  }
+}
+
+/* =====================================================================================================================
+   A. TONIGHT_GLOW: TONIGHT = solid green band, TOMORROW = soft green band, a slow glow and a light sweep on TONIGHT's date badge only.
+   ===================================================================================================================== */
+:root[data-tonight-glow] .tile .day-tag {
+  display: block;
+  box-sizing: border-box;
+  border-radius: 8px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  text-align: center;
+}
+:root[data-tonight-glow] .tile .day-tag.tonight {
+  background: var(--z7-tonight-bg);
+  color: var(--z7-tonight-ink);
+}
+:root[data-tonight-glow] .tile .day-tag.tomorrow {
+  background: var(--z7-tomorrow-bg);
+  color: var(--z7-tomorrow-ink);
+}
+/* The date badge only (never the whole card). Game day only. */
+:root[data-tonight-glow] .tile.day-tonight {
+  animation: z7-pulse 2.2s ease-in-out infinite;
+}
+:root[data-tonight-glow] .tile.day-tonight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 35%, var(--z7-sweep) 50%, transparent 65%);
+  background-size: 300% 100%;
+  background-position: 130% 0;
+  animation: z7-sweep 3.6s ease-in-out infinite;
+}
+@keyframes z7-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgb(var(--z7-glow) / 0%),
+      0 0 8px 1px rgb(var(--z7-glow) / 35%);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgb(var(--z7-glow) / 16%),
+      0 0 20px 5px rgb(var(--z7-glow) / 55%);
+  }
+}
+@keyframes z7-sweep {
+  0%,
+  55% {
+    background-position: 130% 0;
+  }
+  100% {
+    background-position: -30% 0;
+  }
+}
+/* Reduce Motion: everything holds still (the bands and colors stay). */
+@media (prefers-reduced-motion: reduce) {
+  :root[data-tonight-glow] .tile.day-tonight,
+  :root[data-tonight-glow] .tile.day-tonight::after {
+    animation: none;
+  }
+  :root[data-tonight-glow] .tile.day-tonight {
+    box-shadow: 0 0 0 3px rgb(var(--z7-glow) / 16%), 0 0 14px 2px rgb(var(--z7-glow) / 40%);
+  }
+  :root[data-tonight-glow] .tile.day-tonight::after {
+    display: none;
+  }
+}
+
+/* =====================================================================================================================
+   B. COLOR_CLEANUP
+   ===================================================================================================================== */
+
+/* Waitlist is neutral gray (selected: dark gray with white text in light mode, light gray with dark text in dark mode). */
+:root[data-color-cleanup] .court-switch,
+:root[data-color-cleanup] .hv2-short {
+  --sw-wait-bg: var(--z7-wait-bg);
+  --sw-wait-fg: var(--z7-wait-ink);
+}
+:root[data-color-cleanup] .scard.court-waitlist {
+  border-color: var(--line-strong);
+}
+:root[data-color-cleanup] .court-waitlist .court-banner {
+  background: var(--muted-bg);
+  color: var(--muted-fg);
+  border-bottom-color: var(--line-strong);
+}
+:root[data-color-cleanup] .sched-status.court-waitlist .court-status {
+  color: var(--muted-fg);
+}
+:root[data-color-cleanup] .court-waitlist .court-dot {
+  background: var(--muted-fg);
+}
+
+/* "Extra game" is a gray outline (purple belongs to texting only). The organizer's holiday note follows: its purple becomes gray. */
+:root[data-color-cleanup] {
+  --holiday-fg: var(--z7-gray-ink);
+  --holiday-bg: transparent;
+}
+:root[data-color-cleanup] .extra-tag,
+:root[data-color-cleanup] .sched-tilecol .extra-flag {
+  background: transparent;
+  border: 1.5px solid var(--z7-gray-line);
+  color: var(--z7-gray-ink);
+}
+
+/* Canceled is red (it was green): the pill or box that shows "Canceled" and its reason on a player card. */
+:root[data-color-cleanup] .schedule .st-canceled.note-pill,
+:root[data-color-cleanup] .schedule .st-canceled.note-box {
+  background: var(--z7-cancel-bg);
+  color: var(--z7-cancel-fg);
+}
+
+/* Purple = texting only: every Text button. (Remind, Text all and the per-person Text on Money are already purple.) */
+:root[data-color-cleanup] .btn.text-btn,
+:root[data-color-cleanup] a.btn[href^='sms:'],
+:root[data-color-cleanup] a.btn.sg-text {
+  background: var(--z7-text-fill);
+  color: var(--z7-text-ink);
+  border-color: transparent;
+}
+:root[data-color-cleanup] .btn.text-btn svg {
+  color: inherit;
+}
+
+/* Blue = links and credit: credit uses the blue tokens (header chip, "Credit $3 used", "+ credit" on the due chip). */
+:root[data-color-cleanup] .credit-chip .cc-label {
+  color: var(--z7-credit-fg);
+}
+:root[data-color-cleanup] .schedule .pchip.chip-credit-used {
+  color: var(--z7-credit-fg);
+  box-shadow: inset 0 0 0 1.5px var(--z7-credit-fg);
+  background: var(--z7-credit-bg);
+}
+:root[data-color-cleanup] .schedule .chip-credit {
+  color: var(--z7-credit-fg);
+}
+
+/* =====================================================================================================================
+   C. PLAYER_CARDS_SIMPLE
+   ===================================================================================================================== */
+/* One small "On the waitlist" label for a player who is on a list, in the card's quiet gray. */
+:root[data-player-cards] .schedule .sched-status .st-wait.on-waitlist {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--pc-muted);
+}
+
+/* Organizer date tiles are narrow (about 44 px): the band follows the tile's own width so TOMORROW still fits on one line. */
+:root[data-tonight-glow] .scard .tile .day-tag,
+:root[data-tonight-glow] .hv2-short .tile .day-tag {
+  margin: 0 2px;
+  padding: 2px 0;
+  letter-spacing: 0;
+  font-size: min(0.55rem, 17cqw);
+}
+:root[data-tonight-glow] .scard .tile .day-tag.tomorrow {
+  font-size: min(0.55rem, 14.2cqw);
+}
+:root[data-tonight-glow] .hv2-short .tile .day-tag {
+  font-size: 0.5rem;
+}
+:root[data-tonight-glow] .hv2-short .tile .day-tag.tomorrow {
+  font-size: 0.4rem;
+}

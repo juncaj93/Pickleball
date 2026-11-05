@@ -8,6 +8,7 @@ import { playerFix1ForAll } from './playerFix1';
 import { instantTapsForAll } from './instantTaps';
 import { motionSetting } from './motion';
 import { homeCollapseForAll } from './homeCollapse';
+import { colorCleanupForAll, playerCardsForAll, tonightGlowForAll } from './zip7';
 import { paySheetForAll } from './paySheet';
 import { lateFeesForAll } from './lateFees';
 import { hiddenGameIds } from './hideGame';
@@ -91,6 +92,10 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     (await instantTapsForAll(ctx.db, group.id)) ? 'it' : '',
     // The organizer turning "Home collapse" on or off for everyone (the Home list then lays out differently).
     (await homeCollapseForAll(ctx.db, group.id)) ? 'hc' : '',
+    // Zip 7 switches: a segment only exists while a switch is on, so with all three off the stamp is exactly what it was.
+    ...((await tonightGlowForAll(ctx.db, group.id)) ? ['tg'] : []),
+    ...((await colorCleanupForAll(ctx.db, group.id)) ? ['cc'] : []),
+    ...((await playerCardsForAll(ctx.db, group.id)) ? ['pc'] : []),
     // The organizer changing the player animations in Settings (nothing is added until the row is first used).
     (await motionSetting(ctx.db, group.id, 'player')) ?? '',
     // The organizer removing a canceled game from the player screen (or putting it back).

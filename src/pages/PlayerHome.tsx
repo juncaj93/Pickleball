@@ -24,6 +24,8 @@ import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
+import { useZip7Root } from '../zip7';
+import { tileDay, type TileDay } from '../../shared/zip7';
 import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
 import { courtStatus } from '../../shared/court';
 import { OrganizerLink } from './SiteHome';
@@ -236,6 +238,8 @@ export function PlayerHome({
   const [showAll, setShowAll] = useState(false);
   // "Home collapse" (HOME_COLLAPSE): the later games' one button. Closed on every page load, never remembered.
   const [laterOpen, setLaterOpen] = useState(false);
+  // Show fewer tapped on a list that a shared link opened: the link's game no longer holds it open.
+  const [laterFolded, setLaterFolded] = useState(false);
   const [creditOpen, setCreditOpen] = useState(false);
   // The "Want in?" answer ("You're in" + Done) lives here, so the game cards below can refresh at once.
   const [answered, setAnswered] = useState<{ sessionId: string; text: string; startsAt: string; endsAt: string } | null>(null);
@@ -262,6 +266,8 @@ export function PlayerHome({
     if (g) rememberMotion(g.motion === true);
   }, [g, g?.motion]);
   useLayoutEffect(() => () => setMotion(false), []);
+  // Zip 7 switches (Tonight glow, Color cleanup, Simpler player cards): <html> attributes, only while their answer is yes.
+  useZip7Root(g);
   const motion = useMotion();
   // The first-load cascade plays once per page open (not on refreshes, filter taps or name switches). `live` turns on
   // when it is over: anything that appears from then on is a real change.
@@ -445,7 +451,7 @@ export function PlayerHome({
   const collapse = g?.homeCollapse === true;
   const isLater = (s: PlayerSessionView) => weekTier(s.startsAt, Date.parse(g!.now), g!.group.timezone) === 'later';
   const laterGames = collapse && g ? filtered.filter(isLater) : [];
-  const laterShown = laterOpen || (focusIndex >= 0 && laterGames.some((s) => s.id === focusId));
+  const laterShown = laterOpen || (!laterFolded && focusIndex >= 0 && laterGames.some((s) => s.id === focusId));
   const shownSessions = collapse
     ? filtered.filter((s) => !isLater(s) || laterShown)
     : showAll || focusIndex >= SHOW_FIRST
@@ -559,6 +565,7 @@ export function PlayerHome({
                 // Can't make it on a game further down than the list shows: show it, then its drop question opens.
                 setShowAll(true);
                 setLaterOpen(true);
+                setLaterFolded(false);
                 setFilter('all');
               }}
             />
@@ -639,6 +646,7 @@ export function PlayerHome({
                     onClick={(e) => {
                       const btn = e.currentTarget;
                       setLaterOpen(!laterShown);
+                      setLaterFolded(laterShown);
                       // Folding a long list leaves the button where the list was: bring it back into view.
                       if (laterShown) requestAnimationFrame(() => btn.scrollIntoView({ block: 'nearest' }));
                     }}
@@ -1482,13 +1490,14 @@ const TILE_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
  * calendar: red weekday, big dark day, small gray month. `mine` adds a small
  * green check in the corner (you're in).
  */
-export function DateTile({ iso, tz, mine, ts = '' }: { iso: string; tz: string; mine?: boolean; ts?: string }) {
+export function DateTile({ iso, tz, mine, ts = '', day }: { iso: string; tz: string; mine?: boolean; ts?: string; day?: TileDay }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   return (
-    <div className={`tile${mine ? ' mine' : ''}${ts}`} aria-hidden="true">
+    <div className={`tile${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`} aria-hidden="true">
       {ts && <TileBorders />}
-      <span className="dow">{TILE_DOW[p.weekday]}</span>
+      {/* TONIGHT_GLOW on: `day` is set on game day and the day before; otherwise (and always with the switch off) the weekday. */}
+      {day ? <span className={`tonight-tag day-tag ${day}`}>{day === 'tonight' ? 'TONIGHT' : 'TOMORROW'}</span> : <span className="dow">{TILE_DOW[p.weekday]}</span>}
       <span className="day">{p.day}</span>
       <span className="mon">{month}</span>
       {mine && (
@@ -1513,14 +1522,27 @@ const CHECK = (
  * blue TONIGHT strip where the weekday would be. Extra (added by hand): an
  * ink tile (cream in dark mode). A check badge on the corner when you're in.
  */
-function PlayerTile({ iso, tz, mine, tonight, extra, ts = '' }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string }) {
+function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string; day?: TileDay }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
+  // TONIGHT_GLOW on: `day` is given (tonight, tomorrow or null) and decides the tag; off, `day` is undefined and the old blue TONIGHT strip is drawn.
+  const tag =
+    day !== undefined ? (
+      day ? (
+        <span className={`tonight-tag day-tag ${day}`}>{day === 'tonight' ? 'TONIGHT' : 'TOMORROW'}</span>
+      ) : (
+        <span className="dow">{TILE_DOW[p.weekday]}</span>
+      )
+    ) : tonight ? (
+      <span className="tonight-tag">TONIGHT</span>
+    ) : (
+      <span className="dow">{TILE_DOW[p.weekday]}</span>
+    );
   return (
     <div className="tile-wrap" aria-hidden="true">
-      <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}${ts}`}>
+      <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`}>
         {ts && <TileBorders />}
-        {tonight ? <span className="tonight-tag">TONIGHT</span> : <span className="dow">{TILE_DOW[p.weekday]}</span>}
+        {tag}
         <span className="day">{p.day}</span>
         <span className="mon">{month}</span>
       </div>
@@ -1948,13 +1970,19 @@ export function ScheduleRow({
   const moneyFresh = useJustChanged(moneyKey, 700);
   const paidFresh = useJustChanged(mine?.paymentStatus === 'paid', 700);
   const tonight = open && playerDay(s.startsAt, tz, nowMs).word === 'tonight';
+  // Zip 7 switches. TONIGHT_GLOW: the tile wears TONIGHT or TOMORROW (Eastern calendar days). PLAYER_CARDS_SIMPLE: no court words or dot.
+  const dayTag: TileDay | undefined = g.tonightGlow === true ? tileDay(s.startsAt, tz, nowMs, open && !s.canceled) : undefined;
+  const simple = g.playerCardsSimple === true;
+  // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
+  const standbyWord = courtWait && !simple;
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
   const calLink = isIn && open && (
     <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
       <CalendarPlusIcon />
     </a>
   );
-  const showCount = !s.canceled && (s.confirmed.length > 0 || !courtWait);
+  // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
+  const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
   const dropLink = isIn && open && (
     <button className="link-btn quiet-link drop-link" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
       Drop out
@@ -1972,7 +2000,19 @@ export function ScheduleRow({
   // A canceled game's reason is shown like a comment: a pill when the reason is short, a soft box when it is long (same words as before).
   const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
   if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
-  else if (waiting) status = <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
+  else if (waiting)
+    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
+  else if (isIn && simple)
+    // PLAYER_CARDS_SIMPLE: "You're in" and the calendar icon, nothing about the court.
+    status = (
+      <>
+        <span className="st-lead">
+          <strong className="st-in">You're in</strong>
+        </span>
+        <span className="st-tail">{calLink}</span>
+      </>
+    );
+  else if (simple) status = null;
   else if (isIn)
     status = (
       <>
@@ -1996,12 +2036,12 @@ export function ScheduleRow({
 
   const joinBtn = notIn && (
     <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
-      {busy ? 'Saving…' : courtWait ? 'Join standby' : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
+      {busy ? 'Saving…' : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = waiting && open && (
     <button className="btn sched-btn outline" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
-      {courtWait ? 'Leave standby' : 'Leave waitlist'}
+      {standbyWord ? 'Leave standby' : 'Leave waitlist'}
     </button>
   );
   const noteEl = note && (
@@ -2022,7 +2062,7 @@ export function ScheduleRow({
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} />
         <div className="sched-when-col">
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
@@ -2048,25 +2088,27 @@ export function ScheduleRow({
         {isIn ? ". You're in" : ''}
       </h2>
       <div className="sched-body">
-        <div className="sched-head">
-          <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
-            {status}
+        {status !== null && (
+          <div className="sched-head">
+            <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
+              {status}
+            </div>
           </div>
-        </div>
+        )}
         <div className="sched-main">
           {showCount && (
             <div className="in-line">
               <span className="in-count">
-                <RollText text={countLine(s)} />
+                <RollText text={simple ? s.countText : countLine(s)} />
               </span>
               <SpotDots names={names} me={g.me?.name} celebrate={celebrating} />
             </div>
           )}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
-          {!s.canceled && !waiting && (
+          {!s.canceled && !waiting && !simple && (
             <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
-          {waiting && !s.canceled && <p className="sched-sub">You're in if someone drops.</p>}
+          {waiting && !s.canceled && !simple && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
           {s.canceled && (inSession || waiting) && mine.lateFee?.kind === 'canceled_late' ? (
             <p className="sched-sub" data-late-fee>
@@ -2095,7 +2137,7 @@ export function ScheduleRow({
       {celebrating && motion && <Burst />}
       <ConfirmDialog
         open={askOut}
-        title={waiting ? (courtWait ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
+        title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         body={
           waiting
             ? 'You lose your place in line.'
@@ -2109,7 +2151,7 @@ export function ScheduleRow({
                 )
               : 'Your spot opens up for someone else.'
         }
-        confirmLabel={waiting ? (courtWait ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
+        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
         danger
         busy={busy}
         onConfirm={() => {

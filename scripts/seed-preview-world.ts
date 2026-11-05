@@ -23,6 +23,7 @@ import { createNodeD1 } from '../dev/nodeD1';
 import { handleApi } from '../server/app';
 import type { Env } from '../server/db';
 import { backupToSql } from './backup-sql.mjs';
+import { localParts, zonedTimeToUtc } from '../shared/time';
 
 export const FAKE_GROUP_NAME = 'Pickleball Bros (PREVIEW, fake data)';
 
@@ -388,6 +389,35 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   summary.push('extra game "Fee split $11" (canceled late, fee not waived, 5 in): Kai, Christopher Vanderberg and Jordan each owe $11; Lane and Morgan paid $14 and got $3 back as credit');
   summary.push('Venmo usernames saved for Avery, Harper, Indy, Kai, Lane, Christopher Vanderberg; none for Jordan, Gray, Morgan, Reese (they show "no Venmo saved")');
 
+  // 14. Zip 7 (Tonight glow, Simpler player cards): the preview must always have a game TONIGHT and a game TOMORROW (Eastern), whatever day it is
+  //     seeded. The regular Tue/Thu games often already are one of them; an extra game is added only for the day that has no open game yet.
+  //     Tonight's extra is booked with 3 in (Gray is not in it); tomorrow's is not booked with 2 in (the card shows just "2 of 4 in" and I'm in).
+  const eastDate = (t: number) => {
+    const q = localParts(t, 'America/Detroit');
+    return `${q.year}-${q.month}-${q.day}`;
+  };
+  const hasOpenGameOn = (date: string) => games().some((g) => !g.state.flags.canceled && ms(g.endsAt) > N && eastDate(ms(g.startsAt)) === date);
+  const pt = localParts(N, 'America/Detroit');
+  if (!hasOpenGameOn(eastDate(N))) {
+    const start = Math.max(zonedTimeToUtc(pt.year, pt.month, pt.day, 20, 15, 'America/Detroit'), Math.ceil((N + 30 * 60_000) / 900_000) * 900_000);
+    if (eastDate(start) === eastDate(N)) {
+      const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: 'Tonight test' });
+      await refresh();
+      const tg = games().find((g) => g.id === made.id);
+      await setCourt(tg, 'booked');
+      for (const n of ['Avery', 'Blake', 'Emery']) await join(n, tg);
+      summary.push('extra game "Tonight test" (no regular game tonight): Booked, 3 in (Avery, Blake, Emery); Gray is not in it');
+    }
+  }
+  if (!hasOpenGameOn(eastDate(zonedTimeToUtc(pt.year, pt.month, pt.day + 1, 12, 0, 'America/Detroit')))) {
+    const start = zonedTimeToUtc(pt.year, pt.month, pt.day + 1, 18, 45, 'America/Detroit');
+    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: 'Tomorrow test' });
+    await refresh();
+    const tm = games().find((g) => g.id === made.id);
+    for (const n of ['Casey', 'Drew']) await join(n, tm);
+    summary.push('extra game "Tomorrow test" (no regular game tomorrow): not booked, 2 in (Casey, Drew); Gray is not in it');
+  }
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -430,6 +460,9 @@ export const PREVIEW_SWITCHES_ON = [
   'adjust_credit_on',
   'venmo_request_on',
   'home_collapse_on',
+  'tonight_glow_on',
+  'color_cleanup_on',
+  'player_cards_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

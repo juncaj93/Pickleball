@@ -13,6 +13,8 @@ import { GoPage } from './pages/GoPage';
 import { watchKeyboard } from './keyboard';
 // Last, so its big-text rules win over the page styles above.
 import './large-text.css';
+// Even later: the Zip 7 switches' rules (all under an <html> attribute that only exists while the switch is on).
+import './zip7.css';
 
 function App() {
   const path = usePath();
