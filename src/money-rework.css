@@ -61,6 +61,7 @@
 }
 .mrw-month {
   appearance: none;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -80,6 +81,12 @@
   text-transform: none;
   white-space: nowrap;
   cursor: pointer;
+}
+/* The box is 42 px tall; the area that answers a tap is 44. */
+.mrw-month::before {
+  content: '';
+  position: absolute;
+  inset: -1px 0;
 }
 .mrw-month[aria-expanded='true'] {
   border-color: var(--line-strong);
