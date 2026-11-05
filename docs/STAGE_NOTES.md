@@ -2388,7 +2388,7 @@ nothing switched on, no live database touched. The full description of each swit
   with a slow pulse and a light sweep on the tile only; TOMORROW = soft green band (light #dff0e6 / #1f6b45, dark #1c3a2a / #8be0b3), no motion. Open games only. "Tonight" and "tomorrow" are Eastern calendar dates
   (`playerDay`, DST safe). Reduce Motion: no animation (the band stays, the glow becomes a still soft ring). No Christmas decoration.
 - **B. Color cleanup.** Tokens in one place (`--z7-*`, same values as the Money tokens). Waitlist gray (selected pill, hv2 pill, card border, banner, dot), Extra game gray outline (holiday purple tokens gray too),
-  Canceled pill on a player card RED, every `sms:` button and the gear Text button purple, credit blue on the header label and the "Credit $3 used" chip. Links stay blue. Cancel sheet: blurb removed, long line shortened.
+  Canceled pill on a player card neutral GRAY with the row and its date tile dimmed to about 58 percent (Alex's option A), every `sms:` button and the gear Text button purple, credit blue on the header label and the "Credit $3 used" chip. Links stay blue. Cancel sheet: blurb removed, long line shortened.
 - **C. Simpler player cards.** See the switch row. The status line of a card that is not yours is gone, so the count row leads.
 - **D. Home collapse "Show fewer" (no switch).** `src/pages/PlayerHome.tsx`: a shared link to a later game held the list open, so Show fewer did nothing. A `laterFolded` flag lets Show fewer win (reset by "More sessions"
   and by the Can't-make-it jump). Only reachable with `HOME_COLLAPSE` on; with it off nothing changes. Item 20 is the section above.

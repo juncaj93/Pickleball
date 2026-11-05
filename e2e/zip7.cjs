@@ -275,17 +275,26 @@ async function main() {
   });
   await post(areq, `/api/admin/sessions/${game.tomorrow.id}/court-status`, { status: 'booked' });
   for (const scheme of ['light', 'dark']) {
-    await check(`B: the Canceled pill is RED (it was green) and readable (${scheme}), before and after`, async () => {
+    await check(`B: the Canceled pill is neutral GRAY (it was green), the canceled row and its date tile are dimmed, no red on the row (${scheme}), before and after`, async () => {
       const q = await openPlayer('Jordan', { scheme, query: 'colorcleanup=on&homecollapse=on' });
       await q.page.locator('[data-later-toggle]').click().catch(() => {});
       await q.page.waitForTimeout(400);
       const pill = q.page.locator('.st-canceled.note-pill, .st-canceled.note-box').first();
       assert((await pill.count()) === 1, 'a canceled game with a reason is shown');
-      const [bg, fg] = [(await css(pill, 'background-color')).match(/\d+/g).map(Number), (await css(pill, 'color')).match(/\d+/g).map(Number)];
-      assert(fg[0] > fg[1] + 40 && bg[0] > bg[1] + 15, `red pill (${bg} / ${fg})`);
+      assert(/^Canceled - .+/.test((await pill.innerText()).trim()), `pill words (${await pill.innerText()})`);
+      const num = async (loc, prop) => (await css(loc, prop)).match(/[\d.]+/g).map(Number);
+      const [bg, fg] = [await num(pill, 'background-color'), await num(pill, 'color')];
+      const want = scheme === 'light' ? [[233, 235, 238], [75, 85, 99]] : [[38, 44, 40], [170, 178, 172]];
+      assert(JSON.stringify(bg.slice(0, 3)) === JSON.stringify(want[0]) && JSON.stringify(fg.slice(0, 3)) === JSON.stringify(want[1]), `gray pill (${bg} / ${fg})`);
       const lum = (c) => c.map((v) => v / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
       const ratio = (Math.max(lum(bg), lum(fg)) + 0.05) / (Math.min(lum(bg), lum(fg)) + 0.05);
       assert(ratio >= 4.5, `contrast ${ratio.toFixed(2)}`);
+      const row = pill.locator('xpath=ancestor::article[contains(@class,"sched")]');
+      const opacity = parseFloat(await css(row.locator('.sched-tilecol'), 'opacity'));
+      assert(opacity >= 0.55 && opacity <= 0.6, `the date tile and time are dimmed to about 58% (${opacity})`);
+      // No red anywhere on the row: every text and border color on it has no strong red lead.
+      const reds = await row.evaluate((r) => [r, ...r.querySelectorAll('*')].flatMap((e) => { const cs = getComputedStyle(e); return [cs.color, cs.backgroundColor, cs.borderTopColor].filter((c) => { const m = c.match(/[\d.]+/g).map(Number); return (m[3] === undefined || m[3] > 0) && m[0] > m[1] + 40 && m[0] > m[2] + 40; }).map((c) => `${e.className} ${c}`); }));
+      assert(reds.length === 0, `red on the canceled row: ${reds.slice(0, 3)}`);
       await pill.scrollIntoViewIfNeeded();
       await shot(q.page, `canceled-after-${scheme}`);
       await q.ctx.close();
@@ -295,6 +304,8 @@ async function main() {
       const old = o.page.locator('.st-canceled.note-pill, .st-canceled.note-box').first();
       const oc = (await css(old, 'color')).match(/\d+/g).map(Number);
       assert(oc[1] > oc[0] && oc[1] > oc[2] - 5, `before: green (${oc})`);
+      const orow = old.locator('xpath=ancestor::article[contains(@class,"sched")]');
+      assert(parseFloat(await css(orow.locator('.sched-tilecol'), 'opacity')) === 1, 'before: tile not dimmed');
       await old.scrollIntoViewIfNeeded();
       await shot(o.page, `canceled-before-${scheme}`);
       await o.ctx.close();

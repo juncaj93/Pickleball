@@ -24,8 +24,8 @@
   --z7-credit-bg: #e9edf6;
   --z7-wait-bg: #4b5563;
   --z7-wait-ink: #ffffff;
-  --z7-cancel-fg: #a11c1c;
-  --z7-cancel-bg: #fbe5e1;
+  --z7-cancel-fg: #4b5563;
+  --z7-cancel-bg: #e9ebee;
   --z7-gray-line: #b9bcb2;
   --z7-gray-ink: #565d58;
 }
@@ -42,8 +42,8 @@
   --z7-credit-bg: #202840;
   --z7-wait-bg: #9aa3b0;
   --z7-wait-ink: #14181c;
-  --z7-cancel-fg: #ffaba1;
-  --z7-cancel-bg: #3a1714;
+  --z7-cancel-fg: #aab2ac;
+  --z7-cancel-bg: #262c28;
   --z7-gray-line: #5a615b;
   --z7-gray-ink: #b3b9b5;
 }
@@ -61,8 +61,8 @@
     --z7-credit-bg: #202840;
     --z7-wait-bg: #9aa3b0;
     --z7-wait-ink: #14181c;
-    --z7-cancel-fg: #ffaba1;
-    --z7-cancel-bg: #3a1714;
+    --z7-cancel-fg: #aab2ac;
+    --z7-cancel-bg: #262c28;
     --z7-gray-line: #5a615b;
     --z7-gray-ink: #b3b9b5;
   }
@@ -176,11 +176,19 @@
   color: var(--z7-gray-ink);
 }
 
-/* Canceled is red (it was green): the pill or box that shows "Canceled" and its reason on a player card. */
+/* Canceled is a neutral gray pill (it was green; red is kept for deadlines, cancel actions and errors): light #4b5563 on a soft gray, dark #aab2ac on
+   #262c28, the same gray family as Waitlist. The whole canceled row is dimmed: the date tile (weekday, number, month, time) to about 58 percent, and
+   the weekday loses its calendar red, so there is no red anywhere on the row. The words stay fully readable (4.5:1 or better). */
 :root[data-color-cleanup] .schedule .st-canceled.note-pill,
 :root[data-color-cleanup] .schedule .st-canceled.note-box {
   background: var(--z7-cancel-bg);
   color: var(--z7-cancel-fg);
+}
+:root[data-color-cleanup] .schedule > .sched.off .sched-tilecol {
+  opacity: 0.58;
+}
+:root[data-color-cleanup] .schedule > .sched.off .ptile .dow {
+  color: var(--pc-muted);
 }
 
 /* Purple = texting only: every Text button. (Remind, Text all and the per-person Text on Money are already purple.) */
