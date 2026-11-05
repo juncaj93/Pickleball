@@ -7,7 +7,6 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { api, ApiError, isDemo } from '../../lib';
 import type { AdminCtx } from '../Admin';
 import { useInstant } from '../../InstantTaps';
-import { useToast } from '../../ui';
 
 export type Parsed = { value: unknown } | { error: string };
 type RowState = { status: 'saving' | 'saved' } | { status: 'invalid'; message: string } | { status: 'failed'; retry: () => void };
@@ -107,7 +106,6 @@ export function AutoInput({
   input: (p: { id: string; value: string; onChange: (v: string) => void; onBlur: () => void; invalid: boolean }) => ReactNode;
 }) {
   const inputId = useId();
-  const toast = useToast();
   const [text, setText] = useState(initial);
   const saved = useRef(initial);
   const timer = useRef<number | undefined>(undefined);
@@ -124,14 +122,9 @@ export function AutoInput({
     }
     const r = parse(now);
     if ('error' in r) return auto.invalid(id, r.error);
+    // A failed save keeps what was typed, with "Couldn't save. Tap to retry." under the box (Alex, Nov 5: never wipe what was typed),
+    // with instant taps on or off.
     if (await auto.save(id, body(r.value))) saved.current = now;
-    else if (auto.instant && latest.current === now && auto.failed(id)) {
-      // Instant taps: a save that failed (not a wrong value) puts the box back to what was saved, so the screen never shows a value
-      // the server does not have. Off: what was typed stays, with "Tap to retry" (as before).
-      setText(saved.current);
-      auto.clear(id);
-      toast("That didn't save. It's back to what it was.", 'error');
-    }
   }
   useEffect(() => () => window.clearTimeout(timer.current), []);
 

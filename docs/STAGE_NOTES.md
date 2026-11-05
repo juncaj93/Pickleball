@@ -2268,8 +2268,9 @@ fees, prices, credit, Finalize, court and roster changes) nothing is guessed: th
   lands on a different button is stopped; a Money row whose save is running keeps its place; a 5-second refresh that set off before a save
   is thrown away (`useLoad` with a tracker), and a saved tap's guess stays until fresh data is on screen (released after 15 seconds at the
   latest); a save that waited in line is not sent if the screen changed meanwhile (View as ended, another name).
-- Settings: every switch snaps back to the server's value on a failed save, with a toast; text boxes and the first session date go back to
-  the saved value; a second flip while saving is ignored.
+- Settings: every switch snaps back to the server's value on a failed save, with a toast; the first session date goes back to the saved
+  date; a second flip while saving is ignored. Text boxes keep what was typed, with "Couldn't save. Tap to retry." (Alex, Nov 5: never wipe
+  typing; same as with the switch off).
 
 ### Money page rule (Alex, Thu Nov 5, under MONEY_REWORK which is ON live; no new switch)
 A fully paid game moves to "Previous games" only once it is FINALIZED. Tonight's game where everyone already paid stays in the main Games list

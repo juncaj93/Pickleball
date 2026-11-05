@@ -499,6 +499,33 @@ async function main() {
     await ctx.close();
   });
 
+  await check('Settings text box, server error (500): what was typed STAYS, with "Couldn\'t save. Tap to retry." (Alex, Nov 5), nothing saved; retry saves it', async () => {
+    const { ctx, page } = await openAdmin();
+    await tab(page, 'Settings');
+    for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
+    const row = page.locator('[data-row="venueName"]');
+    const box = row.locator('input');
+    await box.waitFor();
+    const was = (await dash()).group.venueName;
+    const off = await network(page, /\/api\/admin\/group$/, 'fail');
+    await box.fill('Typed but not saved');
+    await box.press('Enter');
+    await box.blur();
+    await row.locator('.save-retry').waitFor({ timeout: 4000 });
+    assert((await box.inputValue()) === 'Typed but not saved', `the typing was wiped: ${await box.inputValue()}`);
+    assert(/Tap to retry/.test(await row.locator('.save-retry').innerText()), 'Tap to retry');
+    assert((await dash()).group.venueName === was, 'saved anyway');
+    await off();
+    await row.locator('.save-retry').click();
+    await page.waitForTimeout(1200);
+    assert((await dash()).group.venueName === 'Typed but not saved', 'retry saved it');
+    // Put it back.
+    await box.fill(was ?? '');
+    await box.blur();
+    await page.waitForTimeout(1200);
+    await ctx.close();
+  });
+
   // ================================================================ server decides: pressed look and spinner
   await check('where the server decides (a full game: waitlist or not), the tapped button shows a pressed look and spinner within 100 ms', async () => {
     const full = upcoming.find((x) => names(x).length >= 10);
