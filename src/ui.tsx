@@ -355,11 +355,14 @@ export function Sheet({
   title,
   onClose,
   children,
+  headerAction,
 }: {
   open: boolean;
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** An optional button in the header, between the title and the close button. */
+  headerAction?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -468,6 +471,7 @@ export function Sheet({
             }}
           >
             <h2 id={titleId}>{title}</h2>
+            {headerAction}
             <button className="icon-btn" onClick={onClose} aria-label="Close">
               ✕
             </button>

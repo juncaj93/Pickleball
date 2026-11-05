@@ -516,7 +516,8 @@ function SessionsSection({ ctx }: { ctx: AdminCtx }) {
     </>
   );
   // Home is upcoming only; played sessions live under History.
-  const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs);
+  // (Money page rework: a game the organizer hid from the list is not here. `hiddenFromList` only exists while that switch is on.)
+  const list = ctx.d.sessions.filter((s) => Date.parse(s.endsAt) > nowMs && s.hiddenFromList !== true);
   // Round 2: only THIS WEEK's games start open and every later week starts folded (a tap flips one). With nothing left this week, the first
   // game opens so the screen is never all folded. (Without round 2: the top 2, as the new layout always did.)
   const thisWeek = new Set(list.filter((s) => weekLabel(s.startsAt, nowMs, ctx.d.group.timezone) === 'This week').map((s) => s.id));

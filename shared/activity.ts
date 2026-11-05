@@ -13,10 +13,15 @@ export function doneByOthers(e: Pick<ActivityEntry, 'actorLabel'> & { details?: 
   return !/^organizer( as .+)?$/.test(e.actorLabel);
 }
 
-/** The sentence for one entry. `organizer` is the organizer's name (from Settings), or "Organizer". */
-export function activityText(e: ActivityEntry, tz: string, organizer: string): string {
+/**
+ * The sentence for one entry. `organizer` is the organizer's name (from Settings), or "Organizer".
+ * `opts.names` (Money page rework): finds a player's name from their id when the entry itself did not keep one, so a line says who
+ * it was about instead of "someone"; it also words the few actions that used to read as a bare action name.
+ */
+export function activityText(e: ActivityEntry, tz: string, organizer: string, opts: { names?: (playerId: string) => string | null } = {}): string {
   const d = e.details;
-  const player = typeof d.player === 'string' ? d.player : typeof d.name === 'string' ? d.name : 'someone';
+  const known = opts.names && typeof d.playerId === 'string' ? opts.names(d.playerId) : null;
+  const player = typeof d.player === 'string' ? d.player : typeof d.name === 'string' ? d.name : (known ?? 'someone');
   const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
   const forDay = day ? ` for ${day}` : '';
   const ofDay = day ? ` of ${day}` : '';
@@ -113,7 +118,7 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
     case 'refund_request_declined':
       return `${who} put off ${player}'s refund request`;
     case 'late_drop_done':
-      return `${who} handled a late drop${forDay}`;
+      return opts.names && player !== 'someone' ? `${who} handled ${player}'s late drop${forDay}` : `${who} handled a late drop${forDay}`;
     case 'roster_confirm':
       return `${who} gave ${player} a spot${forDay}`;
     case 'roster_waitlist':
@@ -202,6 +207,23 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
       return `${who} switched the admin screens round 3 on`;
     case 'admin_r3_off':
       return `${who} switched the admin screens round 3 off`;
+    case 'payment_claim_confirmed':
+      // The words with the player's name are the Money page rework's; without it this reads as it always did (the generic line below).
+      if (opts.names) return `${who} confirmed ${player}'s I paid${forDay}`;
+      return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
+    case 'payment_claim_cleared':
+      if (opts.names) return `${who} cleared ${player}'s I paid${forDay}`;
+      return `${who}: ${e.action.replace(/_/g, ' ')}${forDay}`;
+    case 'session_hidden_from_list':
+      return `${who} hid${day ? ` ${day}` : ' a game'} from the lists`;
+    case 'session_shown_in_list':
+      return `${who} restored${day ? ` ${day}` : ' a game'} to the lists`;
+    case 'charge_edited':
+      return `${who} changed the venue charge${forDay}${typeof d.chargedCents === 'number' ? (d.chargedCents > 0 ? ` to ${formatPrice(d.chargedCents)}` : ' to none') : ''}`;
+    case 'money_rework_on':
+      return `${who} switched the Money page rework on`;
+    case 'money_rework_off':
+      return `${who} switched the Money page rework off`;
     case 'player_admin_hidden':
       return `${who} hid ${player} from the Players list`;
     case 'player_admin_unhidden':
@@ -215,4 +237,86 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string): s
 function splitOf(d: Record<string, unknown>): { count: number; priceCents: number } | null {
   const x = d.split as { count?: unknown; priceCents?: unknown } | undefined;
   return x && typeof x.count === 'number' && typeof x.priceCents === 'number' ? { count: x.count, priceCents: x.priceCents } : null;
+}
+
+// ---------- A quieter Activity list (Money page rework) ----------
+
+/** What a player's seat is in a game, as far as the log shows: in, on the waitlist, or out. */
+type SeatState = 'in' | 'waitlist' | 'out';
+
+/** Where did this entry leave the player's seat (null when it says nothing about one)? Only the actions that change a seat. */
+function seatAfter(e: ActivityEntry): SeatState | null {
+  const a = e.action.replace(/^(player|as_player)_/, '');
+  const who = e.action.startsWith('roster_');
+  const result = typeof e.details.result === 'string' ? e.details.result : '';
+  if (who) {
+    if (e.action === 'roster_confirm') return result === 'waitlisted' || result === 'standby' ? 'waitlist' : 'in';
+    if (e.action === 'roster_waitlist') return 'waitlist';
+    if (e.action === 'roster_withdraw') return 'out';
+    return null;
+  }
+  if (a === 'join') return result === 'waitlisted' || result === 'standby' ? 'waitlist' : 'in';
+  if (a === 'withdraw' || a === 'decline') return 'out';
+  return null;
+}
+
+/**
+ * Is this move one that changed nothing? The server says so itself for a confirm of someone already in ("already_confirmed") and a
+ * remove of someone who was not in ("not_in_session"); a move to the waitlist (or in, or out) that repeats where the log already shows
+ * the seat is the same thing. A seat the log has not shown yet (older than this page) is never guessed at.
+ */
+function isNoOpMove(e: ActivityEntry, before: SeatState | undefined): boolean {
+  if (!e.action.startsWith('roster_')) return false;
+  const result = typeof e.details.result === 'string' ? e.details.result : '';
+  if (e.action === 'roster_confirm' && result === 'already_confirmed') return true;
+  if (e.action === 'roster_withdraw' && result === 'not_in_session') return true;
+  const after = seatAfter(e);
+  return after !== null && before !== undefined && before === after;
+}
+
+/** Two entries are truly identical: same hands, same action, same game, same details, a minute apart at most. */
+const IDENTICAL_MS = 60_000;
+const sameEntry = (a: ActivityEntry, b: ActivityEntry) =>
+  a.actorLabel === b.actorLabel &&
+  a.action === b.action &&
+  a.sessionStartsAt === b.sessionStartsAt &&
+  JSON.stringify(a.details) === JSON.stringify(b.details) &&
+  Math.abs(Date.parse(a.createdAt) - Date.parse(b.createdAt)) <= IDENTICAL_MS;
+
+/**
+ * The Activity list with the noise taken out (Money page rework): a move that changed nothing is hidden, and an entry that is truly
+ * identical to the one just before it (a double tap) shows once. Nothing else is touched, and nothing is deleted: the log itself is
+ * unchanged. Entries come newest first, as the server sends them; the order is kept.
+ */
+export function cleanActivity(entries: ActivityEntry[]): ActivityEntry[] {
+  // Walk oldest to newest so each entry knows where its player's seat already was.
+  const seat = new Map<string, SeatState>();
+  const noop = new Set<string>();
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    const who = typeof e.details.player === 'string' ? e.details.player : typeof e.details.name === 'string' ? e.details.name : null;
+    const key = who ? `${e.sessionStartsAt ?? ''}|${who}` : null;
+    if (isNoOpMove(e, key ? seat.get(key) : undefined)) {
+      noop.add(e.id);
+      continue;
+    }
+    const after = seatAfter(e);
+    if (key && after) seat.set(key, after);
+  }
+  const kept: ActivityEntry[] = [];
+  for (const e of entries) {
+    if (noop.has(e.id)) continue;
+    // Compared with the entries already kept just newer than this one.
+    const dup = kept.slice(-5).some((k) => sameEntry(k, e));
+    if (!dup) kept.push(e);
+  }
+  return kept;
+}
+
+/**
+ * Highlight an entry only when it is new since the last visit AND someone other than the organizer did it (a player's own tap, for
+ * example). The organizer's own actions, and anything already viewed, are never highlighted.
+ */
+export function highlightNew(e: ActivityEntry, isNew: boolean): boolean {
+  return isNew && doneByOthers(e);
 }

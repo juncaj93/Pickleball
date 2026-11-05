@@ -307,6 +307,8 @@ export interface AdminSessionView {
   note: string | null;
   /** A canceled game the organizer removed from the player screen (server/hideGame.ts). Still shown on organizer screens. */
   hiddenFromPlayers?: boolean;
+  /** "Money page rework": the organizer hid this game from their own Home and Money lists and from Totals (server/moneyRework.ts). */
+  hiddenFromList?: boolean;
   /** When the booking window opens (14 days before play by default). */
   bookingOpensAt: string;
   shownEarly: boolean;
@@ -428,6 +430,10 @@ export interface AdminDashboard {
   lateFeeSplit?: boolean;
   /** "Late-cancel fee split" is on for everyone (Settings > Feature switches). */
   lateFeeSplitForAll?: boolean;
+  /** "Money page rework" is on for this screen (server/moneyRework.ts). False or missing: every screen looks and works exactly as before. */
+  moneyRework?: boolean;
+  /** Settings > Feature switches > "Money page rework" is on (for everyone). */
+  moneyReworkForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */
@@ -457,6 +463,10 @@ export interface AdminDashboard {
   audit: AuditEntry[];
   /** Upcoming sessions hidden by the first session date, which the organizer can show. */
   hiddenSessions: { id: string; startsAt: string; endsAt: string }[];
+  /** "Money page rework" only: the games the organizer hid from their own lists (Settings > Advanced > Hidden games, each with Restore). */
+  hiddenGames?: { id: string; startsAt: string; label: string }[];
+  /** "Money page rework" only: how many games Money lists in each month ("2026-11": 12), every month back to the first game. */
+  gameMonthCounts?: Record<string, number>;
   /**
    * The credit pot per player who has any history: `balanceCents` is the pot, `reservedCents` is held
    * for a pending refund request, `refundCents` is what "Refund credit balance" pays back now, and every entry, oldest first.
@@ -549,4 +559,30 @@ export interface MonthlyMoney {
     playedCount: number | null;
     priceCents: number | null;
   }[];
+  /**
+   * "Money page rework" only (server/money.ts): the two cards on the Totals tab. "So far" counts played games and canceled games the venue
+   * charged; "projected" adds the booked games still coming up (and played games not finalized yet) at what their players would pay today.
+   * Your cost is what is left after the players' share, never below $0, split into the court part and the membership part.
+   */
+  rework?: {
+    courtSessions: number;
+    courtCostCents: number;
+    membershipCents: number;
+    owedToVenueCents: number;
+    collectedCents: number;
+    yourCostCents: number;
+    yourCostCourtCents: number;
+    yourCostMembershipCents: number;
+    projected: {
+      courtCount: number;
+      addedCourts: number;
+      courtCostCents: number;
+      membershipCents: number;
+      totalCents: number;
+      playersPayCents: number;
+      yourCostCents: number;
+      yourCostCourtCents: number;
+      yourCostMembershipCents: number;
+    };
+  };
 }

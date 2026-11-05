@@ -115,6 +115,8 @@ class World {
 
 // ---- the cast: all made up --------------------------------------------------------------------------------
 const ORGANIZER = 'Organizer Orla';
+/** A made-up player with no phone number saved. */
+export const NO_NUMBER = 'Reese';
 const CAST = ['Avery', 'Blake', 'Casey', 'Drew', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jordan', 'Kai', 'Lane', 'Morgan'];
 
 export interface Seed {
@@ -127,8 +129,11 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
 
-  // Setup happens 12 days ago so there are past games to play and finish.
-  w.now = N - 12 * DAY;
+  // Setup happens about 11 months ago, so the Money page's month list has real older months to scroll through; the games of those months
+  // are played below. The clock then moves up to 12 days ago, where the rest of the world starts.
+  const nowDate = new Date(N);
+  const monthStartMs = (back: number) => Date.UTC(nowDate.getUTCFullYear(), nowDate.getUTCMonth() - back, 1, 17);
+  w.now = monthStartMs(11);
   const players = [ORGANIZER, ...CAST].map((name, i) => ({ name, phone: `(313) 555-01${String(i).padStart(2, '0')}` }));
   await w.org.ok('POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
@@ -138,6 +143,8 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     players,
   });
   await w.org.ok('PUT', '/api/admin/group', { organizerName: ORGANIZER, venueName: 'Fake Courts', venueAddress: '1 Made Up Way' });
+  // One made-up player with NO phone number saved, for Text all on the Money page's Remind sheet (it skips a person with no number).
+  await w.org.ok('POST', '/api/admin/players', { name: NO_NUMBER });
   let dash = await w.org.ok('GET', '/api/admin/dashboard');
   w.groupKey = String(dash.group.privateLink).split('/g/')[1];
   for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
@@ -148,10 +155,43 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   };
   /** Move the fake clock forward to this moment (it never goes back). */
   const at = async (ms: number) => {
+    const before = w.now;
     w.now = Math.max(w.now, ms);
+    // Sign-ins last hours, not months: when the clock jumps a long way, the organizer signs in again and every phone picks its name again.
+    if (w.now - before > 6 * HOUR) {
+      await w.org.ok('POST', '/api/admin/login', { pin: previewPin() });
+      for (const phone of w.phones.values()) phone.cookies.clear();
+    }
     await refresh();
   };
   const ms = (iso: string) => Date.parse(iso);
+
+  // 0. Older months: from 11 months back to 2 months back, 2 to 4 games a month, each with 4 players, booked, all paid $14 and finalized at
+  //    the flat price (4 played = $14, so no credit moves). Real site code, a fake clock. Marked shown early so they stay listed after the
+  //    first session date is set below.
+  const perMonth = [2, 3, 4, 3, 2, 4, 3, 2, 3, 4];
+  let oldGames = 0;
+  for (let i = 0; i < perMonth.length; i++) {
+    const from = monthStartMs(11 - i);
+    const to = monthStartMs(10 - i);
+    await at(from - 5 * DAY); // the site makes games six weeks ahead, so this month's games exist now
+    const inMonth = games().filter((g) => ms(g.startsAt) >= from && ms(g.startsAt) < to);
+    const step = Math.max(1, Math.floor(inMonth.length / perMonth[i]));
+    const chosen = inMonth.filter((_, j) => j % step === 0).slice(0, perMonth[i]);
+    for (const [k, g] of chosen.entries()) {
+      const names = [0, 1, 2, 3].map((x) => CAST[(oldGames + k + x * 3) % CAST.length]);
+      await at(ms(g.startsAt) - 2 * DAY);
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'booked' });
+      for (const n of names) await (await w.pick(n)).ok('POST', `/api/sessions/${g.id}/join`, {});
+      for (const n of names) await w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[n], paid: true });
+      await at(ms(g.endsAt) + 2 * HOUR);
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+      w.db.raw.prepare('UPDATE sessions SET shown_early = 1 WHERE id = ?').run(g.id);
+      oldGames++;
+    }
+  }
+  if (oldGames > 0) summary.push(`${oldGames} older games over 10 months (Dec to Sep): 4 players each, all paid $14, finalized, court $48 (they fill the month list on Money)`);
+  await at(N - 12 * DAY);
 
   // Pick the games by position around "now".
   await refresh();
@@ -165,6 +205,20 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   const firstDay = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit' }).format(new Date(ms(pastBooked.startsAt)));
   await w.org.ok('PUT', '/api/admin/group', { firstSessionDate: firstDay });
 
+  // Extra PAST games for the Money page rework (the preview must show a test game to hide, and previous games that are fully paid).
+  // They sit after the first booked game and before the last past game, so they need about 4.5 days between those two (Thu to Tue); a
+  // Tue to Thu pair has no room, and then they are simply left out. All at the flat $14 with 4 in, so no credit comes back to anyone.
+  const roomForPast = ms(pastNeverBooked.startsAt) - ms(pastBooked.startsAt) >= 4.5 * DAY;
+  const pastExtra = async (days: number, note: string) => {
+    const start = ms(pastBooked.startsAt) + days * DAY;
+    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note });
+    await refresh();
+    return games().find((g) => g.id === made.id);
+  };
+  const testGame = roomForPast ? await pastExtra(1, 'Test game') : null;
+  const previous1 = roomForPast ? await pastExtra(3, 'Sunday run') : null;
+  const previous2 = roomForPast ? await pastExtra(4, 'Monday run') : null;
+
   const join = async (name: string, g: any) => (await w.pick(name)).ok('POST', `/api/sessions/${g.id}/join`, {});
   const orgPays = (name: string, g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[name], paid: true });
   const setCourt = (g: any, status: 'booked' | 'waitlist' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
@@ -177,6 +231,24 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await at(Math.min(ms(pastBooked.endsAt) + 2 * HOUR, N));
   await w.org.ok('POST', `/api/admin/sessions/${pastBooked.id}/finalize`, { everyone: true });
   summary.push('past game, booked, finalized: 5 played, $11 each, $3 credit back to Avery, Blake, Casey, Drew, Emery');
+
+  // 1b. Past extras (only when there is room): a test game to hide (canceled, no money in it), and two fully paid previous games.
+  if (testGame && previous1 && previous2) {
+    // The test game: canceled early with nobody in and no charge, so no money is in it and it can be hidden.
+    await w.org.ok('POST', `/api/admin/sessions/${testGame.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Test game' });
+    await setCourt(previous1, 'booked');
+    for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray']) await join(n, previous1);
+    await setCourt(previous2, 'booked');
+    await w.org.ok('POST', `/api/admin/sessions/${previous2.id}/me`, { in: true });
+    for (const n of ['Finley', 'Lane', 'Kai']) await join(n, previous2);
+    for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray']) await orgPays(n, previous1);
+    for (const n of ['Finley', 'Lane', 'Kai']) await orgPays(n, previous2);
+    await at(Math.min(ms(previous1.endsAt) + 2 * HOUR, N));
+    await w.org.ok('POST', `/api/admin/sessions/${previous1.id}/finalize`, { everyone: true });
+    await at(Math.min(ms(previous2.endsAt) + 2 * HOUR, N));
+    await w.org.ok('POST', `/api/admin/sessions/${previous2.id}/finalize`, { everyone: true });
+    summary.push('old "Test game" (canceled early, nobody in, no money): the game to hide; "Sunday run" and "Monday run": played, 4 each, all paid $14 (fully paid previous games, court $48 each)');
+  }
 
   // 2. A past game that was never booked, 4 signed up, nobody answered "Did you guys play?" yet.
   await at(ms(pastNeverBooked.startsAt) - 2 * DAY);
@@ -258,6 +330,31 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   for (const n of ['Indy', 'Lane', 'Morgan']) await orgPays(n, sg);
   summary.push('extra game "Fee split test" 10 hours from the seed (inside its 12-hour cancel-by): 6 in (Orla, Avery, Indy, Jordan, Lane, Morgan), Indy, Lane, Morgan paid cash');
 
+  // 11. Money page rework: a game with 4 in and mixed payments ("Mixed payments": Lane and Morgan paid, Kai and Gray owe), and a game
+  //     where everyone has paid ("All paid": 4 of 4, which the Games tab moves to Previous games). Nobody here has credit to spend,
+  //     so no credit balance changes.
+  const upcomingExtra = async (hoursAhead: number, note: string) => {
+    const start = Math.ceil((N + hoursAhead * HOUR) / (30 * 60_000)) * 30 * 60_000;
+    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note });
+    await refresh();
+    const g = games().find((x) => x.id === made.id);
+    await setCourt(g, 'booked');
+    return g;
+  };
+  const mixed = await upcomingExtra(20, 'Mixed payments');
+  for (const n of ['Lane', 'Morgan', 'Kai', 'Gray']) await join(n, mixed);
+  for (const n of ['Lane', 'Morgan']) await orgPays(n, mixed);
+  const allPaid = await upcomingExtra(44, 'All paid');
+  for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await join(n, allPaid);
+  for (const n of ['Indy', 'Jordan', 'Morgan', 'Lane']) await orgPays(n, allPaid);
+  // 12. Text all on the Remind sheet: 5 in, Indy paid, Kai, Lane and Morgan owe $14 and have numbers, and Reese owes $14 with no number saved.
+  const chase = await upcomingExtra(68, 'Owes, one no number');
+  for (const n of ['Indy', 'Kai', 'Lane', 'Morgan', NO_NUMBER]) await join(n, chase);
+  await orgPays('Indy', chase);
+  summary.push('extra game "Owes, one no number" (Booked, 5 in): Indy paid; Kai, Lane and Morgan owe $14 with numbers; Reese owes $14 and has no number saved (Text all skips Reese)');
+  summary.push('extra game "Mixed payments" (Booked, 4 in): Lane and Morgan paid cash, Kai and Gray owe $14');
+  summary.push('extra game "All paid" (Booked, 4 of 4 paid): the Games tab files it under Previous games');
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -279,7 +376,8 @@ function wipeExtras(): string {
  * on live are ON here from the seed (no ?something=on needed), plus the switch being built. A backup does not carry task_log,
  * so they are written here. Keep this list equal to live: it is the one place to change. ON on live (Alex, Wed Nov 4):
  * New admin layout, Admin screens round 2 and round 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
- * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2. Being built: Late-cancel fee split. MOTION and
+ * Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and (since Wed Nov 4, Alex) Late-cancel fee split.
+ * Being built: Money page rework. MOTION and
  * MOTION_ADMIN have no Settings row: they are wrangler.toml switches, "on" in [env.preview.vars] like every kill switch.
  */
 export const PREVIEW_SWITCHES_ON = [
@@ -294,6 +392,7 @@ export const PREVIEW_SWITCHES_ON = [
   'pay_sheet_on',
   'texts_r2_on',
   'late_fee_split_on',
+  'money_rework_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

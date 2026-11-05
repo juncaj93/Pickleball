@@ -64,6 +64,8 @@ export interface Env {
   LATE_FEES?: string;
   /** "Late-cancel fee split" (a fee-kept cancel inside 12 hours with 5 or more in prices like a played game): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?latefeesplit=on (server/lateFeeSplit.ts). A wrangler.toml var. */
   LATE_FEE_SPLIT?: string;
+  /** "Money page rework" (the reworked Money page, Hide from list, Edit charge, cancel sheet default, tidier Feature switches and History): the kill switch, allowed unless "off". Who sees it: Settings > Feature switches, /admin?moneyrework=on (server/moneyRework.ts). A wrangler.toml var. */
+  MONEY_REWORK?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

@@ -27,7 +27,7 @@ export function taskSessionOfView(s: AdminSessionView, courtBookedAt: Record<str
 
 /** The organizer's open tasks right now, most urgent first: the same list the Telegram alerts come from. */
 export function dashboardTasks(d: AdminDashboard, nowMs: number, adminUrl: string): Task[] {
-  return nextTasks(nowMs, d.sessions.map((s) => taskSessionOfView(s, d.courtBookedAt ?? {})), new Set(d.taskMarks ?? []), {
+  return nextTasks(nowMs, d.sessions.filter((s) => s.hiddenFromList !== true).map((s) => taskSessionOfView(s, d.courtBookedAt ?? {})), new Set(d.taskMarks ?? []), {
     tz: d.group.timezone,
     bookingLeadDays: d.group.settings.bookingLeadDays,
     defaultDeadlineHours: d.group.settings.defaultDeadlineHours,
@@ -103,6 +103,7 @@ function courtCardsFrom(d: AdminDashboard, nowMs: number, tasks: Task[]): CourtC
   const book: CourtCard[] = [];
   const played: CourtCard[] = [];
   for (const s of d.sessions) {
+    if (s.hiddenFromList === true) continue; // hidden from the list (Money page rework): no court card
     if (s.state.flags.canceled || s.bookingStatus === 'booked' || s.finalized) continue;
     if (nowMs < Date.parse(s.endsAt)) {
       // Waitlist and Not booked follow one rule: the card shows when the task list asks about the court.

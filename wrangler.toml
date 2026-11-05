@@ -74,6 +74,12 @@ TEXTS_R2 = "on"
 # "off" = the kill switch: every new fee-kept cancel is a flat $14 again, not even the test link. Games already canceled keep
 # the price they were canceled with. Needs a deploy.
 LATE_FEE_SPLIT = "on"
+# "Money page rework" (organizer Money page: Games and Totals, Hide from list with Settings > Advanced > Hidden games, Edit charge on a
+# canceled game, the cancel sheet's "Were you charged?" default, a tidier Feature switches page, a quieter History). "on" here only ALLOWS
+# it; who sees it is Settings > Feature switches > "Money page rework" (off at ship = nobody), plus a phone opened once with
+# /admin?moneyrework=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Admin only, no money rule,
+# amount, seat or credit changes. Needs a deploy.
+MONEY_REWORK = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -97,6 +103,7 @@ PLAYER_FIX1 = "on"
 PAY_SHEET = "on"
 TEXTS_R2 = "on"
 LATE_FEE_SPLIT = "on"
+MONEY_REWORK = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

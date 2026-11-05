@@ -48,7 +48,9 @@ describe('fake-data preview seed', () => {
     const { db, sql } = await loaded();
     const players = db.raw.prepare('SELECT display_name, phone_number FROM players').all() as { display_name: string; phone_number: string }[];
     expect(players.length).toBeGreaterThanOrEqual(8);
-    for (const p of players) expect(p.phone_number).toMatch(/^\(313\) 555-01\d\d$/);
+    // Every made-up player has a 313-555-01xx number, except the one saved with no number on purpose (for Text all).
+    for (const p of players) if (p.display_name !== 'Reese') expect(p.phone_number).toMatch(/^\(313\) 555-01\d\d$/);
+    expect(players.find((p) => p.display_name === 'Reese')?.phone_number ?? null).toBeNull();
     expect(sql).not.toMatch(/juncaj|mitchell/i);
     expect(sql).not.toMatch(/TELEGRAM|bot\d+:/i);
   });
@@ -73,8 +75,9 @@ describe('fake-data preview seed', () => {
 
   it('has the live-ON switches on from the seed, plus the one being built (PREVIEW SWITCHES RULE)', async () => {
     const { dash } = await loaded();
-    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll'])
+    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll'])
       expect(dash[k], k).toBe(true);
+    // Late-cancel fee split went live on Wed Nov 4 (Alex), so it is on in the preview too.
     // The "Fee split test" game: booked, inside its 12-hour cancel-by, 6 in, three paid.
     const g = (dash.sessions as any[]).find((x) => x.note === 'Fee split test');
     expect(g).toMatchObject({ bookingStatus: 'booked', confirmedCount: 6 });
@@ -126,5 +129,55 @@ describe('fake-data preview seed', () => {
     expect({ ...after }).toEqual({ ...before });
     expect((db.raw.prepare('SELECT COUNT(*) n FROM login_attempts').get() as { n: number }).n).toBe(0); // a PIN lockout never carries over
     expect((db.raw.prepare('SELECT COUNT(*) n FROM groups').get() as { n: number }).n).toBe(1);
+  });
+
+  // The day this was built: Wed Nov 4, 2026, 6:00 PM Eastern. The Money page rework needs room for old games between the last two
+  // played games (Thu to Tue), which a Sunday seed does not have, so this is checked on the real seed day.
+  it('on a Wednesday seed it has the Money rework games: a test game to hide, two fully paid previous games, mixed payments, and an all-paid game', async () => {
+    const wed = Date.parse('2026-11-04T23:00:00.000Z');
+    const { sql } = await buildSeed(wed);
+    const db = createNodeD1(':memory:');
+    db.raw.exec(sql);
+    const env: any = { DB: db };
+    const get = async (path: string, cookie = '') => {
+      const h = new Headers();
+      if (cookie) h.set('Cookie', cookie);
+      const res = await handleApi(new Request('https://preview.example' + path, { headers: h }), env, wed, () => {});
+      return { res, data: (await res.json().catch(() => null)) as any };
+    };
+    const login = await handleApi(new Request('https://preview.example/api/admin/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: previewPin() }) }), env, wed, () => {});
+    const cookie = login.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    const dash = (await get('/api/admin/dashboard', cookie)).data;
+    const games = dash.sessions as any[];
+    const by = (note: string) => games.find((g) => g.note === note);
+    // The old test game: canceled early, nobody in, no money (so it can be hidden).
+    expect(by('Test game')).toMatchObject({ confirmedCount: 0, status: 'canceled', roster: [], chargedCents: null });
+    expect(Date.parse(by('Test game').endsAt)).toBeLessThan(wed);
+    // Two previous games, played and finalized, everyone paid.
+    for (const note of ['Sunday run', 'Monday run']) expect(by(note), note).toMatchObject({ payableCount: expect.any(Number), finalized: expect.anything() });
+    for (const note of ['Sunday run', 'Monday run']) expect(by(note).paidCount).toBe(by(note).payableCount);
+    // Mixed payments: 4 in, 2 paid. All paid: 4 of 4.
+    expect(by('Mixed payments')).toMatchObject({ confirmedCount: 4, paidCount: 2, payableCount: 4 });
+    expect(by('All paid')).toMatchObject({ confirmedCount: 4, paidCount: 4, payableCount: 4 });
+    // A game with 5 in (credit comes back at 5): the first coming game, and a canceled one.
+    expect(games.some((g) => Date.parse(g.startsAt) > wed && g.status !== 'canceled' && g.confirmedCount === 5)).toBe(true);
+    expect(games.some((g) => g.status === 'canceled' && g.cancelReason === 'Court closed')).toBe(true);
+    // Text all: a game with three owing players who have numbers and one owing player with none (Reese), and one who paid.
+    const chase = by('Owes, one no number');
+    const owing = chase.roster.filter((r: any) => r.status === 'confirmed' && r.paymentStatus === 'unpaid' && !r.isOrganizer);
+    expect(owing.filter((r: any) => r.phone).map((r: any) => r.name).sort()).toEqual(['Kai', 'Lane', 'Morgan']);
+    expect(owing.filter((r: any) => !r.phone).map((r: any) => r.name)).toEqual(['Reese']);
+    expect(chase.paidCount).toBe(1);
+    // Ten older months (Dec 2025 to Sep 2026), 2 to 4 played games each, so the Money page's month list scrolls well past four months.
+    const counts = dash.gameMonthCounts as Record<string, number>;
+    const old = ['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'];
+    for (const m of old) expect(counts[m], m).toBeGreaterThanOrEqual(2);
+    for (const m of old) expect(counts[m], m).toBeLessThanOrEqual(4);
+    expect(Object.keys(counts).sort()[0]).toBe('2025-12');
+    // Credit left is unchanged by the extra games.
+    expect((dash.creditLedger as any[]).filter((l) => l.balanceCents > 0).map((l) => l.balanceCents).sort((a, b) => a - b)).toEqual([300, 1400, 1400]);
+    // Still passes every live health check.
+    const row = db.raw.prepare(HEALTH).get() as Record<string, number>;
+    expect(Object.entries(row).filter(([k, n]) => !k.startsWith('info_') && Number(n) !== 0)).toEqual([]);
   });
 });

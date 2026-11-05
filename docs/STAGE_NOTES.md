@@ -2178,3 +2178,59 @@ settle those first.
 3. Unmark keeping the $5: OK, written under known gaps in `FEATURE_SWITCHES.md` (with 4).
 4. Monthly Collected counts only what was paid: OK.
 - "Ship it" expected Fri Nov 6 morning. Do not deploy before then. Keep the preview up.
+
+## Money page rework (MONEY_REWORK), built Wed Nov 4, 2026 - ships with the switch OFF
+
+Spec: the "zip 4" brief (`START_HERE.md` and the approved mockup), then three rounds of Alex's phone tests on the preview (rounds 1 to 3 and the Text all
+fix), all approved. PR #83. No database change, no migration. Admin screens only: no player screen, money rule, amount, seat or credit changes. The full
+description of what the switch does is its row in `docs/FEATURE_SWITCHES.md`.
+
+### What it does (only with the switch on)
+Money tab (month box with a list of every month, Games | Totals, cards, Previous games, two Totals cards), instant taps with rollback, Hide from list (only
+games with no money; money is never hidden; hidden games send no Telegram or clock alerts), Hidden games in Settings > Advanced, Edit charge, the cancel
+sheet's "Were you charged?", the Remind sheet with Text all (one message addressed to everyone who owes and has a number, re-read from the server at the
+tap), the tidier Feature switches page, the quieter History, and shared color tokens (paid, owes, credit, texting) used on the Money screens only.
+
+### Different from the mockup (the brief won)
+Fully paid games go to Previous games (no green card). No "Later games" card: games more than 7 days out are not listed on the Games tab of the current
+month (their court still counts in Totals projected). Restore, not Unhide. Hidden games leave Totals, but only a game with no money can be hidden.
+
+### Decisions Alex made
+Projected = booked games still coming plus played-but-not-finalized games, at what their players would pay today. Edit charge to No drops what players paid
+from the new Totals (the old Totals still count it). Membership counts for the current month always, and for another month only once a game is owed.
+
+### Tests
+Unit and API: 2034 passed, 1 skipped, 0 failed (110 files), including `tests/money-rework.test.ts`, `money-rework-ui`, `money-rework-optimistic`,
+`money-rework-split` (fee split totals, Edit charge with the split, the clock around a hidden game) and three reviewer files from the first review.
+Browser: `e2e/money-rework.cjs` 35/35 on the final code (added to `npm run test:e2e`). Regression browser files run again before ship: see the deploy notes below.
+Two independent reviewers (neither wrote the code): the first found 3 real bugs (old Activity wording changed with the switch off; the server did not refuse
+hiding a game with an open late fee; so-far membership on a future-only month), all fixed with tests. The final review is in the deploy notes below.
+
+### Preview data
+`docs/PREVIEW_FAKE_DB.md`: ten older months of played games (Dec 2025 to Sep 2026), a canceled test game to hide, previous games, mixed payments, an all-paid
+game, and "Owes, one no number" (Reese has no phone number) for Text all. Late-cancel fee split is on in the preview because it is on live.
+
+### To ship (rules from Alex: no deploy, switch-on or live database change from 6:00 PM Wed to 11:00 PM Thu; deploy after 11:00 PM Thu Nov 5)
+1. Merge PR #83 to main, pull, `npm test`, confirm main equals live plus this change.
+2. SQL export (`npx wrangler d1 export pickleball --remote --output live-before-money-rework-2026-11-05.sql`, kept out of git) and Time Travel bookmark
+   (`npx wrangler d1 time-travel info pickleball`).
+3. `npm run deploy` from main with `MONEY_REWORK` allowed and the Settings row OFF. No migration.
+4. Read-only live check: pages answer 200, the integrity checks read 0, no `money_rework_on` row in `task_log`.
+5. Do NOT switch it on for everyone. Alex tests with `/admin?moneyrework=on` and switches it on himself in a quiet window.
+Rollback: Settings > Feature switches > "Money page rework" off (no deploy); kill switch `MONEY_REWORK = "off"` and a deploy; or the previous Pages deployment
+(listed in the deploy notes). Nothing in this change writes new kinds of data except `task_log` marks (hide, switch) and `admin_audit_log` entries
+(`charge_edited`, `session_hidden_from_list`, `session_shown_in_list`), so no data restore is needed to undo it.
+
+### Final independent review and last tests (Wed Nov 4, about 9:30 PM Eastern, before the deploy window)
+A fresh reviewer (did not write the code) went over the final diff for money totals, hide rules, instant-tap rollback and Text all. Money totals, the
+hide rules and the instant-tap rollback were found correct (hand-computed totals, 40 random games with fees and the split, Eastern month edges, switch off
+byte-identical to main). It found three real bugs and one risk, all fixed with tests (`tests/review-final-*.test.ts`):
+1. Text all quoted $14 on a game canceled late with the fee split (each owes $11): it now quotes the price on the owing seats.
+2. Moving a hidden game to another day cleared its hide: the hide now survives the move.
+3. A month older than the dashboard's 90 days showed "No games" although the month list counted games: such a month now loads on its own
+   (`GET /api/admin/month-games`, organizer only, read only, needs the switch on).
+4. The last Mark paid on a card could pop the next game open under the finger: which game starts open is now decided once per month on screen.
+Last runs: unit and API 2059 passed, 1 skipped, 0 failed (110 files). Browser: money-rework 36/36, admin-r2 27, admin-v2 27, admin-r3 15, late-fees 19,
+late-fee-split 6, do-now 13, credit 153, cancel-reason 8. `e2e/texts-r2.cjs` shows 4 failures when run at night (10 of 14 pass): proven identical on untouched
+main 4014f51 at the same hour (it reads the real clock and expects "tonight/tomorrow" wording from the time of day), so not caused by this change.
+`tests/held-drop-fuzz.test.ts` seed 136 failed once under heavy CPU load and passes alone (twice) and in the final full run.

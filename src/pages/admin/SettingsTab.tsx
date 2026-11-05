@@ -4,9 +4,10 @@ import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMin
 import { finalPrice } from '../../../shared/pricing';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
-import { formatDateTime, formatTime, localParts } from '../../../shared/time';
+import { formatDateTime, formatShortDate, formatTime, localParts } from '../../../shared/time';
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
 import type { AdminCtx } from '../Admin';
+import '../../money-rework.css';
 
 type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
 type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes'>;
@@ -404,6 +405,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         <Section id="advanced" title="Advanced" sections={sections}>
           {ADVANCED_SETTINGS.map((a) => whole(a.key, a.label, a.hint))}
           {ctx.d.adminR2 === true && <HiddenPlayers ctx={ctx} />}
+          {ctx.d.moneyRework === true && <HiddenGames ctx={ctx} />}
           {r3 && (
             <details className="advanced" data-adv="access">
               <summary>
@@ -422,18 +424,34 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           )}
         </Section>
 
-        <Section id="switches" title="Feature switches" note={[ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined} sections={sections}>
-          <AdminV2Row ctx={ctx} auto={auto} />
-          <AdminR2Row ctx={ctx} auto={auto} />
-          <AdminR3Row ctx={ctx} auto={auto} />
-          <PayNoteRow ctx={ctx} auto={auto} />
-          <PlayerFix1Row ctx={ctx} auto={auto} />
-          <PaySheetRow ctx={ctx} auto={auto} />
-          <LateFeesRow ctx={ctx} auto={auto} />
-          <TextsR2Row ctx={ctx} auto={auto} />
-          <LateFeeSplitRow ctx={ctx} auto={auto} />
-          {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
-          {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
+        <Section
+          id="switches"
+          title="Feature switches"
+          note={
+            ctx.d.moneyRework === true
+              ? undefined
+              : [ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+          }
+          sections={sections}
+        >
+          {ctx.d.moneyRework === true ? (
+            <TidySwitches ctx={ctx} auto={auto} r3={r3} />
+          ) : (
+            <>
+              <MoneyReworkRow ctx={ctx} auto={auto} />
+              <AdminV2Row ctx={ctx} auto={auto} />
+              <AdminR2Row ctx={ctx} auto={auto} />
+              <AdminR3Row ctx={ctx} auto={auto} />
+              <PayNoteRow ctx={ctx} auto={auto} />
+              <PlayerFix1Row ctx={ctx} auto={auto} />
+              <PaySheetRow ctx={ctx} auto={auto} />
+              <LateFeesRow ctx={ctx} auto={auto} />
+              <TextsR2Row ctx={ctx} auto={auto} />
+              <LateFeeSplitRow ctx={ctx} auto={auto} />
+              {r3 && <TimeShiftRow ctx={ctx} auto={auto} />}
+              {r3 && <PayAlwaysRow ctx={ctx} auto={auto} />}
+            </>
+          )}
         </Section>
       </div>
 
@@ -754,7 +772,7 @@ function PayAlwaysRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Ask for payment on every game <SaveMark state={auto.rows.payAlwaysAll} />
           </span>
-          <span className="set-hint">Pay shows before the court is booked. Off: only phones opened with ?payalways=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Pay shows before the court is booked" : <>Pay shows before the court is booked. Off: only phones opened with ?payalways=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -783,7 +801,7 @@ function TimeShiftRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Moved-game notice for everyone <SaveMark state={auto.rows.timeShiftAll} />
           </span>
-          <span className="set-hint">Players confirm a new start time. Off: only phones opened with ?timeshift=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Players confirm a moved start time" : <>Players confirm a new start time. Off: only phones opened with ?timeshift=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -813,7 +831,7 @@ function LateFeesRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Late drops owe $14 <SaveMark state={auto.rows.lateFeesAll} />
           </span>
-          <span className="set-hint">Changes money: inside 12 hours, a drop that leaves fewer than 4 owes unless someone takes the spot. Off: only phones opened with ?latefees=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Changes money: late drops under 4 owe $14 unless a sub steps in" : <>Changes money: inside 12 hours, a drop that leaves fewer than 4 owes unless someone takes the spot. Off: only phones opened with ?latefees=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -846,7 +864,7 @@ function PayNoteRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             No Venmo? note <SaveMark state={auto.rows.payNoteAll} />
           </span>
-          <span className="set-hint">Tells a player without the Venmo app to pay you directly. Off: only phones opened with ?paynote=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Tells players without Venmo to pay you directly" : <>Tells a player without the Venmo app to pay you directly. Off: only phones opened with ?paynote=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -879,7 +897,7 @@ function PlayerFix1Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Player screen fixes <SaveMark state={auto.rows.playerFix1All} />
           </span>
-          <span className="set-hint">Pay and I paid on tonight's game card too, and a roomier TONIGHT tag. Off: only phones opened with ?playerfix1=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Pay on tonight's card, roomier TONIGHT tag" : <>Pay and I paid on tonight's game card too, and a roomier TONIGHT tag. Off: only phones opened with ?playerfix1=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -913,7 +931,7 @@ function TextsR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Texts and alerts, round 2 <SaveMark state={auto.rows.textsR2All} />
           </span>
-          <span className="set-hint">New wording for texts and Telegram alerts, new alert times, cancel sheet starts on No. Off: only phones opened with /admin?textsr2=on get the new texts</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "New text wording and alert times, cancel sheet starts on No" : <>New wording for texts and Telegram alerts, new alert times, cancel sheet starts on No. Off: only phones opened with /admin?textsr2=on get the new texts</>}</span>
         </span>
         <input
           type="checkbox"
@@ -946,9 +964,7 @@ function LateFeeSplitRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Late-cancel fee split <SaveMark state={auto.rows.lateFeeSplitAll} />
           </span>
-          <span className="set-hint">
-            Venue keeps the fee on a late cancel with 5 or more in: everyone owes the played-game price (6 in: $9), extra comes back as credit. Needs late fees on. Off: everyone owes $14
-          </span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Changes money: late cancel with 5+ in pays the played price" : <>Venue keeps the fee on a late cancel with 5 or more in: everyone owes the played-game price (6 in: $9), extra comes back as credit. Needs late fees on. Off: everyone owes $14</>}</span>
         </span>
         <input
           type="checkbox"
@@ -981,7 +997,7 @@ function PaySheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Pay sheet <SaveMark state={auto.rows.paySheetAll} />
           </span>
-          <span className="set-hint">Pay opens a small sheet: Venmo app, copy my Venmo, Zelle line, I paid. Off: only phones opened with ?paysheet=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "Pay opens a sheet: Venmo, copy handle, Zelle" : <>Pay opens a small sheet: Venmo app, copy my Venmo, Zelle line, I paid. Off: only phones opened with ?paysheet=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -1013,7 +1029,7 @@ function AdminV2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             New admin layout <SaveMark state={auto.rows.adminV2All} />
           </span>
-          <span className="set-hint">New History, Money and Home screens. Off: only phones opened with /admin?adminv2=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "New History, Money and Home screens" : <>New History, Money and Home screens. Off: only phones opened with /admin?adminv2=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -1046,7 +1062,7 @@ function AdminR2Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Admin screens, round 2 <SaveMark state={auto.rows.adminR2All} />
           </span>
-          <span className="set-hint">New Home cards, Money, Players, History and header. Off: only phones opened with /admin?adminr2=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "New Home cards, Money, Players, History, header" : <>New Home cards, Money, Players, History and header. Off: only phones opened with /admin?adminr2=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -1079,7 +1095,7 @@ function AdminR3Row({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-name">
             Admin screens, round 3 <SaveMark state={auto.rows.adminR3All} />
           </span>
-          <span className="set-hint">New Edit game, Add game, Settings order and Players list. Needs round 2 on. Off: only phones opened with /admin?adminr3=on</span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? "New Edit game, Add game, Settings, Players. Needs round 2" : <>New Edit game, Add game, Settings order and Players list. Needs round 2 on. Off: only phones opened with /admin?adminr3=on</>}</span>
         </span>
         <input
           type="checkbox"
@@ -1132,6 +1148,128 @@ function HiddenPlayers({ ctx }: { ctx: AdminCtx }) {
               </button>
             </li>
           ))}
+        </ul>
+      )}
+    </details>
+  );
+}
+
+/**
+ * "Money page rework" (MONEY_REWORK, server/moneyRework.ts): the reworked Money page (Games and Totals), Hide from list with Settings >
+ * Advanced > Hidden games, Edit charge on a canceled game, the cancel sheet's "Were you charged?" default, this tidier switches page and
+ * a quieter History. Admin screens only: no money rule, amount, seat or credit changes. Off: only a phone opened with
+ * /admin?moneyrework=on sees it (a private test). Saves itself, no deploy.
+ */
+function MoneyReworkRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  const { on, flip } = useFlip(!!ctx.d.moneyReworkForAll, ctx, auto, 'moneyReworkAll', '/api/admin/money-rework', 'Money page rework', true);
+  return (
+    <div className="set-row-wrap" data-row="moneyReworkAll">
+      <label className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Money page rework <SaveMark state={auto.rows.moneyReworkAll} />
+          </span>
+          <span className="set-hint">{ctx.d.moneyRework === true ? 'New Money page, hide games, edit charge' : 'New Money page, hide games, edit charge. Off: only phones opened with /admin?moneyrework=on'}</span>
+        </span>
+        <input type="checkbox" role="switch" className="switch" checked={on} data-money-rework-all onChange={(e) => flip(e.target.checked)} />
+      </label>
+      <SaveProblem state={auto.rows.moneyReworkAll} />
+    </div>
+  );
+}
+
+/**
+ * The Feature switches page when the Money page rework is on: newest switch first, switches that are off listed above, and every older
+ * switch that is already on for everyone folded into one "Live and stable" group. Which group a row sits in is read once when the
+ * page opens, so a row never jumps away while you are flipping it. No behavior change: each row is the same row, with the same switch.
+ */
+function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: boolean }) {
+  const d = ctx.d;
+  // Newest first (the order the switches were built).
+  const all: { key: string; on: boolean; node: ReactNode }[] = [
+    { key: 'lateFeeSplitAll', on: !!d.lateFeeSplitForAll, node: <LateFeeSplitRow key="lateFeeSplitAll" ctx={ctx} auto={auto} /> },
+    { key: 'textsR2All', on: !!d.textsR2ForAll, node: <TextsR2Row key="textsR2All" ctx={ctx} auto={auto} /> },
+    { key: 'paySheetAll', on: !!d.paySheetForAll, node: <PaySheetRow key="paySheetAll" ctx={ctx} auto={auto} /> },
+    { key: 'playerFix1All', on: !!d.playerFix1ForAll, node: <PlayerFix1Row key="playerFix1All" ctx={ctx} auto={auto} /> },
+    { key: 'lateFeesAll', on: !!d.lateFeesForAll, node: <LateFeesRow key="lateFeesAll" ctx={ctx} auto={auto} /> },
+    { key: 'adminR3All', on: !!d.adminR3ForAll, node: <AdminR3Row key="adminR3All" ctx={ctx} auto={auto} /> },
+    { key: 'adminR2All', on: !!d.adminR2ForAll, node: <AdminR2Row key="adminR2All" ctx={ctx} auto={auto} /> },
+    { key: 'payNoteAll', on: !!d.payNoteForAll, node: <PayNoteRow key="payNoteAll" ctx={ctx} auto={auto} /> },
+    { key: 'adminV2All', on: !!d.adminV2ForAll, node: <AdminV2Row key="adminV2All" ctx={ctx} auto={auto} /> },
+    ...(r3
+      ? [
+          { key: 'payAlwaysAll', on: !!d.payAlwaysForAll, node: <PayAlwaysRow key="payAlwaysAll" ctx={ctx} auto={auto} /> },
+          { key: 'timeShiftAll', on: !!d.timeShiftForAll, node: <TimeShiftRow key="timeShiftAll" ctx={ctx} auto={auto} /> },
+        ]
+      : []),
+  ];
+  const [stable] = useState(() => new Set(all.filter((x) => x.on).map((x) => x.key)));
+  const live = all.filter((x) => stable.has(x.key));
+  const rest = all.filter((x) => !stable.has(x.key));
+  return (
+    <div className="switches-tidy" data-switches-tidy>
+      <MoneyReworkRow ctx={ctx} auto={auto} />
+      {rest.map((x) => x.node)}
+      {live.length > 0 && (
+        <details className="advanced live-stable" data-live-stable>
+          <summary>
+            <span>
+              Live and stable<span className="set-note"> · {live.length}</span>
+            </span>
+          </summary>
+          {live.map((x) => x.node)}
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Settings > Advanced > Hidden games (Money page rework): the games hidden from your Home and Games lists, each with a Restore button.
+ * Restoring puts the game straight back; nothing about it was ever deleted.
+ */
+function HiddenGames({ ctx }: { ctx: AdminCtx }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState<string | null>(null);
+  const tz = ctx.d.group.timezone;
+  const hidden = ctx.d.hiddenGames ?? [];
+  async function restore(id: string, when: string) {
+    setBusy(id);
+    try {
+      await api('POST', `/api/admin/sessions/${id}/hide-from-list`, { hidden: false });
+      await ctx.reload();
+      toast(`${when} is back on your lists`);
+    } catch (err) {
+      toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <details className="advanced hidden-games" data-hidden-games>
+      <summary>
+        <span>
+          Hidden games<span className="set-note"> · {hidden.length}</span>
+        </span>
+      </summary>
+      {hidden.length === 0 ? (
+        <p className="small muted">No games are hidden. Hide one from its card on Money, or the gear menu on Home.</p>
+      ) : (
+        <ul className="rows" aria-label="Hidden games">
+          {hidden.map((h) => {
+            const when = formatShortDate(h.startsAt, tz);
+            return (
+              <li key={h.id} data-hidden-game={h.id}>
+                <span className="who">
+                  <strong>{h.label}</strong>
+                  <span className="small muted">{when} · Hidden from Games</span>
+                </span>
+                <button type="button" className="btn small secondary" disabled={busy === h.id} aria-label={`Restore ${h.label}, ${when}`} onClick={() => void restore(h.id, when)}>
+                  Restore
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </details>

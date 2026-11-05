@@ -80,6 +80,7 @@ export function suggestions(d: AdminDashboard, nowMs: number): Suggestion[] {
   const upcoming: Suggestion[] = [];
   const pay: Suggestion[] = [];
   for (const s of d.sessions) {
+    if (s.hiddenFromList === true) continue; // hidden from the list (Money page rework): no card
     const start = Date.parse(s.startsAt);
     const canceled = s.state.flags.canceled;
     if (!canceled && start > nowMs) {

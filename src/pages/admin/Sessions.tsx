@@ -916,7 +916,11 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const start = Date.parse(s.startsAt);
   const serverNow = Date.parse(ctx.d.now);
   const askCharge = !reopening && serverNow >= start - CHARGE_ASK_HOURS * 3600_000 && serverNow < start;
-  const [charged, setCharged] = useState(false);
+  // The Money page rework (MONEY_REWORK): the sheet always asks "Were you charged?", starting on No more than 12 hours out and on Yes inside
+  // the 12 hours (the venue almost never gives grace). The answer can be flipped either way before Cancel.
+  const rw = ctx.d.moneyRework === true && !reopening;
+  const inside = serverNow >= start - CHARGE_ASK_HOURS * 3600_000 && serverNow < start;
+  const [charged, setCharged] = useState(rw && inside);
   const [amount, setAmount] = useState(() => (((s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents) || 0) / 100).toFixed(2));
   const [amountError, setAmountError] = useState<string | null>(null);
   const [reason, setReason] = useState('');
@@ -926,7 +930,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const flat = ctx.d.group.settings.pricePerPlayerCents;
   const splitCents = askWaived && ctx.d.lateFeeSplit === true ? feeSplitPrice(flat, s.confirmedCount) : null;
   // TEXTS_R2: it starts on No (the venue gives almost no grace, so a late cancel normally keeps the fee). Yes still works exactly as before.
-  const [waived, setWaived] = useState<boolean | null>(ctx.d.textsR2 === true ? false : null);
+  const [waived, setWaived] = useState<boolean | null>(rw || ctx.d.textsR2 === true ? false : null);
   const [waivedError, setWaivedError] = useState(false);
   return (
     <ConfirmDialog
@@ -955,7 +959,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 Reason (optional)
                 <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={40} placeholder="Thanksgiving" autoComplete="off" />
               </label>
-              {askWaived && (
+              {askWaived && !rw && (
                 <fieldset className="charge-ask" data-venue-waived>
                   <legend>Did the venue waive the fee or give you credit toward the next booking?</legend>
                   <div className="segmented" role="group" aria-label="Did the venue waive the fee or give you credit toward the next booking?">
@@ -996,7 +1000,57 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                   {waivedError && <span className="field-error">Pick Yes or No.</span>}
                 </fieldset>
               )}
-              {askCharge && !askWaived && (
+              {rw && askWaived && (
+                <fieldset className="charge-ask" data-venue-waived data-were-you-charged>
+                  <legend>Were you charged?</legend>
+                  <div className="segmented" role="group" aria-label="Were you charged?">
+                    <button type="button" aria-pressed={waived === true} data-charged="no" onClick={() => setWaived(true)}>
+                      No
+                    </button>
+                    <button type="button" aria-pressed={waived === false} data-charged="yes" onClick={() => setWaived(false)}>
+                      Yes
+                    </button>
+                  </div>
+                  <p className="small muted">
+                    {waived === false
+                      ? splitCents !== null
+                        ? `Yes: the fee is kept. ${s.confirmedCount} are in, so everyone signed up owes ${formatPrice(splitCents)} (anything paid above that comes back as credit). Late drops still owe ${formatPrice(flat)}.`
+                        : 'Yes: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
+                      : 'No: everyone gets their money back as credit, nobody owes.'}
+                  </p>
+                </fieldset>
+              )}
+              {rw && !askWaived && (
+                <fieldset className="charge-ask" data-were-you-charged>
+                  <legend>Were you charged?</legend>
+                  <div className="segmented" role="group" aria-label="Were you charged?">
+                    <button type="button" aria-pressed={!charged} data-charged="no" onClick={() => setCharged(false)}>
+                      No
+                    </button>
+                    <button type="button" aria-pressed={charged} data-charged="yes" onClick={() => setCharged(true)}>
+                      Yes
+                    </button>
+                  </div>
+                  {charged && (
+                    <label className="field">
+                      Amount charged
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={amount}
+                        onChange={(e) => {
+                          setAmount(e.target.value);
+                          setAmountError(null);
+                        }}
+                        aria-invalid={amountError ? true : undefined}
+                      />
+                      {amountError && <span className="field-error">{amountError}</span>}
+                    </label>
+                  )}
+                  <p className="small muted">A Yes counts as the court cost for this canceled game in Money. Only you see this.</p>
+                </fieldset>
+              )}
+              {askCharge && !askWaived && !rw && (
                 <fieldset className="charge-ask">
                   <legend>Were you charged for this court?</legend>
                   <div className="segmented" role="group" aria-label="Were you charged for this court?">
@@ -1036,7 +1090,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
       onConfirm={async () => {
         if (askWaived && waived === null) return setWaivedError(true);
         let chargedCents = 0;
-        if (askCharge && !askWaived && charged) {
+        if ((askCharge || rw) && !askWaived && charged) {
           const cents = parseDollars(amount);
           if (cents === null) return setAmountError('Enter an amount like 48 or 48.50.');
           chargedCents = cents;

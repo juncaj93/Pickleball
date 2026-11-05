@@ -168,6 +168,14 @@ export function remindAllTextR2(link: string): string {
   return lines(["Hey, looks like you haven't paid for pickleball yet.", 'Pay here:'], link);
 }
 
+/**
+ * "Text all" on the Money page's Remind sheet (Money page rework): one text for the whole group chat, opened with no recipients filled in.
+ * "today's", "tonight's", "tomorrow's", "yesterday's" or the date ("Tue Nov 17's"), the same day words as every other text.
+ */
+export function remindGameGroupText(startsAt: string, tz: string, nowMs: number, priceCents: number, link: string): string {
+  return lines([`Hey everyone, quick reminder for ${dayWordR2(startsAt, tz, nowMs)}'s pickleball.`, `If you haven't paid your ${formatPrice(priceCents)} yet, please do it here:`], link);
+}
+
 /** 10. STILL IN? (a moved game; "confirmed", because an unbooked game only had an approximate time). */
 export function stillInTextR2(startsAt: string, tz: string, nowMs: number, link: string): string {
   return lines([`Pickleball ${dayWordR2(startsAt, tz, nowMs)} is confirmed @ ${shortTime(startsAt, tz)}!`, 'If you can no longer make it, let us know here:'], link);
