@@ -68,7 +68,7 @@ describe('Totals after a fee-kept cancel with the split on', () => {
     expect(m.rework).toMatchObject({ courtSessions: 1, courtCostCents: 4800, membershipCents: 3000, owedToVenueCents: 7800, collectedCents: 2700, yourCostCents: 5100, yourCostCourtCents: 2100, yourCostMembershipCents: 3000 });
     expect(m.creditsOwedCents).toBe(1500);
     // A canceled game adds nothing to the projection beyond what is already counted.
-    expect(m.rework.projected).toMatchObject({ addedCourts: 0, courtCount: 1, courtCostCents: 4800, playersPayCents: 2700, yourCostCents: 5100 });
+    expect(m.rework.projected).toMatchObject({ addedCourts: 0, courtCount: 1, courtCostCents: 4800, playersPayCents: 4200, yourCostCents: 3600, yourCostCourtCents: 600 });
     nonNegative(m.rework);
     // The same game on the old page: same court and same collected (no double count, no new number).
     expect(m.courtCostCents).toBe(4800);

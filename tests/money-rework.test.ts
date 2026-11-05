@@ -140,23 +140,22 @@ describe('Totals: real numbers only', () => {
     expect(rework).toBeDefined();
     expect(JSON.stringify(b)).toBe(JSON.stringify(a));
   });
-  it('T3 projected adds booked games still coming, at what their players would pay today', async () => {
+  it('T3 projected adds booked games still coming and assumes 3 players pay $14 for EVERY court: each court costs the organizer $6', async () => {
     const { w, s0, month } = await playedGame();
     const next = (await upcoming(w)).find((s: any) => monthOf(Date.parse(s.startsAt)) === month && s.id !== s0.id);
     expect(next).toBeDefined();
-    // Three players, organizer not in: 3 x $14 (below 4 the flat price), one more court $48.
     await fill(w, next, ['Blair', 'Casey', 'Emery'], []);
     const t = (await money(w, month)).rework;
-    expect(t.projected).toMatchObject({ courtCount: 2, addedCourts: 1, courtCostCents: 9600, totalCents: 12600, playersPayCents: 3300 + 4200, yourCostCents: 5100, yourCostCourtCents: 2100, yourCostMembershipCents: 3000 });
-    // "So far" did not move: the coming game is not owed yet.
+    // Two courts: the venue total is unchanged (2 x $48 + $30), the players pay 3 x $14 x 2 = $84, so the organizer's estimate is $30 + $6 x 2.
+    expect(t.projected).toMatchObject({ courtCount: 2, addedCourts: 1, courtCostCents: 9600, membershipCents: 3000, totalCents: 12600, playersPayCents: 8400, yourCostCents: 4200, yourCostCourtCents: 1200, yourCostMembershipCents: 3000 });
+    // "So far" did not move: the coming game is not finalized.
     expect(t).toMatchObject({ courtSessions: 1, courtCostCents: 4800, collectedCents: 3300 });
   });
-  it('T4 projected uses the played-game price once 4 or more are in (organizer counts, pays the venue)', async () => {
+  it('T4 the projection does not depend on who is in: 3 x $14 a court whether 3, 4 or 5 are signed up', async () => {
     const { w, s0, month } = await playedGame();
     const next = (await upcoming(w)).find((s: any) => monthOf(Date.parse(s.startsAt)) === month && s.id !== s0.id)!;
     await fill(w, next, ['Blair', 'Casey', 'Devon', 'Emery'], [], true);
-    // Five in with the organizer: $11 each from the four others.
-    expect((await money(w, month)).rework.projected).toMatchObject({ addedCourts: 1, playersPayCents: 3300 + 4400 });
+    expect((await money(w, month)).rework.projected).toMatchObject({ addedCourts: 1, playersPayCents: 8400, yourCostCents: 4200 });
   });
   it('T5 a coming game with no court booked adds nothing', async () => {
     const { w, s0, month } = await playedGame();
@@ -401,5 +400,69 @@ describe('Hide from list: only a game with no money in it, and it never loses da
     await hide(w, s0.id);
     await call(w, 'POST', `/api/admin/sessions/${s0.id}/hide`, { hidden: false });
     expect(await flags()).toEqual({ player: false, list: true });
+  });
+});
+
+describe('Top card: a game counts only once it is finalized; projected: $6 a court', () => {
+  const dollars = (t: any) => ({ courts: t.courtSessions, court: t.courtCostCents, collected: t.collectedCents, owed: t.owedToVenueCents, yours: t.yourCostCents });
+  it('N1 a game that was played but not finalized adds NOTHING to the top card; finalizing it adds the court and the fees at that moment', async () => {
+    const w = await world();
+    const s0 = await firstSession(w);
+    await fill(w, s0, ['Blair', 'Casey', 'Devon', 'Emery'], ['Blair', 'Casey', 'Devon', 'Emery']);
+    w.app.now = Date.parse(s0.endsAt) + HOUR; // over, everyone paid, not finalized
+    const month = monthOf(Date.parse(s0.startsAt));
+    const before = (await money(w, month)).rework;
+    expect(dollars(before)).toEqual({ courts: 0, court: 0, collected: 0, owed: 3000, yours: 3000 }); // only the monthly membership
+    // It is in the projection, as one court.
+    expect(before.projected).toMatchObject({ courtCount: 1, addedCourts: 1, courtCostCents: 4800, playersPayCents: 4200 });
+    const fin = await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/finalize`, { everyone: true });
+    expect(fin.status, fin.text).toBe(200);
+    const after = (await money(w, month)).rework;
+    expect(dollars(after)).toEqual({ courts: 1, court: 4800, collected: 5600, owed: 7800, yours: 2200 });
+    // The projection did not double count it: still one court.
+    expect(after.projected).toMatchObject({ courtCount: 1, addedCourts: 0, courtCostCents: 4800 });
+  });
+  it('N2 a game still to come adds nothing to the top card, even with payments on it', async () => {
+    const w = await world();
+    const s0 = await firstSession(w);
+    await fill(w, s0, ['Blair', 'Casey', 'Devon'], ['Blair', 'Casey', 'Devon']);
+    const t = (await money(w, monthOf(Date.parse(s0.startsAt)))).rework;
+    expect(dollars(t)).toEqual({ courts: 0, court: 0, collected: 0, owed: t.membershipCents, yours: t.membershipCents });
+    expect(t.projected).toMatchObject({ courtCount: 1, addedCourts: 1 });
+  });
+  it('N3 three courts (one finalized, one played not finalized, one coming): players pay 3 x $14 x 3 = $126, estimate = $30 + $6 x 3 = $48', async () => {
+    const w = await world();
+    // Three games of the same month (November): the first two get played, the third is still coming.
+    const [a, b, c] = (await upcoming(w)).filter((g: any) => monthOf(Date.parse(g.startsAt)) === '2026-11').slice(0, 3);
+    const month = '2026-11';
+    await fill(w, a, ['Blair', 'Casey', 'Devon', 'Emery'], ['Blair', 'Casey', 'Devon', 'Emery']);
+    await fill(w, b, ['Blair', 'Casey', 'Devon'], []);
+    await fill(w, c, ['Blair'], []);
+    w.app.now = Date.parse(b.endsAt) + HOUR; // a and b are over
+    expect((await w.organizer.call('POST', `/api/admin/sessions/${a.id}/finalize`, { everyone: true })).status).toBe(200);
+    const t = (await money(w, month)).rework;
+    expect(t).toMatchObject({ courtSessions: 1, courtCostCents: 4800 }); // top card: only the finalized game
+    expect(t.projected).toMatchObject({ courtCount: 3, courtCostCents: 14400, totalCents: 17400, playersPayCents: 12600, yourCostCents: 4800, yourCostCourtCents: 1800, yourCostMembershipCents: 3000 });
+  });
+  it('N4 a court that costs less than the $42 the 3 players pay never makes the estimate go below the membership or negative', async () => {
+    const w = await world();
+    const s0 = await firstSession(w);
+    await fill(w, s0, ['Blair'], []);
+    await w.organizer.call('PUT', `/api/admin/sessions/${s0.id}/booking`, { courtCostCents: 3000 });
+    const month = monthOf(Date.parse(s0.startsAt));
+    const t = (await money(w, month)).rework;
+    if (t.projected.courtCostCents === 3000) expect(t.projected).toMatchObject({ playersPayCents: 4200, yourCostCents: 3000, yourCostCourtCents: 0 });
+    for (const v of [t.projected.yourCostCents, t.projected.yourCostCourtCents, t.projected.yourCostMembershipCents]) expect(v).toBeGreaterThanOrEqual(0);
+  });
+  it('N5 a canceled game the venue charged counts as a court in the top card (it is settled when canceled); with Edit charge on No it does not', async () => {
+    const w = await world();
+    const s0 = await firstSession(w);
+    await fill(w, s0, ['Blair', 'Casey'], []);
+    w.app.now = Date.parse(s0.startsAt) - 6 * HOUR;
+    await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/decision`, { decision: 'cancel', confirm: true, chargedCents: 4800 }, on);
+    const month = monthOf(Date.parse(s0.startsAt));
+    expect((await money(w, month)).rework).toMatchObject({ courtSessions: 1, courtCostCents: 4800 });
+    await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/charge`, { charged: false }, on);
+    expect((await money(w, month)).rework).toMatchObject({ courtSessions: 0, courtCostCents: 0 });
   });
 });

@@ -2234,3 +2234,18 @@ Last runs: unit and API 2059 passed, 1 skipped, 0 failed (110 files). Browser: m
 late-fee-split 6, do-now 13, credit 153, cancel-reason 8. `e2e/texts-r2.cjs` shows 4 failures when run at night (10 of 14 pass): proven identical on untouched
 main 4014f51 at the same hour (it reads the real clock and expects "tonight/tomorrow" wording from the time of day), so not caused by this change.
 `tests/held-drop-fuzz.test.ts` seed 136 failed once under heavy CPU load and passes alone (twice) and in the final full run.
+
+### Deploy (Thu Nov 5, 2026, about 7:05 AM Eastern, on Alex's "deploy now": no traffic, the group had not been texted)
+- PR #83 merged as `13cdd3b`. Production deployment `206e5b1f-55d2-4fdf-a2b8-06e4cab861dc` from main with `MONEY_REWORK = "on"` (allowed) and the Settings row OFF
+  (no `money_rework_on` row in `task_log`). No migration. The 11:10 PM scheduled run was deleted so it could not deploy twice.
+- Before it: main equaled live (production `49be2ad5-94a9-4294-a9f8-2e830e37403d` = 4014f51). SQL export `live-before-money-rework-2026-11-05.sql` (not committed, has phone
+  numbers, in that session's scratch folder), Time Travel bookmark `000007db-00000000-0000511a-54554262ab42b933845dbb63bb4505a4` (7:03 AM Eastern).
+  Integrity checks: all 21 columns 0 before and after (info lines 0).
+- Tests on merged main: tsc clean, unit and API 2059 passed, 1 skipped, 0 failed, build clean.
+- Read-only live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net is not reachable from the sandbox): `/`, `/admin`, `/api/status`, `/api/group/version`
+  answer 200; `/api/admin/dashboard` and `/api/admin/month-games` answer 401 without a sign-in; the live script is the same file as the local build
+  (index-nM9Xj7Qj.js, 540,982 bytes) and holds the new Money page; row counts unchanged from the export (players 11, games 12, seats 23, credit 5); no hidden-game rows.
+  (Two organizer actions logged at 7:05 and 7:06 AM, a move, a court booking and a settings save, are Alex's own, not the deploy.)
+- Rollback: Settings > Feature switches > "Money page rework" off (no deploy; it ships off); `MONEY_REWORK = "off"` and a deploy; or Pages deployment `49be2ad5`
+  (4014f51, the code before this). No data was changed by the deploy, so no restore is needed.
+- Alex switches it on himself in a quiet window (Friday). To try it first on one phone: `/admin?moneyrework=on`.

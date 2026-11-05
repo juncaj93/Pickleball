@@ -39,3 +39,6 @@ export function gameHasMoney(f: MoneyFacts): boolean {
   if (!f.canceled && (f.booked || f.confirmed > 0)) return true;
   return f.seats.some((s) => s.paid || s.paidCents > 0 || s.lateFee);
 }
+
+/** The projected Totals card assumes this many players pay the usual price (3 x $14) for EVERY court in the month, finalized or not. */
+export const PROJECTED_PLAYERS_PER_COURT = 3;

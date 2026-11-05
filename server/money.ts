@@ -18,7 +18,7 @@ import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
 import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
-import { finalPrice } from '../shared/pricing';
+import { PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -86,14 +86,14 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   // the switch off the page reads exactly as before.
   let splitGames = 0;
   // The reworked Totals (MONEY_REWORK) keep their own sums so the numbers above stay exactly as they were:
-  //  so far = a played game, or a canceled one the venue charged; projected adds games still to be paid for (booked and coming up, or
-  //  played and not finalized yet) at what their players would pay today.
+  //  so far = a game only once it is FINALIZED (its court and the fees players paid are added at that moment; a game not finalized yet adds
+  //  nothing), or a canceled one the venue charged (a cancel is its own settling); projected adds the games still to come (booked and coming up,
+  //  or played and not finalized yet) and assumes 3 players pay the usual price for EVERY court, finalized or not.
   let rwCourts = 0;
   let rwCollected = 0;
   let rwSessions = 0;
   let projCourts = 0;
   let projAdded = 0;
-  let projPlayers = 0;
   const flat = settings.pricePerPlayerCents;
   const sessions: MonthlyMoney['sessions'] = [];
   const creditSessionIds = new Set(ledger.map((e) => e.sessionId).filter((x): x is string => !!x));
@@ -145,12 +145,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
         rwCourts += state === 'played' ? cost : charged;
         rwCollected += kept;
       } else if (state === 'not_finalized' || (state === 'upcoming' && s.status !== 'canceled' && s.booking_status === 'booked')) {
-        const inGame = roster.filter((r) => r.status === 'confirmed');
-        const others = inGame.filter((r) => r.player_id !== organizerId).length;
         projAdded++;
         projCourts += cost;
-        // Everyone in pays the final price for that many players (4 or more), the flat price below 4. The organizer plays but pays the venue.
-        projPlayers += others * finalPrice(flat, inGame.length);
       }
     }
     sessions.push({
@@ -193,8 +189,9 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
             courtCostCents: rwCourts + projCourts,
             membershipCents: projMembership,
             totalCents: rwCourts + projCourts + projMembership,
-            playersPayCents: rwCollected + projPlayers,
-            ...split(rwCourts + projCourts, rwCollected + projPlayers, projMembership),
+            // 3 players pay the usual price for every court in the month, finalized or not: each court costs the organizer $48 - 3 x $14 = $6.
+            playersPayCents: PROJECTED_PLAYERS_PER_COURT * flat * (rwSessions + projAdded),
+            ...split(rwCourts + projCourts, PROJECTED_PLAYERS_PER_COURT * flat * (rwSessions + projAdded), projMembership),
           },
         };
       })()

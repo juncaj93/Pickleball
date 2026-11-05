@@ -560,9 +560,10 @@ export interface MonthlyMoney {
     priceCents: number | null;
   }[];
   /**
-   * "Money page rework" only (server/money.ts): the two cards on the Totals tab. "So far" counts played games and canceled games the venue
-   * charged; "projected" adds the booked games still coming up (and played games not finalized yet) at what their players would pay today.
-   * Your cost is what is left after the players' share, never below $0, split into the court part and the membership part.
+   * "Money page rework" only (server/money.ts): the two cards on the Totals tab. "So far" counts a game only once it is finalized, plus
+   * canceled games the venue charged (`courtSessions` is that many courts); "projected" adds the booked games still coming up (and played games
+   * not finalized yet) and assumes 3 players pay the usual price for EVERY court (finalized or not). Your cost is what is left after the
+   * players' share, never below $0, split into the court part and the membership part.
    */
   rework?: {
     courtSessions: number;
