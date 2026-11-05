@@ -68,6 +68,12 @@ export interface Env {
   MONEY_REWORK?: string;
   /** "Instant taps" (the screen changes the instant a button is tapped, the save runs in the background, a failed save puts it back): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?instanttaps=on (server/instantTaps.ts). A wrangler.toml var. */
   INSTANT_TAPS?: string;
+  /** "Adjust credit" (the organizer adds or removes credit on a player by hand, with a reason): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?adjustcredit=on (server/adjustCredit.ts). A wrangler.toml var. */
+  ADJUST_CREDIT?: string;
+  /** "Home collapse" (player Home shows only this week and next week; later games behind one "More sessions" button): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /?homecollapse=on (server/homeCollapse.ts). A wrangler.toml var. */
+  HOME_COLLAPSE?: string;
+  /** "Venmo request" (a Venmo request link per person who owes, organizer screens): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?venmorequest=on (server/venmoRequest.ts). A wrangler.toml var. */
+  VENMO_REQUEST?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

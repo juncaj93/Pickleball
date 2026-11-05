@@ -86,6 +86,20 @@ MONEY_REWORK = "on"
 # with ?instanttaps=on (the private test switch, works on /admin too). "off" = the kill switch: nobody, not even the test link. Tap
 # feedback only: no money rule, amount, seat or credit depends on it. Needs a deploy.
 INSTANT_TAPS = "on"
+# "Adjust credit" (the organizer adds or removes credit on one player by hand, with a required reason; gear sheet on the Players page).
+# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Adjust credit" (off at ship = nobody), plus a phone opened once
+# with /admin?adjustcredit=on (the private test switch). "off" = the kill switch: nobody, not even the test link, and the save is refused.
+# Organizer screens only. Uses the existing credit ledger (no new table). Needs a deploy.
+ADJUST_CREDIT = "on"
+# "Venmo request" (a blue "Venmo request" link per person who still owes, only where that player has a Venmo username saved).
+# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Venmo request" (off at ship = nobody), plus a phone opened once
+# with /admin?venmorequest=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Organizer screens
+# only; it only shows links (nothing is sent, charged or saved). Needs a deploy.
+VENMO_REQUEST = "on"
+# "Home collapse" (player Home: only THIS WEEK and NEXT WEEK show; every later game sits behind one "More sessions" button, collapsed on each load).
+# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Home collapse" (off at ship = nobody), plus a phone opened once with
+# /?homecollapse=on (the private test switch). "off" = the kill switch: nobody, not even the test link. Player screens, display only. Needs a deploy.
+HOME_COLLAPSE = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -111,6 +125,9 @@ TEXTS_R2 = "on"
 LATE_FEE_SPLIT = "on"
 MONEY_REWORK = "on"
 INSTANT_TAPS = "on"
+ADJUST_CREDIT = "on"
+VENMO_REQUEST = "on"
+HOME_COLLAPSE = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

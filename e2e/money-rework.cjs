@@ -775,8 +775,8 @@ async function main() {
       const tidy = page.locator('[data-switches-tidy]');
       await tidy.waitFor();
       const names = await tidy.locator('.set-name').evaluateAll((els) => els.map((e) => e.innerText.trim()));
-      // Instant taps (Zip 5, Nov 5) is the newest switch now; Money page rework right under it.
-      assert(names[0] === 'Instant taps' && names[1] === 'Money page rework', `newest first: ${names.slice(0, 2)}`);
+      // Zip 6 (Nov 5) added Home collapse, Adjust credit and Venmo request on top; Instant taps and Money page rework sit right under them.
+      assert(names.slice(0, 5).join('|') === 'Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 5)}`);
       // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
@@ -786,7 +786,8 @@ async function main() {
       assert(live[0] === 'Late-cancel fee split' && live[1] === 'Texts and alerts, round 2', `older switches in the group, newest first: ${live}`);
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
-      assert(names.length === 2 + live.length, `nothing else is listed (Instant taps and Money page rework sit above the group): ${names.length} vs ${live.length}`);
+      // This test server keeps the two animation switches dark, so those two rows sit above the group as well.
+      assert(names.length === 5 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the five newest sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
@@ -1040,7 +1041,8 @@ async function main() {
       });
       assert(m.n === 2 && m.names.join() === 'Kai,Gray' || m.names.join() === 'Gray,Kai', `two people owe: ${m.names}`);
       assert(m.small.every((t) => /^owes \$14$/.test(t)), `small "owes $14": ${m.small}`);
-      assert(m.rowH.every((h) => h >= 52 && h <= 60), `rows about 54 px: ${m.rowH} (${tag})`);
+      // Zip 6: a person with a Venmo username shows "Venmo request" next to Text; on a 320 px phone those two buttons drop under the name (about 98 px), by design.
+      assert(m.rowH.every((h) => (h >= 52 && h <= 60) || (/^320/.test(tag) && h <= 100)), `rows about 54 px: ${m.rowH} (${tag})`);
       const purple = scheme === 'light' ? 'rgb(106, 86, 166)' : 'rgb(178, 160, 230)';
       assert(m.oneH === 36 && m.oneColor === purple && m.oneBorder === purple && m.oneSize === '14px' && m.oneRadius === '12px', `Text button ${m.oneH} ${m.oneColor} ${m.oneBorder} (${tag})`);
       assert(m.allH === 34 && m.allBg === purple && m.allColor === (scheme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(29, 20, 51)') && m.allSize === '14px' && m.allWeight === '600', `Text all ${m.allH} ${m.allBg} ${m.allColor} (${tag})`);

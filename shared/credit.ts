@@ -8,6 +8,7 @@
 import type { CreditEntryView } from './api';
 import { formatPrice } from './money';
 import { formatMonthDay, formatShortDate } from './time';
+import { adjustedPlayerLine, signedPrice } from './adjustCredit';
 
 export type CreditKind = 'kept' | 'used' | 'refunded';
 /**
@@ -16,7 +17,9 @@ export type CreditKind = 'kept' | 'used' | 'refunded';
  * toward a seat whose price then went up (a reopen and a redo with fewer
  * players): the pot is unchanged, the seat owes the rest. Never shown.
  */
-export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash';
+export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash' | 'adjusted';
+// 'adjusted': the organizer added ('kept') or removed ('used') credit by hand, no game attached (shared/adjustCredit.ts). The ledger
+// column holds "adjusted:<why>"; loadLedger turns that into reason 'adjusted' plus `note`.
 
 /**
  * "Were you charged for this court?" is asked when canceling a game this many
@@ -40,6 +43,8 @@ export interface CreditRow {
   endedReason?: string | null;
   reason?: CreditReason | null;
   playedCount?: number | null;
+  /** The organizer's reason for an adjustment (reason 'adjusted'). */
+  note?: string;
 }
 
 // Rows arrive in the order they were made (created_at, then insertion order), and sorts keep that order for ties.
@@ -68,6 +73,21 @@ export function potBalance(rows: CreditRow[], playerId: string): number {
  */
 export function usableCredit(potCents: number, reservedCents: number): number {
   return Math.max(0, potCents - Math.max(0, reservedCents));
+}
+
+/**
+ * A player's pot right after one entry was written, as it stood then: every entry of theirs up to and including it (in the order they were
+ * written) that had not already ended by that moment. Never below $0. "Credit +$5, $19 now" on an adjustment.
+ */
+export function balanceAfterEntry(rows: CreditRow[], entryId: string): number {
+  const i = rows.findIndex((r) => r.id === entryId);
+  if (i < 0) return 0;
+  const at = rows[i].createdAt;
+  const sum = rows
+    .slice(0, i + 1)
+    .filter((r) => r.playerId === rows[i].playerId && !(r.endedAt && r.endedAt <= at))
+    .reduce((acc, r) => acc + potEffect(r), 0);
+  return Math.max(0, sum);
 }
 
 /** Everyone's pot, players with $0 left out. */
@@ -211,6 +231,7 @@ export function creditOweText(oweCents: number, creditCents: number): string {
  */
 export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'sessionStartsAt' | 'reason' | 'playedCount'>, tz: string, forPlayer = false): string {
   const money = formatPrice(e.cents);
+  if (e.reason === 'adjusted') return `${signedPrice(e.kind === 'kept' ? e.cents : -e.cents)} adjusted by organizer`;
   const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
   if (e.kind === 'used') return `-${money} used${day ? ` for ${day}` : ''}`;
   // The organizer's screens say refunded; the player's own sheet says cashed out.
@@ -299,7 +320,8 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     const game = e.sessionStartsAt ? day(e.sessionStartsAt) : null;
     const from = game ? ` from ${game}` : '';
     let text: string;
-    if (e.kind === 'used') text = `${money} used${game ? ` for ${game}` : ''}`;
+    if (e.reason === 'adjusted') text = `${adjustedPlayerLine(e.kind === 'kept' ? e.cents : -e.cents).replace(/^Credit/, 'credit')}${e.note ? `. ${e.note}` : ''}`;
+    else if (e.kind === 'used') text = `${money} used${game ? ` for ${game}` : ''}`;
     else if (e.kind === 'refunded') text = `${money} cashed out`;
     else if (e.reason === 'finalized') text = `${money} back${from}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;
     else if (e.reason === 'not_played') text = `${money} back${from} (did not play)`;
@@ -313,7 +335,8 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     out.push({ key: `${e.id}:start`, at: e.at, text: `${lead}: ${text}`, order: i * 2 });
     if (!e.endedAt) return;
     let end: string;
-    if (e.kind === 'used') {
+    if (e.reason === 'adjusted') end = `${signedPrice(e.kind === 'kept' ? -e.cents : e.cents)} taken back (adjustment undone)`;
+    else if (e.kind === 'used') {
       const why =
         e.endedReason === 'dropped'
           ? 'you dropped'

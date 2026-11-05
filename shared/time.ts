@@ -126,6 +126,11 @@ export function formatWeekday(iso: string, tz: string): string {
   return fmt(tz, { weekday: 'long' }).format(new Date(iso));
 }
 
+/** "Tue" */
+export function formatWeekdayShort(iso: string, tz: string): string {
+  return fmt(tz, { weekday: 'short' }).format(new Date(iso));
+}
+
 /** "Tue, Oct 28" */
 export function formatShortDate(iso: string, tz: string): string {
   return fmt(tz, { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(iso));

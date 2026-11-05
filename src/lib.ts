@@ -169,6 +169,11 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (moneyReworkTest()) headers['X-Money-Rework'] = 'on';
   // "Instant taps", private test switch for this phone (?instanttaps=on or /admin?instanttaps=on, see server/instantTaps.ts).
   if (instantTapsTest()) headers['X-Instant-Taps'] = 'on';
+  // "Adjust credit" and "Venmo request", private test switches for this phone (/admin?adjustcredit=on, /admin?venmorequest=on).
+  if (adjustCreditTest()) headers['X-Adjust-Credit'] = 'on';
+  if (venmoRequestTest()) headers['X-Venmo-Request'] = 'on';
+  // "Home collapse", private test switch for this phone (/?homecollapse=on, see server/homeCollapse.ts).
+  if (homeCollapseTest()) headers['X-Home-Collapse'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -616,6 +621,48 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('instanttaps');
   if (want === 'on') storageSet(INSTANT_TAPS_KEY, 'on');
   else if (want === 'off') storageRemove(INSTANT_TAPS_KEY);
+}
+
+/**
+ * "Adjust credit" on this phone only, before it is on for everyone: open /admin once with ?adjustcredit=on
+ * (?adjustcredit=off turns it back off). Remembered in this browser; organizer screens only.
+ */
+const ADJUST_CREDIT_KEY = 'pb_adjust_credit';
+export function adjustCreditTest(): boolean {
+  return storageGet(ADJUST_CREDIT_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('adjustcredit');
+  if (want === 'on') storageSet(ADJUST_CREDIT_KEY, 'on');
+  else if (want === 'off') storageRemove(ADJUST_CREDIT_KEY);
+}
+
+/**
+ * "Home collapse" on this phone only, before it is on for everyone: open the site once with ?homecollapse=on
+ * (?homecollapse=off turns it back off). Remembered in this browser; the player Home layout only.
+ */
+const HOME_COLLAPSE_KEY = 'pb_home_collapse';
+export function homeCollapseTest(): boolean {
+  return storageGet(HOME_COLLAPSE_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('homecollapse');
+  if (want === 'on') storageSet(HOME_COLLAPSE_KEY, 'on');
+  else if (want === 'off') storageRemove(HOME_COLLAPSE_KEY);
+}
+
+/**
+ * "Venmo request" on this phone only, before it is on for everyone: open /admin once with ?venmorequest=on
+ * (?venmorequest=off turns it back off). Remembered in this browser; organizer screens only.
+ */
+const VENMO_REQUEST_KEY = 'pb_venmo_request';
+export function venmoRequestTest(): boolean {
+  return storageGet(VENMO_REQUEST_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('venmorequest');
+  if (want === 'on') storageSet(VENMO_REQUEST_KEY, 'on');
+  else if (want === 'off') storageRemove(VENMO_REQUEST_KEY);
 }
 
 /**

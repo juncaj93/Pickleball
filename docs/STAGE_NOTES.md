@@ -2300,3 +2300,71 @@ the "drop the guess on the next good refresh" rule (now attached in an effect). 
 Known and accepted: if a save works but every refresh fails for 15 seconds, the guess is let go and the screen shows the older data until the
 next good refresh (the server has the tap; a second tap is refused by the server's own checks). The player stamp gained one switch, so every
 phone reloads once after the deploy.
+
+## Zip 6: Adjust credit, Venmo request, tidy (built Thu Nov 5, 2026) - ships with both new switches OFF (on a preview, waiting for "ship it")
+
+Spec: the "zip 6" brief (`START_HERE.md` and `SITE_RULES.md` in the zip, with three approved mockups). One PR. NO database change, no migration.
+Switch descriptions are their rows in `docs/FEATURE_SWITCHES.md`. Built on a Thursday (loud hours): nothing deployed, nothing switched on, no live database touched.
+
+### A. Adjust credit (`ADJUST_CREDIT`)
+- The Edit sheet (the gear on a player row) has an "Adjust credit" row between the name form and Hide player. It opens its own sheet: Add or Remove,
+  an amount box with chips $5 $10 $14, a required reason, "Credit after: $14 → $19", Save off until an amount and a reason are filled in.
+- Rules (one place, `shared/adjustCredit.ts` `planAdjust`, used by the sheet and the server): whole dollars above $0, at most $500 at once, a reason,
+  Remove never below $0 and never the credit a pending cash-out request is holding.
+- Storage, no schema change: Add = one `kept` ledger row, Remove = one `used` row, no game, `credit_ledger.reason` = `adjusted:<why>` (the column is
+  free text; `loadLedger` turns it into reason `adjusted` plus a note). Every pot formula (SQL and `potBalance`) already counts such rows, and every
+  per-game formula looks only at rows with a game, so Use credit, drop-out returns, Finalize, cash-outs and Totals are untouched (tests below).
+- Safety: `adjustCreditEntry` (`server/credit.ts`) is ONE guarded insert: it only goes in while the pot is exactly what the sheet showed (`seen`) and a
+  Remove only within pot minus the cash-out hold. A double tap, a second phone or a stale screen adds nothing ("Their credit just changed. Look again.").
+- Player: "Credit adjusted by organizer: +$5" and the reason on the pay card and the credit sheet (adjustments newer than 14 days) and in the credit list.
+- Organizer: the player's sheet shows "Harper: credit +$5 / $19 now / Adjusted by organizer, Thu 12:00 PM / Reason: ..." and the Activity log has a line.
+
+### B. Venmo request (`VENMO_REQUEST`)
+- `shared/venmoRequest.ts` (changed after Alex's phone test, Thu Nov 5: the plain `venmo.com/USER?...` link showed "+" in the note): built like the player's Pay link,
+  `venmo://paycharge?txn=charge&recipients=USER&amount=14&note=Pickleball%20Tue%20Nov%203` on a phone with `https://venmo.com/?txn=charge&recipients=USER&...` as the fallback
+  (`openVenmo`, the same function Pay uses), real %20 encoded once, one account per link, only for a saved
+  USERNAME (a player saved only as a Venmo id link has no button), nothing owed = no link. The amount is each person's `owesCents` at that moment.
+- Three places: the Remind sheet ("Venmo request ↗" before the purple Text), a Home card per game on its game day or after ("Thu game: 3 haven't paid",
+  Remind, a request per person, "no Venmo saved" for the rest; a canceled-late game that still owes shows too, "$11 each"), and "Request ↗" next to Mark
+  paid on Money rows (13 px, 34 px high). The Home card is NEW next to the existing "Mark paid tonight / Who owes you" cards (they stay as they were).
+- Only the live Money page (the rework) and the Remind sheets carry the links; the older Money layouts (ADMIN_V2 / ADMIN_R2 rows) get only the Remind sheet link.
+
+### C. Tidy
+- MOTION and MOTION_ADMIN had no Settings row at all (only wrangler.toml and private links). They now have rows "Animations, players" and "Animations,
+  organizer" in Settings > Feature switches. They start where wrangler.toml has them (both on); a flip is one `task_log` row that only exists while it
+  differs from wrangler.toml. Behavior with nobody touching a row is unchanged (tests).
+- 320 px: every organizer and player screen was swept (no sideways scroll, nothing spilling, short labels on one line). Real problems fixed, CSS only:
+  a long name (Christopher Vanderberg) squeezed to a few letters next to "Request" and "Mark paid" or "Venmo request" and "Text" (now the name gets the line
+  and the buttons drop below it), "Save adjustment" splitting in two, "$28 owed" splitting in two, and the time of a same-day game wrapping badly on a Money
+  card (the time now sits on its own line above "2 of 5 paid"). The last two apply with the switches off too (checked: nothing else changes). Still wrapping
+  on purpose: long Settings field labels ("Cancellation deadline for new sessions (hours before play)").
+
+### Different from the brief or the mockups
+- Words: "Can't remove more than the $14 credit Harper has." uses the player's name (the mockup said "he"; nobody's pronouns are guessed).
+- The gear "sheet" in the mockup is a menu; the real one is the Edit form, so Adjust credit is a row under Save and above Hide player.
+- "Adjusted by organizer" says organizer, not the organizer's name.
+- The Home card is a new per-game card (the mockup's), not an addition to the existing owed cards.
+
+### Tests
+- Unit: `tests/adjust-credit.test.ts` (rules, switch, ledger, math after an adjustment, wording), `tests/venmo-request.test.ts` (link, %20, amount per person,
+  no button without a username, switch), `tests/motion-settings.test.ts` (unchanged until touched, rows, stamp). Seed test updated for the new fake games.
+- Browser: `e2e/zip6.cjs` (Settings rows, the sheet, the three Venmo placements, 390 / 360 / 320 px, light and dark) and `e2e/zip6-off.cjs` (today's main and this
+  branch side by side with both switches off: every screen, sheet and tap identical apart from the four new Settings rows; needs `MAIN_DIR`, not in `npm run test:e2e`).
+
+### Added the same day (Alex): canceled game box, and Home collapse (`HOME_COLLAPSE`)
+- **Canceled game under LATER (no switch, visual only):** a canceled game in the LATER list was drawn as a full box with sharp corners (the rule that gives
+  a canceled card its thin border, `.schedule > .sched.off` in `src/player-cards.css`, also hit the flat LATER rows). Now `.schedule > .sched.tier-later.off`
+  is a flat row like its neighbors: no box, the same thin line, the same margins. The label's color and wording are untouched. Only LATER rows had the box:
+  canceled THIS WEEK / NEXT WEEK games are cards (rounded) on purpose, and the admin Home and Money canceled rows carry no such box (checked). Nothing canceled
+  = no rule matches = every screen looks as before (`e2e/zip6.cjs` checks the computed style and margins at 390 and 320 px, light and dark).
+- **Home collapse (own switch `HOME_COLLAPSE`, ships OFF, `/?homecollapse=on`, Settings row, ON in the preview):** see its row in `docs/FEATURE_SWITCHES.md`.
+  `src/pages/PlayerHome.tsx` (`collapse`, `laterGames`, `laterShown`): the rows are the games the site calls THIS WEEK or NEXT WEEK (`weekTier`, untouched);
+  later games are drawn only while the one button is open. With the switch off the old six-row list and "More sessions (N)" are exactly as before (`e2e/zip6-off.cjs`).
+
+### Independent review (a fresh reviewer who did not write the code)
+Found and fixed: (1) month Totals "Credits owed" moved after a hand adjustment (a Remove ate the oldest game's credit in the month split): hand adjustments
+are now left out of that split in both directions, test added (an Add then a Remove changes nothing); (2) a player whose credit was taken to $0 (no chip, no
+pay card) was never shown the note: Home now shows "Credit adjusted by organizer: -$5" and the reason (14 days) whenever there is no pay card to carry it;
+(3) the Adjust sheet kept using the old balance after a "Their credit just changed" answer: it now follows the screen and reloads. Accepted and said: the 320 px
+wrapping fixes for "$28 owed" and the same-day time on a Money card apply with the switches off too (CSS only, narrow phones only); the player change-stamp gained
+two always-present segments (`motion`, `hc`), so every open player screen reloads once after the deploy.

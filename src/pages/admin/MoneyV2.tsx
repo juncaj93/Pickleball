@@ -21,6 +21,7 @@ import { CLEAR_CHOICES } from '../../../shared/lateFees';
 import { lateFeeLine } from './LateFees';
 import { ChargeLine, ClosedBody, HideFromList, ReworkRows } from './MoneyReworkParts';
 import { canHide } from './moneyRework';
+import { RequestPair, requestUrlFor, VenmoRequestLink } from './VenmoLink';
 import { useReworkBusy, useReworkRun } from './ReworkOps';
 import type { ReworkOp } from './reworkOptimistic';
 
@@ -321,7 +322,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
             <span data-finalized-line>{formatPrice(fin.creditBackCents)} back as credit</span>
           </p>
         )}
-        <ReworkRows sessionId={s.id} rows={rows} actionsOf={actionsOf} isPaid={isPaid} lineOf={lineOf} busy={busy} />
+        <ReworkRows sessionId={s.id} rows={rows} actionsOf={actionsOf} isPaid={isPaid} lineOf={lineOf} busy={busy} requestFor={(r) => (requestUrlFor(ctx, s, r) ? <VenmoRequestLink ctx={ctx} s={s} r={r} short /> : null)} />
         {s.state.flags.canceled && <ChargeLine ctx={ctx} s={s} />}
         {fin && (
           <div className="stack" style={{ gap: 6 }}>
@@ -528,14 +529,16 @@ export function RemindList({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
                   {readied.has(r.playerId) ? ' · Message ready' : ''}
                 </span>
               </span>
-              <a
-                className="btn small secondary"
-                href={smsHref(r.phone, body, isIOS)}
-                aria-label={`Text ${r.name}: ${body}`}
-                onClick={() => setReadied((cur) => new Set(cur).add(r.playerId))}
-              >
-                Text
-              </a>
+              <RequestPair ctx={ctx} s={s} r={r}>
+                <a
+                  className="btn small secondary"
+                  href={smsHref(r.phone, body, isIOS)}
+                  aria-label={`Text ${r.name}: ${body}`}
+                  onClick={() => setReadied((cur) => new Set(cur).add(r.playerId))}
+                >
+                  Text
+                </a>
+              </RequestPair>
             </li>
           );
         })}

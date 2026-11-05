@@ -110,6 +110,9 @@ export interface CreditEntryView {
   playedCount: number | null;
   /** This money came back because a late fee was cleared: 'sub' (someone took their spot) or 'cleared' (the organizer cleared it). */
   lateFee?: 'sub' | 'cleared' | null;
+  /** An organizer adjustment (reason 'adjusted'): why, and the pot right after it (admin screens). */
+  note?: string;
+  balanceAfterCents?: number;
 }
 
 /** A player's own credit (never anyone else's). */
@@ -144,6 +147,8 @@ export interface GroupView {
   paySheet?: boolean;
   /** "Instant taps" is on for this screen (server/instantTaps.ts): taps draw at once and save in the background. Missing: every tap works exactly as before. */
   instantTaps?: boolean;
+  /** "Home collapse" is on for this screen (server/homeCollapse.ts): Home shows this week and next week, later games behind one button. Missing: Home is exactly as before. */
+  homeCollapse?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -442,6 +447,20 @@ export interface AdminDashboard {
   instantTaps?: boolean;
   /** Settings > Feature switches > "Instant taps" is on (for everyone). */
   instantTapsForAll?: boolean;
+  /** "Adjust credit" is on for this screen (server/adjustCredit.ts). Missing: the Players sheet has no Adjust credit row. */
+  adjustCredit?: boolean;
+  /** Settings > Feature switches > "Adjust credit" is on (for everyone). */
+  adjustCreditForAll?: boolean;
+  /** Settings > Feature switches > "Home collapse" is on (for everyone). */
+  homeCollapseForAll?: boolean;
+  /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
+  venmoRequest?: boolean;
+  /** Settings > Feature switches > "Venmo request" is on (for everyone). */
+  venmoRequestForAll?: boolean;
+  /** Settings > Feature switches > "Animations, players": the effective state for everyone (wrangler.toml MOTION, changed by the row). */
+  motionPlayersForAll?: boolean;
+  /** Settings > Feature switches > "Animations, organizer": the effective state for everyone (wrangler.toml MOTION_ADMIN, changed by the row). */
+  motionAdminForAll?: boolean;
   /** Settings > Feature switches > "No Venmo? note" is on (for everyone). */
   payNoteForAll?: boolean;
   /** Settings > Feature switches > "Player screen fixes" is on (for everyone). */

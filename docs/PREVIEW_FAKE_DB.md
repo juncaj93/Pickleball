@@ -52,15 +52,17 @@ Production is bound to the real database and was not changed.
 | Extra game "Fee split test", 10 hours after the seed | **Booked**, already past its cancel-by | Orla, Avery, Indy, Jordan, Lane, Morgan in (6); Indy, Lane, Morgan paid cash. Gear menu > Cancel session > No: each owes $9, the three who paid get $5 back as credit |
 | Old "Test game" (Fri Oct 30 on a Wednesday seed) | Canceled early | Nobody in, no money, no venue charge: the one game that can be hidden (Money page rework). Games with money in them cannot be hidden |
 | "Sunday run", "Monday run" (Nov 1 and 2) | Played, finalized | 4 each, all paid $14, court $48: two fully paid previous games |
-| Extra game "Mixed payments" (20 hours after the seed) | **Booked**, 4 in | Lane and Morgan paid cash, Kai and Gray owe $14 |
 | Extra game "Owes, one no number" (68 hours after the seed) | **Booked**, 5 in | Indy paid; Kai, Lane, Morgan owe $14 and have numbers; Reese owes $14 and has NO phone number saved (Text all skips Reese) |
+| Extra game "Mixed payments" (20 hours after the seed) | **Booked**, 5 in | Lane and Morgan paid cash; Kai (Venmo saved) and Gray (no Venmo) owe $14. The Money rows and the Remind sheet use this one to show "Request" next to Mark paid. |
+| Extra game "Fee split $11" (11.5 hours after the seed, or 10.5 if that time is taken) | **Canceled late, fee not waived** (fee split on) | 5 were in; Kai, Christopher Vanderberg and Jordan each owe **$11**; Lane and Morgan paid $14 and got $3 back as credit. A Venmo request from here must say $11. |
 | Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: everyone paid but not played yet, so it stays in the Games list (it moves to Previous games once finalized) |
 | Everything after | Normal empty games | The site makes these by itself |
 
 The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.
 
-- Money states: credit left over for **Casey ($3)** and **Harper ($14)**, both in no
-  upcoming game so you can tap I'm in and watch credit apply; **Gray** has a
+- Venmo usernames are saved for Avery, Harper, Indy, Kai, Lane and Christopher Vanderberg; Jordan, Gray, Morgan and Reese have none (they show "no Venmo saved").
+- Money states: credit left over for **Casey ($3)**, **Lane ($3)**, **Morgan ($3)** and **Harper ($14)** (Lane's and Morgan's $3 come back from the
+  canceled "Fee split $11" game); Casey and Harper are in no upcoming game so you can tap I'm in and watch credit apply; **Gray** has a
   **$14 cash-out pending** (Home card with the Venmo button, then Mark refunded);
   players who owe $14; a paid player.
 
@@ -69,7 +71,7 @@ The three old extra games only exist when the two latest played games are about 
 A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
 the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
 (Nov 4, as on live: New admin layout, Admin screens round 2 and 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
-Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); plus the one being built, Instant taps (Thu Nov 5)). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); plus Instant taps (built Thu Nov 5, not yet live) and the three being built, Adjust credit, Venmo request and Home collapse (Zip 6)). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
 When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it

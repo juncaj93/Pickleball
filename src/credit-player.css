@@ -248,3 +248,22 @@
 .fee-notice-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .fee-notice-row > span { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
 .fee-notice-row .btn { min-height: 44px; }
+
+/* "Credit adjusted by organizer: +$5" and the reason (ADJUST_CREDIT): on the credit sheet and the pay card. */
+.credit-adjusted,
+.pay-adjusted {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--info-bg);
+  color: var(--info-fg);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.credit-adjusted > span,
+.pay-adjusted > span {
+  color: var(--ink-2);
+}
