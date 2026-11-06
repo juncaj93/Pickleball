@@ -1,4 +1,5 @@
 import { readOnlyPin, viewOnlyCookie } from './viewOnly';
+import { lastCallFor, lastCallForAll, setLastCallForAll } from './lastCall';
 import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents, formatPrice } from '../shared/money';
@@ -276,6 +277,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     colorCleanupForAll: await colorCleanupForAll(ctx.db, group.id),
     ...((await playerCardsFor(ctx, group.id)) ? { playerCardsSimple: true } : {}),
     playerCardsSimpleForAll: await playerCardsForAll(ctx.db, group.id),
+    ...((await lastCallFor(ctx, group.id)) ? { lastCallTexts: true } : {}),
+    lastCallTextsForAll: await lastCallForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2206,6 +2209,15 @@ export async function adjustPlayerCredit(ctx: Ctx, body: Record<string, unknown>
   if (!made.done) throw new HttpError(409, 'credit_changed', 'Their credit just changed. Look again.');
   await audit(ctx.db, group.id, null, 'credit_adjusted', { player: p.display_name, playerId, deltaCents: plan.deltaCents, balanceAfterCents: plan.afterCents, reason: note, ledgerId: made.id }, ctx.nowIso);
   return { ok: true, balanceCents: plan.afterCents, deltaCents: plan.deltaCents, text: `${p.display_name}: credit ${signedPrice(plan.deltaCents)}, ${formatPrice(plan.afterCents)} now` };
+}
+
+/** PUT /api/admin/last-call-switch { on }: Settings > Feature switches > "Last call texts". The words of two prefilled texts only. */
+export async function setLastCallSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setLastCallForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'last_call_texts_on' : 'last_call_texts_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }
 
 /** PUT /api/admin/home-collapse-switch { on }: Settings > Feature switches > "Home collapse". Player Home layout only; moves nothing. */

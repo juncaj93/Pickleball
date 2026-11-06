@@ -181,6 +181,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (zip7Test('tonightglow')) headers['X-Tonight-Glow'] = 'on';
   if (zip7Test('colorcleanup')) headers['X-Color-Cleanup'] = 'on';
   if (zip7Test('playercards')) headers['X-Player-Cards'] = 'on';
+  // "Last call texts", private test switch for this phone (/admin?lastcall=on, see server/lastCall.ts).
+  if (lastCallTest()) headers['X-Last-Call'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -656,6 +658,20 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('homecollapse');
   if (want === 'on') storageSet(HOME_COLLAPSE_KEY, 'on');
   else if (want === 'off') storageRemove(HOME_COLLAPSE_KEY);
+}
+
+/**
+ * "Last call texts" on this phone only, before it is on for everyone: open /admin?lastcall=on once (?lastcall=off turns it back
+ * off). Remembered in this browser; the words of the Check-in and Need players texts only.
+ */
+const LAST_CALL_KEY = 'pb_last_call';
+export function lastCallTest(): boolean {
+  return storageGet(LAST_CALL_KEY) === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('lastcall');
+  if (want === 'on') storageSet(LAST_CALL_KEY, 'on');
+  else if (want === 'off') storageRemove(LAST_CALL_KEY);
 }
 
 /**

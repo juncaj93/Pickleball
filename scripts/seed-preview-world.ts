@@ -468,6 +468,7 @@ export const PREVIEW_SWITCHES_ON = [
   'tonight_glow_on',
   'color_cleanup_on',
   'player_cards_on',
+  'last_call_texts_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

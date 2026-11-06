@@ -461,6 +461,10 @@ export interface AdminDashboard {
   adjustCreditForAll?: boolean;
   /** Settings > Feature switches > "Home collapse" is on (for everyone). */
   homeCollapseForAll?: boolean;
+  /** "Last call texts" is on for this screen (server/lastCall.ts): the Check-in and Need players words follow Alex's last call rules. Missing: the words are exactly as before. */
+  lastCallTexts?: boolean;
+  /** Settings > Feature switches > "Last call texts" is on (for everyone). */
+  lastCallTextsForAll?: boolean;
   /** "Tonight glow" is on for this screen / Settings > Feature switches > "Tonight glow" is on (for everyone). */
   tonightGlow?: boolean;
   tonightGlowForAll?: boolean;

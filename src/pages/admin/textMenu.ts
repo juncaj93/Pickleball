@@ -32,6 +32,7 @@ import {
   remindAllTextR2,
   shareTextR2,
 } from '../../../shared/textsR2';
+import { checkInTextLastCall, needPlayersTextLastCall } from '../../../shared/lastCall';
 
 export interface TextItem {
   id: 'share' | 'need' | 'checkin' | 'promoted' | 'canceled' | 'moved' | 'final';
@@ -96,10 +97,12 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
     items.push({ id: 'moved', label: 'Moved', body, ...toNumbers('Everyone signed up and waiting', signed, me) });
   }
   items.push({ id: 'share', label: 'Share the game', body: r2 ? shareTextR2(s, tz, nowMs, link) : shareMessage(s, tz, nowMs, link), ...GROUP });
-  if (n < 4) items.push({ id: 'need', label: 'Need players', body: r2 ? needPlayersTextR2(s, tz, nowMs, n, 4 - n, link) : needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
+  // "Last call texts" (Zip 8, shared/lastCall.ts) on top of round 2: Alex's last call words for Need players and Check-in. Off: as before.
+  const lastCall = r2 && d.lastCallTexts === true;
+  if (n < 4) items.push({ id: 'need', label: 'Need players', body: lastCall ? needPlayersTextLastCall(s, tz, nowMs, n, 4 - n, link) : r2 ? needPlayersTextR2(s, tz, nowMs, n, 4 - n, link) : needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
   // 4 or more in: the Check-in goes to everyone signed up, the waitlist too. TEXTS_R2: it opens with NO recipients everywhere (you pick the group chat).
   if (n >= 4) {
-    if (r2) items.push({ id: 'checkin', label: 'Check-in', body: checkInTextR2(s, tz, nowMs, n, link), ...GROUP });
+    if (r2) items.push({ id: 'checkin', label: 'Check-in', body: lastCall ? checkInTextLastCall(s, tz, nowMs, n, link) : checkInTextR2(s, tz, nowMs, n, link), ...GROUP });
     else items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
   }
   // A waitlisted player who moved in after a drop (above the max, someone left).
