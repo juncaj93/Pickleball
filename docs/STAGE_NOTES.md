@@ -2612,3 +2612,20 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
   the site, where a debt follows the price setting). (b) A seat paid $14 cash on a 2 hour game that is then moved to 1.5 hours keeps its $14
   until Finalize gives the $3 back; if that game is instead canceled late with the fee kept and 4 or fewer in, the $3 is not given back.
   (c) A short game finalized with no payments, viewed after the switch is turned off, shows a wrong "paid at" figure in one organizer note (display only).
+### Tests (Fri Nov 6, 2026)
+- Unit and API: 2258 passed, 1 skipped, 0 failed (134 files); tsc clean; build clean. New: `tests/short-games.test.ts` (23: both tables, every
+  price path, switch off and on, the organizer-only test link, the switch flip, moves, calendar, fee split, the credit chain). Seed test follows
+  the new rows and the 1.5 hour game.
+- Credit chain with short games mixed in (Blair): game 1, 2 hours, 6 play, $9: $14 cash, $5 back, credit $5. Game 2, 1.5 hours, 6 play, $7:
+  $5 credit + $6 cash, $4 back, credit $4. Game 3, 1.5 hours, 5 play, $9: $4 credit + $7 cash, $2 back, credit $2. Game 4, 2 hours, 4 play,
+  $14: $2 credit + $12 cash, $0 back, credit $0. Cash $39 = prices $39. Nothing lost, doubled or negative.
+- Browser: `e2e/zip9.cjs` 15/15 (both switches off and on, light and dark, 390/360/320 px, 44 px tap areas, maps links, 90 minute calendar).
+  `e2e/zip9-off.cjs` 21/21 (both switches off = today's main on every screen, with a 1.5 hour game in both worlds; needs `MAIN_DIR`, not in
+  `npm run test:e2e`). Also run: zip8 4, zip7 33, zip6 28, money-rework 36, instant-taps 19, pay-sheet 23, audit-player-flows 93,
+  audit-player-look 145, auto-credit 22, credit 153, money-visible 12, round2 25, time-shift 10, late-fees 19, late-fee-split 6, admin-r3 15,
+  texts-r2 14, player-fix1 30 (one timing flake, clean on rerun), layout-polish 200. zip7 and money-rework were updated to know the two new
+  rows and the joined button's calendar half (both switches are on in the fake world). The other older browser scripts were not run.
+### Preview
+- https://preview-zip9.pickleball-club-9h0.pages.dev (deployment `14cba914`), fake database re-seeded. On there: every switch the Zip 8
+  record lists as on, plus Short games and Card time and buttons. The live switch rows could not be read from this session (blocked), so
+  Alex confirms the live list.
