@@ -11,7 +11,8 @@ export type Overlay = Record<string, 'join' | 'drop'>;
 
 /** Can a tap on "I'm in" be shown at once? Only a plain spot: not a waitlist, not standby, not canceled or started. */
 export function canJoinInstantly(s: PlayerSessionView): boolean {
-  return !s.canceled && !s.started && s.joinAs === 'in' && !s.full && s.courtState !== 'waitlist' && (!s.mine || (s.mine.status !== 'confirmed' && s.mine.status !== 'waitlisted'));
+  // `openSpots`: "Card cleanup" (Zip 10) is never full, but at the database's 12 the server says no, so that tap is not drawn ahead (with the switch off a game that is not full always has spots).
+  return !s.canceled && !s.started && s.joinAs === 'in' && !s.full && s.openSpots > 0 && s.courtState !== 'waitlist' && (!s.mine || (s.mine.status !== 'confirmed' && s.mine.status !== 'waitlisted'));
 }
 
 function joined(s: PlayerSessionView, name: string, max: number): PlayerSessionView {
@@ -101,7 +102,9 @@ export function applyOverlay(g: GroupView, overlay: Overlay, nowIso = new Date()
     sessions: g.sessions.map((s) => {
       const kind = overlay[s.id];
       if (!kind) return s;
-      return kind === 'join' ? joined(s, name, g.group.maxPlayers) : dropped(s, name, g.group.maxPlayers);
+      // "Card cleanup" (Zip 10): no cap, so a game drawn ahead of the server's answer is never "full" or a waitlist.
+      const max = g.cardCleanup === true ? Number.POSITIVE_INFINITY : g.group.maxPlayers;
+      return kind === 'join' ? joined(s, name, max) : dropped(s, name, max);
     }),
     // A held drop must not leave a Pay card for that game at the top.
     payDue: g.payDue.filter((o) => overlay[o.sessionId] !== 'drop'),

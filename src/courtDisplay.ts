@@ -31,7 +31,7 @@ export function isNoCourt(s: PlayerSessionView): boolean {
 }
 
 /** One game, shown the normal way when its court is not booked. Other games are returned as they are. */
-function plainGame(s: PlayerSessionView, maxPlayers: number, payAlways = false): PlayerSessionView {
+function plainGame(s: PlayerSessionView, maxPlayers: number, payAlways = false, noCap = false): PlayerSessionView {
   if (!isNoCourt(s)) return s;
   // A court on Waitlist works like Not booked: real seats while there is room. The server no longer makes standby seats
   // for it, but an old standby seat still left over counts as in as long as there is room; only a full game keeps a waitlist.
@@ -58,10 +58,11 @@ function plainGame(s: PlayerSessionView, maxPlayers: number, payAlways = false):
     ...s,
     confirmed,
     waitlist: stays,
-    countText: countText(confirmed.length, maxPlayers),
-    full: confirmed.length >= maxPlayers,
+    countText: countText(confirmed.length, noCap ? Number.POSITIVE_INFINITY : maxPlayers),
+    // "Card cleanup" (Zip 10, `noCap`): never full, never a waitlist (the server answers the database's 12 itself).
+    full: !noCap && confirmed.length >= maxPlayers,
     // Only a game that is really full beyond the max sends people to the waitlist, same as a booked one.
-    joinAs: confirmed.length >= maxPlayers ? 'waitlist' : 'in',
+    joinAs: !noCap && confirmed.length >= maxPlayers ? 'waitlist' : 'in',
     openSpots: s.canceled || s.started ? 0 : Math.max(0, maxPlayers - confirmed.length),
     courtState: s.courtState === 'waitlist' ? null : s.courtState,
     // Kept for the tile only ("time may shift": dashed border and "~7 PM"); the words stay Court not booked.
@@ -77,7 +78,7 @@ export function courtDisplay(g: GroupView): GroupView {
   const noCourt = new Set(g.sessions.filter(isNoCourt).map((s) => s.id));
   if (noCourt.size === 0) return g;
   const payAlways = !!g.payAlways;
-  const sessions = g.sessions.map((s) => plainGame(s, g.group.maxPlayers, payAlways));
+  const sessions = g.sessions.map((s) => plainGame(s, g.group.maxPlayers, payAlways, g.cardCleanup === true));
   const suggested = g.suggestion && noCourt.has(g.suggestion.sessionId) ? sessions.find((s) => s.id === g.suggestion!.sessionId) : null;
   return {
     ...g,
@@ -87,7 +88,7 @@ export function courtDisplay(g: GroupView): GroupView {
     owed: payAlways ? g.owed : g.owed.filter((o) => !noCourt.has(o.sessionId)),
     suggestion:
       g.suggestion && suggested
-        ? { ...g.suggestion, joinAs: suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
+        ? { ...g.suggestion, joinAs: g.cardCleanup !== true && suggested.confirmed.length >= g.group.maxPlayers ? g.suggestion.joinAs : 'in', courtState: g.suggestion.courtState === 'waitlist' ? null : g.suggestion.courtState, confirmedCount: suggested.confirmed.length, noCourt: true }
         : g.suggestion,
   };
 }

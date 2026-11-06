@@ -46,7 +46,8 @@ SELECT
   ,(SELECT COUNT(*) FROM used_on_seat u JOIN sessions s ON s.id = u.session_id WHERE s.status = 'canceled' AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id) AND NOT EXISTS (SELECT 1 FROM fee f WHERE f.session_id = u.session_id AND f.player_id = u.player_id)) AS credit_used_on_canceled_game
   ,(SELECT COUNT(*) FROM used_on_seat u LEFT JOIN session_players sp ON sp.session_id = u.session_id AND sp.player_id = u.player_id WHERE (sp.id IS NULL OR sp.status IN ('withdrawn', 'declined')) AND NOT EXISTS (SELECT 1 FROM claim c WHERE c.session_id = u.session_id AND c.player_id = u.player_id) AND NOT EXISTS (SELECT 1 FROM fee f WHERE f.session_id = u.session_id AND f.player_id = u.player_id)) AS credit_used_on_left_seat
   ,(SELECT COUNT(*) FROM used_on_seat WHERE cents > 1400) AS credit_on_seat_over_14
-  ,(SELECT COUNT(*) FROM (SELECT session_id FROM session_players WHERE status = 'confirmed' GROUP BY session_id HAVING COUNT(*) > COALESCE((SELECT json_extract(settings_json, '$.maxPlayers') FROM groups LIMIT 1), 10))) AS more_in_than_max
+  -- "Card cleanup" (Zip 10) on for everyone: no Max players cap, so the limit is the database's own 12.
+  ,(SELECT COUNT(*) FROM (SELECT session_id FROM session_players WHERE status = 'confirmed' GROUP BY session_id HAVING COUNT(*) > CASE WHEN EXISTS (SELECT 1 FROM task_log WHERE task = 'card_cleanup_on' AND kind = 'mark' AND session_id IS NULL) THEN 12 ELSE COALESCE((SELECT json_extract(settings_json, '$.maxPlayers') FROM groups LIMIT 1), 10) END)) AS more_in_than_max
   ,(SELECT COUNT(*) FROM session_players WHERE payment_status = 'paid' AND payment_amount_cents IS NULL) AS paid_seat_without_amount
   -- Cash on a canceled game turns into credit at once, except an "I paid" the organizer has not answered yet
   -- (it waits for Confirm / Didn't pay) and the organizer's own court payment (never credit).

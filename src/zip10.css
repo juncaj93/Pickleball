@@ -1,0 +1,181 @@
+/* Zip 10, "Card cleanup" (CARD_CLEANUP). Every rule here sits under html[data-card-cleanup] (set by src/zip7.ts useZip7Root while the
+   switch is on for this screen), so with the switch off nothing in this file applies and the cards look exactly as before.
+   Colors: the existing system only (--pc-* on player cards, the site tokens on organizer screens). Green in and paid, amber owes,
+   blue links and credit, gray neutral. Checked light and dark (4.5:1 for every text). */
+
+:root[data-card-cleanup] {
+  --cl-later-bg: #ebebe4;
+  --cl-later-line: #dad9cf;
+}
+:root[data-card-cleanup][data-theme='dark'] {
+  --cl-later-bg: #1b2620;
+  --cl-later-line: #2b3a31;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-card-cleanup]:not([data-theme='light']) {
+    --cl-later-bg: #1b2620;
+    --cl-later-line: #2b3a31;
+  }
+}
+
+/* ---- Player cards ---- */
+
+/* Vertical rule: the content block is centered to the date tile (its height is --cl-tile-h, measured in PlayerHome.tsx useTileCenter).
+   Content taller than the tile starts at the top of the tile (a min-height, never a fixed height). */
+html[data-card-cleanup] .schedule > .sched.cl {
+  align-items: flex-start;
+}
+html[data-card-cleanup] .schedule > .sched.cl > .sched-body {
+  min-height: var(--cl-tile-h, 0px);
+  justify-content: center;
+}
+
+/* The circles alone, one row, the same size as before (19 px this week, 16 px next week and later, 13 px on organizer screens). Past what
+   the row holds they tuck under each other a little (never a second row): the space between is (row width - n x ball) / (n - 1), between
+   -9 and 6 px (organizer: -7 and 3 px, its usual gap). */
+html[data-card-cleanup] .cl-balls {
+  container-type: inline-size;
+  display: block;
+  min-width: 0;
+}
+html[data-card-cleanup] .schedule .cl-balls {
+  align-self: stretch;
+  width: 100%;
+}
+html[data-card-cleanup] .dots.one-row {
+  --cl-ball: 13px;
+  --cl-gap: 3px;
+  --cl-tuck: -7px;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0;
+  width: max-content;
+  max-width: 100%;
+}
+html[data-card-cleanup] .schedule .dots.one-row {
+  --cl-ball: 19px;
+  --cl-gap: 6px;
+  --cl-tuck: -9px;
+}
+html[data-card-cleanup] .schedule .tier-next .dots.one-row {
+  --cl-ball: 16px;
+}
+html[data-card-cleanup] .dots.one-row > * {
+  position: relative;
+  flex: none;
+}
+html[data-card-cleanup] .dots.one-row > * + * {
+  margin-left: clamp(var(--cl-tuck), calc((100cqw - var(--n) * var(--cl-ball)) / (var(--n) - 1)), var(--cl-gap));
+}
+
+/* People icon + names, in the names' own gray; the viewer's own name stays bold and dark (player-cards.css). No "In:" label. */
+html[data-card-cleanup] .names-line.with-icon {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+html[data-card-cleanup] .names-line.with-icon .people-icon,
+html[data-card-cleanup] .cl-names .people-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 1.3em;
+  color: inherit;
+}
+html[data-card-cleanup] .names-line.with-icon .people-icon svg,
+html[data-card-cleanup] .cl-names .people-icon svg {
+  width: 1.05em;
+  height: 1.05em;
+}
+html[data-card-cleanup] .names-line.with-icon .names-text {
+  min-width: 0;
+}
+/* Player cards: the names a little smaller (13 px, was 15 px; 14 px at 360 and below), so 5 names fit on one line at 390 and 6 short ones do.
+   A longer list still wraps. The icon follows the text size (1.05em). */
+html[data-card-cleanup] .schedule .names-line.with-icon {
+  font-size: 13px;
+}
+
+/* Not in: a normal size filled "I'm in" under the names (not full width, not on the right). */
+html[data-card-cleanup] .schedule > .sched.cl .sched-money > .sched-btn {
+  align-self: flex-start;
+}
+
+/* LATER games (beyond next week): a smaller version of the same card, on a soft tint. */
+html[data-card-cleanup] .schedule > .sched.cl-later {
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--cl-later-line);
+  border-radius: 18px;
+  background: var(--cl-later-bg);
+  box-shadow: none;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .sched-tilecol {
+  width: 56px;
+  gap: 4px;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .tile.ptile {
+  border-radius: 12px;
+  padding: 6px 0 6px;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .ptile .dow,
+html[data-card-cleanup] .schedule > .sched.cl-later .ptile .mon {
+  font-size: 0.64rem;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .ptile .day {
+  font-size: 1.3rem;
+  margin: 3px 0 2px;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .sched-status {
+  font-size: 0.88rem;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .names-line {
+  font-size: 13px;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .sched-time {
+  font-size: 0.78rem;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .tile-check {
+  transform: scale(0.85);
+  transform-origin: top right;
+}
+
+/* ---- Organizer screens ---- */
+
+/* The Home card (R2): tighter. The circles row is only as tall as the circles (its 34 px minimum was the old In button's height; In | Out is in the
+   footer now), about 10 px between the note line (or the court switch) and the circles, and about 6 px between the circles and the names. */
+html[data-card-cleanup] .scard-r2 .cl-players {
+  margin-top: 4px;
+  gap: 5px;
+}
+html[data-card-cleanup] .scard-r2 .cl-players .players-top {
+  min-height: 0;
+}
+
+/* The Home card and the Games card: the circles take the row (the organizer's own In | Out stays at its right end). */
+html[data-card-cleanup] .cl-players .players-top .cl-balls {
+  flex: 1 1 auto;
+}
+/* The folded row: the time on the left of the first line, the circles to its right; the people icon before the names. */
+html[data-card-cleanup] .hv2-count.cl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+html[data-card-cleanup] .hv2-count.cl-row > strong {
+  flex: none;
+}
+html[data-card-cleanup] .hv2-count.cl-row > .cl-balls {
+  flex: 1 1 auto;
+}
+html[data-card-cleanup] .cl-names {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+html[data-card-cleanup] .cl-names .cl-names-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

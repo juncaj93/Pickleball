@@ -186,6 +186,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // Zip 9 private test switches for this phone (?shortgames=on, ?cardtime=on; also on /admin, see server/zip9.ts).
   if (zip9Test('shortgames')) headers['X-Short-Games'] = 'on';
   if (zip9Test('cardtime')) headers['X-Card-Time'] = 'on';
+  // Zip 10 private test switch for this phone (?cardcleanup=on; also on /admin, see server/zip10.ts).
+  if (zip10Test()) headers['X-Card-Cleanup'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -692,6 +694,20 @@ if (typeof window !== 'undefined') {
     if (want === 'on') storageSet(`pb_${name}`, 'on');
     else if (want === 'off') storageRemove(`pb_${name}`);
   }
+}
+
+/**
+ * "Card cleanup" (Zip 10) on this phone only, before it is on for everyone: open the site once with ?cardcleanup=on (=off turns it back
+ * off; works on /admin too). Remembered in this browser. It also lifts the Max players cap and the waitlist for that phone's taps (up
+ * to 12, the database's limit), so test it on the fake-data preview, or on live only with test players on an extra game.
+ */
+export function zip10Test(): boolean {
+  return storageGet('pb_cardcleanup') === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('cardcleanup');
+  if (want === 'on') storageSet('pb_cardcleanup', 'on');
+  else if (want === 'off') storageRemove('pb_cardcleanup');
 }
 
 /**

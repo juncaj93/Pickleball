@@ -528,7 +528,8 @@ async function main() {
 
   // ================================================================ server decides: pressed look and spinner
   await check('where the server decides (a full game: waitlist or not), the tapped button shows a pressed look and spinner within 100 ms', async () => {
-    const full = upcoming.find((x) => names(x).length >= 10);
+    // Zip 10 "Card cleanup" (on in the fake world): no game is full; the game at the database's 12 is the one the server decides.
+    const full = upcoming.find((x) => names(x).length >= 12) ?? upcoming.find((x) => names(x).length >= 10);
     assert(full, 'a full game');
     const { ctx, page } = await openPlayer('Casey');
     const sent = counter(page, 'POST', /\/api\/sessions\/[^/]+\/join$/);

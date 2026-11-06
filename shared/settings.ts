@@ -14,6 +14,16 @@ export interface GroupSettings {
   defaultEndMinutes: number; // the usual end for new regular games (1320 = 10:00 PM)
   /** NOT saved: set by the server only while "Short games" (SHORT_GAMES, Zip 9) is on for this request; missing = off. */
   shortGames?: true;
+  /** NOT saved: set by the server only while "Card cleanup" (CARD_CLEANUP, Zip 10) is on for this request: no Max players cap, no waitlist. Missing = off. */
+  noCap?: true;
+}
+
+/**
+ * The most who can be in one game for this request: the organizer's "Max players" setting, or with "Card cleanup" on (Zip 10, no cap)
+ * the database's own limit (12, the trigger from migration 0013). `maxPlayers` itself always stays the saved setting.
+ */
+export function capOf(settings: Pick<GroupSettings, 'maxPlayers' | 'noCap'>): number {
+  return settings.noCap === true ? MAX_PLAYERS_LIMIT : settings.maxPlayers;
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
@@ -30,8 +40,8 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   defaultEndMinutes: 22 * 60,
 };
 
-/** The saved settings (every key but the request-only `shortGames`). */
-export type SettingKey = Exclude<keyof GroupSettings, 'shortGames'>;
+/** The saved settings (every key but the request-only `shortGames` and `noCap`). */
+export type SettingKey = Exclude<keyof GroupSettings, 'shortGames' | 'noCap'>;
 
 const LIMITS: Record<SettingKey, [number, number]> = {
   horizonWeeks: [1, 12],

@@ -447,6 +447,42 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await orgPays('Indy', shortGame);
   summary.push('extra 1.5 hour game, no note (7:30 to 9:00 PM, Booked, 4 in): Indy paid $11 cash; Jordan, Kai and Finley owe $11 (Short games on)');
 
+  // 16. Zip 10 "Card cleanup": no waitlist and no Max players cap. Switching it on for everyone ends every waitlist: Gray, the real standby
+  //     on game 4 (10 in), moves in as a normal 11th player (his credit goes on like at I'm in; no "spot opened" notice). Then three extra
+  //     games, no notes, so the preview has 1, 3, 4, 5, 8 and 12 players to look at: "1 in" (Booked, Kai), "8 in" (Booked, Avery to Jordan,
+  //     Avery and Blake paid), and "12 in" (Booked, the organizer and 11 more; Jordan and Indy paid): one row of circles, any number.
+  const cleanup = await w.org.ok('PUT', '/api/admin/card-cleanup-switch', { on: true });
+  summary.push(`Card cleanup on: ${cleanup.movedIn} waitlisted player moved in (Gray, game 4 is now 11 in)`);
+  const extraAt = async (hour: number, minute: number, firstDay: number) => {
+    for (let daysOut = firstDay; daysOut < firstDay + 12; daysOut++) {
+      const q = localParts(N + daysOut * 24 * HOUR, 'America/Detroit');
+      const start = zonedTimeToUtc(q.year, q.month, q.day, hour, minute, 'America/Detroit');
+      if (start <= N) continue;
+      try {
+        const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: null });
+        await refresh();
+        return games().find((x) => x.id === made.id);
+      } catch (err) {
+        if (!/game_exists|time_taken/.test(String(err))) throw err;
+      }
+    }
+    throw new Error('no free evening for a Card cleanup game');
+  };
+  const one = await extraAt(18, 0, 2);
+  await setCourt(one, 'booked');
+  await join('Kai', one);
+  const eight = await extraAt(17, 30, 4);
+  await setCourt(eight, 'booked');
+  // Nobody with credit left over (Casey, Harper, Lane, Morgan keep theirs, as PREVIEW_FAKE_DB.md lists).
+  for (const n of ['Avery', 'Blake', 'Drew', 'Emery', 'Finley', 'Gray', 'Indy', 'Jordan']) await join(n, eight);
+  for (const n of ['Avery', 'Blake']) await orgPays(n, eight);
+  const twelve = await extraAt(17, 0, 9);
+  await setCourt(twelve, 'booked');
+  await w.org.ok('POST', `/api/admin/sessions/${twelve.id}/me`, { in: true });
+  for (const n of ['Avery', 'Blake', 'Drew', 'Emery', 'Finley', 'Gray', 'Indy', 'Jordan', 'Kai', NO_NUMBER, LONG_NAME]) await join(n, twelve);
+  for (const n of ['Jordan', 'Indy']) await orgPays(n, twelve);
+  summary.push(`Card cleanup games, no notes: "1 in" (Booked, Kai, 6:00 PM), "8 in" (Booked, Avery to Jordan, 5:30 PM; Avery and Blake paid), "12 in" (Booked, Orla and 11 more incl. ${NO_NUMBER} and ${LONG_NAME}, 5:00 PM; Jordan and Indy paid)`);
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -493,9 +529,11 @@ export const PREVIEW_SWITCHES_ON = [
   'color_cleanup_on',
   'player_cards_on',
   'last_call_texts_on',
-  // Being built (Zip 9): Short games and Card time and buttons.
+  // Zip 9 (live, switched on by Alex Fri Nov 6): Short games and Card time and buttons.
   'short_games_on',
   'card_time_buttons_on',
+  // Being built (Zip 10): Card cleanup.
+  'card_cleanup_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

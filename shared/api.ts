@@ -170,6 +170,8 @@ export interface GroupView {
   shortGames?: boolean;
   /** "Card time and buttons" is on for this screen (server/zip9.ts): the time line under the date tile and the joined Calendar | Directions button. Missing: cards are exactly as before. */
   cardTimeButtons?: boolean;
+  /** "Card cleanup" is on for this screen (server/zip10.ts): no count text, people icon and names, tinted Later cards; no waitlist and no Max players cap. Missing: exactly as before. */
+  cardCleanup?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -498,6 +500,10 @@ export interface AdminDashboard {
   /** "Card time and buttons" is on for this screen / Settings row is on (for everyone). Player cards only. */
   cardTimeButtons?: boolean;
   cardTimeButtonsForAll?: boolean;
+  /** "Card cleanup" is on for this screen (server/zip10.ts): new card look, no waitlist, no Max players cap. Missing: exactly as before. */
+  cardCleanup?: boolean;
+  /** Settings > Feature switches > "Card cleanup" is on (for everyone). */
+  cardCleanupForAll?: boolean;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

@@ -1,6 +1,7 @@
 import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
-import type { GroupSettings } from '../shared/settings';
+import { capOf, type GroupSettings } from '../shared/settings';
+import { DB_LIMIT_MESSAGE } from '../shared/zip10';
 import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, moneyBackAt, seatMoneyBackStatements } from './credit';
 import { finishLateDropClear, LEAVES_SHORT, OPEN_FEE, OPEN_LATE_DROP, tagOldestLateDrop } from './lateFees';
 import { lateFeeCutoffMs } from '../shared/lateFees';
@@ -231,7 +232,9 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
  * happens or not at all.
  */
 export async function settle(db: D1Database, session: SessionRow, nowIso: string, settings: GroupSettings): Promise<Promotion[]> {
-  const maxPlayers = settings.maxPlayers;
+  // "Card cleanup" (Zip 10) on: no cap but the database's 12, and a move-in is a normal seat (no "spot opened" notice or text card).
+  const maxPlayers = capOf(settings);
+  const quiet = settings.noCap === true;
   const promoted: Promotion[] = [];
   // Looked up once, only when someone may move in. Moving in uses their credit like tapping I'm in.
   let auto: AutoCredit | null | undefined;
@@ -252,7 +255,7 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
              SET status = 'confirmed', confirmed_at = ?2,
                  confirm_seq = ${NEXT_CONFIRM_SEQ},
                  attendance_confirmed_at = NULL,
-                 promoted_at = ?2, promotion_reason = 'spot_opened', promotion_notified_at = NULL,
+                 ${quiet ? 'promoted_at = NULL, promotion_reason = NULL' : "promoted_at = ?2, promotion_reason = 'spot_opened'"}, promotion_notified_at = NULL,
                  ${KEEP_PAYMENT_UNLESS_REFUNDED},
                  played = NULL,
                  updated_at = ?2
@@ -299,7 +302,7 @@ export async function joinSession(
   /** The group's settings for this request (Max players, and the price: "Short games" rides on it). */
   settings: GroupSettings,
 ): Promise<JoinResult> {
-  const maxPlayers = settings.maxPlayers;
+  const maxPlayers = capOf(settings);
   assertOpen(session, nowMs);
   const nowIso = new Date(nowMs).toISOString();
   const existing = await existingRow(db, session.id, playerId);
@@ -318,6 +321,8 @@ export async function joinSession(
     return credit.cents > 0 ? { result: 'confirmed', creditCents: credit.cents, paidWithCredit: credit.paid } : { result: 'confirmed' };
   }
   if (mode !== 'auto') return { result: 'spot_taken' };
+  // "Card cleanup" (Zip 10): there is no waitlist. The only way here is the database's own limit (12 in), so say that plainly.
+  if (settings.noCap === true) throw new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE);
 
   await addToWaitlist(db, session, playerId, nowIso);
   const promoted = await settle(db, session, nowIso, settings);

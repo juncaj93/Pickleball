@@ -81,7 +81,7 @@ import { timeShiftFor } from './timeShift';
 import { motionFor } from './motion';
 import { payAlwaysFor } from './payAlways';
 import { flatOf, priceOf, specialFlatOf } from './repo';
-import type { GroupSettings } from '../shared/settings';
+import { capOf, type GroupSettings } from '../shared/settings';
 import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
 import { instantTapsFor } from './instantTaps';
@@ -96,6 +96,7 @@ import { afterTap, watchTap } from './alerts';
 import { changeStamp } from './stamp';
 import { hiddenFromPlayers } from './hideGame';
 import { cardTimeFor } from './zip9';
+import { cardCleanupLook } from './zip10';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -238,7 +239,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
           sessionId: s.id,
           startsAt: s.starts_at,
           endsAt: s.ends_at,
-          joinAs: joinOutcome(confirmedOf(roster).length, settings.maxPlayers),
+          joinAs: joinOutcome(confirmedOf(roster).length, capOf(settings)),
           holiday: holidayFor(s.starts_at, tz),
           confirmedCount: confirmedOf(roster).length,
           courtState: s.court_state,
@@ -259,7 +260,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // The Apple Pay / Zelle number on the Pay sheet (Settings > Money).
       ...(paySheetOn ? { zelleNumber: zelleNumberOf(group.settings_json) } : {}),
       priceCents: settings.pricePerPlayerCents,
-      maxPlayers: settings.maxPlayers,
+      // "Card cleanup" (Zip 10): no cap, so the screen's notes count to the database's 12 (capOf); off: the setting, as before.
+      maxPlayers: capOf(settings),
       // The usual game length (Settings > Schedule): a card shows only the start time unless a game runs a different length.
       usualMinutes: settings.defaultEndMinutes - settings.defaultStartMinutes,
     },
@@ -280,6 +282,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Zip 9. "Short games" for this screen is what requireGroupKey put on the group (the same answer every price on it used).
     ...(group.short_games === true ? { shortGames: true } : {}),
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
+    // Zip 10. "Card cleanup" for this screen is what requireGroupKey put on the group (the same answer every join on it used).
+    // A player's phone with the private link gets the look only (cardCleanupLook); seats follow the group row's answer.
+    ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,

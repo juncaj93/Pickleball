@@ -46,7 +46,7 @@ Production is bound to the real database and was not changed.
 | Next game | **Court booked** | Orla in; Indy **paid** cash; Jordan **owes $14**; Avery used $3 credit and owes $11; Finley **paid with credit**; Kai tapped I paid, then dropped (a card waits for you on Home) |
 | Then | **Waitlist** (court) | Blake, Drew, Emery in, each used $3 credit |
 | Then | **Not booked**, "3 of 4 in" | Gray, Emery, Lane |
-| Then | **Booked and full (10 in)** with a real **standby** | Gray is the standby; Indy, Jordan, Finley paid; Morgan tapped I paid; the rest owe $14 |
+| Then | **Booked, 11 in** (was "full, 10 in, with a real standby") | Gray was the standby; Card cleanup (Zip 10) moved him in as a normal 11th player. Indy, Jordan, Finley paid; Morgan tapped I paid; the rest owe $14 |
 | Then | **Canceled** ("Court closed") | Finley, Gray, Harper paid $14 and got it back as credit |
 | Extra game "Late-fee test", 11 hours after the seed | **Booked**, already past its cancel-by (start minus 12 hours) | Jordan, Lane, Morgan, Kai in (Kai paid cash). Open the preview with `?latefees=on` as one of them and tap Drop out: it leaves 3, so they owe $14 unless someone takes the spot |
 | Extra game "Fee split test", 10 hours after the seed | **Booked**, already past its cancel-by | Orla, Avery, Indy, Jordan, Lane, Morgan in (6); Indy, Lane, Morgan paid cash. Gear menu > Cancel session > No: each owes $9, the three who paid get $5 back as credit |
@@ -57,6 +57,9 @@ Production is bound to the real database and was not changed.
 | Extra game "Fee split $11" (11.5 hours after the seed, or 10.5 if that time is taken) | **Canceled late, fee not waived** (fee split on) | 5 were in; Kai, Christopher Vanderberg and Jordan each owe **$11**; Lane and Morgan paid $14 and got $3 back as credit. A Venmo request from here must say $11. |
 | Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: everyone paid but not played yet, so it stays in the Games list (it moves to Previous games once finalized) |
 | An extra 1.5 hour game, no note (7:30 to 9:00 PM Eastern, about 3 days after the seed) | **Booked**, 4 in, Short games on | Indy paid **$11** cash; Jordan, Kai and Finley owe **$11** (Zip 9). Every 2 hour game around it stays at $14 |
+| Extra game, no note, 6:00 PM about 2 days after the seed (Zip 10) | **Booked, 1 in** | Kai: one ball and three empty circles |
+| Extra game, no note, 5:30 PM about 4 days after the seed (Zip 10) | **Booked, 8 in** | Avery to Jordan (no one with credit left over); Avery and Blake paid |
+| Extra game, no note, 5:00 PM about 9 days after the seed (Zip 10) | **Booked, 12 in** (the most one game can hold) | Orla and 11 more, including Reese and Christopher Vanderberg; Jordan and Indy paid. A 13th I'm in is refused plainly |
 | Everything after | Normal empty games | The site makes these by itself |
 
 The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.
@@ -72,7 +75,7 @@ The three old extra games only exist when the two latest played games are about 
 A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
 the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
 (Nov 4, as on live: New admin layout, Admin screens round 2 and 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
-Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); Instant taps, Adjust credit, Venmo request and Home collapse (live, Settings rows off, Zips 5 and 6), Tonight glow, Color cleanup and Simpler player cards (Zip 7, switched on live Fri Nov 6), Last call texts (Zip 8), plus the two being built (Zip 9): Short games and Card time and buttons). A game TONIGHT and a game TOMORROW (Eastern) always exist after a re-seed: the regular Tue/Thu game when there is one, else an extra game "Tonight test" (Booked, 3 in) or "Tomorrow test" (not booked, 2 in). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); Instant taps, Adjust credit, Venmo request and Home collapse (live, Settings rows off, Zips 5 and 6), Tonight glow, Color cleanup and Simpler player cards (Zip 7, switched on live Fri Nov 6), Last call texts (Zip 8), Short games and Card time and buttons (Zip 9, on live), plus the one being built (Zip 10): Card cleanup. The seed switches Card cleanup on the way the Settings row does, so the one waitlisted player (Gray) moves in, and no game has a waitlist). A game TONIGHT and a game TOMORROW (Eastern) always exist after a re-seed: the regular Tue/Thu game when there is one, else an extra game "Tonight test" (Booked, 3 in) or "Tomorrow test" (not booked, 2 in). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
 When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it

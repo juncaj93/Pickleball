@@ -1,4 +1,4 @@
-import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createContext, type CSSProperties, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { type CourtKind } from '../shared/court';
 import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
@@ -813,7 +813,11 @@ export function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
  * for every extra person beyond 4, up to the max. Never empty circles past
  * the first 4. The count text beside it carries the number for screen readers.
  */
-export function SpotDots({ names, me, celebrate }: { names: string[]; me?: string | null; celebrate?: boolean }) {
+/**
+ * The circles. `oneRow` ("Card cleanup", Zip 10): every ball stays on one row at its usual size; when there are more than the row
+ * holds, they tuck slightly under each other instead of wrapping (src/zip10.css, from `--n`, the number of circles).
+ */
+export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean }) {
   const slots = Math.max(MIN_PLAYERS, names.length);
   // Only balls that appeared since the last look spin in; the first look at a card is still.
   // The marker lasts for the whole spin, even if the card redraws (instant tap, then the server's data).
@@ -828,7 +832,12 @@ export function SpotDots({ names, me, celebrate }: { names: string[]; me?: strin
     return () => clearTimeout(t);
   }, [names.length]);
   return (
-    <span className={`dots${celebrate ? ' dots-celebrate' : ''}`} role="img" aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}>
+    <span
+      className={`dots${celebrate ? ' dots-celebrate' : ''}${oneRow ? ' one-row' : ''}`}
+      style={oneRow ? ({ '--n': slots } as CSSProperties) : undefined}
+      role="img"
+      aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}
+    >
       {Array.from({ length: slots }, (_, i) =>
         i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} /> : <span key={i} className="dot" />,
       )}
@@ -864,12 +873,15 @@ export function NamesLine({
   everyone,
   label,
   children,
+  icon,
 }: {
   names: string[];
   me?: string | null;
   everyone: string[];
   label?: string;
   children?: ReactNode;
+  /** "Card cleanup" (Zip 10): the small gray people icon before the names. */
+  icon?: boolean;
 }) {
   // A name that appeared since the last draw (someone joined while you were looking) fades in.
   const seen = useRef<Set<string> | null>(null);
@@ -890,16 +902,32 @@ export function NamesLine({
   }, [key]);
   if (names.length === 0) return null;
   const show = nameLabel([...everyone, ...names]);
+  const list = names.map((n, i) => (
+    <Fragment key={n + i}>
+      {i > 0 && ', '}
+      {fresh.includes(n) ? <span className="name-new">{n === me ? <strong>{show(n)}</strong> : show(n)}</span> : n === me ? <strong>{show(n)}</strong> : show(n)}
+    </Fragment>
+  ));
   return (
-    <p className={label ? 'waitlist-line' : 'names-line'} title={names.join(', ')}>
+    <p className={`${label ? 'waitlist-line' : 'names-line'}${icon ? ' with-icon' : ''}`} title={names.join(', ')}>
       {label && `${label}: `}
-      {names.map((n, i) => (
-        <Fragment key={n + i}>
-          {i > 0 && ', '}
-          {fresh.includes(n) ? <span className="name-new">{n === me ? <strong>{show(n)}</strong> : show(n)}</span> : n === me ? <strong>{show(n)}</strong> : show(n)}
-        </Fragment>
-      ))}
-      {children}
+      {icon ? (
+        <>
+          {/* The same people icon as the organizer's Players tab, small and gray. */}
+          <span className="people-icon">
+            <PeopleIcon />
+          </span>
+          <span className="names-text">
+            {list}
+            {children}
+          </span>
+        </>
+      ) : (
+        <>
+          {list}
+          {children}
+        </>
+      )}
     </p>
   );
 }
@@ -916,7 +944,10 @@ export function PlayersLine({
   everyone,
   after,
   maxPlayers,
+  cleanup,
 }: {
+  /** "Card cleanup" (Zip 10): no count text, the circles on one row, the people icon before the names, no waitlist line. */
+  cleanup?: boolean;
   /** Confirmed players, in sign-up order. */
   names: string[];
   /** The most who can be in ("10 in, full"). */
@@ -930,6 +961,19 @@ export function PlayersLine({
   /** Something at the right end of the first line (the organizer's own I'm in). */
   after?: ReactNode;
 }) {
+  if (cleanup) {
+    return (
+      <div className="players players-line cl-players">
+        <div className="players-top">
+          <span className="cl-balls">
+            <SpotDots names={names} oneRow />
+          </span>
+          {after && <span className="players-after">{after}</span>}
+        </div>
+        <NamesLine names={names} everyone={everyone} icon />
+      </div>
+    );
+  }
   return (
     <div className="players players-line">
       <div className="players-top">

@@ -524,6 +524,22 @@ async function main() {
       // Today's Home lists the first six games and keeps the rest behind "More sessions (N)": open it.
       await p.page.locator('main button.btn.ghost.block', { hasText: /More sessions/ }).first().click();
       await p.page.waitForTimeout(500);
+      if (await p.page.evaluate(() => document.documentElement.hasAttribute('data-card-cleanup'))) {
+        // Zip 10 "Card cleanup" (on in the fake world): every LATER game is a small tinted card, the canceled one too, lined up with the others.
+        const c = await p.page.evaluate(() => {
+          const off = document.querySelector('.schedule > .sched.cl-later.off');
+          const sib = [...document.querySelectorAll('.schedule > .sched.cl-later')].find((x) => !x.classList.contains('off'));
+          const box = (e) => e && { l: e.getBoundingClientRect().left, r: e.getBoundingClientRect().right, bg: getComputedStyle(e).backgroundColor, text: e.innerText.trim() };
+          return { off: box(off), sib: box(sib) };
+        });
+        assert(c.off && c.sib, 'a canceled later card and a normal later card');
+        assert(c.off.l === c.sib.l && c.off.r === c.sib.r, `same margins: ${JSON.stringify(c)}`);
+        assert(/^(\w{3}\s+\d+\s+\w{3}\s+)?[\s\S]*Canceled/.test(c.off.text), `the label keeps its words: ${c.off.text}`);
+        await noSideScroll(p.page, 'player home');
+        await shot(p.page, `canceled-row-${width}-${scheme}`);
+        await p.ctx.close();
+        return;
+      }
       await p.page.locator('.schedule > .sched.tier-later.off').first().scrollIntoViewIfNeeded();
       const { off, sib } = await flatRow(p.page);
       assert(off && sib, 'a canceled later row and a normal later row are both on the page');

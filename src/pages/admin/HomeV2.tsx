@@ -10,6 +10,7 @@ import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
 import { menuJustDismissed } from './menuDismiss';
 import { shortGameLine } from './ShortGame';
+import { PeopleIcon, SpotDots } from '../../ui';
 
 /** Things inside a card that do their own job when tapped: a tap on them never folds the game. */
 const OWN_TAP =
@@ -139,6 +140,7 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
   // The second line is always one line (it is cut off with an ellipsis): who is in, or when booking opens. Never a sentence or a button.
   // Zip 9 "Short games": a 1.5 hour game's row says so on its second line ("1.5 hr game · $11 each"); the names show when it opens.
   const tag = canceled ? null : shortGameLine(ctx, s);
+  const cleanup = ctx.d.cardCleanup === true;
   const second = canceled ? (s.cancelReason ?? 'Canceled') : tag ? tag : court.kind === 'later' ? court.text : names.length > 0 ? names.join(', ') : 'Nobody in yet';
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
@@ -155,7 +157,7 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
         role="button"
         tabIndex={0}
         aria-expanded="false"
-        aria-label={`${date}, ${canceled ? 'canceled' : `${countText(names.length, ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you're in" : ''}. Open.`}
+        aria-label={`${date}, ${canceled ? 'canceled' : `${countText(names.length, cleanup ? Number.POSITIVE_INFINITY : ctx.d.group.settings.maxPlayers)}, ${SWITCH_LABEL[switchValue]}`}${mine ? ", you're in" : ''}. Open.`}
         data-session={s.id}
         data-court={court.kind}
         data-switch={switchValue}
@@ -166,12 +168,38 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
         onKeyDown={key}
       >
         <DateTile iso={s.startsAt} tz={tz} day={adminTileDay(ctx.d, s)} />
-        <div className="hv2-main">
-          <div className="hv2-count">
-            <strong>{canceled ? 'Canceled' : `${countText(names.length, ctx.d.group.settings.maxPlayers)} · ${start}`}</strong>
+        {cleanup ? (
+          // "Card cleanup" (Zip 10): the time on the left of the first line, the circles to its right (no "3 of 4 in"); the people icon before the names.
+          <div className="hv2-main">
+            <div className="hv2-count cl-row">
+              <strong>{canceled ? 'Canceled' : start}</strong>
+              {!canceled && (
+                <span className="cl-balls">
+                  <SpotDots names={names} oneRow />
+                </span>
+              )}
+            </div>
+            <div className="hv2-names">
+              {!canceled && !tag && court.kind !== 'later' && names.length > 0 ? (
+                <span className="cl-names">
+                  <span className="people-icon">
+                    <PeopleIcon />
+                  </span>
+                  <span className="cl-names-text">{second}</span>
+                </span>
+              ) : (
+                second
+              )}
+            </div>
           </div>
-          <div className="hv2-names">{second}</div>
-        </div>
+        ) : (
+          <div className="hv2-main">
+            <div className="hv2-count">
+              <strong>{canceled ? 'Canceled' : `${countText(names.length, ctx.d.group.settings.maxPlayers)} · ${start}`}</strong>
+            </div>
+            <div className="hv2-names">{second}</div>
+          </div>
+        )}
         <div className="hv2-side">
           {canceled ? <span className="hv2-pill off">Canceled</span> : <span className={`hv2-pill sw-${switchValue}`}>{SWITCH_LABEL[switchValue]}</span>}
           {mine && !canceled && (

@@ -67,15 +67,18 @@ describe('fake-data preview seed', () => {
     expect(next.some((g) => g.bookingStatus === 'booked' && g.status !== 'canceled')).toBe(true);
     expect(next.some((g) => g.bookingStatus === 'unavailable' && g.courtState === 'waitlist')).toBe(true);
     expect(next.some((g) => g.bookingStatus === 'needs_booking' && g.confirmedCount === 3)).toBe(true);
-    // full with a real standby
-    expect(next.some((g) => g.confirmedCount === 10 && g.waitlistCount === 1)).toBe(true);
+    // Zip 10, Card cleanup on: no waitlist anywhere (the old standby, Gray, moved in as an 11th player), and games with 1, 3, 4, 5, 8 and 12 in.
+    expect(next.every((g) => g.waitlistCount === 0)).toBe(true);
+    expect(next.some((g) => g.confirmedCount === 11 && g.roster.some((r: any) => r.name === 'Gray' && r.status === 'confirmed'))).toBe(true);
+    for (const n of [1, 3, 4, 5, 8, 12]) expect(next.some((g) => g.status !== 'canceled' && g.confirmedCount === n), `a game with ${n} in`).toBe(true);
+    expect(dash.cardCleanupForAll).toBe(true);
     // canceled, with a reason
     expect(next.some((g) => g.status === 'canceled' && g.cancelReason === 'Court closed')).toBe(true);
   });
 
   it('has the live-ON switches on from the seed, plus the one being built (PREVIEW SWITCHES RULE)', async () => {
     const { dash } = await loaded();
-    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll', 'instantTapsForAll', 'adjustCreditForAll', 'venmoRequestForAll', 'homeCollapseForAll', 'tonightGlowForAll', 'colorCleanupForAll', 'playerCardsSimpleForAll', 'lastCallTextsForAll', 'shortGamesForAll', 'cardTimeButtonsForAll'])
+    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll', 'instantTapsForAll', 'adjustCreditForAll', 'venmoRequestForAll', 'homeCollapseForAll', 'tonightGlowForAll', 'colorCleanupForAll', 'playerCardsSimpleForAll', 'lastCallTextsForAll', 'shortGamesForAll', 'cardTimeButtonsForAll', 'cardCleanupForAll'])
       expect(dash[k], k).toBe(true);
     // Zip 9: one 1.5 hour game, no note (the site already says the length once), priced $11 with Short games on.
     const short = (dash.sessions as any[]).find((x) => Date.parse(x.endsAt) - Date.parse(x.startsAt) === 90 * 60_000);
