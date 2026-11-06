@@ -2649,3 +2649,60 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
 - Follow-up PR (before the deploy): the full unit run on merged main caught `tests/zip7.test.ts` "every rule is under an <html> attribute": the
   `:is(.ts-booked, .ts-none)` selectors read as an unguarded rule after the comma. Each selector is now written out in full (same result). Unit
   2258 passed, zip9 15/15, zip7 33/33, tile height and text position identical to live.
+
+### Deploy (Fri Nov 6, 2026, afternoon; recorded with Zip 10)
+- Zip 9 is live: production deployment `9c94c864-11cd-4471-a004-f4eeddefb1e3` = main `624c60f` (PR #91 on top of #90). The build live before it was Zip 8,
+  `5c4935b1-98d0-471a-8de6-9d91881e6dec` (main `1cf0784`): that is the rollback. Alex switched Short games and Card time and buttons on. The Time Travel
+  bookmark of that deploy was not recorded in this file.
+
+## Zip 10: Card cleanup (CARD_CLEANUP): no count text, people icon, tinted Later cards, vertical centering, no waitlist, no player cap - built Fri Nov 6, 2026; on a preview, waiting for "ship it"
+
+Spec: the "zip 10" brief (`START_HERE.md`, `SITE_RULES.md`, the later-cards-v4 and player-screen mockups; the ALERTS mockups are Zip 11). One PR. NO database
+schema change, no migration. Built in a quiet window (Friday afternoon). Nothing deployed to production, nothing switched on, no live data changed. Zip 9 was
+merged and live first (production `9c94c864` = main `624c60f`). The full description of the switch is its row in `docs/FEATURE_SWITCHES.md`.
+
+### A. Cards (player and organizer)
+- `src/pages/PlayerHome.tsx` `ScheduleRow`: with the switch on, no count text (the circles alone: `SpotDots oneRow`, one row, the same sizes as before; past
+  what the row holds they tuck under each other, `src/zip10.css`), the people icon (the Players tab icon, `PeopleIcon`) before the names, no waitlist line,
+  a filled "I'm in" under the names. The status line, the joined Calendar | Directions button, Pay, the Paid pill and the links are the existing pieces.
+- Vertical rule: `useTileCenter` puts the tile's measured height on the card (`--cl-tile-h`, follows the tile with a ResizeObserver); the body is at least
+  that tall and centers its content, so taller content starts at the tile's top.
+- Later games: the card is drawn as a smaller version of the Next week card (`tier-next cl-later`, 56 px tile) on a soft tint (`--cl-later-bg`, light
+  #ebebe4, dark #1b2620). `data-tier` stays `later`. Extra games keep their tile and EXTRA tag; canceled keeps the gray pill.
+- Organizer: `PlayersLine cleanup` (Home card R2 and the Games card): circles on one row, people icon + names, no count, no Waitlist line; the court switch,
+  In / Out, paid pill and gear unchanged. `HomeV2` folded row: the time on the left of the first line, the circles to its right, the people icon before the
+  names on the second line. The Players sheet loses To waitlist / Waitlist.
+- Every rule in `src/zip10.css` sits under `html[data-card-cleanup]` (set by `src/zip7.ts` `useZip7Root`). One bug found while building: a size variable
+  named `--ball` collided with the site's ball COLOR variable (`--ball`), turning the balls black; renamed `--cl-ball`.
+
+### C. No waitlist, no player cap
+- Server: the request's answer rides on the group row (`server/zip10.ts` `withCardCleanup`, called from `requireAdmin`, `requireGroupKey` and texted links)
+  and on to `settingsOf(group).noCap`. `capOf(settings)` (`shared/settings.ts`) is the cap for every join path: 12 with the switch on, the saved Max players
+  with it off. `maxPlayers` itself always stays the saved setting (a Settings save never stores 12).
+- Can NOT be switched off in the database: the hard limit of 12 confirmed per game is a trigger (migration 0013). Lifting it is a schema change, so it stays.
+  With the switch on a 13th tap gets "12 is the most one game can hold right now. Ask Alex." (409 `game_limit`) and nobody is put on a waitlist. The organizer
+  roster "waitlist" action answers 409 `no_waitlist`.
+- `settle()` with no cap moves anyone still waiting in as a normal seat (no `promoted_at`, no "Good news", no "Spot opened" text card). Views hide every
+  waitlist with the switch on (a player still on one reads as not in: their I'm in takes a seat), `full` is never true, `joinAs` is always `in`, older
+  promotions show no notice. Telegram: `alertMessage` drops "moved up from the waitlist" (`noWaitlist`).
+- Switching the Settings row ON runs `endWaitlists`: everyone waiting on an open game moves in, first in line first, up to 12 (their credit goes on like at
+  I'm in). Off moves nobody back.
+- `scripts/integrity-checks.sql` `more_in_than_max` allows 12 while the row is on (else the saved max, as before).
+- Old waitlisted players: on the preview data, 1 (Gray, the standby on the full 10-in game, now an 11th player). Live: the read-only look at the live
+  database was blocked in this session (permission), so the count there is not known; when Alex switches the row on, anyone waiting on an open live game
+  moves in the same way at that moment, and nothing happens before that.
+- Not switched: nothing. Every change above is behind the switch; with it off the code paths are main's (checked by `e2e/zip10-off.cjs`).
+
+### Prices with 11 and 12 players
+- Normal (2 hours): floor(4 x $14 / N): 11 play $5 each ($9 back), 12 play $4 each ($10 back). Court $48: 11 x $5 = $55, 12 x $4 = $48, covered.
+- 1.5 hour games (Zip 9 table, above 10 pays the 10 price): 11 and 12 play $4 each ($7 back). Court $36 covered.
+- Credit chain (Blair, switch on, `tests/card-cleanup.test.ts`): game 1, 2 hours, 12 play, $4: $14 cash, $10 back, credit $10. Game 2, 2 hours, 11 play,
+  $5: $10 credit + $4 cash, $9 back, credit $9. Game 3, 1.5 hours, 12 play, $4: $9 credit + $2 cash, $7 back, credit $7. Game 4, 1.5 hours, 11 play, $4:
+  $7 credit + $4 cash, $7 back, credit $7. Cash $24 = prices $17 + credit left $7. Nothing lost, doubled or negative.
+
+### D. Switch
+- Settings row "Card cleanup" (newest first), `PUT /api/admin/card-cleanup-switch` (answers `movedIn`), `task_log` row `card_cleanup_on`, kill switch
+  `CARD_CLEANUP` in `wrangler.toml` (allowed; on in `[env.preview.vars]`), private link `?cardcleanup=on` (header `X-Card-Cleanup`), Activity lines,
+  player stamp piece `cl` only while on.
+- Preview seed: `card_cleanup_on` in `PREVIEW_SWITCHES_ON`; the seed switches it on the way the row does (Gray moves in), then adds three games with no notes:
+  1 in, 8 in and 12 in.
