@@ -12,7 +12,9 @@
 //   route runs (only sign in and sign out are let through), and its reads run on a database that
 //   cannot be written to (viewOnlyDb below), so even upkeep writes inside a read do nothing.
 // - Same lockout as the real PIN (server/auth.ts counts every guess the same way). The PIN is never
-//   written to the database, a log or any screen.
+//   written to a log or any screen. The database holds only a short fingerprint of it in each view-only
+//   sign-in's id (so a changed PIN signs helpers out); someone who can read the whole database could work
+//   the read-only PIN out from that, never the real PIN.
 
 import type { D1Database, D1PreparedStatement, D1Result, Env } from './db';
 import { ADMIN_COOKIE, type Ctx } from './context';
@@ -31,8 +33,8 @@ export const VIEW_ONLY_ALLOWED_WRITES = new Set(['POST /api/admin/login', 'POST 
 
 /** The read-only PIN, or null when the secret is missing or not 6 to 12 digits (then the feature is off). */
 export function readOnlyPin(env: Env): string | null {
-  const pin = env.ORGANIZER_READONLY_PIN;
-  return typeof pin === 'string' && /^\d{6,12}$/.test(pin) ? pin : null;
+  const pin = typeof env.ORGANIZER_READONLY_PIN === 'string' ? env.ORGANIZER_READONLY_PIN.trim() : null;
+  return pin && /^\d{6,12}$/.test(pin) ? pin : null;
 }
 
 /**

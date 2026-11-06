@@ -69,6 +69,12 @@ describe('when a copy is due', () => {
     expect(p.map((x) => x.length)).toEqual([90_000, 90_000, 70_001]);
     expect(p.join('')).toBe(t);
     expect(splitParts('')).toEqual(['']);
+    // An emoji right on a piece boundary stays whole.
+    const e = 'x'.repeat(89_999) + '😀' + 'y';
+    const q = splitParts(e);
+    expect(q[0].length).toBe(89_999);
+    expect(q.join('')).toBe(e);
+    expect(q.every((x) => !/[\ud800-\udbff]$/.test(x))).toBe(true);
   });
 });
 

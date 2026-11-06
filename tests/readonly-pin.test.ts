@@ -155,7 +155,7 @@ describe('read-only organizer PIN (Zip 8)', () => {
     const c = ctx.app.client();
     expect((await c.call('POST', '/api/admin/login', { pin: RO_PIN })).status).toBe(401);
     // A malformed secret counts as no secret.
-    for (const bad of ['', '12345', 'abcdefgh', '1234567890123', ' 58302917']) {
+    for (const bad of ['', '12345', 'abcdefgh', '1234567890123', ' 5830 2917']) {
       ctx.app.env.ORGANIZER_READONLY_PIN = bad;
       ctx.app.advance(16 * 60_000); // past the lockout window, so each try is a real PIN check
       const d = ctx.app.client();
@@ -271,5 +271,12 @@ describe('read-only organizer PIN (Zip 8)', () => {
     expect((await again.call('GET', '/api/admin/dashboard')).data.viewOnly).toBe(true);
     expect((await again.call('POST', '/api/admin/login', { pin: RO_PIN })).status).toBe(401);
   });
-});
 
+  it('a secret saved with a stray space or new line still works (trimmed)', async () => {
+    const ctx = await world();
+    ctx.app.env.ORGANIZER_READONLY_PIN = `${RO_PIN}\n`;
+    expect((await ctx.viewer.call('GET', '/api/admin/dashboard')).data.viewOnly).toBe(true);
+    const c = ctx.app.client();
+    expect((await c.call('POST', '/api/admin/login', { pin: RO_PIN })).status).toBe(200);
+  });
+});

@@ -63,7 +63,15 @@ export function checkThisTick(nowMs: number): boolean {
 /** Split a long text into pieces of at most `size` characters. */
 export function splitParts(text: string, size = PART_CHARS): string[] {
   const out: string[] = [];
-  for (let i = 0; i < text.length; i += size) out.push(text.slice(i, i + size));
+  let i = 0;
+  while (i < text.length) {
+    let end = Math.min(i + size, text.length);
+    // Never cut an emoji (a two-part character) in half: end the piece one character early instead.
+    const code = text.charCodeAt(end - 1);
+    if (end < text.length && code >= 0xd800 && code <= 0xdbff) end--;
+    out.push(text.slice(i, end));
+    i = end;
+  }
   return out.length ? out : [''];
 }
 
