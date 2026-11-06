@@ -1426,7 +1426,8 @@ function SuggestionCard({
   const cleanup = g.cardCleanup === true;
   const standby = !cleanup && s.courtState === 'waitlist';
   const waitlistForm = !cleanup && !standby && s.confirmedCount >= g.group.maxPlayers;
-  const subline = standby ? '' : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
+  // At the database's 12 the popup only says how many are in (an I'm in there gets the plain refusal).
+  const subline = standby ? '' : cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     if (instant && !yes) {
@@ -2102,7 +2103,7 @@ export function ScheduleRow({
 
   const joinBtn = notIn && (
     <button className={`btn sched-btn${flatLater ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
-      {busy ? 'Saving…' : cleanup ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
+      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = waiting && open && (

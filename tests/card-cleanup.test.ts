@@ -163,23 +163,28 @@ describe('switch OFF: exactly as before', () => {
 });
 
 describe('switch ON: no cap, no waitlist', () => {
-  it('the private link: a player phone gets the look only (the cap and the waitlist stay); the organizer sign-in gets all of it', async () => {
+  it('the private link is the look only, on any phone (organizer too): the cap and the waitlist stay until the Settings row is on', async () => {
     const ctx = await group();
     const phones = await phonesOf(ctx);
     const [s] = await upcoming(ctx);
     for (const n of ALL.slice(0, 10)) await phones[n].call('POST', `/api/sessions/${s.id}/join`, {});
     const v = (await phones[ALL[10]].call('GET', '/api/group', undefined, ON)).data;
     expect(v.cardCleanup).toBe(true);
-    // Seats: exactly as before for a player phone, link or not (a player can never get past Max players with a link).
     expect(v.group.maxPlayers).toBe(10);
+    expect(v.sessions.find((x: any) => x.id === s.id)).toMatchObject({ full: true, joinAs: 'waitlist' });
     expect((await phones[ALL[10]].call('POST', `/api/sessions/${s.id}/join`, {}, ON)).data.result).toBe('waitlisted');
     expect((await phones.Alex.call('GET', '/api/group')).data.cardCleanup).toBeUndefined();
-    // The organizer's sign-in with the link: no cap (the organizer gives the 12th spot).
+    // The organizer's sign-in with the link: the look, and seats exactly as before.
     expect((await dashboard(ctx, ON)).cardCleanup).toBe(true);
     expect((await dashboard(ctx)).cardCleanup).toBeUndefined();
     const give = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName[ALL[11]], action: 'confirm' }, ON);
-    expect(give.status, give.text).toBe(200);
-    expect((await game(ctx, s.id)).roster.filter((r: any) => r.status === 'confirmed')).toHaveLength(11);
+    expect(give.status).toBe(409);
+    expect(give.data.error).toBe('session_full');
+    // Review 2: the organizer removes a player with the link on: ONE waiter moves in, with the notice, never past Max players.
+    expect((await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName.Alex, action: 'withdraw' }, ON)).status).toBe(200);
+    const g = await game(ctx, s.id);
+    expect(g.roster.filter((r: any) => r.status === 'confirmed')).toHaveLength(10);
+    expect(g.roster.find((r: any) => r.name === ALL[10])).toMatchObject({ status: 'confirmed', promotionReason: 'spot_opened' });
   });
 
   it('review A: switch off, a player phone with the link drops: the next in line moves in as before (one, with the notice), never past Max players', async () => {

@@ -2747,3 +2747,12 @@ merged and live first (production `9c94c864` = main `624c60f`). The full descrip
 - Tweak 2, organizer Home card tighter (only with Card cleanup on): the circles row is as tall as the circles (its 34 px minimum was the old In button's
   height), about 10 px from the note line to the circles (was about 16), about 6 px from the circles to the names (was about 10). The folded Next week
   rows already sit 1 px apart, unchanged. `e2e/zip10.cjs` checks both gaps.
+
+### Second fresh review (final diff, before the deploy)
+- Nothing blocks deploying with the switch OFF (checked line by line against main: server paths, JSON, clock, Telegram, money, integrity check, client,
+  CSS, settings_json). One should-fix, proved: the organizer's private link on live still lifted the cap for the organizer's own taps, so previewing the
+  look and then removing a player would move every waiter in up to 12 with no notice. Fixed: the private link is the LOOK only on every phone, the
+  organizer's too; seats follow the Settings row alone (`server/zip10.ts`, `cardCleanupFor` vs `cardCleanupLook`; test in `tests/card-cleanup.test.ts`).
+- Also fixed from its notes: a look-only test phone on a full game says "Join waitlist" again (what its tap does); the Want in? popup at 12 says only
+  "12 are in." Notes kept: switching the row on while the kill switch is "off" moves nobody (the kill switch wins); after switching the row off again, a
+  game left at 11 or 12 shows in `more_in_than_max` (expected).

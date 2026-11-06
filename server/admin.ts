@@ -73,7 +73,7 @@ import { flatOf, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { isShortGame } from '../shared/gameLength';
-import { cardCleanupForAll, setCardCleanupForAll } from './zip10';
+import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
 import { capOf } from '../shared/settings';
 
@@ -293,7 +293,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
     cardTimeButtonsForAll: await cardTimeForAll(ctx.db, group.id),
     // Zip 10. "Card cleanup" for this screen is what requireAdmin put on the group (the same answer every join on it used).
-    ...(group.card_cleanup === true ? { cardCleanup: true } : {}),
+    // The look: the Settings row, or this phone's private link (look only; seats follow the row alone).
+    ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     cardCleanupForAll: await cardCleanupForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };

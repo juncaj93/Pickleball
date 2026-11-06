@@ -7,7 +7,7 @@ import { CARD_CLEANUP_HEADER, zip10Allowed } from '../shared/zip10';
 // Zip 10: CARD_CLEANUP (shared/zip10.ts). On for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
 //  - the organizer switched it on in Settings > Feature switches (every phone), or this phone opened the site with ?cardcleanup=on
-//    (it then sends X-Card-Cleanup: a private test switch for that phone only; for seats it counts only on the organizer's sign-in).
+//    (it then sends X-Card-Cleanup: a private test switch for that phone's LOOK only; seats follow the Settings row alone).
 // "On for everyone" is one row in task_log (kind 'mark', no game): no schema change, the same way the other switches are stored.
 //
 // It removes the Max players cap and the waitlist, so its answer has to reach every join path of the request. It rides on the group
@@ -37,14 +37,12 @@ export async function setCardCleanupForAll(db: D1Database, groupId: string, on: 
 }
 
 /**
- * "Card cleanup" for this request: the kill switch allows it, and the Settings row is on, or this phone has the private test link.
- * `organizer`: the request is the organizer's own sign-in (requireAdmin, which also covers View as). The no-cap, no-waitlist part
- * changes who gets a seat, so the private link only counts for it there (the same rule as Zip 9's Short games); a player's phone or a
- * texted link follows only the Settings row. `cardCleanupLook` below is the look alone, which any phone's link may turn on.
+ * "Card cleanup" for seats (no cap, no waitlist) on this request: the kill switch allows it and the Settings row is on. Nothing else: the
+ * private test link never changes who gets a seat, not even on the organizer's phone (a fresh review, Nov 6: the organizer previewing the
+ * look on live would otherwise move waiters in past Max players with no notice). Test the seats part on the fake-data preview.
  */
-export async function cardCleanupFor(ctx: Ctx, groupId: string, organizer = false): Promise<boolean> {
+export async function cardCleanupFor(ctx: Ctx, groupId: string): Promise<boolean> {
   if (!zip10Allowed(ctx.env.CARD_CLEANUP)) return false;
-  if (organizer && (ctx.req.headers.get(CARD_CLEANUP_HEADER) ?? '').toLowerCase() === 'on') return true;
   return forAll(ctx.db, groupId);
 }
 
@@ -59,7 +57,7 @@ export async function cardCleanupLook(ctx: Ctx, groupId: string): Promise<boolea
  * Puts this request's CARD_CLEANUP answer on the group row, so settingsOf(group) carries it (no cap, no waitlist) to every join path.
  * Only ever sets the mark when it is on; off leaves the row exactly as read.
  */
-export async function withCardCleanup<G extends GroupRow>(ctx: Ctx, group: G, organizer = false): Promise<G> {
-  if (await cardCleanupFor(ctx, group.id, organizer)) group.card_cleanup = true;
+export async function withCardCleanup<G extends GroupRow>(ctx: Ctx, group: G): Promise<G> {
+  if (await cardCleanupFor(ctx, group.id)) group.card_cleanup = true;
   return group;
 }
