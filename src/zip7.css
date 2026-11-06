@@ -193,7 +193,8 @@
    BORDER down to a whole pixel (Chrome draws 1 px) but not the 1.5 px placement, so a half-pixel gap ran down both sides, and through it showed
    the tile's own fill (white on TOM) or the tinted card behind (TONIGHT): a thin light line on each side of the green strip and the tile. Two
    changes: the solid ring is drawn as an inset shadow, which is never rounded, so it covers that edge exactly in every browser; and the strip
-   runs out under the ring (to its outer edge, with its corner radius), with the ring drawn on top, so nothing shows between them either. */
+   runs out under the ring (to its outer edge, with its corner radius), with the ring drawn on top, so nothing shows between them either. The
+   strip and fill rules apply only to a solid ring (Court booked, Not booked): a Waitlist tile keeps its dashed ring and the Zip 8 look. */
 :root[data-tonight-glow] .admin-page .tile.ts .tb-solid {
   border-width: 0;
   box-shadow: inset 0 0 0 var(--tb-w, 1.5px) var(--z7-ring, var(--ts-booked));
@@ -206,12 +207,14 @@
 }
 /* The fill runs to the tile's outer edge again (the Zip 8 padding-box clip let the tinted card show through a rounding gap); the ring above
    now covers that edge completely, so no fill can show outside it. */
-:root[data-tonight-glow] .admin-page .tile.ts.day-tonight {
+:root[data-tonight-glow] .admin-page .tile.day-tonight:is(.ts-booked, .ts-none) {
   background-clip: border-box;
 }
-:root[data-tonight-glow] .admin-page .tile.ts .day-tag {
+:root[data-tonight-glow] .admin-page .tile:is(.ts-booked, .ts-none) .day-tag {
   width: calc(100% + 2 * var(--tb-w, 1.5px));
   margin: calc(var(--tb-w, 1.5px) * -1) calc(var(--tb-w, 1.5px) * -1) 0;
+  /* The strip starts 1.5 px higher, so it is 1.5 px taller on top: the word, the date and the tile's height stay exactly where they were. */
+  padding-top: calc(5px + var(--tb-w, 1.5px));
   border-radius: var(--z7-r) var(--z7-r) 0 0;
 }
 /* Reduce Motion: everything holds still (the bands and colors stay). */

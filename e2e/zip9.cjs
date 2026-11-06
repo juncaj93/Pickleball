@@ -225,6 +225,15 @@ async function main() {
         assert(Math.abs(t.tag[0]) < 0.01 && Math.abs(t.tag[1]) < 0.01, `strip runs to the ring's outer edge: ${JSON.stringify(t)}`);
         assert(t.clip === 'border-box', `fill to the outer edge: ${JSON.stringify(t)}`);
       }
+      // The tile keeps its height and the word and date stay where they were (the strip starts 1.5 px higher and is 1.5 px taller on top):
+      // the word starts 5 px below the tile's inner top edge, as before the fix, and the TONIGHT/TOM tile is as tall as on main (60.34 px at 390).
+      const spots = await page.evaluate(() => [...document.querySelectorAll('.admin-page .scard .tile.ts.day-tonight, .admin-page .scard .tile.ts.day-tomorrow')].map((el) => {
+        const tag = el.querySelector('.day-tag');
+        const r = el.getBoundingClientRect();
+        const word = tag.getBoundingClientRect().top + parseFloat(getComputedStyle(tag).paddingTop) - (r.top + parseFloat(getComputedStyle(el).borderTopWidth));
+        return { word, h: r.height };
+      }));
+      for (const x of spots) assert(Math.abs(x.word - 5) < 0.05 && Math.abs(x.h - Number(process.env.ZIP9_TILE_H || 60.34375)) < 0.5, `word and height as before: ${JSON.stringify(spots)}`);
       // The normal games carry none.
       for (const s of d0.sessions.filter((x) => x.id !== shortGame.id).slice(0, 6)) {
         const t = await page.locator(`#session-${s.id}`).innerText().catch(() => '');

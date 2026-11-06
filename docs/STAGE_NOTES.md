@@ -2640,3 +2640,9 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
   (Chrome: 1 px) but not the 1.5 px placement, so a half-pixel gap ran down both sides and showed the tile fill or the tinted card. Fix: the solid
   ring is an inset shadow (never rounded), the strip runs under the ring to its outer edge with the ring on top, and the TONIGHT fill runs to the
   outer edge again. Checked pixel by pixel at 3x and 4x, light and dark; `e2e/zip7.cjs` and `e2e/zip9.cjs` check the geometry. Player tiles unchanged.
+- Second fresh reviewer (final diff, before the deploy): nothing blocking; full unit suite 2258 passed. Fixed from it: the strip and fill rules
+  were keyed on any court ring, so a TONIGHT tile on a Waitlist court (dashed ring) would have shown the fill between the dashes; they now apply
+  only to a solid ring (Court booked, Not booked). The strip's 1.5 px higher start is matched by 1.5 px more top padding, so TONIGHT and TOM
+  tiles keep exactly live's height (60.34 px at 390), word and date position (measured on main and on the branch, identical).
+  Notes kept: the ring change also makes every organizer Court booked / Not booked tile's ring a true 1.5 px (on a 1x desktop screen slightly
+  heavier); Windows High Contrast drops shadows (the ring would not show there); `admin-r2` check F4 fails on main too (it depends on today's date).
