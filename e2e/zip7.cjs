@@ -168,7 +168,10 @@ async function main() {
         if (t.scrollWidth > t.clientWidth + 1) out.push(`${name}: clipped`);
         const rg = document.createRange();
         rg.selectNodeContents(vis);
-        if (rg.getBoundingClientRect().width > r.width + 0.5) out.push(`${name}: the word is wider than the strip`);
+        const wr = rg.getBoundingClientRect();
+        if (wr.width > r.width + 0.5) out.push(`${name}: the word is wider than the strip`);
+        // Centered across the FULL strip, on every tile (the badge never pushes the word aside).
+        if (Math.abs(wr.left + wr.width / 2 - (r.left + r.width / 2)) > 1) out.push(`${name}: the word ${word} is off center by ${(wr.left + wr.width / 2 - (r.left + r.width / 2)).toFixed(1)} px`);
         if (word === 'TOM' && t.classList.contains('tonight')) out.push('TONIGHT must never be shortened');
         if (parseFloat(getComputedStyle(t).borderTopLeftRadius) < 2) out.push(`${name}: strip corners are not rounded to the tile`);
       }
@@ -202,7 +205,13 @@ async function main() {
           const rg = document.createRange();
           rg.selectNodeContents(vis);
           const w = rg.getBoundingClientRect();
-          if (w.right > c.left - 0.5 && w.top < c.bottom && w.bottom > c.top) out.push(`${name}: the word ${vis.textContent.trim()} runs under the badge (${Math.round(w.right)} > ${Math.round(c.left)})`);
+          // The word must not touch the badge: its nearest point to the badge's center is farther than the badge's radius.
+          const nx = Math.max(w.left, Math.min(cx, w.right));
+          const ny = Math.max(w.top, Math.min(cy, w.bottom));
+          if (Math.hypot(cx - nx, cy - ny) < rad + 1) out.push(`${name}: the word ${vis.textContent.trim()} touches or runs under the badge`);
+          // Only a few pixels of the badge cover the strip: the badge sits mostly outside the tile.
+          const tr = wrap.querySelector('.tile').getBoundingClientRect();
+          if (c.left + c.width / 2 < tr.right - 4) out.push(`${name}: the badge sits too far inside the tile`);
           if (parseFloat(getComputedStyle(vis).fontSize) < 9) out.push(`${name}: word under 9 px`);
         }
       }

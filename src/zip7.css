@@ -111,8 +111,8 @@
   white-space: nowrap;
   text-align: center;
 }
-/* The green check badge ("You're in") overlaps the tile's top right corner: it sits fully ON TOP of the strip (above it in the stack, never clipped by the
-   tile), and the word is centered in the space left of it (the strip gives up the badge's width on the right). */
+/* The green check badge ("You're in") overlaps the tile's top right corner like the approved mockup: mostly OUTSIDE the tile, only a few pixels over
+   the end of the strip, drawn above it (never clipped) and it never moves the word, which is always centered across the full strip. */
 :root[data-tonight-glow] .tile .day-tag {
   position: relative;
   z-index: 0;
@@ -120,11 +120,17 @@
 :root[data-tonight-glow] .tile-wrap > .tile-check {
   z-index: 3;
 }
-:root[data-tonight-glow] .tile.mine .day-tag {
-  padding-right: 13px;
+:root[data-tonight-glow] .schedule .tile-wrap > .tile-check {
+  top: -14px;
+  right: -14px;
 }
-:root[data-tonight-glow] .schedule .tier-this .tile.mine .day-tag {
-  padding-right: 14px;
+:root[data-tonight-glow] .schedule .tier-next .tile-wrap > .tile-check {
+  top: -12px;
+  right: -12px;
+}
+:root[data-tonight-glow] .schedule .tier-later .tile-wrap > .tile-check {
+  top: -11px;
+  right: -11px;
 }
 /* The short word, only where the tile is too narrow for TOMORROW at 9 px (organizer tiles at narrow widths; see below). */
 :root[data-tonight-glow] .tile .day-tag .dt-short {
@@ -296,8 +302,9 @@
     display: inline;
   }
 }
-/* With the check badge taking room on the right, TOMORROW needs a wider tile (the word, the badge's 14 px and a little air). */
-@container (max-width: 77px) {
+/* With the word centered, TOMORROW (about 58 px) on a tile with the check badge needs a tile of 81 px or more to stay clear of the badge; a narrower
+   tile with a badge says TOM (centered). */
+@container (max-width: 80px) {
   :root[data-tonight-glow] .tile.mine .day-tag .dt-full {
     display: none;
   }
