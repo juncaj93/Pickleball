@@ -1,5 +1,6 @@
 import { readOnlyPin, viewOnlyCookie } from './viewOnly';
 import { lastCallFor, lastCallForAll, setLastCallForAll } from './lastCall';
+import { backupObject } from './backupData';
 import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents, formatPrice } from '../shared/money';
@@ -1667,23 +1668,8 @@ export async function exportData(ctx: Ctx): Promise<Response> {
   });
 }
 
-/**
- * Tables in a backup file, parents before children (the order a restore
- * puts them back in). Sign-in records, wrong-PIN counts and spam counters
- * are left out: they're short-lived, and a restore signs everyone out.
- */
-export const BACKUP_TABLES = [
-  'groups',
-  'players',
-  'sessions',
-  'session_players',
-  'credits',
-  'credit_ledger',
-  'refund_requests',
-  'session_action_tokens',
-  'player_devices',
-  'admin_audit_log',
-] as const;
+// The backup's tables live in server/backupData.ts (shared with the weekly copy, worker/backup.ts).
+export { BACKUP_TABLES } from './backupData';
 
 /**
  * GET /api/admin/backup: everything needed to rebuild the site's data, as
@@ -1692,14 +1678,9 @@ export const BACKUP_TABLES = [
  */
 export async function backupFile(ctx: Ctx): Promise<Response> {
   const group = await requireAdmin(ctx);
-  const tables: Record<string, Record<string, unknown>[]> = {};
-  for (const t of BACKUP_TABLES) {
-    const { results } = await ctx.db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all<Record<string, unknown>>();
-    tables[t] = results;
-  }
   const p = localParts(ctx.nowMs, group.timezone);
   const stamp = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
-  const body = JSON.stringify({ format: 'pickleball-backup', version: 1, createdAt: ctx.nowIso, groupName: group.name, tables }, null, 1);
+  const body = JSON.stringify(await backupObject(ctx.db, group.name, ctx.nowIso), null, 1);
   return new Response(body, {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',

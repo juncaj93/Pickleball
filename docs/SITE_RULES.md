@@ -47,3 +47,16 @@ Admin-only changes can deploy any time outside game night.
 PREVIEW DATABASE: previews use the fake database named pickleball-preview. NEVER delete, drop, rename or reuse it. The only approved way to wipe it is npm run db:seed:preview. The preview organizer PIN lives only in docs/PREVIEW_FAKE_DB.md; do not paste it into reports.
 
 FEATURE SWITCHES RULE: every new feature ships OFF with its on/off switch as a row inside Settings, in a collapsed section named "Feature switches" (create it if it does not exist yet). The switch must work with no deploy. Keep a private per-phone test link too. Document each switch in docs/FEATURE_SWITCHES.md (name, what it does, default, how to turn off).
+
+## PREVIEW SWITCHES RULE (added Nov 4)
+A preview must behave like live. Every feature switch that is ON on live must be ON by default on the preview (no ?something=on needed), and the switch for the feature being built is ON on its own preview too. List which switches the preview has on in the report. A tester should never have to flip a switch to see what live shows.
+
+## Live check with the read-only PIN (added Zip 8, Nov 6)
+After every deploy, check the LIVE site yourself with the read-only organizer PIN, so Alex does fewer manual taps.
+- Alex gives you the read-only PIN (8 digits). It is NOT the real organizer PIN. Never ask for the real PIN, never write the read-only PIN into git, docs, tests, logs or a report other than Alex's own copy.
+- Sign in at https://pickleball.juncaj.net/admin (or https://pickleball-club-9h0.pages.dev/admin) with it, in a browser or with a request: POST /api/admin/login {"pin":"..."} with an Origin header of the same site, then GET /api/admin/dashboard, /api/admin/money?month=YYYY-MM, /api/admin/activity and so on with the cookie it returns.
+- It opens every organizer screen with the real numbers. The title shows a small "View only" label.
+- It is read only, enforced on the server: every POST, PUT, PATCH and DELETE answers 403 "View only. Nothing was saved." (only sign in and sign out work), and its reads cannot write anything either (not even the usual upkeep, like adding next weeks' games, and no Telegram alert is sent). So it is safe at any hour, but still do the check in a quiet window when you can.
+- It lasts 12 hours, shares the real PIN's wrong-PIN lockout (5 wrong tries per phone, 20 overall, in 15 minutes), and stops working the moment the secret is removed. A PIN change signs it out too.
+- It lives only as the Cloudflare secret ORGANIZER_READONLY_PIN (Pages project pickleball-club, production and preview). To turn it off: remove that secret (Cloudflare dashboard > Workers & Pages > pickleball-club > Settings > Variables and Secrets, or `npx wrangler pages secret delete ORGANIZER_READONLY_PIN --project-name pickleball-club`) and redeploy. To change it: put a new value the same way and redeploy.
+- Do not use it to change anything for Alex. If a check needs a tap that saves, ask Alex.

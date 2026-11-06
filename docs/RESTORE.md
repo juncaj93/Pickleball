@@ -67,6 +67,47 @@ If step 4 shows a red error, stop there and ask Claude for help. The safety
 copy from step 3 and Cloudflare's 7-day history (below) can both put things
 back the way they were.
 
+## Weekly copies (automatic, since Zip 8)
+
+Every Sunday from 3:00 AM Eastern, the 5-minute clock (the `pickleball-alerts-clock` Worker) saves a copy of the
+live data into a private Cloudflare database called `pickleball-backups`. It is the same file the Backup button
+downloads. The newest 8 copies are kept (about two months), so you have more than Time Travel's 7 days.
+If a Sunday is missed, the copy is made within the hour once the last one is more than 8 days old.
+
+- Where it lives: Cloudflare dashboard > Storage & Databases > D1 > `pickleball-backups`. Only your Cloudflare account
+  can open it. It has no web address. It has phone numbers, so never copy it into git, a text or a chat.
+- Cost: $0 (Cloudflare free plan; each copy is well under 1 MB).
+- It only reads the live database. It cannot change anything on the site.
+
+### Getting a weekly copy back as a backup file
+
+On a computer with this project (the same setup used to deploy), in a terminal in the project folder:
+
+1. **See the copies** (newest first, with the week and how many players and games each holds):
+
+   ```
+   node scripts/weekly-backup.mjs list
+   ```
+
+2. **Turn the one you want into a backup file** (use the week exactly as the list shows it):
+
+   ```
+   node scripts/weekly-backup.mjs get 2026-11-08
+   ```
+
+   This writes `pickleball-backup-2026-11-08.json`. It has phone numbers: keep it private.
+
+3. **Restore it** with the steps in "Restoring from a backup file" above, starting at step 1 with that file name.
+   Try it on the practice copy first (step 2 there), and make the safety copy (step 3 there) before touching the live site.
+
+### Stopping or checking the copies
+
+- Did last Sunday's copy happen? Step 1 above lists it. The Worker's logs (Cloudflare dashboard > Workers >
+  `pickleball-alerts-clock` > Logs) also show a line "weekly backup 2026-11-08: ... bytes" each time one is made.
+- To stop the copies: remove the two `[[d1_databases]]` blocks at the end of `worker/wrangler.toml` and deploy the
+  Worker (`npx wrangler deploy --config worker/wrangler.toml`). The alert clock keeps working either way.
+- Never delete the `pickleball-backups` database unless you mean to throw every weekly copy away.
+
 ## Undoing a mistake from the last 7 days without a file
 
 Cloudflare Time Travel can put the whole database back to a moment in the past

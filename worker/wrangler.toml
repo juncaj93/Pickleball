@@ -1,4 +1,4 @@
-# The smart-alert clock (worker/cron.ts). Free plan: one cron trigger.
+# The smart-alert clock (worker/cron.ts), plus the weekly backup copy (worker/backup.ts). Free plan: one cron trigger (the account has 5, all used).
 # Deploy: npx wrangler deploy --config worker/wrangler.toml
 # Secret (same value as the Pages project's CRON_SECRET):
 #   npx wrangler secret put CRON_SECRET --config worker/wrangler.toml
@@ -14,3 +14,15 @@ crons = ["*/5 * * * *"]
 
 [vars]
 SITE_URL = "https://pickleball-club-9h0.pages.dev"
+
+# The weekly backup copy (Zip 8, worker/backup.ts). DB is the LIVE database and is only READ (SELECTs); every write goes
+# to BACKUP, the private copy database. Remove these two blocks (and deploy) to stop the copies; the knock is unaffected.
+[[d1_databases]]
+binding = "DB"
+database_name = "pickleball"
+database_id = "5c939453-ebef-4a1d-869e-9a952339d275"
+
+[[d1_databases]]
+binding = "BACKUP"
+database_name = "pickleball-backups"
+database_id = "a532f080-7535-4d4d-8067-62ab6af928e4"
