@@ -2587,3 +2587,7 @@ production, nothing switched on, no live data changed. Only reads of the live da
   No data was changed by the deploy, so no restore is needed.
 - Deleted (Alex's OK): the 47 old preview deployments. Alex deletes the 22 merged branches on GitHub himself.
 
+- First weekly copy (real D1): made Fri Nov 6, 12:00 PM Eastern by the first hourly look after the Worker deploy (week 2026-11-01; players 11, games 12, seats 24, credit
+  entries 5). `node scripts/weekly-backup.mjs get 2026-11-01` turned it back into a backup file, and `scripts/restore-backup.mjs` read it into 332 restore lines.
+  Clock runs after the deploy: every 5 minutes, 0 errors; CPU about 1 to 2.5 ms, and 13 ms on the 12:00 PM run that made the copy (it finished fine; it runs after
+  the knock, so the alerts never wait on it). Watch: if that hourly run ever starts failing as the data grows, the copy (not the alerts) is what stops.
