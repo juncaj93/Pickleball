@@ -163,20 +163,47 @@ describe('switch OFF: exactly as before', () => {
 });
 
 describe('switch ON: no cap, no waitlist', () => {
-  it('the private link (one phone): that phone gets the flag and joins past 10; another phone and the organizer stay as before', async () => {
+  it('the private link: a player phone gets the look only (the cap and the waitlist stay); the organizer sign-in gets all of it', async () => {
     const ctx = await group();
     const phones = await phonesOf(ctx);
     const [s] = await upcoming(ctx);
     for (const n of ALL.slice(0, 10)) await phones[n].call('POST', `/api/sessions/${s.id}/join`, {});
     const v = (await phones[ALL[10]].call('GET', '/api/group', undefined, ON)).data;
     expect(v.cardCleanup).toBe(true);
-    expect(v.group.maxPlayers).toBe(12);
-    expect(v.sessions.find((x: any) => x.id === s.id)).toMatchObject({ full: false, joinAs: 'in', waitlist: [] });
-    expect((await phones[ALL[10]].call('POST', `/api/sessions/${s.id}/join`, {}, ON)).data.result).toBe('confirmed');
-    // Without the link: the old rule.
-    expect((await phones[ALL[11]].call('POST', `/api/sessions/${s.id}/join`, {})).data.result).toBe('waitlisted');
+    // Seats: exactly as before for a player phone, link or not (a player can never get past Max players with a link).
+    expect(v.group.maxPlayers).toBe(10);
+    expect((await phones[ALL[10]].call('POST', `/api/sessions/${s.id}/join`, {}, ON)).data.result).toBe('waitlisted');
     expect((await phones.Alex.call('GET', '/api/group')).data.cardCleanup).toBeUndefined();
+    // The organizer's sign-in with the link: no cap (the organizer gives the 12th spot).
+    expect((await dashboard(ctx, ON)).cardCleanup).toBe(true);
     expect((await dashboard(ctx)).cardCleanup).toBeUndefined();
+    const give = await ctx.organizer.call('POST', `/api/admin/sessions/${s.id}/roster`, { playerId: ctx.byName[ALL[11]], action: 'confirm' }, ON);
+    expect(give.status, give.text).toBe(200);
+    expect((await game(ctx, s.id)).roster.filter((r: any) => r.status === 'confirmed')).toHaveLength(11);
+  });
+
+  it('review A: switch off, a player phone with the link drops: the next in line moves in as before (one, with the notice), never past Max players', async () => {
+    const ctx = await group();
+    const phones = await phonesOf(ctx);
+    const [s] = await upcoming(ctx);
+    for (const n of ALL.slice(0, 10)) await phones[n].call('POST', `/api/sessions/${s.id}/join`, {});
+    for (const n of ALL.slice(10, 13)) expect((await phones[n].call('POST', `/api/sessions/${s.id}/join`, {})).data.result).toBe('waitlisted');
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/withdraw`, {}, ON)).status).toBe(200);
+    const g = await game(ctx, s.id);
+    expect(g.roster.filter((r: any) => r.status === 'confirmed')).toHaveLength(10);
+    expect(g.roster.find((r: any) => r.name === ALL[10])).toMatchObject({ status: 'confirmed', promotionReason: 'spot_opened' });
+    expect(g.roster.filter((r: any) => r.status === 'waitlisted')).toHaveLength(2);
+  });
+
+  it('review C: switch off, the organizer phone has the link and raises Max players: the people waiting move in first, as on main', async () => {
+    const ctx = await group();
+    const phones = await phonesOf(ctx);
+    const [s] = await upcoming(ctx);
+    for (const n of ALL.slice(0, 10)) await phones[n].call('POST', `/api/sessions/${s.id}/join`, {});
+    expect((await phones[ALL[10]].call('POST', `/api/sessions/${s.id}/join`, {})).data.result).toBe('waitlisted');
+    const settings = (await dashboard(ctx)).group.settings;
+    expect((await ctx.organizer.call('PUT', '/api/admin/group', { settings: { ...settings, maxPlayers: 12 } }, ON)).status).toBe(200);
+    expect((await game(ctx, s.id)).roster.find((r: any) => r.name === ALL[10]).status).toBe('confirmed');
   });
 
   it('Settings row on: 11 and 12 join as normal players (credit on like anyone), the 13th gets the plain refusal, never a waitlist', async () => {
@@ -256,10 +283,18 @@ describe('switch ON: no cap, no waitlist', () => {
     const v = (await phones[ALL[10]].call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id);
     expect(v.mine).toMatchObject({ status: 'confirmed', promotion: null });
     expect(v.mine.oweCents).toBe(1400);
-    // The one who could not fit (13th) reads as not in yet: no waitlist anywhere on their screen; I'm in is refused plainly.
+    // Review B: the one who could not fit (13th) comes off the list (no hidden waitlist left behind), and is not moved in later by a drop.
+    expect(g.roster.find((r: any) => r.name === ALL[12]).status).toBe('withdrawn');
     const thirteenth = (await phones[ALL[12]].call('GET', '/api/group')).data.sessions.find((x: any) => x.id === s.id);
-    expect(thirteenth.mine).toBeNull();
     expect(thirteenth.waitlist).toEqual([]);
+    expect(thirteenth.mine?.status ?? 'none').not.toBe('waitlisted');
+    expect((await phones.Alex.call('POST', `/api/sessions/${s.id}/withdraw`, {})).status).toBe(200);
+    const g2 = await game(ctx, s.id);
+    expect(g2.roster.find((r: any) => r.name === ALL[12]).status).toBe('withdrawn');
+    expect(g2.roster.filter((r: any) => r.status === 'confirmed')).toHaveLength(11);
+    // A spot is open now: the 13th can tap I'm in like anyone.
+    expect((await phones[ALL[12]].call('POST', `/api/sessions/${s.id}/join`, {})).data.result).toBe('confirmed');
+    expect(ctx.app.db.raw.prepare("SELECT COUNT(*) AS n FROM session_players WHERE status = 'waitlisted'").get()).toMatchObject({ n: 0 });
     expect((await game(ctx, s2.id)).roster.filter((r: any) => r.status === 'confirmed')).toHaveLength(5);
     // Switching it off again moves nobody back.
     const off = await ctx.organizer.call('PUT', '/api/admin/card-cleanup-switch', { on: false });

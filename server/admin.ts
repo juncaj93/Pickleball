@@ -1581,8 +1581,9 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     zelleRaw = z ?? '';
   }
   const storedSettings = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
-  // The room before this save: with "Card cleanup" on (Zip 10) that is already the database's 12, so a new Max players moves nobody.
-  const oldMax = capOf(settingsOf(group));
+  // The room before this save, from the saved setting (a "Card cleanup" test link on this phone must not change that). With the switch on
+  // for everyone nobody is waiting, so a move-in below finds nobody.
+  const oldMax = settingsOf(group).maxPlayers;
   await ctx.db
     .prepare(
       `UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ?,
@@ -2277,7 +2278,13 @@ async function endWaitlists(ctx: Ctx, group: GroupRow): Promise<number> {
     .bind(group.id, ctx.nowIso)
     .all<SessionRow>();
   let moved = 0;
-  for (const s of open) moved += (await settle(ctx.db, s, ctx.nowIso, settings)).length;
+  for (const s of open) {
+    moved += (await settle(ctx.db, s, ctx.nowIso, settings)).length;
+    // Still waiting = the game already holds 12 (the database's limit). There is no waitlist anymore, so they come off it (their
+    // money, if any, comes back the way a drop does); they can tap I'm in again if a spot opens.
+    const { results: left } = await ctx.db.prepare("SELECT player_id FROM session_players WHERE session_id = ? AND status = 'waitlisted'").bind(s.id).all<{ player_id: string }>();
+    for (const r of left) await withdraw(ctx.db, { ...group, card_cleanup: true }, s, r.player_id, ctx.nowMs);
+  }
   return moved;
 }
 

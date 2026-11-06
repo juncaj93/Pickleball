@@ -108,7 +108,7 @@ export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
       throw new HttpError(403, 'view_only', VIEW_ONLY_MESSAGE);
     }
   }
-  return withCardCleanup(ctx, await withShortGames(ctx, group as GroupRow, true));
+  return withCardCleanup(ctx, await withShortGames(ctx, group as GroupRow, true), true);
 }
 
 export async function adminLogout(ctx: Ctx) {

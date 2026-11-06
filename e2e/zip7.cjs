@@ -501,7 +501,7 @@ async function main() {
   });
 
   // =============================================================== C. SIMPLER PLAYER CARDS
-  const wordsOnCards = (page) => page.evaluate(() => [...document.querySelectorAll('.schedule > .sched')].map((r) => ({ id: r.id, text: [...r.querySelectorAll('*')].filter((e) => !e.closest('button, [aria-hidden="true"], .sr-only')).map((e) => (e.children.length === 0 ? e.textContent : '')).join(' ').replace(/\s+/g, ' ').trim(), mine: r.dataset.mine === 'in', cal: r.querySelectorAll('.cal-icon-link, [data-card-calendar]').length, join: r.querySelectorAll('[data-join]').length, dot: r.querySelectorAll('.court-dot').length, head: r.querySelectorAll('.sched-head').length })));
+  const wordsOnCards = (page) => page.evaluate(() => [...document.querySelectorAll('.schedule > .sched')].map((r) => ({ id: r.id, text: [...r.querySelectorAll('*')].filter((e) => !e.closest('button, [aria-hidden="true"], .sr-only')).map((e) => (e.children.length === 0 ? e.textContent : '')).join(' ').replace(/\s+/g, ' ').trim(), mine: r.dataset.mine === 'in', cal: r.querySelectorAll('.cal-icon-link, [data-card-calendar]').length, join: r.querySelectorAll('[data-join]').length, dot: r.querySelectorAll('.court-dot').length, head: r.querySelectorAll('.sched-head').length, balls: r.querySelectorAll('.cl-balls').length })));
   for (const scheme of ['light', 'dark']) {
     await check(`C: no "Court booked / not booked" words or dot on any card; calendar icon only next to You're in (${scheme})`, async () => {
       for (const who of ['Jordan', 'Avery', 'Casey', 'Gray']) {
@@ -516,7 +516,8 @@ async function main() {
           assert(r.cal === (r.mine ? 1 : 0), `${who} ${r.id}: calendar icon ${r.cal} for mine=${r.mine}`);
         }
         const notIn = rows.filter((r) => !r.mine && r.join > 0);
-        for (const r of notIn) assert(r.head === 0 && /of 4 in|\d+ in/.test(r.text), `${who} ${r.id}: not-in card is just the count and I'm in («${r.text}»)`);
+        // Zip 10 "Card cleanup" (on in the fake world): the circles alone stand for the count.
+        for (const r of notIn) assert(r.head === 0 && (r.balls > 0 || /of 4 in|\d+ in/.test(r.text)), `${who} ${r.id}: not-in card is just the count and I'm in («${r.text}»)`);
         if (who === 'Casey' && scheme === 'light') await shot(p.page, 'cards-casey');
         if (who === 'Jordan') await shot(p.page, `cards-jordan-${scheme}`);
         await p.ctx.close();
@@ -535,6 +536,15 @@ async function main() {
   await check('C: game notes and the Court number pill stay; ONE small "On the waitlist" label only for the player on the list', async () => {
     const g = byNote(d0, 'Mixed payments');
     const full = d0.sessions.find((s) => s.confirmedCount >= 10 && s.waitlistCount === 1);
+    if (d0.cardCleanupForAll) {
+      // Zip 10 "Card cleanup" is on in the fake world: there is no waitlist at all (the seed moved Gray in), so no label anywhere.
+      const p = await openPlayer('Gray', { query: 'playercards=on&homecollapse=on' });
+      assert((await p.page.locator(`#row-${g.id} .game-note`).innerText()).trim() === 'Mixed payments', 'the admin note is kept');
+      assert((await p.page.locator('.on-waitlist').count()) === 0, 'no waitlist label with Card cleanup on');
+      assert(!/in line|if someone drops|Standby|Waitlist:|On the waitlist/i.test(await p.page.locator('.schedule').innerText()), 'no waitlist words');
+      await p.ctx.close();
+      return;
+    }
     const p = await openPlayer('Gray', { query: `playercards=on&homecollapse=on&s=${full.id}` });
     assert((await p.page.locator(`#row-${g.id} .game-note`).innerText()).trim() === 'Mixed payments', 'the admin note is kept');
     const row = p.page.locator(`#row-${full.id}`);

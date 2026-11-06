@@ -96,6 +96,7 @@ import { afterTap, watchTap } from './alerts';
 import { changeStamp } from './stamp';
 import { hiddenFromPlayers } from './hideGame';
 import { cardTimeFor } from './zip9';
+import { cardCleanupLook } from './zip10';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -282,7 +283,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...(group.short_games === true ? { shortGames: true } : {}),
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
     // Zip 10. "Card cleanup" for this screen is what requireGroupKey put on the group (the same answer every join on it used).
-    ...(group.card_cleanup === true ? { cardCleanup: true } : {}),
+    // A player's phone with the private link gets the look only (cardCleanupLook); seats follow the group row's answer.
+    ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,

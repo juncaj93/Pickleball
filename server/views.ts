@@ -90,7 +90,8 @@ export function playerSessionView(
   const feeCents = flatOf(session, settings);
   const lateWindow =
     lateFees && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
-  const dropOwes = lateWindow && dropLeavesShort(confirmed.length, waitlist.length);
+  // The real waitlist (also when hidden), the same count the server's late-drop rule uses.
+  const dropOwes = lateWindow && dropLeavesShort(confirmed.length, waitlistOf(roster).length);
   const openFee = mine ? lateFeeKind(mine, session, isOrganizer) : null;
   const ownRow: PlayerSessionView['mine'] = mine
     ? {

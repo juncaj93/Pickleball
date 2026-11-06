@@ -1805,7 +1805,8 @@ function useTileCenter(ref: { current: HTMLElement | null }, on: boolean) {
     if (!on || !el) return undefined;
     const tile = el.querySelector<HTMLElement>('.sched-tilecol .tile-wrap');
     if (!tile) return undefined;
-    const set = () => el.style.setProperty('--cl-tile-h', `${tile.getBoundingClientRect().height}px`);
+    // offsetHeight: the laid-out height, never a size caught in the middle of an entry animation (a transform).
+    const set = () => el.style.setProperty('--cl-tile-h', `${tile.offsetHeight}px`);
     set();
     if (typeof ResizeObserver === 'undefined') return () => el.style.removeProperty('--cl-tile-h');
     const ro = new ResizeObserver(set);

@@ -5,6 +5,7 @@ import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, loc
 import { useRef, useState } from 'react';
 import { api, ApiError, useNow } from '../../lib';
 import { CourtReserveLink, PlayersLine, useToast } from '../../ui';
+import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
@@ -47,7 +48,8 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
       // Joining: the last spot after everyone, or the waitlist when the game is full.
       // "Card cleanup" (Zip 10): no cap and no waitlist, so the organizer is always drawn in.
       if (ctx.d.cardCleanup !== true && confirmedNames.length >= ctx.d.group.settings.maxPlayers) waitNames = [...waitNames, ctx.d.me.name];
-      else confirmedNames = [...confirmedNames, ctx.d.me.name];
+      // At the database's 12 the server says no: nothing is drawn ahead of that answer.
+      else if (ctx.d.cardCleanup !== true || confirmedNames.length < MAX_PLAYERS_LIMIT) confirmedNames = [...confirmedNames, ctx.d.me.name];
     } else if (!seat && mineRow) {
       confirmedNames = s.roster.filter((r) => r.status === 'confirmed' && r.playerId !== meId).map((r) => r.name);
       waitNames = s.roster.filter((r) => r.status === 'waitlisted' && r.playerId !== meId).map((r) => r.name);
