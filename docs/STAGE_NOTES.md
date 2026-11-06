@@ -2530,13 +2530,13 @@ production, nothing switched on, no live data changed. Only reads of the live da
   hash blanked (fresh reviewer: a 6-digit PIN can be guessed from its hash offline).
 - Screens: a small "View only" label next to the title (`src/view-only.css`, light and dark, 4.5:1). Refused saves show the calm note, never a red error
   (Settings switches snap back). The dashboard answer gains `viewOnly: true` only for that sign-in; for the real PIN it is unchanged.
-- The secret is NOT set yet: storing a Cloudflare secret needs Alex's OK (see the report).
+- Secret set Fri Nov 6 (Alex's OK) on the Pages project, production and preview (8 digits, given to Alex only; not in git). Checked on the preview: sign-in 200, `viewOnly: true`, a save 403, backup PIN hash blank. Live starts using it with the Zip 8 deploy.
 ### B. Date-proof tests
 - `e2e/fixed-clock.cjs` pins the server clock and every page's clock. admin-cleanup, admin-motion, texts-r2, player-fix1, circles, money-visible, good-news,
   audit-player-flows, admin-audit, motion, layout-polish, popup, pay-always (and pay-sheet through layout-lib) all start from a fixed moment. Before, on Fri Nov 6 08:21 to 08:54 AM:
   circles 10/8, money-visible 2/10, good-news 8/1, audit-player-flows 85/8, layout-polish 195/5, popup crashed after 11, admin-motion 27/1, admin-audit 10/1.
-  After: all pass, except admin-audit check 15, left failing on purpose: a real layout bug (the X on a dismissible "Need players" card overlaps a long date
-  line at 320 px, `.sg-when` lacks the right padding `.sg-head` has, `src/suggestions.css`). Not fixed (visible change, needs its own switch or Alex's OK).
+  After: all pass. admin-audit check 15 found a real layout bug (the X on a dismissible "Need players" card overlapped a long date line at 320 px): fixed
+  on Alex's OK (Nov 6) without a switch, CSS only, `.dismissible > .sg-when` gets the same right room as the line above (`src/do-now.css`); 11/11 now.
 - `tests/held-drop-fuzz.test.ts` seed 136: the test's I'm in did not wait for a drop already on its way (the real screen does). Fixed in the test; seed 136
   8 of 8 under a slowed hash, all 2,000 seeds clean.
 ### C. Finalize reminder at 10:30 PM
@@ -2553,7 +2553,8 @@ production, nothing switched on, no live data changed. Only reads of the live da
 - With the switch on: "5 in so far. Is everyone still in? Anyone else in?" and "3 in. We need 1 more or tomorrow's game is canceled to avoid fees. Want in? Join
   tonight." (`shared/lastCall.ts`). Settings row "Last call texts", `/admin?lastcall=on`, kill switch in `wrangler.toml`, Activity lines, `docs/FEATURE_SWITCHES.md`.
 ### F. Cleanup
-- Nothing deleted yet: deleting branches and Pages deployments needs Alex's OK (blocked in this session). Candidates listed in the report.
+- On Alex's OK (Nov 6): deleted the 47 old preview deployments (Zips 1 to 7; kept the 90 production deployments and preview-zip8). The 22 merged
+  branches could not be deleted from this session (its GitHub access only pushes its own branch); Alex deletes them on GitHub. Nothing else touched.
 ### G. Weekly backup
 - New private D1 database `pickleball-backups` (id a532f080-7535-4d4d-8067-62ab6af928e4, free). The clock Worker (`worker/backup.ts`, `worker/cron.ts`) looks once
   an hour, after its knock, and on Sunday from 3:00 AM Eastern (or when the newest copy is over 8 days old) saves the same file Settings > Backup gives, in pieces,
