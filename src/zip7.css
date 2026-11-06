@@ -181,6 +181,13 @@
     background-position: -30% 0;
   }
 }
+/* Organizer screens only (Zip 8, Alex): no white edge around tonight's tile. The tile's fill no longer shows through its see-through border,
+   and the pulsing pale ring is replaced by one still, soft green glow. The green banner strip stays. Player screens keep the pulse. */
+:root[data-tonight-glow] .admin-page .tile.day-tonight {
+  background-clip: padding-box;
+  animation: none;
+  box-shadow: 0 0 10px 1px rgb(var(--z7-glow) / 38%);
+}
 /* Reduce Motion: everything holds still (the bands and colors stay). */
 @media (prefers-reduced-motion: reduce) {
   :root[data-tonight-glow] .tile.day-tonight,
