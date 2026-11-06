@@ -5,6 +5,7 @@ import { countText } from '../../../shared/spots';
 import { cardTime, formatShortDate } from '../../../shared/time';
 import { tsKind, tsTime } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
+import { adminTileDay } from '../../zip7';
 import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
 import { menuJustDismissed } from './menuDismiss';
@@ -161,7 +162,7 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
         }}
         onKeyDown={key}
       >
-        <DateTile iso={s.startsAt} tz={tz} />
+        <DateTile iso={s.startsAt} tz={tz} day={adminTileDay(ctx.d, s)} />
         <div className="hv2-main">
           <div className="hv2-count">
             <strong>{canceled ? 'Canceled' : `${countText(names.length, ctx.d.group.settings.maxPlayers)} · ${start}`}</strong>

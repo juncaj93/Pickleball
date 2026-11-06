@@ -8,6 +8,7 @@ import { CourtReserveLink, PlayersLine, useToast } from '../../ui';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
+import { adminTileDay } from '../../zip7';
 import type { AdminCtx } from '../Admin';
 import { courtLine, ShortPanel, TimeCheck, useAction } from './Sessions';
 import { CourtSwitch } from './CourtSwitch';
@@ -77,7 +78,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
       >
         <div className="r2-top">
           <div className="scard-tilecol">
-            <DateTile iso={s.startsAt} tz={tz} ts={tsClass(ts, flip)} />
+            <DateTile iso={s.startsAt} tz={tz} ts={tsClass(ts, flip)} day={adminTileDay(ctx.d, s)} />
             <div className={`scard-time${tsClass(ts, flip)}${timeFade ? ' m-time-fade' : ''}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
               {tsTime(start, ts)}
             </div>

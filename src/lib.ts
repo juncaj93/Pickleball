@@ -174,6 +174,10 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (venmoRequestTest()) headers['X-Venmo-Request'] = 'on';
   // "Home collapse", private test switch for this phone (/?homecollapse=on, see server/homeCollapse.ts).
   if (homeCollapseTest()) headers['X-Home-Collapse'] = 'on';
+  // Zip 7 private test switches for this phone (?tonightglow=on, ?colorcleanup=on, ?playercards=on, see server/zip7.ts).
+  if (zip7Test('tonightglow')) headers['X-Tonight-Glow'] = 'on';
+  if (zip7Test('colorcleanup')) headers['X-Color-Cleanup'] = 'on';
+  if (zip7Test('playercards')) headers['X-Player-Cards'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -649,6 +653,21 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('homecollapse');
   if (want === 'on') storageSet(HOME_COLLAPSE_KEY, 'on');
   else if (want === 'off') storageRemove(HOME_COLLAPSE_KEY);
+}
+
+/**
+ * Zip 7 switches on this phone only, before they are on for everyone: open the site once with ?tonightglow=on, ?colorcleanup=on or
+ * ?playercards=on (the same word with =off turns it back off). Remembered in this browser; look and feel only.
+ */
+export function zip7Test(name: 'tonightglow' | 'colorcleanup' | 'playercards'): boolean {
+  return storageGet(`pb_${name}`) === 'on';
+}
+if (typeof window !== 'undefined') {
+  for (const name of ['tonightglow', 'colorcleanup', 'playercards']) {
+    const want = new URLSearchParams(window.location.search).get(name);
+    if (want === 'on') storageSet(`pb_${name}`, 'on');
+    else if (want === 'off') storageRemove(`pb_${name}`);
+  }
 }
 
 /**

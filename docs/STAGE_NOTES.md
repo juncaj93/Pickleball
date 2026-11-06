@@ -2368,3 +2368,39 @@ pay card) was never shown the note: Home now shows "Credit adjusted by organizer
 (3) the Adjust sheet kept using the old balance after a "Their credit just changed" answer: it now follows the screen and reloads. Accepted and said: the 320 px
 wrapping fixes for "$28 owed" and the same-day time on a Money card apply with the switches off too (CSS only, narrow phones only); the player change-stamp gained
 two always-present segments (`motion`, `hc`), so every open player screen reloads once after the deploy.
+
+## Deploy IDs for Zips 4, 5 and 6 (added with Zip 7, Thu Nov 5, 2026)
+- **Zip 4: Money page rework (`MONEY_REWORK`).** PR #83, main `13cdd3b`, deployed Thu Nov 5, about 7:05 AM ET, deployment `206e5b1f-55d2-4fdf-a2b8-06e4cab861dc`, rollback (the build live before it, 4014f51) `49be2ad5-94a9-4294-a9f8-2e830e37403d`, Time Travel bookmark `000007db-00000000-0000511a-54554262ab42b933845dbb63bb4505a4` (7:03 AM ET). Switched on by Alex later that day.
+- **Zip 5: Instant taps (`INSTANT_TAPS`) and the Money rule.** PR #85, main `811c5c7` (merged Thu Nov 5, 12:06 PM ET). Deployment ID: probably `6fde6dc0-d40f-438b-a7db-a19889cc571d` (unconfirmed; it is the deployment Zip 6 lists as its rollback, so the build live right before Zip 6). Rollback ID and Time Travel bookmark of this deploy: not recorded. Instant taps and the Money rule are live.
+- **Zip 6: Adjust credit, Venmo request, Home collapse (all ship OFF).** PR #86, main `54dcdc6`, deployed Thu Nov 5, 5:39 PM ET, deployment `5f82c960-8c32-4049-8292-70a342b42f7a`, rollback `6fde6dc0-d40f-438b-a7db-a19889cc571d`, Time Travel bookmark `00000865-00000000-0000511a-5bf9637083cdc4ea5dad74063de3ddb7`.
+
+## Zip 7: Tonight glow, Color cleanup, Simpler player cards (built Thu Nov 5, 2026) - ships with all three switches OFF (on a preview, waiting for "ship it")
+
+Spec: the "zip 7" brief (`START_HERE.md`, `SITE_RULES.md`, three layout mockups). One PR. NO database change, no migration. Built on a game day (loud hours): nothing deployed,
+nothing switched on, no live database touched. The full description of each switch is its row in `docs/FEATURE_SWITCHES.md`.
+
+### What changed
+- **Plumbing (items 1 to 18 ship OFF).** `TONIGHT_GLOW`, `COLOR_CLEANUP`, `PLAYER_CARDS_SIMPLE`: `shared/zip7.ts` (headers, kill-switch rule, `tileDay`), `server/zip7.ts` (the `task_log` rows, one per switch), three
+  `PUT /api/admin/*-switch` routes, flags on the player view and the organizer dashboard, three Settings > Feature switches rows ("Tonight glow", "Color cleanup", "Simpler player cards", titles on one line), private links
+  `?tonightglow=on`, `?colorcleanup=on`, `?playercards=on` (also on `/admin`), `wrangler.toml` kill switches (allowed; ON in `[env.preview.vars]`), Activity log lines, and a stamp piece that exists only while a switch is on.
+  The page sets `<html data-tonight-glow | data-color-cleanup | data-player-cards>` (`src/zip7.ts`); every rule in `src/zip7.css` (imported last) sits under one of them.
+- **A. Tonight glow.** Big date tiles only (player cards in every tier, organizer Home cards in all three layouts; Money list tiles keep the weekday). TONIGHT = a solid green BANNER across the top of the tile, flush with the tile's top edge and corners, replacing the weekday (light #1f6b45 / white, dark #4cc58a / #0d2a1b),
+  with a slow pulse and a light sweep on the tile only (Alex, after the preview: it must be a banner, not a floating pill); TOMORROW = the same banner in soft green (9 px type; a tile too narrow for the word, which is about 58 px, says TOM: every organizer tile, the LATER row tile, and a tile of 80 px or less with the check badge; the word is always centered across the full strip and the badge sits mostly outside the tile, on top of the strip end) (light #dff0e6 / #1f6b45, dark #1c3a2a / #8be0b3), no motion. Open games only. "Tonight" and "tomorrow" are Eastern calendar dates
+  (`playerDay`, DST safe). Reduce Motion: no animation (the band stays, the glow becomes a still soft ring). No Christmas decoration.
+- **B. Color cleanup.** Tokens in one place (`--z7-*`, same values as the Money tokens). Waitlist gray (selected pill, hv2 pill, card border, banner, dot), Extra game gray outline (holiday purple tokens gray too),
+  Canceled pill on a player card neutral GRAY with the row and its date tile dimmed to about 58 percent (Alex's option A), every `sms:` button and the gear Text button purple, credit blue on the header label and the "Credit $3 used" chip. Links stay blue. Cancel sheet: blurb removed, long line shortened.
+- **C. Simpler player cards.** See the switch row. The status line of a card that is not yours is gone, so the count row leads.
+- **D. Home collapse "Show fewer" (no switch).** `src/pages/PlayerHome.tsx`: a shared link to a later game held the list open, so Show fewer did nothing. A `laterFolded` flag lets Show fewer win (reset by "More sessions"
+  and by the Can't-make-it jump). Only reachable with `HOME_COLLAPSE` on; with it off nothing changes. Item 20 is the section above.
+- **Preview seed.** `scripts/seed-preview-world.ts` always leaves a game tonight and a game tomorrow (Eastern); the three switch rows are in `PREVIEW_SWITCHES_ON`.
+
+### Cancel sheet wording (for Alex to OK; only with COLOR_CLEANUP on)
+- Removed: "Players will see it as canceled, and reminders and payments stop for it."
+- Old: "Yes: the fee is kept, and everyone signed up still owes their $14 (late drops too)." (with the fee split: "Yes: the fee is kept. 6 are in, so everyone signed up owes $9 (anything paid above that comes back as credit). Late drops still owe $14.")
+- New: "Yes: the fee is kept. Everyone signed up owes $14." (with the fee split: "Yes: the fee is kept. Everyone signed up owes $9.")
+- The older Money layouts' "No: the fee is kept..." lines (MONEY_REWORK off) are not changed.
+
+### Tests
+- Unit: `tests/zip7.test.ts` (tonight/tomorrow in Eastern time: midnight, UTC rollover, both DST changes, month and year ends; the three switches: header, Settings row, kill switch, stamp, log line, same-games-either-way; color tokens, contrast 4.5:1, every CSS rule under an `<html>` attribute). Seed test follows the new rows.
+- Browser: `e2e/zip7.cjs` (pinned clock, so not today's real date: tiles and glow, Reduce Motion, 390/360/320 px light and dark, organizer Home, Waitlist and Extra gray, red Canceled pill before and after, purple Text, blue credit, Cancel sheet wording, card words, calendar icon, instant I'm in with a slow server, waitlist label, Show fewer, Settings rows)
+  and `e2e/zip7-off.cjs` (today's main and this branch side by side with all three OFF: every screen identical apart from the three new Settings rows; needs `MAIN_DIR`, not in `npm run test:e2e`).

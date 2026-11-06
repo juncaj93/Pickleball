@@ -71,7 +71,7 @@ The three old extra games only exist when the two latest played games are about 
 A preview behaves like live: the Settings > Feature switches rows that are ON for everyone on live are ON right after a seed, plus
 the switch being built, with no `?something=on` link. The list is `PREVIEW_SWITCHES_ON` in `scripts/seed-preview-world.ts`
 (Nov 4, as on live: New admin layout, Admin screens round 2 and 3, Ask for payment on every game, No Venmo? note, Moved-game notice,
-Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); plus Instant taps (built Thu Nov 5, not yet live) and the three being built, Adjust credit, Venmo request and Home collapse (Zip 6)). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
+Late drops owe $14, Player screen fixes, Pay sheet, Texts and alerts round 2, and Late-cancel fee split (switched on live Wed Nov 4); Money page rework (switched on live Thu Nov 5, about 9:00 AM); Instant taps, Adjust credit, Venmo request and Home collapse (live, Settings rows off, Zips 5 and 6), plus the three being built (Zip 7): Tonight glow, Color cleanup and Simpler player cards). A game TONIGHT and a game TOMORROW (Eastern) always exist after a re-seed: the regular Tue/Thu game when there is one, else an extra game "Tonight test" (Booked, 3 in) or "Tomorrow test" (not booked, 2 in). The wrangler.toml switches are already "on" in `[env.preview.vars]`.
 When Alex switches another row on (or off) on live, change that list too.
 
 ## Use it

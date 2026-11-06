@@ -72,6 +72,12 @@ export interface Env {
   ADJUST_CREDIT?: string;
   /** "Home collapse" (player Home shows only this week and next week; later games behind one "More sessions" button): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /?homecollapse=on (server/homeCollapse.ts). A wrangler.toml var. */
   HOME_COLLAPSE?: string;
+  /** "Tonight glow" (TONIGHT / TOMORROW tags on date tiles, a green glow on tonight's badge): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?tonightglow=on (server/zip7.ts). A wrangler.toml var. */
+  TONIGHT_GLOW?: string;
+  /** "Color cleanup" (one color system for the whole site): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?colorcleanup=on (server/zip7.ts). A wrangler.toml var. */
+  COLOR_CLEANUP?: string;
+  /** "Simpler player cards" (no court status words or dot, calendar icon only next to You're in): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?playercards=on (server/zip7.ts). A wrangler.toml var. */
+  PLAYER_CARDS_SIMPLE?: string;
   /** "Venmo request" (a Venmo request link per person who owes, organizer screens): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?venmorequest=on (server/venmoRequest.ts). A wrangler.toml var. */
   VENMO_REQUEST?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */

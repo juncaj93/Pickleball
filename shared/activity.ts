@@ -180,6 +180,18 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Home collapse" on`;
     case 'home_collapse_off':
       return `${who} switched "Home collapse" off`;
+    case 'tonight_glow_on':
+      return `${who} switched "Tonight glow" on`;
+    case 'tonight_glow_off':
+      return `${who} switched "Tonight glow" off`;
+    case 'color_cleanup_on':
+      return `${who} switched "Color cleanup" on`;
+    case 'color_cleanup_off':
+      return `${who} switched "Color cleanup" off`;
+    case 'player_cards_on':
+      return `${who} switched "Simpler player cards" on`;
+    case 'player_cards_off':
+      return `${who} switched "Simpler player cards" off`;
     case 'venmo_request_on':
       return `${who} switched "Venmo request" on`;
     case 'venmo_request_off':

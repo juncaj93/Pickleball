@@ -11,6 +11,7 @@ import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
+import { useZip7Root } from '../zip7';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
@@ -149,6 +150,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   // Motion (the MOTION_ADMIN switch). Visual only; with it off none of this does anything. The player demo (View as)
   // looks after its own motion, so the organizer's steps back while it is showing.
   useAdminMotion(d.motion === true, !viewing);
+  useZip7Root(d, !viewing);
   const motion = useMotion();
   useSwitchStretch(motion);
   useDetailsEase(motion);

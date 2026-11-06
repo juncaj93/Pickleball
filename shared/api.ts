@@ -149,6 +149,12 @@ export interface GroupView {
   instantTaps?: boolean;
   /** "Home collapse" is on for this screen (server/homeCollapse.ts): Home shows this week and next week, later games behind one button. Missing: Home is exactly as before. */
   homeCollapse?: boolean;
+  /** "Tonight glow" is on for this screen (server/zip7.ts): TONIGHT / TOMORROW tags and the badge glow. Missing: tiles are exactly as before. */
+  tonightGlow?: boolean;
+  /** "Color cleanup" is on for this screen (server/zip7.ts): the one color system. Missing: colors are exactly as before. */
+  colorCleanup?: boolean;
+  /** "Simpler player cards" is on for this screen (server/zip7.ts): no court status words or dot on player cards. Missing: cards are exactly as before. */
+  playerCardsSimple?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -453,6 +459,15 @@ export interface AdminDashboard {
   adjustCreditForAll?: boolean;
   /** Settings > Feature switches > "Home collapse" is on (for everyone). */
   homeCollapseForAll?: boolean;
+  /** "Tonight glow" is on for this screen / Settings > Feature switches > "Tonight glow" is on (for everyone). */
+  tonightGlow?: boolean;
+  tonightGlowForAll?: boolean;
+  /** "Color cleanup" is on for this screen / Settings row is on (for everyone). */
+  colorCleanup?: boolean;
+  colorCleanupForAll?: boolean;
+  /** "Simpler player cards" is on for this screen / Settings row is on (for everyone). */
+  playerCardsSimple?: boolean;
+  playerCardsSimpleForAll?: boolean;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */
