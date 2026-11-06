@@ -2649,3 +2649,18 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
 - Follow-up PR (before the deploy): the full unit run on merged main caught `tests/zip7.test.ts` "every rule is under an <html> attribute": the
   `:is(.ts-booked, .ts-none)` selectors read as an unguarded rule after the comma. Each selector is now written out in full (same result). Unit
   2258 passed, zip9 15/15, zip7 33/33, tile height and text position identical to live.
+### Deploy (Fri Nov 6, 2026, 3:48 PM Eastern, quiet window, on Alex's "ship it") - BOTH SWITCHES OFF
+- PR #90 merged as `0742995`, follow-up PR #91 merged as `624c60f` (same tree as the tested commit `ee2c455`). Production deployment
+  `9c94c864-11cd-4471-a004-f4eeddefb1e3` from main `624c60f`, with `SHORT_GAMES` and `CARD_TIME_BUTTONS` allowed in `wrangler.toml` and both
+  Settings rows OFF (no `short_games_on` or `card_time_buttons_on` row in `task_log`). No migration, no data change. Alex switches them on himself.
+- Before it: main equaled live (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = `1cf0784`). SQL export `live-before-zip9-2026-11-06.sql`
+  (154,766 bytes; not committed, has phone numbers, in that session's scratch folder), Time Travel bookmark
+  `00000986-00000000-0000511b-d7f84649a581f428d86d4119af43ac85` (3:47 PM Eastern). Integrity checks: all 21 columns 0 before and after, 0 rows written.
+- Tests on the merged tree: tsc clean, unit 2258 passed, 1 skipped, 0 failed (134 files), build clean; browser zip9 15/15, zip7 33/33.
+- Read-only live check (pickleball-club-9h0.pages.dev): `/`, `/admin`, `/api/status`, `/api/group/version` 200; `/api/admin/dashboard` 401
+  without a sign-in; read-only sign-in 200 with `viewOnly: true`; `shortGamesForAll` and `cardTimeButtonsForAll` false, no game carries
+  `shortGame` (no 1.5 hour game exists on live); the 22 switches Alex has on are still on; a save from it answered 403 "View only. Nothing was
+  saved."; Money page 200; the live script is the local build's file (index-BD4yFmVp.js) and holds the two new rows. Players 11, games 11 listed.
+- Rollback: Settings > Feature switches, the two rows (they ship off; no deploy); `SHORT_GAMES` / `CARD_TIME_BUTTONS` = "off" and a deploy; or
+  Pages deployment `5c4935b1-98d0-471a-8de6-9d91881e6dec` (Zip 8, `1cf0784`), which also undoes the organizer TONIGHT/TOM tile fix (not
+  behind a switch). No data was changed by the deploy, so no restore is needed.
