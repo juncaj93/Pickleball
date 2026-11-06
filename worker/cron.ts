@@ -1,15 +1,24 @@
 // The smart-alert clock: a tiny Cloudflare Worker with one cron trigger
 // (every 5 minutes). It only knocks on the site's /api/cron/tick with a
 // shared secret; the site works out what is due and sends it with its own
-// Telegram secrets (server/tasks.ts). It has no public address, reads no
-// data and holds no Telegram token. If a knock fails, the next one, 5
+// Telegram secrets (server/tasks.ts). It has no public address, sends no
+// messages and holds no Telegram token. If a knock fails, the next one, 5
 // minutes later, catches up (alerts are sent up to an hour late, never twice).
+// Once an hour it also looks whether the weekly backup copy is due (worker/backup.ts, Zip 8).
+
+import type { D1Database } from '../server/db';
+import { maybeWeeklyBackup } from './backup';
+import { viewOnlyDb } from '../server/viewOnly';
 
 interface Env {
   /** Where the site lives, e.g. https://pickleball-club-9h0.pages.dev */
   SITE_URL: string;
   /** The same value as the site's CRON_SECRET. */
   CRON_SECRET: string;
+  /** The live database, only READ, for the weekly backup copy (worker/backup.ts). Missing: no copies, the knock goes on as before. */
+  DB?: D1Database;
+  /** The private backup database `pickleball-backups` the weekly copy is saved in. */
+  BACKUP?: D1Database;
 }
 
 interface ScheduledCtx {
@@ -33,8 +42,22 @@ export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<nu
   }
 }
 
+/** The weekly copy, on its own: it never delays or stops the knock, and a failure is only a log line (retried within the hour). */
+export async function backupTick(env: Env, nowMs = Date.now()): Promise<void> {
+  // The live database is handed over wrapped so it can only be read: any write would quietly do nothing.
+  const r = await maybeWeeklyBackup(env.DB ? viewOnlyDb(env.DB) : undefined, env.BACKUP, nowMs);
+  if (r.made) console.log(`weekly backup ${r.week}: ${r.bytes} bytes in ${r.parts} parts, ${r.kept} kept`);
+  else if (r.reason.startsWith('failed')) console.log(`weekly backup ${r.reason}`);
+}
+
 export default {
   scheduled(_event: unknown, env: Env, ctx: ScheduledCtx) {
-    ctx.waitUntil(knock(env));
+    // The knock first and on its own; the weekly copy only starts once the knock has its answer, so it can never cut the knock short.
+    ctx.waitUntil(
+      knock(env)
+        .catch(() => 0)
+        .then(() => backupTick(env))
+        .catch(() => {}),
+    );
   },
 };

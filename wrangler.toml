@@ -114,6 +114,10 @@ COLOR_CLEANUP = "on"
 # label only for a player who is on a waitlist). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Simpler player cards" (off at ship =
 # nobody), plus a phone opened once with ?playercards=on. "off" = the kill switch. Display only. Needs a deploy.
 PLAYER_CARDS_SIMPLE = "on"
+# "Last call texts" (Zip 8, shared/lastCall.ts): the night-before Check-in and Need players words follow Alex's rules (still in? anyone else? / need X more
+# or the game is canceled to avoid fees). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Last call texts" (off at ship = nobody),
+# plus a phone opened once with /admin?lastcall=on. "off" = the kill switch. Words only. Needs a deploy.
+LAST_CALL_TEXTS = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -145,6 +149,7 @@ HOME_COLLAPSE = "on"
 TONIGHT_GLOW = "on"
 COLOR_CLEANUP = "on"
 PLAYER_CARDS_SIMPLE = "on"
+LAST_CALL_TEXTS = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

@@ -777,7 +777,8 @@ async function main() {
       const names = await tidy.locator('.set-name').evaluateAll((els) => els.map((e) => e.innerText.trim()));
       // Zip 6 (Nov 5) added Home collapse, Adjust credit and Venmo request on top; Instant taps and Money page rework sit right under them.
       // Zip 7 (Nov 5) added Tonight glow, Color cleanup and Simpler player cards above those.
-      assert(names.slice(0, 8).join('|') === 'Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 8)}`);
+      // Zip 8 (Nov 6) added Last call texts above those.
+      assert(names.slice(0, 9).join('|') === 'Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 9)}`);
       // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
@@ -788,7 +789,7 @@ async function main() {
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
       // This test server keeps the two animation switches dark, so those two rows sit above the group as well.
-      assert(names.length === 8 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the eight newest sit above the group): ${names.length} vs ${live.length}`);
+      assert(names.length === 9 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the nine newest sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {

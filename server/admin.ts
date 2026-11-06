@@ -1,3 +1,6 @@
+import { readOnlyPin, viewOnlyCookie } from './viewOnly';
+import { lastCallFor, lastCallForAll, setLastCallForAll } from './lastCall';
+import { backupObject } from './backupData';
 import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents, formatPrice } from '../shared/money';
@@ -184,6 +187,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .all<{ id: string; n: number }>();
   const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
   return {
+    // Signed in with the read-only PIN (server/viewOnly.ts): the screens show "View only". Absent for the real PIN, so its answer is unchanged.
+    ...(viewOnlyCookie(ctx) ? { viewOnly: true as const } : {}),
     group: {
       name: group.name,
       timezone: group.timezone,
@@ -273,6 +278,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     colorCleanupForAll: await colorCleanupForAll(ctx.db, group.id),
     ...((await playerCardsFor(ctx, group.id)) ? { playerCardsSimple: true } : {}),
     playerCardsSimpleForAll: await playerCardsForAll(ctx.db, group.id),
+    ...((await lastCallFor(ctx, group.id)) ? { lastCallTexts: true } : {}),
+    lastCallTextsForAll: await lastCallForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -1583,6 +1590,8 @@ export async function changePin(ctx: Ctx, body: Record<string, unknown>) {
     throw new HttpError(401, 'wrong_pin', 'Current PIN is not right.');
   }
   const next = v.pin(body.newPin, 'newPin');
+  // Never let the real PIN become the read-only one (that PIN is meant to be handed to helpers).
+  if (next === readOnlyPin(ctx.env)) throw new HttpError(400, 'invalid', 'Pick a different PIN.');
   await ctx.db.prepare('UPDATE groups SET admin_pin_hash = ? WHERE id = ?').bind(await hashPin(next), group.id).run();
   await revokeAdminSessions(ctx, group.id);
   await startAdminSession(ctx, group.id);
@@ -1659,23 +1668,8 @@ export async function exportData(ctx: Ctx): Promise<Response> {
   });
 }
 
-/**
- * Tables in a backup file, parents before children (the order a restore
- * puts them back in). Sign-in records, wrong-PIN counts and spam counters
- * are left out: they're short-lived, and a restore signs everyone out.
- */
-export const BACKUP_TABLES = [
-  'groups',
-  'players',
-  'sessions',
-  'session_players',
-  'credits',
-  'credit_ledger',
-  'refund_requests',
-  'session_action_tokens',
-  'player_devices',
-  'admin_audit_log',
-] as const;
+// The backup's tables live in server/backupData.ts (shared with the weekly copy, worker/backup.ts).
+export { BACKUP_TABLES } from './backupData';
 
 /**
  * GET /api/admin/backup: everything needed to rebuild the site's data, as
@@ -1684,14 +1678,13 @@ export const BACKUP_TABLES = [
  */
 export async function backupFile(ctx: Ctx): Promise<Response> {
   const group = await requireAdmin(ctx);
-  const tables: Record<string, Record<string, unknown>[]> = {};
-  for (const t of BACKUP_TABLES) {
-    const { results } = await ctx.db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all<Record<string, unknown>>();
-    tables[t] = results;
-  }
   const p = localParts(ctx.nowMs, group.timezone);
   const stamp = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
-  const body = JSON.stringify({ format: 'pickleball-backup', version: 1, createdAt: ctx.nowIso, groupName: group.name, tables }, null, 1);
+  const backup = await backupObject(ctx.db, group.name, ctx.nowIso);
+  // Read-only PIN (server/viewOnly.ts): never hand out the real PIN's hash or the group word's hash (a short PIN can be guessed
+  // from its hash offline). The file is otherwise the same, so View as still works; a restore needs the real PIN's own file.
+  if (viewOnlyCookie(ctx)) backup.tables.groups = backup.tables.groups.map((g) => ({ ...g, admin_pin_hash: '', group_word_hash: null }));
+  const body = JSON.stringify(backup, null, 1);
   return new Response(body, {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -2201,6 +2194,15 @@ export async function adjustPlayerCredit(ctx: Ctx, body: Record<string, unknown>
   if (!made.done) throw new HttpError(409, 'credit_changed', 'Their credit just changed. Look again.');
   await audit(ctx.db, group.id, null, 'credit_adjusted', { player: p.display_name, playerId, deltaCents: plan.deltaCents, balanceAfterCents: plan.afterCents, reason: note, ledgerId: made.id }, ctx.nowIso);
   return { ok: true, balanceCents: plan.afterCents, deltaCents: plan.deltaCents, text: `${p.display_name}: credit ${signedPrice(plan.deltaCents)}, ${formatPrice(plan.afterCents)} now` };
+}
+
+/** PUT /api/admin/last-call-switch { on }: Settings > Feature switches > "Last call texts". The words of two prefilled texts only. */
+export async function setLastCallSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setLastCallForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'last_call_texts_on' : 'last_call_texts_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }
 
 /** PUT /api/admin/home-collapse-switch { on }: Settings > Feature switches > "Home collapse". Player Home layout only; moves nothing. */

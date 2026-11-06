@@ -212,6 +212,8 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
       <TopBar
         eyebrow="Organizer"
         title={r2 ? 'Admin' : d.group.name}
+        // Signed in with the read-only PIN (server/viewOnly.ts): a small label, and every save is refused by the server.
+        titleExtra={d.viewOnly ? <span className="view-only-pill" data-view-only>View only</span> : undefined}
         action={
           r2 ? (
             // Round 2: View as… first, then the Light/Dark button, so the button sits right next to the calendar tile.

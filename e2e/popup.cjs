@@ -9,6 +9,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5198;
@@ -58,9 +59,12 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse('2026-11-02T09:00:00-05:00') }) });
+  // The server clock AND every browser page are pinned to this moment (pages used to read the real date), so nothing here depends on
+  // today's real date or hour.
+  const clock = fixedClock(BASE);
+  await clock.set(Date.parse('2026-11-02T09:00:00-05:00'));
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const api = await browser.newContext();
   const call = async (req, method, url, data) => {
     const res = await req.fetch(BASE + url, { method, data, headers: { Origin: BASE } });

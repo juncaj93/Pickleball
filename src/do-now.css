@@ -138,6 +138,8 @@
 }
 /* The top lines make room for the X (the card's own 14 to 16 px padding plus this clears 44 px). */
 .dismissible > .sg-head,
+/* The date line sits inside the X's 44 px too (Zip 8: "Sat, Nov 14 · 7:00 to 9:00 PM" ran under the X at 320 px). */
+.dismissible > .sg-when,
 .dismissible > .dn-eyebrow,
 .dismissible > .dn-text {
   padding-right: 32px;

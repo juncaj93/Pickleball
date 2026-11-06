@@ -355,7 +355,12 @@ async function main() {
     const { ctx, page } = await openAdmin({ url: '/admin?tonightglow=on' });
     assert((await page.locator(`#session-${game.tonight.id} .day-tag.tonight`).count()) === 1, 'admin TONIGHT');
     assert((await page.locator(`#session-${game.tomorrow.id} .day-tag.tomorrow`).count()) === 1, 'admin TOMORROW');
-    assert((await css(page.locator(`#session-${game.tonight.id} .tile`), 'animation-name')) === 'z7-pulse', 'admin badge glows');
+    // Zip 8 (Alex): on the organizer screens the badge keeps a still, soft green glow (no pulse, no white ring); player screens still pulse.
+    const adminTile = page.locator(`#session-${game.tonight.id} .tile`);
+    assert((await css(adminTile, 'animation-name')) === 'none', 'admin badge holds still');
+    const sh = await css(adminTile, 'box-shadow');
+    assert(/rgba\((47, 143, 91|76, 197, 138), 0\.38\) 0px 0px 10px 1px/.test(sh) && !/0px 0px 0px \d/.test(sh), `admin badge: one soft green glow, no ring (${sh})`);
+    assert((await css(adminTile, 'background-clip')) === 'padding-box', 'the fill does not show through the border');
     await shot(page, 'admin-tiles');
     await tab(page, 'Money');
     await page.waitForTimeout(500);

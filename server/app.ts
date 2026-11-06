@@ -13,6 +13,7 @@ import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 import * as alerts from './alerts';
 import * as tasks from './tasks';
 import { goText } from './go';
+import { isWrite, VIEW_ONLY_ALLOWED_WRITES, VIEW_ONLY_MESSAGE, viewOnlyCookie, viewOnlyDb } from './viewOnly';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>;
 
@@ -24,6 +25,14 @@ interface Route {
 }
 
 const routes: Route[] = [];
+
+/** Every route the API answers (method and path pattern), for tests that must cover each one, including routes added later. */
+export function routeList(): { method: string; path: string }[] {
+  return routes.map((r) => ({
+    method: r.method,
+    path: r.pattern.source.replace(/^\^/, '').replace(/\$$/, '').replace(/\(\[\^\/\]\+\)/g, ':param').replace(/\\\//g, '/'),
+  }));
+}
 
 function route(method: string, path: string, handler: Handler) {
   const keys: string[] = [];
@@ -127,6 +136,7 @@ route('PUT', '/api/admin/instant-taps', admin.setInstantTaps);
 route('PUT', '/api/admin/adjust-credit-switch', admin.setAdjustCreditSwitch);
 route('PUT', '/api/admin/venmo-request-switch', admin.setVenmoRequestSwitch);
 route('PUT', '/api/admin/home-collapse-switch', admin.setHomeCollapseSwitch);
+route('PUT', '/api/admin/last-call-switch', admin.setLastCallSwitch);
 route('PUT', '/api/admin/tonight-glow-switch', admin.setTonightGlowSwitch);
 route('PUT', '/api/admin/color-cleanup-switch', admin.setColorCleanupSwitch);
 route('PUT', '/api/admin/player-cards-switch', admin.setPlayerCardsSwitch);
@@ -158,6 +168,17 @@ export async function handleApi(req: Request, env: Env, nowMs = Date.now(), wait
       if (at === null) throw new HttpError(400, 'invalid_pretend', 'Pick a date and time.');
       const db = readOnly(env.DB);
       ctx = { ...makeCtx(req, { ...env, DB: db }, at, waitUntil), realNowIso: ctx.realNowIso };
+    }
+    // The read-only organizer PIN (server/viewOnly.ts): a phone signed in with it never writes. Every POST, PUT, PATCH and
+    // DELETE is refused here, before any route runs (sign in and sign out excepted), and its reads run on a database that
+    // cannot be written to, so upkeep inside a read (adding next weeks' games, alerts) does nothing either.
+    if (viewOnlyCookie(ctx)) {
+      if (isWrite(req.method)) {
+        if (!VIEW_ONLY_ALLOWED_WRITES.has(`${req.method} ${ctx.url.pathname}`)) throw new HttpError(403, 'view_only', VIEW_ONLY_MESSAGE);
+      } else {
+        const db = viewOnlyDb(ctx.db);
+        ctx = { ...ctx, env: { ...ctx.env, DB: db }, db };
+      }
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       // Cross-site form posts can't reach state-changing routes.

@@ -2,7 +2,7 @@ import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } 
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
-import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
+import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
 import { formatDateTime, formatShortDate, formatTime, localParts } from '../../../shared/time';
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
@@ -237,7 +237,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               if (ok) return void (confirmedAccess.current = next);
               setOpenAccess(confirmedAccess.current);
               auto.clear('openAccess');
-              toast("That didn't save. It's back to what it was.", 'error');
+              if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+              else toast("That didn't save. It's back to what it was.", 'error');
             });
           }}
         />
@@ -408,7 +409,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                       else if (latestDate.current === next) {
                         setFirstDate(confirmedDate.current);
                         auto.clear('firstSessionDate');
-                        toast("That didn't save. It's back to what it was.", 'error');
+                        if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+                        else toast("That didn't save. It's back to what it was.", 'error');
                       }
                     });
                 }}
@@ -461,7 +463,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -469,6 +471,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <LastCallRow ctx={ctx} auto={auto} />
               <TonightGlowRow ctx={ctx} auto={auto} />
               <ColorCleanupRow ctx={ctx} auto={auto} />
               <PlayerCardsRow ctx={ctx} auto={auto} />
@@ -592,7 +595,8 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       }
       setOn((cur) => ({ ...cur, [key]: confirmedAlerts.current[key] }));
       auto.clear(`alert-${key}`);
-      toast("That didn't save. The switch is back where it was.", 'error');
+      if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+      else toast("That didn't save. The switch is back where it was.", 'error');
     });
   }
 
@@ -795,7 +799,9 @@ function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, p
   const toast = useToast();
   // Instant taps (INSTANT_TAPS): every switch snaps back on a failed save, with a toast, and a second flip while it saves is ignored.
   const instant = useInstant();
-  const snap = snapAsked || !!instant;
+  // Signed in with the read-only PIN (server/viewOnly.ts): every switch snaps back, with the calm "View only" note (never a red error).
+  const viewOnly = ctx.d.viewOnly === true;
+  const snap = snapAsked || !!instant || viewOnly;
   const [on, setOn] = useState(initial);
   // What the server last confirmed: a failed save always snaps back to this (so two quick failing taps cannot leave it wrong).
   const confirmed = useRef(initial);
@@ -814,7 +820,8 @@ function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, p
           setOn(confirmed.current);
           // The switch is back where it was, so no "tap to retry" line (a retry would save a value the switch no longer shows).
           auto.clear(key);
-          toast("That didn't save. The switch is back where it was.", 'error');
+          if (viewOnly) toast(VIEW_ONLY_MESSAGE);
+          else toast("That didn't save. The switch is back where it was.", 'error');
         }
       }
       return ctx.reload();
@@ -1307,6 +1314,10 @@ function TonightGlowRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 function ColorCleanupRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="colorCleanupAll" path="/api/admin/color-cleanup-switch" name="Color cleanup" hint="One color system across the site" flag={!!ctx.d.colorCleanupForAll} dataAttr="data-color-cleanup-all" />;
 }
+/** "Last call texts" (LAST_CALL_TEXTS, server/lastCall.ts, Zip 8): the night-before Check-in and Need players words. Off: only /admin?lastcall=on. */
+function LastCallRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="lastCallAll" path="/api/admin/last-call-switch" name="Last call texts" hint="Still in? texts for the group chat" flag={!!ctx.d.lastCallTextsForAll} dataAttr="data-last-call-all" />;
+}
 function PlayerCardsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="playerCardsAll" path="/api/admin/player-cards-switch" name="Simpler player cards" hint="No court status on player cards" flag={!!ctx.d.playerCardsSimpleForAll} dataAttr="data-player-cards-all" />;
 }
@@ -1380,7 +1391,8 @@ function MotionRow({ ctx, auto, which }: { ctx: AdminCtx; auto: Autosave; which:
       } else {
         setOn(confirmed.current);
         auto.clear(key);
-        toast("That didn't save. The switch is back where it was.", 'error');
+        if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+        else toast("That didn't save. The switch is back where it was.", 'error');
       }
       return ctx.reload();
     });
@@ -1434,6 +1446,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <LastCallRow ctx={ctx} auto={auto} />
       <TonightGlowRow ctx={ctx} auto={auto} />
               <ColorCleanupRow ctx={ctx} auto={auto} />
               <PlayerCardsRow ctx={ctx} auto={auto} />

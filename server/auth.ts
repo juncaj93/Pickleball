@@ -2,6 +2,16 @@ import { ADMIN_COOKIE, type Ctx, PLAYER_COOKIE, setCookie } from './context';
 import { newId, randomToken, sha256, timingSafeEqual, verifyPin } from './crypto';
 import { HttpError } from './http';
 import { type GroupRow, getGroup } from './repo';
+import {
+  isWrite,
+  readOnlyPin,
+  VIEW_ONLY_ALLOWED_WRITES,
+  VIEW_ONLY_COOKIE_PREFIX,
+  VIEW_ONLY_MESSAGE,
+  VIEW_ONLY_SESSION_HOURS,
+  VIEW_ONLY_SESSION_PREFIX,
+  viewOnlySessionPrefix,
+} from './viewOnly';
 
 const ADMIN_SESSION_DAYS = 30;
 const LOCKOUT_WINDOW_MS = 15 * 60_000;
@@ -44,24 +54,30 @@ export async function adminLogin(ctx: Ctx, pin: string): Promise<GroupRow> {
   }
 
   const ok = await verifyPin(pin, group.admin_pin_hash);
+  // The read-only PIN (server/viewOnly.ts) is only tried when the real one did not match, inside the same counted attempt,
+  // so it shares every limit above. No secret = never accepted.
+  const roPin = ok ? null : readOnlyPin(ctx.env);
+  const viewOnly = roPin !== null && timingSafeEqual(pin, roPin);
   await ctx.db
     .prepare('DELETE FROM login_attempts WHERE attempted_at < ?')
     .bind(new Date(ctx.nowMs - 86_400_000).toISOString())
     .run();
-  if (!ok) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
+  if (!ok && !viewOnly) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
   await ctx.db.prepare('UPDATE login_attempts SET succeeded = 1 WHERE id = ?').bind(attemptId).run();
-  await startAdminSession(ctx, group.id);
+  await startAdminSession(ctx, group.id, viewOnly);
   return group;
 }
 
-export async function startAdminSession(ctx: Ctx, groupId: string) {
-  const token = randomToken();
-  const expires = new Date(ctx.nowMs + ADMIN_SESSION_DAYS * 86_400_000).toISOString();
+/** `viewOnly`: a read-only sign-in (its own id and cookie prefix, 12 hours). Real sign-ins are exactly as before. */
+export async function startAdminSession(ctx: Ctx, groupId: string, viewOnly = false) {
+  const token = viewOnly ? VIEW_ONLY_COOKIE_PREFIX + randomToken() : randomToken();
+  const seconds = viewOnly ? VIEW_ONLY_SESSION_HOURS * 3600 : ADMIN_SESSION_DAYS * 86_400;
+  const expires = new Date(ctx.nowMs + seconds * 1000).toISOString();
   await ctx.db
     .prepare('INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(newId(), groupId, await sha256(token), ctx.nowIso, expires)
+    .bind(viewOnly ? (await viewOnlySessionPrefix(readOnlyPin(ctx.env) ?? '')) + newId() : newId(), groupId, await sha256(token), ctx.nowIso, expires)
     .run();
-  setCookie(ctx, ADMIN_COOKIE, token, ADMIN_SESSION_DAYS * 86_400, 'Strict');
+  setCookie(ctx, ADMIN_COOKIE, token, seconds, 'Strict');
 }
 
 /** Every admin route calls this first. Returns the group the admin manages. */
@@ -70,14 +86,27 @@ export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
   if (!token) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
   const row = await ctx.db
     .prepare(
-      `SELECT g.* FROM admin_sessions a JOIN groups g ON g.id = a.group_id
+      `SELECT g.*, a.id AS admin_session_id FROM admin_sessions a JOIN groups g ON g.id = a.group_id
        WHERE a.token_hash = ? AND a.expires_at > ?`,
     )
     // Real time, even while pretending it's another time.
     .bind(await sha256(token), ctx.realNowIso)
-    .first<GroupRow>();
+    .first<GroupRow & { admin_session_id: string }>();
   if (!row) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
-  return row;
+  const { admin_session_id: sessionId, ...group } = row;
+  // A read-only sign-in (server/viewOnly.ts): the stored row and the cookie must agree, it only lives while the secret is set,
+  // and it never saves (server/app.ts refuses writes first; this is the second lock).
+  const viewOnly = String(sessionId).startsWith(VIEW_ONLY_SESSION_PREFIX);
+  if (viewOnly !== token.startsWith(VIEW_ONLY_COOKIE_PREFIX)) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
+  if (viewOnly) {
+    // Only while the secret is set, and only for a sign-in made with the PIN the secret holds now (a changed PIN signs helpers out).
+    const pin = readOnlyPin(ctx.env);
+    if (!pin || !String(sessionId).startsWith(await viewOnlySessionPrefix(pin))) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
+    if (isWrite(ctx.req.method) && !VIEW_ONLY_ALLOWED_WRITES.has(`${ctx.req.method} ${ctx.url.pathname}`)) {
+      throw new HttpError(403, 'view_only', VIEW_ONLY_MESSAGE);
+    }
+  }
+  return group as GroupRow;
 }
 
 export async function adminLogout(ctx: Ctx) {

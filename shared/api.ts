@@ -411,6 +411,8 @@ export interface RefundRequestView {
 }
 
 export interface AdminDashboard {
+  /** Signed in with the read-only organizer PIN (server/viewOnly.ts): every save is refused. Missing for the real PIN. */
+  viewOnly?: true;
   /** The MOTION_ADMIN switch (server/motion.ts): the organizer screens animate. Visual only; false or missing means they look exactly as before. */
   motion?: boolean;
   /** The "did anything change?" stamp this load was drawn from (see /api/admin/version). */
@@ -459,6 +461,10 @@ export interface AdminDashboard {
   adjustCreditForAll?: boolean;
   /** Settings > Feature switches > "Home collapse" is on (for everyone). */
   homeCollapseForAll?: boolean;
+  /** "Last call texts" is on for this screen (server/lastCall.ts): the Check-in and Need players words follow Alex's last call rules. Missing: the words are exactly as before. */
+  lastCallTexts?: boolean;
+  /** Settings > Feature switches > "Last call texts" is on (for everyone). */
+  lastCallTextsForAll?: boolean;
   /** "Tonight glow" is on for this screen / Settings > Feature switches > "Tonight glow" is on (for everyone). */
   tonightGlow?: boolean;
   tonightGlowForAll?: boolean;

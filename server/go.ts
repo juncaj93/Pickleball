@@ -9,6 +9,8 @@ import { MIN_PLAYERS } from '../shared/spots';
 import { checkInMessage, needPlayersMessage, siteAddress } from '../shared/messages';
 import { checkInTextR2, needPlayersTextR2 } from '../shared/textsR2';
 import { textsR2For } from './textsR2';
+import { checkInTextLastCall, needPlayersTextLastCall } from '../shared/lastCall';
+import { lastCallFor } from './lastCall';
 import { playerLinkFor } from './admin';
 import type { Ctx } from './context';
 import { HttpError } from './http';
@@ -91,7 +93,13 @@ export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   const s = { startsAt: session.starts_at, endsAt: session.ends_at };
   // TEXTS_R2 on (everyone, or this phone's private link): the new wording with line breaks. Off: the old words.
   const r2 = await textsR2For(ctx, group.id);
-  const text = r2
+  // "Last call texts" (Zip 8) on top of round 2: Alex's last call words. Off: exactly as before.
+  const lastCall = r2 && (await lastCallFor(ctx, group.id));
+  const text = lastCall
+    ? n < MIN_PLAYERS
+      ? needPlayersTextLastCall(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
+      : checkInTextLastCall(s, group.timezone, ctx.nowMs, n, link)
+    : r2
     ? n < MIN_PLAYERS
       ? needPlayersTextR2(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
       : checkInTextR2(s, group.timezone, ctx.nowMs, n, link)

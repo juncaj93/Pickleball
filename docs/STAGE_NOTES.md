@@ -473,6 +473,17 @@ Status: built and tested on the branch `claude/new-session-ekyoyg`. NOT deployed
 - Rollback: deploy 3, set `GO_LINKS = "off"` and redeploy (or roll back to `24d49885`). Deploy 2 site half: roll back to `00fbd694`; the secret alone does nothing without the Worker.
 - To finish: give the session a token with Workers Scripts Edit, then run steps 5, 6 and 8 of "Finishing Deploy 2" (Worker deploy, Worker secret, checks). The Worker secret must be the same value as the site's; if that value is lost, make a new one and set it on both, then redeploy the site.
 
+### Smart alerts deploy 2 finished: the clock (Fri Oct 30, 2026, 5:51 to 6:21 PM Eastern)
+- No game that day. 741 unit tests green. No database change. Same token as before (ID `16e52fe92a6bf0db0e9fdc6587802e93`), now with Workers Scripts Edit and Account Analytics Read.
+- Restore points: Time Travel bookmark `00000143-00000000-00005114-9dfd82a8be9a7bf4b2330d9c95ad2d9b` (5:51 PM). Full SQL export (164 INSERT lines, has phone numbers, not committed) `live-before-clock-2026-10-30.sql` in that session's scratch folder.
+- New `CRON_SECRET` (the old value was lost) set on the Pages project and on the Worker. Not written anywhere else.
+- Worker `pickleball-alerts-clock` created, version `8d0f28bc-c15f-4308-a186-b6cf96925641`, cron `*/5 * * * *`, workers.dev and preview links off.
+- Site redeployed from main 7be1b79 (same code as fb9d3e50 plus notes): Pages deployment `87ad17c5`.
+- Checks: right secret answers 200 `{"ok":true,"sent":0,"failed":0}` in 0.56 s; wrong or missing secret answers 404. Cron ran on its own at 6:00, 6:05, 6:10 and 6:15 PM, all success, 0 errors. D1 query analytics show the tick's reads (groups, sessions, task_log by game) at each of those minutes and no errors; those reads only happen after the secret check passes. Live tail is blocked by the session's network proxy.
+- Cron triggers: the account's other Worker, fantasy-analyst, has 4, so the account is now at 5 of 5. No room for another.
+- CPU (Account Analytics): Worker 0.47 to 0.80 ms. Pages production, last 7 days, 2,387 requests, 0 errors, median 8.9 ms, 90th percentile 24.0 ms, 99th 46.1 ms. The tick alone measured 12.2, 18.5 and 29.8 ms. No request has been stopped for CPU so far, but the tick is over the Free plan's 10 ms on paper. Worth trimming.
+- Rollback: `npx wrangler delete --config worker/wrangler.toml` stops the clock. Site: roll back to `fb9d3e50`.
+
 ## Banner position, card start times, games with no court (Fri Oct 30, 2026, evening)
 
 Three front-end fixes, one deploy. No database change, no money logic touched.
@@ -1706,6 +1717,19 @@ that at 100% text only. Tell Alex if he wants the count never cut.
 2. SQL export and a Time Travel bookmark (no migration, no database change: this is for the rule).
 3. `npm run deploy` from main. 4. Read-only live check. 5. Rollback: redeploy the previous commit (no data to restore).
 
+### Deploy: layout polish LIVE (Mon Nov 2, 2026, about 1:57 PM Eastern, quiet window), every new switch OFF
+- PR #74 merged as 09547e3 (same tree as the tested branch head 76b28cc). Production deployment `cd5a5dd6-8f6e-40a1-827f-20949dc84211`, branch main.
+- Before it: SQL export `live-before-layout-polish-2026-11-02.sql` (260 INSERTs, has phone numbers, not committed, in the session scratch folder);
+  Time Travel bookmark `000004a5-00000000-00005117-edbd66114d824e1284cd284b78373c28` (1:56 PM). No migration, no database change.
+- Switches: PAY_NOTE allowed, Settings > Feature switches > "No Venmo? note" OFF for everyone (the live `/api/group` answers `payNote: false`,
+  and `true` only with the private header `X-Pay-Note: on`). Nothing else was switched. Layout and item 9 are plain CSS/markup with no switch.
+- After it (read-only): /, /admin, /api/status, /api/group/version 200; bundle holds the new code; row counts identical to before
+  (players 10, sessions 9, session_players 21, credit_ledger 5, player_devices 38, task_log 6, admin_audit_log 144, refund_requests 0);
+  live-check.cjs all green except the known "setup code is configured" line.
+- Rollback: Pages deployment `c0d807e3-2261-4bdd-a74f-5f6f155ebdb7` (commit ebb375a, admin v2) via the Cloudflare dashboard, Deployments, "Rollback to this
+  deployment". No data to restore. Whole database only if ever needed: `npx wrangler d1 time-travel restore pickleball --bookmark=000004a5-00000000-00005117-edbd66114d824e1284cd284b78373c28`.
+- Known and not mine: admin-cleanup (2) and admin-motion "2. press" fail on untouched main too; round2 has one older flaky check; L5 left for later.
+
 ## Admin screens, round 2 (ADMIN_R2) - Mon Nov 2, 2026 - on a preview, waiting for "ship it"
 
 Spec: zip 1 (Home cards, Money, Players, History, header), mockups `Home_round5_LOCKED` (option A) and `Money_round4_LOCKED` (option A, tight).
@@ -1964,6 +1988,29 @@ confirmed seats in games that are on. Fixed in that one place (plus the Home car
   `npm run deploy` from main, LATE_FEES stays OFF, read-only live check. Rollback: Pages deployment 76053686-2f55-4612-b630-72df79c12d2c (commit 0edf850,
   live now) or, for the whole database, the bookmark taken at deploy time. No migration, no data change.
 
+### Deploy: reminder texts for late-fee debts (Tue Nov 3, 2026, 9:21 AM Eastern) - LIVE with LATE_FEES OFF for everyone
+- Alex made a one-time exception to the loud hours (quiet morning, all 4 players for tonight confirmed, switch OFF so players see no change; cutoff 2:00 PM).
+  PR #78 merged as d570182 (same tree as the tested branch 298c6a8). Production deployment `1568f40c-124e-48a0-bb31-c55dcf514b8e`, branch main, commit
+  d570182. Live was `76053686-2f55-4612-b630-72df79c12d2c` (commit 0edf850). No migration, no database change; the clock Worker and the alerts were not touched.
+- Before it (8:08 AM): live health checks all 0, no `late_fees_on` row, no late-fee History lines; row counts audit 162, credit_ledger 5, players 10, seats 22,
+  games 10, task_log 13, refund_requests 0, migrations 16. SQL export `live-before-reminder-fix-2026-11-03.sql` (287 INSERTs, has phone numbers, not committed, in
+  this session's scratch folder) and Time Travel bookmark `0000058d-00000000-00005118-246988de539bc60ec448f363e294a6df` (8:08 AM).
+- Fresh reviewer on the final diff (git diff 0edf850..298c6a8): SHIP. Only 5 files changed (no server, schema, wrangler.toml, clock or alert code); with the switch off
+  the helpers matched the old code on 24,000 random cases and 3 real flows; with it on they matched an independent model on 4,000 random dashboards.
+- Tests on main: type check clean; unit 1,766 passed, 1 skipped, 0 failed. Browser, every file one by one: all green except known failures. Known: admin-cleanup 2
+  (the "2 of 3 paid" pill; the other is time dependent: the red cancel-by line this time was instead the "Do this now ... Court still needs to be booked" check),
+  admin-motion "press" 1. round2 passed. NEW at this hour: pay-always 4 failed (light and dark "$14 due, Pay and I paid", I paid, 360 px fit). I ran pay-always and
+  admin-cleanup on the code that was live (0edf850) at the same hour: the very same checks fail there. Cause: tonight's game is on game day, so after 8:00 AM the Pay
+  button moves to the top Pay card and those tests look for it on the game row. A test assumption about the hour, not a site bug and not this change. late-fees 19 of 19.
+- Read-only live check after (backup address; pickleball.juncaj.net is not reachable from this session): /, /admin, /api/status, /api/group/version 200; organizer data and
+  the switch endpoint 401 without a sign-in; `/api/group` answers `lateFees: false` (true only with the private header), no notices; the new bundle is served and has the
+  "Late drops owe $14" row; 21 health columns all 0; row counts identical to before the deploy; no `late_fees_on` row. The sign-up page and the admin sign-in page are pixel-identical
+  before and after (360 light, 430 dark). Pay card, admin Home, Money and Settings > Feature switches were compared on a LOCAL copy of this morning's backup, old code against new,
+  same clock: the same words on every screen, and "Late drops owe $14" is present and OFF on both. (Local copies deleted afterwards.)
+- Rollback: redeploy Pages deployment `76053686-2f55-4612-b630-72df79c12d2c` (commit 0edf850). The new code writes nothing, so no data restore is needed. Whole database:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=0000058d-00000000-00005118-246988de539bc60ec448f363e294a6df`.
+- Switching LATE_FEES on is Alex's call, in a quiet window: Settings > Feature switches > "Late drops owe $14".
+
 ## Admin zip 2: Edit game, Add game, Settings cleanup, Players layout (ADMIN_R3), built Tue Nov 3, 2026 (NOT shipped yet)
 
 Built on main at `0edf850` (the late-fees merge, so its "Late drops owe $14" row is kept in Feature switches). Ships OFF behind
@@ -2032,6 +2079,16 @@ The player screen's markup was compared with main's, 27 screens (3 players x 3 p
 - Preview (fake database, re-seeded Tue Nov 3 about 11:00 AM): https://preview-player-fix1.pickleball-club-9h0.pages.dev (deployment c3261d96). Not on production. Tonight's fake game is Tue Nov 3, 8:00 PM, Court booked, Jordan owes $14 (also Avery owes $11): that is the game-day look.
 - To ship (never in loud hours; Wed Nov 4 6:00 AM Eastern or later, and only after "ship it"): PR, full unit suite, SQL export and Time Travel bookmark, `npm run deploy` from main with PLAYER_FIX1 and PAY_SHEET OFF, read-only live check. Rollback: Pages deployment `2bbbff84-880c-40cc-ae74-79ef1bac9e9f` (commit 20fc8a9, live now). No migration, no data change.
 
+## Deployed: PLAYER_FIX1 and PAY_SHEET (Wed Nov 4, 2026, 12:12 AM Eastern, after the 11:00 PM Tuesday quiet-down) - BOTH SWITCHES OFF
+- PR #80 merged to main (33480812), deployed from main: Pages deployment `41880b8d-f4a5-49ad-bc67-2ce4b68a39c4` (commit 3348081). Before: live was `2bbbff84-880c-40cc-ae74-79ef1bac9e9f` (commit 20fc8a9 = main before the merge).
+- Restore points taken at 12:11 AM Eastern, before the deploy: SQL export of the live database (kept off the repo, it has phone numbers) and Time Travel bookmark `00000657-00000000-00005119-6badbdd2a076655b94b52e0449b4fa9f`.
+- No migration, no data change, clock Worker and alerts not touched. Row counts before and after are identical (audit 182, credit entries 5, players 11, seats 23, games 10, task_log 20, refunds 0); the only switch row is `late_fees_on`; no `player_fix1_on` or `pay_sheet_on` row.
+- Tests before the deploy: unit 1,803 passed, 1 skipped, 0 failed (99 files). Browser, every file one by one: the known failures (admin-cleanup 2, admin-motion "press" 1) PLUS 8 files that failed only because the run happened late at night (after tonight's 8:00 PM game ended): popup, circles, money-visible, good-news, audit-player-flows, admin-audit, motion, layout-polish. The same 8 files were run on a clean checkout of main (20fc8a9) at 11:45 PM to 12:10 AM and failed the same way (same counts), and the same code passed all of them at about 12:30 PM Tuesday. Re-run them after 8:00 AM to confirm.
+- Fresh reviewer on the final diff: SHIP. It found the Zelle number would be sent to every phone even with the sheet off; fixed (sent only when the sheet is on for that phone) before deploying.
+- Read-only live check (backup address; pickleball.juncaj.net is not reachable from this session): `/`, `/admin`, `/api/status`, `/api/group/version` 200; dashboard and both new switch endpoints 401 without a sign-in; the served bundle contains the sheet; `/api/group` answers `playerFix1: false`, `paySheet: false` (true only with the private headers), no `zelleNumber`; `payNote` and `lateFees` still true. Admin Home, Money and Settings need the PIN, so they were not opened from here.
+- Turn on later (Alex): Settings > Feature switches > "Player screen fixes" and "Pay sheet". Private test on live: `?playerfix1=on` and `?paysheet=on`.
+- Rollback: code: redeploy Pages deployment `2bbbff84-880c-40cc-ae74-79ef1bac9e9f` (commit 20fc8a9). Nothing is written while the switches are off, so no data restore is needed. Whole database: `npx wrangler d1 time-travel restore pickleball --bookmark=00000657-00000000-00005119-6badbdd2a076655b94b52e0449b4fa9f`.
+
 ## Texts and Telegram alerts, round 2 (TEXTS_R2) (Wed Nov 4, 2026) - built, tested, reviewed; on a preview, waiting for "ship it"
 
 Zip 3 (START_HERE, TEXT_AUDIT, SITE_RULES). Built on main `3348081` (the PLAYER_FIX1 / PAY_SHEET merge). Wording, timing and one default only: no money rule, amount
@@ -2094,7 +2151,14 @@ never changes an alert; the text menu with the switch off is the old words, one 
 ### Change after Alex's answers (Wed Nov 4, 2026)
 Check-in and Need players: the back-out line and the join line say "tonight" when the game is tomorrow or today, and "early" for a game further out ("Need to back out? Do it early to avoid cancel fees." / "Want in? Join early, otherwise we'll have to cancel."). Everything else unchanged; the other answers (6:55 AM, fee-kept order, "tonight"/"today" on game night, #5 and #7 left as they are, no line for a paid dropper) needed no change. Unit 1,873 passed (100 files), `e2e/texts-r2.cjs` 14 of 14, `e2e/texts.cjs` 52 of 52. Same preview address, redeployed.
 
-## Late-cancel fee split (LATE_FEE_SPLIT) (Wed Nov 4, 2026) - built, tested, reviewed twice; on a preview, waiting for "ship it"
+### Deployed (Wed Nov 4, 2026, about 12:30 PM Eastern, quiet window)
+- PR #81 merged (main `58e464d`). Full unit suite on main: 1,873 passed, 0 failed. Deployed with `npm run deploy` from main: Pages deployment `30dd77c6-e3de-419b-b384-03dab1fb5585`. **`TEXTS_R2` is allowed in `wrangler.toml` but the Settings row is OFF, so nothing visible or audible changed.** No migration, no data change.
+- Restore points taken right before the deploy: SQL export of the live database (541 lines, has phone numbers, kept in the session scratch folder, not committed) and Time Travel bookmark `000006ef-00000000-00005119-36590f19dd52036a3144d543d9cac702` (good for 7 days).
+- Rollback: Pages deployment `41880b8d-f4a5-49ad-bc67-2ce4b68a39c4` (commit 3348081, live until this deploy). To undo only this feature with no deploy: it is already off; to force it off even if someone switches it on, set `TEXTS_R2 = "off"` in `wrangler.toml` and deploy. Database restore is not needed (the only stored thing is one optional `task_log` row).
+- Read-only live check: the new deployment and the `pickleball-club-9h0.pages.dev` alias answer (home 200, group "Pickleball Bros", admin page 200, the clock endpoint answers 404 without its secret). `pickleball.juncaj.net` itself could not be reached from the build sandbox (its network only reaches Cloudflare's own addresses), so that address was not checked from here. The clock Worker was not changed.
+- Next, Alex's call: try `/admin?textsr2=on` on his phone (texts and cancel sheet only), then switch Settings > Feature switches > "Texts and alerts, round 2" on for everyone in a quiet window (Fri to Mon before 6:00 PM, or Wed 6:00 AM to 6:00 PM, never the hour after he texts the group). The Telegram alerts change only then.
+
+## Late-cancel fee split (LATE_FEE_SPLIT) (Wed Nov 4, 2026) - LIVE with the switch OFF for everyone (deployed Wed Nov 4, 3:47 PM Eastern)
 
 Zip "latefeesplit" (START_HERE, SITE_RULES with the new PREVIEW SWITCHES RULE). Built on main `58e464d` (TEXTS_R2 merged). **Changes money.** Ships OFF behind
 ONE new switch `LATE_FEE_SPLIT` (needs `LATE_FEES` on): `wrangler.toml` kill switch (production and preview), Settings > Feature switches > "Late-cancel
@@ -2178,6 +2242,22 @@ settle those first.
 3. Unmark keeping the $5: OK, written under known gaps in `FEATURE_SWITCHES.md` (with 4).
 4. Monthly Collected counts only what was paid: OK.
 - "Ship it" expected Fri Nov 6 morning. Do not deploy before then. Keep the preview up.
+
+### Deploy (Wed Nov 4, 2026, 3:47 PM Eastern) - LIVE with LATE_FEE_SPLIT OFF for everyone
+- Alex: "Ship it now" (Wed before 6:00 PM, a quiet window; replaces the earlier "not before Friday"). PR #82 merged as `4014f51` (same tree as the tested
+  branch `bb967c0`). Live before: Pages deployment `30dd77c6-e3de-419b-b384-03dab1fb5585` (commit 58e464d), so main equaled live.
+- Tests on main before the deploy: type check clean; unit 1,928 passed, 1 skipped, 0 failed (103 files); production build clean.
+- Restore points: SQL export `live-before-late-fee-split-2026-11-04.sql` (333 INSERTs, has phone numbers, not committed, in this session's scratch folder),
+  3:38 PM. Time Travel bookmark `00000716-00000000-00005119-50485a3498848e847b1cb21bf67115fa` (3:38 PM).
+- Production deployment `49be2ad5-94a9-4294-a9f8-2e830e37403d`, branch main, commit 4014f51. No migration, no database change, the clock Worker untouched.
+- Read-only live check after (backup address; pickleball.juncaj.net is not reachable from this session): /, /admin, /api/status, /api/group/version 200; the new
+  bundle `index-CYaPukY7.js` is served; `PUT /api/admin/late-fee-split` and the dashboard 401 without a sign-in; health checks all 0 (`info_open_late_fees` 0);
+  no `late_fee_split_on` row (OFF), `late_fees_on` present; no game holds a split price; row counts equal the export (players 11, games 11, seats 23,
+  credit_ledger 5, task_log 26, migrations 16).
+- Turn it on (Alex, Fri in a quiet window): Settings > Feature switches > "Late-cancel fee split". Private test first: `/admin?latefeesplit=on` (writes real records).
+- Rollback: Settings row off (no deploy). Code: redeploy Pages deployment `30dd77c6-e3de-419b-b384-03dab1fb5585` (commit 58e464d); with the switch off the new
+  code writes nothing new, so no data restore is needed. If a split cancel was ever made, settle or Clear those seats before rolling back the code. Whole
+  database: `npx wrangler d1 time-travel restore pickleball --bookmark=00000716-00000000-00005119-50485a3498848e847b1cb21bf67115fa` (3:38 PM).
 
 ## Money page rework (MONEY_REWORK), built Wed Nov 4, 2026 - ships with the switch OFF
 
@@ -2301,6 +2381,26 @@ Known and accepted: if a save works but every refresh fails for 15 seconds, the 
 next good refresh (the server has the tap; a second tap is refused by the server's own checks). The player stamp gained one switch, so every
 phone reloads once after the deploy.
 
+### Deploy (Thu Nov 5, 2026, about 12:06 PM Eastern, on Alex's written "SHIP IT NOW, LOUD HOURS OK" at about 12:00 PM)
+- Last change before ship (Alex's answer): a Settings text box whose save fails keeps what was typed, with "Couldn't save. Tap to retry." (as
+  before); browser test added. Unit and API on the ship commit: 2109 passed, 1 skipped, 0 failed (123 files). Browser: instant-taps 19/19,
+  switch-OFF side by side with main 18/18 identical, admin-r3 15/15, admin-v2 27/27; the full browser run on the code before that last
+  change: no new failures (known ones unchanged; texts-r2 14/14 in the daytime).
+- PR #85 merged as `811c5c7`. Main equaled live before it (production `6edeadd4` = f0a2194). Production deployment
+  `6fde6dc0-d40f-438b-a7db-a19889cc571d` from main with `INSTANT_TAPS = "on"` (allowed) and the Settings row OFF (no `instant_taps_on` row).
+  No migration.
+- Before it: SQL export `live-before-instant-taps-2026-11-05.sql` (362 rows, not committed, has phone numbers, in this session's scratch folder),
+  taken 11:52 AM Eastern. Time Travel bookmark `0000081d-00000000-0000511a-7f65082f163368ea09df584ff02d8c07` (11:52 AM Eastern).
+  Integrity checks: all 21 columns 0 before and after.
+- Read-only live check (pickleball-club-9h0.pages.dev): `/`, `/admin`, `/api/status`, `/api/group/version` answer 200; `/api/admin/dashboard`,
+  `/api/admin/month-games` and `PUT /api/admin/instant-taps` answer 401 without a sign-in; the live script is the same file as the local build
+  (index-DLKG3Wl1.js, 552,980 bytes); the player view has no `instantTaps` (off for everyone) and the private header turns it on for that
+  request; row counts unchanged from the export (players 11, games 12, seats 23, credit 5); `money_rework_on` 1 row, `instant_taps_on` 0 rows.
+- Live with the deploy (not behind INSTANT_TAPS): the Money page rule, a fully paid game goes to Previous games only once finalized.
+- Rollback: Settings > Feature switches > "Instant taps" off (no deploy; it ships off); `INSTANT_TAPS = "off"` and a deploy; or Pages deployment
+  `6edeadd4` (f0a2194, the code before this; also undoes the Money rule). No data was changed by the deploy, so no restore is needed.
+- Alex tests on his phone with `/?instanttaps=on` (and `/admin?instanttaps=on`) and switches it on himself.
+
 ## Zip 6: Adjust credit, Venmo request, tidy (built Thu Nov 5, 2026) - ships with both new switches OFF (on a preview, waiting for "ship it")
 
 Spec: the "zip 6" brief (`START_HERE.md` and `SITE_RULES.md` in the zip, with three approved mockups). One PR. NO database change, no migration.
@@ -2404,3 +2504,67 @@ nothing switched on, no live database touched. The full description of each swit
 - Unit: `tests/zip7.test.ts` (tonight/tomorrow in Eastern time: midnight, UTC rollover, both DST changes, month and year ends; the three switches: header, Settings row, kill switch, stamp, log line, same-games-either-way; color tokens, contrast 4.5:1, every CSS rule under an `<html>` attribute). Seed test follows the new rows.
 - Browser: `e2e/zip7.cjs` (pinned clock, so not today's real date: tiles and glow, Reduce Motion, 390/360/320 px light and dark, organizer Home, Waitlist and Extra gray, red Canceled pill before and after, purple Text, blue credit, Cancel sheet wording, card words, calendar icon, instant I'm in with a slow server, waitlist label, Show fewer, Settings rows)
   and `e2e/zip7-off.cjs` (today's main and this branch side by side with all three OFF: every screen identical apart from the three new Settings rows; needs `MAIN_DIR`, not in `npm run test:e2e`).
+
+### Deploy (Fri Nov 6, 2026, 7:52 AM Eastern, quiet window, on Alex's "ship it now")
+- PR #87 merged as `963f39f` (merge commit; same tree as the tested branch head `183c7a1`). Production deployment `ca890645-2495-4e96-8aef-b8dc437f4876` from main, with `TONIGHT_GLOW`, `COLOR_CLEANUP` and `PLAYER_CARDS_SIMPLE` allowed in `wrangler.toml` and all three Settings rows OFF (no `tonight_glow_on`, `color_cleanup_on` or `player_cards_on` row in `task_log`). No migration, no data change. Alex switches them on himself.
+- Before it: main equaled live (production `5f82c960-8c32-4049-8292-70a342b42f7a` = 54dcdc6). SQL export `live-before-zip7-2026-11-06.sql` (not committed, has phone numbers, in that session's scratch folder), Time Travel bookmark `0000091c-00000004-0000511b-cf6d20db620d7974d89801478f4bb194` (7:51 AM Eastern). Integrity checks: all 21 columns 0 before and after (info lines 0).
+- Tests on the merged tree: tsc clean, unit and API 2196 passed, 1 skipped, 0 failed (128 files), build clean. Browser: zip7 33/33, zip7-off 21/21 (all three OFF identical to main), zip6 28/28, instant-taps 19/19, money-rework 36/36. A fresh reviewer on the final diff found nothing blocking.
+- Read-only live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net is not reachable from the sandbox): `/`, `/admin`, `/api/status`, `/api/group/version` answer 200; `/api/admin/dashboard` and `/api/admin/month-games` answer 401 without a sign-in; the live script is the same file as the local build (index-FvQIttVq.js) and holds the three new rows; the player view carries none of the three new flags (only the existing instantTaps and homeCollapse); row counts unchanged (players 11, games 12, seats 23). The Settings rows themselves need the organizer PIN, so their OFF state is shown by the empty `task_log` check above.
+- Rollback: Settings > Feature switches, the three rows off (no deploy); or `TONIGHT_GLOW`, `COLOR_CLEANUP`, `PLAYER_CARDS_SIMPLE` = "off" and a deploy; or Pages deployment `5f82c960-8c32-4049-8292-70a342b42f7a` (Zip 6, 54dcdc6). No data was changed by the deploy, so no restore is needed.
+- Follow-ups from the final review (all only visible with a switch ON, none blocking): (1) with Simpler player cards on, a venue-waitlist game that is also full says "I'm in" instead of "Join waitlist" (that state is turned into a normal game for players today, so it is unreachable); (2) the shortened Cancel line drops "Late drops still owe $14" and the credit-back note (Alex approved the wording); (3) the TONIGHT glow ignores the organizer's "Animations, players" switch and only follows the phone's Reduce Motion; (4) on the folded organizer Home row the 44 px tile may overflow TONIGHT by about 1 px; (5) the dimmed canceled tile text is below 4.5:1 on purpose (Alex's 58 percent).
+
+## Zip 8: cleanup (read-only PIN, date-proof tests, reminder time, credit check, backups) - built Fri Nov 6, 2026; on a preview, waiting for "ship it"
+
+Spec: the "zip 8" brief (`START_HERE.md`, `SITE_RULES.md`). One PR. NO database schema change, no migration. Built in a quiet window (Friday). Nothing deployed to
+production, nothing switched on, no live data changed. Only reads of the live database (the switch rows in `task_log`). Zip 5 deploy ID stays "probably
+`6fde6dc0-d40f-438b-a7db-a19889cc571d` (unconfirmed)".
+
+### A. Read-only organizer PIN (`ORGANIZER_READONLY_PIN`, a Cloudflare secret; missing = off)
+- `server/viewOnly.ts`, `server/auth.ts`, `server/app.ts`. Tried only after the real PIN fails, inside the same counted attempt (same lockout: 5 per phone,
+  20 overall, 15 minutes). Its own sign-in: `admin_sessions.id` starts `ro:<fingerprint of the secret>:`, the cookie value starts `ro.` (the stored hash
+  covers the prefix), 12 hours. Changing or removing the secret ends every view-only sign-in at once. A PIN change signs it out too. The real PIN can never
+  be changed to the read-only one.
+- Every POST, PUT, PATCH and DELETE from a view-only phone gets 403 `view_only` "View only. Nothing was saved." before any route runs (sign in and sign out
+  excepted), with a second check in `requireAdmin`. Its GETs run on `viewOnlyDb` (only plain SELECTs reach the database, a batch of reads really runs, no
+  Telegram alert can be sent), so even the dashboard's upkeep (adding next weeks' games) does nothing. Its backup download has the PIN hash and the group word
+  hash blanked (fresh reviewer: a 6-digit PIN can be guessed from its hash offline).
+- Screens: a small "View only" label next to the title (`src/view-only.css`, light and dark, 4.5:1). Refused saves show the calm note, never a red error
+  (Settings switches snap back). The dashboard answer gains `viewOnly: true` only for that sign-in; for the real PIN it is unchanged.
+- Secret set Fri Nov 6 (Alex's OK) on the Pages project, production and preview (8 digits, given to Alex only; not in git). Checked on the preview: sign-in 200, `viewOnly: true`, a save 403, backup PIN hash blank. Live starts using it with the Zip 8 deploy.
+### B. Date-proof tests
+- `e2e/fixed-clock.cjs` pins the server clock and every page's clock. admin-cleanup, admin-motion, texts-r2, player-fix1, circles, money-visible, good-news,
+  audit-player-flows, admin-audit, motion, layout-polish, popup, pay-always (and pay-sheet through layout-lib) all start from a fixed moment. Before, on Fri Nov 6 08:21 to 08:54 AM:
+  circles 10/8, money-visible 2/10, good-news 8/1, audit-player-flows 85/8, layout-polish 195/5, popup crashed after 11, admin-motion 27/1, admin-audit 10/1.
+  After: all pass. admin-audit check 15 found a real layout bug (the X on a dismissible "Need players" card overlapped a long date line at 320 px): fixed
+  on Alex's OK (Nov 6) without a switch, CSS only, `.dismissible > .sg-when` gets the same right room as the line above (`src/do-now.css`); 11/11 now.
+- `tests/held-drop-fuzz.test.ts` seed 136: the test's I'm in did not wait for a drop already on its way (the real screen does). Fixed in the test; seed 136
+  8 of 8 under a slowed hash, all 2,000 seeds clean.
+### C. Finalize reminder at 10:30 PM
+- `shared/tasks.ts` `finalizeDueMs`: 10:30 PM on game night, Eastern wall clock, or 5 minutes after the end if that is later. One time value, no switch. It
+  moves the Telegram alert and the "Do this now" Finalize card together (same due time); the separate Home "Finalize" card (`needsFinalize`) still shows as
+  soon as the game is over. Wording unchanged. The 5-minute tick's quick check follows it. Tests across both clock changes (`tests/finalize-reminder.test.ts`);
+  the six-week sweep golden changed only on the four finalize lines (9:05 / 9:35 / 10:05 PM to 10:30 PM), every other card identical to main at every tick.
+### D. Credit chain (verified, no money change)
+- `tests/credit-chain.test.ts`, through the real API: $14 at 6 played ($9, $5 back), $5 credit + $9 cash at 5 played ($11, $3 back), $3 + $11 at 7 ($8, $6 back),
+  $6 + $8 at 4 ($14, $0 back). Credit after each: $5, $3, $6, $0. Cash paid $42 = prices $42. Nothing lost, doubled or negative. Same with the organizer playing.
+### E. Last call alert (`LAST_CALL_TEXTS`, ships OFF)
+- Today (live, Texts round 2 on): the night-before alert links to the direct text page, which opens Messages with no recipients. 4 or more: "5 in so far. Want in?
+  Join now." 3 or fewer: "3 in, need 1 more. Want in? Join tonight, otherwise we'll have to cancel." Neither asks "still in?" nor says "to avoid fees".
+- With the switch on: "5 in so far. Is everyone still in? Anyone else in?" and "3 in. We need 1 more or tomorrow's game is canceled to avoid fees. Want in? Join
+  tonight." (`shared/lastCall.ts`). Settings row "Last call texts", `/admin?lastcall=on`, kill switch in `wrangler.toml`, Activity lines, `docs/FEATURE_SWITCHES.md`.
+### F. Cleanup
+- On Alex's OK (Nov 6): deleted the 47 old preview deployments (Zips 1 to 7; kept the 90 production deployments and preview-zip8). The 22 merged
+  branches could not be deleted from this session (its GitHub access only pushes its own branch); Alex deletes them on GitHub. Nothing else touched.
+### G. Weekly backup
+- New private D1 database `pickleball-backups` (id a532f080-7535-4d4d-8067-62ab6af928e4, free). The clock Worker (`worker/backup.ts`, `worker/cron.ts`) looks once
+  an hour, after its knock, and on Sunday from 3:00 AM Eastern (or when the newest copy is over 8 days old) saves the same file Settings > Backup gives, in pieces,
+  keeping the newest 8. The live database is only read, through a read-only wrapper, in one batch. Restore: `docs/RESTORE.md`, "Weekly copies"
+  (`scripts/weekly-backup.mjs list` / `get`). R2 was not used: this token cannot reach R2, and the free plan's 5 cron triggers are all in use.
+- Run for real in Cloudflare's local runtime on fake data: 381,515 bytes in 5 pieces; a second tick the same hour made no second copy. The Worker deploy waits for "ship it".
+### H. Notes
+- The deploy records left on notes-only branches (Oct 30 clock, layout polish, late-fee reminders, PLAYER_FIX1 / PAY_SHEET, TEXTS_R2, LATE_FEE_SPLIT, Instant taps,
+  Zip 7) are now in this file.
+### Tests
+- Unit: see the PR. New: `readonly-pin`, `credit-chain`, `finalize-reminder`, `last-call`, `weekly-backup`. Browser: `e2e/zip8.cjs` (4/4).
+- Fresh reviewer (did not write the code): 1 blocker (the PIN hash in the view-only backup) and 2 should-fix (knock and copy in the same run; some red toasts), all fixed
+  with tests; also fixed from its notes: secret rotation signs helpers out, one-batch snapshot, the Worker's live database wrapped read-only.
