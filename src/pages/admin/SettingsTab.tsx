@@ -237,7 +237,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
               if (ok) return void (confirmedAccess.current = next);
               setOpenAccess(confirmedAccess.current);
               auto.clear('openAccess');
-              toast("That didn't save. It's back to what it was.", 'error');
+              if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+              else toast("That didn't save. It's back to what it was.", 'error');
             });
           }}
         />
@@ -408,7 +409,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
                       else if (latestDate.current === next) {
                         setFirstDate(confirmedDate.current);
                         auto.clear('firstSessionDate');
-                        toast("That didn't save. It's back to what it was.", 'error');
+                        if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+                        else toast("That didn't save. It's back to what it was.", 'error');
                       }
                     });
                 }}
@@ -593,7 +595,8 @@ function AlertsBody({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
       }
       setOn((cur) => ({ ...cur, [key]: confirmedAlerts.current[key] }));
       auto.clear(`alert-${key}`);
-      toast("That didn't save. The switch is back where it was.", 'error');
+      if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+      else toast("That didn't save. The switch is back where it was.", 'error');
     });
   }
 
@@ -1388,7 +1391,8 @@ function MotionRow({ ctx, auto, which }: { ctx: AdminCtx; auto: Autosave; which:
       } else {
         setOn(confirmed.current);
         auto.clear(key);
-        toast("That didn't save. The switch is back where it was.", 'error');
+        if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+        else toast("That didn't save. The switch is back where it was.", 'error');
       }
       return ctx.reload();
     });

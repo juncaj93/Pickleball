@@ -10,6 +10,7 @@ import {
   VIEW_ONLY_MESSAGE,
   VIEW_ONLY_SESSION_HOURS,
   VIEW_ONLY_SESSION_PREFIX,
+  viewOnlySessionPrefix,
 } from './viewOnly';
 
 const ADMIN_SESSION_DAYS = 30;
@@ -74,7 +75,7 @@ export async function startAdminSession(ctx: Ctx, groupId: string, viewOnly = fa
   const expires = new Date(ctx.nowMs + seconds * 1000).toISOString();
   await ctx.db
     .prepare('INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)')
-    .bind(viewOnly ? VIEW_ONLY_SESSION_PREFIX + newId() : newId(), groupId, await sha256(token), ctx.nowIso, expires)
+    .bind(viewOnly ? (await viewOnlySessionPrefix(readOnlyPin(ctx.env) ?? '')) + newId() : newId(), groupId, await sha256(token), ctx.nowIso, expires)
     .run();
   setCookie(ctx, ADMIN_COOKIE, token, seconds, 'Strict');
 }
@@ -98,7 +99,9 @@ export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
   const viewOnly = String(sessionId).startsWith(VIEW_ONLY_SESSION_PREFIX);
   if (viewOnly !== token.startsWith(VIEW_ONLY_COOKIE_PREFIX)) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
   if (viewOnly) {
-    if (!readOnlyPin(ctx.env)) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
+    // Only while the secret is set, and only for a sign-in made with the PIN the secret holds now (a changed PIN signs helpers out).
+    const pin = readOnlyPin(ctx.env);
+    if (!pin || !String(sessionId).startsWith(await viewOnlySessionPrefix(pin))) throw new HttpError(401, 'admin_required', 'Organizer PIN required.');
     if (isWrite(ctx.req.method) && !VIEW_ONLY_ALLOWED_WRITES.has(`${ctx.req.method} ${ctx.url.pathname}`)) {
       throw new HttpError(403, 'view_only', VIEW_ONLY_MESSAGE);
     }

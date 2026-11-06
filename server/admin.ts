@@ -1680,7 +1680,11 @@ export async function backupFile(ctx: Ctx): Promise<Response> {
   const group = await requireAdmin(ctx);
   const p = localParts(ctx.nowMs, group.timezone);
   const stamp = `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
-  const body = JSON.stringify(await backupObject(ctx.db, group.name, ctx.nowIso), null, 1);
+  const backup = await backupObject(ctx.db, group.name, ctx.nowIso);
+  // Read-only PIN (server/viewOnly.ts): never hand out the real PIN's hash or the group word's hash (a short PIN can be guessed
+  // from its hash offline). The file is otherwise the same, so View as still works; a restore needs the real PIN's own file.
+  if (viewOnlyCookie(ctx)) backup.tables.groups = backup.tables.groups.map((g) => ({ ...g, admin_pin_hash: '', group_word_hash: null }));
+  const body = JSON.stringify(backup, null, 1);
   return new Response(body, {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',

@@ -239,4 +239,37 @@ describe('read-only organizer PIN (Zip 8)', () => {
     ])
       expect(isReadSql(sql), sql).toBe(false);
   });
+
+  it('the backup file a view-only phone downloads has no PIN hash or group word hash (the real PIN cannot be guessed from it)', async () => {
+    const ctx = await world();
+    const ro = JSON.parse((await ctx.viewer.call('GET', '/api/admin/backup')).text);
+    const real = JSON.parse((await ctx.organizer.call('GET', '/api/admin/backup')).text);
+    expect(real.tables.groups[0].admin_pin_hash).toMatch(/^pbkdf2-sha256\$/);
+    expect(ro.tables.groups[0].admin_pin_hash).toBe('');
+    expect(ro.tables.groups[0].group_word_hash).toBeNull();
+    expect(JSON.stringify(ro)).not.toContain(real.tables.groups[0].admin_pin_hash);
+    // Everything else is the same file.
+    const strip = (b: any) => ({ ...b, tables: { ...b.tables, groups: b.tables.groups.map((g: any) => ({ ...g, admin_pin_hash: '', group_word_hash: null })) } });
+    expect(ro).toEqual(strip(real));
+    // No other read answer carries the hash either.
+    for (const r of routeList().filter((x) => x.method === 'GET' && !x.path.includes(':param'))) {
+      const res = await ctx.viewer.call('GET', r.path === '/api/admin/money' ? `${r.path}?month=2026-10` : r.path);
+      expect(res.text, r.path).not.toContain(real.tables.groups[0].admin_pin_hash);
+    }
+  });
+
+  it('changing the secret to a new PIN signs every view-only phone out at once (putting the same PIN back lets them in again: they know it anyway)', async () => {
+    const ctx = await world();
+    expect((await ctx.viewer.call('GET', '/api/admin/dashboard')).status).toBe(200);
+    ctx.app.env.ORGANIZER_READONLY_PIN = '61094827';
+    expect((await ctx.viewer.call('GET', '/api/admin/dashboard')).status).toBe(401);
+    ctx.app.env.ORGANIZER_READONLY_PIN = RO_PIN;
+    expect((await ctx.viewer.call('GET', '/api/admin/dashboard')).status).toBe(200); // same PIN again: same fingerprint
+    ctx.app.env.ORGANIZER_READONLY_PIN = '61094827';
+    const again = ctx.app.client();
+    expect((await again.call('POST', '/api/admin/login', { pin: '61094827' })).status).toBe(200);
+    expect((await again.call('GET', '/api/admin/dashboard')).data.viewOnly).toBe(true);
+    expect((await again.call('POST', '/api/admin/login', { pin: RO_PIN })).status).toBe(401);
+  });
 });
+

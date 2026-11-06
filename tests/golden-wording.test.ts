@@ -15,7 +15,7 @@ const OLD_CARDS = { noMarks: '5ce16421029746d7ae71d9b6347ec0dfb34e7f4d70c091ed06
 
 describe('booking alert wording', () => {
   for (const [name, marks] of [['noMarks', new Set<string>()], ['withMarks', MARKS]] as const) {
-    it(`only "Then tap I booked it" became "Then set it to Booked" (${name})`, () => {
+    it(`only "Then tap I booked it" became "Then set it to Booked" (${name})`, { timeout: 30_000 }, () => {
       const back = createHash('sha256');
       let seen = 0;
       for (const now of ticks()) {

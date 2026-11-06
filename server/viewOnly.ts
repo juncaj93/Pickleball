@@ -35,6 +35,15 @@ export function readOnlyPin(env: Env): string | null {
   return typeof pin === 'string' && /^\d{6,12}$/.test(pin) ? pin : null;
 }
 
+/**
+ * The admin_sessions.id start for a view-only sign-in made with today's secret: "ro:" plus a short fingerprint of the secret.
+ * Changing the secret changes the fingerprint, so every view-only sign-in made with the old PIN stops working at once.
+ */
+export async function viewOnlySessionPrefix(pin: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`view-only-pin:${pin}`)));
+  return `${VIEW_ONLY_SESSION_PREFIX}${[...bytes.slice(0, 6)].map((b) => b.toString(16).padStart(2, '0')).join('')}:`;
+}
+
 /** Does this request carry a view-only sign-in? (Whether it is still valid is requireAdmin's job.) */
 export function viewOnlyCookie(ctx: Ctx): boolean {
   return (ctx.cookies[ADMIN_COOKIE] ?? '').startsWith(VIEW_ONLY_COOKIE_PREFIX);

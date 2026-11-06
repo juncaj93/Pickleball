@@ -25,12 +25,10 @@ export interface BackupObject {
   tables: Record<string, Record<string, unknown>[]>;
 }
 
-/** Every backed-up table, read as it is now. */
+/** Every backed-up table, read in one batch, so the file is one consistent moment (no row without its parent). */
 export async function backupObject(db: D1Database, groupName: string, nowIso: string): Promise<BackupObject> {
+  const read = await db.batch(BACKUP_TABLES.map((t) => db.prepare(`SELECT * FROM ${t} ORDER BY rowid`)));
   const tables: Record<string, Record<string, unknown>[]> = {};
-  for (const t of BACKUP_TABLES) {
-    const { results } = await db.prepare(`SELECT * FROM ${t} ORDER BY rowid`).all<Record<string, unknown>>();
-    tables[t] = results;
-  }
+  BACKUP_TABLES.forEach((t, i) => (tables[t] = read[i].results as Record<string, unknown>[]));
   return { format: 'pickleball-backup', version: 1, createdAt: nowIso, groupName, tables };
 }

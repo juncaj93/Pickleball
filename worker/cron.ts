@@ -8,6 +8,7 @@
 
 import type { D1Database } from '../server/db';
 import { maybeWeeklyBackup } from './backup';
+import { viewOnlyDb } from '../server/viewOnly';
 
 interface Env {
   /** Where the site lives, e.g. https://pickleball-club-9h0.pages.dev */
@@ -43,14 +44,20 @@ export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<nu
 
 /** The weekly copy, on its own: it never delays or stops the knock, and a failure is only a log line (retried within the hour). */
 export async function backupTick(env: Env, nowMs = Date.now()): Promise<void> {
-  const r = await maybeWeeklyBackup(env.DB, env.BACKUP, nowMs);
+  // The live database is handed over wrapped so it can only be read: any write would quietly do nothing.
+  const r = await maybeWeeklyBackup(env.DB ? viewOnlyDb(env.DB) : undefined, env.BACKUP, nowMs);
   if (r.made) console.log(`weekly backup ${r.week}: ${r.bytes} bytes in ${r.parts} parts, ${r.kept} kept`);
   else if (r.reason.startsWith('failed')) console.log(`weekly backup ${r.reason}`);
 }
 
 export default {
   scheduled(_event: unknown, env: Env, ctx: ScheduledCtx) {
-    ctx.waitUntil(knock(env));
-    ctx.waitUntil(backupTick(env).catch(() => {}));
+    // The knock first and on its own; the weekly copy only starts once the knock has its answer, so it can never cut the knock short.
+    ctx.waitUntil(
+      knock(env)
+        .catch(() => 0)
+        .then(() => backupTick(env))
+        .catch(() => {}),
+    );
   },
 };

@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { useToast } from '../../ui';
+import { isDemo } from '../../lib';
 import { SaveLine, TapQueue } from '../../instant';
 import { useInstant } from '../../InstantTaps';
 import type { AdminCtx } from '../Admin';
@@ -72,7 +73,11 @@ export function useReworkRun(ctx: AdminCtx): ((op: ReworkOp, save: () => Promise
         return value;
       },
     });
-    if (res.status === 'failed') toast("Couldn't save, nothing changed", 'error');
+    if (res.status === 'failed') {
+      // The read-only PIN's refusal (and the demo's) is a plain note, not a red error.
+      if (isDemo(res.error)) toast((res.error as Error).message);
+      else toast("Couldn't save, nothing changed", 'error');
+    }
     return res.status === 'ok';
   };
 }
