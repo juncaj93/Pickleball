@@ -2512,3 +2512,58 @@ nothing switched on, no live database touched. The full description of each swit
 - Read-only live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net is not reachable from the sandbox): `/`, `/admin`, `/api/status`, `/api/group/version` answer 200; `/api/admin/dashboard` and `/api/admin/month-games` answer 401 without a sign-in; the live script is the same file as the local build (index-FvQIttVq.js) and holds the three new rows; the player view carries none of the three new flags (only the existing instantTaps and homeCollapse); row counts unchanged (players 11, games 12, seats 23). The Settings rows themselves need the organizer PIN, so their OFF state is shown by the empty `task_log` check above.
 - Rollback: Settings > Feature switches, the three rows off (no deploy); or `TONIGHT_GLOW`, `COLOR_CLEANUP`, `PLAYER_CARDS_SIMPLE` = "off" and a deploy; or Pages deployment `5f82c960-8c32-4049-8292-70a342b42f7a` (Zip 6, 54dcdc6). No data was changed by the deploy, so no restore is needed.
 - Follow-ups from the final review (all only visible with a switch ON, none blocking): (1) with Simpler player cards on, a venue-waitlist game that is also full says "I'm in" instead of "Join waitlist" (that state is turned into a normal game for players today, so it is unreachable); (2) the shortened Cancel line drops "Late drops still owe $14" and the credit-back note (Alex approved the wording); (3) the TONIGHT glow ignores the organizer's "Animations, players" switch and only follows the phone's Reduce Motion; (4) on the folded organizer Home row the 44 px tile may overflow TONIGHT by about 1 px; (5) the dimmed canceled tile text is below 4.5:1 on purpose (Alex's 58 percent).
+
+## Zip 8: cleanup (read-only PIN, date-proof tests, reminder time, credit check, backups) - built Fri Nov 6, 2026; on a preview, waiting for "ship it"
+
+Spec: the "zip 8" brief (`START_HERE.md`, `SITE_RULES.md`). One PR. NO database schema change, no migration. Built in a quiet window (Friday). Nothing deployed to
+production, nothing switched on, no live data changed. Only reads of the live database (the switch rows in `task_log`). Zip 5 deploy ID stays "probably
+`6fde6dc0-d40f-438b-a7db-a19889cc571d` (unconfirmed)".
+
+### A. Read-only organizer PIN (`ORGANIZER_READONLY_PIN`, a Cloudflare secret; missing = off)
+- `server/viewOnly.ts`, `server/auth.ts`, `server/app.ts`. Tried only after the real PIN fails, inside the same counted attempt (same lockout: 5 per phone,
+  20 overall, 15 minutes). Its own sign-in: `admin_sessions.id` starts `ro:<fingerprint of the secret>:`, the cookie value starts `ro.` (the stored hash
+  covers the prefix), 12 hours. Changing or removing the secret ends every view-only sign-in at once. A PIN change signs it out too. The real PIN can never
+  be changed to the read-only one.
+- Every POST, PUT, PATCH and DELETE from a view-only phone gets 403 `view_only` "View only. Nothing was saved." before any route runs (sign in and sign out
+  excepted), with a second check in `requireAdmin`. Its GETs run on `viewOnlyDb` (only plain SELECTs reach the database, a batch of reads really runs, no
+  Telegram alert can be sent), so even the dashboard's upkeep (adding next weeks' games) does nothing. Its backup download has the PIN hash and the group word
+  hash blanked (fresh reviewer: a 6-digit PIN can be guessed from its hash offline).
+- Screens: a small "View only" label next to the title (`src/view-only.css`, light and dark, 4.5:1). Refused saves show the calm note, never a red error
+  (Settings switches snap back). The dashboard answer gains `viewOnly: true` only for that sign-in; for the real PIN it is unchanged.
+- The secret is NOT set yet: storing a Cloudflare secret needs Alex's OK (see the report).
+### B. Date-proof tests
+- `e2e/fixed-clock.cjs` pins the server clock and every page's clock. admin-cleanup, admin-motion, texts-r2, player-fix1, circles, money-visible, good-news,
+  audit-player-flows, admin-audit, motion, layout-polish, popup, pay-always (and pay-sheet through layout-lib) all start from a fixed moment. Before, on Fri Nov 6 08:21 to 08:54 AM:
+  circles 10/8, money-visible 2/10, good-news 8/1, audit-player-flows 85/8, layout-polish 195/5, popup crashed after 11, admin-motion 27/1, admin-audit 10/1.
+  After: all pass, except admin-audit check 15, left failing on purpose: a real layout bug (the X on a dismissible "Need players" card overlaps a long date
+  line at 320 px, `.sg-when` lacks the right padding `.sg-head` has, `src/suggestions.css`). Not fixed (visible change, needs its own switch or Alex's OK).
+- `tests/held-drop-fuzz.test.ts` seed 136: the test's I'm in did not wait for a drop already on its way (the real screen does). Fixed in the test; seed 136
+  8 of 8 under a slowed hash, all 2,000 seeds clean.
+### C. Finalize reminder at 10:30 PM
+- `shared/tasks.ts` `finalizeDueMs`: 10:30 PM on game night, Eastern wall clock, or 5 minutes after the end if that is later. One time value, no switch. It
+  moves the Telegram alert and the "Do this now" Finalize card together (same due time); the separate Home "Finalize" card (`needsFinalize`) still shows as
+  soon as the game is over. Wording unchanged. The 5-minute tick's quick check follows it. Tests across both clock changes (`tests/finalize-reminder.test.ts`);
+  the six-week sweep golden changed only on the four finalize lines (9:05 / 9:35 / 10:05 PM to 10:30 PM), every other card identical to main at every tick.
+### D. Credit chain (verified, no money change)
+- `tests/credit-chain.test.ts`, through the real API: $14 at 6 played ($9, $5 back), $5 credit + $9 cash at 5 played ($11, $3 back), $3 + $11 at 7 ($8, $6 back),
+  $6 + $8 at 4 ($14, $0 back). Credit after each: $5, $3, $6, $0. Cash paid $42 = prices $42. Nothing lost, doubled or negative. Same with the organizer playing.
+### E. Last call alert (`LAST_CALL_TEXTS`, ships OFF)
+- Today (live, Texts round 2 on): the night-before alert links to the direct text page, which opens Messages with no recipients. 4 or more: "5 in so far. Want in?
+  Join now." 3 or fewer: "3 in, need 1 more. Want in? Join tonight, otherwise we'll have to cancel." Neither asks "still in?" nor says "to avoid fees".
+- With the switch on: "5 in so far. Is everyone still in? Anyone else in?" and "3 in. We need 1 more or tomorrow's game is canceled to avoid fees. Want in? Join
+  tonight." (`shared/lastCall.ts`). Settings row "Last call texts", `/admin?lastcall=on`, kill switch in `wrangler.toml`, Activity lines, `docs/FEATURE_SWITCHES.md`.
+### F. Cleanup
+- Nothing deleted yet: deleting branches and Pages deployments needs Alex's OK (blocked in this session). Candidates listed in the report.
+### G. Weekly backup
+- New private D1 database `pickleball-backups` (id a532f080-7535-4d4d-8067-62ab6af928e4, free). The clock Worker (`worker/backup.ts`, `worker/cron.ts`) looks once
+  an hour, after its knock, and on Sunday from 3:00 AM Eastern (or when the newest copy is over 8 days old) saves the same file Settings > Backup gives, in pieces,
+  keeping the newest 8. The live database is only read, through a read-only wrapper, in one batch. Restore: `docs/RESTORE.md`, "Weekly copies"
+  (`scripts/weekly-backup.mjs list` / `get`). R2 was not used: this token cannot reach R2, and the free plan's 5 cron triggers are all in use.
+- Run for real in Cloudflare's local runtime on fake data: 381,515 bytes in 5 pieces; a second tick the same hour made no second copy. The Worker deploy waits for "ship it".
+### H. Notes
+- The deploy records left on notes-only branches (Oct 30 clock, layout polish, late-fee reminders, PLAYER_FIX1 / PAY_SHEET, TEXTS_R2, LATE_FEE_SPLIT, Instant taps,
+  Zip 7) are now in this file.
+### Tests
+- Unit: see the PR. New: `readonly-pin`, `credit-chain`, `finalize-reminder`, `last-call`, `weekly-backup`. Browser: `e2e/zip8.cjs` (4/4).
+- Fresh reviewer (did not write the code): 1 blocker (the PIN hash in the view-only backup) and 2 should-fix (knock and copy in the same run; some red toasts), all fixed
+  with tests; also fixed from its notes: secret rotation signs helpers out, one-batch snapshot, the Worker's live database wrapped read-only.
