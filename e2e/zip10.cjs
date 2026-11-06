@@ -187,8 +187,23 @@ async function main() {
         const twelve = cards.find((c) => c.id === `row-${g12.id}`);
         assert(twelve && twelve.balls.length === 12, `12 balls on the 12-in card: ${twelve && twelve.balls.length}`);
         assert(cards.find((c) => c.id === `row-${g11.id}`).balls.length === 11, '11 balls');
-        // Every card with names has the people icon; no "In:" label.
+        // Every card with names has the people icon; no "In:" label. The names are 13 px (Alex, after the preview).
         for (const c of cards.filter((x) => x.names)) assert(c.hasIcon, `${c.id}: people icon`);
+        const fonts = await page.locator('.schedule .names-line.with-icon').evaluateAll((els) => [...new Set(els.map((e) => getComputedStyle(e).fontSize))]);
+        assert(fonts.length === 1 && fonts[0] === '13px', `names font ${fonts}`);
+        if (width === 390) {
+          // Five ordinary names, or six short ones, fit on one line on every card at 390 px.
+          const fit = await page.evaluate(() =>
+            [...document.querySelectorAll('.schedule > article.sched .names-line.with-icon')].map((line) => {
+              const room = line.closest('.sched-body').getBoundingClientRect().width - line.querySelector('.people-icon').getBoundingClientRect().width - parseFloat(getComputedStyle(line).columnGap);
+              const c = document.createElement('canvas').getContext('2d');
+              const cs = getComputedStyle(line.querySelector('.names-text'));
+              c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+              return { room, five: c.measureText('Alex, Nathan, Joe, Lane, Jordan').width, six: c.measureText('Alex, Joe, Dan, Kai, Sam, Lee').width };
+            }),
+          );
+          for (const f of fit) assert(f.five <= f.room && f.six <= f.room, `names room ${JSON.stringify(f)}`);
+        }
         const body = await page.locator('.schedule').innerText();
         assert(!/waitlist|standby|\bIn:/i.test(body), `waitlist words: ${body.match(/.{30}(waitlist|standby|In:).{30}/i)}`);
         if (width === 390) await shot(page, `on-player-${scheme}`);
@@ -295,6 +310,22 @@ async function main() {
       for (const sel of ['.court-switch, .court-line', '.r2-inout', '.r2-paidcell', '.r2-gear']) assert((await first.locator(sel).count()) > 0, `${sel} on the card`);
       const cardText = await cards.evaluateAll((els) => els.map((e) => e.innerText).join('\n'));
       assert(!/\b\d+ of 4 in\b|\b\d+ in\b(?!\s*·)|\b\d+ in, full\b/.test(cardText.replace(/You're in|I'm in/g, '')), 'no count text on the organizer cards');
+      // Tighter Home cards (Alex, after the preview): about 10 px from the note line to the circles, about 6 px from the circles to the names.
+      const gaps = await page.evaluate(() =>
+        [...document.querySelectorAll('[data-r2-card]')]
+          .map((c) => {
+            const note = c.querySelector('.r2-mid .game-note');
+            const ball = c.querySelector('.cl-players .dots > *');
+            const text = c.querySelector('.cl-players .names-text');
+            if (!note || !ball || !text) return null;
+            const range = document.createRange();
+            range.selectNodeContents(text);
+            return { note: ball.getBoundingClientRect().top - note.getBoundingClientRect().bottom, names: range.getClientRects()[0].top - ball.getBoundingClientRect().bottom };
+          })
+          .filter(Boolean),
+      );
+      assert(gaps.length > 2, 'cards with a note');
+      for (const g of gaps) assert(Math.abs(g.note - 10) <= 1.5 && Math.abs(g.names - 6) <= 1.5, `card gaps ${JSON.stringify(g)}`);
       const rows = page.locator('.hv2-short');
       assert((await rows.count()) > 3, 'folded rows');
       for (const t of await page.locator('.hv2-count.cl-row > strong').allInnerTexts()) assert(/^(~?\d{1,2}(:\d\d)? (AM|PM)|Canceled)$/.test(t.trim()), `row first line is the time: «${t}»`);

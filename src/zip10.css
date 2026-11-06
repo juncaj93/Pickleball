@@ -90,6 +90,11 @@ html[data-card-cleanup] .cl-names .people-icon svg {
 html[data-card-cleanup] .names-line.with-icon .names-text {
   min-width: 0;
 }
+/* Player cards: the names a little smaller (13 px, was 15 px; 14 px at 360 and below), so 5 names fit on one line at 390 and 6 short ones do.
+   A longer list still wraps. The icon follows the text size (1.05em). */
+html[data-card-cleanup] .schedule .names-line.with-icon {
+  font-size: 13px;
+}
 
 /* Not in: a normal size filled "I'm in" under the names (not full width, not on the right). */
 html[data-card-cleanup] .schedule > .sched.cl .sched-money > .sched-btn {
@@ -121,9 +126,11 @@ html[data-card-cleanup] .schedule > .sched.cl-later .ptile .day {
   font-size: 1.3rem;
   margin: 3px 0 2px;
 }
-html[data-card-cleanup] .schedule > .sched.cl-later .sched-status,
-html[data-card-cleanup] .schedule > .sched.cl-later .names-line {
+html[data-card-cleanup] .schedule > .sched.cl-later .sched-status {
   font-size: 0.88rem;
+}
+html[data-card-cleanup] .schedule > .sched.cl-later .names-line {
+  font-size: 13px;
 }
 html[data-card-cleanup] .schedule > .sched.cl-later .sched-time {
   font-size: 0.78rem;
@@ -134,6 +141,16 @@ html[data-card-cleanup] .schedule > .sched.cl-later .tile-check {
 }
 
 /* ---- Organizer screens ---- */
+
+/* The Home card (R2): tighter. The circles row is only as tall as the circles (its 34 px minimum was the old In button's height; In | Out is in the
+   footer now), about 10 px between the note line (or the court switch) and the circles, and about 6 px between the circles and the names. */
+html[data-card-cleanup] .scard-r2 .cl-players {
+  margin-top: 4px;
+  gap: 5px;
+}
+html[data-card-cleanup] .scard-r2 .cl-players .players-top {
+  min-height: 0;
+}
 
 /* The Home card and the Games card: the circles take the row (the organizer's own In | Out stays at its right end). */
 html[data-card-cleanup] .cl-players .players-top .cl-balls {

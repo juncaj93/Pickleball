@@ -2737,3 +2737,13 @@ merged and live first (production `9c94c864` = main `624c60f`). The full descrip
 ### Preview
 - https://preview-zip10.pickleball-club-9h0.pages.dev, fake database re-seeded Fri Nov 6, about 5:00 PM Eastern. On there: every switch the Zip 9 record
   lists as on (all live switches), plus Card cleanup.
+
+### After Alex tested the preview (Fri Nov 6, 2026, about 5:00 PM Eastern)
+- Answers: keep "Paid $14" and "Paid with credit"; keep the 12 player limit (no database change); $4 each for 11 and 12 on 1.5 hour games OK; the
+  branch name does not matter.
+- Tweak 1, player names 13 px (were 15 px, 14 px at 360 and below), only with Card cleanup on. Measured: at 390 px five ordinary names ("Alex, Nathan,
+  Joe, Lane, Jordan") or six short ones fit on one line on every card; at 360 they fit on Next week and Later cards, and on a This week card when about
+  4 px shorter; at 320 a list wraps after three or four names. `e2e/zip10.cjs` checks the 13 px and the 390 px fit.
+- Tweak 2, organizer Home card tighter (only with Card cleanup on): the circles row is as tall as the circles (its 34 px minimum was the old In button's
+  height), about 10 px from the note line to the circles (was about 16), about 6 px from the circles to the names (was about 10). The folded Next week
+  rows already sit 1 px apart, unchanged. `e2e/zip10.cjs` checks both gaps.
