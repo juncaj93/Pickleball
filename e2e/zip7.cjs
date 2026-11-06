@@ -495,7 +495,7 @@ async function main() {
   });
 
   // =============================================================== C. SIMPLER PLAYER CARDS
-  const wordsOnCards = (page) => page.evaluate(() => [...document.querySelectorAll('.schedule > .sched')].map((r) => ({ id: r.id, text: [...r.querySelectorAll('*')].filter((e) => !e.closest('button, [aria-hidden="true"], .sr-only')).map((e) => (e.children.length === 0 ? e.textContent : '')).join(' ').replace(/\s+/g, ' ').trim(), mine: r.dataset.mine === 'in', cal: r.querySelectorAll('.cal-icon-link').length, join: r.querySelectorAll('[data-join]').length, dot: r.querySelectorAll('.court-dot').length, head: r.querySelectorAll('.sched-head').length })));
+  const wordsOnCards = (page) => page.evaluate(() => [...document.querySelectorAll('.schedule > .sched')].map((r) => ({ id: r.id, text: [...r.querySelectorAll('*')].filter((e) => !e.closest('button, [aria-hidden="true"], .sr-only')).map((e) => (e.children.length === 0 ? e.textContent : '')).join(' ').replace(/\s+/g, ' ').trim(), mine: r.dataset.mine === 'in', cal: r.querySelectorAll('.cal-icon-link, [data-card-calendar]').length, join: r.querySelectorAll('[data-join]').length, dot: r.querySelectorAll('.court-dot').length, head: r.querySelectorAll('.sched-head').length })));
   for (const scheme of ['light', 'dark']) {
     await check(`C: no "Court booked / not booked" words or dot on any card; calendar icon only next to You're in (${scheme})`, async () => {
       for (const who of ['Jordan', 'Avery', 'Casey', 'Gray']) {
@@ -554,7 +554,8 @@ async function main() {
     await p.page.waitForTimeout(350);
     const now = p.page.locator(`#row-${id}`);
     assert((await now.getAttribute('data-mine')) === 'in', "the card says you're in at once");
-    assert((await now.locator('.cal-icon-link').count()) === 1, 'with the calendar icon');
+    // Zip 9 "Card time and buttons" (on in the fake world) turns the icon into the calendar half of the joined button.
+    assert((await now.locator('.cal-icon-link, [data-card-calendar]').count()) === 1, 'with the calendar icon');
     assert(/You're in/.test(await now.innerText()), "You're in text");
     await p.page.waitForTimeout(3000);
     assert((await now.getAttribute('data-mine')) === 'in', 'and it stays after the server answers');

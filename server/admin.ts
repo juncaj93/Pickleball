@@ -71,6 +71,8 @@ import { adminChangeStamp } from './stamp';
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { flatOf, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
+import { zip9Allowed } from '../shared/zip9';
+import { isShortGame } from '../shared/gameLength';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -1595,7 +1597,8 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
       .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND starts_at > ? ORDER BY starts_at")
       .bind(group.id, ctx.nowIso)
       .all<SessionRow>();
-    for (const s of open) await settle(ctx.db, s, ctx.nowIso, settings);
+    // The saved settings plus this request's "Short games" answer (normalizeSettings drops it), so a move-in pays the game's own price.
+    for (const s of open) await settle(ctx.db, s, ctx.nowIso, group.short_games === true ? { ...settings, shortGames: true } : settings);
   }
   return { ok: true };
 }
@@ -2227,6 +2230,15 @@ export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown
   const on = v.bool(body.on, 'on');
   await setShortGamesForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'short_games_on' : 'short_games_off', {}, ctx.nowIso);
+  // The flat price of every open 1.5 hour game just changed for everyone ($14 <-> $11): reprice their seats now, the way a move does
+  // (credit on a seat follows the new price; cash is never taken back, it is settled at Finalize). Nothing else is touched.
+  const everyone = zip9Allowed(ctx.env.SHORT_GAMES) && on;
+  const after: ReturnType<typeof settingsOf> = everyone ? { ...settingsOf({ ...group, short_games: false }), shortGames: true } : settingsOf({ ...group, short_games: false });
+  const { results: open } = await ctx.db
+    .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?")
+    .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
+    .all<SessionRow>();
+  for (const s of open) if (isShortGame(s.starts_at, s.ends_at)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
   return { ok: true, on };
 }
 

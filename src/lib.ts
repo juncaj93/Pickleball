@@ -680,7 +680,8 @@ if (typeof window !== 'undefined') {
 /**
  * Zip 9 switches on this phone only, before they are on for everyone: open the site once with ?shortgames=on or ?cardtime=on
  * (the same word with =off turns it back off; works on /admin too). Remembered in this browser. "Short games" really changes the
- * price of 1.5 hour games for that phone's taps: test it on the fake-data preview, or on live only with test players on an extra game.
+ * price of 1.5 hour games for that phone's taps, and the server honors it only for the organizer's sign-in (server/zip9.ts): test it on
+ * the fake-data preview, or on live only with test players on an extra game.
  */
 export function zip9Test(name: 'shortgames' | 'cardtime'): boolean {
   return storageGet(`pb_${name}`) === 'on';

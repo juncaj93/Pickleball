@@ -2568,3 +2568,47 @@ production, nothing switched on, no live data changed. Only reads of the live da
 - Unit: see the PR. New: `readonly-pin`, `credit-chain`, `finalize-reminder`, `last-call`, `weekly-backup`. Browser: `e2e/zip8.cjs` (4/4).
 - Fresh reviewer (did not write the code): 1 blocker (the PIN hash in the view-only backup) and 2 should-fix (knock and copy in the same run; some red toasts), all fixed
   with tests; also fixed from its notes: secret rotation signs helpers out, one-batch snapshot, the Worker's live database wrapped read-only.
+
+## Zip 9: short games (1.5 hour games), time line under the date, Calendar | Directions button - built Fri Nov 6, 2026; on a preview, waiting for "ship it"
+
+Spec: the "zip 9" brief (`START_HERE.md`, `SITE_RULES.md`, four mockups). One PR. NO database schema change, no migration (a game's length is End
+minus Start). Built in a quiet window (Friday). Nothing deployed to production, nothing switched on, no live data changed. Zip 8 was merged and live
+first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The full description of each switch is its row in `docs/FEATURE_SWITCHES.md`.
+
+### A. Short games (`SHORT_GAMES`, ships OFF; CHANGES MONEY for 1.5 hour games only)
+- The one table: `shared/gameLength.ts` `GAME_LENGTHS`, keyed by minutes (90 and 120), each row with court cost and the price each for 4 to 10.
+  Normal (120): 14, 11, 9, 8, 7, 6, 5 and $48 (a normal game keeps reading Settings > Money, exactly as live; a test checks the row equals that rule).
+  Short (90): 11, 9, 7, 6, 5, and PROPOSED 4, 4 for 9 and 10 (waiting for Alex), court $36. Above 10 pays the 10 price; under 4 pays the 4 price.
+  A new length later = one new row. `gamePrice()` is the only place that decides a game's price.
+- Server: the request's switch answer rides on the group row (`server/zip9.ts` `withShortGames`, called by `requireAdmin` and `requireGroupKey`)
+  and on to `settingsOf(group).shortGames` (missing when off, so settings are exactly as before). `priceOf` / `flatOf` / `courtCostOf` in
+  `server/repo.ts` give each game its own price. Every path that used the Settings price for a game now uses the game's: seat prices
+  (`pricesFor`), auto credit at I'm in and waitlist move-ins (`autoCreditFor`, now given the request's settings), the cash-out offer and Use it,
+  Finalize (the row's table), Reopen, repricing, late drops and no-shows, the late-cancel fee split (`feeSplitPrice` takes the game's price),
+  Unmark, the views (player and organizer, `shortGame` on a game only when it is special), Totals (projected = 3 x the game's own price per court),
+  fee-cleared notices, History lines. Moving a game between 2 hours and 1.5 hours reprices its seats in the same batch as the move.
+- Screens: player "$11 due", Pay, Pay sheet, Venmo links and requests all read the server's owed amount; toasts, the credit note and late-fee words
+  use the game's price. Organizer: Finalize card preview, Money cards ("$11/person", "Credit: $2 per"), Cancel sheet, canceled-late texts,
+  Remind texts, Edit charge. Heads-up on Add game and Edit game; "1.5 HR" pill on the tile and "1.5 hr game · $11 each" on the folded row.
+- Add to calendar already used each game's real end time on main (`server/player.ts` `sessionCalendarFile`): unchanged, now tested (90 minute event).
+- Other lengths: no row, so priced like a normal game ($14, $48), no tag, no heads-up; the old "7:30–9:30 PM" style end line stays with Card time off,
+  and with it on the length shows in words ("1 hour", "2.5 hours").
+### B and C. Card time and buttons (`CARD_TIME_BUTTONS`, ships OFF; display only)
+- `src/pages/PlayerHome.tsx`, `src/CardButtons.tsx`, `src/zip9.css`: start time and a smaller gray length line under every tile; on a card you are in,
+  one joined Calendar | Directions button (26 px, 15 px icons, 44 px tall tap areas, labels "Add to calendar" and "Directions"). The address is
+  `COURT_ADDRESS` in `shared/zip9.ts`. iPhone: maps.apple.com; Android and computers: Google's directions link.
+### D. Switches
+- Two Settings rows (newest first), `PUT /api/admin/short-games-switch` and `/api/admin/card-time-switch`, `task_log` rows `short_games_on` and
+  `card_time_buttons_on`, kill switches in `wrangler.toml` (allowed; on in `[env.preview.vars]`), private links `?shortgames=on`, `?cardtime=on`,
+  Activity lines, player stamp pieces `sg` and `ct` only while on.
+- Preview seed: both rows on (`PREVIEW_SWITCHES_ON`), plus a "1.5 hour game" (Booked, 4 in, Indy paid $11, three owe $11).
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking with the switches off (checked: settings, JSON shape, stamp, every price path).
+- Fixed from it: (1) texted links (`server/tokens.ts`) now get the switch too (they priced from Settings); (2) a Settings save that moves
+  waiters in keeps the switch for their price; (4) the private test link `?shortgames=on` only counts for the organizer's sign-in (and View as),
+  so a player can never lower their own price; (6) flipping the Settings row reprices the seats of open 1.5 hour games at once (tests added).
+- Known gaps, left as is and listed for Alex: (a) a debt on a game canceled late with the fee kept (no split) or a late drop is priced from the
+  switch as it is when looked at: flipping Short games off turns an $11 debt back into $14 (nothing is stored per seat; same as the rest of
+  the site, where a debt follows the price setting). (b) A seat paid $14 cash on a 2 hour game that is then moved to 1.5 hours keeps its $14
+  until Finalize gives the $3 back; if that game is instead canceled late with the fee kept and 4 or fewer in, the $3 is not given back.
+  (c) A short game finalized with no payments, viewed after the switch is turned off, shows a wrong "paid at" figure in one organizer note (display only).

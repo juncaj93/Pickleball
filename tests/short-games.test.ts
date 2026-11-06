@@ -273,6 +273,68 @@ describe('short games through the API', () => {
     expect(d.shortGamesForAll).toBe(false);
   });
 
+  it('a PLAYER phone with the private link changes nothing: only the organizer\'s sign-in honors it (a player can never lower their price)', async () => {
+    const ctx = await group();
+    ctx.app.now = Date.parse('2026-11-06T15:00:00.000Z');
+    const id = await addGame(ctx, 3, 90);
+    const blair = await playerPhone(ctx, 'Blair');
+    const j = await blair.call('POST', `/api/sessions/${id}/join`, {}, ON);
+    expect(j.data.result).toBe('confirmed');
+    const v = (await blair.call('GET', '/api/group', undefined, ON)).data;
+    expect(v.shortGames).toBeUndefined();
+    const mine = v.sessions.find((x: any) => x.id === id);
+    expect(mine.shortGame).toBeUndefined();
+    expect(mine.mine.oweCents).toBe(1400);
+    expect((await blair.call('POST', `/api/sessions/${id}/paid`, { paid: true }, ON)).status).toBe(200);
+    expect((await game(ctx, id)).roster.find((r: any) => r.name === 'Blair').paymentAmountCents).toBe(1400);
+  });
+
+  it('flipping the Settings row reprices open 1.5 hour games at once: a $14 credit seat is paid at $11 when on, owes $3 when off again', async () => {
+    const ctx = await group();
+    ctx.app.now = Date.parse('2026-11-06T15:00:00.000Z');
+    // Blair gets $14 credit (paid into a game canceled early), then joins a 1.5 hour game while the switch is OFF: $14 credit goes on.
+    const normal = await addGame(ctx, 2, 120);
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', `/api/sessions/${normal}/join`, {});
+    await ctx.organizer.call('POST', `/api/admin/sessions/${normal}/payment`, { playerId: ctx.byName.Blair, paid: true });
+    await ctx.organizer.call('POST', `/api/admin/sessions/${normal}/decision`, { decision: 'cancel', confirm: true });
+    const short = await addGame(ctx, 3, 90);
+    const casey = await playerPhone(ctx, 'Casey');
+    await blair.call('POST', `/api/sessions/${short}/join`, {});
+    await casey.call('POST', `/api/sessions/${short}/join`, {});
+    expect((await game(ctx, short)).roster.find((r: any) => r.name === 'Blair')).toMatchObject({ paymentStatus: 'paid', creditCents: 1400 });
+    // On for everyone: the game is $11 now. Blair's seat stays paid (the $3 extra comes back at Finalize); Casey owes $11.
+    await ctx.organizer.call('PUT', '/api/admin/short-games-switch', { on: true });
+    let g = await game(ctx, short);
+    expect(g.roster.find((r: any) => r.name === 'Casey').owesCents).toBe(1100);
+    expect(g.roster.find((r: any) => r.name === 'Blair').paymentStatus).toBe('paid');
+    // Off again: back to $14 for both.
+    await ctx.organizer.call('PUT', '/api/admin/short-games-switch', { on: false });
+    g = await game(ctx, short);
+    expect(g.roster.find((r: any) => r.name === 'Casey').owesCents).toBe(1400);
+    expect(g.roster.find((r: any) => r.name === 'Blair')).toMatchObject({ paymentStatus: 'paid', owesCents: 0 });
+    expect(await potOf(ctx, 'Blair')).toBe(0);
+  });
+
+  it('flipping on reprices a seat whose credit now covers the price: $11 of credit on a $14 seat becomes paid at $11', async () => {
+    const ctx = await group();
+    ctx.app.now = Date.parse('2026-11-06T15:00:00.000Z');
+    // Blair gets $11 credit: pays $11 into a 1.5 hour game (switch on) that is then canceled early.
+    await ctx.organizer.call('PUT', '/api/admin/short-games-switch', { on: true });
+    const first = await addGame(ctx, 2, 90);
+    const blair = await playerPhone(ctx, 'Blair');
+    await blair.call('POST', `/api/sessions/${first}/join`, {});
+    await ctx.organizer.call('POST', `/api/admin/sessions/${first}/payment`, { playerId: ctx.byName.Blair, paid: true });
+    await ctx.organizer.call('POST', `/api/admin/sessions/${first}/decision`, { decision: 'cancel', confirm: true });
+    expect(await potOf(ctx, 'Blair')).toBe(1100);
+    await ctx.organizer.call('PUT', '/api/admin/short-games-switch', { on: false });
+    const short = await addGame(ctx, 3, 90);
+    await blair.call('POST', `/api/sessions/${short}/join`, {});
+    expect((await game(ctx, short)).roster.find((r: any) => r.name === 'Blair')).toMatchObject({ paymentStatus: 'unpaid', owesCents: 300, creditCents: 1100 });
+    await ctx.organizer.call('PUT', '/api/admin/short-games-switch', { on: true });
+    expect((await game(ctx, short)).roster.find((r: any) => r.name === 'Blair')).toMatchObject({ paymentStatus: 'paid', owesCents: 0, paymentAmountCents: 1100 });
+  });
+
   it('auto credit at I\'m in takes at most $11 on a short game; a pending cash out is offered for the $11 too', async () => {
     const ctx = await group();
     ctx.app.now = Date.parse('2026-11-06T15:00:00.000Z');

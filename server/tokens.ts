@@ -10,6 +10,7 @@ import { lateFeesFor } from './lateFees';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 import { flatOf, specialFlatOf } from './repo';
+import { withShortGames } from './zip9';
 
 export type TokenScope = 'attendance' | 'claim';
 
@@ -60,6 +61,8 @@ async function resolve(ctx: Ctx, raw: unknown): Promise<Resolved> {
   if (!session || !player) throw new HttpError(404, 'link_not_found', 'This link is not valid.');
   const group = await ctx.db.prepare('SELECT * FROM groups WHERE id = ?').bind(session.group_id).first<GroupRow>();
   if (!group) throw new HttpError(404, 'link_not_found', 'This link is not valid.');
+  // "Short games" (server/zip9.ts): a texted link prices a 1.5 hour game the same way the player's screen does.
+  await withShortGames(ctx, group);
   return { token, session, group, playerName: player.display_name, playerActive: !!player.is_active };
 }
 
