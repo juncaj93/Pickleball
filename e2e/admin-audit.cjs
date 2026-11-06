@@ -290,9 +290,8 @@ async function main() {
     assert(box.width >= 44 && box.height >= 44, `X is ${box.width}x${box.height}`);
     assert(Math.abs(box.x + box.width - (cardBox.x + cardBox.width)) <= 1 && Math.abs(box.y - cardBox.y) <= 1, 'X is not in the top-right corner');
     // The X never covers the card's words.
-    // KNOWN SITE BUG (found Nov 6, 2026, when this file was pinned to a fixed day): at 320 px the X's 44 px box overlaps the end of a
-    // long date line, for example "Sat, Nov 14 · 7:00 to 9:00 PM" (words end at 266, X starts at 261). Only .sg-head gets the 32 px
-    // right padding on a dismissible card, not .sg-when, so whether this failed used to depend on the real date. Left failing on purpose.
+    // Zip 8 (Nov 6, 2026): at 320 px a long date line ("Sat, Nov 14 · 7:00 to 9:00 PM") used to run under the X; the date line now
+    // keeps the same room for the X as the line above it (src/do-now.css, .dismissible > .sg-when).
     const overlap = await c.evaluate((card) => {
       const xr = card.querySelector('.card-x').getBoundingClientRect();
       const hit = [];
