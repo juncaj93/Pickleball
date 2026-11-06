@@ -2706,3 +2706,34 @@ merged and live first (production `9c94c864` = main `624c60f`). The full descrip
   player stamp piece `cl` only while on.
 - Preview seed: `card_cleanup_on` in `PREVIEW_SWITCHES_ON`; the seed switches it on the way the row does (Gray moves in), then adds three games with no notes:
   1 in, 8 in and 12 in.
+
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking. Three should-fix, each proven with a test by the reviewer and now regression tests in `tests/card-cleanup.test.ts`:
+  (A) the private link was honored on any phone, so a player phone could join past Max players and its drop moved waiters in up to 12 with no notice:
+  the no-cap part now counts the link only on the organizer's sign-in (and View as), like Zip 9's Short games; a player phone with the link gets the
+  look only (`cardCleanupLook`). (B) switching on left anyone past 12 on a hidden waitlist that a later drop would fill silently: they now come off the
+  list when the row is switched on (`endWaitlists`, money back the way a drop does). (C) raising Max players while the organizer's phone had the link
+  moved nobody in: the comparison uses the saved setting again.
+- Also fixed from its notes: the drop warning counts the real waitlist; the organizer's own In is never drawn past 12; the tile height is read from
+  layout (`offsetHeight`), not a size caught mid-animation. Found while rerunning older tests: with Instant taps a tap on a 12-in game was drawn as
+  joined, then taken back; only a game with a spot is drawn ahead now (`canJoinInstantly` checks `openSpots`).
+- Notes kept: the integrity check allows 12 whenever the Settings row is on, even if the `CARD_CLEANUP` kill switch is "off" (SQL cannot see the
+  kill switch); the dashboard always carries `cardCleanupForAll` (false when off), as every other switch does.
+
+### Tests (Fri Nov 6, 2026)
+- Unit and API: 2277 passed, 1 skipped, 0 failed (135 files); tsc clean; build clean. New: `tests/card-cleanup.test.ts` (19: capOf, the kill switch,
+  the refusal words, Telegram without "moved up", the Want in? line, Activity lines, every zip10.css rule under the attribute, prices at 11 and 12 normal
+  and short, switch off as before, the private link player vs organizer, 11 and 12 joins and the 13th refused, Settings save keeps Max players, the switch
+  flip moving waiters in and taking the rest off, older promotions hidden, the review's A and C, the credit chain at 11 and 12). Seed test follows the new
+  games; the integrity check knows the switch.
+- Browser: `e2e/zip10.cjs` 21/21 (light and dark, 390/360/320 px: no count text, balls on one row inside the card at their old sizes, people icon, no
+  waitlist words, short content centered on the tile and tall content at the tile top, You're in and Not in layouts, 44 px taps, tinted Later cards at
+  4.5:1, organizer cards and rows, a 12th joining and dropping, a 13th refused, the Settings row; switch off = old cards; `?cardcleanup=on` on one phone).
+  `e2e/zip10-off.cjs` 34/34 (switch off = today's main on every screen, light and dark, including the standby, Leave waitlist and an 11th going on the
+  waitlist; needs `MAIN_DIR`, not in `npm run test:e2e`). Older scripts on the fake world, rerun: zip9 15, zip8 4, zip7 33, zip6 28, instant-taps 19,
+  money-rework 36 (zip7, zip6, instant-taps and money-rework updated to know the new cards, no waitlist and the new Settings row). Scripts that build
+  their own world (switch off there) were not rerun.
+
+### Preview
+- https://preview-zip10.pickleball-club-9h0.pages.dev, fake database re-seeded Fri Nov 6, about 5:00 PM Eastern. On there: every switch the Zip 9 record
+  lists as on (all live switches), plus Card cleanup.
