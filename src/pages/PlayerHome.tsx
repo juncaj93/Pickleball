@@ -1483,6 +1483,22 @@ export function HolidayPill({ name, venueNote, confirmed }: { name: string; venu
   );
 }
 
+/** TONIGHT_GLOW on: the banner across the top of a date tile. On a tile too narrow for TOMORROW the CSS shows TOM instead (src/zip7.css). */
+function DayBanner({ day }: { day: 'tonight' | 'tomorrow' }) {
+  return (
+    <span className={`tonight-tag day-tag ${day}`}>
+      {day === 'tonight' ? (
+        'TONIGHT'
+      ) : (
+        <>
+          <span className="dt-full">TOMORROW</span>
+          <span className="dt-short">TOM</span>
+        </>
+      )}
+    </span>
+  );
+}
+
 const TILE_DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
 /**
@@ -1497,7 +1513,7 @@ export function DateTile({ iso, tz, mine, ts = '', day }: { iso: string; tz: str
     <div className={`tile${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`} aria-hidden="true">
       {ts && <TileBorders />}
       {/* TONIGHT_GLOW on: `day` is set on game day and the day before; otherwise (and always with the switch off) the weekday. */}
-      {day ? <span className={`tonight-tag day-tag ${day}`}>{day === 'tonight' ? 'TONIGHT' : 'TOMORROW'}</span> : <span className="dow">{TILE_DOW[p.weekday]}</span>}
+      {day ? <DayBanner day={day} /> : <span className="dow">{TILE_DOW[p.weekday]}</span>}
       <span className="day">{p.day}</span>
       <span className="mon">{month}</span>
       {mine && (
@@ -1529,7 +1545,7 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: stri
   const tag =
     day !== undefined ? (
       day ? (
-        <span className={`tonight-tag day-tag ${day}`}>{day === 'tonight' ? 'TONIGHT' : 'TOMORROW'}</span>
+        <DayBanner day={day} />
       ) : (
         <span className="dow">{TILE_DOW[p.weekday]}</span>
       )

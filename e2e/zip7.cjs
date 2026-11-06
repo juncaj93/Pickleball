@@ -143,6 +143,37 @@ async function main() {
   const rowByNote = (page, note) => page.locator('.schedule > .sched', { hasText: note }).first();
   const tonightRow = (page) => page.locator('.schedule > .sched', { has: page.locator('.tile', { hasText: /TONIGHT|^THU/ }) }).first();
   const tileOf = (row) => row.locator('.tile.ptile').first();
+  /** The banner rule, for every TONIGHT / TOMORROW tag on the page: a strip flush with the tile's top edge and full inner width, replacing the weekday, with the date number and month below it, 9 px or bigger, never clipped; TOM only where TOMORROW cannot fit. */
+  const bannerProblems = (page) =>
+    page.evaluate(() => {
+      const out = [];
+      for (const t of document.querySelectorAll('.day-tag')) {
+        const tile = t.closest('.tile');
+        const tr = tile.getBoundingClientRect();
+        const cs = getComputedStyle(tile);
+        const L = tr.left + parseFloat(cs.borderLeftWidth);
+        const R = tr.right - parseFloat(cs.borderRightWidth);
+        const T = tr.top + parseFloat(cs.borderTopWidth);
+        const r = t.getBoundingClientRect();
+        const vis = [...t.querySelectorAll('span')].find((x) => getComputedStyle(x).display !== 'none') || t;
+        const word = vis.textContent.trim();
+        const name = `${word} on a ${Math.round(tr.width)} px tile`;
+        if (Math.abs(r.left - L) > 1 || Math.abs(r.right - R) > 1) out.push(`${name}: not the full inner width (${Math.round(r.left - L)}, ${Math.round(R - r.right)})`);
+        if (Math.abs(r.top - T) > 1) out.push(`${name}: not flush with the top edge (${Math.round(r.top - T)})`);
+        if (tile.querySelector('.dow')) out.push(`${name}: a weekday is still on the tile`);
+        const day = tile.querySelector('.day');
+        const mon = tile.querySelector('.mon');
+        if (!day || !mon || day.getBoundingClientRect().top < r.bottom - 0.5 || mon.getBoundingClientRect().top < day.getBoundingClientRect().bottom - 0.5) out.push(`${name}: date number and month are not below the strip`);
+        if (parseFloat(getComputedStyle(vis).fontSize) < 9) out.push(`${name}: type under 9 px`);
+        if (t.scrollWidth > t.clientWidth + 1) out.push(`${name}: clipped`);
+        const rg = document.createRange();
+        rg.selectNodeContents(vis);
+        if (rg.getBoundingClientRect().width > r.width + 0.5) out.push(`${name}: the word is wider than the strip`);
+        if (word === 'TOM' && t.classList.contains('tonight')) out.push('TONIGHT must never be shortened');
+        if (parseFloat(getComputedStyle(t).borderTopLeftRadius) < 2) out.push(`${name}: strip corners are not rounded to the tile`);
+      }
+      return out;
+    });
   const idOf = async (row) => (await row.getAttribute('id')).replace('row-', '');
 
   const game = {
@@ -206,24 +237,43 @@ async function main() {
     await p.ctx.close();
   });
   for (const width of [390, 360, 320]) {
-    await check(`A: the tags fit inside their tiles on every card at ${width} px, light and dark, no sideways scroll`, async () => {
+    await check(`A: the banner is a strip across the top of the tile on every player card at ${width} px, light and dark (with Player screen fixes on too), no sideways scroll`, async () => {
       for (const scheme of ['light', 'dark']) {
         const p = await openPlayer('Jordan', { width, scheme, query: ALL_ON });
         assert((await p.page.locator('.schedule.pf1').count()) === 1, 'Player screen fixes is on too');
-        const bad = await p.page.evaluate(() =>
-          [...document.querySelectorAll('.day-tag')].flatMap((t) => {
-            const r = t.getBoundingClientRect();
-            const tile = t.closest('.tile').getBoundingClientRect();
-            return t.scrollWidth > t.clientWidth + 1 || r.left < tile.left || r.right > tile.right + 0.5 || t.getBoundingClientRect().height > 24 ? [`${t.textContent} ${Math.round(r.width)} in ${Math.round(tile.width)}`] : [];
-          }),
-        );
-        assert(bad.length === 0, `tag spills (${scheme}): ${bad.join('; ')}`);
+        assert((await p.page.locator('.day-tag').count()) >= 3, 'tags on the page');
+        const bad = await bannerProblems(p.page);
+        assert(bad.length === 0, `banner (${scheme}): ${bad.join('; ')}`);
+        // TOMORROW is the full word on this week's and next week's tiles.
+        const tm = p.page.locator(`#row-${game.tomorrow.id} .day-tag.tomorrow`);
+        assert((await tm.innerText()).trim() === 'TOMORROW', `TOMORROW in full on the card (${await tm.innerText()})`);
         await noSideScroll(p.page, `player ${width} ${scheme}`);
         if (width === 320) await shot(p.page, `player-320-${scheme}`);
         await p.ctx.close();
       }
     });
   }
+  await check('A: a LATER row tile (56 px, too narrow for TOMORROW at 9 px) says TOM, still 9 px and flush; TONIGHT stays whole', async () => {
+    const p = await openPlayer('Jordan', { width: 320, query: ALL_ON });
+    // Put a copy of tomorrow's and tonight's tiles into a LATER-tier card shell on the page.
+    await p.page.evaluate(([a, b]) => {
+      const mk = (id) => {
+        const src = document.getElementById(`row-${id}`).cloneNode(true);
+        src.id = `later-${id}`;
+        src.className = src.className.replace(/tier-\w+/, 'tier-later');
+        src.dataset.tier = 'later';
+        document.querySelector('.schedule').append(src);
+      };
+      mk(a);
+      mk(b);
+    }, [game.tomorrow.id, game.tonight.id]);
+    await p.page.waitForTimeout(300);
+    const info = await p.page.evaluate(([a, b]) => ({ tomorrow: document.querySelector(`#later-${a} .day-tag`).innerText.trim(), tonight: document.querySelector(`#later-${b} .day-tag`).innerText.trim(), width: document.querySelector(`#later-${a} .tile`).getBoundingClientRect().width }), [game.tomorrow.id, game.tonight.id]);
+    assert(info.tomorrow === 'TOM' && info.tonight === 'TONIGHT', `LATER tile words: ${JSON.stringify(info)}`);
+    const bad = await bannerProblems(p.page);
+    assert(bad.length === 0, `banner: ${bad.join('; ')}`);
+    await p.ctx.close();
+  });
   await check('A: organizer Home tiles say TONIGHT / TOMORROW too; the Money list tiles keep the weekday', async () => {
     const { ctx, page } = await openAdmin({ url: '/admin?tonightglow=on' });
     assert((await page.locator(`#session-${game.tonight.id} .day-tag.tonight`).count()) === 1, 'admin TONIGHT');
@@ -238,13 +288,22 @@ async function main() {
     assert((await off.page.locator('.day-tag').count()) === 0, 'admin switch off: weekday');
     await off.ctx.close();
   });
-  await check('A: the admin tile at 320 px fits TOMORROW', async () => {
-    const { ctx, page } = await openAdmin({ width: 320, url: '/admin?tonightglow=on' });
-    const bad = await page.evaluate(() => [...document.querySelectorAll('.day-tag')].filter((t) => t.scrollWidth > t.clientWidth + 1 || t.getBoundingClientRect().left < t.closest('.tile').getBoundingClientRect().left).map((t) => t.textContent));
-    assert(bad.length === 0, `spills: ${bad}`);
-    await noSideScroll(page, 'admin 320');
-    await ctx.close();
-  });
+  for (const width of [390, 360, 320]) {
+    await check(`A: organizer Home banners are flush strips at ${width} px, light and dark: TONIGHT whole, TOMORROW says TOM at 9 px on the narrow tile`, async () => {
+      for (const scheme of ['light', 'dark']) {
+        const { ctx, page } = await openAdmin({ width, scheme, url: `/admin?${ALL_ON}` });
+        assert((await page.locator('.day-tag').count()) >= 3, 'tags on the page');
+        const bad = await bannerProblems(page);
+        assert(bad.length === 0, `banner (${scheme}): ${bad.join('; ')}`);
+        const tm = (await page.locator(`#session-${game.tomorrow.id} .day-tag.tomorrow`).innerText()).trim();
+        assert(tm === 'TOM', `the narrow organizer tile says TOM (${tm})`);
+        assert((await page.locator(`#session-${game.tonight.id} .day-tag.tonight`).innerText()).trim() === 'TONIGHT', 'TONIGHT whole');
+        await noSideScroll(page, `admin ${width} ${scheme}`);
+        if (width === 320) await shot(page, `admin-banner-320-${scheme}`);
+        await ctx.close();
+      }
+    });
+  }
 
   // =============================================================== B. COLOR CLEANUP
   // A waitlist game that shows on the organizer Home: tomorrow's game for the length of the color tests (put back to Booked after).

@@ -71,14 +71,49 @@
 /* =====================================================================================================================
    A. TONIGHT_GLOW: TONIGHT = solid green band, TOMORROW = soft green band, a slow glow and a light sweep on TONIGHT's date badge only.
    ===================================================================================================================== */
+:root[data-tonight-glow] .tile {
+  /* Outer radius and border width of this tile, so the banner's top corners match the tile's inside edge. */
+  --z7-r: 12px;
+  --z7-bw: 1.5px;
+}
+:root[data-tonight-glow] .schedule .tile.ptile {
+  --z7-r: 16px;
+  --z7-bw: 2px;
+}
+:root[data-tonight-glow] .schedule.tier-next .tile.ptile,
+:root[data-tonight-glow] .tier-next .tile.ptile {
+  --z7-r: 13px;
+  --z7-bw: 1.5px;
+}
+:root[data-tonight-glow] .tier-later .tile.ptile {
+  --z7-r: 12px;
+  --z7-bw: 1.5px;
+}
+/* The banner: a solid strip across the TOP of the date tile, flush with the tile's top edge and corners, full width. It REPLACES the weekday
+   (the date number and the month stay below it). 9 px type, like the approved mockup. */
+:root[data-tonight-glow] .tile.day-tonight,
+:root[data-tonight-glow] .tile.day-tomorrow {
+  padding-top: 0;
+}
 :root[data-tonight-glow] .tile .day-tag {
   display: block;
+  align-self: stretch;
   box-sizing: border-box;
-  border-radius: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 5px 0 4px;
+  border-radius: calc(var(--z7-r) - var(--z7-bw)) calc(var(--z7-r) - var(--z7-bw)) 0 0;
+  font-family: var(--body);
+  font-size: 9px;
   font-weight: 800;
+  line-height: 1.15;
   letter-spacing: 0.02em;
   white-space: nowrap;
   text-align: center;
+}
+/* The short word, only where the tile is too narrow for TOMORROW at 9 px (organizer tiles at narrow widths; see below). */
+:root[data-tonight-glow] .tile .day-tag .dt-short {
+  display: none;
 }
 :root[data-tonight-glow] .tile .day-tag.tonight {
   background: var(--z7-tonight-bg);
@@ -230,34 +265,19 @@
   color: var(--pc-muted);
 }
 
-/* Organizer date tiles are narrow (about 44 px): the band follows the tile's own width so TOMORROW still fits on one line. */
-:root[data-tonight-glow] .scard .tile .day-tag,
-:root[data-tonight-glow] .hv2-short .tile .day-tag {
-  margin: 0 2px;
-  padding: 2px 0;
-  letter-spacing: 0;
-  font-size: min(0.55rem, 17cqw);
+/* TOMORROW stays at 9 px (the word is about 58 px wide); a tile narrower than that says TOM instead (TONIGHT always fits): every organizer tile
+   and the LATER row tile on the player screen. The tile's own column is the container (it is as wide as the tile). The folded Home row's tile is a fixed 44 px, so it always says TOM. */
+:root[data-tonight-glow] .hv2-short .tile .day-tag .dt-full {
+  display: none;
 }
-:root[data-tonight-glow] .scard .tile .day-tag.tomorrow {
-  font-size: min(0.55rem, 14.2cqw);
+:root[data-tonight-glow] .hv2-short .tile .day-tag .dt-short {
+  display: inline;
 }
-:root[data-tonight-glow] .hv2-short .tile .day-tag {
-  font-size: 0.5rem;
-}
-:root[data-tonight-glow] .hv2-short .tile .day-tag.tomorrow {
-  font-size: 0.4rem;
-}
-
-/* Player tiles with "Player screen fixes" on (a roomier tag): the word TOMORROW is wider than TONIGHT, so its band gets a smaller word and less
-   side room and always stays inside the tile (the date tile's own width, in cqw, as the tag already does). */
-:root[data-tonight-glow] .schedule.pf1 .tonight-tag.day-tag,
-:root[data-tonight-glow] .schedule.pf1 .tier-later .tonight-tag.day-tag {
-  margin: 0 3px;
-  padding: 0.42em 0.2em;
-  letter-spacing: 0;
-  font-size: min(0.68rem, 12cqw);
-}
-:root[data-tonight-glow] .schedule.pf1 .tonight-tag.day-tag.tomorrow,
-:root[data-tonight-glow] .schedule.pf1 .tier-later .tonight-tag.day-tag.tomorrow {
-  font-size: min(0.62rem, 10.6cqw);
+@container (max-width: 62px) {
+  :root[data-tonight-glow] .tile .day-tag .dt-full {
+    display: none;
+  }
+  :root[data-tonight-glow] .tile .day-tag .dt-short {
+    display: inline;
+  }
 }

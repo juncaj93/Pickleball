@@ -398,9 +398,14 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   };
   const hasOpenGameOn = (date: string) => games().some((g) => !g.state.flags.canceled && ms(g.endsAt) > N && eastDate(ms(g.startsAt)) === date);
   const pt = localParts(N, 'America/Detroit');
-  if (!hasOpenGameOn(eastDate(N))) {
-    const start = Math.max(zonedTimeToUtc(pt.year, pt.month, pt.day, 20, 15, 'America/Detroit'), Math.ceil((N + 30 * 60_000) / 900_000) * 900_000);
-    if (eastDate(start) === eastDate(N)) {
+  // Seeded late in the evening (9 PM Eastern or later) tonight's games are over or about to start, and the next look at the preview is most
+  // likely after midnight: then "tonight" means the NEXT calendar day, and "tomorrow" the day after it.
+  const dayShift = pt.hour >= 21 ? 1 : 0;
+  const tonightStart = zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift, 20, 15, 'America/Detroit');
+  const tonightDate = eastDate(tonightStart);
+  if (!hasOpenGameOn(tonightDate)) {
+    const start = Math.max(tonightStart, Math.ceil((N + 30 * 60_000) / 900_000) * 900_000);
+    if (eastDate(start) === tonightDate) {
       const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: 'Tonight test' });
       await refresh();
       const tg = games().find((g) => g.id === made.id);
@@ -409,9 +414,9 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
       summary.push('extra game "Tonight test" (no regular game tonight): Booked, 3 in (Avery, Blake, Emery); Gray is not in it');
     }
   }
-  if (!hasOpenGameOn(eastDate(zonedTimeToUtc(pt.year, pt.month, pt.day + 1, 12, 0, 'America/Detroit')))) {
-    const start = zonedTimeToUtc(pt.year, pt.month, pt.day + 1, 18, 45, 'America/Detroit');
-    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: 'Tomorrow test' });
+  const tomorrowStart = zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift + 1, 18, 45, 'America/Detroit');
+  if (!hasOpenGameOn(eastDate(tomorrowStart))) {
+    const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(tomorrowStart).toISOString(), endsAt: new Date(tomorrowStart + 2 * HOUR).toISOString(), note: 'Tomorrow test' });
     await refresh();
     const tm = games().find((g) => g.id === made.id);
     for (const n of ['Casey', 'Drew']) await join(n, tm);
