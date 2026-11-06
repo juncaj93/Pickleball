@@ -128,9 +128,11 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(ids).toEqual(['s-2026-11-14:book', 's-2026-11-14:book_followup']); // Sat Oct 31 is 14 days before Sat Nov 14
   });
 
-  it('after the game 10:05 PM: finalize who played, only for a game that was played, gone once finalized', () => {
-    expect(tasksAt('2026-11-04T03:04:00Z', [game('2026-11-03', { confirmedCount: 5 })]).map((x) => x.kind)).toEqual([]);
-    const t = tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 5 })]);
+  it('after the game, 10:30 PM: finalize who played, only for a game that was played, gone once finalized', () => {
+    // Zip 8: 10:30 PM game night (it was 10:05 PM, 5 minutes after this 8:00 to 10:00 PM game).
+    expect(tasksAt('2026-11-04T03:05:00Z', [game('2026-11-03', { confirmedCount: 5 })]).map((x) => x.kind)).toEqual([]);
+    expect(tasksAt('2026-11-04T03:29:00Z', [game('2026-11-03', { confirmedCount: 5 })]).map((x) => x.kind)).toEqual([]);
+    const t = tasksAt('2026-11-04T03:30:00Z', [game('2026-11-03', { confirmedCount: 5 })]);
     expect(t[0].text).toBe('Tuesday: finalize who played.');
     expect(t[0].alerts[0].text).toBe(`Tuesday: finalize who played: ${ADMIN}`);
     expect(t[0].buttons.map((b) => [b.label, b.action.type])).toEqual([['Finalize who played', 'finalize']]);
@@ -208,26 +210,26 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
   const at730 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 30);
   const iso = (ms: number) => new Date(ms).toISOString();
 
-  it('7:00 PM: last call 6:00 PM, cancel warning 9:00 PM (+9:30 follow-up), game-day check 6:15 AM, finalize 9:05 PM, booking 8:30 AM', () => {
+  it('7:00 PM: last call 6:00 PM, cancel warning 9:00 PM (+9:30 follow-up), game-day check 6:15 AM, finalize 10:30 PM, booking 8:30 AM', () => {
     const t = taskTimes(at7('2026-11-03'), OPTS);
     expect(iso(t.nightLastCall)).toBe('2026-11-02T23:00:00.000Z'); // Mon 6:00 PM EST
     expect(iso(t.deadline)).toBe('2026-11-03T12:00:00.000Z'); // Tue 7:00 AM
     expect(iso(t.cancelWarning)).toBe('2026-11-03T02:00:00.000Z'); // Mon 9:00 PM
     expect(iso(t.cancelFollowup)).toBe('2026-11-03T02:30:00.000Z'); // Mon 9:30 PM
     expect(iso(t.gamedayCheck)).toBe('2026-11-03T11:15:00.000Z'); // Tue 6:15 AM
-    expect(iso(t.finalize)).toBe('2026-11-04T02:05:00.000Z'); // Tue 9:05 PM
+    expect(iso(t.finalize)).toBe('2026-11-04T03:30:00.000Z'); // Tue 10:30 PM (Zip 8; was 9:05 PM)
     expect(iso(t.courtOpens)).toBe('2026-10-20T11:00:00.000Z'); // Tue Oct 20, 7:00 AM EDT
     expect(iso(t.bookingHeadsUp)).toBe('2026-10-20T10:45:00.000Z'); // 6:45 AM
     expect(iso(t.bookingFollowup)).toBe('2026-10-20T11:30:00.000Z'); // 7:30 AM
     expect(iso(t.noCourtCheck)).toBe('2026-11-03T12:15:00.000Z'); // Tue 7:15 AM
   });
 
-  it('7:30 PM: last call 6:30 PM, cancel warning 9:30 PM, game-day check 6:45 AM, finalize 9:35 PM', () => {
+  it('7:30 PM: last call 6:30 PM, cancel warning 9:30 PM, game-day check 6:45 AM, finalize 10:30 PM', () => {
     const t = taskTimes(at730('2026-11-05'), OPTS);
     expect(iso(t.nightLastCall)).toBe('2026-11-04T23:30:00.000Z'); // Wed 6:30 PM
     expect(iso(t.cancelWarning)).toBe('2026-11-05T02:30:00.000Z'); // Wed 9:30 PM
     expect(iso(t.gamedayCheck)).toBe('2026-11-05T11:45:00.000Z'); // Thu 6:45 AM
-    expect(iso(t.finalize)).toBe('2026-11-06T02:35:00.000Z'); // Thu 9:35 PM
+    expect(iso(t.finalize)).toBe('2026-11-06T03:30:00.000Z'); // Thu 10:30 PM (Zip 8; was 9:35 PM)
   });
 
   it("the game's own deadline moves the cancel warning and the game-day check, and the card names it", () => {

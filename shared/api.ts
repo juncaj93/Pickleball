@@ -411,6 +411,8 @@ export interface RefundRequestView {
 }
 
 export interface AdminDashboard {
+  /** Signed in with the read-only organizer PIN (server/viewOnly.ts): every save is refused. Missing for the real PIN. */
+  viewOnly?: true;
   /** The MOTION_ADMIN switch (server/motion.ts): the organizer screens animate. Visual only; false or missing means they look exactly as before. */
   motion?: boolean;
   /** The "did anything change?" stamp this load was drawn from (see /api/admin/version). */

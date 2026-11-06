@@ -135,8 +135,20 @@ export const CANCEL_WARNING_BEFORE_DEADLINE_MIN = 10 * 60;
 export const CANCEL_FOLLOWUP_AFTER_WARNING_MIN = 30;
 /** Game-day check: this long before the cancellation deadline. 7:00 AM deadline: 6:15 AM. Booked games only. */
 export const GAMEDAY_CHECK_BEFORE_DEADLINE_MIN = 45;
-/** Finalize alert: this long after the game ends. */
+/** Finalize reminder: never sooner than this long after the game ends. */
 export const FINALIZE_AFTER_END_MIN = 5;
+/**
+ * Finalize reminder (alert and "Do this now" card): 10:30 PM on game night, wall clock in the group's time zone (Eastern),
+ * so it is 10:30 PM before and after a clock change. A game still going at 10:30 PM gets it 5 minutes after it ends. Zip 8
+ * (it used to be 5 minutes after the end: 10:05 PM for an 8:00 to 10:00 PM game).
+ */
+export const FINALIZE_REMINDER_TIME = { hour: 22, minute: 30 };
+
+/** When the finalize reminder is due for a game. */
+export function finalizeDueMs(s: Pick<TaskSession, 'startsAt' | 'endsAt'>, tz: string): number {
+  const atNight = dayAt(s.startsAt, tz, 0, FINALIZE_REMINDER_TIME.hour, FINALIZE_REMINDER_TIME.minute);
+  return Math.max(atNight, Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS);
+}
 /** CourtReserve opens each date at this clock time, `bookingLeadDays` (14) days ahead. */
 export const COURT_OPENS_TIME = { hour: 7, minute: 0 };
 /** The booking heads-up: this long before the court opens (6:45 AM). Only for the game exactly 14 days out. */
@@ -189,7 +201,7 @@ export function taskTimes(s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'cancella
     cancelFollowup: cancelWarning + CANCEL_FOLLOWUP_AFTER_WARNING_MIN * MIN_MS,
     gamedayCheck: wallShift(deadline, o.tz, -GAMEDAY_CHECK_BEFORE_DEADLINE_MIN),
     noCourtCheck: o.textsR2 === true ? noCourtCheckR2(deadline, o.tz) : deadline + NO_COURT_CHECK_AFTER_DEADLINE_MIN * MIN_MS,
-    finalize: Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS,
+    finalize: finalizeDueMs(s, o.tz),
     courtOpens,
     bookingHeadsUp: courtOpens - (o.textsR2 === true ? BOOKING_HEADS_UP_BEFORE_OPEN_MIN_R2 : BOOKING_HEADS_UP_BEFORE_OPEN_MIN) * MIN_MS,
     bookingFollowup: courtOpens + BOOKING_FOLLOWUP_AFTER_OPEN_MIN * MIN_MS,
@@ -398,7 +410,7 @@ function noCourtTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | nul
   return { id: `nocourt:${s.id}`, kind: 'nocourt', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o), bookedButton], steps: [], alerts, rank: 2 };
 }
 
-/** After a game that was played (4 or more, not canceled): "Finalize who played", from 5 minutes after it ends until it is finalized. */
+/** After a game that was played (4 or more, not canceled): "Finalize who played", from 10:30 PM game night (finalizeDueMs) until it is finalized. */
 function finalizeTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | null {
   if (s.canceled || s.finalized || s.confirmedCount < MIN_PLAYERS) return null;
   const due = taskTimes(s, o).finalize;
@@ -497,9 +509,17 @@ export function mayAlertSoon(
   const near = (dueMs: number) => dueMs - ALERT_PAD_MS <= nowMs && nowMs < dueMs + ALERT_PAD_MS + CATCH_UP_MS;
   const enough = confirmedCount === null || confirmedCount >= MIN_PLAYERS;
   const short = confirmedCount === null || confirmedCount < MIN_PLAYERS;
-  // Finalize (the only alert after the start).
-  if (!s.finalized && enough && near(Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS)) return true;
   const start = Date.parse(s.startsAt);
+  // Finalize (the only alert after the start): 10:30 PM on the game's date, worked out with each offset the zone can have,
+  // or 5 minutes after the end when that is later (finalizeDueMs).
+  if (!s.finalized && enough) {
+    const endPlus = Date.parse(s.endsAt) + FINALIZE_AFTER_END_MIN * MIN_MS;
+    for (const h of offsets) {
+      const local = new Date(start + h * HOUR_MS);
+      const atNight = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), FINALIZE_REMINDER_TIME.hour, FINALIZE_REMINDER_TIME.minute) - h * HOUR_MS;
+      if (near(Math.max(atNight, endPlus))) return true;
+    }
+  }
   if (nowMs >= start) return false;
   const deadline = deadlineMsOf(s, o.defaultDeadlineHours);
   if (s.booked) {

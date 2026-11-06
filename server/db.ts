@@ -80,6 +80,11 @@ export interface Env {
   PLAYER_CARDS_SIMPLE?: string;
   /** "Venmo request" (a Venmo request link per person who owes, organizer screens): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?venmorequest=on (server/venmoRequest.ts). A wrangler.toml var. */
   VENMO_REQUEST?: string;
+  /**
+   * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
+   * Missing or not 6 to 12 digits = off (server/viewOnly.ts).
+   */
+  ORGANIZER_READONLY_PIN?: string;
   /** Tests only: a stand-in for fetch, so no real message is ever sent. */
   TELEGRAM_FETCH?: typeof fetch;
 }

@@ -492,9 +492,10 @@ describe('TEXTS_R2: Telegram wording (clock brain)', () => {
   });
   it('#8 finalize says Tonight for an evening game and Today for a daytime game', () => {
     const eve = alertsOver([game('2026-11-03', { confirmedCount: 5 })], R2, '2026-11-04T02:00:00Z', '2026-11-04T05:00:00Z');
-    expect(eve.map((a) => [when(a.at), a.text])).toEqual([['Tue, 10:05 PM', `Tonight: finalize who played: ${ADMIN}`]]);
-    const day = alertsOver([game('2026-11-03', { confirmedCount: 5 }, 14, 0)], R2, '2026-11-03T17:00:00Z', '2026-11-03T22:00:00Z');
-    expect(day.map((a) => [when(a.at), a.text])).toEqual([['Tue, 4:05 PM', `Today: finalize who played: ${ADMIN}`]]);
+    // Zip 8: the finalize reminder is due at 10:30 PM game night (was 5 minutes after the end).
+    expect(eve.map((a) => [when(a.at), a.text])).toEqual([['Tue, 10:30 PM', `Tonight: finalize who played: ${ADMIN}`]]);
+    const day = alertsOver([game('2026-11-03', { confirmedCount: 5 }, 14, 0)], R2, '2026-11-03T17:00:00Z', '2026-11-04T05:00:00Z');
+    expect(day.map((a) => [when(a.at), a.text])).toEqual([['Tue, 10:30 PM', `Today: finalize who played: ${ADMIN}`]]);
     expect(alertsOver([game('2026-11-03', { confirmedCount: 5 })], OFF, '2026-11-04T02:00:00Z', '2026-11-04T05:00:00Z')[0].text).toBe(`Tuesday: finalize who played: ${ADMIN}`);
   });
 });

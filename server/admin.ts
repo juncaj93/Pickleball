@@ -1,3 +1,4 @@
+import { readOnlyPin, viewOnlyCookie } from './viewOnly';
 import { alertsView } from './alerts';
 import type { ActionLinkDraft, ActivityPage, AdminDashboard, AuditEntry } from '../shared/api';
 import { formatCents, formatPrice } from '../shared/money';
@@ -184,6 +185,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .all<{ id: string; n: number }>();
   const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
   return {
+    // Signed in with the read-only PIN (server/viewOnly.ts): the screens show "View only". Absent for the real PIN, so its answer is unchanged.
+    ...(viewOnlyCookie(ctx) ? { viewOnly: true as const } : {}),
     group: {
       name: group.name,
       timezone: group.timezone,
@@ -1583,6 +1586,8 @@ export async function changePin(ctx: Ctx, body: Record<string, unknown>) {
     throw new HttpError(401, 'wrong_pin', 'Current PIN is not right.');
   }
   const next = v.pin(body.newPin, 'newPin');
+  // Never let the real PIN become the read-only one (that PIN is meant to be handed to helpers).
+  if (next === readOnlyPin(ctx.env)) throw new HttpError(400, 'invalid', 'Pick a different PIN.');
   await ctx.db.prepare('UPDATE groups SET admin_pin_hash = ? WHERE id = ?').bind(await hashPin(next), group.id).run();
   await revokeAdminSessions(ctx, group.id);
   await startAdminSession(ctx, group.id);

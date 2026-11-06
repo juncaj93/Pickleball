@@ -412,7 +412,7 @@ describe('the clock at its worst moments (the tick API, Telegram stubbed)', () =
       }
       expect(g.sent.filter((m) => !/Nov 17/.test(m.text)).map((m) => m.text.split(':')[0])).toEqual(['Tuesday']);
     }
-    // 5 played, finalized before 10:05 PM: no finalize alert.
+    // 5 played, finalized before the 10:30 PM reminder: no finalize alert.
     {
       const { g, s } = await tueNov3(5);
       g.app.now = at('2026-11-04T03:02:00Z');

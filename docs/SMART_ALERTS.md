@@ -33,7 +33,7 @@ clock change doesn't shift anything.
 | Cancel follow-up: 30 min later (`CANCEL_FOLLOWUP_AFTER_WARNING_MIN`) | 9:30 PM | 10:00 PM | 10:30 PM |
 | Game-day check, booked: 45 min before the deadline (`GAMEDAY_CHECK_BEFORE_DEADLINE_MIN`) | 6:15 AM | 6:45 AM | 7:15 AM |
 | Morning-of no-court check, 4+ in: deadline + 15 min (`NO_COURT_CHECK_AFTER_DEADLINE_MIN`) | 7:15 AM | 7:45 AM | 8:15 AM |
-| Finalize: 5 min after the end (`FINALIZE_AFTER_END_MIN`) | 9:05 PM | 9:35 PM | 10:05 PM |
+| Finalize: 10:30 PM game night, or 5 min after the end if later (`FINALIZE_REMINDER_TIME`, `FINALIZE_AFTER_END_MIN`; Zip 8, was 5 min after the end) | 10:30 PM | 10:30 PM | 10:30 PM |
 | Booking heads-up and follow-up, 14 days before (`COURT_OPENS_TIME` 7:00 AM, `BOOKING_HEADS_UP_BEFORE_OPEN_MIN` 15, `BOOKING_FOLLOWUP_AFTER_OPEN_MIN` 30) | 6:45 AM and 7:30 AM | same | same |
 
 What each task shows and sends, most urgent first:

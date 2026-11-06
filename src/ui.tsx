@@ -3,7 +3,7 @@ import { type CourtKind } from '../shared/court';
 import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
 import { holdLive } from './busy';
-import { DEMO_MESSAGE, isIOS } from './lib';
+import { DEMO_MESSAGE, isIOS, VIEW_ONLY_MESSAGE } from './lib';
 import { adminMotionOn, canMove, motionOn, RollText, useMotion } from './motion';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
@@ -178,8 +178,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [shown, setShown] = useState<Shown | null>(null);
   const [spoken, setSpoken] = useState<{ msg: string; kind: ToastKind } | null>(null);
   const show = useCallback<ToastFn>((msg, kind = 'ok', opts = {}) => {
-    // "Demo only" (View as, Pretend it's...) is a plain note, never a red error.
-    if (msg === DEMO_MESSAGE) kind = 'ok';
+    // "Demo only" (View as, Pretend it's...) and "View only" (the read-only PIN) are plain notes, never a red error.
+    if (msg === DEMO_MESSAGE || msg === VIEW_ONLY_MESSAGE) kind = 'ok';
     setShown({ id: Date.now() + Math.random(), msg, kind, opts });
     setSpoken({ msg, kind });
   }, []);

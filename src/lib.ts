@@ -32,9 +32,12 @@ export function setViewAs(playerId: string | null) {
 /** What a tap says when the live site refuses a View-as change. */
 export const DEMO_MESSAGE = 'Demo only. Nothing was saved.';
 
-/** True for the "Demo only" answer, which is shown as a plain note, not an error. */
+/** What a tap says when the organizer signed in with the read-only PIN (server/viewOnly.ts) and the server refused the save. */
+export const VIEW_ONLY_MESSAGE = 'View only. Nothing was saved.';
+
+/** True for the "Demo only" answer (and the read-only PIN's "View only" answer), which is shown as a plain note, not an error. */
 export function isDemo(err: unknown): err is ApiError {
-  return err instanceof ApiError && err.code === 'demo_only';
+  return err instanceof ApiError && (err.code === 'demo_only' || err.code === 'view_only');
 }
 
 // ---------- The organizer's demo: "View as..." and "Pretend it's..." ----------

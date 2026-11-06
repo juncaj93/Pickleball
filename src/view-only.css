@@ -1,0 +1,34 @@
+/* The read-only organizer PIN (Zip 8, server/viewOnly.ts): a small "View only" label next to the title.
+   Only drawn when the organizer screen was opened with that PIN; nothing else on the site uses these rules. */
+:root {
+  --vo-bg: #fff4d6;
+  --vo-ink: #6b4a00;
+  --vo-line: #e3c169;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --vo-bg: #3a2e10;
+    --vo-ink: #ffd98a;
+    --vo-line: #7a6124;
+  }
+}
+:root[data-theme='dark'] {
+  --vo-bg: #3a2e10;
+  --vo-ink: #ffd98a;
+  --vo-line: #7a6124;
+}
+.view-only-pill {
+  flex: none;
+  align-self: center;
+  padding: 2px 8px;
+  border: 1px solid var(--vo-line);
+  border-radius: 999px;
+  background: var(--vo-bg);
+  color: var(--vo-ink);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
