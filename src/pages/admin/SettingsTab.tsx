@@ -2,7 +2,7 @@ import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } 
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
-import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice } from '../../lib';
+import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
 import { formatDateTime, formatShortDate, formatTime, localParts } from '../../../shared/time';
 import { type Autosave, AutoInput, SaveMark, SaveProblem, useAutosave } from './autosave';
@@ -796,7 +796,9 @@ function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, p
   const toast = useToast();
   // Instant taps (INSTANT_TAPS): every switch snaps back on a failed save, with a toast, and a second flip while it saves is ignored.
   const instant = useInstant();
-  const snap = snapAsked || !!instant;
+  // Signed in with the read-only PIN (server/viewOnly.ts): every switch snaps back, with the calm "View only" note (never a red error).
+  const viewOnly = ctx.d.viewOnly === true;
+  const snap = snapAsked || !!instant || viewOnly;
   const [on, setOn] = useState(initial);
   // What the server last confirmed: a failed save always snaps back to this (so two quick failing taps cannot leave it wrong).
   const confirmed = useRef(initial);
@@ -815,7 +817,8 @@ function useFlip(initial: boolean, ctx: AdminCtx, auto: Autosave, key: string, p
           setOn(confirmed.current);
           // The switch is back where it was, so no "tap to retry" line (a retry would save a value the switch no longer shows).
           auto.clear(key);
-          toast("That didn't save. The switch is back where it was.", 'error');
+          if (viewOnly) toast(VIEW_ONLY_MESSAGE);
+          else toast("That didn't save. The switch is back where it was.", 'error');
         }
       }
       return ctx.reload();
