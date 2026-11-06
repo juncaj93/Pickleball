@@ -2578,7 +2578,7 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
 ### A. Short games (`SHORT_GAMES`, ships OFF; CHANGES MONEY for 1.5 hour games only)
 - The one table: `shared/gameLength.ts` `GAME_LENGTHS`, keyed by minutes (90 and 120), each row with court cost and the price each for 4 to 10.
   Normal (120): 14, 11, 9, 8, 7, 6, 5 and $48 (a normal game keeps reading Settings > Money, exactly as live; a test checks the row equals that rule).
-  Short (90): 11, 9, 7, 6, 5, and PROPOSED 4, 4 for 9 and 10 (waiting for Alex), court $36. Above 10 pays the 10 price; under 4 pays the 4 price.
+  Short (90): 11, 9, 7, 6, 5, and 4, 4 for 9 and 10 (Alex OKed Nov 6), court $36. Above 10 pays the 10 price; under 4 pays the 4 price.
   A new length later = one new row. `gamePrice()` is the only place that decides a game's price.
 - Server: the request's switch answer rides on the group row (`server/zip9.ts` `withShortGames`, called by `requireAdmin` and `requireGroupKey`)
   and on to `settingsOf(group).shortGames` (missing when off, so settings are exactly as before). `priceOf` / `flatOf` / `courtCostOf` in
@@ -2629,3 +2629,14 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
 - https://preview-zip9.pickleball-club-9h0.pages.dev (deployment `14cba914`), fake database re-seeded. On there: every switch the Zip 8
   record lists as on, plus Short games and Card time and buttons. The live switch rows could not be read from this session (blocked), so
   Alex confirms the live list.
+### After Alex tested the preview (Fri Nov 6, 2026)
+- Calendar and Directions halves: work (Alex). $4 for 9 and 10 on short games: OKed. All live switches are ON (Alex), the same list the preview has.
+- Every fact once: the green "1.5 hour game" chip on the player card and the "1.5 hour game" line on the organizer card were the NOTE typed on the
+  seeded fake game, not site text. The seed game now has no note. A sweep of the heads-up, tag, time line, Pay card, Money card and texts found
+  no other place that says the length, the time, the price or the amount owed twice. `e2e/zip9.cjs` now checks "1.5 hours" and "$11" show
+  once on the card and no second length on the organizer card.
+- Organizer TONIGHT and TOM tiles, white edge on both sides (not behind a switch; `src/zip7.css`, organizer screens only): the tile's dark
+  outline is the court ring (`.tb`), placed 1.5 px outside the tile's see-through border. Browsers round a 1.5 px border down to a whole pixel
+  (Chrome: 1 px) but not the 1.5 px placement, so a half-pixel gap ran down both sides and showed the tile fill or the tinted card. Fix: the solid
+  ring is an inset shadow (never rounded), the strip runs under the ring to its outer edge with the ring on top, and the TONIGHT fill runs to the
+  outer edge again. Checked pixel by pixel at 3x and 4x, light and dark; `e2e/zip7.cjs` and `e2e/zip9.cjs` check the geometry. Player tiles unchanged.

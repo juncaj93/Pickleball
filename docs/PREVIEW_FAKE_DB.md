@@ -56,7 +56,7 @@ Production is bound to the real database and was not changed.
 | Extra game "Mixed payments" (20 hours after the seed) | **Booked**, 5 in | Lane and Morgan paid cash; Kai (Venmo saved) and Gray (no Venmo) owe $14. The Money rows and the Remind sheet use this one to show "Request" next to Mark paid. |
 | Extra game "Fee split $11" (11.5 hours after the seed, or 10.5 if that time is taken) | **Canceled late, fee not waived** (fee split on) | 5 were in; Kai, Christopher Vanderberg and Jordan each owe **$11**; Lane and Morgan paid $14 and got $3 back as credit. A Venmo request from here must say $11. |
 | Extra game "All paid" (44 hours after the seed) | **Booked**, 4 of 4 paid | Indy, Jordan, Morgan, Lane: everyone paid but not played yet, so it stays in the Games list (it moves to Previous games once finalized) |
-| Extra game "1.5 hour game" (7:30 to 9:00 PM Eastern, about 3 days after the seed) | **Booked**, 4 in, Short games on | Indy paid **$11** cash; Jordan, Kai and Finley owe **$11** (Zip 9). Every 2 hour game around it stays at $14 |
+| An extra 1.5 hour game, no note (7:30 to 9:00 PM Eastern, about 3 days after the seed) | **Booked**, 4 in, Short games on | Indy paid **$11** cash; Jordan, Kai and Finley owe **$11** (Zip 9). Every 2 hour game around it stays at $14 |
 | Everything after | Normal empty games | The site makes these by itself |
 
 The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.

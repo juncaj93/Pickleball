@@ -151,9 +151,12 @@ async function main() {
         const tile = t.closest('.tile');
         const tr = tile.getBoundingClientRect();
         const cs = getComputedStyle(tile);
-        const L = tr.left + parseFloat(cs.borderLeftWidth);
-        const R = tr.right - parseFloat(cs.borderRightWidth);
-        const T = tr.top + parseFloat(cs.borderTopWidth);
+        // Organizer tiles (Zip 9 fix): the strip runs out under the court ring to the ring's outer edge, so it is measured against the ring.
+        const ring = tile.closest('.admin-page') && tile.classList.contains('ts') ? tile.querySelector('.tb-solid') : null;
+        const rr = ring && ring.getBoundingClientRect();
+        const L = rr ? rr.left : tr.left + parseFloat(cs.borderLeftWidth);
+        const R = rr ? rr.right : tr.right - parseFloat(cs.borderRightWidth);
+        const T = rr ? rr.top : tr.top + parseFloat(cs.borderTopWidth);
         const r = t.getBoundingClientRect();
         const vis = [...t.querySelectorAll('span')].find((x) => getComputedStyle(x).display !== 'none') || t;
         const word = vis.textContent.trim();
@@ -360,7 +363,10 @@ async function main() {
     assert((await css(adminTile, 'animation-name')) === 'none', 'admin badge holds still');
     const sh = await css(adminTile, 'box-shadow');
     assert(/rgba\((47, 143, 91|76, 197, 138), 0\.38\) 0px 0px 10px 1px/.test(sh) && !/0px 0px 0px \d/.test(sh), `admin badge: one soft green glow, no ring (${sh})`);
-    assert((await css(adminTile, 'background-clip')) === 'padding-box', 'the fill does not show through the border');
+    // Zip 9 fix (Alex, Nov 6): the court ring now covers the tile's edge exactly (an inset shadow), so the fill runs to the outer edge under it
+    // and no rounding gap can show a light line (e2e/zip9.cjs checks the geometry).
+    assert((await css(adminTile, 'background-clip')) === 'border-box', 'the fill runs under the ring');
+    assert(/inset/.test(await css(page.locator(`#session-${game.tonight.id} .tile .tb-solid`), 'box-shadow')), 'the ring is an inset shadow');
     await shot(page, 'admin-tiles');
     await tab(page, 'Money');
     await page.waitForTimeout(500);

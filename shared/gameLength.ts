@@ -38,7 +38,7 @@ export const NORMAL_MINUTES = 120;
 export const SHORT_MINUTES = 90;
 
 export const GAME_LENGTHS: readonly GameLength[] = [
-  // 9 and 10 in: $4 each, PROPOSED (Zip 9 report), waiting for Alex's OK. 9 x $4 = $36 and 10 x $4 = $40, so the $36 court stays
+  // 9 and 10 in: $4 each (Alex OKed, Fri Nov 6). 9 x $4 = $36 and 10 x $4 = $40, so the $36 court stays
   // covered; $3 at 10 would be $30. With today's Max players (10) a short game never reaches 11 or 12.
   { minutes: SHORT_MINUTES, words: '1.5 hours', short: '1.5 hr', courtCents: 36_00, prices: { 4: 11_00, 5: 9_00, 6: 7_00, 7: 6_00, 8: 5_00, 9: 4_00, 10: 4_00 } },
   { minutes: NORMAL_MINUTES, words: '2 hours', short: '2 hr', courtCents: 48_00, prices: { 4: 14_00, 5: 11_00, 6: 9_00, 7: 8_00, 8: 7_00, 9: 6_00, 10: 5_00 } },

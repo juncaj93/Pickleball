@@ -46,7 +46,7 @@ describe('the one game-length table (shared/gameLength.ts)', () => {
     expect(normal.courtCents).toBe(2 * 2400);
   });
 
-  it('the short row: $11 $9 $7 $6 $5 for 4 to 8, proposed $4 $4 for 9 and 10, court $36 ($24 an hour), and the court stays covered', () => {
+  it('the short row: $11 $9 $7 $6 $5 for 4 to 8, $4 $4 for 9 and 10 (Alex OKed), court $36 ($24 an hour), and the court stays covered', () => {
     const short = lengthRow(SHORT_MINUTES)!;
     expect(NS.map((n) => short.prices[n] / 100)).toEqual([11, 9, 7, 6, 5, 4, 4]);
     expect(short.courtCents).toBe(Math.round(1.5 * 2400));

@@ -425,14 +425,15 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
 
   // 15. Zip 9 "Short games": one 1.5 hour game (7:30 to 9:00 PM Eastern, about 3 days out), Booked, 4 in: Indy paid $11 cash, Jordan, Kai
   //     and Finley owe $11. Priced through the real site rules with the switch on (the preview has it on from the seed), so every amount on it
-  //     is the short game's. The normal 2 hour games all around it stay at $14.
+  //     is the short game's. The normal 2 hour games all around it stay at $14. No note: the site already says "1.5 hours" (player time line)
+  //     and "1.5 HR" / "1.5 hr game · $11 each" (organizer), and every fact shows once (Alex, Nov 6).
   await w.org.ok('PUT', '/api/admin/short-games-switch', { on: true });
   let shortGame: any = null;
   for (const daysOut of [3, 4, 5]) {
     const q = localParts(N + daysOut * 24 * HOUR, 'America/Detroit');
     const start = zonedTimeToUtc(q.year, q.month, q.day, 19, 30, 'America/Detroit');
     try {
-      const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 90 * 60_000).toISOString(), note: '1.5 hour game' });
+      const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 90 * 60_000).toISOString(), note: null });
       await refresh();
       shortGame = games().find((x) => x.id === made.id);
       break;
@@ -444,7 +445,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await setCourt(shortGame, 'booked');
   for (const n of ['Indy', 'Jordan', 'Kai', 'Finley']) await join(n, shortGame);
   await orgPays('Indy', shortGame);
-  summary.push('extra game "1.5 hour game" (7:30 to 9:00 PM, Booked, 4 in): Indy paid $11 cash; Jordan, Kai and Finley owe $11 (Short games on)');
+  summary.push('extra 1.5 hour game, no note (7:30 to 9:00 PM, Booked, 4 in): Indy paid $11 cash; Jordan, Kai and Finley owe $11 (Short games on)');
 
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');

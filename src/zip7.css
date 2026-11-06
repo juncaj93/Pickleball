@@ -188,6 +188,32 @@
   animation: none;
   box-shadow: 0 0 10px 1px rgb(var(--z7-glow) / 38%);
 }
+/* Organizer tiles (Zip 9 fix, Alex: white clipping on both sides of TONIGHT and TOM, light and dark). The dark outline of an organizer tile is not
+   its own border: it is the court ring (.tb, src/time-shift.css), placed 1.5 px outside the tile's see-through border. Browsers round a 1.5 px
+   BORDER down to a whole pixel (Chrome draws 1 px) but not the 1.5 px placement, so a half-pixel gap ran down both sides, and through it showed
+   the tile's own fill (white on TOM) or the tinted card behind (TONIGHT): a thin light line on each side of the green strip and the tile. Two
+   changes: the solid ring is drawn as an inset shadow, which is never rounded, so it covers that edge exactly in every browser; and the strip
+   runs out under the ring (to its outer edge, with its corner radius), with the ring drawn on top, so nothing shows between them either. */
+:root[data-tonight-glow] .admin-page .tile.ts .tb-solid {
+  border-width: 0;
+  box-shadow: inset 0 0 0 var(--tb-w, 1.5px) var(--z7-ring, var(--ts-booked));
+}
+:root[data-tonight-glow] .admin-page .tile.ts-none .tb-solid {
+  --z7-ring: var(--ts-none);
+}
+:root[data-tonight-glow] .admin-page .tile.ts .tb {
+  z-index: 1;
+}
+/* The fill runs to the tile's outer edge again (the Zip 8 padding-box clip let the tinted card show through a rounding gap); the ring above
+   now covers that edge completely, so no fill can show outside it. */
+:root[data-tonight-glow] .admin-page .tile.ts.day-tonight {
+  background-clip: border-box;
+}
+:root[data-tonight-glow] .admin-page .tile.ts .day-tag {
+  width: calc(100% + 2 * var(--tb-w, 1.5px));
+  margin: calc(var(--tb-w, 1.5px) * -1) calc(var(--tb-w, 1.5px) * -1) 0;
+  border-radius: var(--z7-r) var(--z7-r) 0 0;
+}
 /* Reduce Motion: everything holds still (the bands and colors stay). */
 @media (prefers-reduced-motion: reduce) {
   :root[data-tonight-glow] .tile.day-tonight,

@@ -77,6 +77,10 @@ describe('fake-data preview seed', () => {
     const { dash } = await loaded();
     for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll', 'instantTapsForAll', 'adjustCreditForAll', 'venmoRequestForAll', 'homeCollapseForAll', 'tonightGlowForAll', 'colorCleanupForAll', 'playerCardsSimpleForAll', 'lastCallTextsForAll', 'shortGamesForAll', 'cardTimeButtonsForAll'])
       expect(dash[k], k).toBe(true);
+    // Zip 9: one 1.5 hour game, no note (the site already says the length once), priced $11 with Short games on.
+    const short = (dash.sessions as any[]).find((x) => Date.parse(x.endsAt) - Date.parse(x.startsAt) === 90 * 60_000);
+    expect(short).toMatchObject({ note: null, bookingStatus: 'booked', confirmedCount: 4, shortGame: { minutes: 90, flatCents: 1100, courtCents: 3600 } });
+    expect(short.roster.filter((r: any) => r.status === 'confirmed').map((r: any) => r.owesCents).sort()).toEqual([0, 1100, 1100, 1100]);
     // Late-cancel fee split went live on Wed Nov 4 (Alex), so it is on in the preview too.
     // The "Fee split test" game: booked, inside its 12-hour cancel-by, 6 in, three paid.
     const g = (dash.sessions as any[]).find((x) => x.note === 'Fee split test');

@@ -76,7 +76,7 @@ async function main() {
   };
   const d0 = await dash();
   const nameId = (name) => d0.players.find((p) => p.name === name).id;
-  const shortGame = d0.sessions.find((s) => s.note === '1.5 hour game');
+  const shortGame = d0.sessions.find((s) => Date.parse(s.endsAt) - Date.parse(s.startsAt) === 90 * 60_000 && !s.note);
   if (!shortGame) throw new Error('the seed has no 1.5 hour game');
   const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
   const phone = (width, scheme = 'light', height = 900) => ({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA });
@@ -207,6 +207,24 @@ async function main() {
       const n = await tags.count();
       assert(n > 0 || /1\.5 hr game · \$11 each/.test(rowsText), `a tag on the short game (${n}) ${rowsText}`);
       if (n > 0) assert((await tags.first().innerText()).includes('1.5 HR'), 'pill text');
+      // Every fact once: no other "1.5 hour" words on the short game's own card or row.
+      assert(!/1\.5 hour/i.test(rowsText), `no second length on the organizer card: ${rowsText}`);
+      // The TONIGHT and TOM tiles (Zip 9 fix): the ring covers the tile's edge exactly and the strip runs under it, so no light line shows.
+      const tiles = await page.evaluate(() => [...document.querySelectorAll('.admin-page .tile.ts.day-tonight, .admin-page .tile.ts.day-tomorrow')].map((el) => {
+        const r = el.getBoundingClientRect();
+        const ring = el.querySelector('.tb-solid');
+        const rr = ring.getBoundingClientRect();
+        const tag = el.querySelector('.day-tag').getBoundingClientRect();
+        const cs = getComputedStyle(ring);
+        return { inset: cs.boxShadow.includes('inset'), bw: parseFloat(cs.borderLeftWidth), ringOut: [r.left - rr.left, rr.right - r.right], tag: [tag.left - rr.left, rr.right - tag.right], clip: getComputedStyle(el).backgroundClip };
+      }));
+      assert(tiles.length >= 2, `TONIGHT and TOM tiles (${tiles.length})`);
+      for (const t of tiles) {
+        assert(t.inset && t.bw === 0, `ring is an inset shadow: ${JSON.stringify(t)}`);
+        assert(t.ringOut[0] >= 0 && t.ringOut[1] >= 0, `ring reaches past the tile edge: ${JSON.stringify(t)}`);
+        assert(Math.abs(t.tag[0]) < 0.01 && Math.abs(t.tag[1]) < 0.01, `strip runs to the ring's outer edge: ${JSON.stringify(t)}`);
+        assert(t.clip === 'border-box', `fill to the outer edge: ${JSON.stringify(t)}`);
+      }
       // The normal games carry none.
       for (const s of d0.sessions.filter((x) => x.id !== shortGame.id).slice(0, 6)) {
         const t = await page.locator(`#session-${s.id}`).innerText().catch(() => '');
@@ -223,6 +241,10 @@ async function main() {
         const c = card(page, shortGame.id);
         const text = await c.innerText();
         assert(/\$11 due/.test(text), `"$11 due": ${text}`);
+        // Every fact once (Alex, Nov 6): the length only under the time, the price only on the pill.
+        assert((text.match(/1\.5 hour/g) || []).length === 1, `"1.5 hours" once: ${text}`);
+        assert((text.match(/\$11/g) || []).length === 1, `"$11" once: ${text}`);
+        assert((await c.locator('.game-note').count()) === 0, 'no note chip on the 1.5 hour game');
         assert((await c.locator('.z9-length').innerText()) === '1.5 hours', 'short game says 1.5 hours');
         // Every tier shows a start time and a length line.
         const tiers = await page.evaluate(() => [...document.querySelectorAll('.schedule article.sched')].map((a) => ({ tier: a.getAttribute('data-tier'), len: a.querySelector('.z9-length')?.textContent ?? null, time: a.querySelector('[data-sched-time] span')?.textContent ?? null })));
