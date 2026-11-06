@@ -86,6 +86,8 @@ export interface Env {
   SHORT_GAMES?: string;
   /** "Card time and buttons" (Zip 9, time line under the date tile and the joined Calendar | Directions button): the kill switch. Who gets it: Settings > Feature switches, ?cardtime=on. Display only. */
   CARD_TIME_BUTTONS?: string;
+  /** "Card cleanup" (Zip 10: cards without count text, people icon and names, tinted Later cards; no waitlist and no Max players cap): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?cardcleanup=on (server/zip10.ts). */
+  CARD_CLEANUP?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

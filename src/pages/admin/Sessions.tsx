@@ -1,3 +1,4 @@
+import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { useEffect, useState } from 'react';
 import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import {
@@ -129,6 +130,7 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
               waitLabel="Waitlist"
               everyone={ctx.d.players.map((p) => p.name)}
               maxPlayers={ctx.d.group.settings.maxPlayers}
+              cleanup={ctx.d.cardCleanup === true}
               after={live ? <OrganizerInOut ctx={ctx} s={s} /> : undefined}
             />
           )}
@@ -573,7 +575,9 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
     run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg, { key: `roster:${playerId}` });
   const inRoster = new Set(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => r.playerId));
   const others = ctx.d.players.filter((p) => p.isActive && !p.adminHidden && !inRoster.has(p.id));
-  const full = s.confirmedCount >= ctx.d.group.settings.maxPlayers;
+  // "Card cleanup" (Zip 10): no Max players cap and no waitlist; only the database's 12 stops a Give spot.
+  const cleanup = ctx.d.cardCleanup === true;
+  const full = s.confirmedCount >= (cleanup ? MAX_PLAYERS_LIMIT : ctx.d.group.settings.maxPlayers);
 
   return (
     <div className="stack">
@@ -592,7 +596,7 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
             </div>
             {live && !held.has(r.playerId) && (
               <div className="btn-row">
-                {r.status === 'confirmed' && (
+                {r.status === 'confirmed' && !cleanup && (
                   <button className="btn small secondary" disabled={busy} onClick={() => act(r.playerId, 'waitlist', `${r.name} moved to waitlist`)}>
                     To waitlist
                   </button>
@@ -626,9 +630,11 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
                     <button className="btn small secondary" disabled={busy || full} onClick={() => act(p.id, 'confirm', `${p.name} got a spot`)}>
                       Give spot
                     </button>
-                    <button className="btn small ghost" disabled={busy} onClick={() => act(p.id, 'waitlist', `${p.name} added to waitlist`)}>
-                      Waitlist
-                    </button>
+                    {!cleanup && (
+                      <button className="btn small ghost" disabled={busy} onClick={() => act(p.id, 'waitlist', `${p.name} added to waitlist`)}>
+                        Waitlist
+                      </button>
+                    )}
                   </div>
                 </li>
               ))}

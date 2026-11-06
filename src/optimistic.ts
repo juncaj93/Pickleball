@@ -101,7 +101,9 @@ export function applyOverlay(g: GroupView, overlay: Overlay, nowIso = new Date()
     sessions: g.sessions.map((s) => {
       const kind = overlay[s.id];
       if (!kind) return s;
-      return kind === 'join' ? joined(s, name, g.group.maxPlayers) : dropped(s, name, g.group.maxPlayers);
+      // "Card cleanup" (Zip 10): no cap, so a game drawn ahead of the server's answer is never "full" or a waitlist.
+      const max = g.cardCleanup === true ? Number.POSITIVE_INFINITY : g.group.maxPlayers;
+      return kind === 'join' ? joined(s, name, max) : dropped(s, name, max);
     }),
     // A held drop must not leave a Pay card for that game at the top.
     payDue: g.payDue.filter((o) => overlay[o.sessionId] !== 'drop'),

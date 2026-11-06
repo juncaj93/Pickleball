@@ -47,6 +47,8 @@ export interface AlertInput {
   textsR2?: boolean;
   /** TEXTS_R2 only: what the person who dropped now owes (late fees on and the drop created the debt), in cents. */
   dropperOwesCents?: number | null;
+  /** "Card cleanup" (Zip 10) is on: there is no waitlist, so the "moved up from the waitlist" line never shows. */
+  noWaitlist?: boolean;
 }
 
 /** "Thu Nov 5, 8:00 PM" */
@@ -101,7 +103,7 @@ export function alertMessage(a: AlertInput): string | null {
   if (dropped) {
     const late = a.nowMs >= a.deadlineMs ? 'Late drop: ' : '';
     lines.push(`${late}${a.actor.name} dropped out of ${when} (${alertLead(left)} before).`);
-    if (newlyIn.length) lines.push(`${names(newlyIn)} moved up from the waitlist.`);
+    if (newlyIn.length && a.noWaitlist !== true) lines.push(`${names(newlyIn)} moved up from the waitlist.`);
     lines.push(n < MIN_PLAYERS ? `${n} in now, under ${MIN_PLAYERS}.` : `${n} in now.`);
     if (a.textsR2 === true && a.dropperOwesCents && a.dropperOwesCents > 0) lines.push(`${a.actor.name} owes ${formatPrice(a.dropperOwesCents)}.`);
   }

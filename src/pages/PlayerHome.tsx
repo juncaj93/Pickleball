@@ -1422,9 +1422,11 @@ function SuggestionCard({
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
   // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
   // warns first. With room, a game with no court booked reads like a normal one.
-  const standby = s.courtState === 'waitlist';
-  const waitlistForm = !standby && s.confirmedCount >= g.group.maxPlayers;
-  const subline = standby ? '' : wantInSubline(s.confirmedCount, g.group.maxPlayers);
+  // "Card cleanup" (Zip 10): no waitlist and no cap, so the popup never says waitlist or standby ("12 are in. You'd make it 13.").
+  const cleanup = g.cardCleanup === true;
+  const standby = !cleanup && s.courtState === 'waitlist';
+  const waitlistForm = !cleanup && !standby && s.confirmedCount >= g.group.maxPlayers;
+  const subline = standby ? '' : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     if (instant && !yes) {
@@ -1792,6 +1794,29 @@ function Burst() {
  * and a check when you're in; the short time sits under it. No green tint for
  * joined. The calendar icon sits at the right end of the status line.
  */
+/**
+ * "Card cleanup" (Zip 10): the card's content block is vertically centered to the date tile (the tile only, not the time under it).
+ * The tile's height goes on the card as --cl-tile-h; the body is at least that tall and centers what it holds, so content taller than
+ * the tile simply starts at the top of the tile. Follows the tile when it changes size (larger text, a rotated phone).
+ */
+function useTileCenter(ref: { current: HTMLElement | null }, on: boolean) {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!on || !el) return undefined;
+    const tile = el.querySelector<HTMLElement>('.sched-tilecol .tile-wrap');
+    if (!tile) return undefined;
+    const set = () => el.style.setProperty('--cl-tile-h', `${tile.getBoundingClientRect().height}px`);
+    set();
+    if (typeof ResizeObserver === 'undefined') return () => el.style.removeProperty('--cl-tile-h');
+    const ro = new ResizeObserver(set);
+    ro.observe(tile);
+    return () => {
+      ro.disconnect();
+      el.style.removeProperty('--cl-tile-h');
+    };
+  }, [ref, on]);
+}
+
 export function ScheduleRow({
   s,
   g,
@@ -2001,6 +2026,10 @@ export function ScheduleRow({
   const standbyWord = courtWait && !simple;
   // Zip 9, CARD_TIME_BUTTONS: the start and the length under the tile, and one joined Calendar | Directions button instead of the icon.
   const cardButtons = g.cardTimeButtons === true;
+  // Zip 10, CARD_CLEANUP: no count text (only the circles, one row), the people icon before the names, the content centered to the
+  // date tile, a filled I'm in, no waitlist words; a LATER game is a smaller tinted card with the same slots.
+  const cleanup = g.cardCleanup === true;
+  useTileCenter(rowRef, cleanup);
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
   const calLink =
     isIn &&
@@ -2023,6 +2052,8 @@ export function ScheduleRow({
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
   const notIn = open && !(inSession || waiting);
+  // The flat LATER row (switch off) puts the note in the middle column; every card (and every Card cleanup card) puts it under the button.
+  const flatLater = tier === 'later' && !cleanup;
   const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? s.shortGame
         ? gameCreditBackNote(viewPrice(s, { pricePerPlayerCents: g.group.priceCents, typicalCourtCostCents: 0 }), s.confirmed.length, g.group.maxPlayers, formatPrice)
         : creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice)
@@ -2069,8 +2100,8 @@ export function ScheduleRow({
     );
 
   const joinBtn = notIn && (
-    <button className={`btn sched-btn${tier === 'later' ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
-      {busy ? 'Saving…' : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
+    <button className={`btn sched-btn${flatLater ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
+      {busy ? 'Saving…' : cleanup ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = waiting && open && (
@@ -2088,7 +2119,7 @@ export function ScheduleRow({
     <article
       ref={rowRef}
       id={`row-${s.id}`}
-      className={`sched tier-${tier}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
+      className={`sched ${cleanup && tier === 'later' ? 'tier-next cl-later' : `tier-${tier}`}${cleanup ? ' cl' : ''}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-mine={isIn ? 'in' : undefined}
@@ -2144,19 +2175,25 @@ export function ScheduleRow({
           </div>
         )}
         <div className="sched-main">
-          {showCount && (
-            <div className="in-line">
-              <span className="in-count">
-                <RollText text={simple ? s.countText : countLine(s)} />
-              </span>
-              <SpotDots names={names} me={g.me?.name} celebrate={celebrating} />
-            </div>
-          )}
-          {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} />}
-          {!s.canceled && !waiting && !simple && (
+          {showCount &&
+            (cleanup ? (
+              // Card cleanup: the circles alone (the same size as before; past 4 they keep coming on the same row), the count is read out.
+              <div className="in-line cl-balls">
+                <SpotDots names={names} me={g.me?.name} celebrate={celebrating} oneRow />
+              </div>
+            ) : (
+              <div className="in-line">
+                <span className="in-count">
+                  <RollText text={simple ? s.countText : countLine(s)} />
+                </span>
+                <SpotDots names={names} me={g.me?.name} celebrate={celebrating} />
+              </div>
+            ))}
+          {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} />}
+          {!s.canceled && !waiting && !simple && !cleanup && (
             <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
-          {waiting && !s.canceled && !simple && <p className="sched-sub">You're in if someone drops.</p>}
+          {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
           {s.canceled && (inSession || waiting) && mine.lateFee?.kind === 'canceled_late' ? (
             <p className="sched-sub" data-late-fee>
@@ -2169,7 +2206,7 @@ export function ScheduleRow({
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && (s.note.trim().length <= NOTE_PILL_MAX ? <span className="game-note note-pill">{s.note.trim()}</span> : <p className="game-note note-box">{s.note}</p>)}
           {goodNews && <Notice tone="ok">{goodNews}</Notice>}
-          {tier === 'later' && noteEl}
+          {flatLater && noteEl}
         </div>
 
         {payShows && <RowPay g={g} s={s} onTop={onTop} onChanged={onChanged} drop={dropLink} />}
@@ -2179,7 +2216,7 @@ export function ScheduleRow({
           </div>
         )}
         {(joinBtn || leaveBtn) && <div className="sched-money">{joinBtn}{leaveBtn}</div>}
-        {tier !== 'later' && noteEl}
+        {!flatLater && noteEl}
       </div>
 
       {celebrating && motion && <Burst />}

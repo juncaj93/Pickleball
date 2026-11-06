@@ -10,7 +10,7 @@ import { cardWindows, deadlineMs } from '../shared/cards';
 import { isPaymentClaim, moneySeen, NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
 import { holidayFor } from '../shared/holidays';
 import { courtSplit, flatAtFinalize } from '../shared/pricing';
-import type { GroupSettings } from '../shared/settings';
+import { capOf, type GroupSettings } from '../shared/settings';
 import { countText, joinOutcome, openSpots } from '../shared/spots';
 import { computeSessionState } from '../shared/status';
 import {
@@ -72,9 +72,12 @@ export function playerSessionView(
   lateFees = false,
 ): PlayerSessionView {
   const confirmed = confirmedOf(roster);
-  const waitlist = waitlistOf(roster);
+  // "Card cleanup" (Zip 10): players never see a waitlist. Someone still on one (only possible while the switch is on for a test phone
+  // alone; switching it on for everyone moves every waiter in) reads as not in yet: their I'm in takes a seat like anyone's.
+  const noWaitlist = settings.noCap === true;
+  const waitlist = noWaitlist ? [] : waitlistOf(roster);
   const prices = pricesFor(session, roster, settings);
-  const mine = meId ? roster.find((r) => r.player_id === meId) : undefined;
+  const mine = meId ? roster.find((r) => r.player_id === meId && !(noWaitlist && r.status === 'waitlisted')) : undefined;
   const started = nowMs >= Date.parse(session.starts_at);
   const canceled = session.status === 'canceled';
   const owes = !!mine && mine.status === 'confirmed' && mine.payment_status === 'unpaid' && prices.has(mine.player_id);
@@ -94,7 +97,8 @@ export function playerSessionView(
         status: mine.status,
         waitlistPosition: mine.status === 'waitlisted' ? waitlist.findIndex((r) => r.id === mine.id) + 1 : null,
         attendanceConfirmed: !!mine.attendance_confirmed_at,
-        promotion: mine.status === 'confirmed' && mine.promotion_reason ? 'spot_opened' : null,
+        // "Card cleanup" (Zip 10): no waitlist, so no "Good news, a spot opened up" either (also for an older move-in).
+        promotion: !noWaitlist && mine.status === 'confirmed' && mine.promotion_reason ? 'spot_opened' : null,
         shareCents: prices.get(mine.player_id)?.cents ?? null,
         paymentStatus: mine.payment_status,
         selfPaid: !!mine.self_paid_at,
@@ -136,10 +140,10 @@ export function playerSessionView(
     venueName: session.venue_name,
     confirmed: confirmed.map((r) => ({ name: r.display_name, attendanceConfirmed: !!r.attendance_confirmed_at })),
     waitlist: waitlist.map((r) => ({ name: r.display_name })),
-    openSpots: canceled || started ? 0 : openSpots(confirmed.length, settings.maxPlayers),
-    countText: countText(confirmed.length, settings.maxPlayers),
-    full: confirmed.length >= settings.maxPlayers,
-    joinAs: joinOutcome(confirmed.length, settings.maxPlayers),
+    openSpots: canceled || started ? 0 : openSpots(confirmed.length, capOf(settings)),
+    countText: countText(confirmed.length, noWaitlist ? Number.POSITIVE_INFINITY : settings.maxPlayers),
+    full: !noWaitlist && confirmed.length >= settings.maxPlayers,
+    joinAs: noWaitlist ? 'in' : joinOutcome(confirmed.length, settings.maxPlayers),
     holiday: holidayFor(session.starts_at, tz),
     courtState: session.court_state,
     extra: !!session.is_extra,
@@ -288,7 +292,8 @@ export function adminSessionView(
         refundedAt: r.payment_status === 'paid' ? r.refunded_at : null,
         lateDropAt: r.status === 'withdrawn' ? r.late_drop_at : null,
         lateDropDoneAt: r.status === 'withdrawn' ? r.late_drop_done_at : null,
-        promotionReason: r.status === 'confirmed' && r.promotion_reason ? 'spot_opened' : null,
+        // "Card cleanup" (Zip 10): no "Spot opened" text card on organizer Home (also for an older move-in).
+        promotionReason: settings.noCap !== true && r.status === 'confirmed' && r.promotion_reason ? 'spot_opened' : null,
         promotionNotifiedAt: r.promotion_notified_at,
       };
     });

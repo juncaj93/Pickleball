@@ -315,6 +315,8 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null, dropperOwesCe
       nowMs: ctx.nowMs,
       timezone: watch.group.timezone,
       prefs: watch.prefs,
+      // Zip 10, "Card cleanup" on for this tap (it rides on the group row): no waitlist words.
+      ...(watch.group.card_cleanup === true ? { noWaitlist: true } : {}),
     };
     let text = alertMessage(input);
     // The new wording is the same message with the game named by its day. It only costs a read when there is something to send.

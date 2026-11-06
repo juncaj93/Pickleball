@@ -9,8 +9,10 @@ import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, record
 import { lateFeesFor } from './lateFees';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
+import { capOf } from '../shared/settings';
 import { flatOf, specialFlatOf } from './repo';
 import { withShortGames } from './zip9';
+import { withCardCleanup } from './zip10';
 
 export type TokenScope = 'attendance' | 'claim';
 
@@ -63,6 +65,8 @@ async function resolve(ctx: Ctx, raw: unknown): Promise<Resolved> {
   if (!group) throw new HttpError(404, 'link_not_found', 'This link is not valid.');
   // "Short games" (server/zip9.ts): a texted link prices a 1.5 hour game the same way the player's screen does.
   await withShortGames(ctx, group);
+  // "Card cleanup" (server/zip10.ts): a texted link joins with the same cap the player's screen has.
+  await withCardCleanup(ctx, group);
   return { token, session, group, playerName: player.display_name, playerActive: !!player.is_active };
 }
 
@@ -88,7 +92,7 @@ async function view(ctx: Ctx, r: Resolved): Promise<ActionTokenView> {
       endsAt: r.session.ends_at,
       canceled: r.session.status === 'canceled',
       venueName: r.session.venue_name,
-      openSpots: openSpots(confirmedOf(roster).length, settingsOf(r.group).maxPlayers),
+      openSpots: openSpots(confirmedOf(roster).length, capOf(settingsOf(r.group))),
     },
     myStatus: mine?.status ?? null,
     attendanceConfirmed: !!mine?.attendance_confirmed_at,

@@ -13,6 +13,7 @@ import { paySheetForAll } from './paySheet';
 import { lateFeesForAll } from './lateFees';
 import { hiddenGameIds } from './hideGame';
 import { cardTimeForAll, shortGamesForAll } from './zip9';
+import { cardCleanupForAll } from './zip10';
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
 const TIME_BUCKET_MS = 10 * 60_000;
@@ -100,6 +101,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     // Zip 9 switches: the same rule, a segment only while the switch is on for everyone.
     ...((await shortGamesForAll(ctx.db, group.id)) ? ['sg'] : []),
     ...((await cardTimeForAll(ctx.db, group.id)) ? ['ct'] : []),
+    // Zip 10: the same rule.
+    ...((await cardCleanupForAll(ctx.db, group.id)) ? ['cl'] : []),
     // The organizer changing the player animations in Settings (nothing is added until the row is first used).
     (await motionSetting(ctx.db, group.id, 'player')) ?? '',
     // The organizer removing a canceled game from the player screen (or putting it back).

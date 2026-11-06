@@ -21,6 +21,8 @@ export interface GroupRow {
   created_at: string;
   /** NOT a column: this request's "Short games" answer (server/zip9.ts withShortGames), carried to settingsOf(group).shortGames. */
   short_games?: boolean;
+  /** NOT a column: this request's "Card cleanup" answer (server/zip10.ts withCardCleanup), carried to settingsOf(group).noCap. */
+  card_cleanup?: boolean;
   organizer_name: string | null;
   venue_name: string | null;
   venue_address: string | null;
@@ -126,6 +128,8 @@ export function settingsOf(group: GroupRow): GroupSettings {
   }
   // "Short games" on for this request (server/zip9.ts): only then is the key there, so with it off the settings are exactly as before.
   if (group.short_games === true) out.shortGames = true;
+  // "Card cleanup" on for this request (server/zip10.ts): no Max players cap and no waitlist (capOf, shared/settings.ts). Off: not there.
+  if (group.card_cleanup === true) out.noCap = true;
   return out;
 }
 

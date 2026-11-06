@@ -1,4 +1,4 @@
-import type { GroupSettings } from './settings';
+import { capOf, type GroupSettings } from './settings';
 import { MIN_PLAYERS, openSpots as spotsOpen, playersNeeded } from './spots';
 import { BOOKING_PROMPT_HOUR, bookingOpensMs, DEFAULT_TIMEZONE } from './time';
 
@@ -114,7 +114,8 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
   const started = nowMs >= start;
   const live = !canceled && !started;
   const bookingWindowOpen = nowMs >= bookingOpensMs(s.startsAt, settings.bookingLeadDays, tz);
-  const openSpots = spotsOpen(s.confirmedCount, settings.maxPlayers);
+  // "Card cleanup" (Zip 10): no Max players cap (capOf), and a game is never "full".
+  const openSpots = spotsOpen(s.confirmedCount, capOf(settings));
   const underfilled = live && s.confirmedCount < MIN_PLAYERS;
   const deadline = s.cancellationDeadlineAt ? Date.parse(s.cancellationDeadlineAt) : null;
   const inCheckIn = live && nowMs >= start - settings.checkInHours * HOUR;
@@ -136,7 +137,7 @@ export function computeSessionState(s: StatusInput, nowMs: number, settings: Gro
     underfilled,
     openSpots: live ? openSpots : 0,
     playersNeeded: live ? playersNeeded(s.confirmedCount) : 0,
-    full: live && s.confirmedCount >= settings.maxPlayers,
+    full: live && settings.noCap !== true && s.confirmedCount >= settings.maxPlayers,
     inCheckIn,
     deadlinePassed,
     shortOnPlayers,

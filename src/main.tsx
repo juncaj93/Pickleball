@@ -17,6 +17,8 @@ import './large-text.css';
 import './zip7.css';
 import './view-only.css';
 import './zip9.css';
+// Zip 10, Card cleanup: every rule under <html data-card-cleanup> (dormant with the switch off).
+import './zip10.css';
 
 function App() {
   const path = usePath();

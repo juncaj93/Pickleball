@@ -1,5 +1,6 @@
 import { ADMIN_COOKIE, type Ctx, PLAYER_COOKIE, setCookie } from './context';
 import { withShortGames } from './zip9';
+import { withCardCleanup } from './zip10';
 import { newId, randomToken, sha256, timingSafeEqual, verifyPin } from './crypto';
 import { HttpError } from './http';
 import { type GroupRow, getGroup } from './repo';
@@ -107,7 +108,7 @@ export async function requireAdmin(ctx: Ctx): Promise<GroupRow> {
       throw new HttpError(403, 'view_only', VIEW_ONLY_MESSAGE);
     }
   }
-  return withShortGames(ctx, group as GroupRow, true);
+  return withCardCleanup(ctx, await withShortGames(ctx, group as GroupRow, true));
 }
 
 export async function adminLogout(ctx: Ctx) {
@@ -160,12 +161,12 @@ export async function requireGroupKey(ctx: Ctx): Promise<GroupRow> {
     if (!/^[A-Za-z0-9_-]{20,64}$/.test(key)) throw new HttpError(404, 'group_not_found', 'This group link is not valid.');
     const group = await ctx.db.prepare('SELECT * FROM groups WHERE group_key = ?').bind(key).first<GroupRow>();
     if (!group) throw new HttpError(404, 'group_not_found', 'This group link is not valid.');
-    return withShortGames(ctx, group);
+    return withCardCleanup(ctx, await withShortGames(ctx, group));
   }
   const group = await getGroup(ctx.db);
   if (!group || !group.open_access) throw new HttpError(404, 'group_not_found', 'Open the link your organizer sent you.');
   if (!(await hasGroupAccess(ctx, group))) throw new HttpError(403, 'group_word_required', 'Enter the group word.');
-  return withShortGames(ctx, group);
+  return withCardCleanup(ctx, await withShortGames(ctx, group));
 }
 
 /** Which saved name this phone picked. Comes from an HttpOnly cookie, not from the request body. */

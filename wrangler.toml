@@ -127,6 +127,12 @@ SHORT_GAMES = "on"
 # joined button (Add to calendar | Directions) at the top right of the "You're in" line. "on" here only ALLOWS it; who gets it is Settings > Feature
 # switches > "Card time and buttons" (off at ship = nobody), plus a phone opened once with ?cardtime=on. "off" = the kill switch. Display only. Needs a deploy.
 CARD_TIME_BUTTONS = "on"
+# "Card cleanup" (Zip 10, shared/zip10.ts): player and organizer cards lose the "3 of 4 in" / "5 in" text (only the pickleball circles, one row), get a small
+# people icon before the names, are vertically centered to the date tile, and Later games become a smaller tinted card. Also NO WAITLIST AND NO MAX PLAYERS
+# CAP: anyone can join (up to 12, the database's own limit), every player-facing waitlist word is gone, the "Spot opened" text card and the Telegram
+# "moved up from the waitlist" line too. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Card cleanup" (off at ship = nobody),
+# plus a phone opened once with ?cardcleanup=on. "off" = the kill switch. Needs a deploy.
+CARD_CLEANUP = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -161,6 +167,7 @@ PLAYER_CARDS_SIMPLE = "on"
 LAST_CALL_TEXTS = "on"
 SHORT_GAMES = "on"
 CARD_TIME_BUTTONS = "on"
+CARD_CLEANUP = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

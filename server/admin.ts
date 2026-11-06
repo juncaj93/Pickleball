@@ -73,6 +73,9 @@ import { flatOf, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { isShortGame } from '../shared/gameLength';
+import { cardCleanupForAll, setCardCleanupForAll } from './zip10';
+import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
+import { capOf } from '../shared/settings';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -289,6 +292,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     shortGamesForAll: await shortGamesForAll(ctx.db, group.id),
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
     cardTimeButtonsForAll: await cardTimeForAll(ctx.db, group.id),
+    // Zip 10. "Card cleanup" for this screen is what requireAdmin put on the group (the same answer every join on it used).
+    ...(group.card_cleanup === true ? { cardCleanup: true } : {}),
+    cardCleanupForAll: await cardCleanupForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -980,9 +986,12 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   let result: string;
   if (action === 'confirm') {
     const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer', settingsOf(group));
-    if (r.result === 'spot_taken') throw new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
+    // "Card cleanup" (Zip 10): no cap, only the database's 12; never the word "full".
+    if (r.result === 'spot_taken') throw settingsOf(group).noCap === true ? new HttpError(409, 'game_limit', DB_LIMIT_MESSAGE) : new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
     result = r.result;
   } else if (action === 'waitlist') {
+    // "Card cleanup" (Zip 10): there is no waitlist to move anyone to.
+    if (settingsOf(group).noCap === true) throw new HttpError(409, 'no_waitlist', 'There is no waitlist anymore. Use Out instead.');
     await moveToWaitlist(ctx.db, session, playerId, ctx.nowMs);
     result = 'waitlisted';
   } else if (action === 'withdraw') {
@@ -1457,7 +1466,7 @@ export async function prepareLinks(ctx: Ctx, body: Record<string, unknown>): Pro
       .filter((r) => !r.attendance_confirmed_at)
       .map((r) => ({ playerId: r.player_id, name: r.display_name, phone: r.phone_number }));
   } else {
-    if (openSpots(confirmedOf(roster).length, settingsOf(group).maxPlayers) === 0) {
+    if (openSpots(confirmedOf(roster).length, capOf(settingsOf(group))) === 0) {
       throw new HttpError(409, 'session_full', 'No spots are open right now.');
     }
     recipients = eligibleSubstitutes(roster, await getPlayers(ctx.db, group.id));
@@ -1572,7 +1581,8 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     zelleRaw = z ?? '';
   }
   const storedSettings = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
-  const oldMax = settingsOf(group).maxPlayers;
+  // The room before this save: with "Card cleanup" on (Zip 10) that is already the database's 12, so a new Max players moves nobody.
+  const oldMax = capOf(settingsOf(group));
   await ctx.db
     .prepare(
       `UPDATE groups SET name = ?, venmo_url = ?, settings_json = ?, organizer_name = ?, venue_name = ?, venue_address = ?, first_session_date = ?,
@@ -2240,6 +2250,35 @@ export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown
     .all<SessionRow>();
   for (const s of open) if (isShortGame(s.starts_at, s.ends_at)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
   return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/card-cleanup-switch { on }: Settings > Feature switches > "Card cleanup" (Zip 10). Switching it on for everyone also
+ * ends the waitlist: anyone still waiting on an open game moves in at once, first in line first, as a normal player (their credit
+ * goes on like at I'm in; no "spot opened" notice, text card or Telegram line). Off moves nobody back.
+ */
+export async function setCardCleanupSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setCardCleanupForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'card_cleanup_on' : 'card_cleanup_off', {}, ctx.nowIso);
+  const movedIn = on && zip10Allowed(ctx.env.CARD_CLEANUP) ? await endWaitlists(ctx, group) : 0;
+  return { ok: true, on, movedIn };
+}
+
+/** Everyone waiting on an open game moves in (no cap: up to the database's 12). Returns how many moved. */
+async function endWaitlists(ctx: Ctx, group: GroupRow): Promise<number> {
+  const settings = { ...settingsOf(group), noCap: true as const };
+  const { results: open } = await ctx.db
+    .prepare(
+      `SELECT * FROM sessions s WHERE s.group_id = ? AND s.status <> 'canceled' AND s.starts_at > ?
+         AND EXISTS (SELECT 1 FROM session_players sp WHERE sp.session_id = s.id AND sp.status = 'waitlisted') ORDER BY s.starts_at`,
+    )
+    .bind(group.id, ctx.nowIso)
+    .all<SessionRow>();
+  let moved = 0;
+  for (const s of open) moved += (await settle(ctx.db, s, ctx.nowIso, settings)).length;
+  return moved;
 }
 
 /** PUT /api/admin/card-time-switch { on }: Settings > Feature switches > "Card time and buttons". Player cards only, display only. */

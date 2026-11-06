@@ -7,12 +7,15 @@ export interface Zip7Flags {
   tonightGlow?: boolean;
   colorCleanup?: boolean;
   playerCardsSimple?: boolean;
+  /** Zip 10, CARD_CLEANUP (src/zip10.css): rides on the same hook. */
+  cardCleanup?: boolean;
 }
 
 const ATTRS: [keyof Zip7Flags, string][] = [
   ['tonightGlow', 'data-tonight-glow'],
   ['colorCleanup', 'data-color-cleanup'],
   ['playerCardsSimple', 'data-player-cards'],
+  ['cardCleanup', 'data-card-cleanup'],
 ];
 
 /** Sets the <html> attributes for the switches that are on for this screen; takes them off when the screen goes away. */
@@ -20,8 +23,9 @@ export function useZip7Root(flags: Zip7Flags | null | undefined, active = true) 
   const tg = !!flags?.tonightGlow && active;
   const cc = !!flags?.colorCleanup && active;
   const pc = !!flags?.playerCardsSimple && active;
+  const cl = !!flags?.cardCleanup && active;
   useLayoutEffect(() => {
-    const on: Record<string, boolean> = { tonightGlow: tg, colorCleanup: cc, playerCardsSimple: pc };
+    const on: Record<string, boolean> = { tonightGlow: tg, colorCleanup: cc, playerCardsSimple: pc, cardCleanup: cl };
     const root = document.documentElement;
     const set: string[] = [];
     for (const [key, attr] of ATTRS) {
@@ -31,7 +35,7 @@ export function useZip7Root(flags: Zip7Flags | null | undefined, active = true) 
       }
     }
     return () => set.forEach((a) => root.removeAttribute(a));
-  }, [tg, cc, pc]);
+  }, [tg, cc, pc, cl]);
 }
 
 /** TONIGHT_GLOW on: which tag a date tile on the organizer Home wears (undefined with the switch off, so the tile stays exactly as before). */
