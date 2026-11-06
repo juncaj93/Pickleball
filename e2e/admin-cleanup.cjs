@@ -10,6 +10,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5270;
@@ -19,6 +20,9 @@ const PIN = '482913';
 const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon', 'Christopher', 'Bartholomew', 'Maximilian', 'Wilhelmina', 'Anastasia'];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const SHOTS = path.join(__dirname, 'screenshots');
+// The fixed "now" (Fri Nov 6, 2026, 10:00 AM Eastern): the server clock and every browser page are pinned to it, so the checks do not
+// depend on today's real date or hour (the red-line game below starts 20 hours after it, the next morning).
+const NOW_MS = Date.parse('2026-11-06T10:00:00-05:00');
 
 let passed = 0;
 let failed = 0;
@@ -62,10 +66,11 @@ async function main() {
     } catch {}
     await sleep(500);
   }
-  const now = Date.now();
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: now }) });
+  const now = NOW_MS;
+  const clock = fixedClock(BASE);
+  await clock.set(now);
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;

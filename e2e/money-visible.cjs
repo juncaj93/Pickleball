@@ -17,6 +17,7 @@ const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = 5263;
@@ -101,11 +102,14 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
-  const clock = (iso) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse(iso) }) });
+  // The server clock AND every browser page follow this clock (pages used to read the real date), so nothing here depends on today's
+  // real date or hour.
+  const fixed = fixedClock(BASE);
+  const clock = (iso) => fixed.set(Date.parse(iso));
   // Sat Oct 31, 2026, 11:00 AM Eastern: nobody is signing up, the next games are Tue Nov 3 and Thu Nov 5.
   await clock('2026-10-31T11:00:00-04:00');
 
-  const browser = await chromium.launch();
+  const browser = fixed.pin(await chromium.launch());
   const api = await browser.newContext();
   const call = async (req, method, url, data) => {
     const res = await req.fetch(BASE + url, { method, data, headers: { Origin: BASE } });

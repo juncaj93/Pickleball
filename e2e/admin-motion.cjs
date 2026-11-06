@@ -12,6 +12,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5274;
@@ -21,6 +22,10 @@ const PIN = '482913';
 const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon'];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const SHOTS = process.env.E2E_SHOTS || path.join(__dirname, 'screenshots');
+
+// The fixed "now" (Fri Nov 6, 2026, 10:00 AM Eastern): the server clock and every browser page are pinned to it, so which games are
+// ahead and where their cards sit do not depend on today's real date or hour.
+const NOW_MS = Date.parse('2026-11-06T10:00:00-05:00');
 
 let passed = 0;
 let failed = 0;
@@ -63,9 +68,10 @@ async function main() {
     } catch {}
     await sleep(500);
   }
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() }) });
+  const clock = fixedClock(BASE);
+  await clock.set(NOW_MS);
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
   const made = await post(setup, '/api/setup', {
@@ -83,7 +89,7 @@ async function main() {
   for (const h of d.hiddenSessions || []) await post(areq, `/api/admin/sessions/${h.id}/show`, { shown: true });
   d = await dash();
   // Games far enough out that no deadline is near: A booked (3 in), B booked and empty, C not booked (1 in).
-  const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > Date.now() + 36 * 3600_000);
+  const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > clock.now() + 36 * 3600_000);
   const [A, B, C] = ahead;
   const idOf = (n) => d.players.find((p) => p.name === n).id;
   const phones = {};

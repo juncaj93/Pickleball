@@ -15,6 +15,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5301;
@@ -77,10 +78,13 @@ async function main() {
     } catch {}
     await sleep(500);
   }
-  const setClock = (ms) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: ms }) });
+  // The server clock AND every browser page follow this clock (each new browser context starts at the latest moment set; pages used to
+  // read the real date), so nothing here depends on today's real date or hour. A phone opened with clockAt also installs that time.
+  const fixed = fixedClock(BASE);
+  const setClock = (ms) => fixed.set(ms);
   await setClock(et('2026-11-02T09:00:00-05:00'));
 
-  const browser = await chromium.launch();
+  const browser = fixed.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
   const made = await post(setup, '/api/setup', {
