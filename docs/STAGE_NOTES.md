@@ -2513,7 +2513,7 @@ nothing switched on, no live database touched. The full description of each swit
 - Rollback: Settings > Feature switches, the three rows off (no deploy); or `TONIGHT_GLOW`, `COLOR_CLEANUP`, `PLAYER_CARDS_SIMPLE` = "off" and a deploy; or Pages deployment `5f82c960-8c32-4049-8292-70a342b42f7a` (Zip 6, 54dcdc6). No data was changed by the deploy, so no restore is needed.
 - Follow-ups from the final review (all only visible with a switch ON, none blocking): (1) with Simpler player cards on, a venue-waitlist game that is also full says "I'm in" instead of "Join waitlist" (that state is turned into a normal game for players today, so it is unreachable); (2) the shortened Cancel line drops "Late drops still owe $14" and the credit-back note (Alex approved the wording); (3) the TONIGHT glow ignores the organizer's "Animations, players" switch and only follows the phone's Reduce Motion; (4) on the folded organizer Home row the 44 px tile may overflow TONIGHT by about 1 px; (5) the dimmed canceled tile text is below 4.5:1 on purpose (Alex's 58 percent).
 
-## Zip 8: cleanup (read-only PIN, date-proof tests, reminder time, credit check, backups) - built Fri Nov 6, 2026; on a preview, waiting for "ship it"
+## Zip 8: cleanup (read-only PIN, date-proof tests, reminder time, credit check, backups) - LIVE Fri Nov 6, 2026 (Last call texts OFF)
 
 Spec: the "zip 8" brief (`START_HERE.md`, `SITE_RULES.md`). One PR. NO database schema change, no migration. Built in a quiet window (Friday). Nothing deployed to
 production, nothing switched on, no live data changed. Only reads of the live database (the switch rows in `task_log`). Zip 5 deploy ID stays "probably
@@ -2568,3 +2568,26 @@ production, nothing switched on, no live data changed. Only reads of the live da
 - Unit: see the PR. New: `readonly-pin`, `credit-chain`, `finalize-reminder`, `last-call`, `weekly-backup`. Browser: `e2e/zip8.cjs` (4/4).
 - Fresh reviewer (did not write the code): 1 blocker (the PIN hash in the view-only backup) and 2 should-fix (knock and copy in the same run; some red toasts), all fixed
   with tests; also fixed from its notes: secret rotation signs helpers out, one-batch snapshot, the Worker's live database wrapped read-only.
+
+### Deploy (Fri Nov 6, 2026, 11:12 AM Eastern, quiet window, on Alex's "ship it" after testing the preview)
+- Alex also asked, before ship: the organizer Home TONIGHT tile without its white ring (green strip kept, one still soft green glow; player screens unchanged).
+- PR #88 merged as `1cf0784` (merge commit; same tree as the tested branch head `31ea1a8`). Production deployment `5c4935b1-98d0-471a-8de6-9d91881e6dec` from main.
+  `LAST_CALL_TEXTS` allowed in `wrangler.toml`, Settings row OFF (no `last_call_texts_on` row in `task_log`). No migration, no data change.
+- Clock Worker `pickleball-alerts-clock` deployed from main: version `ff418c61-0bb4-48b0-8296-13be55545889` (bindings DB = pickleball, read only in code and wrapped;
+  BACKUP = pickleball-backups; CRON_SECRET kept). Rollback version `49dfbbb2-7e72-44e4-8b86-255b81f477bf` (`npx wrangler rollback 49dfbbb2-7e72-44e4-8b86-255b81f477bf --config worker/wrangler.toml`).
+- Before it: main equaled live (production `ca890645-2495-4e96-8aef-b8dc437f4876` = 963f39f). SQL export `live-before-zip8-2026-11-06.sql` (398 rows, not committed, has phone
+  numbers, in this session's scratch folder), Time Travel bookmark `00000945-00000000-0000511b-1de7d4082f8dfdcc61f58aad76917030` (11:11 AM Eastern). Integrity checks:
+  all 21 columns 0 before and after.
+- Tests on merged main: tsc clean, unit and API 2235 passed, 1 skipped, 0 failed (133 files), build clean. A last fresh reviewer on the final diff found nothing blocking;
+  its two should-fix notes were fixed before the merge (backup pieces never split an emoji; the read-only secret is trimmed).
+- Read-only live check with the read-only PIN (pickleball-club-9h0.pages.dev): `/`, `/admin`, `/api/status`, `/api/group/version` 200; dashboard without sign-in 401;
+  view-only sign-in 200, `viewOnly: true`, 11 players and 11 games (same as the export), Money, Activity and month list 200, a save 403 "View only", its backup has no
+  PIN hash, sign out 200; Last call texts off (`lastCallTextsForAll: false`); the live script is the same file as the local build (index-D_y0Sfjd.js).
+- Rollback: site, Pages deployment `ca890645` (Zip 7, 963f39f); Worker, version `49dfbbb2`; read-only PIN, remove the secret. Last call texts: its Settings row (it is off).
+  No data was changed by the deploy, so no restore is needed.
+- Deleted (Alex's OK): the 47 old preview deployments. Alex deletes the 22 merged branches on GitHub himself.
+
+- First weekly copy (real D1): made Fri Nov 6, 12:00 PM Eastern by the first hourly look after the Worker deploy (week 2026-11-01; players 11, games 12, seats 24, credit
+  entries 5). `node scripts/weekly-backup.mjs get 2026-11-01` turned it back into a backup file, and `scripts/restore-backup.mjs` read it into 332 restore lines.
+  Clock runs after the deploy: every 5 minutes, 0 errors; CPU about 1 to 2.5 ms, and 13 ms on the 12:00 PM run that made the copy (it finished fine; it runs after
+  the knock, so the alerts never wait on it). Watch: if that hourly run ever starts failing as the data grows, the copy (not the alerts) is what stops.
