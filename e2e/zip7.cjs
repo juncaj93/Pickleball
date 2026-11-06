@@ -174,6 +174,40 @@ async function main() {
       }
       return out;
     });
+  /** The green check badge ("You're in") on every date tile that has one: the whole circle is visible (the top element at points all around it is the badge itself, so nothing covers or clips it), inside the screen, and the strip's word ends before the badge starts. */
+  const checkProblems = (page) =>
+    page.evaluate(() => {
+      const out = [];
+      let seen = 0;
+      for (const wrap of document.querySelectorAll('.tile-wrap')) {
+        const chk = wrap.querySelector('.tile-check');
+        if (!chk) continue;
+        seen++;
+        chk.scrollIntoView({ block: 'center' });
+        const c = chk.getBoundingClientRect();
+        const name = `check on a ${Math.round(wrap.querySelector('.tile').getBoundingClientRect().width)} px tile`;
+        if (c.left < 0 || c.right > innerWidth || c.top < 0) out.push(`${name}: outside the screen`);
+        const cx = c.left + c.width / 2;
+        const cy = c.top + c.height / 2;
+        const rad = c.width / 2;
+        const pts = [[0, 0]];
+        for (let a = 0; a < 8; a++) pts.push([Math.cos((a * Math.PI) / 4) * rad * 0.85, Math.sin((a * Math.PI) / 4) * rad * 0.85]);
+        for (const [dx, dy] of pts) {
+          const top = document.elementsFromPoint(cx + dx, cy + dy)[0];
+          if (!top || !top.closest('.tile-check')) out.push(`${name}: covered or clipped at (${Math.round(dx)}, ${Math.round(dy)}) by ${top ? top.className || top.tagName : 'nothing'}`);
+        }
+        const tag = wrap.querySelector('.day-tag');
+        if (tag) {
+          const vis = [...tag.querySelectorAll('span')].find((x) => getComputedStyle(x).display !== 'none') || tag;
+          const rg = document.createRange();
+          rg.selectNodeContents(vis);
+          const w = rg.getBoundingClientRect();
+          if (w.right > c.left - 0.5 && w.top < c.bottom && w.bottom > c.top) out.push(`${name}: the word ${vis.textContent.trim()} runs under the badge (${Math.round(w.right)} > ${Math.round(c.left)})`);
+          if (parseFloat(getComputedStyle(vis).fontSize) < 9) out.push(`${name}: word under 9 px`);
+        }
+      }
+      return seen === 0 ? ['no check badge on the page'] : out;
+    });
   const idOf = async (row) => (await row.getAttribute('id')).replace('row-', '');
 
   const game = {
@@ -244,7 +278,9 @@ async function main() {
         assert((await p.page.locator('.day-tag').count()) >= 3, 'tags on the page');
         const bad = await bannerProblems(p.page);
         assert(bad.length === 0, `banner (${scheme}): ${bad.join('; ')}`);
-        // TOMORROW is the full word on this week's and next week's tiles.
+        const badCheck = await checkProblems(p.page);
+        assert(badCheck.length === 0, `TONIGHT tile check badge (${scheme}): ${badCheck.join('; ')}`);
+        // TOMORROW is the full word on a tile without the badge; with the badge it keeps 9 px and the word never runs under it.
         const tm = p.page.locator(`#row-${game.tomorrow.id} .day-tag.tomorrow`);
         assert((await tm.innerText()).trim() === 'TOMORROW', `TOMORROW in full on the card (${await tm.innerText()})`);
         await noSideScroll(p.page, `player ${width} ${scheme}`);
@@ -274,6 +310,38 @@ async function main() {
     assert(bad.length === 0, `banner: ${bad.join('; ')}`);
     await p.ctx.close();
   });
+  for (const width of [390, 360, 320]) {
+    await check(`A: the green check badge sits fully on top of the strip, nothing clipped or covered, the word stays clear of it (TOMORROW and TONIGHT, ${width} px, light and dark)`, async () => {
+      for (const scheme of ['light', 'dark']) {
+        // Gray is in tomorrow's game, Jordan in tonight's.
+        const g = await openPlayer('Gray', { width, scheme, query: ALL_ON });
+        const bad = await checkProblems(g.page);
+        assert(bad.length === 0, `Gray ${scheme}: ${bad.join('; ')}`);
+        assert((await g.page.locator(`#row-${game.tomorrow.id} .tile-check`).count()) === 1, "Gray's tomorrow card shows the check");
+        // The same tile in the other card sizes (next week and later rows): a copy of the card dropped into each shell.
+        await g.page.evaluate((id) => {
+          for (const tier of ['next', 'later']) {
+            const c = document.getElementById(`row-${id}`).cloneNode(true);
+            c.id = `copy-${tier}`;
+            c.className = c.className.replace(/tier-\w+/, `tier-${tier}`);
+            c.dataset.tier = tier;
+            document.querySelector('.schedule').append(c);
+          }
+        }, game.tomorrow.id);
+        await g.page.waitForTimeout(300);
+        const bad2 = await checkProblems(g.page);
+        assert(bad2.length === 0, `Gray ${scheme}, other tile sizes: ${bad2.join('; ')}`);
+        const words = await g.page.evaluate(() => ['copy-next', 'copy-later'].map((id) => document.querySelector(`#${id} .day-tag`).innerText.trim()));
+        assert(words.join() === 'TOM,TOM', `narrow tiles with the badge say TOM (${words})`);
+        if (scheme === 'light') await shot(g.page, `check-tomorrow-${width}`);
+        await g.ctx.close();
+        const j = await openPlayer('Jordan', { width, scheme, query: ALL_ON });
+        const bad3 = await checkProblems(j.page);
+        assert(bad3.length === 0, `Jordan ${scheme}: ${bad3.join('; ')}`);
+        await j.ctx.close();
+      }
+    });
+  }
   await check('A: organizer Home tiles say TONIGHT / TOMORROW too; the Money list tiles keep the weekday', async () => {
     const { ctx, page } = await openAdmin({ url: '/admin?tonightglow=on' });
     assert((await page.locator(`#session-${game.tonight.id} .day-tag.tonight`).count()) === 1, 'admin TONIGHT');
