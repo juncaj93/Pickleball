@@ -2756,3 +2756,20 @@ merged and live first (production `9c94c864` = main `624c60f`). The full descrip
 - Also fixed from its notes: a look-only test phone on a full game says "Join waitlist" again (what its tap does); the Want in? popup at 12 says only
   "12 are in." Notes kept: switching the row on while the kill switch is "off" moves nobody (the kill switch wins); after switching the row off again, a
   game left at 11 or 12 shows in `more_in_than_max` (expected).
+
+### Deploy (Fri Nov 6, 2026, 6:14 PM Eastern, quiet window, on Alex's "ship it")
+- PR #92 merged as `fb44afc` (merge commit; same tree as the tested branch head `0a22d06`). Production deployment `f09f5aac-d683-49bd-a3cb-de9794278759`
+  from main, with `CARD_CLEANUP` allowed in `wrangler.toml` and the Settings row OFF (no `card_cleanup_on` row in `task_log`). No migration, no data
+  change. Alex switches it on himself.
+- Before it: main equaled live (production `9c94c864` = 624c60f). SQL export `live-before-zip10-deploy-2026-11-06.sql` (411 rows; not committed, has phone
+  numbers; in this session's scratch folder `/tmp/claude-0/-home-user-Pickleball/a67ccdee-ec00-5b26-8e26-0b34a87dff49/scratchpad/backup/`), Time Travel
+  bookmark `000009a5-00000000-0000511b-4296f0657cdbd3decd84e33cc002d23b` (6:13 PM Eastern). Integrity checks on a copy of the export: all 21 columns 0.
+- Tests on the final tree: tsc clean, unit and API 2277 passed, 1 skipped, 0 failed (135 files), build clean. Browser: zip10 21/21, zip10-off 34/34
+  (switch off = main), zip9 15, zip8 4, zip7 33, zip6 28, instant-taps 19, money-rework 36. Two fresh reviewers; the second found nothing blocking
+  with the switch off.
+- Read-only live check (pickleball-club-9h0.pages.dev): home, robots, headers, setup refusal, phone layout pass (the "setup code is configured" line is
+  the known one once a group exists); the view-only PIN signs in (`viewOnly: true`) and its save is refused (403); `cardCleanupForAll: false`, no
+  `cardCleanup` flag; the live script is the local build (index-D4Xhzfe8.js) and holds the new row. Players on a waitlist on live right now: 0 (on any
+  game; Max players 10; the fullest upcoming game has 4). So switching the row on will move nobody.
+- Rollback: Settings > Feature switches > "Card cleanup" off (no deploy); or `CARD_CLEANUP = "off"` and a deploy; or Pages deployment
+  `9c94c864-11cd-4471-a004-f4eeddefb1e3` (Zip 9, 624c60f). No data was changed by the deploy, so no restore is needed.
