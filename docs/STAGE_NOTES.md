@@ -2646,3 +2646,6 @@ first (production `5c4935b1-98d0-471a-8de6-9d91881e6dec` = main `1cf0784`). The 
   tiles keep exactly live's height (60.34 px at 390), word and date position (measured on main and on the branch, identical).
   Notes kept: the ring change also makes every organizer Court booked / Not booked tile's ring a true 1.5 px (on a 1x desktop screen slightly
   heavier); Windows High Contrast drops shadows (the ring would not show there); `admin-r2` check F4 fails on main too (it depends on today's date).
+- Follow-up PR (before the deploy): the full unit run on merged main caught `tests/zip7.test.ts` "every rule is under an <html> attribute": the
+  `:is(.ts-booked, .ts-none)` selectors read as an unguarded rule after the comma. Each selector is now written out in full (same result). Unit
+  2258 passed, zip9 15/15, zip7 33/33, tile height and text position identical to live.
