@@ -12,6 +12,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5281;
@@ -23,6 +24,10 @@ const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/6
 const SHOTS = path.join(__dirname, 'screenshots');
 const HOUR = 3600_000;
 const DAY = 24 * HOUR;
+
+// The fixed start (Fri Nov 6, 2026, 10:00 AM Eastern): the server clock and every browser page are pinned to it (and then to 10:00 AM
+// the day after the second game, below), so none of the checks depend on today's real date or hour.
+const START_MS = Date.parse('2026-11-06T10:00:00-05:00');
 
 let passed = 0;
 let failed = 0;
@@ -73,10 +78,11 @@ async function main() {
     } catch {}
     await sleep(500);
   }
-  const clock = (atMs) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs }) });
-  await clock(Date.now());
+  const fixed = fixedClock(BASE);
+  const clock = (atMs) => fixed.set(atMs);
+  await clock(START_MS);
 
-  const browser = await chromium.launch();
+  const browser = fixed.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
@@ -284,6 +290,9 @@ async function main() {
     assert(box.width >= 44 && box.height >= 44, `X is ${box.width}x${box.height}`);
     assert(Math.abs(box.x + box.width - (cardBox.x + cardBox.width)) <= 1 && Math.abs(box.y - cardBox.y) <= 1, 'X is not in the top-right corner');
     // The X never covers the card's words.
+    // KNOWN SITE BUG (found Nov 6, 2026, when this file was pinned to a fixed day): at 320 px the X's 44 px box overlaps the end of a
+    // long date line, for example "Sat, Nov 14 · 7:00 to 9:00 PM" (words end at 266, X starts at 261). Only .sg-head gets the 32 px
+    // right padding on a dismissible card, not .sg-when, so whether this failed used to depend on the real date. Left failing on purpose.
     const overlap = await c.evaluate((card) => {
       const xr = card.querySelector('.card-x').getBoundingClientRect();
       const hit = [];
@@ -291,7 +300,9 @@ async function main() {
         const r = document.createRange();
         r.selectNodeContents(el);
         const b = r.getBoundingClientRect();
-        if (b.width && b.left < xr.right && b.right > xr.left + 0.5 && b.top < xr.bottom && b.bottom > xr.top) hit.push(el.className);
+        const at = (n) => Math.round(n);
+        if (b.width && b.left < xr.right && b.right > xr.left + 0.5 && b.top < xr.bottom && b.bottom > xr.top)
+          hit.push(`${el.className} "${el.textContent.trim()}" (words ${at(b.left)}..${at(b.right)} x ${at(b.top)}..${at(b.bottom)}, X ${at(xr.left)}..${at(xr.right)} x ${at(xr.top)}..${at(xr.bottom)})`);
       }
       return hit;
     });

@@ -13,15 +13,20 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = Number(process.env.E2E_PORT) || 5274;
+const PORT = Number(process.env.E2E_PORT) || 5275; // not 5274: e2e/admin-motion.cjs uses that one
 const BASE = `http://localhost:${PORT}`;
 const SETUP_TOKEN = 'payalways-setup-token-0123456789';
 const PIN = '573904';
 const NAMES = ['Alex', 'Ryan', 'Julian', 'Nathan', 'Mitchel', 'Brandon', 'Devon', 'Casey'];
 const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const MONEY = /\$\d+ due|\bPay\b|I paid/;
+
+// The fixed "now" (Fri Nov 6, 2026, 10:00 AM Eastern): the server clock and every browser page are pinned to it, so which games
+// come next, and what their cards show, do not depend on today's real date or hour.
+const NOW_MS = Date.parse('2026-11-06T10:00:00-05:00');
 
 let passed = 0;
 let failed = 0;
@@ -61,10 +66,11 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
-  const setClock = (atMs) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs }) });
-  await setClock(Date.now());
+  const clock = fixedClock(BASE);
+  const setClock = (atMs) => clock.set(atMs);
+  await setClock(NOW_MS);
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
@@ -210,6 +216,8 @@ async function main() {
   });
 
   await check('game day from 8:00 AM: the Pay card at the top lists the Not booked game (test link on), not with it off', async () => {
+    const back = clock.now();
+    const leftAt = Date.now();
     await setClock(Date.parse(A.startsAt) - 5 * 3600_000);
     try {
       const on = await open('Brandon', { query: '?payalways=on' });
@@ -221,7 +229,8 @@ async function main() {
       assert((await off.page.locator('section.pay-card').count()) === 0, 'pay card shows with the switch off');
       await off.ctx.close();
     } finally {
-      await setClock(Date.now());
+      // Back to the pinned time line (as if the clock had never jumped).
+      await setClock(back + (Date.now() - leftAt));
     }
   });
 

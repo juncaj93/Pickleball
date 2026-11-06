@@ -154,6 +154,11 @@ async function runSequence(seed: number) {
       // I'm in while the drop is still held just takes it back; otherwise a real join.
       if (!undoHold(g.id)) {
         try {
+          // As PlayerHome join (sendDropsBeforeJoin): a drop already on its way lands first, and the join goes after it.
+          // Without this the two requests raced, and which one the server saw first depended on the machine's real speed
+          // (each request does real SHA-256 work on the thread pool, which the fake clock does not control): seed 136
+          // (drop, wait, I'm in) failed that way on a busy machine.
+          await settleHolds();
           await post('join');
           shownIn = serverIn();
         } catch {

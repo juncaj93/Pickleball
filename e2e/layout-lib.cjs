@@ -7,6 +7,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PIN = '482913';
@@ -51,10 +52,13 @@ async function startSite({ port, name, token, root = ROOT }) {
 
 /** The fake group, in the state described at the top. Returns everything a test needs. */
 async function seed({ BASE, token }) {
-  const clock = (iso) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: at(iso) }) });
+  // The server clock and every browser page follow the moment set here (each new browser context starts at the latest one), so none of
+  // this depends on today's real date or hour.
+  const fixed = fixedClock(BASE);
+  const clock = (iso) => fixed.set(at(iso));
   // Mon Nov 2, 6:00 AM Eastern: the day before the first real game.
   await clock('2026-11-02T06:00:00-05:00');
-  const browser = await chromium.launch();
+  const browser = fixed.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const ok = async (resp, what) => {
