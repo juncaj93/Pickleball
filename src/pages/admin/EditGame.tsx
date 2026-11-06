@@ -10,6 +10,7 @@ import { canMove, useMotion } from '../../motion';
 import type { AdminCtx } from '../Admin';
 import { CourtSwitch } from './CourtSwitch';
 import { HideAgain, useAction } from './Sessions';
+import { boxMinutes, ShortGameHeadsUp } from './ShortGame';
 
 /**
  * "Edit game": the court status, the date and times, and the CourtReserve
@@ -114,6 +115,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
               <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} required />
             </label>
           </div>
+          <ShortGameHeadsUp ctx={ctx} minutes={boxMinutes(start, end)} />
           {timeChanged && startsAt && endsAt && (
             <p className="small">
               New time: <strong>{formatShortDate(startsAt, tz)}, {formatTimeRange(startsAt, endsAt, tz)}</strong>

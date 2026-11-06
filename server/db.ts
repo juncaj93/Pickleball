@@ -82,6 +82,10 @@ export interface Env {
   VENMO_REQUEST?: string;
   /** "Last call texts" (the night-before Check-in and Need players words Alex asked for, Zip 8): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?lastcall=on (server/lastCall.ts). A wrangler.toml var. */
   LAST_CALL_TEXTS?: string;
+  /** "Short games" (Zip 9, 1.5 hour games priced from shared/gameLength.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?shortgames=on (server/zip9.ts). CHANGES MONEY for 1.5 hour games. */
+  SHORT_GAMES?: string;
+  /** "Card time and buttons" (Zip 9, time line under the date tile and the joined Calendar | Directions button): the kill switch. Who gets it: Settings > Feature switches, ?cardtime=on. Display only. */
+  CARD_TIME_BUTTONS?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

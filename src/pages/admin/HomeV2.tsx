@@ -9,6 +9,7 @@ import { adminTileDay } from '../../zip7';
 import type { AdminCtx } from '../Admin';
 import { SessionCard } from './Sessions';
 import { menuJustDismissed } from './menuDismiss';
+import { shortGameLine } from './ShortGame';
 
 /** Things inside a card that do their own job when tapped: a tap on them never folds the game. */
 const OWN_TAP =
@@ -136,7 +137,9 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
   const start = tsTime(cardTime(s.startsAt, s.endsAt, tz).start, ts);
   const date = formatShortDate(s.startsAt, tz);
   // The second line is always one line (it is cut off with an ellipsis): who is in, or when booking opens. Never a sentence or a button.
-  const second = canceled ? (s.cancelReason ?? 'Canceled') : court.kind === 'later' ? court.text : names.length > 0 ? names.join(', ') : 'Nobody in yet';
+  // Zip 9 "Short games": a 1.5 hour game's row says so on its second line ("1.5 hr game · $11 each"); the names show when it opens.
+  const tag = canceled ? null : shortGameLine(ctx, s);
+  const second = canceled ? (s.cancelReason ?? 'Canceled') : tag ? tag : court.kind === 'later' ? court.text : names.length > 0 ? names.join(', ') : 'Nobody in yet';
   const key = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === ' ') {

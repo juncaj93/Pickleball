@@ -33,6 +33,7 @@ import {
   shareTextR2,
 } from '../../../shared/textsR2';
 import { checkInTextLastCall, needPlayersTextLastCall } from '../../../shared/lastCall';
+import { viewFlat } from '../../../shared/gameLength';
 
 export interface TextItem {
   id: 'share' | 'need' | 'checkin' | 'promoted' | 'canceled' | 'moved' | 'final';
@@ -226,8 +227,8 @@ export function lateCancelText(d: AdminDashboard, s: AdminSessionView, reason: s
   if (s.canceledBy === 'organizer_fee_kept') {
     // With the fee split (LATE_FEE_SPLIT) the share is the split price ("your $9 share"); the words are otherwise the same.
     const body = r2
-      ? canceledFeeKeptTextR2(s, d.group.timezone, nowMs, s.feeSplit?.priceCents ?? d.group.settings.pricePerPlayerCents, link, why)
-      : canceledFeeKeptMessage(s.feeSplit?.priceCents ?? d.group.settings.pricePerPlayerCents, link);
+      ? canceledFeeKeptTextR2(s, d.group.timezone, nowMs, s.feeSplit?.priceCents ?? viewFlat(s, d.group.settings.pricePerPlayerCents), link, why)
+      : canceledFeeKeptMessage(s.feeSplit?.priceCents ?? viewFlat(s, d.group.settings.pricePerPlayerCents), link);
     return { body, to: 'The players who were in', feeKept: true, reach: confirmedReach(d, s, true) };
   }
   return {

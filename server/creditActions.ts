@@ -13,6 +13,7 @@ import { HttpError } from './http';
 import { lateFeeKind } from '../shared/lateFees';
 import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
+import { flatOf } from './repo';
 
 /** What a player can spend or ask back right now: the pot minus any pending request. */
 export async function usableFor(ctx: Ctx, group: GroupRow, playerId: string) {
@@ -95,7 +96,7 @@ export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionR
  */
 export async function useCashOutOn(ctx: Ctx, group: GroupRow, session: SessionRow, playerId: string, name: string, body: Record<string, unknown>) {
   const shown = v.cents(body.cents, 'cents');
-  const offer = await cashOutOffer(ctx.db, session, playerId);
+  const offer = await cashOutOffer(ctx.db, session, playerId, settingsOf(group));
   if (!offer) throw new HttpError(409, 'nothing_to_use', 'There is nothing to use on this game now.');
   if (shown !== offer.cents) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');
   const done = await useCashOutOnSeat(ctx.db, {
@@ -106,8 +107,8 @@ export async function useCashOutOn(ctx: Ctx, group: GroupRow, session: SessionRo
     requestCents: offer.requestCents,
     usableCents: offer.usableCents,
     fromRequest: offer.cents,
-    alreadyUsed: settingsOf(group).pricePerPlayerCents - offer.owedCents,
-    priceCents: settingsOf(group).pricePerPlayerCents,
+    alreadyUsed: flatOf(session, settingsOf(group)) - offer.owedCents,
+    priceCents: flatOf(session, settingsOf(group)),
     nowIso: ctx.nowIso,
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again.');

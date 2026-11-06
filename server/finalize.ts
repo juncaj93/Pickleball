@@ -17,6 +17,8 @@ import { auditLateFeeOwed } from './roster';
 import { FEE_MIN_PLAYERS, lateFeeKind } from '../shared/lateFees';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
+import { flatOf, priceOf, specialFlatOf } from './repo';
+import { gameFinalPrice } from '../shared/gameLength';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
 export function needsFinalize(session: SessionRow, roster: { status: string; payment_status: string }[], nowMs: number): boolean {
@@ -79,7 +81,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   const confirmed = confirmedOf(roster);
   const organizerId = await organizerIdOf(ctx.db, group);
   const n = playedIds.size;
-  const price = finalPrice(settings.pricePerPlayerCents, n);
+  // The final price for this game: floor(4 x $14 / N) for a normal game, the 1.5 hour row's table with "Short games" on.
+  const price = gameFinalPrice(priceOf(session, settings), n);
   const now = ctx.nowIso;
   const claimed = `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND finalized_at = ${sqlText(now)})`;
   // Late fees (shared/lateFees.ts rule 4): with fewer than 4 played, someone who was in and did not play owes their $14
@@ -159,7 +162,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     }
   }
   // Unpaid seats whose used credit now covers the final price are paid.
-  statements.push(...repriceStatements(ctx.db, session.id, settings.pricePerPlayerCents, now));
+  statements.push(...repriceStatements(ctx.db, session.id, flatOf(session, settings), now));
   const [claim] = await ctx.db.batch(statements);
   if (claim.meta.changes !== 1) {
     const fresh = await getSession(ctx.db, group.id, session.id);
@@ -169,7 +172,7 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   }
   await audit(ctx.db, group.id, session.id, 'session_finalized', { played: n, priceCents: price, creditBackCents: backs.reduce((s, b) => s + b.cents, 0) }, now);
   for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, now);
-  for (const pid of owing) await auditLateFeeOwed(ctx.db, group.id, session.id, pid, 'no_show', now);
+  for (const pid of owing) await auditLateFeeOwed(ctx.db, group.id, session.id, pid, 'no_show', now, 'organizer', specialFlatOf(session, settings));
   // Finalized means it was played: a later Reopen never asks "Did you guys play?" (a display mark, no money; never fails the tap).
   await writeMark(ctx.db, group.id, session.id, 'played', now).catch(() => {});
   return { ok: true, played: n, priceCents: price, creditBack: backs.map((b) => ({ playerId: b.playerId, cents: b.cents })) };
@@ -230,7 +233,7 @@ export async function reopenFinalize(ctx: Ctx) {
        WHERE sp.session_id = ? AND sp.status = 'confirmed' AND sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL
          AND COALESCE(sp.payment_amount_cents, 0) < ? ORDER BY p.display_name`,
     )
-    .bind(session.id, settingsOf(group).pricePerPlayerCents)
+    .bind(session.id, flatOf(session, settingsOf(group)))
     .all<{ name: string }>();
   if (unconfirmed.length) {
     throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${unconfirmed.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
@@ -250,7 +253,7 @@ export async function reopenFinalize(ctx: Ctx) {
     // Only while the game is still the finalize this Reopen looked at (a newer Finalize from another device keeps its credit).
     ctx.db
       .prepare(`UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'undone' WHERE ${backRows} AND ${allThere} AND (SELECT finalized_at FROM sessions WHERE id = ?2) = ?3 AND NOT EXISTS (${unconfirmedShort})`)
-      .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents),
+      .bind(now, session.id, session.finalized_at, flatOf(session, settingsOf(group))),
     ctx.db
       .prepare(
         `UPDATE session_players SET refunded_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND refunded_at IS NOT NULL
@@ -264,20 +267,20 @@ export async function reopenFinalize(ctx: Ctx) {
          WHERE id = ?2 AND finalized_at = ?3 AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE ${backRows})
            AND NOT EXISTS (${unconfirmedShort})`,
       )
-      .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents),
+      .bind(now, session.id, session.finalized_at, flatOf(session, settingsOf(group))),
     // Not a seat that left: played = 0 there is an open late-drop debt (shared/lateFees.ts), which Reopen does not touch.
     ctx.db.prepare("UPDATE session_players SET played = NULL, updated_at = ?1 WHERE session_id = ?2 AND played IS NOT NULL AND status <> 'withdrawn' AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL").bind(now, session.id),
     // The no-show debts that finalize made go with it (open or cleared): the game is not finalized any more.
     ctx.db
       .prepare("UPDATE session_players SET late_drop_at = NULL, late_drop_done_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND status = 'confirmed' AND late_drop_at = ?3 AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL")
       .bind(now, session.id, session.finalized_at),
-    ...repriceStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, now),
+    ...repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), now),
   ]);
   if (unfinalized.meta.changes !== 1) {
     const late = (
       await ctx.db
         .prepare(`SELECT p.display_name AS name FROM session_players u JOIN players p ON p.id = u.player_id WHERE ${unconfirmedShort.replace('SELECT 1 FROM session_players u WHERE ', '')}`)
-        .bind(now, session.id, session.finalized_at, settingsOf(group).pricePerPlayerCents)
+        .bind(now, session.id, session.finalized_at, flatOf(session, settingsOf(group)))
         .all<{ name: string }>()
     ).results;
     if (late.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${late.map((u) => u.name).join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);

@@ -30,21 +30,23 @@ import { lateFeeKind } from '../shared/lateFees';
  * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." The cleared late fees of THIS player only
  * (their own History lines, matched by their id), from the last 60 days. The phone remembers which ones were dismissed.
  */
-async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string): Promise<NonNullable<GroupView['feeNotices']>> {
+async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string, settings: GroupSettings): Promise<NonNullable<GroupView['feeNotices']>> {
   const since = new Date(ctx.nowMs - 60 * DAY_MS).toISOString();
   const { results } = await ctx.db
     .prepare(
-      `SELECT a.id, a.details_json, s.starts_at FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
+      `SELECT a.id, a.details_json, s.starts_at, s.ends_at FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
        WHERE a.group_id = ? AND a.action = 'late_fee_cleared' AND a.created_at >= ? ORDER BY a.created_at, a.rowid`,
     )
     .bind(groupId, since)
-    .all<{ id: string; details_json: string; starts_at: string }>();
+    .all<{ id: string; details_json: string; starts_at: string; ends_at: string }>();
   const out: NonNullable<GroupView['feeNotices']> = [];
   for (const r of results) {
     try {
       const d = JSON.parse(r.details_json) as { playerId?: string; why?: string; amountCents?: number };
       if (d.playerId !== playerId) continue;
-      out.push({ id: r.id, startsAt: r.starts_at, why: d.why === 'sub' ? 'sub' : 'cleared', creditCents: typeof d.amountCents === 'number' && d.amountCents > 0 ? d.amountCents : 0 });
+      // A 1.5 hour game ("Short games" on) owed its own price: "You no longer owe $11". Every other game: nothing added (the $14 as before).
+      const gp = priceOf(r, settings);
+      out.push({ id: r.id, startsAt: r.starts_at, why: d.why === 'sub' ? 'sub' : 'cleared', creditCents: typeof d.amountCents === 'number' && d.amountCents > 0 ? d.amountCents : 0, ...(gp.special ? { feeCents: gp.flatCents } : {}) });
     } catch {
       /* an unreadable line shows nothing */
     }
@@ -78,6 +80,8 @@ import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
 import { timeShiftFor } from './timeShift';
 import { motionFor } from './motion';
 import { payAlwaysFor } from './payAlways';
+import { flatOf, priceOf, specialFlatOf } from './repo';
+import type { GroupSettings } from '../shared/settings';
 import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
 import { instantTapsFor } from './instantTaps';
@@ -91,6 +95,7 @@ import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 import { changeStamp } from './stamp';
 import { hiddenFromPlayers } from './hideGame';
+import { cardTimeFor } from './zip9';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -194,7 +199,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       credit.pending = pending ? { id: pending.id, cents: pending.amount_cents, at: pending.created_at } : null;
       // Money that came back because a late fee was cleared: "someone took your spot" (a sub) or cleared by the organizer.
       const feeClears = await lateFeeClearsFor(ctx, group.id, me.id);
-      feeNotices.push(...(await feeNoticesFor(ctx, group.id, me.id)));
+      feeNotices.push(...(await feeNoticesFor(ctx, group.id, me.id, settings)));
       const startsOf = new Map(
         (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
       );
@@ -272,6 +277,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...((await tonightGlowFor(ctx, group.id)) ? { tonightGlow: true } : {}),
     ...((await colorCleanupFor(ctx, group.id)) ? { colorCleanup: true } : {}),
     ...((await playerCardsFor(ctx, group.id)) ? { playerCardsSimple: true } : {}),
+    // Zip 9. "Short games" for this screen is what requireGroupKey put on the group (the same answer every price on it used).
+    ...(group.short_games === true ? { shortGames: true } : {}),
+    ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
@@ -428,12 +436,12 @@ async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, ac
 export async function playerJoin(ctx: Ctx) {
   const who = await actingOn(ctx);
   const watch = await watchTap(ctx, who.group, who.session, who.playerId);
-  const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto', settingsOf(who.group).maxPlayers);
+  const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto', settingsOf(who.group));
   await clearLateDrop(ctx.db, who.session.id, who.playerId);
   if (res.result !== 'already_confirmed') await logAction(ctx, who, 'join', res.result);
   await afterTap(ctx, watch);
   // Their credit was used on the seat already; a pending cash out that could cover the rest is offered next.
-  const offer = res.result === 'confirmed' ? await cashOutOffer(ctx.db, who.session, who.playerId) : null;
+  const offer = res.result === 'confirmed' ? await cashOutOffer(ctx.db, who.session, who.playerId, settingsOf(who.group)) : null;
   return offer ? { ...res, cashOutOffer: { cents: offer.cents, requestCents: offer.requestCents } } : res;
 }
 
@@ -445,15 +453,15 @@ export async function playerWithdraw(ctx: Ctx) {
   const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group), lateFees) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late, ...(res.lateFee ? { owes: true } : {}) });
-  if (res.lateFee) await auditLateFeeOwed(ctx.db, who.group.id, who.session.id, who.playerId, 'late_drop', ctx.nowIso);
+  if (res.lateFee) await auditLateFeeOwed(ctx.db, who.group.id, who.session.id, who.playerId, 'late_drop', ctx.nowIso, 'organizer', specialFlatOf(who.session, settingsOf(who.group)));
   if (res.creditBackCents > 0) {
     const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
     await audit(ctx.db, who.group.id, who.session.id, 'credit_back', { player: p?.display_name ?? 'A player', playerId: who.playerId, amountCents: res.creditBackCents, reason: 'dropped' }, ctx.nowIso);
   }
-  await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? settingsOf(who.group).pricePerPlayerCents : null);
+  await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? flatOf(who.session, settingsOf(who.group)) : null);
   // creditBackCents: cash paid that became credit; creditReturnedCents: credit used on the game that went back.
   // lateFee: the drop left the game short, so their $14 stays on it (or is owed) unless someone takes the spot.
-  return { result, creditBackCents: res.creditBackCents, creditReturnedCents: res.creditReturnedCents, ...(res.lateFee ? { lateFee: { cents: settingsOf(who.group).pricePerPlayerCents, paid: res.lateFee.paid } } : {}) };
+  return { result, creditBackCents: res.creditBackCents, creditReturnedCents: res.creditReturnedCents, ...(res.lateFee ? { lateFee: { cents: flatOf(who.session, settingsOf(who.group)), paid: res.lateFee.paid } } : {}) };
 }
 
 /**

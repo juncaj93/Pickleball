@@ -12,6 +12,8 @@ export interface GroupSettings {
   monthlyMembershipCents: number; // organizer only: the club membership the surplus goes toward
   defaultStartMinutes: number; // the usual start for NEW regular games, in minutes after midnight (1200 = 8:00 PM); existing games keep their times
   defaultEndMinutes: number; // the usual end for new regular games (1320 = 10:00 PM)
+  /** NOT saved: set by the server only while "Short games" (SHORT_GAMES, Zip 9) is on for this request; missing = off. */
+  shortGames?: true;
 }
 
 export const DEFAULT_SETTINGS: GroupSettings = {
@@ -28,7 +30,10 @@ export const DEFAULT_SETTINGS: GroupSettings = {
   defaultEndMinutes: 22 * 60,
 };
 
-const LIMITS: Record<keyof GroupSettings, [number, number]> = {
+/** The saved settings (every key but the request-only `shortGames`). */
+export type SettingKey = Exclude<keyof GroupSettings, 'shortGames'>;
+
+const LIMITS: Record<SettingKey, [number, number]> = {
   horizonWeeks: [1, 12],
   bookingLeadDays: [1, 30],
   checkInHours: [1, 72],
@@ -50,7 +55,7 @@ export function normalizeSettings(input: unknown): GroupSettings {
   // Older saves called the check-in window "confirmationLeadHours".
   if (src.checkInHours === undefined && typeof src.confirmationLeadHours === 'number') src.checkInHours = src.confirmationLeadHours;
   const out = { ...DEFAULT_SETTINGS };
-  for (const key of Object.keys(LIMITS) as (keyof GroupSettings)[]) {
+  for (const key of Object.keys(LIMITS) as SettingKey[]) {
     const v = src[key];
     if (typeof v === 'number' && Number.isFinite(v)) {
       const [min, max] = LIMITS[key];

@@ -176,6 +176,14 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Adjust credit" on`;
     case 'adjust_credit_off':
       return `${who} switched "Adjust credit" off`;
+    case 'short_games_on':
+      return `${who} switched "Short games" on`;
+    case 'short_games_off':
+      return `${who} switched "Short games" off`;
+    case 'card_time_buttons_on':
+      return `${who} switched "Card time and buttons" on`;
+    case 'card_time_buttons_off':
+      return `${who} switched "Card time and buttons" off`;
     case 'last_call_texts_on':
       return `${who} switched "Last call texts" on`;
     case 'last_call_texts_off':
@@ -237,7 +245,7 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
     case 'late_fees_off':
       return `${who} switched "Late drops owe $14" off`;
     case 'late_fee_owed':
-      return `${player} owes ${d.kind === 'canceled_late' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (canceled late, fee not waived)` : d.kind === 'no_show' ? 'their $14 (did not play, fewer than 4 played)' : 'their $14 (late drop, game short)'}${forDay}`;
+      return `${player} owes ${d.kind === 'canceled_late' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (canceled late, fee not waived)` : d.kind === 'no_show' ? `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (did not play, fewer than 4 played)` : `their ${typeof d.priceCents === 'number' ? formatPrice(d.priceCents) : '$14'} (late drop, game short)`}${forDay}`;
     case 'late_fee_cleared':
       return d.why === 'sub'
         ? `${typeof d.sub === 'string' ? d.sub : 'A sub'} took ${player}'s spot: ${player}'s $14 cleared${forDay}`

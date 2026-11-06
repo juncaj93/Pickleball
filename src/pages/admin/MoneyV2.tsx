@@ -24,6 +24,7 @@ import { canHide } from './moneyRework';
 import { RequestPair, requestUrlFor, VenmoRequestLink } from './VenmoLink';
 import { useReworkBusy, useReworkRun } from './ReworkOps';
 import type { ReworkOp } from './reworkOptimistic';
+import { viewFlat } from '../../../shared/gameLength';
 
 type View = 'who' | 'totals';
 type Tone = 'ok' | 'info' | 'warn' | 'muted';
@@ -162,7 +163,7 @@ export const Chevron = () => (
 function GameV2({ ctx, s, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx; s: AdminSessionView; open: boolean; onToggle: () => void; onRemind: () => void; sameDay: boolean }) {
   const tz = ctx.d.group.timezone;
   const date = formatShortDate(s.startsAt, tz);
-  const sub = gameSub(s, ctx.d.group.settings.pricePerPlayerCents, open);
+  const sub = gameSub(s, viewFlat(s, ctx.d.group.settings.pricePerPlayerCents), open);
   const chip = gameChip(s);
   const owed = unpaidRows(s).length;
   return (
@@ -314,7 +315,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
       <div className="mv2-body mrw-body">
         {s.state.flags.canceled && (
           <p className="mv2-summary small muted" data-summary>
-            {feeKept ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.') : 'Canceled. Only late fees are left on it.'}
+            {feeKept ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : `Canceled late, the venue did not waive the fee: everyone who was in owes their ${formatPrice(viewFlat(s, ctx.d.group.settings.pricePerPlayerCents))}.`) : 'Canceled. Only late fees are left on it.'}
           </p>
         )}
         {!s.state.flags.canceled && fin && fin.creditBackCents > 0 && (
@@ -355,7 +356,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
     <div className="mv2-body">
       {s.state.flags.canceled && (
         <p className="mv2-summary small muted" data-summary>
-          {s.canceledBy === 'organizer_fee_kept' ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : 'Canceled late, the venue did not waive the fee: everyone who was in owes their $14.') : 'Canceled. Only late fees are left on it.'}
+          {s.canceledBy === 'organizer_fee_kept' ? (s.feeSplit ? `Canceled late, the venue did not waive the fee: ${s.feeSplit.count} were in, so everyone who was in owes ${formatPrice(s.feeSplit.priceCents)}.` : `Canceled late, the venue did not waive the fee: everyone who was in owes their ${formatPrice(viewFlat(s, ctx.d.group.settings.pricePerPlayerCents))}.`) : 'Canceled. Only late fees are left on it.'}
         </p>
       )}
       {!s.state.flags.canceled && (fin ? fin.creditBackCents > 0 : !played && Date.parse(s.endsAt) <= Date.parse(ctx.d.now)) && (

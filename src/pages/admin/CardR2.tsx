@@ -15,6 +15,7 @@ import { CourtSwitch } from './CourtSwitch';
 import { GameMenu } from './GameMenu';
 import { lateDropsAll } from './todo';
 import '../../admin-r2.css';
+import { ShortGameTilePill } from './ShortGame';
 
 /**
  * One organizer game card, "Admin screens, round 2" (ADMIN_R2). Same data, same taps and same rules as the card it replaces;
@@ -82,6 +83,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             <div className={`scard-time${tsClass(ts, flip)}${timeFade ? ' m-time-fade' : ''}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
               {tsTime(start, ts)}
             </div>
+            <ShortGameTilePill ctx={ctx} s={s} />
           </div>
           <div className="r2-mid">
             <h2 id={`as-${s.id}`} className="sr-only">

@@ -20,6 +20,7 @@
 // late cancel or as a no-show (they pay the venue).
 
 import { finalPrice } from './pricing';
+import { type GamePrice, gameFinalPrice } from './gameLength';
 
 /** sessions.canceled_by for "Did the venue waive the fee?" answered No: no money moved, everyone signed up still owes. */
 export const FEE_KEPT = 'organizer_fee_kept';
@@ -42,10 +43,15 @@ export function lateFeeSplitAllowed(flag: string | undefined | null): boolean {
   return (flag ?? 'on').trim().toLowerCase() !== 'off';
 }
 
-/** The split price for a fee-kept cancel with `signedUp` in, or null when it changes nothing (4 or fewer, or no lower price). */
-export function feeSplitPrice(flatCents: number, signedUp: number): number | null {
+/**
+ * The split price for a fee-kept cancel with `signedUp` in, or null when it changes nothing (4 or fewer, or no lower price).
+ * A number is the flat price of a normal game (floor(4 x flat / N)); a GamePrice (shared/gameLength.ts) uses that game's own
+ * table, so a 1.5 hour game with "Short games" on splits at its played-game price too ($9 at 5 in, $7 at 6).
+ */
+export function feeSplitPrice(price: number | GamePrice, signedUp: number): number | null {
   if (signedUp <= FEE_MIN_PLAYERS) return null;
-  const p = finalPrice(flatCents, signedUp);
+  const flatCents = typeof price === 'number' ? price : price.flatCents;
+  const p = typeof price === 'number' ? finalPrice(price, signedUp) : gameFinalPrice(price, signedUp);
   return p < flatCents ? p : null;
 }
 

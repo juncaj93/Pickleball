@@ -75,7 +75,7 @@ describe('fake-data preview seed', () => {
 
   it('has the live-ON switches on from the seed, plus the one being built (PREVIEW SWITCHES RULE)', async () => {
     const { dash } = await loaded();
-    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll', 'instantTapsForAll', 'adjustCreditForAll', 'venmoRequestForAll', 'homeCollapseForAll', 'tonightGlowForAll', 'colorCleanupForAll', 'playerCardsSimpleForAll'])
+    for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll', 'instantTapsForAll', 'adjustCreditForAll', 'venmoRequestForAll', 'homeCollapseForAll', 'tonightGlowForAll', 'colorCleanupForAll', 'playerCardsSimpleForAll', 'lastCallTextsForAll', 'shortGamesForAll', 'cardTimeButtonsForAll'])
       expect(dash[k], k).toBe(true);
     // Late-cancel fee split went live on Wed Nov 4 (Alex), so it is on in the preview too.
     // The "Fee split test" game: booked, inside its 12-hour cancel-by, 6 in, three paid.

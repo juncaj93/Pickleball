@@ -4,6 +4,7 @@ import type {
   AdminSessionView,
   EligibleSubstitute,
   PlayerSessionView,
+  ShortGameInfo,
 } from '../shared/api';
 import { cardWindows, deadlineMs } from '../shared/cards';
 import { isPaymentClaim, moneySeen, NO_SEAT_CREDIT, type SeatCredit } from '../shared/credit';
@@ -15,7 +16,9 @@ import { computeSessionState } from '../shared/status';
 import {
   confirmedOf,
   courtCostOf,
+  flatOf,
   type PlayerRow,
+  priceOf,
   type RosterRow,
   pricesFor,
   type SessionRow,
@@ -26,6 +29,12 @@ import {
 import { bookingOpensMs } from '../shared/time';
 import { agreedStart, isWaitingOnTime } from '../shared/timeShift';
 import { dropLeavesShort, FEE_KEPT, feeSplitOf, lateFeeCutoffMs, lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
+
+/** `{ shortGame }` for a game priced from its own game-length row ("Short games" on, a 1.5 hour game), else nothing at all. */
+function shortGameOf(session: SessionRow, settings: GroupSettings): { shortGame?: ShortGameInfo } {
+  const gp = priceOf(session, settings);
+  return gp.special ? { shortGame: { minutes: gp.minutes, flatCents: gp.flatCents, courtCents: gp.courtCents } } : {};
+}
 
 /** The organizer pays the venue, so their own player screen carries no share, Pay, credit or "paid". */
 const NO_MONEY = {
@@ -75,7 +84,7 @@ export function playerSessionView(
   const claimed = !!mine && paidNow > 0 && !!mine.self_paid_at;
   // Late fees (shared/lateFees.ts): past the cancel-by with the switch on, a drop that leaves the game short keeps their
   // money on it (nothing comes back), and the dialog and banner say so.
-  const feeCents = settings.pricePerPlayerCents;
+  const feeCents = flatOf(session, settings);
   const lateWindow =
     lateFees && !!mine && mine.status === 'confirmed' && !canceled && !started && nowMs >= lateFeeCutoffMs(session.starts_at);
   const dropOwes = lateWindow && dropLeavesShort(confirmed.length, waitlist.length);
@@ -138,7 +147,8 @@ export function playerSessionView(
     bookingOpen: nowMs >= bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz),
     bookingOpensAt: new Date(bookingOpensMs(session.starts_at, settings.bookingLeadDays, tz)).toISOString(),
     past: nowMs >= Date.parse(session.ends_at),
-    finalized: session.finalized_at ? { playedCount: session.final_played_count ?? 0, priceCents: session.final_price_cents ?? settings.pricePerPlayerCents } : null,
+    finalized: session.finalized_at ? { playedCount: session.final_played_count ?? 0, priceCents: session.final_price_cents ?? feeCents } : null,
+    ...shortGameOf(session, settings),
     // With LATE_FEES on, one clock: start minus 12 hours (the late-drop rule uses the same one).
     dropCutoffAt: new Date(lateFees ? lateFeeCutoffMs(session.starts_at) : deadlineMs({ startsAt: session.starts_at, cancellationDeadlineAt: session.cancellation_deadline_at }, settings)).toISOString(),
     confirmationOpen:
@@ -269,7 +279,7 @@ export function adminSessionView(
         // The organizer's own late drop: owed until cleared, never "paid" (their seat's payment is the court payment).
         lateFee: fee
           ? me
-            ? { kind: fee, paid: false, oweCents: settings.pricePerPlayerCents }
+            ? { kind: fee, paid: false, oweCents: flatOf(session, settings) }
             : { kind: fee, paid: r.payment_status === 'paid' && !r.refunded_at, oweCents: owes }
           : null,
         isOrganizer: me,
@@ -315,18 +325,19 @@ export function adminSessionView(
         return 0;
       }),
   );
+  const gp = priceOf(session, settings);
+  const paidByPlayed = roster.filter((r) => r.player_id !== organizerId && r.played === 1 && r.payment_status === 'paid' && !r.refunded_at).map((r) => r.payment_amount_cents ?? 0);
   const finalized = session.finalized_at
     ? {
         at: session.finalized_at,
         playedCount: session.final_played_count ?? 0,
-        priceCents: session.final_price_cents ?? settings.pricePerPlayerCents,
+        priceCents: session.final_price_cents ?? gp.flatCents,
         creditBackCents: roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + potFor(r).finalizedBackCents, 0),
-        flatCents: flatAtFinalize(
-          roster.filter((r) => r.player_id !== organizerId && r.played === 1 && r.payment_status === 'paid' && !r.refunded_at).map((r) => r.payment_amount_cents ?? 0),
-          settings.pricePerPlayerCents,
-          session.final_played_count ?? 0,
-          session.final_price_cents ?? settings.pricePerPlayerCents,
-        ),
+        // A 1.5 hour game ("Short games" on) is not priced floor(4 x flat / N), so with no payment to go on its flat price is its row's.
+        flatCents:
+          gp.special && !paidByPlayed.some((c) => c > 0)
+            ? gp.flatCents
+            : flatAtFinalize(paidByPlayed, gp.flatCents, session.final_played_count ?? 0, session.final_price_cents ?? gp.flatCents),
       }
     : null;
 
@@ -345,6 +356,7 @@ export function adminSessionView(
     canceledAt: session.canceled_at,
     canceledBy: session.canceled_by,
     feeSplit: feeSplitOf(session),
+    ...shortGameOf(session, settings),
     cancelReason: session.status === 'canceled' ? session.cancel_reason : null,
     state,
     roster: entries,

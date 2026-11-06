@@ -11,7 +11,7 @@ import { useInstant } from '../../InstantTaps';
 import '../../money-rework.css';
 
 type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
-type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes'>;
+type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes' | 'shortGames'>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
@@ -463,7 +463,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -471,6 +471,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <ShortGamesRow ctx={ctx} auto={auto} />
+              <CardTimeRow ctx={ctx} auto={auto} />
               <LastCallRow ctx={ctx} auto={auto} />
               <TonightGlowRow ctx={ctx} auto={auto} />
               <ColorCleanupRow ctx={ctx} auto={auto} />
@@ -1314,6 +1316,14 @@ function TonightGlowRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 function ColorCleanupRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="colorCleanupAll" path="/api/admin/color-cleanup-switch" name="Color cleanup" hint="One color system across the site" flag={!!ctx.d.colorCleanupForAll} dataAttr="data-color-cleanup-all" />;
 }
+/** "Short games" (SHORT_GAMES, server/zip9.ts, Zip 9): 1.5 hour games get their own price table. CHANGES MONEY. Off: only ?shortgames=on. */
+function ShortGamesRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="shortGamesAll" path="/api/admin/short-games-switch" name="Short games" hint="Changes money: 1.5 hour games cost $11 each at 4 in" flag={!!ctx.d.shortGamesForAll} dataAttr="data-short-games-all" />;
+}
+/** "Card time and buttons" (CARD_TIME_BUTTONS, server/zip9.ts, Zip 9): time line under the date tile, Calendar | Directions. Off: only ?cardtime=on. */
+function CardTimeRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="cardTimeAll" path="/api/admin/card-time-switch" name="Card time and buttons" hint="Start time and length under the date, calendar and directions" flag={!!ctx.d.cardTimeButtonsForAll} dataAttr="data-card-time-all" />;
+}
 /** "Last call texts" (LAST_CALL_TEXTS, server/lastCall.ts, Zip 8): the night-before Check-in and Need players words. Off: only /admin?lastcall=on. */
 function LastCallRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="lastCallAll" path="/api/admin/last-call-switch" name="Last call texts" hint="Still in? texts for the group chat" flag={!!ctx.d.lastCallTextsForAll} dataAttr="data-last-call-all" />;
@@ -1446,6 +1456,8 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <ShortGamesRow ctx={ctx} auto={auto} />
+      <CardTimeRow ctx={ctx} auto={auto} />
       <LastCallRow ctx={ctx} auto={auto} />
       <TonightGlowRow ctx={ctx} auto={auto} />
               <ColorCleanupRow ctx={ctx} auto={auto} />

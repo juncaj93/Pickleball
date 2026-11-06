@@ -423,6 +423,29 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     summary.push('extra game "Tomorrow test" (no regular game tomorrow): not booked, 2 in (Casey, Drew); Gray is not in it');
   }
 
+  // 15. Zip 9 "Short games": one 1.5 hour game (7:30 to 9:00 PM Eastern, about 3 days out), Booked, 4 in: Indy paid $11 cash, Jordan, Kai
+  //     and Finley owe $11. Priced through the real site rules with the switch on (the preview has it on from the seed), so every amount on it
+  //     is the short game's. The normal 2 hour games all around it stay at $14.
+  await w.org.ok('PUT', '/api/admin/short-games-switch', { on: true });
+  let shortGame: any = null;
+  for (const daysOut of [3, 4, 5]) {
+    const q = localParts(N + daysOut * 24 * HOUR, 'America/Detroit');
+    const start = zonedTimeToUtc(q.year, q.month, q.day, 19, 30, 'America/Detroit');
+    try {
+      const made = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 90 * 60_000).toISOString(), note: '1.5 hour game' });
+      await refresh();
+      shortGame = games().find((x) => x.id === made.id);
+      break;
+    } catch (err) {
+      if (!/game_exists|time_taken/.test(String(err))) throw err;
+    }
+  }
+  if (!shortGame) throw new Error('no free evening for the 1.5 hour game');
+  await setCourt(shortGame, 'booked');
+  for (const n of ['Indy', 'Jordan', 'Kai', 'Finley']) await join(n, shortGame);
+  await orgPays('Indy', shortGame);
+  summary.push('extra game "1.5 hour game" (7:30 to 9:00 PM, Booked, 4 in): Indy paid $11 cash; Jordan, Kai and Finley owe $11 (Short games on)');
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -469,6 +492,9 @@ export const PREVIEW_SWITCHES_ON = [
   'color_cleanup_on',
   'player_cards_on',
   'last_call_texts_on',
+  // Being built (Zip 9): Short games and Card time and buttons.
+  'short_games_on',
+  'card_time_buttons_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

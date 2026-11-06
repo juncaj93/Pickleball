@@ -40,6 +40,8 @@ export type SheetKind = 'edit' | 'roster' | 'payments' | 'cancel' | 'canceled' |
 
 export { useAction } from './action';
 import { opTap, useAction } from './action';
+import { viewFlat, viewPrice } from '../../../shared/gameLength';
+import { ShortGameTilePill } from './ShortGame';
 
 /**
  * One organizer game card. `courtNeed` (new layout, or round 2): this game is the one "Court still needs to be booked" is
@@ -85,6 +87,7 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
           <div className={`scard-time${tsClass(ts, flip)}${timeFade ? ' m-time-fade' : ''}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
             {tsTime(start, ts)}
           </div>
+          <ShortGameTilePill ctx={ctx} s={s} />
         </div>
         <div className="scard-body">
           <h2 id={`as-${s.id}`} className="sr-only">
@@ -695,7 +698,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId }, paid ? 'Mark paid' : 'Unmark'));
-  const price = ctx.d.group.settings.pricePerPlayerCents;
+  const price = viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
   const played = isPlayed(s);
   const fin = s.finalized;
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
@@ -901,14 +904,14 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
   const rw = ctx.d.moneyRework === true && !reopening;
   const inside = serverNow >= start - CHARGE_ASK_HOURS * 3600_000 && serverNow < start;
   const [charged, setCharged] = useState(rw && inside);
-  const [amount, setAmount] = useState(() => (((s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents) || 0) / 100).toFixed(2));
+  const [amount, setAmount] = useState(() => (((s.courtCostCents ?? s.shortGame?.courtCents ?? ctx.d.group.settings.typicalCourtCostCents) || 0) / 100).toFixed(2));
   const [amountError, setAmountError] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   // Late fees on (shared/lateFees.ts rule 5): the question is "Did the venue waive the fee?", with no default.
   const askWaived = askCharge && ctx.d.lateFees === true;
   // "Late-cancel fee split" (LATE_FEE_SPLIT): with 5 or more in, No prices every seat like a played game (shared/lateFees.ts).
-  const flat = ctx.d.group.settings.pricePerPlayerCents;
-  const splitCents = askWaived && ctx.d.lateFeeSplit === true ? feeSplitPrice(flat, s.confirmedCount) : null;
+  const flat = viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
+  const splitCents = askWaived && ctx.d.lateFeeSplit === true ? feeSplitPrice(s.shortGame ? viewPrice(s, ctx.d.group.settings) : flat, s.confirmedCount) : null;
   // TEXTS_R2: it starts on No (the venue gives almost no grace, so a late cancel normally keeps the fee). Yes still works exactly as before.
   const [waived, setWaived] = useState<boolean | null>(rw || ctx.d.textsR2 === true ? false : null);
   const [waivedError, setWaivedError] = useState(false);
@@ -976,10 +979,10 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                           ? 'Yes: everyone gets their money back as credit, nobody owes.'
                           : `Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up owes ${formatPrice(splitCents)}.`
                       : waived === false
-                        ? 'No: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
+                        ? `No: the fee is kept, and everyone signed up still owes their ${formatPrice(flat)} (late drops too).`
                         : waived === true
                           ? 'Yes: everyone gets their money back as credit, nobody owes.'
-                          : 'Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up still owes $14.'}
+                          : `Yes: everyone gets money back as credit, nobody owes. No: the fee is kept, everyone signed up still owes ${formatPrice(flat)}.`}
                   </p>
                   {waivedError && <span className="field-error">Pick Yes or No.</span>}
                 </fieldset>
@@ -1003,7 +1006,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                           : `Yes: the fee is kept. ${s.confirmedCount} are in, so everyone signed up owes ${formatPrice(splitCents)} (anything paid above that comes back as credit). Late drops still owe ${formatPrice(flat)}.`
                         : cleanup
                           ? keptLine('Yes')
-                          : 'Yes: the fee is kept, and everyone signed up still owes their $14 (late drops too).'
+                          : `Yes: the fee is kept, and everyone signed up still owes their ${formatPrice(flat)} (late drops too).`
                       : 'No: everyone gets their money back as credit, nobody owes.'}
                   </p>
                 </fieldset>

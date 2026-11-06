@@ -230,7 +230,8 @@ async function addToWaitlist(db: D1Database, session: SessionRow, playerId: stri
  * ("Spot opened"). Each move is one guarded statement, so it either fully
  * happens or not at all.
  */
-export async function settle(db: D1Database, session: SessionRow, nowIso: string, maxPlayers: number): Promise<Promotion[]> {
+export async function settle(db: D1Database, session: SessionRow, nowIso: string, settings: GroupSettings): Promise<Promotion[]> {
+  const maxPlayers = settings.maxPlayers;
   const promoted: Promotion[] = [];
   // Looked up once, only when someone may move in. Moving in uses their credit like tapping I'm in.
   let auto: AutoCredit | null | undefined;
@@ -240,7 +241,7 @@ export async function settle(db: D1Database, session: SessionRow, nowIso: string
     const waiting = waitlistOf(roster);
     if (confirmed >= maxPlayers || waiting.length === 0) break;
     const row = waiting[0];
-    if (auto === undefined) auto = await autoCreditFor(db, session);
+    if (auto === undefined) auto = await autoCreditFor(db, session, settings);
     const credits = auto ? autoCreditStatements(db, auto, session.id, row.player_id, nowIso) : [];
     let cleared = false;
     const res = await db
@@ -295,8 +296,10 @@ export async function joinSession(
   playerId: string,
   nowMs: number,
   mode: 'auto' | 'claim_only' | 'organizer',
-  maxPlayers: number,
+  /** The group's settings for this request (Max players, and the price: "Short games" rides on it). */
+  settings: GroupSettings,
 ): Promise<JoinResult> {
+  const maxPlayers = settings.maxPlayers;
   assertOpen(session, nowMs);
   const nowIso = new Date(nowMs).toISOString();
   const existing = await existingRow(db, session.id, playerId);
@@ -305,7 +308,7 @@ export async function joinSession(
   // A court on Waitlist works exactly like Not booked here: a normal seat while there is room (credit goes on with it),
   // and the real waitlist only when the game is full beyond the max.
   // Their credit goes on the seat in the same step as the seat itself (never for the organizer).
-  const auto = await autoCreditFor(db, session);
+  const auto = await autoCreditFor(db, session, settings);
   const sub = { cleared: false };
   const got = await tryConfirm(db, session, playerId, nowIso, maxPlayers, auto, mode !== 'organizer', sub);
   if (got) {
@@ -317,7 +320,7 @@ export async function joinSession(
   if (mode !== 'auto') return { result: 'spot_taken' };
 
   await addToWaitlist(db, session, playerId, nowIso);
-  const promoted = await settle(db, session, nowIso, maxPlayers);
+  const promoted = await settle(db, session, nowIso, settings);
   const mine = promoted.find((p) => p.playerId === playerId);
   if (mine) return mine.creditCents > 0 ? { result: 'confirmed', creditCents: mine.creditCents, paidWithCredit: mine.paidWithCredit } : { result: 'confirmed' };
   const row = await existingRow(db, session.id, playerId);
@@ -421,7 +424,7 @@ export async function withdraw(
       .run();
   }
   // A court on Waitlist never moves anybody in or out of line by itself: a drop frees a seat for the first real waiter like any game.
-  const promoted = changed ? await settle(db, session, nowIso, settingsOf(group).maxPlayers) : [];
+  const promoted = changed ? await settle(db, session, nowIso, settingsOf(group)) : [];
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents: cash, creditReturnedCents: credit, lateFee };
 }
 

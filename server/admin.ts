@@ -69,6 +69,8 @@ import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
 import { adminChangeStamp } from './stamp';
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
+import { flatOf, priceOf, specialFlatOf } from './repo';
+import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 
 export async function login(ctx: Ctx, body: Record<string, unknown>) {
   if (typeof body.pin !== 'string' || body.pin.length > 20) throw new HttpError(401, 'wrong_pin', 'That PIN is not right.');
@@ -280,6 +282,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     playerCardsSimpleForAll: await playerCardsForAll(ctx.db, group.id),
     ...((await lastCallFor(ctx, group.id)) ? { lastCallTexts: true } : {}),
     lastCallTextsForAll: await lastCallForAll(ctx.db, group.id),
+    // Zip 9. "Short games" for this screen is what requireAdmin put on the group (the same answer every price on it used).
+    ...(group.short_games === true ? { shortGames: true } : {}),
+    shortGamesForAll: await shortGamesForAll(ctx.db, group.id),
+    ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
+    cardTimeButtonsForAll: await cardTimeForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -409,7 +416,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     const wasSplit = !!feeSplitOf(session);
     // An I paid nobody confirmed, at the split price (below $14): Reopen would leave it as a $9 claim on a $14 game, so the
     // organizer confirms it (Mark paid) or clears it (Unmark) first, the same rule as Reopen after Finalize.
-    const flatCents = settingsOf(group).pricePerPlayerCents;
+    const flatCents = flatOf(session, settingsOf(group));
     const unconfirmedShort = `SELECT 1 FROM session_players u WHERE u.session_id = ${sqlText(session.id)} AND u.status = 'confirmed' AND u.payment_status = 'paid'
       AND u.refunded_at IS NULL AND u.self_paid_at IS NOT NULL AND COALESCE(u.payment_amount_cents, 0) < ${Math.trunc(flatCents)}`;
     if (wasSplit) {
@@ -437,7 +444,7 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
              AND ${reopened}` : ''}`,
         )
         .bind(ctx.nowIso, session.id),
-      ...(wasSplit ? unsplitStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, ctx.nowIso, reopened) : []),
+      ...(wasSplit ? unsplitStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso, reopened) : []),
     ]);
     // A split game whose reopen was stopped by an I paid landing at that moment: nothing moved (every statement above checks it).
     if (wasSplit && opened.meta.changes !== 1) {
@@ -611,7 +618,7 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
   }
   for (const r of await loadRoster(ctx.db, session.id)) {
     if (r.status === 'confirmed' && lateFeeKind(r, fresh, r.player_id === organizerId))
-      await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso, 'organizer', plan ? lateFeePriceCents('canceled_late', fresh, settingsOf(group).pricePerPlayerCents) : null);
+      await auditLateFeeOwed(ctx.db, group.id, session.id, r.player_id, 'canceled_late', ctx.nowIso, 'organizer', plan ? lateFeePriceCents('canceled_late', fresh, flatOf(session, settingsOf(group))) : specialFlatOf(session, settingsOf(group)));
   }
   return { ok: true, changed: true, feeKept: true, ...(plan ? { split: { count: plan.count, priceCents: plan.priceCents } } : {}) };
 }
@@ -627,7 +634,7 @@ async function splitPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organiz
   const state = (await ctx.db.prepare(`SELECT ${SPLIT_STATE(session.id)} AS s`).first<{ s: string }>())?.s ?? '';
   const roster = await loadRoster(ctx.db, session.id);
   const confirmed = roster.filter((r) => r.status === 'confirmed');
-  const priceCents = feeSplitPrice(settingsOf(group).pricePerPlayerCents, confirmed.length);
+  const priceCents = feeSplitPrice(priceOf(session, settingsOf(group)), confirmed.length);
   if (priceCents === null) return null;
   const seats: SplitSeat[] = [];
   for (const r of confirmed) {
@@ -925,6 +932,12 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
        WHERE id = ?`,
     )
     .bind(startsAt, endsAt, deadline, ctx.nowIso, session.id);
+  // "Short games" on (shared/gameLength.ts): a new length can change the flat price (2 hours $14 <-> 1.5 hours $11). The seats are
+  // then repriced in the same batch as the move, the way Reopen does it: a seat paid with credit that is now short owes the rest, an
+  // unpaid seat whose credit now covers it is paid, and anything paid above the new price comes back as credit at Finalize.
+  // Off (or the same price): nothing is added, exactly as before.
+  const newFlat = flatOf({ starts_at: startsAt, ends_at: endsAt }, settingsOf(group));
+  const reprice = newFlat !== flatOf(session, settingsOf(group)) ? repriceStatements(ctx.db, session.id, newFlat, ctx.nowIso) : [];
   try {
     if (startsAt !== session.starts_at) {
       // "Time may shift": everyone in (or on the real waitlist) who had agreed to the old start time, by joining at
@@ -935,7 +948,10 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
           .prepare("UPDATE session_players SET time_confirmed = ? WHERE session_id = ? AND time_confirmed IS NULL AND status IN ('confirmed', 'waitlisted')")
           .bind(session.starts_at, session.id),
         move,
+        ...reprice,
       ]);
+    } else if (reprice.length) {
+      await ctx.db.batch([move, ...reprice]);
     } else {
       await move.run();
     }
@@ -961,7 +977,7 @@ export async function editRoster(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'Player not found.');
   let result: string;
   if (action === 'confirm') {
-    const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer', settingsOf(group).maxPlayers);
+    const r = await joinSession(ctx.db, session, playerId, ctx.nowMs, 'organizer', settingsOf(group));
     if (r.result === 'spot_taken') throw new HttpError(409, 'session_full', `The game is full (${settingsOf(group).maxPlayers} in).`);
     result = r.result;
   } else if (action === 'waitlist') {
@@ -1318,7 +1334,7 @@ export async function applyPayment(
       // Only the latest cash went: the credit (and cash held) left on the seat may cover its price on its own. Then
       // the seat is paid with it, and on a finalized game that played, what is above the final price comes back as
       // credit, as Finalize does (never left unused on a seat that owes nothing).
-      ...(latestCash > 0 ? repriceStatements(ctx.db, session.id, settingsOf(group).pricePerPlayerCents, ctx.nowIso) : []),
+      ...(latestCash > 0 ? repriceStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso) : []),
       ...(latestCash > 0 && session.finalized_at && row.played === 1 && session.final_price_cents !== null && session.final_price_cents !== undefined
         ? creditBackStatements(ctx.db, {
             groupId: group.id,
@@ -1579,7 +1595,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
       .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND starts_at > ? ORDER BY starts_at")
       .bind(group.id, ctx.nowIso)
       .all<SessionRow>();
-    for (const s of open) await settle(ctx.db, s, ctx.nowIso, settings.maxPlayers);
+    for (const s of open) await settle(ctx.db, s, ctx.nowIso, settings);
   }
   return { ok: true };
 }
@@ -1811,7 +1827,7 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
   const me = await organizerPlayer(ctx, group, true);
   if (!me) throw new HttpError(400, 'name_needed', 'Add your name in Settings first (Group > Your name).');
   if (goingIn) {
-    const res = await joinSession(ctx.db, session, me.id, ctx.nowMs, 'auto', settingsOf(group).maxPlayers);
+    const res = await joinSession(ctx.db, session, me.id, ctx.nowMs, 'auto', settingsOf(group));
     await clearLateDrop(ctx.db, session.id, me.id);
     if (res.result !== 'already_confirmed') await audit(ctx.db, group.id, session.id, 'player_join', { player: me.name, result: res.result, organizer: true }, ctx.nowIso, me.name);
     return res;
@@ -1821,8 +1837,8 @@ export async function organizerInOut(ctx: Ctx, body: Record<string, unknown>) {
   const res = await withdraw(ctx.db, group, session, me.id, ctx.nowMs, { lateFees });
   const late = res.freedSpot ? await recordLateDrop(ctx.db, session, me.id, ctx.nowMs, settingsOf(group), lateFees) : false;
   if (res.changed) await audit(ctx.db, group.id, session.id, 'player_withdraw', { player: me.name, result: 'withdrawn', late, organizer: true, ...(res.lateFee ? { owes: true } : {}) }, ctx.nowIso, me.name);
-  if (res.lateFee) await auditLateFeeOwed(ctx.db, group.id, session.id, me.id, 'late_drop', ctx.nowIso, me.name);
-  return { result: res.changed ? 'withdrawn' : 'not_in_session', ...(res.lateFee ? { lateFee: { cents: settingsOf(group).pricePerPlayerCents } } : {}) };
+  if (res.lateFee) await auditLateFeeOwed(ctx.db, group.id, session.id, me.id, 'late_drop', ctx.nowIso, me.name, specialFlatOf(session, settingsOf(group)));
+  return { result: res.changed ? 'withdrawn' : 'not_in_session', ...(res.lateFee ? { lateFee: { cents: flatOf(session, settingsOf(group)) } } : {}) };
 }
 
 /** PUT /api/admin/time-shift { on }: Settings > "Moved-game notice for everyone". Changes no money and no seat. */
@@ -2202,6 +2218,24 @@ export async function setLastCallSwitch(ctx: Ctx, body: Record<string, unknown>)
   const on = v.bool(body.on, 'on');
   await setLastCallForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'last_call_texts_on' : 'last_call_texts_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/short-games-switch { on }: Settings > Feature switches > "Short games". CHANGES MONEY for 1.5 hour games (shared/gameLength.ts). */
+export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setShortGamesForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'short_games_on' : 'short_games_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/card-time-switch { on }: Settings > Feature switches > "Card time and buttons". Player cards only, display only. */
+export async function setCardTimeSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setCardTimeForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'card_time_buttons_on' : 'card_time_buttons_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

@@ -9,6 +9,7 @@ import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, record
 import { lateFeesFor } from './lateFees';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
+import { flatOf, specialFlatOf } from './repo';
 
 export type TokenScope = 'attendance' | 'claim';
 
@@ -138,11 +139,11 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
     const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group), lateFees) : false;
     outcome = 'withdrawn';
     if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late, ...(res.lateFee ? { owes: true } : {}) });
-    if (res.lateFee) await auditLateFeeOwed(ctx.db, r.group.id, r.session.id, r.token.player_id, 'late_drop', ctx.nowIso);
-    await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? settingsOf(r.group).pricePerPlayerCents : null);
+    if (res.lateFee) await auditLateFeeOwed(ctx.db, r.group.id, r.session.id, r.token.player_id, 'late_drop', ctx.nowIso, 'organizer', specialFlatOf(r.session, settingsOf(r.group)));
+    await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? flatOf(r.session, settingsOf(r.group)) : null);
   } else {
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
-    const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only', settingsOf(r.group).maxPlayers);
+    const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only', settingsOf(r.group));
     await afterTap(ctx, watch);
     await clearLateDrop(ctx.db, r.session.id, r.token.player_id);
     if (res.result === 'spot_taken') {

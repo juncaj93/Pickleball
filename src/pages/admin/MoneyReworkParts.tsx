@@ -166,7 +166,7 @@ function EditCharge({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessionView; on
   const { busy, run } = useAction(ctx);
   const rw = useReworkRun(ctx);
   const was = venueCharged(s);
-  const typical = s.courtCostCents ?? ctx.d.group.settings.typicalCourtCostCents;
+  const typical = s.courtCostCents ?? s.shortGame?.courtCents ?? ctx.d.group.settings.typicalCourtCostCents;
   const [charged, setCharged] = useState(was);
   const [amount, setAmount] = useState(() => String(((was ? (s.chargedCents ?? 0) : typical) / 100).toFixed(2)).replace(/\.00$/, ''));
   const [error, setError] = useState<string | null>(null);

@@ -10,7 +10,8 @@ import { adjustNoteOf } from '../shared/adjustCredit';
 import { newId } from './crypto';
 import type { D1Database, D1PreparedStatement } from './db';
 import { HttpError } from './http';
-import { audit, type GroupRow, loadRosters, loadSessions, lookbackIso, organizerIdOf, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { audit, flatOf, type GroupRow, loadRosters, loadSessions, lookbackIso, organizerIdOf, type SessionRow, visibleFrom } from './repo';
+import type { GroupSettings } from '../shared/settings';
 import { OPEN_FEE } from './lateFees';
 
 const HISTORY_MS = 90 * 86_400_000;
@@ -775,11 +776,12 @@ export interface AutoCredit {
  * Auto credit for a game, or null when a new seat there can't take any: the
  * game is canceled or already finalized (nobody signs up then anyway).
  */
-export async function autoCreditFor(db: D1Database, session: SessionRow): Promise<AutoCredit | null> {
+export async function autoCreditFor(db: D1Database, session: SessionRow, settings: GroupSettings): Promise<AutoCredit | null> {
   if (session.status === 'canceled' || session.finalized_at) return null;
   const group = await db.prepare('SELECT * FROM groups WHERE id = ?').bind(session.group_id).first<GroupRow>();
   if (!group) return null;
-  return { groupId: group.id, organizerId: await organizerIdOf(db, group), priceCents: settingsOf(group).pricePerPlayerCents };
+  // The price comes from the caller's settings (this request's "Short games" answer rides on them), not the row just read.
+  return { groupId: group.id, organizerId: await organizerIdOf(db, group), priceCents: flatOf(session, settings) };
 }
 
 /**
@@ -851,7 +853,7 @@ export async function auditAutoCredit(db: D1Database, groupId: string, sessionId
  * game?". Only when it matters: the seat is confirmed and unpaid, still owes,
  * and a request is pending. `cents` is the part of the request it would take.
  */
-export async function cashOutOffer(db: D1Database, session: SessionRow, playerId: string): Promise<{ requestId: string; requestCents: number; cents: number; owedCents: number; usableCents: number } | null> {
+export async function cashOutOffer(db: D1Database, session: SessionRow, playerId: string, settings: GroupSettings): Promise<{ requestId: string; requestCents: number; cents: number; owedCents: number; usableCents: number } | null> {
   if (session.status === 'canceled' || session.finalized_at) return null;
   const row = await db
     .prepare(
@@ -867,7 +869,7 @@ export async function cashOutOffer(db: D1Database, session: SessionRow, playerId
   if (!row) return null;
   const group = await db.prepare('SELECT * FROM groups WHERE id = ?').bind(session.group_id).first<GroupRow>();
   if (!group || playerId === (await organizerIdOf(db, group))) return null;
-  const owed = settingsOf(group).pricePerPlayerCents - row.used;
+  const owed = flatOf(session, settings) - row.used;
   const usable = Math.max(0, row.usable);
   // Usable credit already covers it: nothing to ask.
   if (owed <= 0 || usable >= owed) return null;
