@@ -14,6 +14,7 @@ import { unpaidRows, owedCentsOf } from './moneyList';
 import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
 import { ReworkOpsProvider, useReworkPatch } from './ReworkOps';
 import '../../money-rework.css';
+import { viewFlat } from '../../../shared/gameLength';
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 
@@ -217,8 +218,8 @@ function GameCard({ ctx, g, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx
   const owedRows = unpaidRows(s);
   const owed = owedCentsOf(s);
   const title = titleOf(s);
-  const price = s.finalized ? s.finalized.priceCents : ctx.d.group.settings.pricePerPlayerCents;
-  const credit = creditPerPlayerCents(s, ctx.d.group.settings.pricePerPlayerCents);
+  const price = s.finalized ? s.finalized.priceCents : viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
+  const credit = creditPerPlayerCents(s, ctx.d.group.settings);
   let right: ReactNode = null;
   if (closed) right = <span className="mrw-pill muted">Closed</span>;
   else if (open && owedRows.length > 0)

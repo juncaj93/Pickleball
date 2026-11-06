@@ -151,9 +151,12 @@ async function main() {
         const tile = t.closest('.tile');
         const tr = tile.getBoundingClientRect();
         const cs = getComputedStyle(tile);
-        const L = tr.left + parseFloat(cs.borderLeftWidth);
-        const R = tr.right - parseFloat(cs.borderRightWidth);
-        const T = tr.top + parseFloat(cs.borderTopWidth);
+        // Organizer tiles (Zip 9 fix): the strip runs out under the court ring to the ring's outer edge, so it is measured against the ring.
+        const ring = tile.closest('.admin-page') && tile.classList.contains('ts') ? tile.querySelector('.tb-solid') : null;
+        const rr = ring && ring.getBoundingClientRect();
+        const L = rr ? rr.left : tr.left + parseFloat(cs.borderLeftWidth);
+        const R = rr ? rr.right : tr.right - parseFloat(cs.borderRightWidth);
+        const T = rr ? rr.top : tr.top + parseFloat(cs.borderTopWidth);
         const r = t.getBoundingClientRect();
         const vis = [...t.querySelectorAll('span')].find((x) => getComputedStyle(x).display !== 'none') || t;
         const word = vis.textContent.trim();
@@ -360,7 +363,10 @@ async function main() {
     assert((await css(adminTile, 'animation-name')) === 'none', 'admin badge holds still');
     const sh = await css(adminTile, 'box-shadow');
     assert(/rgba\((47, 143, 91|76, 197, 138), 0\.38\) 0px 0px 10px 1px/.test(sh) && !/0px 0px 0px \d/.test(sh), `admin badge: one soft green glow, no ring (${sh})`);
-    assert((await css(adminTile, 'background-clip')) === 'padding-box', 'the fill does not show through the border');
+    // Zip 9 fix (Alex, Nov 6): the court ring now covers the tile's edge exactly (an inset shadow), so the fill runs to the outer edge under it
+    // and no rounding gap can show a light line (e2e/zip9.cjs checks the geometry).
+    assert((await css(adminTile, 'background-clip')) === 'border-box', 'the fill runs under the ring');
+    assert(/inset/.test(await css(page.locator(`#session-${game.tonight.id} .tile .tb-solid`), 'box-shadow')), 'the ring is an inset shadow');
     await shot(page, 'admin-tiles');
     await tab(page, 'Money');
     await page.waitForTimeout(500);
@@ -495,7 +501,7 @@ async function main() {
   });
 
   // =============================================================== C. SIMPLER PLAYER CARDS
-  const wordsOnCards = (page) => page.evaluate(() => [...document.querySelectorAll('.schedule > .sched')].map((r) => ({ id: r.id, text: [...r.querySelectorAll('*')].filter((e) => !e.closest('button, [aria-hidden="true"], .sr-only')).map((e) => (e.children.length === 0 ? e.textContent : '')).join(' ').replace(/\s+/g, ' ').trim(), mine: r.dataset.mine === 'in', cal: r.querySelectorAll('.cal-icon-link').length, join: r.querySelectorAll('[data-join]').length, dot: r.querySelectorAll('.court-dot').length, head: r.querySelectorAll('.sched-head').length })));
+  const wordsOnCards = (page) => page.evaluate(() => [...document.querySelectorAll('.schedule > .sched')].map((r) => ({ id: r.id, text: [...r.querySelectorAll('*')].filter((e) => !e.closest('button, [aria-hidden="true"], .sr-only')).map((e) => (e.children.length === 0 ? e.textContent : '')).join(' ').replace(/\s+/g, ' ').trim(), mine: r.dataset.mine === 'in', cal: r.querySelectorAll('.cal-icon-link, [data-card-calendar]').length, join: r.querySelectorAll('[data-join]').length, dot: r.querySelectorAll('.court-dot').length, head: r.querySelectorAll('.sched-head').length })));
   for (const scheme of ['light', 'dark']) {
     await check(`C: no "Court booked / not booked" words or dot on any card; calendar icon only next to You're in (${scheme})`, async () => {
       for (const who of ['Jordan', 'Avery', 'Casey', 'Gray']) {
@@ -554,7 +560,8 @@ async function main() {
     await p.page.waitForTimeout(350);
     const now = p.page.locator(`#row-${id}`);
     assert((await now.getAttribute('data-mine')) === 'in', "the card says you're in at once");
-    assert((await now.locator('.cal-icon-link').count()) === 1, 'with the calendar icon');
+    // Zip 9 "Card time and buttons" (on in the fake world) turns the icon into the calendar half of the joined button.
+    assert((await now.locator('.cal-icon-link, [data-card-calendar]').count()) === 1, 'with the calendar icon');
     assert(/You're in/.test(await now.innerText()), "You're in text");
     await p.page.waitForTimeout(3000);
     assert((await now.getAttribute('data-mine')) === 'in', 'and it stays after the server answers');

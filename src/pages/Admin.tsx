@@ -26,6 +26,7 @@ import { MoneyTab } from './admin/MoneyTab';
 import { HomeGame, useOpenGames } from './admin/HomeV2';
 import { HistoryTab } from './admin/HistoryTab';
 import { ClearChoices, FindSubLink } from './admin/LateFees';
+import { boxMinutes, ShortGameHeadsUp } from './admin/ShortGame';
 
 type Tab = 'home' | 'players' | 'money' | 'history' | 'settings';
 
@@ -697,6 +698,7 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
           )}
         </label>
       </div>
+      <ShortGameHeadsUp ctx={ctx} minutes={boxMinutes(start, end)} />
       <label className="field">
         Note (optional)
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder="Court 3, bring water" />

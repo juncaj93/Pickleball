@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { AdminDashboard, AdminSessionView, RefundRequestView } from '../../../shared/api';
 import { formatPrice, venmoRefundUrl } from '../../../shared/money';
 import { paymentClaimText, unconfirmedPaidWarning } from '../../../shared/credit';
-import { finalPreview } from '../../../shared/pricing';
 import { formatShortDate } from '../../../shared/time';
 import { api, openVenmo, storageGet, storageSet } from '../../lib';
 import { Sheet } from '../../ui';
@@ -10,6 +9,7 @@ import type { AdminCtx } from '../Admin';
 import { tapsHeld, useTapsHeld } from './tapGuard';
 import { useAction } from './action';
 import '../../finalize.css';
+import { type GamePrice, gameFinalPreview, viewPrice } from '../../../shared/gameLength';
 
 const CREDIT_NOTE = 'Pickleball credit refund';
 
@@ -23,7 +23,9 @@ const useRun = useAction;
  */
 export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const tz = ctx.d.group.timezone;
-  const price = ctx.d.group.settings.pricePerPlayerCents;
+  // This game's own price: the normal one, or a 1.5 hour game's row when the server priced it so (shared/gameLength.ts).
+  const gp = viewPrice(s, ctx.d.group.settings);
+  const price = gp.flatCents;
   const { busy: saving, run } = useRun(ctx);
   // Dimmed for a moment right after "Yes, we played" brings this card in under the finger.
   const held = useTapsHeld();
@@ -53,7 +55,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           {day} · {n} in
         </h3>
         <div className="small muted" data-finalize-preview>
-          {under ? `Only ${n} in. Cancel it (everyone paid gets credit) or finalize anyway at ${formatPrice(price)} each.` : finalPreview(price, n, formatPrice)}
+          {under ? `Only ${n} in. Cancel it (everyone paid gets credit) or finalize anyway at ${formatPrice(price)} each.` : gameFinalPreview(gp, n, formatPrice)}
         </div>
       </div>
       {unconfirmed && <UnconfirmedWarning text={unconfirmed} />}
@@ -79,7 +81,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         )}
       </div>
       <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
-        {changing && <WhoPlayed s={s} price={price} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />}
+        {changing && <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />}
       </Sheet>
     </article>
   );
@@ -99,7 +101,8 @@ function UnconfirmedWarning({ text }: { text: string }) {
 }
 
 /** The sheet: everyone who was in, a switch each, the preview updating live, and Confirm. */
-function WhoPlayed({ s, price, busy, onConfirm }: { s: AdminSessionView; price: number; busy: boolean; onConfirm: (ids: string[]) => void }) {
+function WhoPlayed({ s, gp, busy, onConfirm }: { s: AdminSessionView; gp: GamePrice; busy: boolean; onConfirm: (ids: string[]) => void }) {
+  const price = gp.flatCents;
   const inNow = s.roster.filter((r) => r.status === 'confirmed');
   const [played, setPlayed] = useState<Set<string>>(() => new Set(inNow.map((r) => r.playerId)));
   const n = played.size;
@@ -107,7 +110,7 @@ function WhoPlayed({ s, price, busy, onConfirm }: { s: AdminSessionView; price: 
   return (
     <div className="stack" data-who-played>
       <p className="finalize-live" data-finalize-live>
-        {n < 4 ? `${n} played · ${formatPrice(price)} each` : finalPreview(price, n, formatPrice)}
+        {n < 4 ? `${n} played · ${formatPrice(price)} each` : gameFinalPreview(gp, n, formatPrice)}
       </p>
       <ul className="list who-played">
         {inNow.map((r) => (

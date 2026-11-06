@@ -137,6 +137,8 @@ route('PUT', '/api/admin/adjust-credit-switch', admin.setAdjustCreditSwitch);
 route('PUT', '/api/admin/venmo-request-switch', admin.setVenmoRequestSwitch);
 route('PUT', '/api/admin/home-collapse-switch', admin.setHomeCollapseSwitch);
 route('PUT', '/api/admin/last-call-switch', admin.setLastCallSwitch);
+route('PUT', '/api/admin/short-games-switch', admin.setShortGamesSwitch);
+route('PUT', '/api/admin/card-time-switch', admin.setCardTimeSwitch);
 route('PUT', '/api/admin/tonight-glow-switch', admin.setTonightGlowSwitch);
 route('PUT', '/api/admin/color-cleanup-switch', admin.setColorCleanupSwitch);
 route('PUT', '/api/admin/player-cards-switch', admin.setPlayerCardsSwitch);

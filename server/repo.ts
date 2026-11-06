@@ -1,4 +1,5 @@
 import { type SeatPrice, seatPrices } from '../shared/pricing';
+import { type GamePrice, gamePrice } from '../shared/gameLength';
 import { planSessions } from '../shared/schedule';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { type GroupSettings, normalizeSettings } from '../shared/settings';
@@ -18,6 +19,8 @@ export interface GroupRow {
   venmo_url: string | null;
   settings_json: string;
   created_at: string;
+  /** NOT a column: this request's "Short games" answer (server/zip9.ts withShortGames), carried to settingsOf(group).shortGames. */
+  short_games?: boolean;
   organizer_name: string | null;
   venue_name: string | null;
   venue_address: string | null;
@@ -115,11 +118,34 @@ export interface RosterRow {
 }
 
 export function settingsOf(group: GroupRow): GroupSettings {
+  let out: GroupSettings;
   try {
-    return normalizeSettings(JSON.parse(group.settings_json));
+    out = normalizeSettings(JSON.parse(group.settings_json));
   } catch {
-    return normalizeSettings({});
+    out = normalizeSettings({});
   }
+  // "Short games" on for this request (server/zip9.ts): only then is the key there, so with it off the settings are exactly as before.
+  if (group.short_games === true) out.shortGames = true;
+  return out;
+}
+
+/**
+ * One game's price (shared/gameLength.ts): Settings > Money for a normal game and for every game while "Short games" is off;
+ * the game-length table row for a 1.5 hour game while it is on. Every server price path goes through this.
+ */
+export function priceOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): GamePrice {
+  return gamePrice({ startsAt: session.starts_at, endsAt: session.ends_at }, settings, settings.shortGames === true);
+}
+
+/** A 1.5 hour game's own flat price ("Short games" on), for the words that would otherwise say $14; null for a normal game (nothing changes). */
+export function specialFlatOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): number | null {
+  const p = priceOf(session, settings);
+  return p.special ? p.flatCents : null;
+}
+
+/** The flat price everyone in this game pays up front ($14 for a normal game, $11 for a 1.5 hour game with "Short games" on). */
+export function flatOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): number {
+  return priceOf(session, settings).flatCents;
 }
 
 /** One group per deployment. */
@@ -281,11 +307,12 @@ export function waitlistOf(roster: RosterRow[]): RosterRow[] {
  * played (nothing for those who did not). Nobody owes for a canceled game.
  */
 export function pricesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, SeatPrice> {
+  const flat = flatOf(session, settings);
   const out = seatPrices(
     confirmedOf(roster).map((r) => ({ playerId: r.player_id, played: r.played })),
-    settings.pricePerPlayerCents,
+    flat,
     session.status === 'canceled',
-    session.finalized_at ? { priceCents: session.final_price_cents ?? settings.pricePerPlayerCents } : null,
+    session.finalized_at ? { priceCents: session.final_price_cents ?? flat } : null,
   );
   // An open late fee (shared/lateFees.ts) owes the flat price: a late drop that left the game short, a no-show with
   // fewer than 4 played, or a seat in a game canceled late that the venue charged. None exist unless LATE_FEES made
@@ -293,14 +320,14 @@ export function pricesFor(session: SessionRow, roster: RosterRow[], settings: Gr
   // A seat in a game canceled late with the fee split (LATE_FEE_SPLIT) owes the split price stored on the game instead.
   for (const r of roster) {
     const kind = lateFeeKind(r, session);
-    if (kind) out.set(r.player_id, { cents: lateFeePriceCents(kind, session, settings.pricePerPlayerCents) });
+    if (kind) out.set(r.player_id, { cents: lateFeePriceCents(kind, session, flat) });
   }
   return out;
 }
 
-/** What the venue charges for a session: the cost on the booking, else the typical court cost. */
-export function courtCostOf(session: Pick<SessionRow, 'court_cost_cents'>, settings: GroupSettings): number {
-  return session.court_cost_cents ?? settings.typicalCourtCostCents;
+/** What the venue charges for a session: the cost on the booking, else the typical court cost (a 1.5 hour game's row with "Short games" on). */
+export function courtCostOf(session: Pick<SessionRow, 'court_cost_cents' | 'starts_at' | 'ends_at'>, settings: GroupSettings): number {
+  return session.court_cost_cents ?? priceOf(session, settings).courtCents;
 }
 
 export function sharesFor(session: SessionRow, roster: RosterRow[], settings: GroupSettings): Map<string, number> {

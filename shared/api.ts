@@ -7,6 +7,15 @@ import type { AdminDecision, BookingStatus, SessionRecordStatus, SessionState } 
 export type RosterStatus = 'confirmed' | 'waitlisted' | 'withdrawn' | 'declined';
 export type PaymentStatus = 'unpaid' | 'paid' | 'not_applicable';
 
+/** A game priced from its own row of the game-length table (shared/gameLength.ts), with "Short games" on. */
+export interface ShortGameInfo {
+  minutes: number;
+  /** The flat price everyone pays up front ($11 for 1.5 hours). */
+  flatCents: number;
+  /** The court cost when the booking has none entered ($36 for 1.5 hours). */
+  courtCents: number;
+}
+
 export interface PlayerSessionView {
   id: string;
   startsAt: string;
@@ -40,6 +49,8 @@ export interface PlayerSessionView {
   past: boolean;
   /** The organizer finalized who played: the final price each. */
   finalized: { playedCount: number; priceCents: number } | null;
+  /** Only for a game priced from its own game-length row ("Short games" on, a 1.5 hour game; shared/gameLength.ts). Missing: a normal game at group.priceCents. */
+  shortGame?: ShortGameInfo;
   confirmationOpen: boolean;
   /** The cancellation deadline. The page sends a drop at once when it is this close, so the 5-second Undo wait never changes how the drop counts. */
   dropCutoffAt: string;
@@ -155,6 +166,10 @@ export interface GroupView {
   colorCleanup?: boolean;
   /** "Simpler player cards" is on for this screen (server/zip7.ts): no court status words or dot on player cards. Missing: cards are exactly as before. */
   playerCardsSimple?: boolean;
+  /** "Short games" is on for this screen (server/zip9.ts): a 1.5 hour game carries its own price (`shortGame` on the game) and the calendar uses the real end. Missing: exactly as before. */
+  shortGames?: boolean;
+  /** "Card time and buttons" is on for this screen (server/zip9.ts): the time line under the date tile and the joined Calendar | Directions button. Missing: cards are exactly as before. */
+  cardTimeButtons?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -162,7 +177,7 @@ export interface GroupView {
    * on this phone: 'sub' someone took their spot, 'cleared' the organizer cleared it (or the game was canceled).
    * `creditCents`: what came back to them as credit (0 when they had not paid).
    */
-  feeNotices?: { id: string; startsAt: string; why: 'sub' | 'cleared'; creditCents: number }[];
+  feeNotices?: { id: string; startsAt: string; why: 'sub' | 'cleared'; creditCents: number; /** Only for a 1.5 hour game with "Short games" on: what it owed. Missing: group.priceCents. */ feeCents?: number }[];
   now: string;
   sessions: PlayerSessionView[];
   /** Confirmed, unpaid sessions. `reminder` only once the session ended more than 24 hours ago. */
@@ -295,6 +310,8 @@ export interface AdminSessionView {
   canceledBy: string | null;
   /** Canceled late with the fee split (LATE_FEE_SPLIT): how many were in and what each person in owes. Null otherwise. */
   feeSplit?: { count: number; priceCents: number } | null;
+  /** Only for a game priced from its own game-length row ("Short games" on, a 1.5 hour game). Missing: a normal game at Settings > Money. */
+  shortGame?: ShortGameInfo;
   /** Why the organizer canceled (up to 40 characters), or null. */
   cancelReason: string | null;
   state: SessionState;
@@ -474,6 +491,13 @@ export interface AdminDashboard {
   /** "Simpler player cards" is on for this screen / Settings row is on (for everyone). */
   playerCardsSimple?: boolean;
   playerCardsSimpleForAll?: boolean;
+  /** "Short games" is on for this screen (server/zip9.ts): 1.5 hour games are priced from their row, the heads-up and tag show. Missing: exactly as before. */
+  shortGames?: boolean;
+  /** Settings > Feature switches > "Short games" is on (for everyone). */
+  shortGamesForAll?: boolean;
+  /** "Card time and buttons" is on for this screen / Settings row is on (for everyone). Player cards only. */
+  cardTimeButtons?: boolean;
+  cardTimeButtonsForAll?: boolean;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

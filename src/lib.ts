@@ -183,6 +183,9 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (zip7Test('playercards')) headers['X-Player-Cards'] = 'on';
   // "Last call texts", private test switch for this phone (/admin?lastcall=on, see server/lastCall.ts).
   if (lastCallTest()) headers['X-Last-Call'] = 'on';
+  // Zip 9 private test switches for this phone (?shortgames=on, ?cardtime=on; also on /admin, see server/zip9.ts).
+  if (zip9Test('shortgames')) headers['X-Short-Games'] = 'on';
+  if (zip9Test('cardtime')) headers['X-Card-Time'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -672,6 +675,23 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('lastcall');
   if (want === 'on') storageSet(LAST_CALL_KEY, 'on');
   else if (want === 'off') storageRemove(LAST_CALL_KEY);
+}
+
+/**
+ * Zip 9 switches on this phone only, before they are on for everyone: open the site once with ?shortgames=on or ?cardtime=on
+ * (the same word with =off turns it back off; works on /admin too). Remembered in this browser. "Short games" really changes the
+ * price of 1.5 hour games for that phone's taps, and the server honors it only for the organizer's sign-in (server/zip9.ts): test it on
+ * the fake-data preview, or on live only with test players on an extra game.
+ */
+export function zip9Test(name: 'shortgames' | 'cardtime'): boolean {
+  return storageGet(`pb_${name}`) === 'on';
+}
+if (typeof window !== 'undefined') {
+  for (const name of ['shortgames', 'cardtime']) {
+    const want = new URLSearchParams(window.location.search).get(name);
+    if (want === 'on') storageSet(`pb_${name}`, 'on');
+    else if (want === 'off') storageRemove(`pb_${name}`);
+  }
 }
 
 /**

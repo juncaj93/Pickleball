@@ -33,6 +33,14 @@ import '../credit-player.css';
 import '../player-cards.css';
 import '../motion.css';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
+import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
+import { CalendarDirections } from '../CardButtons';
+
+/** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
+function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
+  if (!g) return 0;
+  return viewFlat(g.sessions.find((x) => x.id === sessionId) ?? {}, g.group.priceCents);
+}
 
 const SHOW_FIRST = 6;
 
@@ -368,14 +376,14 @@ export function PlayerHome({
         markCelebrated(sessionId);
         if (before + 1 === MIN_PLAYERS && !offer) {
           burst(sessionId);
-          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, g?.group.priceCents ?? 0, showDue), 'ok', { ball: true });
+          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, flatOfGame(g, sessionId), showDue), 'ok', { ball: true });
         }
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents });
-      toast(joinedText(res, noCourt, g?.group.priceCents ?? 0, showDue));
+      toast(joinedText(res, noCourt, flatOfGame(g, sessionId), showDue));
     },
-    [toast, markCelebrated, burst, g?.group.priceCents, g?.payAlways],
+    [toast, markCelebrated, burst, g, g?.payAlways],
   );
 
   // A drop that was held for Undo when the page closed (or lost signal): finish it. A note younger than the hold
@@ -908,7 +916,7 @@ function FeeNotices({ g }: { g: GroupView }) {
         <div key={n.id} className="fee-notice" data-fee-notice={n.why}>
           <Notice tone="ok">
             <span className="fee-notice-row">
-              <span>{feeClearedNotice(n.why, formatShortDate(n.startsAt, tz), formatPrice(g.group.priceCents), n.creditCents > 0 ? formatPrice(n.creditCents) : null)}</span>
+              <span>{feeClearedNotice(n.why, formatShortDate(n.startsAt, tz), formatPrice(n.feeCents ?? g.group.priceCents), n.creditCents > 0 ? formatPrice(n.creditCents) : null)}</span>
               <button type="button" className="btn small ghost" onClick={() => dismiss(n.id)}>
                 Dismiss
               </button>
@@ -1435,7 +1443,7 @@ function SuggestionCard({
         await sendDropsBeforeJoin(s.sessionId);
         const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
-        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt, g.group.priceCents, !s.noCourt || !!g.payAlways), startsAt: s.startsAt, endsAt: s.endsAt });
+        onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt, flatOfGame(g, s.sessionId), !s.noCourt || !!g.payAlways), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
       } else {
         await api('POST', `/api/sessions/${s.sessionId}/decline`, {});
@@ -1991,12 +1999,19 @@ export function ScheduleRow({
   const simple = g.playerCardsSimple === true;
   // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
   const standbyWord = courtWait && !simple;
+  // Zip 9, CARD_TIME_BUTTONS: the start and the length under the tile, and one joined Calendar | Directions button instead of the icon.
+  const cardButtons = g.cardTimeButtons === true;
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
-  const calLink = isIn && open && (
-    <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
-      <CalendarPlusIcon />
-    </a>
-  );
+  const calLink =
+    isIn &&
+    open &&
+    (cardButtons ? (
+      <CalendarDirections calendarHref={`/api/sessions/${s.id}/calendar.ics`} dayLabel={formatShortDate(s.startsAt, tz)} />
+    ) : (
+      <a className="cal-icon-link" href={`/api/sessions/${s.id}/calendar.ics`} aria-label={`Add ${formatShortDate(s.startsAt, tz)} to calendar`}>
+        <CalendarPlusIcon />
+      </a>
+    ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
   const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
   const dropLink = isIn && open && (
@@ -2008,7 +2023,10 @@ export function ScheduleRow({
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
   const notIn = open && !(inSession || waiting);
-  const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice) : null;
+  const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? s.shortGame
+        ? gameCreditBackNote(viewPrice(s, { pricePerPlayerCents: g.group.priceCents, typicalCourtCostCents: 0 }), s.confirmed.length, g.group.maxPlayers, formatPrice)
+        : creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice)
+      : null;
 
   // The status line: "You're in · Court booked", the court word with a dot, the waitlist spot, or Canceled (with the organizer's reason).
   const courtWord = <span>{court.playerText}</span>;
@@ -2084,6 +2102,20 @@ export function ScheduleRow({
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
           // where it ends, on a second short line, so nobody is misled.
           const t = cardTime(s.startsAt, s.endsAt, tz, g.group.usualMinutes);
+          // CARD_TIME_BUTTONS: the start, and under it a smaller gray line with the length ("2 hours", "1.5 hours"), on every card.
+          if (cardButtons) {
+            const length = lengthWords(gameMinutes(s.startsAt, s.endsAt));
+            return (
+              <div className={`sched-time z9-time${tsClass(ts, flip)}`} data-sched-time data-ts={ts ?? undefined}>
+                <span aria-hidden="true">{tsTime(t.start, ts)}</span>
+                {length && (
+                  <span className="z9-length" aria-hidden="true" data-length>
+                    {length}
+                  </span>
+                )}
+              </div>
+            );
+          }
           return (
             <div className={`sched-time${t.end ? ' range' : ''}${tsClass(ts, flip)}`} data-sched-time data-ts={ts ?? undefined}>
               <span aria-hidden="true">{tsTime(t.start, ts)}</span>
@@ -2106,7 +2138,7 @@ export function ScheduleRow({
       <div className="sched-body">
         {status !== null && (
           <div className="sched-head">
-            <div className={`sched-status court-${court.kind}`} data-court={court.kind}>
+            <div className={`sched-status court-${court.kind}${cardButtons && isIn && open ? ' z9-status' : ''}`} data-court={court.kind}>
               {status}
             </div>
           </div>
@@ -2128,7 +2160,7 @@ export function ScheduleRow({
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
           {s.canceled && (inSession || waiting) && mine.lateFee?.kind === 'canceled_late' ? (
             <p className="sched-sub" data-late-fee>
-              Canceled late. {mine.lateFee.oweCents > 0 ? `You still owe ${formatPrice(mine.lateFee.oweCents)}.` : `Your ${formatPrice(mine.lateFee.priceCents ?? g.group.priceCents)} stays on this game.`}
+              Canceled late. {mine.lateFee.oweCents > 0 ? `You still owe ${formatPrice(mine.lateFee.oweCents)}.` : `Your ${formatPrice(mine.lateFee.priceCents ?? viewFlat(s, g.group.priceCents))} stays on this game.`}
             </p>
           ) : (
             s.canceled && (inSession || waiting) && mine.paymentStatus !== 'not_applicable' && <p className="sched-sub">If you paid, it's now your credit.</p>

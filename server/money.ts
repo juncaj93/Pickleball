@@ -16,7 +16,7 @@ import type { Ctx } from './context';
 import { HttpError } from './http';
 import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
-import { courtCostOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
+import { courtCostOf, flatOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
@@ -95,7 +95,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   let rwSessions = 0;
   let projCourts = 0;
   let projAdded = 0;
-  const flat = settings.pricePerPlayerCents;
+  // What "3 players pay the usual price" adds up to, court by court (a 1.5 hour game's usual price is its own with "Short games" on).
+  let projPlayersCents = 0;
   const sessions: MonthlyMoney['sessions'] = [];
   const creditSessionIds = new Set(ledger.map((e) => e.sessionId).filter((x): x is string => !!x));
   for (const s of results) {
@@ -143,10 +144,12 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     if (rework) {
       if (state === 'played' || (state === 'canceled' && charged > 0)) {
         rwSessions++;
+        projPlayersCents += PROJECTED_PLAYERS_PER_COURT * flatOf(s, settings);
         rwCourts += state === 'played' ? cost : charged;
         rwCollected += kept;
       } else if (state === 'not_finalized' || (state === 'upcoming' && s.status !== 'canceled' && s.booking_status === 'booked')) {
         projAdded++;
+        projPlayersCents += PROJECTED_PLAYERS_PER_COURT * flatOf(s, settings);
         projCourts += cost;
       }
     }
@@ -160,7 +163,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
       courtCostCents: state === 'played' ? cost : charged,
       typicalCost: s.court_cost_cents === null,
       playedCount: s.finalized_at ? (s.final_played_count ?? 0) : null,
-      priceCents: s.finalized_at ? (s.final_price_cents ?? settings.pricePerPlayerCents) : null,
+      priceCents: s.finalized_at ? (s.final_price_cents ?? flatOf(s, settings)) : null,
     });
   }
   const net = collected - courts;
@@ -191,8 +194,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
             membershipCents: projMembership,
             totalCents: rwCourts + projCourts + projMembership,
             // 3 players pay the usual price for every court in the month, finalized or not: each court costs the organizer $48 - 3 x $14 = $6.
-            playersPayCents: PROJECTED_PLAYERS_PER_COURT * flat * (rwSessions + projAdded),
-            ...split(rwCourts + projCourts, PROJECTED_PLAYERS_PER_COURT * flat * (rwSessions + projAdded), projMembership),
+            playersPayCents: projPlayersCents,
+            ...split(rwCourts + projCourts, projPlayersCents, projMembership),
           },
         };
       })()

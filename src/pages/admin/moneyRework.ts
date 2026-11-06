@@ -5,6 +5,7 @@ import { gameHasMoney } from '../../../shared/moneyRework';
 import { creditBack } from '../../../shared/pricing';
 import { localParts, zonedTimeToUtc } from '../../../shared/time';
 import { moneyGames, owedCentsOf, unpaidRows } from './moneyList';
+import { gameCreditBack, type PriceSettings, viewFlat, viewPrice } from '../../../shared/gameLength';
 
 // The reworked Money page (MONEY_REWORK): which game sits where on the Games tab, and the small facts a card shows.
 // Pure functions of the data the page already has, so they are easy to test. Nothing here changes a total or a rule.
@@ -143,9 +144,11 @@ export function monthRowLabel(month: string): string {
 }
 
 /** The credit each player gets back at the number in now ("Credit: $3 per"), in cents; 0 when nothing comes back. */
-export function creditPerPlayerCents(s: AdminSessionView, flatCents: number): number {
+export function creditPerPlayerCents(s: AdminSessionView, settings: PriceSettings | number): number {
   if (s.finalized) return 0;
-  return creditBack(flatCents, s.confirmedCount);
+  const set: PriceSettings = typeof settings === 'number' ? { pricePerPlayerCents: settings, typicalCourtCostCents: 0 } : settings;
+  // This game's own price (a 1.5 hour game's row when the server priced it so); a normal game: creditBack(flat, N) as before.
+  return s.shortGame ? gameCreditBack(viewPrice(s, set), s.confirmedCount) : creditBack(set.pricePerPlayerCents, s.confirmedCount);
 }
 
 /**
@@ -191,7 +194,7 @@ export function gamePriceCents(d: Pick<AdminDashboard, 'group'>, s: AdminSession
   for (const r of unpaidRows(s)) if (r.shareCents !== null && r.shareCents > 0) counts.set(r.shareCents, (counts.get(r.shareCents) ?? 0) + 1);
   const common = [...counts].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
   if (common) return common[0];
-  return s.finalized ? s.finalized.priceCents : d.group.settings.pricePerPlayerCents;
+  return s.finalized ? s.finalized.priceCents : viewFlat(s, d.group.settings.pricePerPlayerCents);
 }
 
 /** The "Text all" message for a game: one text for the group chat (no recipients), the site address alone on the last line. */
