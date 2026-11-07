@@ -2674,9 +2674,18 @@ export function SavedScreenView({ saved }: { saved: SavedScreen }) {
   let body: ReactNode;
   if (layout) {
     // The live list as it was, piece for piece: a game the copy may not show (ended, canceled) keeps its room as a soft shimmer.
+    // As a fresh page load draws it, though: Home collapse folds the later games again, and otherwise only the first 6 cards show.
+    let cardsSeen = 0;
+    let inLater = false;
+    const items = layout.items.filter((it) => {
+      if (it.kind === 'line') inLater = it.tier === 'later';
+      if (v.homeCollapse && inLater) return false;
+      if (it.kind === 'card' && !v.homeCollapse && ++cardsSeen > SHOW_FIRST) return false;
+      return !(it.kind === 'line' && !v.homeCollapse && cardsSeen >= SHOW_FIRST);
+    });
     let tagged = false;
     let tier: WeekTier = 'this';
-    body = layout.items.map((it, i) => {
+    body = items.map((it, i) => {
       if (it.kind === 'line') {
         tier = it.tier as WeekTier;
         const first = !tagged;
