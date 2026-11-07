@@ -108,6 +108,7 @@ import { hiddenFromPlayers } from './hideGame';
 import { cardTimeFor } from './zip9';
 import { cardCleanupLook } from './zip10';
 import { alertCardsFor } from './zip11';
+import { seatDotsFor } from './seatDots';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -315,6 +316,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     // Zip 11. "Alert cards": the one action-card look for every alert (display only).
     ...((await alertCardsFor(ctx, group.id)) ? { alertCards: true } : {}),
+    // "Seat dots": every empty seat a dashed ring (display only).
+    ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,

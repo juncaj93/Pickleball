@@ -72,9 +72,12 @@ async function main() {
   if (seeded.status !== 0) throw new Error(`seed: ${seeded.stderr || seeded.stdout}`);
   // The switch OFF: the Alert cards row is taken out of the world (main never knew it); both sites then get the same bytes.
   const db = new DatabaseSync(a);
-  const gone = db.prepare("DELETE FROM task_log WHERE task = 'alert_cards_on'").run();
+  // Both look switches OFF: Alert cards and Seat dots (main knows only the first; neither row may be left).
+  const gone = db.prepare("DELETE FROM task_log WHERE task IN ('alert_cards_on', 'seat_dots_on')").run();
+  // Like live (Sat Nov 7): the three Zip 12 speed rows are off there too.
+  db.prepare("DELETE FROM task_log WHERE task IN ('speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on')").run();
   db.close();
-  if (gone.changes !== 1) throw new Error(`expected one Alert cards row in the seed, found ${gone.changes}`);
+  if (gone.changes !== 2) throw new Error(`expected the Alert cards and Seat dots rows in the seed, found ${gone.changes}`);
   copyFileSync(a, b);
   const [A, B] = await Promise.all([site(MAIN, 5343, a), site(ROOT, 5344, b)]);
   const browser = await chromium.launch();
@@ -84,6 +87,8 @@ async function main() {
       .replace(/«r[0-9a-z]+»/g, '«id»')
       .replace(/(:r[0-9a-z]+:)/g, ':id:')
       .replace(/\/assets\/[^"']+/g, '/assets/x')
+      // The dev server's own cache-buster after a file changed while it ran (not the site's markup).
+      .replace(/main\.tsx\?t=\d+/g, 'main.tsx')
       .replace(/ dots-celebrate/g, '')
       .replace(/(datetime="[^"]+?)\.\d{3}Z"/g, '$1Z"')
       .replace(/localhost(:|%3A)534[34]/g, 'localhost$1PORT')
@@ -127,7 +132,7 @@ async function main() {
     if (before) await before(page);
     await page.waitForTimeout(2500);
     const html = norm(await page.evaluate(() => document.body.innerHTML));
-    const attr = await page.evaluate(() => document.documentElement.hasAttribute('data-alert-cards'));
+    const attr = await page.evaluate(() => document.documentElement.hasAttribute('data-alert-cards') || document.documentElement.hasAttribute('data-seat-dots'));
     await ctx.close();
     return attr ? `<<data-alert-cards on>>${html}` : html;
   }
@@ -141,13 +146,15 @@ async function main() {
     });
   };
   const PLAYERS = ['Jordan', 'Blake', 'Casey', 'Indy', 'Gray', 'Kai', 'Harper'];
+  // Harper (a Thursday regular in the fake world) has the Want in card with empty seats.
+  PLAYERS.push('Lane');
   for (const scheme of ['light', 'dark']) {
     for (const who of PLAYERS) await same(`player home, ${who}, ${scheme}: identical`, { who, url: '/', scheme });
     for (const t of ['Home', 'Players', 'Money', 'History']) await same(`organizer ${t}, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: t });
     await same(
       `organizer Settings, ${scheme}: identical apart from the new switch row`,
       { who: 'admin', url: '/admin', scheme, tabName: 'Settings' },
-      (h) => h.replace(/<div class="set-row-wrap" data-row="alertCardsAll">.*?<\/label><\/div>/gs, ''),
+      (h) => h.replace(/<div class="set-row-wrap" data-row="(alertCardsAll|seatDotsAll)">.*?<\/label><\/div>/gs, ''),
     );
   }
   for (const width of [360, 320]) {

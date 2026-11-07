@@ -12,7 +12,7 @@ import { courtCards, type CourtCard, textHref, visibleTasks } from './doNow';
 import { type Dismissed, pruneDismissed, readDismissed, writeDismissed } from './dismiss';
 import { DismissX } from './DismissX';
 import '../../do-now.css';
-import { AlertCard, type AcTone } from '../../AlertCard';
+import { AlertCard, type AcIconName, type AcTone } from '../../AlertCard';
 import { splitFirst } from '../../../shared/zip11';
 
 /** Save a card tap on the server. */
@@ -127,6 +127,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
     return (
       <AlertCard
         tone="blue"
+        icon="court"
         label={`${day}: court still needs to be booked`}
         data={{ 'data-task': 'court_book', 'data-session': s.id }}
         title="Court still needs to be booked"
@@ -206,6 +207,7 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
     return (
       <AlertCard
         tone="green"
+        icon="ok"
         label={`${day}: did you guys play?`}
         data={{ 'data-task': 'court_played', 'data-session': s.id }}
         title="Did you guys play?"
@@ -286,6 +288,8 @@ const AC_BUTTON: Record<string, { label: string; tone: AcTone; out?: boolean }> 
   finalize: { label: 'Finalize', tone: 'green' },
 };
 
+const TASK_ICON: Record<Task['kind'], AcIconName> = { cancel: 'stop', night: 'text', book: 'court', nocourt: 'court', nocourt_later: 'court', finalize: 'ok' };
+
 const TASK_TONE: Record<Task['kind'], AcTone> = { cancel: 'red', night: 'purple', book: 'blue', nocourt: 'blue', nocourt_later: 'blue', finalize: 'green' };
 
 /**
@@ -304,6 +308,7 @@ function TaskAlertCard({ ctx, task, nowMs, current, onDismiss }: { ctx: AdminCtx
   return (
     <AlertCard
       tone={TASK_TONE[task.kind]}
+      icon={TASK_ICON[task.kind]}
       label={`Do this now: ${task.text}`}
       data={{ 'data-task': task.kind, 'data-session': task.sessionId }}
       title={title}

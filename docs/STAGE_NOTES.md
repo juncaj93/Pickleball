@@ -2959,3 +2959,69 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
 - Tests on the combined code: unit 2325 passed, 0 failed (138 files); `e2e/zip12.cjs` 26/26; `e2e/zip12-off.cjs` 23/23 against main `513d7b4`; full
   browser suite: the same 4 scripts as before fail on main too (run 10, cancel-reason 2, want-in 1, admin-r2 F4 1); money-rework's "Hide from list"
   failed twice with three scripts sharing the machine (it waits 0.9 s) and passed alone and in two full runs (36/36) on the branch and on main.
+
+### Deploy (Sat Nov 7, 2026, 8:30 AM Eastern, quiet window, on Alex's "ship it")
+- PR #93 merged as `513d7b4` (merge commit; same files as the tested branch head `c1b9519`). Production deployment
+  `b2ffeedd-3c71-4edc-bc70-f676d9011d7c` from main, with `ALERT_CARDS` allowed in `wrangler.toml` and the Settings row OFF (no
+  `alert_cards_on` row in `task_log`). No migration, no data change. Alex switches it on himself in a quiet window.
+- Before it: main equaled live (production `f09f5aac-d683-49bd-a3cb-de9794278759` = `fb44afc`). SQL export `live-before-zip11-2026-11-07.sql`
+  (163 KB, not committed, has phone numbers, in that session's scratch folder), Time Travel bookmark
+  `00000a56-00000000-0000511c-0e093dc76cfb89a13125ea8e8e563137` (8:21 AM Eastern). Integrity checks: all 21 columns 0 before and after.
+- Tests on the merged tree: tsc clean, unit and API 2294 passed, 1 skipped, 0 failed (136 files), build clean.
+- Read-only live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net is not reachable from the sandbox): `/`, `/admin`, `/api/status`,
+  `/api/group/version` and an old `/t/` address answer 200; the live script is the same file as the local build (index-Dfr35_8d.js); the read-only
+  sign-in works (`viewOnly: true`); the dashboard and the player view carry no `alertCards` flag, `alertCardsForAll` is false; Card cleanup and
+  Texts round 2 still on; Activity and Money answer 200; signed out, the dashboard answers 401. Rows unchanged (players 11, games 13, seats 27).
+- Rollback: Settings > Feature switches > "Alert cards" off (no deploy); or `ALERT_CARDS = "off"` and a deploy; or Pages deployment
+  `f09f5aac-d683-49bd-a3cb-de9794278759` (Zip 10, fb44afc). Note: that rollback build also brings back the game-day check code (it only runs
+  with Texts round 2 off, which is on live) and the /t/ page. No data was changed by the deploy, so no restore is needed.
+
+## Alert cards redo + Seat dots (SEAT_DOTS) - built Sat Nov 7, 2026 (quiet window); on a preview, waiting for "ship it"
+
+Spec: the "alerts redo" brief (`mockup/ALERTS_A_final.html`, `vA.png`). Alex switched Alert cards on live, did not like the look (squashed oval
+balls, flat cheap cards, titles wrapping badly) and switched it back off. The live Settings row stays OFF; nothing here touches it. No database
+change, no migration, nothing deployed to production.
+
+### Part 1: the Alert cards look, redone (behind ALERT_CARDS, still OFF; same behavior and words)
+- Cards are drawn like game cards: the game card's own tokens (white `#ffffff` / dark `#18221c`, border `#dad9cf` / `#2b3a31`, ink, muted ink,
+  ring), 18 px corners, a round 32 px icon badge on the left tinted by the card's color (green join and paid, amber money, blue credit and
+  changes, purple texting, gray neutral, red deadlines), 15.5 px bold titles, 13 px gray lines, 38 px buttons (words never wrap), a round 24 px X
+  with a 44 px tap area.
+- Pickleballs: the alerts draw their seats with the game card's own `SpotDots` (the `Pickleball` component and the one `EmptySeat`), at the Next
+  week card's 16 px: perfect circles, the same skin, stroke and dimples (`e2e/zip11.cjs` compares them with a real game card, light and dark).
+- Titles: one line at 390 and 360 (`useFitTitle` in `src/AlertCard.tsx` steps a title that would wrap down by half a pixel, never below 13.5 px,
+  and only when its words or its width change); below 360 a long title wraps into two balanced lines. Gray lines wrap "pretty" (no word alone).
+  Known: a long organizer title next to a button ("Fri 7:00 PM game: 5 haven't paid" with Remind) still needs two lines (the words stay).
+- Phones under 390 get slightly tighter gaps and a 30 px badge so the titles keep their line.
+
+### Part 2: Seat dots (`SEAT_DOTS`, ships OFF)
+- One empty-seat component (`EmptySeat`, `src/ui.tsx`), drawn by `SpotDots` everywhere seats show (player cards in every tier, organizer Home cards
+  and rows, the Games list, the Want in alert). `src/seat-dots.css` turns it into a slightly grayed dashed ring of the same size under
+  `html[data-seat-dots]` (the game card's muted ink at 70 percent: 3.5:1 or better on every card background, light and dark). Filled balls untouched.
+  Works with Alert cards on or off.
+- Switch: Settings row "Seat dots" (newest first), `PUT /api/admin/seat-dots-switch`, `task_log` row `seat_dots_on`, kill switch `SEAT_DOTS` in
+  `wrangler.toml` (allowed; on in `[env.preview.vars]`), private link `?seatdots=on` (header `X-Seat-Dots`), Activity lines, stamp piece `sd`.
+
+### Tests
+- Unit: 2297 passed, 1 skipped, 0 failed (136 files). `tests/alert-cards.test.ts` now also checks the tokens equal the game card's, the Seat dots
+  switch (off, header, row, kill switch, stamp, Activity) and that there is one empty-seat component.
+- Browser: `e2e/zip11.cjs` 26/26 (light and dark, 390/360/320: badges, round 16 px balls equal to the game card's, one-line titles at 390 and
+  360, at most two at 320, buttons never wrap; Seat dots on and off with Alert cards on and off, on player and organizer screens; one picture of
+  every card for the contact sheet). `e2e/zip11-off.cjs` 44/44 (BOTH switches off = today's main on every screen and after every alert tap).
+  Also rerun: zip10, zip7, zip6, zip9, instant-taps pass; money-rework 36/36 alone (its check 6 can fail under a heavy parallel load; main's
+  check 2 does the same).
+- Fresh reviewer: nothing blocking. Fixed from it: the title fit no longer re-measures on every redraw, measures with offsetHeight; the Seat dots
+  rule no longer depends on stylesheet order; the organizer list cards use the fitted title; small tidy-ups.
+
+### Preview
+- https://preview-zip11.pickleball-club-9h0.pages.dev, fake database re-seeded. On there: every switch on live, plus Alert cards and Seat dots.
+  Seed: Harper is a Thursday regular (the Want in card with balls).
+
+### After Alex tested the preview (Sat Nov 7, 2026, late morning Eastern)
+- Preview looked good in light and dark. Answers: (a) 16 px balls matching the real Next week card: right; (b) keep the long organizer titles on
+  two lines, words unchanged. "Ship it" with BOTH switches OFF (ALERT_CARDS and SEAT_DOTS); Alex turns them on himself after testing on his phone.
+- Main had moved (Zip 12, PR #94, `6ab20fb`, live as `63f84d33`). Rebased on it: conflicts only where both added a switch (kept both); the Seat dots
+  row sits above the three speed rows (newest first). The Seat dots read is the shared switch question, so Zip 12's "Fewer database trips" answers it
+  from its one read (no extra trip). The preview list keeps the three speed rows on (Zip 12's own tests use them; they are off on live).
+- Retested on top of Zip 12: unit 2328 passed, 1 skipped, 0 failed (138 files); browser zip11 26/26, zip12 26/26, zip10, zip7, zip6, zip9,
+  instant-taps, money-rework all pass; `e2e/zip11-off.cjs` 44/44 against main `6ab20fb` with every look and speed switch off, as on live.

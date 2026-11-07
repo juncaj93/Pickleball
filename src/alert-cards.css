@@ -1,255 +1,271 @@
-/* Zip 11, "Alert cards" (ALERT_CARDS). Every rule here sits under html[data-alert-cards] (set by src/zip7.ts useZip7Root while the switch
- * is on for the screen), so with the switch off nothing here applies and every alert looks exactly as before.
+/* Zip 11, "Alert cards" (ALERT_CARDS), redone Nov 7 after Alex saw it live ("mockup/ALERTS_A_final.html"). Every rule here sits under
+ * html[data-alert-cards] (set by src/zip7.ts useZip7Root while the switch is on for the screen), so with the switch off nothing here applies
+ * and every alert looks exactly as before.
  *
- * One look ("style B") for every player and organizer alert: a slim tinted card with a thin matching border, no icon, a bold title, an
- * optional gray sub line, and ONE button on the right. Two-choice cards put the buttons under the text. Cards fine to ignore get a small X.
- * Colors follow the Zip 7 color system: green in / paid / join, amber owes, blue links, credit and booking, purple texting, gray neutral
- * and canceled, red deadlines. Every text and button pair below is at least 4.5:1 (tests/alert-cards.test.ts checks them).
+ * The look: an alert is drawn like a game card (the same white surface, thin border, corner roundness and fonts as the player cards'
+ * --pc-* tokens in src/player-cards.css), with a small round icon badge on the left tinted by its color (green join and paid, amber money,
+ * blue credit and changes, purple texting, gray neutral, red deadlines), a 15.5 px bold title, an optional 13 px gray line, and ONE 38 px
+ * button on the right (two-choice cards put both under the text; cards fine to ignore get a small round X). The pickleballs are the game
+ * card's own (SpotDots, src/ui.tsx), at the Next week card's size. Every text and button pair is at least 4.5:1 (tests/alert-cards.test.ts).
  * Tokens in one place: light first, then dark twice (the phone's dark mode, and the site's own dark choice). */
 
 html[data-alert-cards] {
-  --ac-green-bg: #e9f0eb;
-  --ac-green-line: #a9c7b4;
-  --ac-green-fill: #1e6a48;
+  /* The game card's own surface (src/player-cards.css --pc-card, --pc-line, --pc-ink, --pc-muted, --pc-ring). */
+  --ac-card: #ffffff;
+  --ac-line: #dad9cf;
+  --ac-title: #18241d;
+  --ac-sub: #4a4f46;
+  --ac-ring: #18241d;
+  --ac-x-bg: #ecece8;
+  --ac-shadow: 0 1px 2px rgb(24 36 29 / 5%);
+  --ac-green-tint: #e4f2ea;
+  --ac-green-ink: #226b4b;
+  --ac-green-fill: #226b4b;
   --ac-green-fill-ink: #ffffff;
-  --ac-green-ink: #1e6a48;
-  --ac-amber-bg: #faf2e3;
-  --ac-amber-line: #e6c88c;
+  --ac-amber-tint: #fcf1db;
+  --ac-amber-ink: #8a5a00;
   --ac-amber-fill: #8a5a00;
   --ac-amber-fill-ink: #ffffff;
-  --ac-amber-ink: #7a4800;
-  --ac-blue-bg: #e9eaf6;
-  --ac-blue-line: #a8aedc;
-  --ac-blue-fill: #2c3fa6;
+  --ac-blue-tint: #e9ecf9;
+  --ac-blue-ink: #2a3fb0;
+  --ac-blue-fill: #2a3fb0;
   --ac-blue-fill-ink: #ffffff;
-  --ac-blue-ink: #2c3fa6;
-  --ac-purple-bg: #eeebf6;
-  --ac-purple-line: #c3b7e2;
+  --ac-purple-tint: #efeaf8;
+  --ac-purple-ink: #5a3fa0;
   --ac-purple-fill: #6a4fb0;
   --ac-purple-fill-ink: #ffffff;
-  --ac-purple-ink: #5a3fa0;
-  --ac-gray-bg: #efefec;
-  --ac-gray-line: #c8c9c3;
-  --ac-gray-fill: #565d58;
+  --ac-gray-tint: #ecece8;
+  --ac-gray-ink: #4a4e47;
+  --ac-gray-fill: #4a4e47;
   --ac-gray-fill-ink: #ffffff;
-  --ac-gray-ink: #565d58;
-  --ac-red-bg: #fae9e6;
-  --ac-red-line: #e9aca3;
+  --ac-red-tint: #fbe9e6;
+  --ac-red-ink: #b02a1f;
   --ac-red-fill: #b02a1f;
   --ac-red-fill-ink: #ffffff;
-  --ac-red-ink: #b02a1f;
-  --ac-title: #141815;
-  --ac-sub: #596059;
-  --ac-ball: #d8f03b;
-  --ac-ball-line: #6f7d1c;
-  --ac-empty-line: #2a2f2b;
 }
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) {
-    --ac-green-bg: #223127;
-    --ac-green-line: #3f6b52;
-    --ac-green-fill: #7fd8a6;
-    --ac-green-fill-ink: #0f2a1b;
-    --ac-green-ink: #7fd8a6;
-    --ac-amber-bg: #2f2a1b;
-    --ac-amber-line: #6e5a26;
-    --ac-amber-fill: #e3ab2f;
-    --ac-amber-fill-ink: #1d1606;
-    --ac-amber-ink: #f0c35a;
-    --ac-blue-bg: #252b34;
-    --ac-blue-line: #4a5584;
-    --ac-blue-fill: #98aaea;
-    --ac-blue-fill-ink: #111733;
-    --ac-blue-ink: #9fb1ef;
-    --ac-purple-bg: #2b2a35;
-    --ac-purple-line: #534c70;
+    --ac-card: #18221c;
+    --ac-line: #2b3a31;
+    --ac-title: #f1f3ec;
+    --ac-sub: #b8bfb2;
+    --ac-ring: #d5dacf;
+    --ac-x-bg: #26302a;
+    --ac-shadow: none;
+    --ac-green-tint: #1a2f24;
+    --ac-green-ink: #8be0b3;
+    --ac-green-fill: #7fd9a3;
+    --ac-green-fill-ink: #0b140f;
+    --ac-amber-tint: #2f2716;
+    --ac-amber-ink: #f0c26a;
+    --ac-amber-fill: #f0b84a;
+    --ac-amber-fill-ink: #2a1c00;
+    --ac-blue-tint: #1f2440;
+    --ac-blue-ink: #a5b5ee;
+    --ac-blue-fill: #7f94e6;
+    --ac-blue-fill-ink: #10153a;
+    --ac-purple-tint: #2a2440;
+    --ac-purple-ink: #c4afef;
     --ac-purple-fill: #bba3f0;
     --ac-purple-fill-ink: #1d1433;
-    --ac-purple-ink: #c4afef;
-    --ac-gray-bg: #262a27;
-    --ac-gray-line: #4a4f4b;
+    --ac-gray-tint: #262b28;
+    --ac-gray-ink: #c3c8c0;
     --ac-gray-fill: #b3b9b5;
     --ac-gray-fill-ink: #141815;
-    --ac-gray-ink: #b3b9b5;
-    --ac-red-bg: #33272a;
-    --ac-red-line: #7a4038;
+    --ac-red-tint: #3a2422;
+    --ac-red-ink: #ff8f7e;
     --ac-red-fill: #ff8f7e;
     --ac-red-fill-ink: #2a0f0b;
-    --ac-red-ink: #ff8f7e;
-    --ac-title: #f1f3f1;
-    --ac-sub: #a4ada7;
-    --ac-ball: #d8f03b;
-    --ac-ball-line: #d8f03b;
-    --ac-empty-line: #c9d1cb;
   }
 }
 html[data-alert-cards][data-theme='dark'] {
-  --ac-green-bg: #223127;
-  --ac-green-line: #3f6b52;
-  --ac-green-fill: #7fd8a6;
-  --ac-green-fill-ink: #0f2a1b;
-  --ac-green-ink: #7fd8a6;
-  --ac-amber-bg: #2f2a1b;
-  --ac-amber-line: #6e5a26;
-  --ac-amber-fill: #e3ab2f;
-  --ac-amber-fill-ink: #1d1606;
-  --ac-amber-ink: #f0c35a;
-  --ac-blue-bg: #252b34;
-  --ac-blue-line: #4a5584;
-  --ac-blue-fill: #98aaea;
-  --ac-blue-fill-ink: #111733;
-  --ac-blue-ink: #9fb1ef;
-  --ac-purple-bg: #2b2a35;
-  --ac-purple-line: #534c70;
+  --ac-card: #18221c;
+  --ac-line: #2b3a31;
+  --ac-title: #f1f3ec;
+  --ac-sub: #b8bfb2;
+  --ac-ring: #d5dacf;
+  --ac-x-bg: #26302a;
+  --ac-shadow: none;
+  --ac-green-tint: #1a2f24;
+  --ac-green-ink: #8be0b3;
+  --ac-green-fill: #7fd9a3;
+  --ac-green-fill-ink: #0b140f;
+  --ac-amber-tint: #2f2716;
+  --ac-amber-ink: #f0c26a;
+  --ac-amber-fill: #f0b84a;
+  --ac-amber-fill-ink: #2a1c00;
+  --ac-blue-tint: #1f2440;
+  --ac-blue-ink: #a5b5ee;
+  --ac-blue-fill: #7f94e6;
+  --ac-blue-fill-ink: #10153a;
+  --ac-purple-tint: #2a2440;
+  --ac-purple-ink: #c4afef;
   --ac-purple-fill: #bba3f0;
   --ac-purple-fill-ink: #1d1433;
-  --ac-purple-ink: #c4afef;
-  --ac-gray-bg: #262a27;
-  --ac-gray-line: #4a4f4b;
+  --ac-gray-tint: #262b28;
+  --ac-gray-ink: #c3c8c0;
   --ac-gray-fill: #b3b9b5;
   --ac-gray-fill-ink: #141815;
-  --ac-gray-ink: #b3b9b5;
-  --ac-red-bg: #33272a;
-  --ac-red-line: #7a4038;
+  --ac-red-tint: #3a2422;
+  --ac-red-ink: #ff8f7e;
   --ac-red-fill: #ff8f7e;
   --ac-red-fill-ink: #2a0f0b;
-  --ac-red-ink: #ff8f7e;
-  --ac-title: #f1f3f1;
-  --ac-sub: #a4ada7;
-  --ac-ball: #d8f03b;
-  --ac-ball-line: #d8f03b;
-  --ac-empty-line: #c9d1cb;
 }
 
-/* Each tone sets the card's own four colors; buttons and links read them. A button can carry its own tone (data-ac-tone). */
+/* Each tone sets the four colors its badge, buttons and links read. A button can carry its own tone (data-ac-tone). */
 html[data-alert-cards] .ac-green,
 html[data-alert-cards] [data-ac-tone='green'] {
-  --t-bg: var(--ac-green-bg);
-  --t-line: var(--ac-green-line);
+  --t-tint: var(--ac-green-tint);
+  --t-ink: var(--ac-green-ink);
   --t-fill: var(--ac-green-fill);
   --t-fill-ink: var(--ac-green-fill-ink);
-  --t-ink: var(--ac-green-ink);
 }
 html[data-alert-cards] .ac-amber,
 html[data-alert-cards] [data-ac-tone='amber'] {
-  --t-bg: var(--ac-amber-bg);
-  --t-line: var(--ac-amber-line);
+  --t-tint: var(--ac-amber-tint);
+  --t-ink: var(--ac-amber-ink);
   --t-fill: var(--ac-amber-fill);
   --t-fill-ink: var(--ac-amber-fill-ink);
-  --t-ink: var(--ac-amber-ink);
 }
 html[data-alert-cards] .ac-blue,
 html[data-alert-cards] [data-ac-tone='blue'] {
-  --t-bg: var(--ac-blue-bg);
-  --t-line: var(--ac-blue-line);
+  --t-tint: var(--ac-blue-tint);
+  --t-ink: var(--ac-blue-ink);
   --t-fill: var(--ac-blue-fill);
   --t-fill-ink: var(--ac-blue-fill-ink);
-  --t-ink: var(--ac-blue-ink);
 }
 html[data-alert-cards] .ac-purple,
 html[data-alert-cards] [data-ac-tone='purple'] {
-  --t-bg: var(--ac-purple-bg);
-  --t-line: var(--ac-purple-line);
+  --t-tint: var(--ac-purple-tint);
+  --t-ink: var(--ac-purple-ink);
   --t-fill: var(--ac-purple-fill);
   --t-fill-ink: var(--ac-purple-fill-ink);
-  --t-ink: var(--ac-purple-ink);
 }
 html[data-alert-cards] .ac-gray,
 html[data-alert-cards] [data-ac-tone='gray'] {
-  --t-bg: var(--ac-gray-bg);
-  --t-line: var(--ac-gray-line);
+  --t-tint: var(--ac-gray-tint);
+  --t-ink: var(--ac-gray-ink);
   --t-fill: var(--ac-gray-fill);
   --t-fill-ink: var(--ac-gray-fill-ink);
-  --t-ink: var(--ac-gray-ink);
 }
 html[data-alert-cards] .ac-red,
 html[data-alert-cards] [data-ac-tone='red'] {
-  --t-bg: var(--ac-red-bg);
-  --t-line: var(--ac-red-line);
+  --t-tint: var(--ac-red-tint);
+  --t-ink: var(--ac-red-ink);
   --t-fill: var(--ac-red-fill);
   --t-fill-ink: var(--ac-red-fill-ink);
-  --t-ink: var(--ac-red-ink);
 }
 
-/* The card. */
+/* ---------- The card: a game card's surface ---------- */
 html[data-alert-cards] .ac {
   display: block;
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 11px 12px 11px 16px;
-  border: 1.5px solid var(--t-line);
-  border-radius: 16px;
-  background: var(--t-bg);
+  padding: 12px;
+  border: 1px solid var(--ac-line);
+  border-radius: 18px;
+  background: var(--ac-card);
   color: var(--ac-title);
-  box-shadow: none;
+  box-shadow: var(--ac-shadow);
+  font-family: var(--body);
   text-align: left;
-}
-html[data-alert-cards] .ac + .ac {
-  margin-top: 0;
 }
 html[data-alert-cards] .ac-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  min-height: 38px;
 }
 html[data-alert-cards] .ac-text {
   flex: 1 1 auto;
   min-width: 0;
 }
+
+/* The round icon badge on the left, tinted by the card's color. */
+html[data-alert-cards] .ac-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--t-tint);
+  color: var(--t-ink);
+}
+html[data-alert-cards] .ac-icon svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+/* A two-choice card: the badge stays with the title (top), the buttons go under both. */
+html[data-alert-cards] .ac-stacked .ac-row {
+  align-items: flex-start;
+  min-height: 0;
+}
+
+/* The words. One clean line at 390 and 360; at 320 a long title wraps to two balanced lines (never one word alone). */
 html[data-alert-cards] .ac-title {
   margin: 0;
   font-family: var(--body);
-  font-size: 17px;
-  line-height: 1.25;
-  font-weight: 700;
-  letter-spacing: -0.005em;
+  font-size: 15.5px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.1px;
   color: var(--ac-title);
-  overflow-wrap: anywhere;
+  text-wrap: balance;
+  overflow-wrap: break-word;
 }
 html[data-alert-cards] .ac-sub {
-  margin-top: 2px;
-  font-size: 14.5px;
-  line-height: 1.3;
+  margin-top: 3px;
+  font-size: 13px;
+  line-height: 1.25;
   font-weight: 450;
   color: var(--ac-sub);
-  overflow-wrap: anywhere;
+  text-wrap: pretty;
+  overflow-wrap: break-word;
 }
 html[data-alert-cards] .ac-sub + .ac-sub {
-  margin-top: 1px;
+  margin-top: 2px;
 }
 html[data-alert-cards] .ac-sub-red {
   color: var(--ac-red-ink);
-  font-weight: 600;
+  font-weight: 650;
 }
 html[data-alert-cards] .ac-sub-amber {
   color: var(--ac-amber-ink);
-  font-weight: 600;
+  font-weight: 650;
 }
 html[data-alert-cards] .ac-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 18px;
-  margin-top: 1px;
+  gap: 2px 14px;
+  margin-top: 6px;
 }
+
+/* ---------- Buttons: 38 px to see, 44 px to tap; the words never wrap ---------- */
 html[data-alert-cards] .ac-action {
-  flex: 0 0 auto;
+  flex: none;
   display: flex;
   gap: 8px;
 }
 html[data-alert-cards] .ac-actions {
   display: flex;
-  flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
 }
-html[data-alert-cards] .ac-stacked .ac-row {
-  min-height: 0;
+html[data-alert-cards] .ac-actions > .ac-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+  font-size: 14.5px;
 }
-
-/* Buttons: one filled (the card's color), an outline twin, and the link-style extra. 40 px to see, 44 px to tap. */
 html[data-alert-cards] .ac-btn {
   position: relative;
   display: inline-flex;
@@ -257,18 +273,18 @@ html[data-alert-cards] .ac-btn {
   justify-content: center;
   gap: 6px;
   box-sizing: border-box;
-  min-height: 40px;
-  min-width: 64px;
+  height: 38px;
+  min-width: 56px;
   margin: 0;
-  padding: 0 18px;
-  border: 2px solid var(--t-fill);
+  padding: 0 14px;
+  border: 1.5px solid var(--t-fill);
   border-radius: 12px;
   background: var(--t-fill);
   color: var(--t-fill-ink);
   font-family: var(--body);
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.1;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
   text-decoration: none;
   white-space: nowrap;
   cursor: pointer;
@@ -283,7 +299,7 @@ html[data-alert-cards] .ac-btn::after {
 html[data-alert-cards] .ac-btn.ac-out {
   background: transparent;
   color: var(--t-ink);
-  border-color: var(--t-ink);
+  border-color: currentColor;
 }
 html[data-alert-cards] .ac-btn:disabled,
 html[data-alert-cards] .ac-btn[aria-disabled='true'] {
@@ -296,7 +312,7 @@ html[data-alert-cards] .ac-btn:active:not(:disabled) {
 html[data-alert-cards] .ac-btn:focus-visible,
 html[data-alert-cards] .ac-link:focus-visible,
 html[data-alert-cards] .ac-x:focus-visible {
-  outline: 3px solid var(--t-ink);
+  outline: 3px solid var(--t-ink, var(--ac-sub));
   outline-offset: 2px;
 }
 html[data-alert-cards] .ac-btn svg {
@@ -304,84 +320,124 @@ html[data-alert-cards] .ac-btn svg {
   height: 16px;
   flex: none;
 }
+/* I paid, Use credit: links under the title, in the card's color. */
 html[data-alert-cards] .ac-link {
   position: relative;
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
+  min-height: 24px;
   margin: 0;
   padding: 0;
   border: 0;
   background: none;
   color: var(--t-ink);
   font-family: var(--body);
-  font-size: 15.5px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 800;
   text-decoration: underline;
   text-underline-offset: 3px;
   text-decoration-thickness: 1.5px;
+  white-space: nowrap;
   cursor: pointer;
 }
 html[data-alert-cards] .ac-link::after {
   content: '';
   position: absolute;
-  inset: -7px -6px;
+  inset: -10px -6px;
 }
 html[data-alert-cards] .ac-link:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-/* The X: a small gray mark, a 44 px tap area. */
+/* The X: a small round gray mark, 44 px to tap. */
 html[data-alert-cards] .ac-x {
-  flex: 0 0 auto;
+  position: relative;
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  margin: 0 -10px 0 -6px;
+  width: 24px;
+  height: 24px;
+  margin: 0 2px 0 0;
   padding: 0;
   border: 0;
-  background: none;
+  border-radius: 50%;
+  background: var(--ac-x-bg);
   color: var(--ac-sub);
   cursor: pointer;
-  border-radius: 10px;
+}
+html[data-alert-cards] .ac-x::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+}
+html[data-alert-cards] .ac-x svg {
+  width: 12px;
+  height: 12px;
 }
 
-/* The pickleball circles as a sub line. */
-html[data-alert-cards] .ac-balls {
-  display: inline-flex;
-  gap: 5px;
-  margin-top: 5px;
-  vertical-align: middle;
+/* The pickleballs: the game card's own (SpotDots), at the Next week card's size: perfect circles, the same skin, stroke and dimples. */
+html[data-alert-cards] .ac-seats {
+  display: block;
+  margin-top: 7px;
+  line-height: 0;
 }
-html[data-alert-cards] .ac-ball {
-  width: 19px;
-  height: 15px;
+html[data-alert-cards] .ac-seats .dots {
+  gap: 6px;
+}
+html[data-alert-cards] .ac-seats .ball,
+html[data-alert-cards] .ac-seats .dot {
+  width: 16px;
+  height: 16px;
   box-sizing: border-box;
-  border-radius: 50%;
-  background: var(--ac-ball);
-  border: 1.5px solid var(--ac-ball-line);
 }
-html[data-alert-cards] .ac-ball.ac-empty {
-  width: 15px;
-  background: transparent;
-  border-color: var(--ac-empty-line);
+html[data-alert-cards] .ac-seats .dot {
+  border: 2px solid var(--ac-ring);
 }
 
-/* A narrow phone (320 px): the button gets a little smaller so the title keeps its room. */
-@media (max-width: 359px) {
+/* A phone narrower than 390 px (360 is common): the same look with tighter gaps, so a title keeps one line. */
+@media (max-width: 389px) {
   html[data-alert-cards] .ac {
-    padding: 10px 10px 10px 13px;
+    padding: 11px 10px 11px 11px;
   }
-  html[data-alert-cards] .ac-title {
-    font-size: 16px;
+  html[data-alert-cards] .ac-row {
+    gap: 8px;
+  }
+  html[data-alert-cards] .ac-icon {
+    width: 30px;
+    height: 30px;
   }
   html[data-alert-cards] .ac-btn {
-    padding: 0 14px;
+    padding: 0 12px;
+    min-width: 52px;
+  }
+  html[data-alert-cards] .ac-x {
+    margin-right: 0;
+  }
+}
+/* A narrow phone (320 px): the same look, a touch smaller, so a title keeps its room. */
+@media (max-width: 359px) {
+  html[data-alert-cards] .ac {
+    padding: 11px 10px;
+  }
+  html[data-alert-cards] .ac-row {
+    gap: 9px;
+  }
+  html[data-alert-cards] .ac-icon {
+    width: 28px;
+    height: 28px;
+  }
+  html[data-alert-cards] .ac-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+  html[data-alert-cards] .ac-title {
     font-size: 15px;
-    min-width: 56px;
+  }
+  html[data-alert-cards] .ac-btn {
+    padding: 0 12px;
+    min-width: 52px;
   }
 }
 
@@ -392,45 +448,61 @@ html[data-alert-cards] .ac-stack {
   gap: 10px;
 }
 
-/* ---------- Pop-ups the site already has (the bottom banner, the cash-out question): the same look, kept where they are. ---------- */
+/* ---------- Pop-ups the site already has (the bottom banner, the cash-out question): the same card, kept where they are ---------- */
 
-/* The toast at the bottom: a tinted card (green for a confirmation, red for an error), no icon, the Undo as its one button. */
+/* The bottom banner: a white card with its own badge (green check, red mark, or the ball for "Game on!"), the Undo or OK as its button. */
 html[data-alert-cards] .pop.toast {
-  background: var(--ac-green-bg);
+  background: var(--ac-card);
   color: var(--ac-title);
-  border: 1.5px solid var(--ac-green-line);
-  border-radius: 16px;
-  box-shadow: 0 8px 24px rgb(10 20 15 / 18%);
+  border: 1px solid var(--ac-line);
+  border-radius: 18px;
+  box-shadow: 0 10px 28px rgb(10 20 15 / 20%);
   font-family: var(--body);
-  font-weight: 700;
+  --t-tint: var(--ac-green-tint);
+  --t-ink: var(--ac-green-ink);
   --t-fill: var(--ac-green-fill);
   --t-fill-ink: var(--ac-green-fill-ink);
-  --t-ink: var(--ac-green-ink);
 }
 html[data-alert-cards] .pop.toast.pop-error {
-  background: var(--ac-red-bg);
-  border-color: var(--ac-red-line);
+  background: var(--ac-card);
+  border-color: var(--ac-line);
   color: var(--ac-title);
+  --t-tint: var(--ac-red-tint);
+  --t-ink: var(--ac-red-ink);
   --t-fill: var(--ac-red-fill);
   --t-fill-ink: var(--ac-red-fill-ink);
-  --t-ink: var(--ac-red-ink);
 }
 html[data-alert-cards] .pop.toast .toast-icon {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--t-tint);
+  color: var(--t-ink);
+  font-weight: 800;
+}
+html[data-alert-cards] .pop.toast .toast-icon svg {
+  width: 16px;
+  height: 16px;
 }
 html[data-alert-cards] .pop.toast .toast-msg {
   color: var(--ac-title);
+  font-size: 15px;
   font-weight: 700;
 }
 html[data-alert-cards] .pop.toast .toast-action {
-  min-height: 40px;
-  padding: 0 16px;
-  border: 2px solid var(--t-fill);
+  height: 38px;
+  padding: 0 14px;
+  border: 1.5px solid var(--t-fill);
   border-radius: 12px;
   background: var(--t-fill);
   color: var(--t-fill-ink);
-  font-weight: 700;
-  font-size: 15.5px;
+  font-weight: 800;
+  font-size: 15px;
+  white-space: nowrap;
   text-decoration: none;
 }
 html[data-alert-cards] .pop.toast .toast-action .m-undo-ring {
@@ -438,48 +510,60 @@ html[data-alert-cards] .pop.toast .toast-action .m-undo-ring {
 }
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) .pop.toast {
-    box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
-  }
-}
-html[data-alert-cards][data-theme='dark'] .pop.toast {
-  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
-}
-
-/* The cash-out question keeps its place at the bottom of the screen, drawn as a blue alert card. */
-html[data-alert-cards] .cashout-prompt.ac {
-  background: var(--ac-blue-bg);
-  border: 1.5px solid var(--ac-blue-line);
-  color: var(--ac-title);
-  box-shadow: 0 10px 28px rgb(10 20 15 / 22%);
-}
-@media (prefers-color-scheme: dark) {
-  html[data-alert-cards]:not([data-theme='light']) .cashout-prompt.ac {
     box-shadow: 0 10px 28px rgb(0 0 0 / 50%);
   }
 }
-html[data-alert-cards][data-theme='dark'] .cashout-prompt.ac {
+html[data-alert-cards][data-theme='dark'] .pop.toast {
   box-shadow: 0 10px 28px rgb(0 0 0 / 50%);
 }
 
-/* The good-news line inside a game card: a small green card in the same look. */
+/* The cash-out question keeps its old size and place (centered at the bottom, inside the screen), drawn as a card that floats. */
+html[data-alert-cards] .cashout-prompt.ac {
+  width: min(380px, calc(100vw - 24px));
+  background: var(--ac-card);
+  border: 1px solid var(--ac-line);
+  color: var(--ac-title);
+  box-shadow: 0 12px 30px rgb(10 20 15 / 24%);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-alert-cards]:not([data-theme='light']) .cashout-prompt.ac {
+    box-shadow: 0 12px 30px rgb(0 0 0 / 55%);
+  }
+}
+html[data-alert-cards][data-theme='dark'] .cashout-prompt.ac {
+  box-shadow: 0 12px 30px rgb(0 0 0 / 55%);
+}
+
+/* The good-news line inside a game card: a small card in the same look. */
 html[data-alert-cards] .ac.ac-inline {
-  padding: 8px 12px;
-  border-radius: 12px;
+  padding: 8px 10px;
+  border-radius: 14px;
 }
 html[data-alert-cards] .ac.ac-inline .ac-row {
   min-height: 0;
 }
+html[data-alert-cards] .ac.ac-inline .ac-icon {
+  width: 26px;
+  height: 26px;
+}
+html[data-alert-cards] .ac.ac-inline .ac-icon svg {
+  width: 15px;
+  height: 15px;
+}
 html[data-alert-cards] .ac.ac-inline .ac-title {
-  font-size: 15px;
+  font-size: 14.5px;
 }
 
-/* Organizer cards that hold a list (Who owes you, Late drop, Mark paid tonight): the same card, the rows inside keep their layout. */
+/* Organizer cards that hold a list (Who owes you, Late drop, Mark paid tonight, who hasn't paid): the rows sit under the title, past the badge. */
 html[data-alert-cards] .ac .rows,
 html[data-alert-cards] .ac .vr-rows {
   margin-top: 8px;
 }
-html[data-alert-cards] .ac .ac-more {
-  margin-top: 6px;
+html[data-alert-cards] .ac-body {
+  margin-left: 42px;
+}
+html[data-alert-cards] .ac .ac-done {
+  margin-top: 10px;
 }
 
 /* "+2 more" under a stack of organizer cards. */
@@ -490,29 +574,29 @@ html[data-alert-cards] .ac-more-link {
   border: 0;
   background: none;
   color: var(--ac-blue-ink);
-  font-weight: 700;
-  font-size: 15px;
+  font-weight: 800;
+  font-size: 14.5px;
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
 }
 
-/* A text card's first words: one gray line, cut with an ellipsis (the whole text is the button's spoken name). */
+/* A text card's first words: up to two gray lines, cut with an ellipsis (the whole text is the button's spoken name). */
 html[data-alert-cards] .ac-preview {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   margin-top: 2px;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--ac-sub);
 }
 html[data-alert-cards] .ac-missing {
   display: block;
   margin-top: 2px;
-  font-size: 13.5px;
+  font-size: 13px;
   color: var(--ac-amber-ink);
-  font-weight: 600;
+  font-weight: 650;
 }
 html[data-alert-cards] .ac-extra {
   margin: 6px 0 0;
@@ -524,8 +608,9 @@ html[data-alert-cards] .ac-note-row {
   gap: 4px 14px;
 }
 html[data-alert-cards] .ac-sub-list {
-  font-size: 13.5px;
+  font-size: 13px;
 }
+
 /* The View as bar: the gray card on the page color, still pinned at the top. */
 html[data-alert-cards] .viewas-banner.ac-viewas {
   display: block;
@@ -536,14 +621,13 @@ html[data-alert-cards] .viewas-banner.ac-viewas {
   font-weight: inherit;
 }
 html[data-alert-cards] .viewas-banner.ac-viewas .ac-title {
-  font-weight: 600;
+  font-weight: 650;
 }
 html[data-alert-cards] .viewas-banner.ac-viewas .ac-title strong {
   font-weight: 800;
 }
-html[data-alert-cards] .ac .ac-done {
-  margin-top: 10px;
-}
+
+/* Who hasn't paid: the same card, its title row with the badge and the Remind button. */
 html[data-alert-cards] .vr-card-ac .vr-head {
   display: flex;
   align-items: center;
@@ -555,23 +639,13 @@ html[data-alert-cards] .vr-card-ac .vr-title-wrap {
 }
 html[data-alert-cards] .vr-card-ac .vr-title {
   margin: 0;
-  font-family: var(--body);
-  font-size: 17px;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--ac-title);
 }
 html[data-alert-cards] .vr-card-ac .vr-sub {
-  margin: 2px 0 0;
-  font-size: 14.5px;
-  color: var(--ac-sub);
+  margin: 3px 0 0;
 }
+
 /* Cards that sit inside a game card (the moved-game check, the short-on-players panel) keep a little room above. */
 html[data-alert-cards] .ts-check-ac,
 html[data-alert-cards] .short-ac {
   margin-top: 10px;
-}
-/* The cash-out question keeps its old size and place (centered at the bottom, inside the screen). */
-html[data-alert-cards] .cashout-prompt.ac {
-  width: min(380px, calc(100vw - 24px));
 }

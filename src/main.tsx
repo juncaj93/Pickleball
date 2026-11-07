@@ -20,6 +20,8 @@ import './zip9.css';
 import './zip10.css';
 // Zip 11, Alert cards: every rule under <html data-alert-cards> (dormant with the switch off).
 import './alert-cards.css';
+// Seat dots: every rule under <html data-seat-dots> (dormant with the switch off).
+import './seat-dots.css';
 
 function App() {
   const path = usePath();
