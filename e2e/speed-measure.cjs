@@ -48,11 +48,14 @@ async function once(browser, state, net) {
     await page.goto(BASE + '/' + QUERY, { waitUntil: 'commit' });
     await page.waitForSelector('[data-tier]', { timeout: 120000 });
     const ms = Date.now() - t0;
+    // The fresh screen (with Zip 12's saved copy, the first cards can be the saved ones; this is when the live ones are in).
+    await page.waitForSelector('.schedule:not([data-saved-copy]) [data-tier]', { timeout: 120000 });
+    const freshMs = Date.now() - t0;
     // Let the quiet refresh land too, then count what the first screen asked for.
     await page.waitForTimeout(1500);
     page.off('request', onReq);
     const fromCache = await page.evaluate(() => performance.getEntriesByType('resource').filter((e) => e.transferSize === 0 && e.decodedBodySize > 0).length);
-    out[visit] = { ms, requests: reqs.length, fromCache, list: reqs };
+    out[visit] = { ms, freshMs, requests: reqs.length, fromCache, list: reqs };
   }
   await ctx.close();
   return out;
@@ -66,7 +69,10 @@ async function once(browser, state, net) {
     for (let i = 0; i < RUNS; i++) runs.push(await once(browser, state, net));
     const f = runs.map((r) => r.first.ms);
     const rp = runs.map((r) => r.repeat.ms);
+    const ff = runs.map((r) => r.first.freshMs);
+    const rf = runs.map((r) => r.repeat.freshMs);
     console.log(`${net}: first visit median ${median(f)} ms (${f.join(', ')}), repeat median ${median(rp)} ms (${rp.join(', ')})`);
+    console.log(`   fresh data on screen: first ${median(ff)} ms, repeat ${median(rf)} ms`);
     console.log(`   requests: first ${runs[0].first.requests}, repeat ${runs[0].repeat.requests} (served from cache on repeat: ${runs[0].repeat.fromCache})`);
     if (process.env.VERBOSE) console.log('   first:', runs[0].first.list.join(' '), '\n   repeat:', runs[0].repeat.list.join(' '));
   }
