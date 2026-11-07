@@ -2819,8 +2819,21 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
 - Server time per call, before -> after: player screen 947 -> 339 ms, version check 569 -> 274 ms, dashboard 1566 -> 586 ms, Money 590 -> 364 ms,
   organizer version 253 -> 211 ms, status 214 -> 220 ms, History 228 -> 236 ms (the last three within noise).
 - Trips per call (main -> switch on): player screen 47 -> 7, version check 21 -> 4, dashboard 81 -> 21, Money 27 -> 8, organizer version 4 -> 3,
-  History 4 -> 3, status 1 -> 1. With the three switches off the player screen asks 2 more tiny questions than main (the two new rows) and the
-  dashboard 3 more, the same way every earlier switch added its own row; with `SPEED_FEWER_QUERIES` on those are free.
+  History 4 -> 3, status 1 -> 1. With the three switches off every screen asks exactly main's count (47, 21, 81, 27, ...): the one read that decides
+  the switch also answers the new Zip 12 rows. Only with the `SPEED_FEWER_QUERIES` kill switch "off" do the new rows cost their own reads (2 on the
+  player screen, 3 on the dashboard), like every earlier switch.
 - Server work per request (Workers CPU, estimated locally as the handler time minus the database's own time): the same with the switch off and on
   (player screen about 2.3 ms, dashboard about 7 ms, Money about 0.9 ms). A first version copied every remembered answer and cost about twice that; it
   was replaced before review by handing each early answer out once with no copy. Live Workers CPU could not be read from this session.
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking with the three switches off. It built its own main-vs-branch comparison (not the branch against itself): every answer, all 17
+  phones, the four moments, about 200 taps with the screen compared after each, Finalize and Reopen: byte for byte main's with the switch forced on.
+- Fixed from it: (1) with "Load games at once" remembered and a group word the phone did not have yet, the early "word needed" answer was reused after
+  the word was typed and the page stayed on a spinner (hidden in dev and in e2e by React's StrictMode; proved with it removed). Now an early answer that
+  is an error is never used, and SiteHome drops it on any screen that is not the games; `e2e/zip12.cjs` checks it with StrictMode taken out. (2) Off,
+  the two new rows cost 2 trips on the player screen and 3 on the dashboard: now free (see above). (3) The dashboard carried three `false` speed fields:
+  now only while on, so off it is byte for byte main's. (4) The saved copy could flash on a "link not working", link-only or group-word screen: now
+  thrown away there. (5) A batch answered early now needs one early answer per statement.
+- Left as is, for Alex: after the row is switched off, each phone shows its saved copy (tagged, buttons held) once more on its next open, because it
+  only hears about the switch from the fresh answer; the copy is gone a second later. A game canceled after a phone saved its copy shows on that copy
+  until the fresh answer replaces it (tagged "as of", nothing tappable).
