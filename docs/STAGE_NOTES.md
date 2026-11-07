@@ -2959,3 +2959,18 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
 - Tests on the combined code: unit 2325 passed, 0 failed (138 files); `e2e/zip12.cjs` 26/26; `e2e/zip12-off.cjs` 23/23 against main `513d7b4`; full
   browser suite: the same 4 scripts as before fail on main too (run 10, cancel-reason 2, want-in 1, admin-r2 F4 1); money-rework's "Hide from list"
   failed twice with three scripts sharing the machine (it waits 0.9 s) and passed alone and in two full runs (36/36) on the branch and on main.
+
+### Deploy (Sat Nov 7, 2026, 9:48 AM Eastern, a quiet window) - LIVE with all three switches OFF
+- PR #94 merged (main `6ab20fb`, on top of Zip 11's `513d7b4`, which was live as `b2ffeedd` = main first). Full unit run on merged main: 2325 passed, 0 failed.
+- Before: SQL export of the live database (`npx wrangler d1 export pickleball --remote`, 9:36 AM, 164,705 bytes, kept out of git) and Time Travel bookmark
+  `00000a68-00000000-0000511c-fc88ef43ecfab94da2e93bafe783d1b2` (9:36 AM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000a68-00000000-0000511c-fc88ef43ecfab94da2e93bafe783d1b2`.
+- Production deployment `63f84d33-4e58-47dd-b841-51c2594fa2c3` = main `6ab20fb`. Rollback: the build live before it, Zip 11, `b2ffeedd-3c71-4edc-bc70-f676d9011d7c`.
+  Nothing is written while the switches are off, so no data restore is needed.
+- Read-only live check (on the backup address; this session's network does not reach pickleball.juncaj.net): `e2e/live-check.cjs` all green except
+  its old "setup code is configured" line (false by design once a group exists; the previous build answers the same). The read-only PIN signs in,
+  dashboard, version, Money and History answer, a save is refused (403 view_only), all five organizer tabs open in a browser with no page errors, and
+  the three speed rows are off. Found: the live Card cleanup row is ON for everyone (`cardCleanupForAll: true`), against Alex's answer; told Alex.
+- Items 3 and 6a on live: `/assets/*` sends `public, max-age=31536000, immutable`; a missing built file answers 404 no-store; the page, `/theme.js`,
+  `/logo.png` keep `max-age=0, must-revalidate`; `/api` no-store; `logo.png` 3,171 bytes. The public page (fast 3G): first visit 5.2 s to
+  "Who are you?", repeat 3.0 s with the script, the styles and the font from the phone's own copy (0 of them before).
