@@ -129,7 +129,12 @@ export interface Seed {
   summary: string[];
 }
 
-export async function buildSeed(startMs = Date.now()): Promise<Seed> {
+/**
+ * `zip13`: also the Zip 13 parts (the organizer's two games earlier this month, and the Players redo, Swap to Alex and Undo rows on). The
+ * preview database always gets them (npm run db:seed:preview); the local browser tests only when they ask (e2e/zip13.cjs), so every older
+ * test keeps the world it was written for, which is also what live looks like with the three switches off.
+ */
+export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean } = {}): Promise<Seed> {
   const w = new World();
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
@@ -278,7 +283,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   //     the flat price, so no credit moves), so the organizer's own "Spent" on the Players page and Money Totals "Your cost so far" have
   //     something to agree on ($30 + 2 x ($48 - 3 x $14) = $42). Only when there is room between the last past game and now, inside this
   //     month; otherwise left out (the summary says so). The players used have no credit at this point, so nobody's pot changes.
-  {
+  if (opts.zip13) {
     const monthStart = (() => {
       const q = localParts(N, 'America/Detroit');
       return zonedTimeToUtc(q.year, q.month, 1, 0, 0, 'America/Detroit');
@@ -578,7 +583,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   backup.tables.player_devices = [];
   await w.settle();
 
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N);
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N, !!opts.zip13);
   return { sql, summary };
 }
 
@@ -633,15 +638,14 @@ export const PREVIEW_SWITCHES_ON = [
   'speed_last_screen_admin_on',
   // Being built: Seat dots.
   'seat_dots_on',
-  // Being built (Zip 13): Players redo, Swap to Alex, Undo on admin toasts.
-  'players_redo_on',
-  'swap_button_on',
-  'admin_undo_on',
 ] as const;
 
-function switchRows(nowMs: number): string {
+/** Being built (Zip 13): Players redo, Swap to Alex, Undo on admin toasts. On the preview database; on a local world only when asked. */
+export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_undo_on'] as const;
+
+function switchRows(nowMs: number, zip13: boolean): string {
   const at = new Date(nowMs).toISOString();
-  return PREVIEW_SWITCHES_ON.map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  return [...PREVIEW_SWITCHES_ON, ...(zip13 ? ZIP13_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

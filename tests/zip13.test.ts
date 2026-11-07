@@ -252,3 +252,12 @@ describe('Undo on admin toasts: the held save (src/undoHold.ts, src/instant.ts)'
     expect(save).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('the preview seed', () => {
+  it('the preview database gets the three Zip 13 rows on (npm run db:seed:preview), local test worlds only when asked', async () => {
+    const { ZIP13_SWITCHES_ON } = await import('../scripts/seed-preview-world');
+    expect([...ZIP13_SWITCHES_ON].sort()).toEqual(Object.values(ZIP13).map((z) => z.task).sort());
+    const src = (await import('node:fs')).readFileSync('scripts/seed-preview.ts', 'utf8');
+    expect(src).toContain('buildSeed(Date.now(), { zip13: true })');
+  });
+});
