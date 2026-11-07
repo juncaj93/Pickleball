@@ -7,6 +7,8 @@ export interface Counted {
   statements: number;
   sql: string[];
   seq?: string[];
+  /** Milliseconds spent inside the database calls (the rest of a request's time is the server's own work). */
+  dbMs?: number;
 }
 
 export function countingDb(inner: D1Database, c: Counted): D1Database {
@@ -16,11 +18,18 @@ export function countingDb(inner: D1Database, c: Counted): D1Database {
     c.sql.push(sql);
     c.seq?.push(`${kind.padEnd(5)} ${sql.replace(/\s+/g, ' ').slice(0, 110)} ${JSON.stringify(vals).slice(0, 80)}`);
   };
+  // The node adapter does its work inside the call itself (synchronously), so this times the database's own work.
+  const timed = <T>(f: () => Promise<T>): Promise<T> => {
+    const t0 = performance.now();
+    const p = f();
+    c.dbMs = (c.dbMs ?? 0) + (performance.now() - t0);
+    return p;
+  };
   const wrapStmt = (s: any, sql: string, vals: unknown[] = []): any => ({
     bind: (...v: unknown[]) => wrapStmt(s.bind(...v), sql, v),
-    first: () => (note('first', sql, vals), s.first()),
-    all: () => (note('all', sql, vals), s.all()),
-    run: () => (note('run', sql, vals), s.run()),
+    first: () => (note('first', sql, vals), timed(() => s.first())),
+    all: () => (note('all', sql, vals), timed(() => s.all())),
+    run: () => (note('run', sql, vals), timed(() => s.run())),
     __inner: s,
   });
   return {
@@ -30,7 +39,7 @@ export function countingDb(inner: D1Database, c: Counted): D1Database {
       c.statements += stmts.length;
       c.sql.push(`BATCH(${stmts.length})`);
       c.seq?.push(`BATCH(${stmts.length})`);
-      return inner.batch(stmts.map((s) => s.__inner ?? s));
+      return timed(() => inner.batch(stmts.map((s) => s.__inner ?? s)));
     },
   } as D1Database;
 }

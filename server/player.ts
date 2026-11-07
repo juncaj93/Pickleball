@@ -83,11 +83,12 @@ async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Pr
   return out;
 }
 import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { cashOutOffer, loadPendingRequests, moneyPicture, moneyPictureFirstReads } from './credit';
+import { cashOutOffer, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { hiddenGameIdsRead } from './hideGame';
 import { directLoadFor, fewerDb, lastScreenFor } from './speed';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
 import { timeShiftFor } from './timeShift';
-import { motionFor } from './motion';
+import { motionFor, motionSettingRead } from './motion';
 import { payAlwaysFor } from './payAlways';
 import { flatOf, organizerIdRead, playersRead, priceOf, type ReadSpec, sessionStartsRead, specialFlatOf } from './repo';
 import { capOf, type GroupSettings } from '../shared/settings';
@@ -161,6 +162,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...moneyPictureFirstReads(group, ctx.nowMs),
     ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : []),
     ...(ownReads ? [{ kind: 'all' as const, ...feeClearsRead(group.id) }, { kind: 'all' as const, ...feeNoticesRead(group.id, ctx.nowMs) }, { kind: 'all' as const, ...sessionStartsRead(group.id) }] : []),
+    // Asked a second time further down: their own cash out request, the hidden games, the player motion row.
+    ...(ownReads ? [{ kind: 'all' as const, ...pendingRequestsRead(group.id) }] : []),
+    { kind: 'all', ...hiddenGameIdsRead(group.id) },
+    { kind: 'first', ...motionSettingRead(group.id, 'player') },
   ]);
   const settings = settingsOf(group);
   const tz = group.timezone;

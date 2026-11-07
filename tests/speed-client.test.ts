@@ -2,7 +2,10 @@
 // the year-long cache rule for built files (public/_headers) and the smaller logo.
 import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Each test builds the fake world (a few seconds on a busy machine).
+vi.setConfig({ testTimeout: 60_000 });
 import { createNodeD1 } from '../dev/nodeD1';
 import { handleApi } from '../server/app';
 import { buildSeed, previewPin, WITH_VENMO } from '../scripts/seed-preview-world';

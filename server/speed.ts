@@ -14,7 +14,8 @@ import { DIRECT_LOAD_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER, speedAllo
 // (fewerQueriesDb below):
 //  1. Every feature switch question ("is the row for X on?", 20+ of them per screen, one database trip each) is answered from ONE
 //     read of all the switch rows, taken the first time one is asked.
-//  2. The same read (same words, same values) asked twice in one request is answered the second time from the first answer.
+//  2. Reads that do not depend on each other are sent together in ONE trip (prefetch), each answer handed to the one call that asks
+//     for it (a read the screen asks twice is listed twice and gets a copy). Nothing else is remembered.
 //  3. Anything that writes (a tap that saves, upkeep that adds next week's games, a switch flipped) throws both away at once, so
 //     every read after a write goes to the database again, exactly as today.
 //  4. Once the answer has been sent (handleApi calls finish()), the wrapper steps aside: work left running after the answer (a
@@ -67,7 +68,9 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
   let state: 'fast' | 'decide' | 'plain' = mode;
   const lookOnly = (inner as { pretend?: boolean }).pretend === true;
   let known: Switches | null = null;
-  const memo = new Map<string, unknown>();
+  // Answers sent early (prefetch), one per question that will ask for it: each is handed out once, as is (no copy). A read the
+  // screen asks twice was listed twice, and only that second one is a copy. Anything not sent early goes to the database.
+  const memo = new Map<string, unknown[]>();
   // Goes up on every write: an answer that set off before a write is never kept (or used for the switches) after it.
   let generation = 0;
   const forget = () => {
@@ -76,15 +79,19 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
     memo.clear();
   };
   const keyOf = (kind: string, sql: string, values: unknown[]) => `${kind}\u0000${sql}\u0000${JSON.stringify(values)}`;
-  const remembered = <T>(key: string, load: () => Promise<T>): Promise<T> => {
-    if (state !== 'fast') return load();
-    if (memo.has(key)) return Promise.resolve(structuredClone(memo.get(key)) as T);
-    const startedAt = generation;
-    return load().then((value) => {
-      // Kept only if nothing wrote in the meantime (a write empties the memo; this answer may be from before it).
-      if (state === 'fast' && generation === startedAt) memo.set(key, structuredClone(value));
-      return value;
-    });
+  /** The early answer for this question if one is waiting (taken: it is never handed out twice), else undefined. */
+  const take = (key: string): unknown => {
+    const list = memo.get(key);
+    if (!list) return undefined;
+    const value = list.shift();
+    if (list.length === 0) memo.delete(key);
+    return value;
+  };
+  const remembered = <T>(kind: string, sql: string, values: unknown[], load: () => Promise<T>): Promise<T> => {
+    if (state !== 'fast' || memo.size === 0) return load();
+    const key = keyOf(kind, sql, values);
+    if (!memo.has(key)) return load();
+    return Promise.resolve(take(key) as T);
   };
   const writeDone = <T>(p: Promise<T>): Promise<T> => {
     forget();
@@ -108,7 +115,7 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
     }
     private async firstOn<T>(): Promise<T | null> {
       if (!this.read) return writeDone(this.inner.first<T>());
-      if (state !== 'plain' && this.values.length === 2 && norm(this.sql) === SWITCH_READ_NORM) {
+      if (this.values.length === 2 && (this.sql === SWITCH_READ || norm(this.sql) === SWITCH_READ_NORM)) {
         const [groupId, task] = this.values as [string, string];
         if (!known) {
           const startedAt = generation;
@@ -132,12 +139,12 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
         }
         return (known.get(String(groupId))?.has(String(task)) ? { x: 1 } : null) as T | null;
       }
-      return remembered(keyOf('first', this.sql, this.values), () => this.inner.first<T>());
+      return remembered('first', this.sql, this.values, () => this.inner.first<T>());
     }
     all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
       if (state === 'plain') return this.inner.all<T>();
       if (!this.read) return writeDone(this.inner.all<T>());
-      return remembered(keyOf('all', this.sql, this.values), () => this.inner.all<T>());
+      return remembered('all', this.sql, this.values, () => this.inner.all<T>());
     }
     run(): Promise<D1Result> {
       if (state === 'plain' || this.read) return this.inner.run();
@@ -153,9 +160,9 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
       const reads = statements.every((s) => s instanceof Stmt && s.read);
       if (!reads) return writeDone(inner.batch(plain));
       // A batch of reads that a prefetch already answered (the change stamp): every answer from it, no trip.
-      if (state === 'fast') {
+      if (state === 'fast' && memo.size > 0) {
         const keys = (statements as Stmt[]).map((s) => keyOf('all', s.sql, s.values));
-        if (keys.every((k) => memo.has(k))) return Promise.resolve(keys.map((k) => structuredClone(memo.get(k)) as D1Result));
+        if (keys.every((k) => memo.has(k))) return Promise.resolve(keys.map((k) => take(k) as D1Result));
       }
       return inner.batch(plain);
     },
@@ -166,16 +173,27 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
     prefetch: async (reads) => {
       // Not on a look-only database ("Pretend it's...", the read-only PIN): their batches are not plain reads (server/pretend.ts).
       if (state !== 'fast' || lookOnly) return;
-      const todo = reads.filter((r) => isReadSql(r.sql) && !memo.has(keyOf(r.kind, r.sql, r.values)));
-      if (todo.length === 0) return;
+      // One entry per distinct read; `uses`: how many times the screen will ask it (listed that many times).
+      const todo = new Map<string, { kind: 'first' | 'all'; sql: string; values: unknown[]; uses: number }>();
+      for (const r of reads) {
+        if (!isReadSql(r.sql)) continue;
+        const key = keyOf(r.kind, r.sql, r.values);
+        if (memo.has(key)) continue;
+        const t = todo.get(key);
+        if (t) t.uses++;
+        else todo.set(key, { ...r, uses: 1 });
+      }
+      if (todo.size === 0) return;
+      const list = [...todo.entries()];
       const startedAt = generation;
-      const results = await inner.batch(todo.map((r) => inner.prepare(r.sql).bind(...r.values))).catch(() => null);
+      const results = await inner.batch(list.map(([, r]) => inner.prepare(r.sql).bind(...r.values))).catch(() => null);
       // A failed batch, or a write meanwhile: keep nothing (each read then goes to the database on its own, as today).
-      if (!results || results.length !== todo.length || state !== 'fast' || generation !== startedAt) return;
-      todo.forEach((r, i) => {
+      if (!results || results.length !== list.length || state !== 'fast' || generation !== startedAt) return;
+      list.forEach(([key, r], i) => {
         const res = results[i];
         const value = r.kind === 'first' ? (res.results[0] ?? null) : { results: res.results, meta: res.meta };
-        memo.set(keyOf(r.kind, r.sql, r.values), structuredClone(value));
+        // The first use gets the answer itself; only a read asked again gets its own copy (so one use can never change another's).
+        memo.set(key, [value, ...Array.from({ length: r.uses - 1 }, () => structuredClone(value))]);
       });
     },
   };

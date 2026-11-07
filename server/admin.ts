@@ -14,7 +14,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTime
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
 import { ADMIN_COOKIE, clearCookie, type Ctx } from './context';
 import { hashPin, newId, randomToken, verifyPin } from './crypto';
-import { motionAdminFor, motionForAll, setMotionForAll } from './motion';
+import { motionAdminFor, motionForAll, motionSettingRead, setMotionForAll } from './motion';
 import { adjustCreditFor, adjustCreditForAll, setAdjustCreditForAll } from './adjustCredit';
 import { homeCollapseForAll, setHomeCollapseForAll } from './homeCollapse';
 import { colorCleanupFor, colorCleanupForAll, playerCardsFor, playerCardsForAll, setColorCleanupForAll, setPlayerCardsForAll, setTonightGlowForAll, tonightGlowFor, tonightGlowForAll } from './zip7';
@@ -67,7 +67,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads } from './credit';
+import { adjustCreditEntry, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -130,6 +130,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     { kind: 'all', ...recentAuditRead(group.id) },
     { kind: 'all', ...lateDropsRead(group.id) },
     { kind: 'all', ...playedCountRead(group.id, ctx.nowIso) },
+    // Asked again further down: the cash out requests, and the motion rows (organizer once, player twice).
+    { kind: 'all', ...pendingRequestsRead(group.id) },
+    { kind: 'first', ...motionSettingRead(group.id, 'admin') },
+    { kind: 'first', ...motionSettingRead(group.id, 'player') },
+    { kind: 'first', ...motionSettingRead(group.id, 'player') },
   ]);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);

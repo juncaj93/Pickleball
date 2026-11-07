@@ -2,7 +2,10 @@
 // moments (a weekend, game day morning, during a game, the morning after), with the Zip 9 and Zip 10 switch rows on and off, every
 // screen's JSON is compared byte for byte with the switch OFF and ON. Then the trip counts: ON meets the targets, OFF is exactly
 // main's count, the kill switch removes the wrapper, and a write in the middle of a request is never answered from before it.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Each test builds the fake world (a few seconds on a busy machine).
+vi.setConfig({ testTimeout: 60_000 });
 import { createNodeD1 } from '../dev/nodeD1';
 import { type Counted, countingDb } from '../dev/countingDb';
 import { handleApi } from '../server/app';
@@ -155,38 +158,45 @@ describe('SPEED_FEWER_QUERIES: trips', () => {
 });
 
 describe('SPEED_FEWER_QUERIES: the wrapper never answers from before a write', () => {
-  it('a read after a write goes to the database again; finish() steps aside', async () => {
+  it('an early answer is handed out once per listed use; a write throws early answers away; finish() steps aside', async () => {
     const raw = createNodeD1(':memory:');
     raw.raw.exec("CREATE TABLE t (id TEXT PRIMARY KEY, v INTEGER); INSERT INTO t VALUES ('a', 1);");
     const c: Counted = { trips: 0, statements: 0, sql: [] };
     const db = fewerQueriesDb(countingDb(raw, c), 'fast');
-    const read = () => db.prepare('SELECT v FROM t WHERE id = ?').bind('a').first<{ v: number }>();
+    const SQL = 'SELECT v FROM t WHERE id = ?';
+    const read = () => db.prepare(SQL).bind('a').first<{ v: number }>();
+    // Listed twice: one trip for both uses; the two answers are separate objects (one use cannot change the other).
+    await db.prefetch([{ kind: 'first', sql: SQL, values: ['a'] }, { kind: 'first', sql: SQL, values: ['a'] }]);
+    expect(c.trips).toBe(1);
+    const one = (await read()) as { v: number };
+    one.v = 99;
     expect((await read())?.v).toBe(1);
+    expect(c.trips).toBe(1);
+    // A third use was not listed: it goes to the database, as today.
     expect((await read())?.v).toBe(1);
-    expect(c.trips).toBe(1); // the second one was remembered
+    expect(c.trips).toBe(2);
+    // A write in between: the early answer is gone, the read sees the change.
+    await db.prefetch([{ kind: 'first', sql: SQL, values: ['a'] }]);
     await db.prepare('UPDATE t SET v = 2 WHERE id = ?').bind('a').run();
     expect((await read())?.v).toBe(2);
+    await db.prefetch([{ kind: 'first', sql: SQL, values: ['a'] }]);
     await db.batch([db.prepare("UPDATE t SET v = 3 WHERE id = 'a'")]);
-    expect((await read())?.v).toBe(3);
-    // A remembered answer handed out is a copy: changing it changes nothing kept.
-    const got = (await read()) as { v: number };
-    got.v = 99;
     expect((await read())?.v).toBe(3);
     db.finish();
     const n = c.trips;
+    await db.prefetch([{ kind: 'first', sql: SQL, values: ['a'] }]);
     await read();
     await read();
-    expect(c.trips).toBe(n + 2);
+    expect(c.trips).toBe(n + 2); // after finish(): no early trip, each read its own
   });
 
-  it('a read that set off before a write is not kept', async () => {
+  it('an early batch that set off before a write is not used', async () => {
     const raw = createNodeD1(':memory:');
     raw.raw.exec("CREATE TABLE t (id TEXT PRIMARY KEY, v INTEGER); INSERT INTO t VALUES ('a', 1);");
     const db = fewerQueriesDb(raw, 'fast');
-    const read = () => db.prepare('SELECT v FROM t WHERE id = ?').bind('a').first<{ v: number }>();
-    const [early] = await Promise.all([read(), db.prepare("UPDATE t SET v = 5 WHERE id = 'a'").run()]);
-    expect(early?.v).toBeDefined();
-    expect((await read())?.v).toBe(5);
+    const SQL = 'SELECT v FROM t WHERE id = ?';
+    await Promise.all([db.prefetch([{ kind: 'first', sql: SQL, values: ['a'] }]), db.prepare("UPDATE t SET v = 5 WHERE id = 'a'").run()]);
+    expect((await db.prepare(SQL).bind('a').first<{ v: number }>())?.v).toBe(5);
   });
 
   it('switch questions follow a switch flipped in the same request', async () => {

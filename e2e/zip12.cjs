@@ -14,7 +14,7 @@ const path = require('node:path');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
-const PORT = Number(process.env.E2E_PORT) || 5312;
+const PORT = Number(process.env.E2E_PORT) || 5412;
 const BASE = `http://localhost:${PORT}`;
 const NOW_ISO = '2026-11-07T17:00:00.000Z';
 const NOW_MS = Date.parse(NOW_ISO);

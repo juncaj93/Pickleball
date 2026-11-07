@@ -2756,3 +2756,53 @@ merged and live first (production `9c94c864` = main `624c60f`). The full descrip
 - Also fixed from its notes: a look-only test phone on a full game says "Join waitlist" again (what its tap does); the Want in? popup at 12 says only
   "12 are in." Notes kept: switching the row on while the kill switch is "off" moves nobody (the kill switch wins); after switching the row off again, a
   game left at 11 or 12 shows in `more_in_than_max` (expected).
+
+## Zip 12: speed fixes (built files kept a year, a smaller logo, and three switches: SPEED_FEWER_QUERIES, SPEED_DIRECT_LOAD, SPEED_LAST_SCREEN) - built Sat Nov 7, 2026; on a preview, waiting for "ship it"
+
+Spec: the "zip 12" brief (`START_HERE.md`, `SITE_RULES.md`), from the Zip 9c read-only speed check. One PR. NO database schema change, no migration, nothing
+about money. Built in a quiet window (Friday night into Saturday). Nothing deployed to production, nothing switched on, no live data changed. Zip 10 was
+merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main `fb44afc`). Each switch's full description is its row in
+`docs/FEATURE_SWITCHES.md`; the two items that cannot be switched are at the end of that file.
+
+### Item 3: built files kept a year (no switch, live at deploy)
+- `public/_headers`: `/assets/*` gets `Cache-Control: public, max-age=31536000, immutable`. Nothing else changes (the page, `/theme.js`, the icons: ask again
+  each time; `/api`: no-store, from the code). Proof the names change: one changed word in the code gave `index-D4Xhzfe8.js` -> `index-Drl6tRz5.js` (and
+  `load-*` too); unchanged files (CSS, the database engine file, fonts) kept their names; putting the word back gave the old names again.
+- Found while checking: Cloudflare answers a MISSING `/assets/...` file with the home page (200), and the year-long rule would have applied to it (seen on a
+  probe preview). A phone could then keep the home page under a script's name for a year (for example after a rollback). Fix: `public/assets/404.html`;
+  with it, a missing built file is a real 404 that Cloudflare sends as no-store (checked on the preview); every other address still opens the site.
+### Item 6a: smaller logo (no switch, live at deploy)
+- `public/logo.png` 31.7 KB (128 px) -> 3.2 KB (72 px, 3x its 24 px size, 128 colors, edges resized the right way so no dark fringe). Pixel comparison at
+  2x and 3x on both tile colors: same look (the new one slightly crisper). Other images: favicon 2.3 KB is fine; the touch icon and the 192/512 icons are
+  not on the first screen and had no lossless saving; `logo-header.png` and `logo-xmas.png` are not used by any page. Left as they are.
+### Item 4: Load games at once (`SPEED_DIRECT_LOAD`, ships OFF)
+- `src/lib.ts` `startEarlyLoads` (called by `src/main.tsx` before the first draw), `takeEarly`; `SiteHome` and `PlayerHome` take the early answer once.
+  Only the plain address, only when the phone remembers the last games answer said `directLoad` (or `?directload=on`). The set-up answer still decides
+  the screen; every check is unchanged. Off: the next answer drops the memory. A brand-new phone's first visit is the old chain (it has not heard yet).
+### Item 1: Fewer database trips (`SPEED_FEWER_QUERIES`, ships OFF)
+- `server/speed.ts`, wired in `server/app.ts` (after the Pretend and read-only PIN databases are set, right before the route runs; stepped aside when the
+  answer is ready). With it on: every switch question from one read of all switch rows (the same index as each old question, so fewer rows read, not
+  more); the same read twice in one request answered from the first (handed out as a copy); any write forgets everything (and a read that set off before
+  a write is not kept); independent reads in one trip (`prefetch`, in `groupView`, `moneyPicture`, the change stamp, the dashboard and the two per-game
+  loops). The reads it sends early use the same SQL text as the code that asks them (shared builders such as `playersRead`, `ledgerRead`), so they cannot
+  drift apart unseen; a missed one only costs its own trip. Prefetch is off on the Pretend and read-only PIN databases (their batches are not plain reads).
+- Off ('decide'): the first switch question of a request is answered by the one read that replaces it (one trip for one trip); if the row is off, every
+  later call goes straight to the database, untouched. Same trips as main, same answers, no extra wait (found by two Telegram tests that check a background
+  send has started the instant a tap answers).
+- Trips per call on the fake world (`scripts/count-queries.ts`), main -> switch on: status 1 -> 1, player screen 47 -> 7, version check 21 -> 4, dashboard
+  81 -> 21, organizer version 4 -> 3, Money 27 -> 8, History 4 -> 3.
+### Item 2: Show last screen at once (`SPEED_LAST_SCREEN`, ships OFF)
+- `src/lastScreen.ts` (what is kept and when it is thrown away), `SavedScreenView` and the cards' `held` mode in `src/pages/PlayerHome.tsx`, `SiteHome`
+  (shows it while its set-up check runs). The copy is a player answer with every money and private field emptied: price 0, nothing owed, no credit, no
+  paid state, no Venmo or organizer name, no names list, no switches that change money or taps, only games still to come; your seat keeps in / waiting /
+  out. Drawn with the live cards (and the same page markers, so Card cleanup and Tonight glow look the same) in an inert list with no button, link or
+  money line; "as of 2:14 PM" in small gray text (12 px, 4.5:1 or better in light and dark). Thrown away on: switch off, "not you?", 24 hours, a new
+  build (`__APP_BUILD__`, set at build time), another address. Never for View as, the demo or Pretend. No service worker.
+- Seen on the preview: the saved cards are a little shorter than the fresh ones (no buttons, no money lines, no Pay card at the top), so the page moves
+  down a little when the fresh answer lands. On purpose: the money parts are never kept.
+### Switches
+- Three Settings rows (newest first): "Show last screen at once", "Load games at once", "Fewer database trips". `PUT /api/admin/speed-last-screen-switch`,
+  `/speed-direct-load-switch`, `/speed-fewer-queries-switch`; `task_log` rows `speed_last_screen_on`, `speed_direct_load_on`, `speed_fewer_queries_on`;
+  kill switches `SPEED_LAST_SCREEN`, `SPEED_DIRECT_LOAD`, `SPEED_FEWER_QUERIES` in `wrangler.toml` (allowed; on in `[env.preview.vars]`); private links
+  `?lastscreen=on`, `?directload=on`, `?fewerqueries=on`; Activity lines. No change-stamp pieces (the phones pick a flip up on their next full answer).
+- Preview seed: all three rows on (`PREVIEW_SWITCHES_ON`).
