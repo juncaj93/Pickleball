@@ -88,6 +88,8 @@ export interface Env {
   CARD_TIME_BUTTONS?: string;
   /** "Card cleanup" (Zip 10: cards without count text, people icon and names, tinted Later cards; no waitlist and no Max players cap): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?cardcleanup=on (server/zip10.ts). */
   CARD_CLEANUP?: string;
+  /** "Alert cards" (Zip 11: one action-card look for every player and organizer alert): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?alertcards=on (server/zip11.ts). Display only. */
+  ALERT_CARDS?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

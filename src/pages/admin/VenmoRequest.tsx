@@ -34,25 +34,25 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
   if (games.length === 0) return null;
   const remindGame = games.find((g) => g.s.id === remind)?.s ?? null;
   return (
-    <section className="stack vr-cards" aria-label="Do this now: who hasn't paid" data-vr-cards>
+    <section className={ctx.d.alertCards === true ? 'ac-stack vr-cards' : 'stack vr-cards'} aria-label="Do this now: who hasn't paid" data-vr-cards>
       {games.map(({ s, rows }) => {
         const amounts = new Set(rows.map((r) => r.owesCents));
         const common = amounts.size === 1 ? rows[0].owesCents : null;
         return (
-          <article key={s.id} className="card vr-card" data-vr-card={s.id}>
+          <article key={s.id} className={ctx.d.alertCards === true ? 'ac ac-amber vr-card-ac' : 'card vr-card'} data-vr-card={s.id} {...(ctx.d.alertCards === true ? { 'data-alert-card': 'amber' } : {})}>
             <div className="vr-head">
               <div className="vr-title-wrap">
-                <h3 className="vr-title">
+                <h3 className={ctx.d.alertCards === true ? 'vr-title ac-title' : 'vr-title'}>
                   {formatWeekdayShort(s.startsAt, tz)}
                   {games.filter((g) => dayKey(Date.parse(g.s.startsAt), tz) === dayKey(Date.parse(s.startsAt), tz)).length > 1 ? ` ${formatTime(s.startsAt, tz)}` : ''} game: {rows.length}{' '}
                   {rows.length === 1 ? "hasn't" : "haven't"} paid
                 </h3>
-                <p className="small muted vr-sub">
+                <p className={ctx.d.alertCards === true ? 'small muted vr-sub ac-sub' : 'small muted vr-sub'}>
                   {common !== null ? `${formatPrice(common)} each` : 'Amounts differ'}
                   {s.state.flags.canceled ? ' · Canceled late, fee kept' : s.court ? ' · Court booked' : ''}
                 </p>
               </div>
-              <button type="button" className="vr-remind" data-vr-remind onClick={() => setRemind(s.id)}>
+              <button type="button" className={ctx.d.alertCards === true ? 'ac-btn vr-remind-ac' : 'vr-remind'} data-ac-tone={ctx.d.alertCards === true ? 'purple' : undefined} data-vr-remind onClick={() => setRemind(s.id)}>
                 Remind
               </button>
             </div>

@@ -45,7 +45,8 @@ describe('tappable words in Telegram alerts', () => {
   it('every alert in six weeks of ticks: no raw address, no /admin link, and the words are the old words', { timeout: 120_000 }, () => {
     const seen = new Set<string>();
     for (const now of ticks()) for (const a of dueAlerts(nextTasks(now, SCENARIO, new Set(), OPTS), now, new Set())) seen.add(a.text);
-    expect(seen.size).toBeGreaterThanOrEqual(30);
+    // 26 different alerts since Zip 11 (the old game-day check, 4 of the 30, is gone).
+    expect(seen.size).toBeGreaterThanOrEqual(26);
     for (const text of seen) {
       const linked = linkText(text, isAdminPage);
       expect(linked.text).not.toMatch(/https?:/);

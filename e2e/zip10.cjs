@@ -315,6 +315,8 @@ async function main() {
         [...document.querySelectorAll('[data-r2-card]')]
           .map((c) => {
             const note = c.querySelector('.r2-mid .game-note');
+            // A late-drop line sits between the note and the circles on purpose (Zip 11 seeds one such game): not this measure.
+            if (c.querySelector('.r2-mid .late-line')) return null;
             const ball = c.querySelector('.cl-players .dots > *');
             const text = c.querySelector('.cl-players .names-text');
             if (!note || !ball || !text) return null;

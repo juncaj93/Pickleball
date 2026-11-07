@@ -69,13 +69,12 @@ function specDue(g: GameState, from: number, to: number): { id: string; due: num
     // Booked games: last call 25 hours before the start (wall clock).
     const night = wallMinus(g.start, 25 * 60);
     add('night', night, g.booked && before && !g.marks.has('night_text') && afterBooking(night));
-    // Booked games under 4: cancel warning 10 hours before the deadline, follow-up 30 minutes later, game-day check 45 minutes before the deadline.
+    // Booked games under 4: cancel warning 10 hours before the deadline, follow-up 30 minutes later. (The game-day check 45 minutes
+    // before the deadline was deleted in Zip 11.)
     const warn = wallMinus(g.deadline, 10 * 60);
     const short = g.booked && before && g.confirmed < 4;
     add('cancel', warn, short && !g.marks.has('court_canceled') && afterBooking(warn));
     add('cancel_followup', warn + 30 * MIN, short && afterBooking(warn + 30 * MIN));
-    const gd = wallMinus(g.deadline, 45);
-    add('gameday', gd, short && !g.marks.has('court_canceled') && to < g.deadline && afterBooking(gd));
     // Not booked: 6:45 AM and 7:30 AM on the day the court opens (14 days before), until that day ends.
     const opens = wallDayAt(g.start, -14, 7, 0);
     add('book', opens - 15 * MIN, !g.booked && before);
@@ -561,6 +560,7 @@ describe('Sun Nov 1 clock change: ticks through the repeated 1 AM hour', () => {
       for (const m of g.sent.splice(0)) hours.push(`${new Intl.DateTimeFormat('en-US', { timeZone: TZ, weekday: 'short', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(t)).replace(',', '')} | ${m.text.split(':')[0]}`);
     }
     // Last call Sat 6:00 PM EDT is 25 wall-clock hours before Sun 7:00 PM EST; deadline Sun 7:00 AM EST.
-    expect(hours).toEqual(['Sat 6:00 PM EDT | Sunday', 'Sat 9:00 PM EDT | Sunday', 'Sat 9:30 PM EDT | Sunday', 'Sun 6:15 AM EST | Tonight']);
+    // (The Sun 6:15 AM EST game-day check is gone, Zip 11.)
+    expect(hours).toEqual(['Sat 6:00 PM EDT | Sunday', 'Sat 9:00 PM EDT | Sunday', 'Sat 9:30 PM EDT | Sunday']);
   });
 });

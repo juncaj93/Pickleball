@@ -31,7 +31,7 @@ clock change doesn't shift anything.
 | Night-before last call, booked only: 25 h before the start (`NIGHT_LAST_CALL_BEFORE_START_MIN`) | 6:00 PM day before | 6:30 PM | 7:00 PM |
 | Cancel warning, booked and under 4: 10 h before the deadline (`CANCEL_WARNING_BEFORE_DEADLINE_MIN`) | 9:00 PM night before | 9:30 PM | 10:00 PM |
 | Cancel follow-up: 30 min later (`CANCEL_FOLLOWUP_AFTER_WARNING_MIN`) | 9:30 PM | 10:00 PM | 10:30 PM |
-| Game-day check, booked: 45 min before the deadline (`GAMEDAY_CHECK_BEFORE_DEADLINE_MIN`) | 6:15 AM | 6:45 AM | 7:15 AM |
+| Game-day check: deleted in Zip 11 (Nov 7, 2026; it was already off under Texts round 2). | | | |
 | Morning-of no-court check, 4+ in: deadline + 15 min (`NO_COURT_CHECK_AFTER_DEADLINE_MIN`) | 7:15 AM | 7:45 AM | 8:15 AM |
 | Finalize: 10:30 PM game night, or 5 min after the end if later (`FINALIZE_REMINDER_TIME`, `FINALIZE_AFTER_END_MIN`; Zip 8, was 5 min after the end) | 10:30 PM | 10:30 PM | 10:30 PM |
 | Booking heads-up and follow-up, 14 days before (`COURT_OPENS_TIME` 7:00 AM, `BOOKING_HEADS_UP_BEFORE_OPEN_MIN` 15, `BOOKING_FOLLOWUP_AFTER_OPEN_MIN` 30) | 6:45 AM and 7:30 AM | same | same |
@@ -40,7 +40,7 @@ What each task shows and sends, most urgent first:
 
 | Task | Card | Telegram |
 | --- | --- | --- |
-| Cancel checklist (booked, under 4, from the cancel warning) | 1. Cancel the court + **Court canceled**<br>2. Cancel the session<br>3. Text everyone it's canceled<br>On game day the words name the deadline: "Tonight: only 3 players in. Cancel court before 7:00 AM." | Cancel warning ("Tuesday: only 3 players in. Cancel court: ...").<br>Follow-up only while the game is not canceled on the site.<br>Game-day check only before the deadline, if Court canceled wasn't tapped |
+| Cancel checklist (booked, under 4, from the cancel warning) | 1. Cancel the court + **Court canceled**<br>2. Cancel the session<br>3. Text everyone it's canceled<br>On game day the words name the deadline: "Tonight: only 3 players in. Cancel court before 7:00 AM." | Cancel warning ("Tuesday: only 3 players in. Cancel court: ...").<br>Follow-up only while the game is not canceled on the site.<br>(The old game-day check was deleted in Zip 11.) |
 | Court opens today (the game exactly 14 days out, not booked) | "Thu Nov 26 opens at 7:00 AM (Thanksgiving)." (after 7:00, "opened"), on Home: the court card "Court still needs to be booked" with **Book a court** | 6:45 AM: "Thu Nov 26 opens at 7:00 AM (Thanksgiving). Book: ... Then set it to Booked". 7:30 AM: one reminder if still not booked |
 | No court, 4 or more in, starts within 24 h | "Tonight: 5 in, no court yet. Check CourtReserve for an opening." (on Home: the court card) | At the deadline + 15 min, silent once booked |
 | Night before (booked) | "Tuesday: 3 players in, need a 4th." + **Text the group**, or "Tuesday: 5 players in." + **Text the group to confirm**. Either way, Messages opens with no recipients | At the last call, unless the text button was already tapped |
@@ -78,7 +78,7 @@ database trip it already makes.
 | --- | --- | --- |
 | Night-before last call | "Tuesday: 5 players in. Text the group to confirm" | "Tomorrow: 5 players in. Text the group to confirm" / "Tomorrow: 3 players in, need a 4th. Text the group" (the link opens the new check-in / need-players text) |
 | Cancel warning, cancel follow-up | "Tuesday: ..." | "Tomorrow: ..." (same words after the day) |
-| Game-day check (45 min before cancel-by) | sent | **not sent** (the Home card still reads the same) |
+| Game-day check (45 min before cancel-by) | deleted in Zip 11: never sent | **not sent** (the Home card still reads the same) |
 | Booking heads-up (game 14 days out, not booked) | 6:45 AM | **6:55 AM** (the clock ticks every 5 minutes, so an exact 6:58 is not possible; a missed tick still sends it up to an hour late) |
 | Booking reminder | 7:30 AM if the game is not Booked | 7:30 AM **only while the game is Not booked** (skips Booked, Waitlist and Canceled) |
 | No court yet (4 or more in) | 15 min after cancel-by (8:15 AM for an 8 PM game) | **30 min before cancel-by, never before 7:00 AM** (7:30 AM for an 8 PM game; 7:00 AM for a 7 PM game). Never before the 24-hour window opens. Words: "Tonight: 5 in, no court yet. Check CourtReserve for an opening" ("Today:" for a daytime game) |

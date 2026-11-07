@@ -47,7 +47,6 @@ export type TaskAction =
   | { type: 'link'; href: string }
   | { type: 'mark'; mark: MarkName }
   | { type: 'cancel' }
-  | { type: 'booked' }
   | { type: 'finalize' };
 
 export interface TaskButton {
@@ -65,7 +64,7 @@ export interface TaskStep {
   buttons: TaskButton[];
 }
 
-export type AlertId = 'night' | 'cancel' | 'cancel_followup' | 'gameday' | 'book' | 'book_followup' | 'nocourt' | 'finalize';
+export type AlertId = 'night' | 'cancel' | 'cancel_followup' | 'book' | 'book_followup' | 'nocourt' | 'finalize';
 
 export interface TaskAlert {
   /** "sessionId:alertId": sent at most once. */
@@ -133,8 +132,6 @@ export const NIGHT_LAST_CALL_BEFORE_START_MIN = 25 * 60;
 export const CANCEL_WARNING_BEFORE_DEADLINE_MIN = 10 * 60;
 /** The cancel follow-up ("court canceled? Now cancel the session"): this long after the cancel warning. */
 export const CANCEL_FOLLOWUP_AFTER_WARNING_MIN = 30;
-/** Game-day check: this long before the cancellation deadline. 7:00 AM deadline: 6:15 AM. Booked games only. */
-export const GAMEDAY_CHECK_BEFORE_DEADLINE_MIN = 45;
 /** Finalize reminder: never sooner than this long after the game ends. */
 export const FINALIZE_AFTER_END_MIN = 5;
 /**
@@ -199,7 +196,6 @@ export function taskTimes(s: Pick<TaskSession, 'startsAt' | 'endsAt' | 'cancella
     deadline,
     cancelWarning,
     cancelFollowup: cancelWarning + CANCEL_FOLLOWUP_AFTER_WARNING_MIN * MIN_MS,
-    gamedayCheck: wallShift(deadline, o.tz, -GAMEDAY_CHECK_BEFORE_DEADLINE_MIN),
     noCourtCheck: o.textsR2 === true ? noCourtCheckR2(deadline, o.tz) : deadline + NO_COURT_CHECK_AFTER_DEADLINE_MIN * MIN_MS,
     finalize: finalizeDueMs(s, o.tz),
     courtOpens,
@@ -269,9 +265,8 @@ interface Built extends Task {
   rank: number;
 }
 
-// Not drawn on Home any more (the court card replaced these task buttons); the labels stay as they were so
-// the alert brain's golden file (tests/fixtures/tick-golden.json) keeps proving nothing else moved.
-const bookedButton: TaskButton = { id: 'booked', label: 'I booked it', action: { type: 'booked' } };
+// Not drawn on Home any more (the court card replaced these task buttons; the golden file never held buttons).
+// Zip 11: the old "I booked it" button is gone (nothing drew it); the organizer sets the game's court switch to Booked.
 const bookLink = (o: TaskOptions): TaskButton => ({ id: 'book-link', label: 'Book on CourtReserve', action: { type: 'link', href: o.links.book } });
 
 /** "tonight", "today", "tomorrow" or "Thursday". */
@@ -363,8 +358,7 @@ function cancelTask(s: TaskSession, nowMs: number, marks: Marks, o: TaskOptions)
   if (!s.canceled) {
     if (!courtDone) alertIf(alerts, s, 'cancel', opens, `${lead} Cancel court: ${o.links.cancel}`, true);
     alertIf(alerts, s, 'cancel_followup', times.cancelFollowup, `${day}: court canceled? Now cancel the session and text everyone: ${o.links.admin}`, true);
-    // TEXTS_R2: the game-day check is gone (the cancel warning the night before and its follow-up are enough).
-    if (!courtDone && beforeDeadline && o.textsR2 !== true) alertIf(alerts, s, 'gameday', times.gamedayCheck, `${text.replace(/\.$/, '')}: ${o.links.cancel}`, true);
+    // The game-day check (6:15 / 7:15 AM) is gone (TEXTS_R2, then deleted for good in Zip 11): the cancel warning the night before and its follow-up are enough.
   }
   return { id: `cancel:${s.id}`, kind: 'cancel', sessionId: s.id, startsAt: s.startsAt, text, buttons: [], steps, alerts, rank: 0 };
 }
@@ -388,7 +382,7 @@ function bookTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | null {
   alertIf(alerts, s, 'book', t.bookingHeadsUp, `${date} opens at ${opensAt}${holiday}. ${tail}`);
   // TEXTS_R2: the reminder goes only while the game is still "not booked" (it fired after a backup was booked and the game set to Waitlist).
   if (o.textsR2 !== true || !s.waitlisted) alertIf(alerts, s, 'book_followup', t.bookingFollowup, `Reminder: ${date} opened at ${opensAt}${holiday}. ${tail}`);
-  return { id: `book:${s.id}`, kind: 'book', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o), bookedButton], steps: [], alerts, rank: 1 };
+  return { id: `book:${s.id}`, kind: 'book', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o)], steps: [], alerts, rank: 1 };
 }
 
 /**
@@ -407,7 +401,7 @@ function noCourtTask(s: TaskSession, nowMs: number, o: TaskOptions): Built | nul
   // TEXTS_R2 sends it at its own earlier time, but never before that 24-hour window opens (a 24-hour cancel-by still gets its alert).
   const oldDue = taskTimes(s, { ...o, textsR2: false }).noCourtCheck;
   if (start - oldDue <= 24 * HOUR_MS) alertIf(alerts, s, 'nocourt', o.textsR2 === true ? Math.max(due, start - 24 * HOUR_MS) : due, `${text.replace(/\.$/, '')}: ${o.links.book}`);
-  return { id: `nocourt:${s.id}`, kind: 'nocourt', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o), bookedButton], steps: [], alerts, rank: 2 };
+  return { id: `nocourt:${s.id}`, kind: 'nocourt', sessionId: s.id, startsAt: s.startsAt, text, buttons: [bookLink(o)], steps: [], alerts, rank: 2 };
 }
 
 /** After a game that was played (4 or more, not canceled): "Finalize who played", from 10:30 PM game night (finalizeDueMs) until it is finalized. */
@@ -459,7 +453,7 @@ export function nextTasks(nowMs: number, sessions: TaskSession[], marks: Marks, 
       sessionId: s.id,
       startsAt: s.startsAt,
       text: `${textDay(s.startsAt, o.tz)} has no court yet.`,
-      buttons: [bookedButton],
+      buttons: [],
       steps: [],
       alerts: [],
       rank: 5,
@@ -527,7 +521,6 @@ export function mayAlertSoon(
     if (short) {
       const warning = deadline - CANCEL_WARNING_BEFORE_DEADLINE_MIN * MIN_MS;
       if (near(warning) || near(warning + CANCEL_FOLLOWUP_AFTER_WARNING_MIN * MIN_MS)) return true;
-      if (near(deadline - GAMEDAY_CHECK_BEFORE_DEADLINE_MIN * MIN_MS)) return true;
     }
     return false;
   }

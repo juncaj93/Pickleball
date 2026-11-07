@@ -4,6 +4,7 @@ import { holdLive } from '../busy';
 import { api, ApiError, isDemo } from '../lib';
 import { useToast } from '../ui';
 import { canMove } from '../motion';
+import '../alert-cards.css';
 
 /**
  * The one question after I'm in when a cash out is pending and the player's
@@ -12,7 +13,20 @@ import { canMove } from '../motion';
  * part of a card. "Use it" puts that money on the game (the request shrinks or
  * goes); "No, keep cash out" just closes it: they are in and pay as usual.
  */
-export function CashOutPrompt({ sessionId, cents, onClose: closeNow, onChanged }: { sessionId: string; cents: number; onClose: () => void; onChanged: () => Promise<void> }) {
+export function CashOutPrompt({
+  sessionId,
+  cents,
+  onClose: closeNow,
+  onChanged,
+  card,
+}: {
+  sessionId: string;
+  cents: number;
+  onClose: () => void;
+  onChanged: () => Promise<void>;
+  /** Zip 11, Alert cards: the same question as a blue card ("Use your $10 cash out for this game?", "You asked Alex to cash out $10"). */
+  card?: { requestCents: number; organizer: string };
+}) {
   const toast = useToast();
   // With the motion on it slides down in 150 ms before it is gone (the question is already answered by then).
   const [leaving, setLeaving] = useState(false);
@@ -53,6 +67,30 @@ export function CashOutPrompt({ sessionId, cents, onClose: closeNow, onChanged }
     }
   }
 
+  if (card) {
+    return (
+      <div className={`cashout-prompt ac ac-blue ac-stacked${leaving ? ' m-leaving' : ''}`} role="dialog" aria-modal="false" aria-labelledby="cashout-q" data-cashout-prompt data-alert-card="blue">
+        <div className="ac-row">
+          <div className="ac-text">
+            <p id="cashout-q" className="ac-title">
+              Use your {formatPrice(cents)} cash out for this game?
+            </p>
+            <div className="ac-sub">
+              You asked {card.organizer} to cash out {formatPrice(card.requestCents)}
+            </div>
+          </div>
+        </div>
+        <div className="ac-actions">
+          <button ref={first} className="ac-btn" disabled={busy} onClick={useIt} data-cashout-use>
+            {busy ? 'Saving…' : 'Use it'}
+          </button>
+          <button className="ac-btn ac-out" disabled={busy} onClick={onClose} data-cashout-keep>
+            No, keep cash out
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className={`cashout-prompt${leaving ? ' m-leaving' : ''}`} role="dialog" aria-modal="false" aria-labelledby="cashout-q" data-cashout-prompt>
       <p id="cashout-q" className="cashout-q">

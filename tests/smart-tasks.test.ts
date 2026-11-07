@@ -85,17 +85,14 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(tasksAt('2026-11-03T03:00:00Z', [game('2026-11-03', { confirmedCount: 4 })]).map((x) => x.kind)).toEqual(['night']);
   });
 
-  it('game day 7:15 AM: uses the real deadline, silent once it passed or the court is marked canceled', () => {
+  it('game day 7:15 AM: the card uses the real deadline; there is no game-day Telegram check any more (Zip 11 deleted it)', () => {
     const t = tasksAt('2026-11-03T12:15:00Z', [tue]);
     expect(t[0].text).toBe('Tonight: only 3 players in. Cancel court before 8:00 AM.');
-    const g = t[0].alerts.find((a) => a.id === 'gameday')!;
-    expect(g).toMatchObject({ dueMs: at('2026-11-03T12:15:00Z'), text: `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}` });
+    expect(t[0].alerts.map((a) => a.id as string)).not.toContain('gameday');
     // Its own deadline, not a fixed 8:00 AM.
     const early = game('2026-11-03', { cancellationDeadlineAt: '2026-11-03T14:30:00Z' }); // 9:30 AM
     expect(tasksAt('2026-11-03T12:15:00Z', [early])[0].text).toBe('Tonight: only 3 players in. Cancel court before 9:30 AM.');
-    const passed = game('2026-11-03', { cancellationDeadlineAt: '2026-11-03T12:00:00Z' }); // 7:00 AM
-    expect(tasksAt('2026-11-03T12:15:00Z', [passed])[0].alerts.find((a) => a.id === 'gameday')).toBeUndefined();
-    expect(tasksAt('2026-11-03T12:15:00Z', [tue], [markKey(tue.id, 'court_canceled')])[0].alerts.find((a) => a.id === 'gameday')).toBeUndefined();
+    expect(tasksAt('2026-11-03T12:15:00Z', [early])[0].alerts.map((a) => a.id as string)).not.toContain('gameday');
   });
 
   it('booking day: heads-up at 6:45 AM for the game exactly 14 days out, one follow-up at 7:30 AM, nothing once booked', () => {
@@ -103,7 +100,7 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
     expect(tasksAt('2026-11-03T11:44:00Z', [nov17])).toEqual([]);
     const t = tasksAt('2026-11-03T11:45:00Z', [nov17]); // Tue Nov 3, 6:45 AM EST
     expect(t[0].text).toBe('Tue Nov 17 opens at 7:00 AM.');
-    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
+    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve']);
     expect(t[0].alerts[0]).toMatchObject({ id: 'book', dueMs: at('2026-11-03T11:45:00Z') });
     expect(t[0].alerts[0].text).toBe(`Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked: ${ADMIN}`);
     expect(t[0].alerts[1]).toMatchObject({ id: 'book_followup', dueMs: at('2026-11-03T12:30:00Z') }); // 7:30 AM
@@ -183,7 +180,7 @@ describe('the task brain: times (Eastern, America/Detroit)', () => {
           const lead = t.text.replace(/\.$/, '');
           if (a.id === 'cancel_followup') expect(a.text.startsWith(`${lead.split(':')[0]}: court canceled?`)).toBe(true);
           else if (a.id === 'book_followup') expect(a.text.startsWith(`Reminder: ${t.text}`)).toBe(true);
-          else if (a.id === 'cancel' || a.id === 'gameday') expect(a.text.startsWith(a.id === 'gameday' ? lead : t.text.split(' Cancel court before')[0])).toBe(true);
+          else if (a.id === 'cancel') expect(a.text.startsWith(t.text.split(' Cancel court before')[0])).toBe(true);
           else expect(a.text.startsWith(lead)).toBe(true);
         }
       }
@@ -210,13 +207,12 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
   const at730 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 30);
   const iso = (ms: number) => new Date(ms).toISOString();
 
-  it('7:00 PM: last call 6:00 PM, cancel warning 9:00 PM (+9:30 follow-up), game-day check 6:15 AM, finalize 10:30 PM, booking 8:30 AM', () => {
+  it('7:00 PM: last call 6:00 PM, cancel warning 9:00 PM (+9:30 follow-up), finalize 10:30 PM, booking 8:30 AM', () => {
     const t = taskTimes(at7('2026-11-03'), OPTS);
     expect(iso(t.nightLastCall)).toBe('2026-11-02T23:00:00.000Z'); // Mon 6:00 PM EST
     expect(iso(t.deadline)).toBe('2026-11-03T12:00:00.000Z'); // Tue 7:00 AM
     expect(iso(t.cancelWarning)).toBe('2026-11-03T02:00:00.000Z'); // Mon 9:00 PM
     expect(iso(t.cancelFollowup)).toBe('2026-11-03T02:30:00.000Z'); // Mon 9:30 PM
-    expect(iso(t.gamedayCheck)).toBe('2026-11-03T11:15:00.000Z'); // Tue 6:15 AM
     expect(iso(t.finalize)).toBe('2026-11-04T03:30:00.000Z'); // Tue 10:30 PM (Zip 8; was 9:05 PM)
     expect(iso(t.courtOpens)).toBe('2026-10-20T11:00:00.000Z'); // Tue Oct 20, 7:00 AM EDT
     expect(iso(t.bookingHeadsUp)).toBe('2026-10-20T10:45:00.000Z'); // 6:45 AM
@@ -224,27 +220,24 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
     expect(iso(t.noCourtCheck)).toBe('2026-11-03T12:15:00.000Z'); // Tue 7:15 AM
   });
 
-  it('7:30 PM: last call 6:30 PM, cancel warning 9:30 PM, game-day check 6:45 AM, finalize 10:30 PM', () => {
+  it('7:30 PM: last call 6:30 PM, cancel warning 9:30 PM, finalize 10:30 PM', () => {
     const t = taskTimes(at730('2026-11-05'), OPTS);
     expect(iso(t.nightLastCall)).toBe('2026-11-04T23:30:00.000Z'); // Wed 6:30 PM
     expect(iso(t.cancelWarning)).toBe('2026-11-05T02:30:00.000Z'); // Wed 9:30 PM
-    expect(iso(t.gamedayCheck)).toBe('2026-11-05T11:45:00.000Z'); // Thu 6:45 AM
     expect(iso(t.finalize)).toBe('2026-11-06T03:30:00.000Z'); // Thu 10:30 PM (Zip 8; was 9:35 PM)
   });
 
-  it("the game's own deadline moves the cancel warning and the game-day check, and the card names it", () => {
+  it("the game's own deadline moves the cancel warning, and the card names it", () => {
     const g = at7('2026-11-03', { cancellationDeadlineAt: '2026-11-03T14:00:00Z' }); // 9:00 AM
     const t = taskTimes(g, OPTS);
     expect(iso(t.cancelWarning)).toBe('2026-11-03T04:00:00.000Z'); // Mon 11:00 PM
-    expect(iso(t.gamedayCheck)).toBe('2026-11-03T13:15:00.000Z'); // Tue 8:15 AM
-    expect(tasksAt(iso(t.gamedayCheck), [g])[0].text).toBe('Tonight: only 3 players in. Cancel court before 9:00 AM.');
+    expect(tasksAt('2026-11-03T13:15:00.000Z', [g])[0].text).toBe('Tonight: only 3 players in. Cancel court before 9:00 AM.'); // Tue 8:15 AM
   });
 
   it('across the Sun Nov 1 clock change: a 7:00 PM Sunday game and a 7:30 PM Monday game keep their clock times', () => {
     const sun = taskTimes(at7('2026-11-01'), OPTS);
     expect(iso(sun.nightLastCall)).toBe('2026-10-31T22:00:00.000Z'); // Sat 6:00 PM EDT
     expect(iso(sun.cancelWarning)).toBe('2026-11-01T01:00:00.000Z'); // Sat 9:00 PM EDT (deadline Sun 7:00 AM EST)
-    expect(iso(sun.gamedayCheck)).toBe('2026-11-01T11:15:00.000Z'); // Sun 6:15 AM EST
     const mon = taskTimes(at730('2026-11-02'), OPTS);
     expect(iso(mon.nightLastCall)).toBe('2026-11-01T23:30:00.000Z'); // Sun 6:30 PM EST
   });
@@ -255,9 +248,7 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
       ['2026-11-02T23:00:00.000Z', 'g7:night'], // Mon 6:00 PM
       ['2026-11-03T02:00:00.000Z', 'g7:cancel'], // Mon 9:00 PM
       ['2026-11-03T02:30:00.000Z', 'g7:cancel_followup'], // Mon 9:30 PM
-      ['2026-11-03T11:15:00.000Z', 'g7:gameday'], // Tue 6:15 AM
     ]);
-    expect(log[3].text).toBe(`Tonight: only 3 players in. Cancel court before 7:00 AM: ${COURTRESERVE_CANCEL_URL}`);
   });
 
   it('moved from 7:00 to 7:30 PM after the last call went out: not sent again; the unsent alerts move to the new times; the card shows the new truth', () => {
@@ -270,9 +261,7 @@ describe('7:00 PM and 7:30 PM games: every time follows the game', () => {
       ['2026-11-02T23:00:00.000Z', 'mv:night'], // sent for 7:00 PM; not repeated at 6:30 PM
       ['2026-11-03T02:30:00.000Z', 'mv:cancel'], // Mon 9:30 PM (was 9:00)
       ['2026-11-03T03:00:00.000Z', 'mv:cancel_followup'], // Mon 10:00 PM
-      ['2026-11-03T11:45:00.000Z', 'mv:gameday'], // Tue 6:45 AM (was 6:15)
     ]);
-    expect(log[3].text).toBe(`Tonight: only 3 players in. Cancel court before 7:30 AM: ${COURTRESERVE_CANCEL_URL}`);
     // A moved game whose new last call is still ahead gets it at the new time.
     const early = { ...at7('2026-11-05'), id: 'e' };
     const later = { ...at730('2026-11-05'), id: 'e' };
@@ -285,11 +274,11 @@ describe('court status gates the alerts', () => {
   const g7 = (date: string, over: Partial<TaskSession> = {}) => game(date, over, 19, 0);
   const iso = (ms: number) => new Date(ms).toISOString();
 
-  it('booked and not booked games at the same moment: only the booked one gets the last call, cancel warning and game-day check', () => {
+  it('booked and not booked games at the same moment: only the booked one gets the last call and the cancel warning', () => {
     const booked = { ...g7('2026-11-03'), id: 'yes' };
     const none = { ...g7('2026-11-03', { booked: false }), id: 'no' };
     const log = simulate('2026-11-02T17:00:00Z', 30, () => [booked, none]);
-    expect(log.map((l) => l.key)).toEqual(['yes:night', 'yes:cancel', 'yes:cancel_followup', 'yes:gameday']);
+    expect(log.map((l) => l.key)).toEqual(['yes:night', 'yes:cancel', 'yes:cancel_followup']);
     // The card: the unbooked game shows only "has no court yet" (no cancel-court steps).
     const t = tasksAt('2026-11-03T02:10:00Z', [booked, none]);
     expect(t.filter((x) => x.sessionId === 'no').map((x) => [x.kind, x.text])).toEqual([['nocourt_later', 'Tue Nov 3 has no court yet.']]);
@@ -303,7 +292,6 @@ describe('court status gates the alerts', () => {
     const log = simulate('2026-11-02T17:00:00Z', 30, (ms) => [ms < Date.parse(bookedAt) ? before : after]);
     expect(log.map((l) => [iso(l.ms), l.key])).toEqual([
       ['2026-11-03T02:30:00.000Z', 'late:cancel_followup'], // 9:30 PM
-      ['2026-11-03T11:15:00.000Z', 'late:gameday'], // 6:15 AM
     ]);
     // The card: the one-time "Court booked" text card (no Telegram), plus the cancel checklist (3 in).
     const t = tasksAt('2026-11-03T02:25:00Z', [after]);
@@ -330,7 +318,7 @@ describe('court status gates the alerts', () => {
     const t = tasksAt('2026-11-03T12:15:00Z', [five]); // Tue 7:15 AM
     expect(t[0]).toMatchObject({ kind: 'nocourt', text: 'Tonight: 5 in, no court yet. Check CourtReserve for an opening.' });
     expect(t[0].alerts[0]).toMatchObject({ id: 'nocourt', dueMs: at('2026-11-03T12:15:00Z'), text: `Tonight: 5 in, no court yet. Check CourtReserve for an opening: ${COURTRESERVE_BOOKING_URL}` });
-    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve', 'I booked it']);
+    expect(t[0].buttons.map((b) => b.label)).toEqual(['Book on CourtReserve']);
     expect(simulate('2026-11-03T05:00:00Z', 15, () => [five]).map((l) => [iso(l.ms), l.key])).toEqual([['2026-11-03T12:15:00.000Z', 'five:nocourt']]);
     expect(simulate('2026-11-03T05:00:00Z', 15, () => [{ ...five, confirmedCount: 3 }])).toEqual([]);
     expect(simulate('2026-11-03T05:00:00Z', 15, () => [{ ...five, booked: true, bookedAt: '2026-11-03T05:00:00.000Z' }]).map((l) => l.key)).not.toContain('five:nocourt');
@@ -352,8 +340,6 @@ describe('court status gates the alerts', () => {
       ['2026-11-05T02:30:00.000Z', 'seven:cancel_followup'],
       ['2026-11-05T03:00:00.000Z', 'eight:cancel'], // 10:00 PM
       ['2026-11-05T03:30:00.000Z', 'eight:cancel_followup'],
-      ['2026-11-05T11:15:00.000Z', 'seven:gameday'], // Thu 6:15 AM
-      ['2026-11-05T12:15:00.000Z', 'eight:gameday'], // Thu 7:15 AM
     ]);
   });
 
@@ -381,7 +367,6 @@ describe('ticks every 5 minutes', () => {
       ['2026-11-03T03:00:00.000Z', 's-2026-11-03:cancel'], // Mon 10:00 PM
       ['2026-11-03T03:30:00.000Z', 's-2026-11-03:cancel_followup'], // Mon 10:30 PM
       ['2026-11-03T11:45:00.000Z', 's-2026-11-17:book'], // Tue 6:45 AM
-      ['2026-11-03T12:15:00.000Z', 's-2026-11-03:gameday'], // Tue 7:15 AM
       ['2026-11-03T12:30:00.000Z', 's-2026-11-17:book_followup'], // Tue 7:30 AM
     ]);
     expect(new Set(log.map((l) => l.key)).size).toBe(log.length);
@@ -396,7 +381,6 @@ describe('ticks every 5 minutes', () => {
       ['2026-10-31T23:00:00.000Z', 'sun:night'], // Sat Oct 31, 7:00 PM EDT (same clock time, across the change)
       ['2026-11-01T02:00:00.000Z', 'sun:cancel'], // Sat 10:00 PM EDT
       ['2026-11-01T02:30:00.000Z', 'sun:cancel_followup'],
-      ['2026-11-01T12:15:00.000Z', 'sun:gameday'], // Sun 7:15 AM EST (after the change)
       ['2026-11-02T00:00:00.000Z', 'mon:night'], // Sun 7:00 PM EST
     ]);
   });
@@ -473,7 +457,7 @@ async function fill(g: Awaited<ReturnType<typeof smartGroup>>, date: string, n: 
 }
 
 describe('the tick endpoint', () => {
-  it('48 hours of ticks through the API: the same six alerts, once each, with no phone numbers or money', async () => {
+  it('48 hours of ticks through the API: the same five alerts, once each, with no phone numbers or money (Zip 11: no game-day check)', async () => {
     const g = await smartGroup();
     g.app.now = at('2026-11-02T17:00:00Z'); // Mon Nov 2, noon EST
     await g.dash(); // makes the games up to six weeks out
@@ -490,7 +474,6 @@ describe('the tick endpoint', () => {
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
       `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
       `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
     for (const t of g.sent) {
@@ -689,11 +672,10 @@ describe('the tick endpoint', () => {
       await g.tick();
       g.app.now += 5 * MIN;
     }
-    // New deadline 8:30 AM: cancel warning 10:30 PM, follow-up 11:00 PM, game-day check 7:45 AM.
+    // New deadline 8:30 AM: cancel warning 10:30 PM, follow-up 11:00 PM (the game-day check is gone, Zip 11).
     expect(g.sent.filter((t) => !t.includes('Nov 17'))).toEqual([
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone`, // plain words: Open site is the way in
-      `Tonight: only 3 players in. Cancel court before 8:30 AM: ${COURTRESERVE_CANCEL_URL}`,
     ]);
     const card = (await import('../src/pages/admin/doNow')).dashboardTasks(await g.dash(), at('2026-11-03T12:50:00Z'), ADMIN);
     expect(card[0].text).toBe('Tonight: only 3 players in. Cancel court before 8:30 AM.');

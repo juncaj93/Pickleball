@@ -383,11 +383,13 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     }
   }
 
+  // Zip 11, Alert cards: the list cards keep their rows and buttons inside the one card look (amber for money owed, gray for late drops).
+  const cards = ctx.d.alertCards === true;
   if (item.kind === 'owed' || item.kind === 'tonight') {
     const label = item.kind === 'tonight' ? 'Mark paid tonight' : 'Who owes you';
     return (
-      <article className={`card stack${item.kind === 'tonight' ? ' tonight' : ''}`} aria-label={label}>
-        <h3>{label}</h3>
+      <article className={cards ? 'ac ac-amber' : `card stack${item.kind === 'tonight' ? ' tonight' : ''}`} aria-label={label} {...(cards ? { 'data-alert-card': 'amber' } : {})}>
+        {cards ? <h3 className="ac-title">{label}</h3> : <h3>{label}</h3>}
         <ul className="rows">
           {item.rows.map((r) => (
             <li key={`${r.session.id}-${r.playerId}`}>
@@ -398,7 +400,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 </span>
               </span>
               <button
-                className="btn small secondary"
+                className={cards ? 'ac-btn ac-out' : 'btn small secondary'}
                 disabled={busy}
                 aria-label={`Mark ${r.name} paid for ${formatShortDate(r.session.startsAt, tz)}`}
                 onClick={() =>
@@ -424,11 +426,18 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   // these late drops still owes (a debt made while it was on stays until it is cleared or paid).
   const feeMode = ctx.d.lateFees === true || lateDrops(s).some((r) => r.lateFee);
   return (
-    <article className="card stack" aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`}>
-      <div>
-        <h3>{title}</h3>
-        <div className="small muted">{when(s, tz)}</div>
-      </div>
+    <article className={cards ? 'ac ac-gray' : 'card stack'} aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`} {...(cards ? { 'data-alert-card': 'gray' } : {})}>
+      {cards ? (
+        <div>
+          <h3 className="ac-title">{title}</h3>
+          <div className="ac-sub">{when(s, tz)}</div>
+        </div>
+      ) : (
+        <div>
+          <h3>{title}</h3>
+          <div className="small muted">{when(s, tz)}</div>
+        </div>
+      )}
       <ul className="rows">
         {lateDrops(s).map((r) => (
           <li key={r.playerId}>
@@ -457,7 +466,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         </div>
       ) : (
       <button
-        className="btn small ghost"
+        className={cards ? 'ac-btn ac-out ac-done' : 'btn small ghost'}
         disabled={busy}
         onClick={() =>
           act(async () => {

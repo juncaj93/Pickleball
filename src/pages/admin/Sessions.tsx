@@ -21,6 +21,7 @@ import { cancelByCardLine, cancelByIso, cancelByShort, cardTime, formatTime, for
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING } from '../../ui';
 import { flushHold, startHold, undoHold, UNDO_MS } from '../../hold';
+import { AlertCard } from '../../AlertCard';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
 import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { type AdminCtx } from '../Admin';
@@ -178,6 +179,37 @@ export function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   // TEXTS_R2: "Pickleball tomorrow is confirmed @ 7:30pm!" with line breaks. Off: the words as they were.
   const body = ctx.d.textsR2 === true ? stillInTextR2(s.startsAt, tz, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink)) : stillInText(s.startsAt, tz, siteAddress(ctx.d.group.playerLink));
   const one = c.waiting.length === 1 ? c.waiting[0] : null;
+  // Zip 11, Alert cards: a purple (texting) card inside the game card: "Confirmed 2 of 3", "Waiting on Dan", Text Dan (one Text per person).
+  if (ctx.d.alertCards === true) {
+    return (
+      <AlertCard
+        as="div"
+        tone="purple"
+        className="ts-check-ac"
+        data={{ 'data-time-check': true }}
+        title={`Confirmed ${c.confirmedCount} of ${c.inCount}`}
+        sub={c.waiting.length > 0 ? `Waiting on ${c.waiting.map((w) => w.name).join(', ')}` : undefined}
+        action={
+          one ? (
+            <a className="ac-btn" href={smsHref(one.phone, body, isIOS)} aria-label={`Text ${one.name}: ${body}`}>
+              Text {one.name}
+            </a>
+          ) : undefined
+        }
+        actions={
+          c.waiting.length > 1 ? (
+            <>
+              {c.waiting.map((w) => (
+                <a key={w.playerId} className="ac-btn ts-pill" href={smsHref(w.phone, body, isIOS)} aria-label={`Text ${w.name}: ${body}`}>
+                  Text {w.name}
+                </a>
+              ))}
+            </>
+          ) : undefined
+        }
+      />
+    );
+  }
   return (
     <div className="ts-check" data-time-check>
       <span className="ts-count">
@@ -329,6 +361,54 @@ export function ShortPanel({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   const { busy, run } = useAction(ctx);
   const passed = Date.parse(cancelByIso(s.startsAt)) <= now;
   const booked = s.bookingStatus === 'booked';
+  // Zip 11, Alert cards: the same words and the same four buttons as one card under the game: red before the cancel-by time
+  // (a deadline), gray once it passed.
+  if (ctx.d.alertCards === true) {
+    return (
+      <AlertCard
+        as="div"
+        tone={passed ? 'gray' : 'red'}
+        className="short-ac"
+        data={{ 'data-short-panel': true }}
+        title={`${s.confirmedCount} going, ${s.state.flags.playersNeeded} more needed`}
+        sub={passed ? (booked ? 'The cancellation deadline passed, so canceling the court may not be free.' : 'The cancellation deadline passed.') : `Reschedule or cancel by ${cancelByShort(s.startsAt, tz)}.`}
+        subTone={passed ? undefined : 'red'}
+        actions={
+          <>
+            <button className="ac-btn ac-out" disabled={busy} onClick={() => ctx.open('edit', s.id)}>
+              Edit game
+            </button>
+            <button className="ac-btn ac-out" data-ac-tone="red" disabled={busy} onClick={() => ctx.open('cancel', s.id)}>
+              Cancel session
+            </button>
+            {booked && (
+              <a className="ac-btn" data-ac-tone="blue" href={COURTRESERVE_CANCEL_URL} target="_blank" rel="noopener noreferrer">
+                Cancel court
+                <span className="sr-only"> (opens CourtReserve)</span>
+              </a>
+            )}
+            <button
+              className="ac-btn ac-out"
+              data-ac-tone="gray"
+              disabled={busy}
+              onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/decision`, { decision: 'keep' }), 'Keeping it as is')}
+            >
+              Keep as is
+            </button>
+          </>
+        }
+      >
+        {!passed && ctx.d.textsR2 !== true && (
+          <details className="ac-extra">
+            <summary className="small" style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>
+              Text this alert to yourself
+            </summary>
+            <SmsDraft to="You" phone={null} body={deadlineAlertMessage(s, tz, cancelByIso(s.startsAt))} />
+          </details>
+        )}
+      </AlertCard>
+    );
+  }
   return (
     <div className="stack">
       <p className="small">

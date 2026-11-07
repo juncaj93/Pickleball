@@ -11,7 +11,11 @@ import { MARKS, OPTS, SCENARIO, ticks } from './tick-scenarios';
 // Zip 8 (Nov 6): the finalize reminder moved to 10:30 PM game night, so the finalize cards appear later and their alert time
 // changed; every other card was checked identical to the old code at every tick of the sweep, and the alert lines in
 // tick-golden.json changed only for finalize. Fingerprints recomputed then (the Zip 7 ones were cdec146b... and d4cad9c0...).
-const OLD_CARDS = { noMarks: '5ce16421029746d7ae71d9b6347ec0dfb34e7f4d70c091ed0690e926e89ff986', withMarks: 'c3237a057954ab5905c3cc4e71df2cb47e5a98366b4e82d9c8ae4a2b7142d3d3' };
+// Zip 11 (Nov 7): the unused "I booked it" button and the game-day check (6:15 / 7:15 AM, already off under TEXTS_R2) were deleted. A
+// one-off check ran the old brain (main, fb44afc) and the new one at all 12,684 ticks of both sweeps: the new cards and alerts were the old
+// ones minus exactly those two things. tick-golden.json lost only its 9 ":gameday" lines. Fingerprints recomputed then (the Zip 8 ones
+// were 5ce16421... and c3237a05...).
+const OLD_CARDS = { noMarks: '9a8288652c1e57b35f60be6e6c45b04e03f9e390f73048ec3392977864d3520e', withMarks: '840b89744515811fae5434564fed85eb05f703cf39967c3f0092ad9f1277f8af' };
 
 describe('booking alert wording', () => {
   for (const [name, marks] of [['noMarks', new Set<string>()], ['withMarks', MARKS]] as const) {

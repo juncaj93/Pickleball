@@ -4081,8 +4081,9 @@ async function main() {
 
     await check('bad links show a clear error state', async () => {
       const p = await newPage();
+      // Zip 11: the old personal-link page is gone; an old /t/ link opens the home page.
       await p.goto(`${BASE}/t/${'x'.repeat(43)}`);
-      await p.getByText("This link doesn't work").waitFor();
+      await p.waitForFunction(() => window.location.pathname === '/');
       await p.goto(`${BASE}/g/${'y'.repeat(24)}`);
       await p.getByText("This group link isn't valid").waitFor();
     });

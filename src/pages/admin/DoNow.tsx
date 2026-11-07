@@ -12,6 +12,8 @@ import { courtCards, type CourtCard, textHref, visibleTasks } from './doNow';
 import { type Dismissed, pruneDismissed, readDismissed, writeDismissed } from './dismiss';
 import { DismissX } from './DismissX';
 import '../../do-now.css';
+import { AlertCard, type AcTone } from '../../AlertCard';
+import { splitFirst } from '../../../shared/zip11';
 
 /** Save a card tap on the server. */
 export function markTask(sessionId: string, mark: MarkName) {
@@ -85,8 +87,9 @@ export function DoNowCard({ ctx, hideBook }: { ctx: AdminCtx; hideBook?: boolean
   const courts = courtCards(ctx.d, nowMs, adminUrl).filter((c) => !(hideBook && c.kind === 'book'));
   if (tasks.length === 0 && courts.length === 0) return null;
   const [first, ...rest] = tasks;
+  const cards = ctx.d.alertCards === true;
   return (
-    <section className="do-now" aria-labelledby="do-now-title">
+    <section className={`do-now${cards ? ' ac-stack' : ''}`} aria-labelledby="do-now-title">
       <h2 id="do-now-title" className="sr-only">
         Do this now
       </h2>
@@ -95,7 +98,7 @@ export function DoNowCard({ ctx, hideBook }: { ctx: AdminCtx; hideBook?: boolean
       ))}
       {first && <TaskCard ctx={ctx} task={first} nowMs={nowMs} lead={courts.length === 0} onDismiss={dismiss} />}
       {first && rest.length > 0 && (
-        <button type="button" className="link-btn dn-more" aria-expanded={more} onClick={() => setMore((v) => !v)}>
+        <button type="button" className={cards ? 'ac-more-link dn-more' : 'link-btn dn-more'} aria-expanded={more} onClick={() => setMore((v) => !v)}>
           {more ? 'Show less' : `+${rest.length} more`}
         </button>
       )}
@@ -118,6 +121,25 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
   const s = card.session;
   // Date and start time: two games on one day (an extra game) never look the same.
   const day = `${formatShortDate(s.startsAt, ctx.d.group.timezone)} · ${formatTime(s.startsAt, ctx.d.group.timezone)}`;
+  const cards = ctx.d.alertCards === true;
+  if (card.kind === 'book' && cards) {
+    // Zip 11, Alert cards: the same card and the same CourtReserve link, as a blue (booking) card with Book on the right.
+    return (
+      <AlertCard
+        tone="blue"
+        label={`${day}: court still needs to be booked`}
+        data={{ 'data-task': 'court_book', 'data-session': s.id }}
+        title="Court still needs to be booked"
+        sub={day}
+        action={
+          <a className="ac-btn" href={COURTRESERVE_BOOKING_URL} target="_blank" rel="noopener noreferrer">
+            Book
+            <span className="sr-only"> (opens CourtReserve)</span>
+          </a>
+        }
+      />
+    );
+  }
   if (card.kind === 'book') {
     return (
       <article className="card dn-card" data-task="court_book" data-session={s.id} aria-label={`${day}: court still needs to be booked`}>
@@ -179,6 +201,28 @@ function CourtCardView({ ctx, card }: { ctx: AdminCtx; card: CourtCard }) {
       settleTaps(saved ? SETTLE_MS : 0);
     }
   };
+  if (cards) {
+    // Zip 11, Alert cards: green (after the game), both answers under the text.
+    return (
+      <AlertCard
+        tone="green"
+        label={`${day}: did you guys play?`}
+        data={{ 'data-task': 'court_played', 'data-session': s.id }}
+        title="Did you guys play?"
+        sub={day}
+        actions={
+          <>
+            <button type="button" className="ac-btn" disabled={busy || held} data-action="played" onClick={() => void played()}>
+              {busy ? 'Saving…' : 'Yes, we played'}
+            </button>
+            <button type="button" className="ac-btn ac-out" data-ac-tone="red" disabled={busy || held} data-action="cancel-game" onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
+              Cancel game
+            </button>
+          </>
+        }
+      />
+    );
+  }
   return (
     <article className="card dn-card" data-task="court_played" data-session={s.id} aria-label={`${day}: did you guys play?`}>
       <div className="dn-eyebrow">{day}</div>
@@ -208,6 +252,7 @@ function TaskCard({ ctx, task, nowMs, lead, onDismiss }: { ctx: AdminCtx; task: 
   const current = task.steps.find((st) => !st.done && st.enabled);
   // Only the night-before text is a notice; cancel checklists and finalize need an answer.
   const canDismiss = task.kind === 'night' && !!onDismiss;
+  if (ctx.d.alertCards === true) return <TaskAlertCard ctx={ctx} task={task} nowMs={nowMs} current={current} onDismiss={canDismiss ? () => onDismiss!(task) : undefined} />;
   return (
     <article className={`card dn-card${lead ? ' lead' : ''}${canDismiss ? ' dismissible' : ''}`} data-task={task.kind} data-session={task.sessionId} aria-label={`Do this now: ${task.text}`}>
       {canDismiss && <DismissX label={task.text} onDismiss={() => onDismiss!(task)} />}
@@ -227,6 +272,55 @@ function TaskCard({ ctx, task, nowMs, lead, onDismiss }: { ctx: AdminCtx; task: 
         </div>
       )}
     </article>
+  );
+}
+
+
+/** Zip 11, Alert cards: each button's short label and color (the same action; the old label stays as the button's spoken name). */
+const AC_BUTTON: Record<string, { label: string; tone: AcTone; out?: boolean }> = {
+  text: { label: 'Text', tone: 'purple' },
+  'court-link': { label: 'Cancel court', tone: 'blue' },
+  'court-done': { label: 'Court canceled', tone: 'blue', out: true },
+  cancel: { label: 'Cancel session', tone: 'red', out: true },
+  'canceled-text': { label: 'Text everyone', tone: 'red', out: true },
+  finalize: { label: 'Finalize', tone: 'green' },
+};
+
+const TASK_TONE: Record<Task['kind'], AcTone> = { cancel: 'red', night: 'purple', book: 'blue', nocourt: 'blue', nocourt_later: 'blue', finalize: 'green' };
+
+/**
+ * Zip 11, Alert cards: one task as one action card. The words are the task's own (the same as its Telegram alert), split into a bold
+ * title and a sub line; the buttons are the same buttons (a checklist shows its current step's, as before, under the text).
+ */
+function TaskAlertCard({ ctx, task, nowMs, current, onDismiss }: { ctx: AdminCtx; task: Task; nowMs: number; current: TaskStep | undefined; onDismiss?: () => void }) {
+  const { title, rest } = splitFirst(task.text);
+  const steps = task.steps.length > 0;
+  const buttons = steps ? (current?.buttons ?? []) : task.buttons;
+  // The night-before card: its button's long label ("Text the group to confirm") becomes the sub line, the button says "Text".
+  const sub = rest || (task.kind === 'night' && task.buttons[0] ? task.buttons[0].label : '');
+  const stepLine = steps && current ? `Step ${task.steps.indexOf(current) + 1} of ${task.steps.length}: ${current.label}` : '';
+  const btns = buttons.map((b, i) => <Action key={b.id} ctx={ctx} task={task} b={b} primary={i === 0} nowMs={nowMs} card />);
+  const many = btns.length > 1 || steps;
+  return (
+    <AlertCard
+      tone={TASK_TONE[task.kind]}
+      label={`Do this now: ${task.text}`}
+      data={{ 'data-task': task.kind, 'data-session': task.sessionId }}
+      title={title}
+      sub={
+        sub || stepLine ? (
+          <>
+            {sub && <span className={task.kind === 'cancel' ? 'ac-sub-red' : undefined}>{sub}</span>}
+            {sub && stepLine && <br />}
+            {stepLine && <span data-step-line>{stepLine}</span>}
+          </>
+        ) : undefined
+      }
+      action={!many && btns.length === 1 ? btns[0] : undefined}
+      actions={many && btns.length > 0 ? <>{btns}</> : undefined}
+      onX={onDismiss}
+      xLabel={task.text}
+    />
   );
 }
 
@@ -260,11 +354,17 @@ function Step({ ctx, task, step, n, current, nowMs }: { ctx: AdminCtx; task: Tas
   );
 }
 
-function Action({ ctx, task, b, primary, nowMs }: { ctx: AdminCtx; task: Task; b: TaskButton; primary: boolean; nowMs: number }) {
+function Action({ ctx, task, b, primary, nowMs, card }: { ctx: AdminCtx; task: Task; b: TaskButton; primary: boolean; nowMs: number; card?: boolean }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const s = ctx.d.sessions.find((x) => x.id === task.sessionId)!;
-  const cls = `btn small${primary ? '' : ' secondary'}`;
+  // Zip 11, Alert cards: the short label and the color of the color system; the same action below.
+  const look = card ? (AC_BUTTON[b.id] ?? { label: b.label, tone: TASK_TONE[task.kind], out: !primary }) : null;
+  const cls = look ? `ac-btn${look.out ? ' ac-out' : ''}` : `btn small${primary ? '' : ' secondary'}`;
+  const tone = look ? { 'data-ac-tone': look.tone } : {};
+  const label = look ? look.label : b.label;
+  // The spoken name starts with the visible words (voice control), then the old full label: "Text: Text the group to confirm".
+  const spoken = look && look.label !== b.label ? { 'aria-label': `${look.label}: ${b.label}` } : {};
   // Instant taps (INSTANT_TAPS): the shared helper (action.ts) shows this button working and keeps a second tap out. Off: as before.
   const instantOn = useInstant() !== null;
   const instantAct = useAction(ctx);
@@ -286,9 +386,9 @@ function Action({ ctx, task, b, primary, nowMs }: { ctx: AdminCtx; task: Task; b
     const href = textHref(ctx.d, s, nowMs, a, isIOS);
     if (!href) {
       return (
-        <button type="button" className={cls} disabled>
-          <MessageIcon />
-          {b.label}
+        <button type="button" className={cls} disabled {...tone} {...spoken}>
+          {!look && <MessageIcon />}
+          {label}
         </button>
       );
     }
@@ -297,27 +397,28 @@ function Action({ ctx, task, b, primary, nowMs }: { ctx: AdminCtx; task: Task; b
         className={cls}
         href={href}
         data-action={b.id}
+        {...tone}
+        {...spoken}
         onClick={() => {
           // Messages opens; the mark is saved quietly (Pretend and the demo can't save, which is fine).
           void markTask(s.id, a.mark).then(ctx.reload, () => {});
         }}
       >
-        <MessageIcon />
-        {b.label}
+        {!look && <MessageIcon />}
+        {label}
       </a>
     );
   }
   if (a.type === 'link') {
     return (
-      <a className={`${cls} external`} href={a.href} target="_blank" rel="noopener noreferrer" data-action={b.id}>
-        {b.label}
-        <span className="sr-only"> (opens CourtReserve)</span>
+      <a className={`${cls} external`} href={a.href} target="_blank" rel="noopener noreferrer" data-action={b.id} {...tone}>
+        {label}
+        <span className="sr-only">{look && look.label !== b.label ? ` (${b.label}, opens CourtReserve)` : ' (opens CourtReserve)'}</span>
       </a>
     );
   }
   const onClick = () => {
     if (a.type === 'mark') return run(() => markTask(s.id, a.mark), 'Saved');
-    if (a.type === 'booked') return run(() => api('POST', `/api/admin/sessions/${s.id}/booked`, {}), 'Marked booked');
     if (a.type === 'cancel') return ctx.open('cancel', s.id);
     // Finalize: the Finalize card is on Home; bring it into view.
     const el = document.querySelector<HTMLElement>(`[data-finalize="${CSS.escape(s.id)}"]`);
@@ -325,8 +426,8 @@ function Action({ ctx, task, b, primary, nowMs }: { ctx: AdminCtx; task: Task; b
     el?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
   };
   return (
-    <button type="button" className={cls} disabled={busy} data-action={b.id} onClick={() => void onClick()}>
-      {busy ? 'Saving…' : b.label}
+    <button type="button" className={cls} disabled={busy} data-action={b.id} {...tone} {...(busy ? {} : spoken)} onClick={() => void onClick()}>
+      {busy ? 'Saving…' : label}
     </button>
   );
 }

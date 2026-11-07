@@ -7,7 +7,6 @@ import { ToastProvider } from './ui';
 import { SetupPage } from './pages/Setup';
 import { PlayerHome } from './pages/PlayerHome';
 import { SiteHome } from './pages/SiteHome';
-import { LinkPage } from './pages/LinkPage';
 import { AdminApp } from './pages/Admin';
 import { GoPage } from './pages/GoPage';
 import { watchKeyboard } from './keyboard';
@@ -19,12 +18,18 @@ import './view-only.css';
 import './zip9.css';
 // Zip 10, Card cleanup: every rule under <html data-card-cleanup> (dormant with the switch off).
 import './zip10.css';
+// Zip 11, Alert cards: every rule under <html data-alert-cards> (dormant with the switch off).
+import './alert-cards.css';
 
 function App() {
   const path = usePath();
   let m: RegExpMatchArray | null;
   if ((m = path.match(/^\/g\/([A-Za-z0-9_-]+)\/?$/))) return <PlayerHome groupKey={m[1]} />;
-  if ((m = path.match(/^\/t\/([A-Za-z0-9_-]+)\/?$/))) return <LinkPage token={m[1]} />;
+  // The old personal-link page (/t/<token>) is gone (Zip 11). None was ever sent on the live site; an old one still opens the home page.
+  if (/^\/t(\/|$)/.test(path)) {
+    window.history.replaceState(null, '', '/');
+    return <SiteHome />;
+  }
   if ((m = path.match(/^\/go\/([A-Za-z0-9_.-]+)\/?$/))) return <GoPage token={m[1]} />;
   if (/^\/admin\/?$/.test(path)) return <AdminApp />;
   if (/^\/setup\/?$/.test(path)) return <SetupPage />;
