@@ -1,6 +1,7 @@
 /* Zip 12: the speed switches on a phone. "Show last screen at once" (the saved copy, its "as of" tag, every button held until the fresh
  * answer, nothing tappable on stale data, light and dark, 390/360/320 px), "Load games at once" (the plain address asks for the games
- * together with its set-up check), the throw-away rules (switch off, "not you?", older than 24 hours, View as never saves), the private
+ * together with its set-up check), the quiet swap (sizes kept, only changes fade in), the throw-away rules (switch off, "not you?", older than 3 hours
+ * shows the shimmer, View as never saves), the private
  * links, and the three Settings rows. "Fewer database trips" changes no screen: its proof is tests/speed-queries.test.ts.
  *
  *   node e2e/zip12.cjs      (also run by npm run test:e2e)
@@ -90,7 +91,7 @@ async function main() {
   if (!status.openAccess || status.wordRequired) throw new Error('the fake world must open at the plain address');
   const nameId = (name) => d0.players.find((p) => p.name === name).id;
   const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
-  const phone = (width, scheme = 'light', height = 900) => ({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: 'reduce' });
+  const phone = (width, scheme = 'light', height = 900, motion = false) => ({ viewport: { width, height }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: motion ? 'no-preference' : 'reduce' });
   const shift = (delta) => {
     const Real = Date;
     class Shifted extends Real {
@@ -106,8 +107,8 @@ async function main() {
   };
 
   /** A phone with a name picked, on the plain address. `hold`: the games answer waits this long (a slow network). */
-  async function playerPhone(name, { width = 390, scheme = 'light', delta = 0 } = {}) {
-    const ctx = await browser.newContext(phone(width, scheme, 1400));
+  async function playerPhone(name, { width = 390, scheme = 'light', delta = 0, motion = false } = {}) {
+    const ctx = await browser.newContext(phone(width, scheme, 1400, motion));
     await ctx.addInitScript(shift, NOW_MS - Date.now() + delta);
     await ctx.addInitScript(() => {
       try {
@@ -253,6 +254,8 @@ async function main() {
       await q.ctx.close();
       return s;
     })();
+    // The copy is one hour old at that moment (a copy older than 3 hours is not shown at all, which another check covers).
+    for (const o of state.origins) for (const it of o.localStorage) if (it.name === 'pb_last_screen') it.value = JSON.stringify({ ...JSON.parse(it.value), savedAt: firstEnd + 60_000 - 3600_000 });
     const ctx = await browser.newContext({ ...phone(390), storageState: state });
     await ctx.addInitScript(shift, firstEnd - Date.now() + 60_000);
     const page = await ctx.newPage();
@@ -279,6 +282,23 @@ async function main() {
     await page.goto(BASE + '/', { waitUntil: 'commit' });
     await sleep(900);
     assert((await page.locator('[data-saved-copy]').count()) === 0, 'a day-old copy was shown');
+    await ctx.close();
+  });
+
+  await check('older than a few hours (4 hours): the normal loading shimmer shows, not the copy', async () => {
+    const q = await playerPhone('Kai');
+    await q.open();
+    await q.fresh();
+    await sleep(400);
+    const state = await q.ctx.storageState();
+    await q.ctx.close();
+    const ctx = await browser.newContext({ ...phone(390), storageState: state });
+    await ctx.addInitScript(shift, NOW_MS - Date.now() + 4 * 3600_000);
+    const page = await ctx.newPage();
+    await page.route('**/api/group', async (r) => (await sleep(2500), r.continue()));
+    await page.goto(BASE + '/', { waitUntil: 'commit' });
+    await page.locator('.skel-schedule').waitFor({ timeout: 2500 });
+    assert((await page.locator('[data-saved-copy]').count()) === 0, 'a 4 hour old copy was shown');
     await ctx.close();
   });
 
@@ -313,6 +333,98 @@ async function main() {
     }
     assert((await page.evaluate(() => localStorage.getItem('pb_last_screen'))) === null, 'View as saved a copy');
     await ctx.close();
+  });
+
+
+  // ---- The quiet swap (Alex, Sat Nov 7) ----
+  /** Each card's top and height on the screen now, by game id (the saved list or the live one). */
+  const boxes = (page, saved) =>
+    page.locator(`.schedule${saved ? '[data-saved-copy]' : ':not([data-saved-copy])'} > article.sched`).evaluateAll((els) =>
+      Object.fromEntries(els.map((e) => {
+        const r = e.getBoundingClientRect();
+        const w = e.querySelector('.sched-body')?.firstElementChild?.getBoundingClientRect();
+        return [e.id, { top: Math.round(r.top + scrollY), h: Math.round(r.height), words: w ? Math.round(w.top - r.top) : null }];
+      })),
+    );
+  // Card cleanup is on in this fake world; live has it off (Alex, Sat Nov 7), so the older card look is checked too.
+  for (const [scheme, width, cleanupOff] of [['light', 390], ['dark', 390], ['light', 360], ['dark', 320], ['light', 390, true], ['dark', 390, true]]) {
+    await check(`quiet swap, ${scheme}, ${width} px${cleanupOff ? ', Card cleanup off (as on live)' : ''}: the saved cards keep their size and place, nothing slides, only changed parts fade in`, async () => {
+      if (cleanupOff) await setRow('/api/admin/card-cleanup-switch', false);
+      try {
+      const p = await playerPhone('Avery', { width, scheme, motion: true });
+      await p.open();
+      await p.fresh();
+      await sleep(900);
+      const live = await boxes(p.page, false);
+      // Someone else joins a game Avery can see, so one card really changes (its balls and names).
+      const d = await dash();
+      const game = d.sessions.find((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > NOW_MS + 3600_000 && s.confirmedCount >= 1 && s.confirmedCount < 4 && !s.roster.some((r) => r.name === 'Harper'));
+      assert(game, 'no game for Harper to join');
+      const hp = (await browser.newContext()).request;
+      await post(hp, '/api/me', { playerId: nameId('Harper') });
+      const j = await post(hp, `/api/sessions/${game.id}/join`, {});
+      assert(j.ok(), `join ${j.status()}`);
+      try {
+        p.hold(2500);
+        await p.open();
+        await p.page.locator('[data-saved-copy] article.sched').first().waitFor({ timeout: 2500 });
+        const kept = await boxes(p.page, true);
+        for (const [id, b] of Object.entries(kept)) {
+          const was = live[id];
+          if (!was) continue;
+          assert(Math.abs(was.top - b.top) <= 1 && Math.abs(was.h - b.h) <= 1, `saved card ${id} at ${b.top}/${b.h}, live was ${was.top}/${was.h}`);
+          // Its words start where they started on the live card (nothing jumps inside the card either).
+          if (was.words !== null && b.words !== null) assert(Math.abs(was.words - b.words) <= 1, `card ${id}: words at ${b.words}, live ${was.words}`);
+        }
+        await p.fresh();
+        const after = await boxes(p.page, false);
+        const changedId = `row-${game.id}`;
+        // Every card above the changed one is exactly where the saved copy drew it.
+        const order = Object.entries(kept).sort((a, b) => a[1].top - b[1].top).map(([id]) => id);
+        for (const id of order.slice(0, Math.max(0, order.indexOf(changedId) + 1))) {
+          if (!after[id]) continue;
+          assert(Math.abs(after[id].top - kept[id].top) <= 1, `card ${id} slid from ${kept[id].top} to ${after[id].top}`);
+        }
+        const marks = await p.page.locator('.schedule:not([data-saved-copy]) > article.sched').evaluateAll((els) =>
+          els.map((e) => ({ id: e.id, sw: e.hasAttribute('data-sw'), card: e.hasAttribute('data-sw-card'), balls: e.hasAttribute('data-sw-balls'), anim: getComputedStyle(e.querySelector('.in-line') || e).animationName })),
+        );
+        const changed = marks.find((m) => m.id === changedId);
+        if (changed) {
+          assert(changed.balls, 'the changed card is not marked');
+          assert(changed.anim === 'sw-in', `the changed balls do not fade in (${changed.anim})`);
+        }
+        // A game the copy could not show (canceled) is a new card on the fresh screen: it fades in whole, which is right.
+        const same = marks.filter((m) => m.id !== changedId && m.sw && !m.balls && !m.card);
+        assert(same.length > 0, 'no unchanged card');
+        assert(same.every((m) => m.anim === 'none'), `an unchanged card fades: ${JSON.stringify(same.filter((m) => m.anim !== 'none'))}`);
+        const buttonsFade = await p.page.locator('.schedule:not([data-saved-copy]) .sched-money').first().evaluate((e) => getComputedStyle(e).animationName);
+        assert(buttonsFade === 'sw-in', `the new buttons do not fade in (${buttonsFade})`);
+        assert((await p.page.locator('[data-saved-asof]').count()) === 0, 'the tag stayed');
+        if (width === 390) await shot(p.page, `swap-${scheme}`);
+        assert(p.errors.length === 0, p.errors.join(' | '));
+      } finally {
+        await post(hp, `/api/sessions/${game.id}/withdraw`, {});
+        await p.ctx.close();
+      }
+      } finally {
+        if (cleanupOff) await setRow('/api/admin/card-cleanup-switch', true);
+      }
+    });
+  }
+
+  await check('the "as of" tag sits in the first section line (no line of its own) and is read out once', async () => {
+    const p = await playerPhone('Indy');
+    await p.open();
+    await p.fresh();
+    await sleep(500);
+    p.hold(2500);
+    await p.open();
+    await p.page.locator('[data-saved-copy] article.sched').first().waitFor({ timeout: 2500 });
+    const inHeader = await p.page.locator('[data-saved-copy] > .week-break').first().locator('[data-saved-asof]').count();
+    assert(inHeader === 1, 'the tag is not in the first section line');
+    const said = await p.page.locator('main [role="status"]').first().textContent();
+    assert(/^Your last screen, as of /.test(said.trim()), `spoken: ${said}`);
+    await p.ctx.close();
   });
 
   // ---- Load games at once ----

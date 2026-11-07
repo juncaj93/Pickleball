@@ -23,7 +23,8 @@
   --pc-shadow: rgb(24 36 29 / 45%);
 }
 :root[data-theme='dark'] .schedule,
-:root[data-theme='dark'] .pay-card {
+:root[data-theme='dark'] .pay-card,
+:root[data-theme='dark'] .saved-hold {
   --pc-card: #18221c;
   --pc-ink: #f1f3ec;
   --pc-muted: #b8bfb2;
@@ -851,16 +852,19 @@ a[href] {
   animation: skel-shimmer 1.4s linear infinite;
 }
 .schedule,
-.pay-card {
+.pay-card,
+.saved-hold {
   --pc-skel-a: #ecebe3;
   --pc-skel-b: #f6f5ef;
 }
-:root[data-theme='dark'] .schedule {
+:root[data-theme='dark'] .schedule,
+:root[data-theme='dark'] .saved-hold {
   --pc-skel-a: #202c25;
   --pc-skel-b: #2a3830;
 }
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) .schedule {
+  :root:not([data-theme='light']) .schedule,
+  :root:not([data-theme='light']) .saved-hold {
     --pc-skel-a: #202c25;
     --pc-skel-b: #2a3830;
   }
@@ -1111,11 +1115,62 @@ html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
   flex: none;
 }
 
-/* Zip 12, "Show last screen at once": the small gray "as of 2:14 PM" over the saved copy (gone the moment fresh data lands). */
+/* Zip 12, "Show last screen at once": the small gray "as of 2:14 PM" on the saved copy (gone the moment fresh data lands). */
 .saved-asof {
-  margin: 0 0 -6px;
-  font-size: 12px;
-  line-height: 16px;
   color: var(--muted-fg);
-  text-align: right;
+}
+
+/* The tag sits where the All games button sits on the live screen (same box), so it adds no height to the line. */
+.week-break .saved-asof {
+  order: 2;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  margin: -6px -4px -6px 0;
+  padding: 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+/* The room the Pay card and notices take on the live screen, held while the saved copy shows. */
+.saved-hold {
+  border-radius: 16px;
+}
+
+/* The first fresh screen after the saved copy (2.5 seconds): only what changed fades in, softly. Unchanged parts stay exactly as they were. */
+@keyframes sw-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.sched[data-sw-card],
+.sched[data-sw-balls] .in-line,
+.sched[data-sw-balls] .names-line,
+.sched[data-sw-status] .sched-head,
+.sched[data-sw] .sched-money,
+.sched[data-sw] .sched-links,
+.sched[data-sw] .credit-note,
+.sched[data-sw] .st-tail,
+main[data-sw-main] > :not(.schedule):not(.m-ptr):not(.sr-only),
+main[data-sw-main] .week-break .filter-toggle {
+  animation: sw-in 320ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sched[data-sw-card],
+  .sched[data-sw-balls] .in-line,
+  .sched[data-sw-balls] .names-line,
+  .sched[data-sw-status] .sched-head,
+  .sched[data-sw] .sched-money,
+  .sched[data-sw] .sched-links,
+  .sched[data-sw] .credit-note,
+  .sched[data-sw] .st-tail,
+  main[data-sw-main] > :not(.schedule):not(.m-ptr):not(.sr-only),
+  main[data-sw-main] .week-break .filter-toggle {
+    animation: none;
+  }
 }

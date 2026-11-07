@@ -122,7 +122,7 @@ describe('saved copy: when it is thrown away', () => {
     saveLastScreen('plain', v, AT, store);
     return { v, store };
   }
-  it('shown within 24 hours on the same address; never after 24 hours (and dropped)', async () => {
+  it('shown while younger than 3 hours on the same address; older: not shown (the loading shimmer instead) and dropped', async () => {
     const { store } = await kept();
     expect(readLastScreen('plain', AT + 60_000, store)).not.toBeNull();
     expect(readLastScreen('g-other', AT + 60_000, store)).toBeNull(); // another address: not shown (kept for its own)
@@ -141,6 +141,8 @@ describe('saved copy: when it is thrown away', () => {
     const { v, store } = await kept();
     const first = [...v.sessions].filter((s) => !s.canceled && !s.past).sort((a, b) => a.endsAt.localeCompare(b.endsAt))[0];
     const after = Date.parse(first.endsAt) + 1000;
+    // The copy is one hour old at that moment (older than 3 hours is not shown at all: the check above).
+    store.setItem(LAST_SCREEN_KEY, JSON.stringify({ ...JSON.parse(store.getItem(LAST_SCREEN_KEY)!), savedAt: after - 3600_000 }));
     const read = readLastScreen('plain', after, store)!;
     expect(read.view.sessions.some((s) => s.id === first.id)).toBe(false);
     expect(read.view.sessions.every((s) => Date.parse(s.endsAt) > after && !s.canceled)).toBe(true);
@@ -165,6 +167,22 @@ describe('saved copy: when it is thrown away', () => {
     const s = sanitize(v, AT);
     expect(JSON.stringify(s)).not.toMatch(/payAlways|payNote|paySheet|instantTaps|lateFees|shortGames|zelle|venmo\.com|Alex|1400|500/);
     expect(s.cardCleanup).toBe(true);
+  });
+});
+
+describe('the size notes kept with the copy (the quiet swap)', () => {
+  it('are numbers only (the page width, the room above the list, each card by game id): never a word, a name or an amount', async () => {
+    const w = await world();
+    const v = (await w.call('GET', '/api/group', await w.phone('Avery'), undefined, { 'X-Last-Screen': 'on' })).data as GroupView;
+    const store = new MemStore();
+    const layout = { width: 390, lead: 124.5, items: [{ kind: 'line' as const, tier: 'this' }, ...v.sessions.map((s) => ({ kind: 'card' as const, id: s.id, h: 168.25, c: 18 }))] };
+    saveLastScreen('plain', v, AT, store, layout);
+    const kept = JSON.parse(store.getItem(LAST_SCREEN_KEY)!);
+    expect(kept.layout).toEqual(layout);
+    for (const it of kept.layout.items) expect(Object.keys(it).sort()).toEqual(it.kind === 'line' ? ['kind', 'tier'] : ['c', 'h', 'id', 'kind']);
+    // A canceled game's card is only a size in the notes: its words and money are not in the copy.
+    const canceled = v.sessions.find((s) => s.canceled)!;
+    expect(kept.view.sessions.some((s: { id: string }) => s.id === canceled.id)).toBe(false);
   });
 });
 

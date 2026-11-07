@@ -8,7 +8,7 @@
 // admin screen. The organizer's View as, the demo and Pretend never read or write it.
 //
 // It is thrown away when: the server's answer no longer says lastScreen (switched off), the player changes name ("not you?") or the
-// phone has no name, it is older than 24 hours, the app version changed, it belongs to another address (/ vs a /g/ link), or
+// phone has no name, it is older than 3 hours (then the normal loading shimmer shows), the app version changed, it belongs to another address (/ vs a /g/ link), or
 // anything about it cannot be read. Every read and write is inside try/catch: if storage fails, the site works exactly as today.
 
 import type { GroupView, PlayerSessionView } from '../shared/api';
@@ -32,6 +32,44 @@ export interface SavedScreen {
   meId: string;
   savedAt: number;
   view: GroupView;
+  /**
+   * Sizes only, so the saved copy takes the same room as the screen it copies and nothing slides when the fresh one lands: the page width they
+   * were measured at, the height of everything above the games list (the Pay card, notices), and each card's height. Never what is in them.
+   */
+  layout?: SavedLayout;
+}
+
+export interface SavedLayout {
+  width: number;
+  lead: number;
+  /** The live list in order: each section line (by its tier) and each card (by game id, with its height), canceled ones too. */
+  items: ({ kind: 'line'; tier: string } | { kind: 'card'; id: string; h: number; /** Where the card's words start, from its top. */ c?: number })[];
+}
+
+/** Reads the sizes of the live player screen as it is drawn now (null when it is not on screen). */
+export function measureLayout(): SavedLayout | null {
+  try {
+    const main = document.querySelector('main.page');
+    const list = main?.querySelector('.schedule:not([data-saved-copy])');
+    if (!main || !list) return null;
+    const top = main.getBoundingClientRect().top + parseFloat(getComputedStyle(main).paddingTop || '0');
+    const items: SavedLayout['items'] = [];
+    Array.from(list.children).forEach((el) => {
+      const e = el as HTMLElement;
+      if (e.matches('.week-break:not(.filter-only)')) {
+        const tier = /tier-(this|next|later)/.exec(e.className)?.[1];
+        if (tier) items.push({ kind: 'line', tier });
+      } else if (e.matches('article.sched[id^="row-"]:not(.leaving)')) {
+        const box = e.getBoundingClientRect();
+        const first = e.querySelector('.sched-body')?.firstElementChild;
+        const c = first ? Math.round((first.getBoundingClientRect().top - box.top) * 100) / 100 : undefined;
+        items.push({ kind: 'card', id: e.id.slice(4), h: Math.round(box.height * 100) / 100, ...(c !== undefined ? { c } : {}) });
+      }
+    });
+    return { width: window.innerWidth, lead: Math.max(0, Math.round((list.getBoundingClientRect().top - top) * 100) / 100), items };
+  } catch {
+    return null;
+  }
 }
 
 interface Store {
@@ -127,6 +165,7 @@ export function sanitize(v: GroupView, nowMs: number): GroupView {
     ...(v.cardTimeButtons ? { cardTimeButtons: true } : {}),
     ...(v.cardCleanup ? { cardCleanup: true } : {}),
     ...(v.playerFix1 ? { playerFix1: true } : {}),
+    ...(v.alertCards ? { alertCards: true } : {}),
     lastScreen: true,
     now: new Date(nowMs).toISOString(),
     sessions: v.sessions.filter((s) => keepGame(s, nowMs)).map((s) => sanitizeGame(s, nowMs)),
@@ -139,14 +178,14 @@ export function sanitize(v: GroupView, nowMs: number): GroupView {
 }
 
 /** Keep this answer for next time, if the server said so; otherwise throw away any old copy. Never for View as or the demo. */
-export function saveLastScreen(page: string, v: GroupView, nowMs = Date.now(), store: Store | null = browserStore()): void {
+export function saveLastScreen(page: string, v: GroupView, nowMs = Date.now(), store: Store | null = browserStore(), layout: SavedLayout | null = null): void {
   if (!store) return;
   try {
     if (v.lastScreen !== true || !v.me || v.viewingAs) {
       store.removeItem(LAST_SCREEN_KEY);
       return;
     }
-    const saved: SavedScreen = { build: build(), page, meId: v.me.id, savedAt: nowMs, view: sanitize(v, nowMs) };
+    const saved: SavedScreen = { build: build(), page, meId: v.me.id, savedAt: nowMs, view: sanitize(v, nowMs), ...(layout ? { layout } : {}) };
     store.setItem(LAST_SCREEN_KEY, JSON.stringify(saved));
   } catch {
     try {

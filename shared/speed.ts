@@ -17,5 +17,8 @@ export function speedAllowed(flag: string | undefined | null): boolean {
   return (flag ?? 'on').trim().toLowerCase() !== 'off';
 }
 
-/** The saved copy of the last screen is never shown when it is older than this. */
-export const LAST_SCREEN_MAX_AGE_MS = 24 * 3_600_000;
+/**
+ * The saved copy of the last screen is shown only while it is younger than this (Alex, Sat Nov 7: older than a few hours, show the normal
+ * loading shimmer instead). Older copies are thrown away.
+ */
+export const LAST_SCREEN_MAX_AGE_MS = 3 * 3_600_000;

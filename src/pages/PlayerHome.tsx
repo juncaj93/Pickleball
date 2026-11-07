@@ -36,7 +36,7 @@ import '../motion.css';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
-import { asOfText, clearLastScreen, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
+import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { rememberDirectLoad, takeEarly } from '../lib';
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
@@ -276,17 +276,36 @@ export function PlayerHome({
   // "Show last screen at once": the copy this phone kept last time (no money in it), drawn with every button held until the
   // first fresh answer lands (src/lastScreen.ts). Read once per page open.
   const [saved] = useState<SavedScreen | null>(() => (ownPhone ? readLastScreen(savedPage) : null));
+  // When the answer on screen arrived (the copy's "as of" time), and the answer itself, for the save made when the page is left.
+  const fresh = useRef<{ at: number; data: GroupView } | null>(null);
   useEffect(() => {
     if (!load.data || !ownPhone) return;
+    fresh.current = { at: Date.now(), data: load.data };
     // Each fresh answer says whether the switches are on; the phone follows it (off: the copy and the memory are dropped).
     rememberDirectLoad(load.data.directLoad === true);
-    saveLastScreen(savedPage, load.data);
+    // The sizes are read after the screen is drawn (an effect runs after the draw).
+    saveLastScreen(savedPage, load.data, Date.now(), undefined, measureLayout());
   }, [load.data, ownPhone, savedPage]);
+  // Leaving the page (another app, the phone locked, closed): the copy keeps the screen's sizes as they are at that moment.
+  useEffect(() => {
+    if (!ownPhone) return undefined;
+    const keep = () => {
+      if (document.visibilityState === 'hidden' && fresh.current && !switchingRef.current) saveLastScreen(savedPage, fresh.current.data, fresh.current.at, undefined, measureLayout());
+    };
+    document.addEventListener('visibilitychange', keep);
+    window.addEventListener('pagehide', keep);
+    return () => {
+      document.removeEventListener('visibilitychange', keep);
+      window.removeEventListener('pagehide', keep);
+    };
+  }, [ownPhone, savedPage]);
   // This address now answers "link not working", "group word needed" or "link only": the copy must not show again.
   useEffect(() => {
     if (load.error && (load.error.status === 403 || load.error.status === 404)) clearLastScreen();
   }, [load.error]);
   // "not you?": a copy kept for this name must never show for another.
+  const switchingRef = useRef(false);
+  switchingRef.current = switching;
   useEffect(() => {
     if (switching) clearLastScreen();
   }, [switching]);
@@ -330,6 +349,14 @@ export function PlayerHome({
   }, [g]);
   useEffect(() => () => clearTimeout(cascadeTimer.current), []);
   const savedShownRef = useRef(false);
+  const swapRef = useRef<Map<string, PlayerSessionView> | null | undefined>(undefined);
+  const [swapOver, setSwapOver] = useState(false);
+  const hasData = !!g;
+  useEffect(() => {
+    if (!hasData || !savedShownRef.current) return undefined;
+    const t = setTimeout(() => setSwapOver(true), 2500);
+    return () => clearTimeout(t);
+  }, [hasData]);
   const ptrBall = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -529,6 +556,9 @@ export function PlayerHome({
   // The saved copy shows only until the first fresh answer (or while that first answer failed: then with its error under it).
   const showSaved = !g && !!saved && saved.view.sessions.length > 0;
   if (showSaved) savedShownRef.current = true;
+  // The first fresh screen after the saved copy: each card is told how the copy drew it, so only what changed fades in (for 2.5 seconds).
+  if (g && swapRef.current === undefined) swapRef.current = savedShownRef.current && saved ? new Map(saved.view.sessions.map((s) => [s.id, s])) : null;
+  const swapFrom = swapOver ? null : (swapRef.current ?? null);
   const showChip = !!g && !!credit && !pickName && (credit.balanceCents > 0 || !!credit.pending);
   const chipStart = lastBalance.current;
 
@@ -590,7 +620,7 @@ export function PlayerHome({
           ) : undefined
         }
       />
-      <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`}>
+      <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`} data-sw-main={swapFrom ? '' : undefined}>
         {/* Pull to refresh: the ball that shows in the gap the list leaves (motion only). */}
         {motion && (
           <div ref={ptrBall} className="m-ptr" aria-hidden="true">
@@ -714,6 +744,7 @@ export function PlayerHome({
                       setOverlay={setOverlay}
                       joinToast={joinToast}
                       celebrating={celebrating.has(s.id)}
+                      prev={swapFrom ? (swapFrom.get(s.id) ?? null) : undefined}
                       leaving={leaving}
                     />
                   </Fragment>
@@ -2130,12 +2161,24 @@ export function ScheduleRow({
   celebrating,
   leaving,
   held,
+  minHeight,
+  contentTop,
+  prev,
 }: {
   s: PlayerSessionView;
   g: GroupView;
   tier: WeekTier;
   /** Zip 12, the saved copy of the last screen: drawn only, with no button, link or money line at all (src/lastScreen.ts). */
   held?: boolean;
+  /** Zip 12, the saved copy: the height this card had on the live screen it copies (so nothing slides at the swap). */
+  minHeight?: number;
+  /** Zip 12, the saved copy: where this card's words started on the live screen (from the card's top), so they do not move at the swap. */
+  contentTop?: number;
+  /**
+   * Zip 12, the first fresh screen after the saved copy: this card as the copy showed it (null: the copy did not have it). Only what
+   * changed fades in (the balls and names, the status, a whole new card, and the buttons and money lines the copy never draws).
+   */
+  prev?: PlayerSessionView | null;
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
@@ -2337,6 +2380,21 @@ export function ScheduleRow({
   // date tile, a filled I'm in, no waitlist words; a LATER game is a smaller tinted card with the same slots.
   const cleanup = g.cardCleanup === true;
   useTileCenter(rowRef, cleanup);
+  // Zip 12, the saved copy: the words start where they started on the live card (the live card's buttons can make the words sit higher
+  // than a card without them, which Card cleanup centers). Top-aligned, then moved down by what is missing.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const card = rowRef.current;
+    if (!held || contentTop === undefined || !body || !card) return;
+    const first = body.firstElementChild as HTMLElement | null;
+    if (!first) return;
+    body.style.justifyContent = 'flex-start';
+    body.style.paddingTop = '';
+    const now = first.getBoundingClientRect().top - card.getBoundingClientRect().top;
+    const delta = contentTop - now;
+    if (Math.abs(delta) > 0.5) body.style.paddingTop = `${parseFloat(getComputedStyle(body).paddingTop || '0') + delta}px`;
+  }, [held, contentTop]);
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
   const calLink =
     !held &&
@@ -2431,6 +2489,8 @@ export function ScheduleRow({
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-held={held ? 'yes' : undefined}
+      style={minHeight ? { minHeight } : undefined}
+      {...swapMarks(prev, s, names)}
       data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
       aria-labelledby={`s-${s.id}`}
@@ -2475,7 +2535,7 @@ export function ScheduleRow({
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
         {isIn ? ". You're in" : ''}
       </h2>
-      <div className="sched-body">
+      <div className="sched-body" ref={bodyRef}>
         {status !== null && (
           <div className="sched-head">
             <div className={`sched-status court-${court.kind}${cardButtons && isIn && open ? ' z9-status' : ''}`} data-court={court.kind}>
@@ -2564,13 +2624,25 @@ export function ScheduleRow({
   );
 }
 
+/** Zip 12: which parts of a fresh card differ from how the saved copy drew it (data attributes; src/player-cards.css fades those in). */
+function swapMarks(prev: PlayerSessionView | null | undefined, s: PlayerSessionView, names: string[]): Record<string, string> {
+  if (prev === undefined) return {};
+  if (prev === null) return { 'data-sw': '', 'data-sw-card': '' };
+  const out: Record<string, string> = { 'data-sw': '' };
+  if (prev.confirmed.map((p) => p.name).join('\u0001') !== names.join('\u0001') || prev.countText !== s.countText) out['data-sw-balls'] = '';
+  if ((prev.mine?.status ?? null) !== (s.mine?.status ?? null) || prev.bookingStatus !== s.bookingStatus || prev.courtState !== s.courtState || prev.canceled !== s.canceled) out['data-sw-status'] = '';
+  return out;
+}
+
 const noop = () => {};
 const noopAsync = async () => {};
 
 /**
  * Zip 12, "Show last screen at once" (src/lastScreen.ts): the saved copy, drawn with the same cards as the live screen while the
- * fresh answer is on its way. Nothing in it can be tapped (`inert`, and the cards draw no button, link or money line at all), and
- * the small gray "as of 2:14 PM" says it is not live. The fresh answer replaces it whole.
+ * fresh answer is on its way. Nothing in it can be tapped (`inert`, and the cards draw no button, link or money line at all). The small
+ * gray "as of 2:14 PM" sits where the All games button sits on the live screen, so it takes no room of its own. When the copy kept the
+ * sizes of the screen it came from (the same page width), each card keeps its height and the room above the list (the Pay card,
+ * notices) is held by a soft shimmer: nothing slides when the fresh screen takes its place.
  */
 export function SavedScreenView({ saved }: { saved: SavedScreen }) {
   const v = courtDisplay(saved.view);
@@ -2582,27 +2654,66 @@ export function SavedScreenView({ saved }: { saved: SavedScreen }) {
   const filtered = mineOnly ? v.sessions.filter(isMineGame) : v.sessions;
   const later = (s: PlayerSessionView) => weekTier(s.startsAt, nowMs, tz) === 'later';
   const shown = v.homeCollapse ? filtered.filter((s) => !later(s)) : filtered.slice(0, SHOW_FIRST);
+  const layout = saved.layout && typeof window !== 'undefined' && saved.layout.width === window.innerWidth && Array.isArray(saved.layout.items) ? saved.layout : null;
+  // The page puts 20 px between the room above the list and the list (main is a 20 px stack).
+  const lead = layout ? layout.lead - 20 : 0;
+  const asOf = asOfText(saved.savedAt, tz);
+  const byId = new Map(filtered.map((s) => [s.id, s]));
+  const row = (s: PlayerSessionView, tier: WeekTier, h?: number, c?: number) => (
+    <ScheduleRow key={s.id} s={s} g={v} tier={tier} held minHeight={h} contentTop={c} onChanged={noopAsync} setOverlay={noop} joinToast={noop} />
+  );
+  const tag = (
+    <span className="saved-asof" data-saved-asof>
+      {asOf}
+    </span>
+  );
+  let body: ReactNode;
+  if (layout) {
+    // The live list as it was, piece for piece: a game the copy may not show (ended, canceled) keeps its room as a soft shimmer.
+    let tagged = false;
+    let tier: WeekTier = 'this';
+    body = layout.items.map((it, i) => {
+      if (it.kind === 'line') {
+        tier = it.tier as WeekTier;
+        const first = !tagged;
+        tagged = true;
+        return (
+          <div key={`line-${i}`} className={`week-break tier-${it.tier}`}>
+            <h3>{TIER_LABEL[it.tier as WeekTier]}</h3>
+            {first && tag}
+          </div>
+        );
+      }
+      const s = byId.get(it.id);
+      if (!s) return <div key={`gap-${it.id}`} className="saved-hold skel" data-saved-gap aria-hidden="true" style={{ height: it.h }} />;
+      return row(s, tier, it.h, it.c);
+    });
+  } else {
+    body = shown.map((s, i) => {
+      const tier = weekTier(s.startsAt, nowMs, tz);
+      const prev = i > 0 ? weekTier(shown[i - 1].startsAt, nowMs, tz) : null;
+      const header = prev !== tier ? TIER_LABEL[tier] : null;
+      return (
+        <Fragment key={s.id}>
+          {header && (
+            <div className={`week-break tier-${tier}`}>
+              <h3>{header}</h3>
+              {i === 0 && tag}
+            </div>
+          )}
+          {row(s, tier)}
+        </Fragment>
+      );
+    });
+  }
   return (
     <>
-      <p className="saved-asof" data-saved-asof role="status">
-        {asOfText(saved.savedAt, tz)}
+      <p className="sr-only" role="status">
+        Your last screen, {asOf}. Updating.
       </p>
+      {lead > 0 && <div className="saved-hold skel" data-saved-lead aria-hidden="true" style={{ height: lead }} />}
       <div className={`schedule saved-copy${v.playerFix1 ? ' pf1' : ''}`} data-saved-copy inert aria-busy="true">
-        {shown.map((s, i) => {
-          const tier = weekTier(s.startsAt, nowMs, tz);
-          const prev = i > 0 ? weekTier(shown[i - 1].startsAt, nowMs, tz) : null;
-          const header = prev !== tier ? TIER_LABEL[tier] : null;
-          return (
-            <Fragment key={s.id}>
-              {header && (
-                <div className={`week-break tier-${tier}`}>
-                  <h3>{header}</h3>
-                </div>
-              )}
-              <ScheduleRow s={s} g={v} tier={tier} held onChanged={noopAsync} setOverlay={noop} joinToast={noop} />
-            </Fragment>
-          );
-        })}
+        {body}
       </div>
     </>
   );
