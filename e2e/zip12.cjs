@@ -382,6 +382,33 @@ async function main() {
     }
   });
 
+  await check('Load games at once with a group word set: an early "word needed" answer is never used (production-like, no StrictMode)', async () => {
+    // The dev server runs React's StrictMode, which starts every first load twice and so hides this case; take it out, like production.
+    const W = await real.put(BASE + '/api/admin/group', { data: { groupWord: 'dinks' }, headers: { Origin: BASE } });
+    assert(W.ok(), `set word ${W.status()}`);
+    try {
+      for (const direct of [false, true]) {
+        const ctx = await browser.newContext(phone(390));
+        await ctx.addInitScript(shift, NOW_MS - Date.now());
+        if (direct) await ctx.addInitScript(() => localStorage.setItem('pb_direct_load', 'on'));
+        await ctx.route(/\/src\/main\.tsx/, async (route) => {
+          const resp = await route.fetch();
+          const body = 'const __Frag = (p) => p.children;\n' + (await resp.text()).replace(/(jsxDEV\w*\()\s*StrictMode,/g, '$1__Frag,');
+          await route.fulfill({ response: resp, body });
+        });
+        const page = await ctx.newPage();
+        await page.goto(BASE + '/');
+        await page.waitForSelector('input[type=text]', { timeout: 15000 });
+        await page.fill('input[type=text]', 'dinks');
+        await page.click('button[type=submit]');
+        await page.getByText('Who are you?').first().waitFor({ timeout: 10000 });
+        await ctx.close();
+      }
+    } finally {
+      await real.put(BASE + '/api/admin/group', { data: { groupWord: '' }, headers: { Origin: BASE } });
+    }
+  });
+
   // ---- Settings rows ----
   for (const scheme of ['light', 'dark']) {
     await check(`Settings > Feature switches: the three speed rows, ${scheme}, and each switches`, async () => {
@@ -405,7 +432,7 @@ async function main() {
       if (scheme === 'light') {
         await page.locator('[data-speed-fewer-queries-all]').click();
         await sleep(1200);
-        assert((await dash()).speedFewerQueriesForAll === false, 'Fewer database trips did not switch off');
+        assert(!(await dash()).speedFewerQueriesForAll, 'Fewer database trips did not switch off');
         await page.locator('[data-speed-fewer-queries-all]').click();
         await sleep(1200);
         assert((await dash()).speedFewerQueriesForAll === true, 'Fewer database trips did not switch back on');

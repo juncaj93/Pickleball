@@ -68,6 +68,14 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
   let state: 'fast' | 'decide' | 'plain' = mode;
   const lookOnly = (inner as { pretend?: boolean }).pretend === true;
   let known: Switches | null = null;
+  // Off for this request: the one read that decided it still answers the Zip 12 rows themselves (`speed_...`), so these new
+  // switches add no trip to main's count. Forgotten at any write to task_log and once the answer is sent.
+  let speedKnown: Switches | null = null;
+  const speedAnswer = (values: unknown[]): { x: 1 } | null | undefined => {
+    const [groupId, task] = values as [string, string];
+    if (!speedKnown || typeof task !== 'string' || !task.startsWith('speed_')) return undefined;
+    return speedKnown.get(String(groupId))?.has(task) ? { x: 1 } : null;
+  };
   // Answers sent early (prefetch), one per question that will ask for it: each is handed out once, as is (no copy). A read the
   // screen asks twice was listed twice, and only that second one is a copy. Anything not sent early goes to the database.
   const memo = new Map<string, unknown[]>();
@@ -110,7 +118,11 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
     }
     first<T = Record<string, unknown>>(): Promise<T | null> {
       // Off for this request (or the answer was sent): the database's own call, untouched (not even an extra wait).
-      if (state === 'plain') return this.inner.first<T>();
+      if (state === 'plain') {
+        this.plainWrite();
+        const own = this.sql === SWITCH_READ && this.values.length === 2 ? speedAnswer(this.values) : undefined;
+        return own === undefined ? this.inner.first<T>() : Promise.resolve(own as T | null);
+      }
       return this.firstOn<T>();
     }
     private async firstOn<T>(): Promise<T | null> {
@@ -133,6 +145,7 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
           // Off: this one question was answered by the read that replaced it; from here on, everything as today.
           if (state === 'plain') {
             const answer = known.get(String(groupId))?.has(String(task));
+            speedKnown = known;
             known = null;
             return (answer ? { x: 1 } : null) as T | null;
           }
@@ -141,33 +154,59 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
       }
       return remembered('first', this.sql, this.values, () => this.inner.first<T>());
     }
+    /** Off: a write to task_log prepared before the decision still forgets the Zip 12 rows. */
+    private plainWrite() {
+      if (!this.read && speedKnown && this.sql.includes('task_log')) speedKnown = null;
+    }
     all<T = Record<string, unknown>>(): Promise<D1Result<T>> {
-      if (state === 'plain') return this.inner.all<T>();
+      if (state === 'plain') {
+        this.plainWrite();
+        return this.inner.all<T>();
+      }
       if (!this.read) return writeDone(this.inner.all<T>());
       return remembered('all', this.sql, this.values, () => this.inner.all<T>());
     }
     run(): Promise<D1Result> {
+      if (state === 'plain') this.plainWrite();
       if (state === 'plain' || this.read) return this.inner.run();
       return writeDone(this.inner.run());
     }
   }
 
   const db: FewerQueriesDb & { pretend?: true } = {
-    prepare: (sql: string) => new Stmt(inner.prepare(sql), sql, isReadSql(sql)),
+    prepare: (sql: string) => {
+      if (state === 'plain') {
+        // Off: the database's own statement, except the switch question while the Zip 12 rows are known.
+        if (speedKnown) {
+          if (sql === SWITCH_READ) return new Stmt(inner.prepare(sql), sql, true);
+          // A write to task_log (a switch flipped) forgets them; the next question goes to the database, as today.
+          if (sql.includes('task_log') && !isReadSql(sql)) speedKnown = null;
+        }
+        return inner.prepare(sql);
+      }
+      return new Stmt(inner.prepare(sql), sql, isReadSql(sql));
+    },
     batch: (statements: D1PreparedStatement[]) => {
       const plain = statements.map((s) => (s instanceof Stmt ? s.inner : s));
-      if (state === 'plain') return inner.batch(plain);
+      if (state === 'plain') {
+        if (speedKnown && statements.some((s) => s instanceof Stmt && !s.read && s.sql.includes('task_log'))) speedKnown = null;
+        return inner.batch(plain);
+      }
       const reads = statements.every((s) => s instanceof Stmt && s.read);
       if (!reads) return writeDone(inner.batch(plain));
       // A batch of reads that a prefetch already answered (the change stamp): every answer from it, no trip.
       if (state === 'fast' && memo.size > 0) {
         const keys = (statements as Stmt[]).map((s) => keyOf('all', s.sql, s.values));
-        if (keys.every((k) => memo.has(k))) return Promise.resolve(keys.map((k) => take(k) as D1Result));
+        // Every statement needs its own early answer (a read listed twice in the batch needs two).
+        const need = new Map<string, number>();
+        for (const k of keys) need.set(k, (need.get(k) ?? 0) + 1);
+        if ([...need].every(([k, n]) => (memo.get(k)?.length ?? 0) >= n)) return Promise.resolve(keys.map((k) => take(k) as D1Result));
       }
       return inner.batch(plain);
     },
     finish: () => {
       state = 'plain';
+      speedKnown = null;
       forget();
     },
     prefetch: async (reads) => {

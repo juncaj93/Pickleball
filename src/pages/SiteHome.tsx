@@ -1,7 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
 import { api, ApiError, demoOn, navigate, storageGet, takeEarly, useLoad } from '../lib';
-import { readLastScreen } from '../lastScreen';
+import { clearLastScreen, readLastScreen } from '../lastScreen';
 import { ModeButton, TopBar } from '../Shell';
 import { ErrorState, Notice, Spinner } from '../ui';
 import { PlayerHome, SavedScreenView } from './PlayerHome';
@@ -49,6 +49,11 @@ export function SiteHome() {
         <main className="page">{status.error && <ErrorState error={status.error} onRetry={status.reload} />}</main>
       </>
     );
+  }
+  // Not the games (not set up, link only, a group word): an early games answer is dropped, and a saved copy never shows here again.
+  if (!s.setupComplete || !s.openAccess || s.wordRequired) {
+    void takeEarly('group')?.catch(() => {});
+    if (saved) clearLastScreen();
   }
   if (!s.setupComplete) return <NotSetUp />;
   if (!s.openAccess) return <LinkOnly />;

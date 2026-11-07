@@ -242,7 +242,12 @@ export function PlayerHome({
   // Instant taps (INSTANT_TAPS): a poll that set off before a save never draws over it, and certain taps still saving are drawn in.
   const tracker = useInstantTracker();
   // "Load games at once" (SPEED_DIRECT_LOAD, src/lib.ts): on the plain address the first answer may already be on its way.
-  const load = useLoad(() => (plain && !viewAs ? takeEarly<GroupView>('group') : null) ?? api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend, demo], tracker);
+  // An early answer that is an error (no name, a group word needed, the link changed...) is never used: the page asks again, as today.
+  const load = useLoad(
+    () => (plain && !viewAs ? takeEarly<GroupView>('group')?.catch(() => api<GroupView>('GET', '/api/group')) : null) ?? api<GroupView>('GET', '/api/group'),
+    [groupKey, viewAs?.id, pretend, demo],
+    tracker,
+  );
   const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
@@ -276,6 +281,10 @@ export function PlayerHome({
     rememberDirectLoad(load.data.directLoad === true);
     saveLastScreen(savedPage, load.data);
   }, [load.data, ownPhone, savedPage]);
+  // This address now answers "link not working", "group word needed" or "link only": the copy must not show again.
+  useEffect(() => {
+    if (load.error && (load.error.status === 403 || load.error.status === 404)) clearLastScreen();
+  }, [load.error]);
   // "not you?": a copy kept for this name must never show for another.
   useEffect(() => {
     if (switching) clearLastScreen();

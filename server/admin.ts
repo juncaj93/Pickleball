@@ -329,9 +329,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     cardCleanupForAll: await cardCleanupForAll(ctx.db, group.id),
     // Zip 12 (server/speed.ts): the three speed rows.
-    speedFewerQueriesForAll: await fewerQueriesForAll(ctx.db, group.id),
-    speedDirectLoadForAll: await directLoadForAll(ctx.db, group.id),
-    speedLastScreenForAll: await lastScreenForAll(ctx.db, group.id),
+    // Only while on, so with all three off this answer is exactly main's (Settings reads a missing one as off).
+    ...((await fewerQueriesForAll(ctx.db, group.id)) ? { speedFewerQueriesForAll: true } : {}),
+    ...((await directLoadForAll(ctx.db, group.id)) ? { speedDirectLoadForAll: true } : {}),
+    ...((await lastScreenForAll(ctx.db, group.id)) ? { speedLastScreenForAll: true } : {}),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }

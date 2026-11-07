@@ -184,7 +184,7 @@ describe('the two flags on the player answer (only while on)', () => {
     expect(on.directLoad).toBe(true);
     expect(on.lastScreen).toBe(true);
     const dash = (await w.call('GET', '/api/admin/dashboard', w.admin)).data;
-    expect([dash.speedDirectLoadForAll, dash.speedLastScreenForAll, dash.speedFewerQueriesForAll]).toEqual([true, true, false]);
+    expect([dash.speedDirectLoadForAll, dash.speedLastScreenForAll, 'speedFewerQueriesForAll' in dash]).toEqual([true, true, false]);
     w.env.SPEED_DIRECT_LOAD = 'off';
     w.env.SPEED_LAST_SCREEN = 'off';
     const killed = (await w.call('GET', '/api/group', ck, undefined, { 'X-Direct-Load': 'on', 'X-Last-Screen': 'on' })).data;
