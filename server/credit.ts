@@ -10,7 +10,8 @@ import { adjustNoteOf } from '../shared/adjustCredit';
 import { newId } from './crypto';
 import type { D1Database, D1PreparedStatement } from './db';
 import { HttpError } from './http';
-import { audit, flatOf, type GroupRow, loadRosters, loadSessions, lookbackIso, organizerIdOf, type SessionRow, visibleFrom } from './repo';
+import { audit, flatOf, type GroupRow, loadRosters, loadSessions, lookbackIso, lookbackRead, organizerIdOf, type ReadSpec, rostersRead, type SessionRow, sessionsRead, visibleFrom } from './repo';
+import { asFewer } from './speed';
 import type { GroupSettings } from '../shared/settings';
 import { OPEN_FEE } from './lateFees';
 
@@ -21,9 +22,20 @@ const HISTORY_MS = 90 * 86_400_000;
  * owes), their rosters, the credit pot, credit spent per seat, and credit that
  * came back per seat.
  */
+/** The reads moneyPicture makes before it knows how far back to look (SPEED_FEWER_QUERIES sends them in one trip). */
+export const moneyPictureFirstReads = (group: GroupRow, nowMs: number) => [
+  { kind: 'first' as const, ...lookbackRead(group.id, nowMs, HISTORY_MS) },
+  { kind: 'all' as const, ...ledgerRead(group.id) },
+  { kind: 'all' as const, ...pendingRequestsRead(group.id) },
+];
+
 export async function moneyPicture(db: D1Database, group: GroupRow, nowMs: number) {
+  const fewer = asFewer(db);
+  await fewer?.prefetch(moneyPictureFirstReads(group, nowMs));
   const since = await lookbackIso(db, group.id, nowMs, HISTORY_MS);
   const from = visibleFrom(group);
+  // The two reads that follow depend on how far back to look: one trip for both.
+  await fewer?.prefetch([{ kind: 'all', ...sessionsRead(group.id, since, from) }, { kind: 'all', ...rostersRead(group.id, since, from) }]);
   const sessions = await loadSessions(db, group.id, since, from);
   const rosters = await loadRosters(db, group.id, since, from);
   const ledger = await loadLedger(db, group.id);
@@ -48,10 +60,13 @@ interface RawRow {
 
 export type LedgerRow = CreditRow & { endedReason: string | null };
 
+export const ledgerRead = (groupId: string): ReadSpec => ({ sql: 'SELECT * FROM credit_ledger WHERE group_id = ? ORDER BY created_at, rowid', values: [groupId] });
+
 export async function loadLedger(db: D1Database, groupId: string): Promise<LedgerRow[]> {
+  const r = ledgerRead(groupId);
   const { results } = await db
-    .prepare('SELECT * FROM credit_ledger WHERE group_id = ? ORDER BY created_at, rowid')
-    .bind(groupId)
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<RawRow>();
   return results.map((r) => ({
     id: r.id,
@@ -82,10 +97,13 @@ export interface RefundRequestRow {
 }
 
 /** Pending refund requests, oldest first. */
+export const pendingRequestsRead = (groupId: string): ReadSpec => ({ sql: "SELECT * FROM refund_requests WHERE group_id = ? AND status = 'pending' ORDER BY created_at, rowid", values: [groupId] });
+
 export async function loadPendingRequests(db: D1Database, groupId: string): Promise<RefundRequestRow[]> {
+  const r = pendingRequestsRead(groupId);
   const { results } = await db
-    .prepare("SELECT * FROM refund_requests WHERE group_id = ? AND status = 'pending' ORDER BY created_at, rowid")
-    .bind(groupId)
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<RefundRequestRow>();
   return results;
 }

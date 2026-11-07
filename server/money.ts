@@ -16,7 +16,8 @@ import type { Ctx } from './context';
 import { HttpError } from './http';
 import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
-import { courtCostOf, flatOf, loadCancelCharges, loadRoster, organizerIdOf, type SessionRow, settingsOf } from './repo';
+import { courtCostOf, flatOf, loadCancelCharges, loadRoster, organizerIdOf, rosterRead, type SessionRow, settingsOf } from './repo';
+import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
@@ -99,6 +100,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   let projPlayersCents = 0;
   const sessions: MonthlyMoney['sessions'] = [];
   const creditSessionIds = new Set(ledger.map((e) => e.sessionId).filter((x): x is string => !!x));
+  // SPEED_FEWER_QUERIES (server/speed.ts): every game's roster in one trip instead of one each (nothing when it is off).
+  await fewerDb(ctx)?.prefetch(results.map((s) => ({ kind: 'all' as const, ...rosterRead(s.id) })));
   for (const s of results) {
     const roster = await loadRoster(ctx.db, s.id);
     // A game hidden from the lists is out of Totals too, but only if it has no money in it (money is never hidden).

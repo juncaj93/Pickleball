@@ -20,12 +20,19 @@ const TASKS: Record<MotionWhich, { on: string; off: string }> = {
 
 const varOn = (ctx: Pick<Ctx, 'env'>, which: MotionWhich) => (which === 'player' ? motionOnForAll(ctx.env.MOTION) : motionAdminOnForAll(ctx.env.MOTION_ADMIN));
 
+/** motionSetting's one read, word for word (SPEED_FEWER_QUERIES sends it early, together with others: server/speed.ts). */
+export function motionSettingRead(groupId: string, which: MotionWhich): { sql: string; values: unknown[] } {
+  const t = TASKS[which];
+  return { sql: "SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task IN (?, ?) ORDER BY at DESC LIMIT 1", values: [groupId, t.on, t.off] };
+}
+
 /** What Settings says for this motion switch: 'on', 'off', or null (nobody touched it: the wrangler.toml value rules). */
 export async function motionSetting(db: D1Database, groupId: string, which: MotionWhich): Promise<'on' | 'off' | null> {
   const t = TASKS[which];
+  const r = motionSettingRead(groupId, which);
   const row = await db
-    .prepare("SELECT task FROM task_log WHERE group_id = ? AND session_id IS NULL AND kind = 'mark' AND task IN (?, ?) ORDER BY at DESC LIMIT 1")
-    .bind(groupId, t.on, t.off)
+    .prepare(r.sql)
+    .bind(...r.values)
     .first<{ task: string }>()
     .catch(() => null);
   return row ? (row.task === t.on ? 'on' : 'off') : null;

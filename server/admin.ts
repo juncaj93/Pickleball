@@ -7,7 +7,8 @@ import { formatCents, formatPrice } from '../shared/money';
 import { usableFor } from './creditActions';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
-import { MONEY_STATE, reopenBlockers, sqlText } from './finalize';
+import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './finalize';
+import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenForAll } from './speed';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -32,7 +33,7 @@ import { paySheetForAll, setPaySheetForAll } from './paySheet';
 import { finishLateDropClear, lateFeesFor, lateFeesForAll, OPEN_FEE, OPEN_LATE_DROP, setLateFeesForAll } from './lateFees';
 import { FEE_KEPT, feeSplitOf, feeSplitPrice, lateFeeKind, lateFeePriceCents, type LateFeeClearWhy } from '../shared/lateFees';
 import { lateFeeSplitFor, lateFeeSplitForAll, lateFeeSplitSwitch, setLateFeeSplitForAll } from './lateFeeSplit';
-import { hiddenGameIds, setHiddenFromPlayers } from './hideGame';
+import { hiddenGameIds, hiddenGameIdsRead, setHiddenFromPlayers } from './hideGame';
 import { instantTapsFor, instantTapsForAll, setInstantTapsForAll } from './instantTaps';
 import { adminHiddenGameIds, moneyReworkFor, moneyReworkForAll, sessionHasMoney, setAdminHiddenGame, setMoneyReworkForAll } from './moneyRework';
 import { HAS_MONEY_MESSAGE } from '../shared/moneyRework';
@@ -48,6 +49,11 @@ import {
   getSession,
   type GroupRow,
   loadRoster,
+  rosterRead,
+  organizerIdRead,
+  playersRead,
+  type ReadSpec,
+  sessionStartsRead,
   loadRosters,
   loadSessions,
   type RosterRow,
@@ -61,7 +67,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements } from './credit';
+import { adjustCreditEntry, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -97,11 +103,34 @@ export async function adminVersion(ctx: Ctx): Promise<Response> {
   });
 }
 
+const recentAuditRead = (groupId: string): ReadSpec => ({ sql: 'SELECT * FROM admin_audit_log WHERE group_id = ? ORDER BY created_at DESC LIMIT 60', values: [groupId] });
+const lateDropsRead = (groupId: string): ReadSpec => ({
+  sql: `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE s.group_id = ? AND sp.late_drop_at IS NOT NULL GROUP BY sp.player_id`,
+  values: [groupId],
+});
+const playedCountRead = (groupId: string, nowIso: string): ReadSpec => ({
+  sql: `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? AND (sp.played IS NULL OR sp.played = 1) GROUP BY sp.player_id`,
+  values: [groupId, nowIso],
+});
+
 export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const group = await requireAdmin(ctx);
   // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
   const version = await adminChangeStamp(ctx, group);
   await ensureSessions(ctx.db, group, ctx.nowMs);
+  // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
+  await fewerDb(ctx)?.prefetch([
+    { kind: 'all', ...playersRead(group.id) },
+    ...moneyPictureFirstReads(group, ctx.nowMs),
+    ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : []),
+    { kind: 'all', ...hiddenGameIdsRead(group.id) },
+    { kind: 'all', ...sessionStartsRead(group.id) },
+    { kind: 'all', ...recentAuditRead(group.id) },
+    { kind: 'all', ...lateDropsRead(group.id) },
+    { kind: 'all', ...playedCountRead(group.id, ctx.nowIso) },
+  ]);
   const settings = settingsOf(group);
   const players = await getPlayers(ctx.db, group.id);
   const { sessions, rosters, ledger, reserved } = await moneyPictureOf(ctx, group);
@@ -129,9 +158,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       return row ? !sessionHasMoney(row, rosters.get(id) ?? [], creditSessionIds, charges) : true;
     }),
   );
-  const startsOf = new Map(
-    (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
-  );
+  const starts = sessionStartsRead(group.id);
+  const startsOf = new Map((await ctx.db.prepare(starts.sql).bind(...starts.values).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]));
   const creditLedger = [...new Set(ledger.map((e) => e.playerId))]
     .map((playerId) => {
       const balanceCents = potBalance(ledger, playerId);
@@ -162,10 +190,13 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     })
     .filter((p) => p.playerId !== organizerId);
   const blockers = new Map<string, { spent: string[]; requested: string[] }>();
+  // SPEED_FEWER_QUERIES (server/speed.ts): one trip for every finalized game's check instead of one each (nothing when it is off).
+  await fewerDb(ctx)?.prefetch(sessions.filter((s) => s.finalized_at).map((s) => ({ kind: 'all' as const, ...reopenBlockersRead(s.id) })));
   for (const s of sessions) if (s.finalized_at) blockers.set(s.id, await reopenBlockers(ctx, s.id));
+  const recent = recentAuditRead(group.id);
   const { results: auditRows } = await ctx.db
-    .prepare('SELECT * FROM admin_audit_log WHERE group_id = ? ORDER BY created_at DESC LIMIT 60')
-    .bind(group.id)
+    .prepare(recent.sql)
+    .bind(...recent.values)
     .all<{ id: string; session_id: string | null; actor_label: string; action: string; details_json: string; created_at: string }>();
   const auditEntries: AuditEntry[] = auditRows.map((a) => ({
     id: a.id,
@@ -176,21 +207,17 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     createdAt: a.created_at,
   }));
   // Late drops per person, ever. Organizer only.
+  const late = lateDropsRead(group.id);
   const lateRows = await ctx.db
-    .prepare(
-      `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
-       WHERE s.group_id = ? AND sp.late_drop_at IS NOT NULL GROUP BY sp.player_id`,
-    )
-    .bind(group.id)
+    .prepare(late.sql)
+    .bind(...late.values)
     .all<{ id: string; n: number }>();
   const lateDrops = new Map(lateRows.results.map((r) => [r.id, Number(r.n)]));
   // Sessions each person has played, ever: in, not canceled, over, and not marked "did not play" at finalize.
+  const playedQ = playedCountRead(group.id, ctx.nowIso);
   const playedRows = await ctx.db
-    .prepare(
-      `SELECT sp.player_id AS id, COUNT(*) AS n FROM session_players sp JOIN sessions s ON s.id = sp.session_id
-       WHERE s.group_id = ? AND sp.status = 'confirmed' AND s.status <> 'canceled' AND s.ends_at <= ? AND (sp.played IS NULL OR sp.played = 1) GROUP BY sp.player_id`,
-    )
-    .bind(group.id, ctx.nowIso)
+    .prepare(playedQ.sql)
+    .bind(...playedQ.values)
     .all<{ id: string; n: number }>();
   const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
   return {
@@ -296,6 +323,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     // The look: the Settings row, or this phone's private link (look only; seats follow the row alone).
     ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     cardCleanupForAll: await cardCleanupForAll(ctx.db, group.id),
+    // Zip 12 (server/speed.ts): the three speed rows.
+    speedFewerQueriesForAll: await fewerQueriesForAll(ctx.db, group.id),
+    speedDirectLoadForAll: await directLoadForAll(ctx.db, group.id),
+    speedLastScreenForAll: await lastScreenForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -1991,6 +2022,8 @@ export async function monthGames(ctx: Ctx): Promise<{ month: string; sessions: A
   const hiddenIds = await hiddenGameIds(ctx.db, group.id);
   const potFor = (sessionId: string) => (r: RosterRow) => seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
   const sessions: AdminDashboard['sessions'] = [];
+  // SPEED_FEWER_QUERIES: every game's roster and finalized check in one trip (nothing when it is off).
+  await fewerDb(ctx)?.prefetch(rows.flatMap((s) => [{ kind: 'all' as const, ...rosterRead(s.id) }, ...(s.finalized_at ? [{ kind: 'all' as const, ...reopenBlockersRead(s.id) }] : [])]));
   for (const s of rows) {
     const roster = await loadRoster(ctx.db, s.id);
     const blockers = s.finalized_at ? await reopenBlockers(ctx, s.id) : { spent: [], requested: [] };
@@ -2251,6 +2284,33 @@ export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown
     .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
     .all<SessionRow>();
   for (const s of open) if (isShortGame(s.starts_at, s.ends_at)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/speed-fewer-queries-switch { on }: Settings > Feature switches > "Fewer database trips" (Zip 12). How the server reads, never what it answers. */
+export async function setSpeedFewerQueriesSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setFewerQueriesForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'speed_fewer_queries_on' : 'speed_fewer_queries_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/speed-direct-load-switch { on }: "Load games at once" (Zip 12). The plain address asks for the games with its set-up check. */
+export async function setSpeedDirectLoadSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setDirectLoadForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'speed_direct_load_on' : 'speed_direct_load_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/speed-last-screen-switch { on }: "Show last screen at once" (Zip 12). Phones keep a copy of the player screen (no money). */
+export async function setSpeedLastScreenSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setLastScreenForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'speed_last_screen_on' : 'speed_last_screen_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

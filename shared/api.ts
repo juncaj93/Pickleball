@@ -172,6 +172,10 @@ export interface GroupView {
   cardTimeButtons?: boolean;
   /** "Card cleanup" is on for this screen (server/zip10.ts): no count text, people icon and names, tinted Later cards; no waitlist and no Max players cap. Missing: exactly as before. */
   cardCleanup?: boolean;
+  /** Zip 12 "Load games at once" (server/speed.ts): the plain site address asks for this answer together with its set-up check next time. Missing: as before. */
+  directLoad?: boolean;
+  /** Zip 12 "Show last screen at once" (server/speed.ts): this phone keeps a copy of what it shows (src/lastScreen.ts). Missing: nothing is kept, and an old copy is thrown away. */
+  lastScreen?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -504,6 +508,10 @@ export interface AdminDashboard {
   cardCleanup?: boolean;
   /** Settings > Feature switches > "Card cleanup" is on (for everyone). */
   cardCleanupForAll?: boolean;
+  /** Zip 12: Settings > Feature switches > "Fewer database trips", "Load games at once", "Show last screen at once" (for everyone). */
+  speedFewerQueriesForAll?: boolean;
+  speedDirectLoadForAll?: boolean;
+  speedLastScreenForAll?: boolean;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

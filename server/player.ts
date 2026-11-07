@@ -30,14 +30,21 @@ import { lateFeeKind } from '../shared/lateFees';
  * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." The cleared late fees of THIS player only
  * (their own History lines, matched by their id), from the last 60 days. The phone remembers which ones were dismissed.
  */
-async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string, settings: GroupSettings): Promise<NonNullable<GroupView['feeNotices']>> {
-  const since = new Date(ctx.nowMs - 60 * DAY_MS).toISOString();
-  const { results } = await ctx.db
-    .prepare(
-      `SELECT a.id, a.details_json, s.starts_at, s.ends_at FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
+const feeNoticesRead = (groupId: string, nowMs: number): ReadSpec => ({
+  sql: `SELECT a.id, a.details_json, s.starts_at, s.ends_at FROM admin_audit_log a JOIN sessions s ON s.id = a.session_id
        WHERE a.group_id = ? AND a.action = 'late_fee_cleared' AND a.created_at >= ? ORDER BY a.created_at, a.rowid`,
-    )
-    .bind(groupId, since)
+  values: [groupId, new Date(nowMs - 60 * DAY_MS).toISOString()],
+});
+const feeClearsRead = (groupId: string): ReadSpec => ({
+  sql: "SELECT session_id, details_json, created_at FROM admin_audit_log WHERE group_id = ? AND action = 'late_fee_cleared' AND session_id IS NOT NULL",
+  values: [groupId],
+});
+
+async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string, settings: GroupSettings): Promise<NonNullable<GroupView['feeNotices']>> {
+  const r = feeNoticesRead(groupId, ctx.nowMs);
+  const { results } = await ctx.db
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<{ id: string; details_json: string; starts_at: string; ends_at: string }>();
   const out: NonNullable<GroupView['feeNotices']> = [];
   for (const r of results) {
@@ -59,9 +66,10 @@ async function feeNoticesFor(ctx: Ctx, groupId: string, playerId: string, settin
  * the organizer cleared it (or the game was canceled). Read from their own History lines only.
  */
 async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Promise<Map<string, 'sub' | 'cleared'>> {
+  const r = feeClearsRead(groupId);
   const { results } = await ctx.db
-    .prepare("SELECT session_id, details_json, created_at FROM admin_audit_log WHERE group_id = ? AND action = 'late_fee_cleared' AND session_id IS NOT NULL")
-    .bind(groupId)
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<{ session_id: string; details_json: string; created_at: string }>();
   const out = new Map<string, 'sub' | 'cleared'>();
   for (const r of results) {
@@ -75,12 +83,13 @@ async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Pr
   return out;
 }
 import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { cashOutOffer, loadPendingRequests, moneyPicture } from './credit';
+import { cashOutOffer, loadPendingRequests, moneyPicture, moneyPictureFirstReads } from './credit';
+import { directLoadFor, fewerDb, lastScreenFor } from './speed';
 import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
 import { timeShiftFor } from './timeShift';
 import { motionFor } from './motion';
 import { payAlwaysFor } from './payAlways';
-import { flatOf, priceOf, specialFlatOf } from './repo';
+import { flatOf, organizerIdRead, playersRead, priceOf, type ReadSpec, sessionStartsRead, specialFlatOf } from './repo';
 import { capOf, type GroupSettings } from '../shared/settings';
 import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
@@ -144,6 +153,15 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   // Taken before the data is read, so a change in between shows up as a newer stamp on the next check.
   const version = await changeStamp(ctx, group, meId);
   await ensureSessions(ctx.db, group, ctx.nowMs);
+  // SPEED_FEWER_QUERIES (server/speed.ts): the reads below that do not depend on each other, in ONE trip (nothing when it is off).
+  // Their own player's reads only when there is one (and it is not the organizer's own, who has no credit).
+  const ownReads = meId && meId !== group.organizer_player_id;
+  await fewerDb(ctx)?.prefetch([
+    { kind: 'all', ...playersRead(group.id) },
+    ...moneyPictureFirstReads(group, ctx.nowMs),
+    ...(group.organizer_player_id ? [{ kind: 'first' as const, ...organizerIdRead(group) }] : []),
+    ...(ownReads ? [{ kind: 'all' as const, ...feeClearsRead(group.id) }, { kind: 'all' as const, ...feeNoticesRead(group.id, ctx.nowMs) }, { kind: 'all' as const, ...sessionStartsRead(group.id) }] : []),
+  ]);
   const settings = settingsOf(group);
   const tz = group.timezone;
   const allPlayers = await getPlayers(ctx.db, group.id);
@@ -201,8 +219,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
       // Money that came back because a late fee was cleared: "someone took your spot" (a sub) or cleared by the organizer.
       const feeClears = await lateFeeClearsFor(ctx, group.id, me.id);
       feeNotices.push(...(await feeNoticesFor(ctx, group.id, me.id, settings)));
+      const starts = sessionStartsRead(group.id);
       const startsOf = new Map(
-        (await ctx.db.prepare('SELECT id, starts_at FROM sessions WHERE group_id = ?').bind(group.id).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
+        (await ctx.db.prepare(starts.sql).bind(...starts.values).all<{ id: string; starts_at: string }>()).results.map((r) => [r.id, r.starts_at]),
       );
       // Their own entries only, including ones that ended (credit used on a game that went back to them), so the
       // credit sheet can say what happened to their money in plain words.
@@ -279,6 +298,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...((await tonightGlowFor(ctx, group.id)) ? { tonightGlow: true } : {}),
     ...((await colorCleanupFor(ctx, group.id)) ? { colorCleanup: true } : {}),
     ...((await playerCardsFor(ctx, group.id)) ? { playerCardsSimple: true } : {}),
+    // Zip 12 (server/speed.ts): only while on, so with both off this answer is exactly what it was.
+    ...((await directLoadFor(ctx, group.id)) ? { directLoad: true } : {}),
+    ...((await lastScreenFor(ctx, group.id)) ? { lastScreen: true } : {}),
     // Zip 9. "Short games" for this screen is what requireGroupKey put on the group (the same answer every price on it used).
     ...(group.short_games === true ? { shortGames: true } : {}),
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
