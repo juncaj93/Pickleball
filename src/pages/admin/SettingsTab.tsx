@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
-import { clearLastAdmin } from '../../lastAdmin';
+import { clearLastAdmin, signedOutLastAdmin } from '../../lastAdmin';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
@@ -527,8 +527,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         className="btn ghost block"
         onClick={async () => {
           setPretend(null);
-          // Zip 12 step C: signing out throws this phone's saved organizer screen away first (src/lastAdmin.ts).
-          clearLastAdmin();
+          // Zip 12 step C: signing out throws this phone's saved organizer screen away first, and no answer still on its way may keep a
+          // new one until the next sign-in (src/lastAdmin.ts).
+          signedOutLastAdmin();
           await api('POST', '/api/admin/logout', {}).catch(() => {});
           navigate('/');
         }}

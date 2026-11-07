@@ -302,3 +302,11 @@ export const setLastScreenAdminForAll = (db: D1Database, groupId: string, v: boo
  * copy of its dashboard while it says yes (src/lastAdmin.ts) and throws it away when it says no. Never for the read-only PIN (the page checks).
  */
 export const lastScreenAdminFor = (ctx: Ctx, groupId: string) => onFor(ctx, groupId, ctx.env.SPEED_LAST_SCREEN_ADMIN, LAST_SCREEN_ADMIN_HEADER, SPEED_LAST_SCREEN_ADMIN_TASK);
+
+/** Both dashboard flags of Instant admin from one read of its row: on for this phone (kill switch, header or row) and the row itself. Off: {}. */
+export async function lastScreenAdminFlags(ctx: Ctx, groupId: string): Promise<{ lastScreenAdmin?: true; speedLastScreenAdminForAll?: true }> {
+  const row = await lastScreenAdminForAll(ctx.db, groupId);
+  const header = (ctx.req.headers.get(LAST_SCREEN_ADMIN_HEADER) ?? '').toLowerCase() === 'on';
+  const forPhone = speedAllowed(ctx.env.SPEED_LAST_SCREEN_ADMIN) && (header || row);
+  return { ...(forPhone ? { lastScreenAdmin: true as const } : {}), ...(row ? { speedLastScreenAdminForAll: true as const } : {}) };
+}

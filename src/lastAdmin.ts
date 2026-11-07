@@ -11,6 +11,10 @@ import type { AdminDashboard } from '../shared/api';
 import { LAST_SCREEN_MAX_AGE_MS } from '../shared/speed';
 
 export const LAST_ADMIN_KEY = 'pb_last_admin';
+/** Set by Sign out and by a "sign in again" answer: nothing is kept until the next real sign-in (an answer still on its way cannot bring the copy back). */
+export const LAST_ADMIN_OFF_KEY = 'pb_last_admin_off';
+/** How long a held copy may wait for the fresh answer before the usual loading takes over. */
+export const LAST_ADMIN_HOLD_MS = 8_000;
 
 export interface SavedAdmin {
   build: string;
@@ -32,9 +36,22 @@ const browserStore = (): Store | null => {
 };
 const build = () => (typeof __APP_BUILD__ === 'string' ? __APP_BUILD__ : 'test');
 
-export function clearLastAdmin(store: Store | null = browserStore()): void {
+export function clearLastAdmin(store: Store | null = browserStore(), signedOut = false): void {
   try {
     store?.removeItem(LAST_ADMIN_KEY);
+    if (signedOut) store?.setItem(LAST_ADMIN_OFF_KEY, '1');
+  } catch {
+    /* nothing to do */
+  }
+}
+
+/** Signed out (Sign out, or a "sign in again" answer): the copy goes and no answer may keep one until the next real sign-in. */
+export const signedOutLastAdmin = (store: Store | null = browserStore()) => clearLastAdmin(store, true);
+
+/** A real sign-in: copies may be kept again. */
+export function signedInLastAdmin(store: Store | null = browserStore()): void {
+  try {
+    store?.removeItem(LAST_ADMIN_OFF_KEY);
   } catch {
     /* nothing to do */
   }
@@ -44,7 +61,7 @@ export function clearLastAdmin(store: Store | null = browserStore()): void {
 export function saveLastAdmin(d: AdminDashboard, opts: { pretend: boolean; demo: boolean }, nowMs = Date.now(), store: Store | null = browserStore()): void {
   if (!store) return;
   try {
-    if (d.lastScreenAdmin !== true || d.viewOnly === true || opts.pretend || opts.demo) {
+    if (d.lastScreenAdmin !== true || d.viewOnly === true || opts.pretend || opts.demo || store.getItem(LAST_ADMIN_OFF_KEY) === '1') {
       store.removeItem(LAST_ADMIN_KEY);
       return;
     }

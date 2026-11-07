@@ -7,7 +7,7 @@ import { courtCards } from './admin/doNow';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
 import { api, ApiError, demoOn, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
-import { clearLastAdmin, markMoney, readLastAdmin, saveLastAdmin, fadeChanges } from '../lastAdmin';
+import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
 import { asOfText } from '../lastScreen';
 import '../admin-held.css';
 import { useLiveUpdates } from '../live';
@@ -51,7 +51,14 @@ export function AdminApp() {
   // dimmed until the first fresh answer. Read once per page open; never in Pretend or the demo.
   const [saved] = useState(() => (!pretend && !demoOn() ? readLastAdmin() : null));
   const [savedShown, setSavedShown] = useState(false);
-  const holding = !load.data && !load.error && !!saved;
+  // A copy waits at most LAST_ADMIN_HOLD_MS for the fresh answer (a stalled link, a session revoked elsewhere); then the usual loading shows.
+  const [holdOver, setHoldOver] = useState(false);
+  useEffect(() => {
+    if (!saved) return undefined;
+    const t = setTimeout(() => setHoldOver(true), LAST_ADMIN_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [saved]);
+  const holding = !load.data && !load.error && !!saved && !holdOver;
   useEffect(() => {
     if (holding) setSavedShown(true);
   }, [holding]);
@@ -59,7 +66,7 @@ export function AdminApp() {
     if (load.data) saveLastAdmin(load.data, { pretend: !!pretend, demo: demoOn() });
   }, [load.data, pretend]);
   useEffect(() => {
-    if (load.error?.status === 401) clearLastAdmin();
+    if (load.error?.status === 401) signedOutLastAdmin();
   }, [load.error]);
   const shownView = instant.view ?? load.data ?? null;
   if (holding || (savedShown && shownView)) {
@@ -81,7 +88,15 @@ export function AdminApp() {
       </>
     );
   }
-  if (load.error?.status === 401) return <Login onDone={load.reload} />;
+  if (load.error?.status === 401)
+    return (
+      <Login
+        onDone={async () => {
+          signedInLastAdmin();
+          await load.reload();
+        }}
+      />
+    );
   if (load.error && !load.data) {
     return (
       <>

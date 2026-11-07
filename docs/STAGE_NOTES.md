@@ -2995,3 +2995,15 @@ Alex: the admin screens should appear instantly too, like players. A separate st
   tappable or sent, tabs held, nothing moves at the swap, money bright after, a change fades in, 3 hours, Sign out, 401, PIN change by API and by the
   Settings form, read-only PIN never keeps, switch off, the private link, the Settings row). `e2e/zip12-off.cjs` 25/25 against main `6ab20fb` (Instant
   admin off = main on every screen, including a repeat open of the organizer Home). money-rework updated for the new row (17 above the group).
+- Fresh review (Instant admin): nothing blocking (nothing can change data while held: the one portal menu opens only on a tap, no tab saves on
+  mount, the poller is paused; off takes main's exact path; the swap keeps the same tree). Fixed from it: (1) a dashboard answer landing just after
+  Sign out could save the copy again: Sign out and a 401 now set a "signed out" mark that blocks keeping one until the next real sign-in; (2) on a
+  stalled link (or a session revoked elsewhere) the held copy could stay up until the answer came: it now gives up after 8 seconds and the usual
+  loading shows; (3) the two dashboard flags come from one read of the row. The as-of pill moved to float above the tab bar (under the header it
+  covered the first card's title). Notes kept for Alex: a PIN change on this phone keeps this phone signed in, so its next answer keeps a new copy (the
+  old one is gone); while held, the older "Updated just now" line (only with Admin screens round 2 off) and the Do this now cards are as of the copy's
+  time; only amounts written as "$" and a digit are dimmed.
+- Tests after the fixes: unit 2329 passed, 0 failed (139 files); `e2e/zip12-admin.cjs` 16/16.
+- Preview: https://preview-zip12c.pickleball-club-9h0.pages.dev (fake database re-seeded Sat Nov 7, about 10:25 AM Eastern). On there: every switch
+  on live (the live rows read with the read-only PIN after the deploy: Card cleanup is ON on live), the three Zip 12 rows, Alert cards (Zip 11's fake
+  world), plus Instant admin.

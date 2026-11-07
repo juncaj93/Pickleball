@@ -8,7 +8,7 @@ import { usableFor } from './creditActions';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
 import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './finalize';
-import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFor, lastScreenAdminForAll, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
+import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFlags, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -338,8 +338,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await directLoadForAll(ctx.db, group.id)) ? { speedDirectLoadForAll: true } : {}),
     ...((await lastScreenForAll(ctx.db, group.id)) ? { speedLastScreenForAll: true } : {}),
     // Zip 12 step C, Instant admin: only while on (off: the answer is exactly as before).
-    ...((await lastScreenAdminFor(ctx, group.id)) ? { lastScreenAdmin: true } : {}),
-    ...((await lastScreenAdminForAll(ctx.db, group.id)) ? { speedLastScreenAdminForAll: true } : {}),
+    // One read of the row for both flags.
+    ...(await lastScreenAdminFlags(ctx, group.id)),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }

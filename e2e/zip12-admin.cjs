@@ -220,7 +220,21 @@ async function main() {
     await ctx.close();
   });
 
-  await check('sign out throws the copy away', async () => {
+  await check('a stalled answer: the held copy gives up after 8 seconds and the usual loading shows', async () => {
+    const o = await organizer();
+    await o.open();
+    await o.ready();
+    await sleep(600);
+    o.hold(12000);
+    await o.open();
+    await o.page.locator('[data-held-admin] .tabbar').waitFor({ timeout: 2500 });
+    await sleep(8600);
+    assert((await o.page.locator('[data-held-admin]').count()) === 0, 'still held after 8 seconds');
+    await o.ready();
+    await o.ctx.close();
+  });
+
+  await check('sign out throws the copy away, and an answer landing after it keeps nothing', async () => {
     const o = await organizer();
     await o.open();
     await o.ready();
@@ -231,6 +245,14 @@ async function main() {
     await o.page.getByRole('button', { name: 'Sign out' }).click();
     await sleep(800);
     assert((await o.page.evaluate(() => localStorage.getItem('pb_last_admin'))) === null, 'still kept after sign out');
+    assert((await o.page.evaluate(() => localStorage.getItem('pb_last_admin_off'))) === '1', 'no signed-out mark');
+    // Signing in again allows a copy again.
+    await o.page.goto(BASE + '/admin');
+    await o.page.fill('input[type=password]', PIN);
+    await o.page.click('button[type=submit]');
+    await o.ready();
+    await sleep(800);
+    assert(await o.kept(), 'no copy after signing in again');
     await o.ctx.close();
   });
 

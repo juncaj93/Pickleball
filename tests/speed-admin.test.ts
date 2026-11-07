@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createNodeD1 } from '../dev/nodeD1';
 import { handleApi } from '../server/app';
 import { buildSeed, previewPin } from '../scripts/seed-preview-world';
-import { clearLastAdmin, LAST_ADMIN_KEY, readLastAdmin, saveLastAdmin } from '../src/lastAdmin';
+import { clearLastAdmin, LAST_ADMIN_KEY, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../src/lastAdmin';
 import type { AdminDashboard } from '../shared/api';
 import { LAST_SCREEN_MAX_AGE_MS } from '../shared/speed';
 
@@ -90,6 +90,18 @@ describe('the organizer copy (src/lastAdmin.ts)', () => {
     saveLastAdmin(real, { pretend: false, demo: false }, AT, store);
     saveLastAdmin(off, { pretend: false, demo: false }, AT, store);
     expect(store.getItem(LAST_ADMIN_KEY)).toBeNull();
+  });
+  it('after Sign out (or a 401), an answer that lands late keeps nothing until the next real sign-in', async () => {
+    const { real } = await answers();
+    const store = new MemStore();
+    saveLastAdmin(real, { pretend: false, demo: false }, AT, store);
+    signedOutLastAdmin(store);
+    expect(store.getItem(LAST_ADMIN_KEY)).toBeNull();
+    saveLastAdmin(real, { pretend: false, demo: false }, AT, store);
+    expect(store.getItem(LAST_ADMIN_KEY)).toBeNull();
+    signedInLastAdmin(store);
+    saveLastAdmin(real, { pretend: false, demo: false }, AT, store);
+    expect(store.getItem(LAST_ADMIN_KEY)).not.toBeNull();
   });
   it('older than 3 hours, another build, unreadable: not shown, dropped; clear() empties it', async () => {
     const { real } = await answers();
