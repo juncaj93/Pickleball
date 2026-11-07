@@ -6,11 +6,13 @@
 .admin-held [data-held-money] {
   transition: opacity 320ms ease-out;
 }
-/* The small "as of 2:14 PM" under the header, out of the page's flow (it adds no height, so nothing moves when it goes). */
+/* The small "as of 2:14 PM", floating just above the tab bar, out of the page's flow (it adds no height, so nothing moves when it goes). */
 .admin-asof {
   position: fixed;
-  top: 72px;
-  right: 12px;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
   z-index: 30;
   padding: 2px 8px;
   border-radius: 999px;

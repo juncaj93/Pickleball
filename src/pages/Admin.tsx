@@ -106,13 +106,14 @@ export function AdminApp() {
  */
 function HeldAdmin({ held, savedAt, tz, children }: { held: boolean; savedAt: number; tz: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [top, setTop] = useState<number | null>(null);
+  // The pill floats just above the tab bar (it covers no card words there), out of the page's flow.
+  const [bottom, setBottom] = useState<number | null>(null);
   useLayoutEffect(() => {
     const root = ref.current;
     if (!held || !root) return;
     markMoney(root);
-    const head = root.querySelector('.topbar');
-    setTop(head ? Math.round(head.getBoundingClientRect().bottom) + 6 : 72);
+    const bar = root.querySelector('.tabbar');
+    setBottom(bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 8 : 96);
   }, [held]);
   // Watching starts while the copy is held (the fresh answer is drawn in the same step that lets go), and stops 1.5 s after it lands.
   const stopWatching = useRef<(() => void) | null>(null);
@@ -143,7 +144,7 @@ function HeldAdmin({ held, savedAt, tz, children }: { held: boolean; savedAt: nu
           <p className="sr-only" role="status">
             Your last organizer screen, {asOfText(savedAt, tz)}. Updating.
           </p>
-          <span className="admin-asof" data-admin-asof aria-hidden="true" style={top !== null ? { top } : undefined}>
+          <span className="admin-asof" data-admin-asof aria-hidden="true" style={bottom !== null ? { bottom } : undefined}>
             {asOfText(savedAt, tz)}
           </span>
         </>
