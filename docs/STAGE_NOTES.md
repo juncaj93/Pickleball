@@ -2959,3 +2959,19 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
 - Tests on the combined code: unit 2325 passed, 0 failed (138 files); `e2e/zip12.cjs` 26/26; `e2e/zip12-off.cjs` 23/23 against main `513d7b4`; full
   browser suite: the same 4 scripts as before fail on main too (run 10, cancel-reason 2, want-in 1, admin-r2 F4 1); money-rework's "Hide from list"
   failed twice with three scripts sharing the machine (it waits 0.9 s) and passed alone and in two full runs (36/36) on the branch and on main.
+
+### Deploy (Sat Nov 7, 2026, 8:30 AM Eastern, quiet window, on Alex's "ship it")
+- PR #93 merged as `513d7b4` (merge commit; same files as the tested branch head `c1b9519`). Production deployment
+  `b2ffeedd-3c71-4edc-bc70-f676d9011d7c` from main, with `ALERT_CARDS` allowed in `wrangler.toml` and the Settings row OFF (no
+  `alert_cards_on` row in `task_log`). No migration, no data change. Alex switches it on himself in a quiet window.
+- Before it: main equaled live (production `f09f5aac-d683-49bd-a3cb-de9794278759` = `fb44afc`). SQL export `live-before-zip11-2026-11-07.sql`
+  (163 KB, not committed, has phone numbers, in that session's scratch folder), Time Travel bookmark
+  `00000a56-00000000-0000511c-0e093dc76cfb89a13125ea8e8e563137` (8:21 AM Eastern). Integrity checks: all 21 columns 0 before and after.
+- Tests on the merged tree: tsc clean, unit and API 2294 passed, 1 skipped, 0 failed (136 files), build clean.
+- Read-only live check (pickleball-club-9h0.pages.dev; pickleball.juncaj.net is not reachable from the sandbox): `/`, `/admin`, `/api/status`,
+  `/api/group/version` and an old `/t/` address answer 200; the live script is the same file as the local build (index-Dfr35_8d.js); the read-only
+  sign-in works (`viewOnly: true`); the dashboard and the player view carry no `alertCards` flag, `alertCardsForAll` is false; Card cleanup and
+  Texts round 2 still on; Activity and Money answer 200; signed out, the dashboard answers 401. Rows unchanged (players 11, games 13, seats 27).
+- Rollback: Settings > Feature switches > "Alert cards" off (no deploy); or `ALERT_CARDS = "off"` and a deploy; or Pages deployment
+  `f09f5aac-d683-49bd-a3cb-de9794278759` (Zip 10, fb44afc). Note: that rollback build also brings back the game-day check code (it only runs
+  with Texts round 2 off, which is on live) and the /t/ page. No data was changed by the deploy, so no restore is needed.
