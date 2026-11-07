@@ -3114,3 +3114,35 @@ to production, nothing switched on, no live data read or changed. Each switch's 
 ### Trips and cost
 - With the speed switch "decide" (live), the three new switch rows are answered from the one switch read (no new trip); `tests/speed-queries.test.ts`
   counts them as not-main. The player page adds nothing for players (no organizer cookie: no read). The summary endpoint runs only when a row is tapped.
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing wrong with the three switches off. Fixed from it (all only with Undo on): (1) a held save could go out after "Pretend it's..." began or
+  ended, into the wrong database (the demo copy, or live from a demo tap): every held save now checks who it acts as when it goes, and Pretend,
+  View as, Sign out and your own player page first wait until every held save has been sent and answered (`afterHolds`, `flushHolds`); (2) View
+  as right after two quick held taps could drop the second (same fix); a court switch Undo after a second tap now reloads; Cancel's Undo only
+  with Instant taps on, and its "text the group" sheet never pushes another open sheet away; a second tap on a held Money row shows nothing; the
+  summary address only exists with the Players redo on; the organizer's All time reads only months that had a finalized or canceled game.
+- Left as is (said in the report): a fourth quick held tap drops the oldest Undo banner (its save still goes); a held tap saves after taps made
+  after it that had no Undo (they are different things); "N played" updates on the next change, not the moment a game ends.
+### Tests (Sat Nov 7, 2026)
+- Unit and API: 2348 passed, 1 skipped, 0 failed (140 files); tsc clean; build clean. New: `tests/zip13.test.ts` (15). Updated for the projected
+  rule: 15 older Totals tests in 6 files (`tests/projectedZip13.ts` says what the new rule adds); `tests/speed-queries.test.ts` (the Zip 13 rows
+  are not main's); `tests/readonly-pin.test.ts` (the summary read with the redo on, still writes nothing).
+- Browser: `e2e/zip13.cjs` 36/36 (list rows 46 px one line at 390/360/320 light and dark, chips, details and edit sheets, organizer Spent = Money,
+  header at 390/360/320 light and dark, swap and back light and dark, View as, a player never sees it, 13 Undo cases each with the whole database
+  compared before and after and no request sent, left alone saves once, polls never flip it, two quick taps, Undo off, Settings rows, private link,
+  projected). `e2e/zip13-off.cjs` 27/27 against main `aab306b` (all three off = main on every player and organizer screen, light and dark, 390/360/320
+  Players, the organizer's own player page, Settings apart from the three rows, Totals apart from the projected card, a Mark paid tap).
+- Full `npm run test:e2e` once, 2 at a time: 48 of 54 scripts clean (money-rework updated for the three new Settings rows). The other 6:
+  `run.cjs` (10), `cancel-reason.cjs` (2), `want-in.cjs` (1), `admin-r2.cjs` F4 (1) fail the same way on main (known since Zip 9 / 12);
+  `round2.cjs` passed alone (load); `player-fix1.cjs` "I paid on tonight's card" fails 2 of 3 runs on main too (flaky there).
+- The Zip 13 seed parts (two organizer games this month, the three rows on) go to the preview database always and to a local test world only when
+  asked (`SEED_ZIP13=1`, e2e/zip13.cjs), so every older test keeps its world.
+### Preview
+- https://preview-zip13.pickleball-club-9h0.pages.dev (fake database re-seeded Sat Nov 7, about 3:00 PM Eastern). On there: every switch on live
+  per the repo records (the Zip 11 read of the live rows: Adjust credit, Admin layout v2, round 2 and 3, Card cleanup, Card time and buttons, Color
+  cleanup, Home collapse, Instant taps, Last call texts, Late-cancel fee split, Late drops owe $14, Money rework, Ask for payment, No Venmo? note, Pay
+  sheet, Simpler player cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow, Venmo request, both animation switches),
+  plus Players redo, Swap to Alex and Undo on admin toasts. Off there as on live: Alert cards, Seat dots and the four speed rows (switched off on the
+  preview after the seed).
+- Projected (fake November): before 19 courts, $930 total, players $789, your estimate $141; after 22 courts, $1,074, $915, $159 (3 Not booked
+  games added; 2 canceled stay out).

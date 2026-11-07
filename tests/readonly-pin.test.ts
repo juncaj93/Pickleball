@@ -102,7 +102,8 @@ describe('read-only organizer PIN (Zip 8)', () => {
     for (const r of reads) {
       const path = fill(r.path, ids);
       const url = path === '/api/admin/money' || path === '/api/admin/month-games' ? `${path}?month=2026-10` : path;
-      const res = await ctx.viewer.call('GET', url);
+      // (Zip 13: the Players redo summary only exists with its switch on: this phone's private test header turns it on for the read.)
+      const res = await ctx.viewer.call('GET', url, undefined, r.path.endsWith('/summary') ? { 'X-Players-Redo': 'on' } : {});
       if (r.path === '/api/cal/:param') expect(res.status).toBe(404); // retired feed: always Not found
       else if (r.path === '/api/admin/month-games') expect([200, 409], url).toContain(res.status); // 409 = Money rework switch off here
       else expect(res.status, url).toBe(200);
