@@ -2836,3 +2836,8 @@ database (the switch rows, the count of texted /t/ links, the count of old "stan
   `task_log` Sat Nov 7: Adjust credit, Admin layout v2, round 2 and 3, Card cleanup, Card time and buttons, Color cleanup, Home collapse, Instant taps,
   Last call texts, Late-cancel fee split, Late drops owe $14, Money rework, Ask for payment on every game, No Venmo? note, Pay sheet, Simpler player
   cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow, Venmo request, and the two animation switches), plus Alert cards.
+
+### After Alex tested the preview (Sat Nov 7, 2026, morning Eastern)
+- Preview looked good in light and dark. Answers: (a) keep today's organizer words, not the mock's; (b) no new cards for the canceled lines;
+  (c) "Alex sent your $10" stays a bottom banner with OK; (d) the slightly darker amber Pay button is fine; (e) leave the /t/ server routes
+  (`/api/link`, `/api/link/act`, the links route) for now. "Ship it" with ALERT_CARDS OFF.
