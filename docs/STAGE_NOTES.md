@@ -2837,3 +2837,22 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
 - Left as is, for Alex: after the row is switched off, each phone shows its saved copy (tagged, buttons held) once more on its next open, because it
   only hears about the switch from the fresh answer; the copy is gone a second later. A game canceled after a phone saved its copy shows on that copy
   until the fresh answer replaces it (tagged "as of", nothing tappable).
+### Tests (Sat Nov 7, 2026)
+- Unit and API: 2306 passed, 1 skipped, 0 failed (137 files); tsc clean; build clean. `PB_SPEED_FORCE=1` (every request with Fewer database trips
+  on): every test passes; in `tests/speed-queries.test.ts` the three trip-count and kill-switch checks skip (forcing makes "off" fast too).
+  New: `tests/speed-queries.test.ts` (15: byte for byte at four moments with the Zip 9 and 10 rows on and off, trip targets, off = main's trips, the
+  Settings row, a write never answered from before it, the kill switch), `tests/speed-client.test.ts` (14: the saved copy's privacy, throw-away
+  rules, the as-of words, the two flags, the year-long rule only on /assets, the 404 page, the logo).
+- Browser: `e2e/zip12.cjs` 18/18 (saved copy at 390/360/320 px, light and dark, held buttons, no tap sent, tag contrast, ended and canceled games,
+  24 hours, not you?, View as, Load games at once order, switched off, the private link, the group word case without StrictMode, Settings rows).
+  `e2e/zip12-off.cjs` 23/23 (all three off = today's main on every player and organizer screen, light and dark, first and repeat open, question
+  order; needs `MAIN_DIR`). Full `npm run test:e2e` once, 3 at a time: 47 of 51 scripts clean (money-rework updated for the three new rows). The other
+  4 fail the same way on today's main (checked there): `run.cjs` (10 Settings checks: its "Last call" label lookup also matches the Zip 8 "Last call
+  texts" row), `cancel-reason.cjs` (2), `want-in.cjs` (1, the View as check), `admin-r2.cjs` F4 (1, depends on today's date, known since Zip 9). Not fixed here.
+- A production-like check on the deployed preview: the saved copy in under half a second, "as of" tag, 0 buttons, 0 taps sent, then 9 buttons
+  and no tag once fresh, light and dark.
+### Preview
+- https://preview-zip12.pickleball-club-9h0.pages.dev (deployment `f97ae827`), fake database re-seeded Sat Nov 7, about 1:35 AM Eastern. On there:
+  every switch the Zip 9 record lists as on (all live switches), Card cleanup (Zip 10), plus the three speed switches. The live switch rows could not be
+  read from this session (blocked), so the live list comes from the repo records; whether Alex has switched Card cleanup on live is not recorded.
+- `https://speed-before.pickleball-club-9h0.pages.dev` is main's build on the same fake database (for the before numbers); `speed-probe` was a header probe.
