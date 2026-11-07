@@ -180,6 +180,18 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Alert cards" on`;
     case 'alert_cards_off':
       return `${who} switched "Alert cards" off`;
+    case 'speed_fewer_queries_on':
+      return `${who} switched "Fewer database trips" on`;
+    case 'speed_fewer_queries_off':
+      return `${who} switched "Fewer database trips" off`;
+    case 'speed_direct_load_on':
+      return `${who} switched "Load games at once" on`;
+    case 'speed_direct_load_off':
+      return `${who} switched "Load games at once" off`;
+    case 'speed_last_screen_on':
+      return `${who} switched "Show last screen at once" on`;
+    case 'speed_last_screen_off':
+      return `${who} switched "Show last screen at once" off`;
     case 'card_cleanup_on':
       return `${who} switched "Card cleanup" on`;
     case 'card_cleanup_off':

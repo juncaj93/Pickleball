@@ -90,6 +90,12 @@ export interface Env {
   CARD_CLEANUP?: string;
   /** "Alert cards" (Zip 11: one action-card look for every player and organizer alert): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?alertcards=on (server/zip11.ts). Display only. */
   ALERT_CARDS?: string;
+  /** Zip 12 "Fewer database trips" (server/speed.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?fewerqueries=on. Changes how the server reads, never what it answers. */
+  SPEED_FEWER_QUERIES?: string;
+  /** Zip 12 "Load games at once" (the plain site address asks for the games together with the set-up check): the kill switch, allowed unless "off". Settings > Feature switches, ?directload=on. */
+  SPEED_DIRECT_LOAD?: string;
+  /** Zip 12 "Show last screen at once" (a returning player's phone draws its saved copy of the last screen, buttons held, then the fresh one): the kill switch, allowed unless "off". Settings > Feature switches, ?lastscreen=on. */
+  SPEED_LAST_SCREEN?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

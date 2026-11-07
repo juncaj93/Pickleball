@@ -1110,3 +1110,12 @@ html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
 .pay-sheet .btn.paid-soft .paid-check {
   flex: none;
 }
+
+/* Zip 12, "Show last screen at once": the small gray "as of 2:14 PM" over the saved copy (gone the moment fresh data lands). */
+.saved-asof {
+  margin: 0 0 -6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted-fg);
+  text-align: right;
+}
