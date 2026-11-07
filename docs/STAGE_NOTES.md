@@ -3072,3 +3072,19 @@ change, no migration, nothing deployed to production.
   from its one read (no extra trip). The preview list keeps the three speed rows on (Zip 12's own tests use them; they are off on live).
 - Retested on top of Zip 12: unit 2328 passed, 1 skipped, 0 failed (138 files); browser zip11 26/26, zip12 26/26, zip10, zip7, zip6, zip9,
   instant-taps, money-rework all pass; `e2e/zip11-off.cjs` 44/44 against main `6ab20fb` with every look and speed switch off, as on live.
+
+### Deploy, Zip 12 step C (Sat Nov 7, 2026, 12:39 PM Eastern, a quiet window) - LIVE with the switch OFF
+- Alex: "ship it" for Instant admin with the switch OFF (he turns it on himself, never for the first time on a game day); Card cleanup being ON on
+  live is correct (Alex turned it on), leave it on.
+- Main had moved (PR #95, Alert cards redo and Seat dots, live as `81e6391c` = main `c5c7ea1`): merged into the branch (Instant admin sits above Seat
+  dots in the switch list), then unit 2333 passed, 0 failed; `e2e/zip12-admin.cjs` 16/16, `e2e/zip12.cjs` 26/26, `e2e/zip12-off.cjs` 25/25 against
+  `c5c7ea1`; full browser suite: 48 of 53 clean, the same 4 scripts that fail on main (run, cancel-reason, want-in, admin-r2 F4) and money-rework's
+  Hide-from-list load flake (36/36 alone). PR #96 merged as main `aab306b`; full unit run on merged main: 2333 passed, 0 failed.
+- Before: SQL export of the live database (12:28 PM, 168,065 bytes, kept out of git) and Time Travel bookmark
+  `00000a8f-00000000-0000511c-ae77c521779b93c16c2f15f974748db7` (12:28 PM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000a8f-00000000-0000511c-ae77c521779b93c16c2f15f974748db7`.
+- Production deployment `5cb45263-87af-486c-8d84-4b2e09de824c` = main `aab306b`. Rollback: the build live before it, `81e6391c-f361-460d-bec6-546e9e3df139`
+  (PR #95). Nothing is written while the switch is off, so no data restore is needed.
+- Read-only live check (backup address): `e2e/live-check.cjs` green apart from its old "setup code is configured" line; read-only PIN: sign-in,
+  dashboard, version, Money, History answer; a save is refused (403 view_only); the five organizer tabs open with no page errors; all four speed rows
+  are off (`lastScreenAdmin` absent); the read-only PIN kept no organizer copy. On live: Card cleanup ON, Alert cards ON.
