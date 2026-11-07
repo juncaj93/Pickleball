@@ -279,7 +279,8 @@ async function main() {
     const note = p.page.locator('[data-adjust-note]').first();
     await note.waitFor();
     const nt = (await note.innerText()).replace(/\s+/g, ' ');
-    assert(nt.includes('Credit adjusted by organizer: +$5') && nt.includes(reason), `player note: ${nt}`);
+    // Zip 11: with Alert cards on (on in the fake world) the Home line is the card "Credit adjusted: +$5" with the reason under it.
+    assert((nt.includes('Credit adjusted by organizer: +$5') || nt.includes('Credit adjusted: +$5')) && nt.includes(reason), `player note: ${nt}`);
     assert(/\$19 credit/.test(await p.page.locator('[data-credit-balance]').innerText()), 'the player sees $19');
     await shot(p.page, 'player-credit-390-light');
     await p.ctx.close();

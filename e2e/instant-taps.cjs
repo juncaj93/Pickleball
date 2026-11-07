@@ -405,6 +405,11 @@ async function main() {
     const sent = counter(page, 'POST', /\/api\/admin\/sessions\/[^/]+\/payment$/);
     const off = await network(page, /\/api\/admin\/sessions\/[^/]+\/payment$/, 'slow');
     const card = page.locator(`article.mrw-game[data-session="${mixed.id}"]`);
+    // Zip 11: the fake world has more Money cards now; open this one by name if the loop above left it folded.
+    if ((await card.getAttribute('data-open')) === 'no') {
+      await card.locator('.mrw-toggle').click();
+      await page.waitForTimeout(300);
+    }
     const kai = card.locator('li').filter({ hasText: 'Kai' });
     await kai.getByRole('button', { name: /Mark paid/ }).dblclick();
     await page.waitForTimeout(120);

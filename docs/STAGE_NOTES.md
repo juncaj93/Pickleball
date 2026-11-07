@@ -2804,7 +2804,7 @@ database (the switch rows, the count of texted /t/ links, the count of old "stan
 
 ### D. Preview seed
 - `alert_cards_on` in `PREVIEW_SWITCHES_ON` (with every switch on live). New fake states: a moved game (Indy, Jordan, Drew), Casey +$5 credit adjusted and
-  a regular for Tue and Thu (Want in), Blake's late drop taken by Kai (cleared debt), and a played game to finalize (Wednesday or Thursday seeds).
+  a regular for Tue and Thu (Want in), Blake's late drop taken by Christopher Vanderberg (cleared debt), and a played game to finalize (Wednesday or Thursday seeds).
 
 ### Fresh review (an independent reviewer who did not write the code)
 - Nothing blocking. Fixed from it: (1) the standby words were still reachable (see B): put back exactly as main has them; (2) with the switch on, the
@@ -2815,3 +2815,24 @@ database (the switch rows, the count of texted /t/ links, the count of old "stan
   texts reads the switch, and main's brain minus the two deleted things gives the new golden fingerprints exactly.
 - Notes kept: the dashboard always carries `alertCardsForAll` (false when off), as every switch does (one more small read per request); the old
   `/api/link` routes stay (see B).
+
+### Tests (Sat Nov 7, 2026, about 12:00 to 3:00 AM Eastern)
+- Unit and API: 2294 passed, 1 skipped, 0 failed (136 files); tsc clean; build clean. New: `tests/alert-cards.test.ts` (the switch: off, header, Settings row,
+  kill switch, stamp, Activity, same data either way; every CSS rule under the attribute; tokens 4.5:1 light and dark; the deleted code; the seed list).
+  Updated for the deleted game-day check and "I booked it": smart-tasks, texts-r2, tick-fast, golden-wording (new fingerprints), audit-behind-clock,
+  telegram-links; preview-seed (Casey's credit is $8).
+- Browser: `e2e/zip11.cjs` 21/21 (light and dark, 390/360/320 px: inside the screen, no icon, 4.5:1, 40 px buttons, 44 px X, no waitlist words on
+  player cards; the Want in X declines, Pay opens the Pay sheet, Still in saves, Can't make it opens the drop question, the cash-out question, the
+  organizer colors, Settings off = the old alerts, `?alertcards=on` on one phone, the Settings row, an old /t/ link opens home).
+  `e2e/zip11-off.cjs` 42/42 (switch off = today's main on every screen, player and organizer, light and dark, 390/360/320, and after tapping every
+  alert's buttons; needs `MAIN_DIR`, not in `npm run test:e2e`).
+- The rest of `npm run test:e2e`, run once in parallel at 390 px: all pass except four that fail on today's main too (rule 7, not fixed here):
+  `run.cjs` (the "Last call" label matches two fields since Zip 8), `cancel-reason.cjs`, `want-in.cjs` (DEMO check) and `admin-r2.cjs` F4 (date).
+  Updated for the new fake world: `money-rework.cjs` (the new Settings row), `zip6.cjs` (the Credit adjusted card words), `zip10.cjs` (a seeded
+  late-drop line sits between note and circles), `instant-taps.cjs` (opens the "Mixed payments" card by name).
+
+### Preview
+- https://preview-zip11.pickleball-club-9h0.pages.dev, fake database re-seeded Sat Nov 7. On there: every switch that is on live (read from the live
+  `task_log` Sat Nov 7: Adjust credit, Admin layout v2, round 2 and 3, Card cleanup, Card time and buttons, Color cleanup, Home collapse, Instant taps,
+  Last call texts, Late-cancel fee split, Late drops owe $14, Money rework, Ask for payment on every game, No Venmo? note, Pay sheet, Simpler player
+  cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow, Venmo request, and the two animation switches), plus Alert cards.

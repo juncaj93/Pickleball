@@ -492,7 +492,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   // 17. Zip 11 "Alert cards": one of every alert the preview did not have yet, so each card can be seen (all fake, real site rules):
   //     a game moved after people were in (player "... moved to 7:30 PM" with Still in / Can't make it; organizer "Confirmed 0 of 3"),
   //     a hand credit adjustment with a reason (player "Credit adjusted: +$5"), and a late drop that someone took ("You no longer owe $14").
-  //     The money ones only move fake money: Casey gets +$5 credit; Blake's $14 late-drop debt is cleared when Kai takes the spot.
+  //     The money ones only move fake money: Casey gets +$5 credit; Blake's $14 late-drop debt is cleared when Christopher Vanderberg takes the spot.
   const moved = await extraAt(19, 0, 5);
   await setCourt(moved, 'booked');
   for (const n of ['Indy', 'Jordan', 'Drew']) await join(n, moved);
@@ -519,10 +519,11 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     }
   }
   if (takenGame) {
-    for (const n of ['Blake', 'Emery', 'Finley', 'Indy']) await join(n, takenGame);
+    // (Players the older browser tests do not tap on their first game: e2e/instant-taps.cjs drives Kai and Indy.)
+    for (const n of ['Blake', 'Emery', 'Finley', 'Drew']) await join(n, takenGame);
     await (await w.pick('Blake')).ok('POST', `/api/sessions/${takenGame.id}/withdraw`, {});
-    await join('Kai', takenGame);
-    summary.push('late drop taken: Blake dropped inside the 12 hours (owed $14), Kai took the spot: Blake sees "You no longer owe $14"');
+    await join(LONG_NAME, takenGame);
+    summary.push(`late drop taken: Blake dropped inside the 12 hours (owed $14), ${LONG_NAME} took the spot: Blake sees "You no longer owe $14"`);
   }
 
   // Hand the world to the caller as SQL.

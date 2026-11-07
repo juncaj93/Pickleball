@@ -779,7 +779,7 @@ async function main() {
       // Zip 7 (Nov 5) added Tonight glow, Color cleanup and Simpler player cards above those.
       // Zip 8 (Nov 6) added Last call texts above those.
       // Zip 9 (Nov 6) added Short games and Card time and buttons above those.
-      assert(names.slice(0, 12).join('|') === 'Card cleanup|Short games|Card time and buttons|Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 12)}`);
+      assert(names.slice(0, 13).join('|') === 'Alert cards|Card cleanup|Short games|Card time and buttons|Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 13)}`);
       // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
@@ -790,7 +790,7 @@ async function main() {
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
       // This test server keeps the two animation switches dark, so those two rows sit above the group as well.
-      assert(names.length === 12 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the eleven newest sit above the group): ${names.length} vs ${live.length}`);
+      assert(names.length === 13 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the eleven newest sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
