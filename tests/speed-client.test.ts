@@ -186,6 +186,21 @@ describe('the size notes kept with the copy (the quiet swap)', () => {
   });
 });
 
+describe('a damaged copy never breaks the page', () => {
+  it('size notes that are not exactly what the code writes are left out; the copy is drawn without them', async () => {
+    const w = await world();
+    const v = (await w.call('GET', '/api/group', await w.phone('Avery'), undefined, { 'X-Last-Screen': 'on' })).data as GroupView;
+    for (const bad of [{ width: 390, lead: 10, items: [null] }, { width: 390, lead: 10, items: [{ kind: 'card', id: 7 }] }, { width: 390, lead: 10, items: [{ kind: 'line', tier: 'someday' }] }, { width: '390', lead: 0, items: [] }, 'x']) {
+      const store = new MemStore();
+      saveLastScreen('plain', v, AT, store);
+      store.setItem(LAST_SCREEN_KEY, JSON.stringify({ ...JSON.parse(store.getItem(LAST_SCREEN_KEY)!), layout: bad }));
+      const read = readLastScreen('plain', AT + 1000, store);
+      expect(read).not.toBeNull();
+      expect(read!.layout).toBeUndefined();
+    }
+  });
+});
+
 describe('the two flags on the player answer (only while on)', () => {
   it('off: missing, so the answer is exactly as before; the private link or the Settings row turns each on; the kill switch wins', async () => {
     const w = await world();

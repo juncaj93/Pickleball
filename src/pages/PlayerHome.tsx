@@ -301,7 +301,11 @@ export function PlayerHome({
   }, [ownPhone, savedPage]);
   // This address now answers "link not working", "group word needed" or "link only": the copy must not show again.
   useEffect(() => {
-    if (load.error && (load.error.status === 403 || load.error.status === 404)) clearLastScreen();
+    if (load.error && (load.error.status === 403 || load.error.status === 404)) {
+      clearLastScreen();
+      // And never saved again from the answer still in memory (leaving the page would otherwise bring the copy back).
+      fresh.current = null;
+    }
   }, [load.error]);
   // "not you?": a copy kept for this name must never show for another.
   const switchingRef = useRef(false);

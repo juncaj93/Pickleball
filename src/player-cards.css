@@ -1148,7 +1148,7 @@ html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
     opacity: 1;
   }
 }
-.sched[data-sw-card],
+html main.page .schedule > .sched[data-sw-card]:not(.leaving),
 .sched[data-sw-balls] .in-line,
 .sched[data-sw-balls] .names-line,
 .sched[data-sw-status] .sched-head,
@@ -1156,12 +1156,12 @@ html[data-motion='on'] .pay-card.m-enter .pay-sheet .btn {
 .sched[data-sw] .sched-links,
 .sched[data-sw] .credit-note,
 .sched[data-sw] .st-tail,
-main[data-sw-main] > :not(.schedule):not(.m-ptr):not(.sr-only),
+html:not([data-motion='on']) main[data-sw-main] > :not(.schedule):not(.m-ptr):not(.sr-only),
 main[data-sw-main] .week-break .filter-toggle {
   animation: sw-in 320ms ease-out both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .sched[data-sw-card],
+  html main.page .schedule > .sched[data-sw-card]:not(.leaving),
   .sched[data-sw-balls] .in-line,
   .sched[data-sw-balls] .names-line,
   .sched[data-sw-status] .sched-head,
@@ -1169,7 +1169,7 @@ main[data-sw-main] .week-break .filter-toggle {
   .sched[data-sw] .sched-links,
   .sched[data-sw] .credit-note,
   .sched[data-sw] .st-tail,
-  main[data-sw-main] > :not(.schedule):not(.m-ptr):not(.sr-only),
+  html:not([data-motion='on']) main[data-sw-main] > :not(.schedule):not(.m-ptr):not(.sr-only),
   main[data-sw-main] .week-break .filter-toggle {
     animation: none;
   }

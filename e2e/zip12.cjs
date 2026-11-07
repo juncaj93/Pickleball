@@ -358,7 +358,7 @@ async function main() {
       const live = await boxes(p.page, false);
       // Someone else joins a game Avery can see, so one card really changes (its balls and names).
       const d = await dash();
-      const game = d.sessions.find((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > NOW_MS + 3600_000 && s.confirmedCount >= 1 && s.confirmedCount < 4 && !s.roster.some((r) => r.name === 'Harper'));
+      const game = d.sessions.find((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > NOW_MS + 3600_000 && s.confirmedCount >= 1 && s.confirmedCount < 4 && !s.roster.some((r) => r.name === 'Harper' && r.status !== 'withdrawn'));
       assert(game, 'no game for Harper to join');
       const hp = (await browser.newContext()).request;
       await post(hp, '/api/me', { playerId: nameId('Harper') });

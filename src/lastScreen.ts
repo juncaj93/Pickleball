@@ -221,7 +221,22 @@ export function readLastScreen(page: string, nowMs = Date.now(), store: Store | 
     }
     if (saved.page !== page) return null;
     const sessions = saved.view.sessions.filter((s) => keepGame(s, nowMs)).map((s) => ({ ...s, started: nowMs >= Date.parse(s.startsAt) }));
-    return { ...saved, view: { ...saved.view, now: new Date(nowMs).toISOString(), sessions } };
+    // Size notes that are not exactly what this code writes are left out (the copy is then drawn without them).
+    const items = saved.layout?.items;
+    const goodLayout =
+      !!saved.layout &&
+      typeof saved.layout.width === 'number' &&
+      typeof saved.layout.lead === 'number' &&
+      Array.isArray(items) &&
+      items.every(
+        (it) =>
+          !!it &&
+          typeof it === 'object' &&
+          ((it.kind === 'line' && (it.tier === 'this' || it.tier === 'next' || it.tier === 'later')) ||
+            (it.kind === 'card' && typeof it.id === 'string' && typeof it.h === 'number' && (it.c === undefined || typeof it.c === 'number'))),
+      );
+    const { layout: _layout, ...rest } = saved;
+    return { ...rest, ...(goodLayout ? { layout: saved.layout } : {}), view: { ...saved.view, now: new Date(nowMs).toISOString(), sessions } };
   } catch {
     clearLastScreen(store);
     return null;
