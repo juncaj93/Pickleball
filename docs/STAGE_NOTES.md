@@ -2940,3 +2940,22 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
   every switch the Zip 9 record lists as on (all live switches), Card cleanup (Zip 10), plus the three speed switches. The live switch rows could not be
   read from this session (blocked), so the live list comes from the repo records; whether Alex has switched Card cleanup on live is not recorded.
 - `https://speed-before.pickleball-club-9h0.pages.dev` is main's build on the same fake database (for the before numbers); `speed-probe` was a header probe.
+### After Alex looked at the preview (Sat Nov 7, 2026, morning)
+- Answers: Card cleanup is NOT on live yet (Alex; note the Zip 11 notes above say the live `card_cleanup_on` row existed when read Sat Nov 7: Alex
+  to check Settings on live). The page may shift a little when fresh data lands, but quietly (below). OK that each phone shows its old copy once after
+  Show last screen at once is switched off.
+- Put on top of main after Zip 11 (PR #93, live as `b2ffeedd` = main `513d7b4`): one commit for the whole of Zip 12, conflicts only where both zips
+  add a switch (Zip 12's rows sit above Alert cards, newest first). The fake world keeps Card cleanup and Alert cards on (Zip 10 and 11's tests use them).
+- A, the quiet swap (Alex): the copy keeps sizes only (page width, the room above the list, each card's height and where its words start, in the
+  live list's order, canceled games included), so the saved copy takes exactly the room the live screen took: the Pay card area and a game the copy
+  may not show keep their room as a soft shimmer; the "as of" tag sits where All games sits; a fresh page load's rules apply (Home collapse folds later
+  games, else the first 6). On the first fresh screen only what changed fades in (a card whose balls, names or status changed, a new card, the buttons
+  and money lines), 320 ms, none with Reduce motion. A copy older than 3 hours is not shown: the normal loading shimmer shows instead.
+  Checked in `e2e/zip12.cjs`: card tops, heights and where the words start within 1 px from the live screen to the copy to the fresh screen, at 390, 360
+  and 320 px, light and dark, with Card cleanup on and off; changed parts fade and unchanged ones do not; a 4 hour old copy shows the shimmer.
+- Second fresh review (the quiet swap): nothing blocking. Fixed from it: a copy thrown away after a "word needed" or "not found" answer could be saved
+  again when the phone was locked (the answer in memory is now forgotten too); a new card's fade lost to the motion switch's rule (it wins now, and with
+  motion on the Pay card keeps its own entry so it never rises twice); damaged size notes are ignored instead of breaking the page.
+- Tests on the combined code: unit 2325 passed, 0 failed (138 files); `e2e/zip12.cjs` 26/26; `e2e/zip12-off.cjs` 23/23 against main `513d7b4`; full
+  browser suite: the same 4 scripts as before fail on main too (run 10, cancel-reason 2, want-in 1, admin-r2 F4 1); money-rework's "Hide from list"
+  failed twice with three scripts sharing the machine (it waits 0.9 s) and passed alone and in two full runs (36/36) on the branch and on main.
