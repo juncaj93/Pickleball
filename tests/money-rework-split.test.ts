@@ -1,5 +1,6 @@
 // Money page rework with the Late-cancel fee split ON (it went live Wed Nov 4): the new Totals after a fee-kept cancel with 5 or 6 in, Edit
 // charge on that game, and the 5-minute clock around a game hidden from the lists. Admin only: nothing here changes a seat, payment or credit.
+import { COURT, comingUnbooked, PLAYERS, YOURS } from './projectedZip13';
 import { describe, expect, it } from 'vitest';
 import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { firstSession, HOUR, MONDAY_NOON, PIN, playerPhone, sentText, setupGroup, TestApp } from './harness';
@@ -68,7 +69,9 @@ describe('Totals after a fee-kept cancel with the split on', () => {
     expect(m.rework).toMatchObject({ courtSessions: 1, courtCostCents: 4800, membershipCents: 3000, owedToVenueCents: 7800, collectedCents: 2700, yourCostCents: 5100, yourCostCourtCents: 2100, yourCostMembershipCents: 3000 });
     expect(m.creditsOwedCents).toBe(1500);
     // A canceled game adds nothing to the projection beyond what is already counted.
-    expect(m.rework.projected).toMatchObject({ addedCourts: 0, courtCount: 1, courtCostCents: 4800, playersPayCents: 4200, yourCostCents: 3600, yourCostCourtCents: 600 });
+    // (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    const x = await comingUnbooked(w.organizer, month, [s0.id]);
+    expect(m.rework.projected).toMatchObject({ addedCourts: x, courtCount: 1 + x, courtCostCents: 4800 + x * COURT, playersPayCents: 4200 + x * PLAYERS, yourCostCents: 3600 + x * YOURS, yourCostCourtCents: 600 + x * YOURS });
     nonNegative(m.rework);
     // The same game on the old page: same court and same collected (no double count, no new number).
     expect(m.courtCostCents).toBe(4800);

@@ -6,9 +6,10 @@ import { SuggestionCards } from './admin/SuggestionCards';
 import { courtCards } from './admin/doNow';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, demoOn, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { api, ApiError, demoOn, navigate, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
 import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
 import { asOfText } from '../lastScreen';
+import { heldCount, releaseAllHolds } from '../undoHold';
 import '../admin-held.css';
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
@@ -257,6 +258,18 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   const ctx: AdminCtx = { d, reload, open: (kind, sessionId) => setSheet({ kind, sessionId }) };
   // "Admin screens, round 2" (ADMIN_R2): Light/Dark button left of View as, "Admin" under ORGANIZER, no "Updated just now".
   const r2 = d.adminR2 === true;
+  // Swap to Alex (SWAP_BUTTON, Zip 13). Off: the header and the View as page exactly as before.
+  const swap = d.swapButton === true;
+  // View as answers from the demo copy, which has no switch rows: the pill follows what the organizer screen said when View as began.
+  const swapAtView = useRef(swap);
+  if (!viewing) swapAtView.current = swap;
+  // Your own player page, the way a player opens it (the group's link): who it shows is this phone's own pick, as always. Nothing signs in or out.
+  const goToMyPage = () => {
+    // A save still held for its Undo goes now (the toast with its Undo button does not follow you to the player page).
+    releaseAllHolds();
+    window.scrollTo(0, 0);
+    navigate(new URL(d.group.privateLink).pathname);
+  };
   const todoCount = homeBadgeCount(d);
   // The organizer screens keep themselves fresh like the player side: one tiny "did anything change?" check every
   // few seconds, the full load only when it did, and never while a sheet or pop-up is open or something is being typed.
@@ -301,6 +314,16 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
             window.scrollTo(0, 0);
             void reload();
           }}
+          // Swap to Alex: "Go to Admin" at the bottom of the View as page too (the same as the bar's Exit).
+          onGoAdmin={
+            swapAtView.current
+              ? () => {
+                  setViewing(null);
+                  window.scrollTo(0, 0);
+                  void reload();
+                }
+              : undefined
+          }
         />
       </>
     );
@@ -310,8 +333,10 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
     <>
       <DemoBar tz={d.group.timezone} />
       <TopBar
-        eyebrow="Organizer"
-        title={r2 ? 'Admin' : d.group.name}
+        // Swap to Alex (SWAP_BUTTON, Zip 13): no ORGANIZER label; "Admin" and a small swap icon are one button to your own player page.
+        eyebrow={swap ? '' : 'Organizer'}
+        title={r2 || swap ? 'Admin' : d.group.name}
+        onTitle={swap ? { onClick: goToMyPage, label: 'Admin. Switch to your player page' } : undefined}
         // Signed in with the read-only PIN (server/viewOnly.ts): a small label, and every save is refused by the server.
         titleExtra={d.viewOnly ? <span className="view-only-pill" data-view-only>View only</span> : undefined}
         action={
@@ -319,13 +344,13 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
             // Round 2: View as… first, then the Light/Dark button, so the button sits right next to the calendar tile.
             <span className="r2-hdr-actions">
               <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
-                View as…
+                {swap ? 'View as' : 'View as…'}
               </button>
               <ModeButton />
             </span>
           ) : (
             <button className="topbar-btn" onClick={() => setPickViewAs(true)}>
-              View as…
+              {swap ? 'View as' : 'View as…'}
             </button>
           )
         }
@@ -375,8 +400,15 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
                   className="btn secondary"
                   onClick={() => {
                     setPickViewAs(false);
-                    setViewing({ id: p.id, name: p.name });
-                    window.scrollTo(0, 0);
+                    const go = () => {
+                      setViewing({ id: p.id, name: p.name });
+                      window.scrollTo(0, 0);
+                    };
+                    // Undo on admin toasts: a save still held for its Undo is sent first (as the organizer), then View as opens.
+                    if (heldCount() > 0) {
+                      releaseAllHolds();
+                      setTimeout(go, 0);
+                    } else go();
                   }}
                 >
                   {p.name}

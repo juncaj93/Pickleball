@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { comingUnbooked, PLAYERS, YOURS } from './projectedZip13';
 import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { firstSession, HOUR, PIN, playerPhone, setupGroup, TestApp } from './harness';
 
@@ -58,7 +59,9 @@ describe('fee-kept cancel, no split', () => {
     const { s0, month } = await feeKept(w, ['Blair', 'Casey', 'Devon'], ['Blair', 'Casey']);
     let t = (await money(w, month)).rework;
     expect(t).toMatchObject({ courtSessions: 1, courtCostCents: 4800, collectedCents: 2800, yourCostCents: 5000 });
-    expect(t.projected).toMatchObject({ courtCount: 1, addedCourts: 0, playersPayCents: 4200, yourCostCents: 3600 });
+// (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    const x = await comingUnbooked(w.organizer, month, [s0.id]);
+    expect(t.projected).toMatchObject({ courtCount: 1 + x, addedCourts: x, playersPayCents: 4200 + x * PLAYERS, yourCostCents: 3600 + x * YOURS });
     sane(t);
     await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/charge`, { charged: true, cents: 2500 }, on);
     t = (await money(w, month)).rework;
@@ -67,7 +70,7 @@ describe('fee-kept cancel, no split', () => {
     await w.organizer.call('POST', `/api/admin/sessions/${s0.id}/charge`, { charged: false }, on);
     t = (await money(w, month)).rework;
     expect(t).toMatchObject({ courtSessions: 0, courtCostCents: 0, collectedCents: 0, yourCostCents: 3000 });
-    expect(t.projected).toMatchObject({ courtCount: 0, playersPayCents: 0, yourCostCents: 3000 });
+    expect(t.projected).toMatchObject({ courtCount: x, playersPayCents: x * PLAYERS, yourCostCents: 3000 + x * YOURS });
     sane(t);
     // old page: collected counted for fee kept even with the charge removed?
     const old = await money(w, month, {});
@@ -88,7 +91,8 @@ describe('late-fee no-show', () => {
     // 3 played at $14; Emery (no show, short of 4) paid $14 and it stays on the game: 4 x 1400 = 5600 collected
     expect(t).toMatchObject({ courtCostCents: 4800, collectedCents: 5600 });
     sane(t);
-    expect(t.projected.playersPayCents).toBe(4200);
+// (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    expect(t.projected.playersPayCents).toBe(4200 + (await comingUnbooked(w.organizer, month, [s0.id])) * PLAYERS);
   });
 });
 

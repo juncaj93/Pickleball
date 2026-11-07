@@ -59,7 +59,15 @@ function AdjustForm({ ctx, player, onClose }: { ctx: AdminCtx; player: AdminPlay
     const done = await run(
       () => api('POST', `/api/admin/players/${player.id}/credit-adjust`, { direction, cents, reason, seen: seen.current }),
       `${player.name}: credit ${signedPrice(plan.deltaCents)}, ${formatPrice(plan.afterCents)} now`,
-      { key: `adjust:${player.id}`, what: 'Adjust credit', press: true },
+      ctx.d.adminUndo === true
+        ? {
+            // Undo on admin toasts (ADMIN_UNDO): the sheet closes and the new balance shows at once; the save waits 5 seconds (dropped on Undo).
+            key: `adjust:${player.id}`,
+            what: 'Adjust credit',
+            undo: true,
+            patch: (d) => ({ ...d, creditLedger: d.creditLedger.map((l) => (l.playerId === player.id ? { ...l, balanceCents: plan.afterCents, refundCents: Math.max(0, plan.afterCents - l.reservedCents) } : l)) }),
+          }
+        : { key: `adjust:${player.id}`, what: 'Adjust credit', press: true },
     );
     if (done) onClose();
     else void ctx.reload();

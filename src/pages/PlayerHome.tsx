@@ -22,7 +22,7 @@ import { addNote, forgetGame, readNotes, removeNote, sameNote } from '../dropNot
 import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
-import { ModeButton, TopBar } from '../Shell';
+import { ModeButton, SwapIcon, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
 import { AcBalls, AlertCard } from '../AlertCard';
@@ -37,7 +37,7 @@ import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtF
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
-import { rememberDirectLoad, takeEarly } from '../lib';
+import { navigate, rememberDirectLoad, takeEarly } from '../lib';
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
 function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
@@ -212,7 +212,10 @@ export function PlayerHome({
   onLinkOnly,
   onWordNeeded,
   topBar,
+  onGoAdmin,
 }: {
+  /** Swap to Alex (Zip 13), View as only: "Go to Admin" at the bottom goes back to the organizer screen. */
+  onGoAdmin?: () => void;
   groupKey: string | null;
   /** "View as...": the organizer's "Pretending it's..." bar, kept with the View as bar at the top. */
   topBar?: ReactNode;
@@ -781,6 +784,15 @@ export function PlayerHome({
                 )}
             {/* The end of the page: just a thin line and a little space. */}
             <div className="page-end" aria-hidden="true" />
+            {/* Swap to Alex (SWAP_BUTTON, Zip 13): only on a phone signed in as the organizer (the server says so), or in View as. */}
+            {(onGoAdmin || (!viewAs && g?.goToAdmin === true)) && (
+              <div className="go-admin-wrap">
+                <button type="button" className="go-admin" data-go-admin onClick={() => (onGoAdmin ? onGoAdmin() : navigate('/admin'))}>
+                  <SwapIcon size={11} />
+                  Go to Admin
+                </button>
+              </div>
+            )}
           </>
         )}
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}

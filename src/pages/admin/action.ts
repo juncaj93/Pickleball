@@ -16,6 +16,12 @@ export interface ActOptions {
   what?: string;
   /** Show the tapped button working (pressed look and spinner) even though a patch is drawn too. */
   press?: boolean;
+  /**
+   * Undo on admin toasts (ADMIN_UNDO, Zip 13): pass `ctx.d.adminUndo === true`. With instant taps on, the toast shows at once with Undo, the
+   * save waits 5 seconds (dropped on Undo), and run() answers true at once (the caller closes its sheet). `onSaved` runs once it really saved.
+   */
+  undo?: boolean;
+  onSaved?: () => void;
 }
 
 /**
@@ -34,7 +40,17 @@ export function useAction(ctx: AdminCtx) {
   const working = useRef(false);
   async function run(fn: () => Promise<unknown>, success?: string, opts: ActOptions = {}) {
     if (instant) {
+      if (opts.undo && success) {
+        // Held for its Undo window: drawn now, answered now; the save (and onSaved) come 5 seconds later unless Undo is tapped.
+        void instant
+          .run({ key: `act${id}:${opts.key ?? success}`, patch: opts.patch ?? null, save: fn, saved: success, what: opts.what, press: opts.press, undo: true })
+          .then((res) => {
+            if (res.status === 'ok') opts.onSaved?.();
+          });
+        return true;
+      }
       const res = await instant.run({ key: `act${id}:${opts.key ?? success ?? ''}`, patch: opts.patch ?? null, save: fn, saved: success, what: opts.what, press: opts.press });
+      if (res.status === 'ok') opts.onSaved?.();
       return res.status === 'ok';
     }
     if (working.current) return false;
@@ -44,6 +60,7 @@ export function useAction(ctx: AdminCtx) {
       await fn();
       await ctx.reload();
       if (success) toast(success);
+      opts.onSaved?.();
       return true;
     } catch (err) {
       toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
@@ -62,9 +79,11 @@ export function useAction(ctx: AdminCtx) {
  * A money tap whose result is certain (Mark paid, Unmark, Undo credit, Clear, Reopen), drawn at once the same way the Money page draws
  * it (reworkOptimistic.ts): one key per row, so a second tap on that row waits and another row still works.
  */
-export function opTap(op: ReworkOp, what?: string): ActOptions {
+export function opTap(op: ReworkOp, what?: string, undo?: boolean): ActOptions {
   // Unmark and Unmark credit would have to work out what the person owes again (credit math): that is the server's to say, so those
   // only show the tapped button working. Mark paid (owes nothing after), Clear (owes nothing), Reopen and Hide are certain.
   const certain = op.kind === 'paid' || op.kind === 'clear' || op.kind === 'reopen' || op.kind === 'hide';
-  return { key: opKey(op), patch: certain ? (d) => applyOps(d, [op]) : undefined, what };
+  // With Undo (ADMIN_UNDO) the save waits 5 seconds, so every money tap is drawn at once (an Unmark too: the same picture the Money page
+  // draws); the server's answer replaces it once it saves.
+  return { key: opKey(op), patch: certain || undo ? (d) => applyOps(d, [op]) : undefined, what, ...(undo ? { undo: true } : {}) };
 }

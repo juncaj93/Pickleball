@@ -1,4 +1,5 @@
 // Independent review of the Totals rework: top card counts a game only once finalized; projected is 3 x $14 a court.
+import { COURT, comingUnbooked, PLAYERS, YOURS } from './projectedZip13';
 import { describe, expect, it } from 'vitest';
 import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { firstSession, HOUR, PIN, playerPhone, setupGroup, TestApp } from './harness';
@@ -77,7 +78,9 @@ describe('R1 finalize timing and reopen', () => {
     expect(r.status, r.text).toBe(200);
     const b = (await money(w, month)).rework;
     expect(b).toMatchObject({ courtSessions: 0, courtCostCents: 0, collectedCents: 0, owedToVenueCents: 3000 });
-    expect(b.projected).toMatchObject({ courtCount: 1, addedCourts: 1, courtCostCents: 4800, playersPayCents: 4200 });
+    // (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    const x = await comingUnbooked(w.organizer, month, [s0.id]);
+    expect(b.projected).toMatchObject({ courtCount: 1 + x, addedCourts: 1 + x, courtCostCents: 4800 + x * COURT, playersPayCents: 4200 + x * PLAYERS });
     expect((await fin(w, s0.id)).status).toBe(200);
     expect(JSON.stringify((await money(w, month)).rework)).toBe(JSON.stringify(a));
     sane(a);
@@ -94,7 +97,9 @@ describe('R1 finalize timing and reopen', () => {
     const t = (await money(w, month)).rework;
     // 3 played -> flat $14 each = 4200 collected, court 3000, membership 3000.
     expect(t).toMatchObject({ courtCostCents: 3000, collectedCents: 4200, owedToVenueCents: 6000, yourCostCents: 1800, yourCostCourtCents: 0, yourCostMembershipCents: 1800 });
-    expect(t.projected).toMatchObject({ courtCount: 1, courtCostCents: 3000, totalCents: 6000, playersPayCents: 4200, yourCostCents: 1800, yourCostCourtCents: 0, yourCostMembershipCents: 1800 });
+    // (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played. The court part stays $0: 3 x $14 a court covers this cheaper court.)
+    const x = await comingUnbooked(w.organizer, month, [s0.id]);
+    expect(t.projected).toMatchObject({ courtCount: 1 + x, courtCostCents: 3000 + x * COURT, totalCents: 6000 + x * COURT, playersPayCents: 4200 + x * PLAYERS, yourCostCents: 1800 + x * YOURS, yourCostCourtCents: 0, yourCostMembershipCents: 1800 + x * YOURS });
     sane(t);
   });
   it('Edit charge on a finalized game is refused and changes nothing', async () => {
@@ -134,7 +139,8 @@ describe('R2 who is in', () => {
     const t = (await money(w, month)).rework;
     expect(t.courtSessions).toBe(0);
     // Note: 3 confirmed players on a game past its end count as a played-not-finalized court even if no court was ever booked.
-    expect(t.projected.courtCount).toBe(1);
+    // (+ the month's other games still to come, not booked: Zip 13 counts them in Projected as if played.)
+    expect(t.projected.courtCount).toBe(1 + (await comingUnbooked(w.organizer, month, [s0.id])));
     sane(t);
   });
 });
@@ -144,8 +150,10 @@ describe('R3 zero courts and projected only', () => {
     const w = await world();
     const month = monthOf(w.app.now);
     const t = (await money(w, month)).rework;
-    expect(t.projected.courtCount).toBe(0);
-    expect(t.projected).toMatchObject({ playersPayCents: 0, yourCostCents: 3000, yourCostCourtCents: 0, yourCostMembershipCents: 3000, totalCents: 3000 });
+    // No court played or booked; Zip 13: every game still to come this month counts in Projected as if played (x of them).
+    const x = await comingUnbooked(w.organizer, month);
+    expect(t.projected.courtCount).toBe(x);
+    expect(t.projected).toMatchObject({ playersPayCents: x * PLAYERS, yourCostCents: 3000 + x * YOURS, yourCostCourtCents: x * YOURS, yourCostMembershipCents: 3000, totalCents: 3000 + x * COURT });
     sane(t);
     const past = (await money(w, '2026-01')).rework;
     expect(past.projected).toMatchObject({ membershipCents: 0, totalCents: 0, playersPayCents: 0, yourCostCents: 0 });

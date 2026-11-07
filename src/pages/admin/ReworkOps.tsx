@@ -1,6 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
-import { useToast } from '../../ui';
+import { BANNER_TIMING, useToast } from '../../ui';
+import { startHold } from '../../undoHold';
+import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { isDemo } from '../../lib';
 import { SaveLine, TapQueue } from '../../instant';
 import { useInstant } from '../../InstantTaps';
@@ -59,17 +61,23 @@ export function useReworkBusy(): (op: ReworkOp) => boolean {
  * exactly as it was and say "Couldn't save, nothing changed". Returns null outside the Money page (the caller then does what it always did).
  */
 export function useReworkRun(ctx: AdminCtx): ((op: ReworkOp, save: () => Promise<unknown>, success?: string) => Promise<boolean>) | null {
-  void ctx;
   const store = useContext(OpsContext);
   const toast = useToast();
   if (!store) return null;
+  // Undo on admin toasts (ADMIN_UNDO, Zip 13): the toast at once with Undo, the save 5 seconds later unless Undo is tapped.
+  const undo = ctx.d.adminUndo === true;
   return async (op, save, success) => {
+    const hold = undo && success ? startHold() : null;
+    if (hold && success) {
+      toast(success, 'ok', { keep: true, stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => void (hold.undo() ? toast('Undone. Nothing was saved.', 'ok', { keep: true }) : toast('Already saved. Change it back by hand.', 'ok')) } });
+    }
     const res = await store.queue.run({
       key: opKey(op),
       patch: op,
+      ...(hold ? { hold: hold.decided } : {}),
       save: async () => {
         const value = await save();
-        if (success) toast(success);
+        if (success && !hold) toast(success);
         return value;
       },
     });

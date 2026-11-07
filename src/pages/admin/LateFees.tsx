@@ -25,7 +25,7 @@ export function ClearChoices({ ctx, s, r, onDone }: { ctx: AdminCtx; s: AdminSes
   const { busy, run } = useAction(ctx);
   const [open, setOpen] = useState(false);
   const clear = async (why: LateFeeClearWhy) => {
-    const ok = await run(() => api('POST', `/api/admin/sessions/${s.id}/late-fee`, { playerId: r.playerId, why }), `${r.name}: cleared`, opTap({ kind: 'clear', sessionId: s.id, playerId: r.playerId }, 'Clear'));
+    const ok = await run(() => api('POST', `/api/admin/sessions/${s.id}/late-fee`, { playerId: r.playerId, why }), `${r.name}: cleared`, opTap({ kind: 'clear', sessionId: s.id, playerId: r.playerId }, 'Clear', ctx.d.adminUndo === true));
     if (ok) {
       setOpen(false);
       onDone?.();

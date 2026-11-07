@@ -274,6 +274,47 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   await at(Math.min(ms(pastNeverBooked.endsAt) + HOUR, N));
   summary.push('past game, never booked, 4 in (Gray, Harper, Kai, Jordan), not finalized: shows "Did you guys play?"');
 
+  // 2b. Zip 13 (Players redo): the organizer played two 4-player games earlier THIS month (both booked, the 3 others paid $14, finalized at
+  //     the flat price, so no credit moves), so the organizer's own "Spent" on the Players page and Money Totals "Your cost so far" have
+  //     something to agree on ($30 + 2 x ($48 - 3 x $14) = $42). Only when there is room between the last past game and now, inside this
+  //     month; otherwise left out (the summary says so). The players used have no credit at this point, so nobody's pot changes.
+  {
+    const monthStart = (() => {
+      const q = localParts(N, 'America/Detroit');
+      return zonedTimeToUtc(q.year, q.month, 1, 0, 0, 'America/Detroit');
+    })();
+    const step = 15 * 60_000;
+    let t = Math.ceil(Math.max(w.now + 2 * HOUR, monthStart + 2 * HOUR) / step) * step;
+    let made = 0;
+    for (const names of [['Indy', 'Jordan', 'Kai'], ['Lane', 'Morgan', 'Gray']]) {
+      let g: any = null;
+      while (!g && t + 2 * HOUR + 30 * 60_000 <= N - 30 * 60_000) {
+        try {
+          const res = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(t).toISOString(), endsAt: new Date(t + 2 * HOUR).toISOString(), note: null });
+          await refresh();
+          g = games().find((x) => x.id === res.id);
+        } catch (err) {
+          if (!/game_exists|time_taken/.test(String(err))) throw err;
+          t += 30 * 60_000;
+        }
+      }
+      if (!g) break;
+      await setCourt(g, 'booked');
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/me`, { in: true });
+      for (const n of names) await join(n, g);
+      for (const n of names) await orgPays(n, g);
+      await at(ms(g.endsAt) + 15 * 60_000);
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+      made++;
+      t = Math.ceil((w.now + HOUR) / step) * step;
+    }
+    summary.push(
+      made === 2
+        ? 'organizer played 2 four-player games earlier this month (Indy, Jordan, Kai; Lane, Morgan, Gray; all paid $14, finalized): organizer Spent this month = Money "Your cost so far"'
+        : `organizer this-month games: only ${made} of 2 fit before now (seeded early in the month); the organizer Spent check needs a later seed`,
+    );
+  }
+
   // Back to "now" for everything upcoming (the fake clock moves forward only).
   await at(N);
 
@@ -592,6 +633,10 @@ export const PREVIEW_SWITCHES_ON = [
   'speed_last_screen_admin_on',
   // Being built: Seat dots.
   'seat_dots_on',
+  // Being built (Zip 13): Players redo, Swap to Alex, Undo on admin toasts.
+  'players_redo_on',
+  'swap_button_on',
+  'admin_undo_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

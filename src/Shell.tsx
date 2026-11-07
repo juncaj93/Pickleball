@@ -30,7 +30,9 @@ export function TopBar({
   titleExtra,
   tools,
   chip,
+  onTitle,
 }: {
+  /** The small label over the title. Empty: no label at all (the organizer header with Swap to Alex on). */
   eyebrow: string;
   title: string;
   sub?: ReactNode;
@@ -41,6 +43,8 @@ export function TopBar({
   tools?: ReactNode;
   /** The player's credit chip: right before the date square, the same height. */
   chip?: ReactNode;
+  /** Swap to Alex (Zip 13): the title and a small swap icon after it are ONE button. Left out: the plain title, exactly as before. */
+  onTitle?: { onClick: () => void; label: string };
 }) {
   useEffect(() => {
     document.title = title === SITE_NAME ? SITE_NAME : `${title} · ${SITE_NAME}`;
@@ -53,8 +57,16 @@ export function TopBar({
           <img className="brand-logo" src="/logo.png" alt="" width="24" height="24" />
         </span>
         <div className="topbar-text">
-          <div className="eyebrow">{eyebrow}</div>
-          {titleExtra ? (
+          {eyebrow !== '' && <div className="eyebrow">{eyebrow}</div>}
+          {onTitle ? (
+            <div className="title-line">
+              <button type="button" className="title-swap" onClick={onTitle.onClick} aria-label={onTitle.label} data-title-swap>
+                <h1>{title}</h1>
+                <SwapIcon />
+              </button>
+              {titleExtra}
+            </div>
+          ) : titleExtra ? (
             <div className="title-line">
               <h1>{title}</h1>
               {titleExtra}
@@ -127,5 +139,14 @@ export function ModeButton({ preview }: { preview?: boolean }) {
     >
       <cur.Icon />
     </button>
+  );
+}
+
+/** Two arrows, one each way (Swap to Alex, Zip 13). Drawn in the text color it sits in. */
+export function SwapIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg className="swap-icon" viewBox="0 0 16 16" width={size} height={size} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M2.5 5.5h10M9.5 2.5l3 3-3 3M13.5 10.5h-10M6.5 7.5l-3 3 3 3" />
+    </svg>
   );
 }

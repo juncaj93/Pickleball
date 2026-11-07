@@ -82,6 +82,9 @@ import { isShortGame } from '../shared/gameLength';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
+import { setZip13ForAll, zip13Flags } from './zip13';
+import { monthPlayedCounts } from './playersRedo';
+import type { Zip13Switch } from '../shared/zip13';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
 import { capOf } from '../shared/settings';
 
@@ -227,6 +230,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     .bind(...playedQ.values)
     .all<{ id: string; n: number }>();
   const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
+  // Zip 13 (server/zip13.ts): each flag only while on, so with all three off this answer is exactly main's.
+  const redo = await zip13Flags(ctx, group.id, 'playersRedo');
+  const swap = await zip13Flags(ctx, group.id, 'swapButton');
+  const undo = await zip13Flags(ctx, group.id, 'adminUndo');
+  const month = redo.on ? await monthPlayedCounts(ctx, group) : null;
   return {
     // Signed in with the read-only PIN (server/viewOnly.ts): the screens show "View only". Absent for the real PIN, so its answer is unchanged.
     ...(viewOnlyCookie(ctx) ? { viewOnly: true as const } : {}),
@@ -245,7 +253,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       openAccess: !!group.open_access,
       hasGroupWord: !!group.group_word_hash,
     },
-    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR3 ? { spentCents: spent.get(p.id) ?? 0 } : {}), ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}) })),
+    players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR3 ? { spentCents: spent.get(p.id) ?? 0 } : {}), ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}), ...(month ? { monthPlayed: month.counts.get(p.id) ?? 0 } : {}) })),
     sessions: sessions.map((s) => ({
       ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
       hiddenFromPlayers: hiddenIds.has(s.id),
@@ -344,6 +352,12 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     // "Seat dots": every empty seat a dashed ring (display only).
     ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
     seatDotsForAll: await seatDotsForAll(ctx.db, group.id),
+    ...(redo.on ? { playersRedo: true as const, playersRedoMonth: month!.label } : {}),
+    ...(redo.forAll ? { playersRedoForAll: true as const } : {}),
+    ...(swap.on ? { swapButton: true as const } : {}),
+    ...(swap.forAll ? { swapButtonForAll: true as const } : {}),
+    ...(undo.on ? { adminUndo: true as const } : {}),
+    ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2376,6 +2390,18 @@ async function endWaitlists(ctx: Ctx, group: GroupRow): Promise<number> {
     for (const r of left) await withdraw(ctx.db, { ...group, card_cleanup: true }, s, r.player_id, ctx.nowMs);
   }
   return moved;
+}
+
+/** PUT /api/admin/players-redo-switch, /swap-button-switch, /admin-undo-switch { on }: the Zip 13 Settings rows. Nothing else moves. */
+export function setZip13Switch(which: Zip13Switch) {
+  const action = { playersRedo: 'players_redo', swapButton: 'swap_button', adminUndo: 'admin_undo' }[which];
+  return async (ctx: Ctx, body: Record<string, unknown>) => {
+    const group = await requireAdmin(ctx);
+    const on = v.bool(body.on, 'on');
+    await setZip13ForAll(ctx.db, group.id, which, on, ctx.nowIso);
+    await audit(ctx.db, group.id, null, `${action}_${on ? 'on' : 'off'}`, {}, ctx.nowIso);
+    return { ok: true, on };
+  };
 }
 
 /** PUT /api/admin/seat-dots-switch { on }: Settings > Feature switches > "Seat dots". Display only; moves nothing. */

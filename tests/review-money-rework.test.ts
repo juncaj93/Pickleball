@@ -1,4 +1,5 @@
 // Independent review of the MONEY_REWORK Totals: hand-computed numbers against the real data.
+import { COURT, comingUnbooked, PLAYERS } from './projectedZip13';
 import { describe, expect, it } from 'vitest';
 import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { firstSession, HOUR, PIN, playerPhone, setupGroup, TestApp } from './harness';
@@ -80,7 +81,9 @@ describe('review: played, not finalized, projections', () => {
     w.app.now = Date.parse(s0.endsAt) + HOUR;
     const t = (await money(w, monthOf(Date.parse(s0.startsAt)))).rework;
     expect(t).toMatchObject({ courtSessions: 0, courtCostCents: 0, collectedCents: 0 });
-    expect(t.projected).toMatchObject({ addedCourts: 1, courtCostCents: 4800, playersPayCents: 4200 }); // 3 x $14 for the one court
+// (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    const x = await comingUnbooked(w.organizer, monthOf(Date.parse(s0.startsAt)), [s0.id]);
+    expect(t.projected).toMatchObject({ addedCourts: 1 + x, courtCostCents: 4800 + x * COURT, playersPayCents: 4200 + x * PLAYERS }); // 3 x $14 for the one court
   });
   it('P2 waitlisted players are not counted in projected (max 4, fifth waits)', async () => {
     const w = await world({ maxPlayers: 4 });
@@ -90,7 +93,8 @@ describe('review: played, not finalized, projections', () => {
     expect(sv.roster.filter((r: any) => r.status === 'waitlisted' || r.status === 'waitlist').length).toBe(1);
     const t = (await money(w, monthOf(Date.parse(s0.startsAt)))).rework;
     // 4 confirmed x $14 = $56; the waitlisted fifth adds nothing.
-    expect(t.projected.playersPayCents).toBe(4200); // 3 x $14 for the one court, whoever is in or waiting
+// (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    expect(t.projected.playersPayCents).toBe(4200 + (await comingUnbooked(w.organizer, monthOf(Date.parse(s0.startsAt)), [s0.id])) * PLAYERS); // 3 x $14 for the one court, whoever is in or waiting
   });
   it('P3 organizer marked paid on a played game is never collected', async () => {
     const w = await world();

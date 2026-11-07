@@ -1,4 +1,5 @@
 import { createContext, type CSSProperties, Fragment, type ReactNode, useCallback, useContext, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { type CourtKind } from '../shared/court';
 import { countText, MIN_PLAYERS } from '../shared/spots';
 import type { Tone } from '../shared/status';
@@ -162,6 +163,11 @@ export interface ToastOptions {
   action?: { label: string; onClick: () => void };
   stayMs?: number;
   ball?: boolean;
+  /**
+   * Undo on admin toasts (ADMIN_UNDO, Zip 13): this banner stays up for its own time even when another one comes; up to three stack, newest
+   * at the bottom, so two quick taps each keep their own Undo. Left out (every other toast): one banner at a time, exactly as before.
+   */
+  keep?: boolean;
 }
 type ToastFn = (msg: string, kind?: ToastKind, opts?: ToastOptions) => void;
 
@@ -175,14 +181,26 @@ interface Shown {
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [shown, setShown] = useState<Shown | null>(null);
+  // The banners on screen, oldest first. Without `keep` there is only ever one (a new one replaces it), exactly as before.
+  const [shown, setShown] = useState<Shown[]>([]);
   const [spoken, setSpoken] = useState<{ msg: string; kind: ToastKind } | null>(null);
   const show = useCallback<ToastFn>((msg, kind = 'ok', opts = {}) => {
     // "Demo only" (View as, Pretend it's...) and "View only" (the read-only PIN) are plain notes, never a red error.
     if (msg === DEMO_MESSAGE || msg === VIEW_ONLY_MESSAGE) kind = 'ok';
-    setShown({ id: Date.now() + Math.random(), msg, kind, opts });
+    const next = { id: Date.now() + Math.random(), msg, kind, opts };
+    setShown((cur) => [...cur.filter((x) => x.opts.keep), next].slice(-3));
     setSpoken({ msg, kind });
   }, []);
+  // Only while an Undo banner (keep) is up: follow which sheet is open on top, so the banner can sit inside it (see below).
+  const keeping = shown.some((x) => x.opts.keep);
+  const [, setSheets] = useState(0);
+  useEffect(() => {
+    if (!keeping) return undefined;
+    const mo = new MutationObserver(() => setSheets((n) => n + 1));
+    mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
+    return () => mo.disconnect();
+  }, [keeping]);
+  const topSheet = keeping && typeof document !== 'undefined' ? ([...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].pop() ?? null) : null;
   return (
     <ToastContext.Provider value={show}>
       {children}
@@ -192,7 +210,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div aria-live="assertive" className="sr-only">
         {spoken?.kind === 'error' ? spoken.msg : ''}
       </div>
-      {shown && <Banner key={shown.id} shown={shown} onGone={() => setShown((cur) => (cur && cur.id === shown.id ? null : cur))} />}
+      {shown.map((b, i) => {
+        const banner = <Banner key={b.id} shown={b} stack={shown.length - 1 - i} onGone={() => setShown((cur) => cur.filter((x) => x.id !== b.id))} />;
+        // An Undo banner (keep) over an open sheet lives INSIDE that sheet: a modal sheet makes everything outside it untappable, so an Undo
+        // drawn outside would look tappable and not be. Moves out again when the sheet closes (its time keeps running).
+        return b.opts.keep && topSheet ? createPortal(<Fragment key={`${b.id}:in`}>{banner}</Fragment>, topSheet) : banner;
+      })}
     </ToastContext.Provider>
   );
 }
@@ -213,7 +236,7 @@ function UndoRing({ ms }: { ms: number }) {
   );
 }
 
-function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
+function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void; stack?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>('');
   const swipe = useRef<{ x: number; y: number } | null>(null);
@@ -253,7 +276,9 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
   }, []);
   useEffect(() => {
     const stay = stayFor(shown, motion);
-    const t = setTimeout(() => setLeaving((v) => v || 'down'), BANNER_TIMING.fadeIn + stay);
+    // An Undo banner (keep) that moved into or out of a sheet keeps its own clock (it was made at shown.id).
+    const spent = shown.opts.keep ? Math.max(0, Date.now() - Math.floor(shown.id)) : 0;
+    const t = setTimeout(() => setLeaving((v) => v || 'down'), Math.max(0, BANNER_TIMING.fadeIn + stay - spent));
     return () => clearTimeout(t);
   }, [shown]);
   const gone = useRef(onGone);
@@ -271,7 +296,9 @@ function Banner({ shown, onGone }: { shown: Shown; onGone: () => void }) {
       data-banner
       // Screen readers hear the message through the live regions; a banner with a button must stay reachable.
       aria-hidden={shown.opts.action ? undefined : true}
-      style={{ '--b-in': `${BANNER_TIMING.fadeIn}ms`, '--b-out': `${BANNER_TIMING.out}ms` } as React.CSSProperties}
+      // A stacked Undo banner (keep) sits one banner higher for each newer one under it. Alone: the usual place.
+      style={{ '--b-in': `${BANNER_TIMING.fadeIn}ms`, '--b-out': `${BANNER_TIMING.out}ms`, ...(stack > 0 ? { marginBottom: `${stack * 72}px` } : {}) } as React.CSSProperties}
+      data-stack={stack > 0 ? stack : undefined}
       onClick={() => {
         // A drag that ended on the banner is not a tap.
         if (motion && dragged.current > 6) return;
@@ -356,6 +383,8 @@ export function Sheet({
   onClose,
   children,
   headerAction,
+  className,
+  hideClose,
 }: {
   open: boolean;
   title: string;
@@ -363,6 +392,10 @@ export function Sheet({
   children: ReactNode;
   /** An optional button in the header, between the title and the close button. */
   headerAction?: ReactNode;
+  /** An extra class on the sheet (the Players redo's sheets). Left out: exactly as before. */
+  className?: string;
+  /** No ✕ (a sheet whose header button is its only one; a tap outside or a swipe down still closes it). Left out: exactly as before. */
+  hideClose?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -415,7 +448,7 @@ export function Sheet({
   return (
     <dialog
       ref={ref}
-      className={`sheet${closing && !open ? ' m-closing' : ''}`}
+      className={`sheet${className ? ` ${className}` : ''}${closing && !open ? ' m-closing' : ''}`}
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(e) => {
@@ -472,9 +505,11 @@ export function Sheet({
           >
             <h2 id={titleId}>{title}</h2>
             {headerAction}
-            <button className="icon-btn" onClick={onClose} aria-label="Close">
-              ✕
-            </button>
+            {!hideClose && (
+              <button className="icon-btn" onClick={onClose} aria-label="Close">
+                ✕
+              </button>
+            )}
           </div>
           <div className="sheet-body">{children}</div>
         </>

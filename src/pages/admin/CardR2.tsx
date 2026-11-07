@@ -4,7 +4,9 @@ import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, localParts, weekFade } from '../../../shared/time';
 import { useRef, useState } from 'react';
 import { api, ApiError, useNow } from '../../lib';
-import { CourtReserveLink, PlayersLine, useToast } from '../../ui';
+import { BANNER_TIMING, CourtReserveLink, PlayersLine, useToast } from '../../ui';
+import { type Hold, startHold } from '../../undoHold';
+import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
@@ -291,6 +293,10 @@ function CardSwitchR2({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSess
   const toast = useToast();
   const latest = useRef(0);
   const chain = useRef<Promise<unknown>>(Promise.resolve());
+  // Undo on admin toasts (ADMIN_UNDO, Zip 13): the switch moves at once, the save waits 5 seconds (src/undoHold.ts). A newer tap on this
+  // switch lets the older one save first, so the server always ends on the last tap. Off: exactly as before.
+  const held = useRef<Hold | null>(null);
+  const undoOn = ctx.d.adminUndo === true;
   return (
     <CourtSwitch
       value={value}
@@ -299,10 +305,29 @@ function CardSwitchR2({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSess
         const mine = ++latest.current;
         onPicked(to);
         const said = to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked';
+        let hold: Hold | null = null;
+        if (undoOn) {
+          held.current?.release();
+          const h = startHold();
+          hold = held.current = h;
+          toast(said, 'ok', {
+            keep: true,
+            stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn,
+            action: {
+              label: 'Undo',
+              onClick: () => {
+                if (!h.undo()) return void toast('Already saved. Change it back by hand.', 'ok');
+                if (mine === latest.current) onPicked(null);
+                toast('Undone. Nothing was saved.', 'ok', { keep: true });
+              },
+            },
+          });
+        }
         chain.current = chain.current.then(async () => {
+          if (hold && !(await hold.decided)) return;
           try {
             await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to });
-            if (mine === latest.current) toast(said);
+            if (mine === latest.current && !hold) toast(said);
           } catch (err) {
             // Only the newest tap decides what the switch shows: a failure of an older one is reported but does not move it.
             toast(err instanceof ApiError ? `${err.message} The switch went back.` : "That did not save, so the switch went back. Check your connection and try again.", 'error');

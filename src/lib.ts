@@ -1,4 +1,6 @@
 import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
+import { ZIP13 } from '../shared/zip13';
+import { leavingWithHolds } from './undoHold';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 export class ApiError extends Error {
@@ -198,6 +200,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (speedTest('lastscreenadmin')) headers[LAST_SCREEN_ADMIN_HEADER] = 'on';
   // Seat dots private test switch for this phone (?seatdots=on; also on /admin, see server/seatDots.ts).
   if (seatDotsTest()) headers['X-Seat-Dots'] = 'on';
+  // Zip 13 private test switches for this phone (/admin?playersredo=on, ?swapbutton=on, ?adminundo=on; see server/zip13.ts).
+  for (const z of Object.values(ZIP13)) if (zip13Test(z.link)) headers[z.header] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -219,7 +223,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
       headers,
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'same-origin',
-      keepalive: opts.keepalive || undefined,
+      // (Undo on admin toasts: held saves let go as the page hides go out with keepalive too, src/undoHold.ts.)
+      keepalive: opts.keepalive || leavingWithHolds() || undefined,
     });
   } catch {
     throw new ApiError(0, 'offline', OFFLINE_MESSAGE);
@@ -703,6 +708,21 @@ if (typeof window !== 'undefined') {
     const want = new URLSearchParams(window.location.search).get(name);
     if (want === 'on') storageSet(`pb_${name}`, 'on');
     else if (want === 'off') storageRemove(`pb_${name}`);
+  }
+}
+
+/**
+ * Zip 13 (shared/zip13.ts) on this phone only, before it is on for everyone: open /admin once with ?playersredo=on, ?swapbutton=on or
+ * ?adminundo=on (=off turns it back off). Remembered in this browser. Organizer screens only (and the organizer's own player page).
+ */
+export function zip13Test(link: string): boolean {
+  return storageGet(`pb_${link}`) === 'on';
+}
+if (typeof window !== 'undefined') {
+  for (const z of Object.values(ZIP13)) {
+    const want = new URLSearchParams(window.location.search).get(z.link);
+    if (want === 'on') storageSet(`pb_${z.link}`, 'on');
+    else if (want === 'off') storageRemove(`pb_${z.link}`);
   }
 }
 
