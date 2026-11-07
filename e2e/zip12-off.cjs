@@ -48,7 +48,7 @@ function diffAt(a, b) {
 async function site(dir, port, dbFile) {
   const server = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
     cwd: dir,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip12-off-setup-token-0123456789', DEV_CLOCK: '1', INSTANT_TAPS: '', ADJUST_CREDIT: '', VENMO_REQUEST: '', HOME_COLLAPSE: '', TONIGHT_GLOW: '', COLOR_CLEANUP: '', PLAYER_CARDS_SIMPLE: '', SHORT_GAMES: '', CARD_TIME_BUTTONS: '', CARD_CLEANUP: '', MOTION: '', MOTION_ADMIN: '', SPEED_FEWER_QUERIES: '', SPEED_DIRECT_LOAD: '', SPEED_LAST_SCREEN: '' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip12-off-setup-token-0123456789', DEV_CLOCK: '1', INSTANT_TAPS: '', ADJUST_CREDIT: '', VENMO_REQUEST: '', HOME_COLLAPSE: '', TONIGHT_GLOW: '', COLOR_CLEANUP: '', PLAYER_CARDS_SIMPLE: '', SHORT_GAMES: '', CARD_TIME_BUTTONS: '', CARD_CLEANUP: '', MOTION: '', MOTION_ADMIN: '', SPEED_FEWER_QUERIES: '', SPEED_DIRECT_LOAD: '', SPEED_LAST_SCREEN: '', SPEED_LAST_SCREEN_ADMIN: '' },
     stdio: 'ignore',
     detached: true,
   });
@@ -136,17 +136,18 @@ async function main() {
     let early = '';
     if (twice) {
       // A repeat visit: the games answer is slow, and what shows while it is on its way must be today's (the loading skeleton).
-      await page.route('**/api/group', async (r) => (await new Promise((res) => setTimeout(res, 1500)), r.continue()));
+      await page.route(who === 'admin' ? '**/api/admin/dashboard' : '**/api/group', async (r) => (await new Promise((res) => setTimeout(res, 1500)), r.continue()));
       order.length = 0;
       await page.goto(base + url, { waitUntil: 'commit' });
       await page.waitForTimeout(900);
       early = norm(await page.evaluate(() => document.body.innerHTML));
       await page.waitForLoadState('networkidle');
-      await page.locator('.schedule article').first().waitFor();
+      if (who === 'admin') await page.locator('.tabbar').waitFor();
+      else await page.locator('.schedule article').first().waitFor();
       await page.waitForTimeout(2000);
     }
     const html = norm(await page.evaluate(() => document.body.innerHTML));
-    const stored = await page.evaluate(() => [localStorage.getItem('pb_last_screen'), localStorage.getItem('pb_direct_load')]);
+    const stored = await page.evaluate(() => [localStorage.getItem('pb_last_screen'), localStorage.getItem('pb_direct_load'), localStorage.getItem('pb_last_admin')]);
     await ctx.close();
     return { html, early, stored, order: order.filter((x) => /status|\/api\/group$/.test(x)).join(' > ') };
   }
@@ -156,7 +157,8 @@ async function main() {
       const f = allow || ((h) => h);
       if (f(x.html) !== f(y.html)) throw new Error(diffAt(f(x.html), f(y.html)));
       if (x.early !== y.early) throw new Error('while loading: ' + diffAt(x.early, y.early));
-      if (y.stored[0] !== null || y.stored[1] !== null) throw new Error(`the branch stored ${JSON.stringify(y.stored)} with the switches off`);
+      // Since Zip 12 is live (main seeds its three rows on), only the organizer copy is new here: Instant admin off keeps nothing.
+      if (y.stored[2] !== null) throw new Error(`the branch stored ${JSON.stringify(y.stored)} with the switches off`);
       // The rule, on both: no games question leaves before a set-up answer is back (the dev server asks each one twice, so the exact
       // interleaving of the two copies is timing, not behavior).
       const chain = (o) => {
@@ -165,23 +167,28 @@ async function main() {
         const firstGroup = steps.indexOf('start /api/group');
         return firstEnd >= 0 && firstGroup > firstEnd;
       };
-      if (opts.url === '/' && !(chain(x.order) && chain(y.order))) throw new Error(`question order: main ${x.order} | branch ${y.order}`);
+      // The branch asks in the same pattern as main (one after the other, or both together once Load games at once is on in main's world).
+      if (opts.url === '/' && chain(x.order) !== chain(y.order)) throw new Error(`question order: main ${x.order} | branch ${y.order}`);
     });
   };
   for (const scheme of ['light', 'dark']) {
     for (const who of ['Jordan', 'Harper', 'Avery', 'Gray', 'Casey', 'Kai']) await same(`player home, ${who}, ${scheme}, first and repeat open: identical`, { who, url: '/', scheme, twice: true });
     for (const t of ['Home', 'Players', 'Money', 'History']) await same(`organizer ${t}, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme, tabName: t });
+    // Instant admin off: a repeat open of the organizer screen is today's too (nothing saved, the usual loading while the answer is on its way).
+    await same(`organizer Home, ${scheme}, first and repeat open: identical`, { who: 'admin', url: '/admin', scheme, twice: true });
     await same(
-      `organizer Settings, ${scheme}: identical apart from the three new switch rows`,
+      `organizer Settings, ${scheme}: identical apart from the four new switch rows`,
       { who: 'admin', url: '/admin', scheme, tabName: 'Settings' },
-      (h) => h.replace(/<div class="set-row-wrap" data-row="speed(LastScreen|DirectLoad|FewerQueries)All">.*?<\/label><\/div>/gs, ''),
+      (h) => h.replace(/<div class="set-row-wrap" data-row="speed(LastScreenAdmin|LastScreen|DirectLoad|FewerQueries)All">.*?<\/label><\/div>/gs, ''),
     );
   }
-  await check('the plain address asks one question after the other, as on main', async () => {
-    const y = await screen(B, { who: 'Casey', url: '/', scheme: 'light' });
-    const i = y.order.indexOf('end /api/status');
-    const j = y.order.indexOf('start /api/group');
-    if (!(i >= 0 && j > i)) throw new Error(y.order);
+  await check('the plain address asks its first questions in the same pattern as main', async () => {
+    const [x, y] = await Promise.all([screen(A, { who: 'Casey', url: '/', scheme: 'light' }), screen(B, { who: 'Casey', url: '/', scheme: 'light' })]);
+    const serial = (o) => {
+      const st = o.split(' > ');
+      return st.indexOf('start /api/group') > st.indexOf('end /api/status');
+    };
+    if (serial(x.order) !== serial(y.order)) throw new Error(`main ${x.order} | branch ${y.order}`);
   });
   await browser.close();
   console.log(`\nzip12-off: ${passed} passed, ${failed} failed`);

@@ -96,6 +96,8 @@ export interface Env {
   SPEED_DIRECT_LOAD?: string;
   /** Zip 12 "Show last screen at once" (a returning player's phone draws its saved copy of the last screen, buttons held, then the fresh one): the kill switch, allowed unless "off". Settings > Feature switches, ?lastscreen=on. */
   SPEED_LAST_SCREEN?: string;
+  /** Zip 12 step C "Instant admin" (the organizer phone draws its saved copy of the dashboard, money dimmed, every action held, then the fresh one): the kill switch, allowed unless "off". Settings > Feature switches, /admin?lastscreenadmin=on. */
+  SPEED_LAST_SCREEN_ADMIN?: string;
   /** "Seat dots" (every empty seat a dashed ring): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?seatdots=on (server/seatDots.ts). Display only. */
   SEAT_DOTS?: string;
   /**

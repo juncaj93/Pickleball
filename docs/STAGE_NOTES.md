@@ -2960,6 +2960,53 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
   browser suite: the same 4 scripts as before fail on main too (run 10, cancel-reason 2, want-in 1, admin-r2 F4 1); money-rework's "Hide from list"
   failed twice with three scripts sharing the machine (it waits 0.9 s) and passed alone and in two full runs (36/36) on the branch and on main.
 
+### Deploy (Sat Nov 7, 2026, 9:48 AM Eastern, a quiet window) - LIVE with all three switches OFF
+- PR #94 merged (main `6ab20fb`, on top of Zip 11's `513d7b4`, which was live as `b2ffeedd` = main first). Full unit run on merged main: 2325 passed, 0 failed.
+- Before: SQL export of the live database (`npx wrangler d1 export pickleball --remote`, 9:36 AM, 164,705 bytes, kept out of git) and Time Travel bookmark
+  `00000a68-00000000-0000511c-fc88ef43ecfab94da2e93bafe783d1b2` (9:36 AM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000a68-00000000-0000511c-fc88ef43ecfab94da2e93bafe783d1b2`.
+- Production deployment `63f84d33-4e58-47dd-b841-51c2594fa2c3` = main `6ab20fb`. Rollback: the build live before it, Zip 11, `b2ffeedd-3c71-4edc-bc70-f676d9011d7c`.
+  Nothing is written while the switches are off, so no data restore is needed.
+- Read-only live check (on the backup address; this session's network does not reach pickleball.juncaj.net): `e2e/live-check.cjs` all green except
+  its old "setup code is configured" line (false by design once a group exists; the previous build answers the same). The read-only PIN signs in,
+  dashboard, version, Money and History answer, a save is refused (403 view_only), all five organizer tabs open in a browser with no page errors, and
+  the three speed rows are off. Found: the live Card cleanup row is ON for everyone (`cardCleanupForAll: true`), against Alex's answer; told Alex.
+- Items 3 and 6a on live: `/assets/*` sends `public, max-age=31536000, immutable`; a missing built file answers 404 no-store; the page, `/theme.js`,
+  `/logo.png` keep `max-age=0, must-revalidate`; `/api` no-store; `logo.png` 3,171 bytes. The public page (fast 3G): first visit 5.2 s to
+  "Who are you?", repeat 3.0 s with the script, the styles and the font from the phone's own copy (0 of them before).
+
+## Zip 12 step C: Instant admin (SPEED_LAST_SCREEN_ADMIN) - built Sat Nov 7, 2026 (morning, after the Zip 12 deploy); on a preview, waiting for "ship it"
+
+Alex: the admin screens should appear instantly too, like players. A separate step with its own switch, ships OFF. No schema change, nothing about money.
+- Server (`server/speed.ts`): task `speed_last_screen_admin_on`, kill switch `SPEED_LAST_SCREEN_ADMIN` (allowed; on in `[env.preview.vars]`), header
+  `X-Last-Screen-Admin` (`/admin?lastscreenadmin=on`), `PUT /api/admin/speed-last-screen-admin-switch` (refused for the read-only PIN like every save),
+  Activity lines. The dashboard carries `lastScreenAdmin: true` and `speedLastScreenAdminForAll: true` only while on (off: the answer is as before).
+- Phone (`src/lastAdmin.ts`, `HeldAdmin` in `src/pages/Admin.tsx`, `src/admin-held.css`): after a real-PIN dashboard answer with the switch on, the
+  whole answer is kept (money included; it is the organizer's own phone). On the next open, while the answer is on its way, the copy is drawn with the
+  real Dashboard inside one inert wrapper (no tap, typing or focus), every element showing a $ amount dimmed to 45 %, the version check paused, and a
+  small "as of 2:14 PM" pill under the header (out of the page's flow). The wrapper stays for the rest of the page's life, so the fresh answer updates
+  the same screen in place: money brightens over 320 ms and only elements whose words changed or that are new fade in (a watcher that starts while the
+  copy is held and stops 1.5 s after the swap). Never kept for the read-only PIN, Pretend or the demo. Thrown away on Sign out, a PIN change (the
+  Settings form), a 401 answer, older than 3 hours (the usual loading then), another build, the switch off. Settings row "Instant admin" (newest first),
+  hint "... Not on a game day the first time".
+- Found while testing: with the fresh answer here before its Instant-taps copy, one draw went down the normal path and rebuilt the screen (no in-place
+  update); and React's double mount in dev stopped the change watcher for good. Both fixed; `e2e/zip12-admin.cjs` covers them.
+- Tests: `tests/speed-admin.test.ts` (4), `e2e/zip12-admin.cjs` 15/15 (390/360/320 px, light and dark: at once, the tag, money dimmed, nothing
+  tappable or sent, tabs held, nothing moves at the swap, money bright after, a change fades in, 3 hours, Sign out, 401, PIN change by API and by the
+  Settings form, read-only PIN never keeps, switch off, the private link, the Settings row). `e2e/zip12-off.cjs` 25/25 against main `6ab20fb` (Instant
+  admin off = main on every screen, including a repeat open of the organizer Home). money-rework updated for the new row (17 above the group).
+- Fresh review (Instant admin): nothing blocking (nothing can change data while held: the one portal menu opens only on a tap, no tab saves on
+  mount, the poller is paused; off takes main's exact path; the swap keeps the same tree). Fixed from it: (1) a dashboard answer landing just after
+  Sign out could save the copy again: Sign out and a 401 now set a "signed out" mark that blocks keeping one until the next real sign-in; (2) on a
+  stalled link (or a session revoked elsewhere) the held copy could stay up until the answer came: it now gives up after 8 seconds and the usual
+  loading shows; (3) the two dashboard flags come from one read of the row. The as-of pill moved to float above the tab bar (under the header it
+  covered the first card's title). Notes kept for Alex: a PIN change on this phone keeps this phone signed in, so its next answer keeps a new copy (the
+  old one is gone); while held, the older "Updated just now" line (only with Admin screens round 2 off) and the Do this now cards are as of the copy's
+  time; only amounts written as "$" and a digit are dimmed.
+- Tests after the fixes: unit 2329 passed, 0 failed (139 files); `e2e/zip12-admin.cjs` 16/16.
+- Preview: https://preview-zip12c.pickleball-club-9h0.pages.dev (fake database re-seeded Sat Nov 7, about 10:25 AM Eastern). On there: every switch
+  on live (the live rows read with the read-only PIN after the deploy: Card cleanup is ON on live), the three Zip 12 rows, Alert cards (Zip 11's fake
+  world), plus Instant admin.
 ### Deploy (Sat Nov 7, 2026, 8:30 AM Eastern, quiet window, on Alex's "ship it")
 - PR #93 merged as `513d7b4` (merge commit; same files as the tested branch head `c1b9519`). Production deployment
   `b2ffeedd-3c71-4edc-bc70-f676d9011d7c` from main, with `ALERT_CARDS` allowed in `wrangler.toml` and the Settings row OFF (no

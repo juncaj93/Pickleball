@@ -1,4 +1,5 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
+import { clearLastAdmin, signedOutLastAdmin } from '../../lastAdmin';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
@@ -144,6 +145,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
     setPinMsg(null);
     try {
       await api('POST', '/api/admin/pin', { currentPin: curPin, newPin });
+      // Zip 12 step C: a new PIN throws this phone's saved organizer screen away (src/lastAdmin.ts).
+      clearLastAdmin();
       setPinMsg({ ok: true, text: 'PIN changed. Other signed-in devices were signed out.' });
       setCurPin('');
       setNewPin('');
@@ -463,7 +466,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -471,6 +474,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <InstantAdminRow ctx={ctx} auto={auto} />
               <SeatDotsRow ctx={ctx} auto={auto} />
               <SpeedRows ctx={ctx} auto={auto} />
               <AlertCardsRow ctx={ctx} auto={auto} />
@@ -525,6 +529,9 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
         className="btn ghost block"
         onClick={async () => {
           setPretend(null);
+          // Zip 12 step C: signing out throws this phone's saved organizer screen away first, and no answer still on its way may keep a
+          // new one until the next sign-in (src/lastAdmin.ts).
+          signedOutLastAdmin();
           await api('POST', '/api/admin/logout', {}).catch(() => {});
           navigate('/');
         }}
@@ -1328,6 +1335,10 @@ function SeatDotsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 function AlertCardsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="alertCardsAll" path="/api/admin/alert-cards-switch" name="Alert cards" hint="One slim card look for every alert, one button each" flag={!!ctx.d.alertCardsForAll} dataAttr="data-alert-cards-all" />;
 }
+/** Zip 12 step C, "Instant admin" (SPEED_LAST_SCREEN_ADMIN, server/speed.ts): the organizer screens from the saved copy. Off: only /admin?lastscreenadmin=on. */
+function InstantAdminRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="speedLastScreenAdminAll" path="/api/admin/speed-last-screen-admin-switch" name="Instant admin" hint="Your organizer screens show at once, money dimmed, taps wait for fresh data. Not on a game day the first time" flag={!!ctx.d.speedLastScreenAdminForAll} dataAttr="data-speed-last-screen-admin-all" />
+}
 /** Zip 12 speed rows (server/speed.ts). None of them changes money or what a tap does. Off: only ?fewerqueries=on / ?directload=on / ?lastscreen=on. */
 function SpeedRows({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return (
@@ -1482,6 +1493,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <InstantAdminRow ctx={ctx} auto={auto} />
       <SeatDotsRow ctx={ctx} auto={auto} />
       <SpeedRows ctx={ctx} auto={auto} />
       <AlertCardsRow ctx={ctx} auto={auto} />

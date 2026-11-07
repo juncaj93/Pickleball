@@ -8,7 +8,7 @@ import { usableFor } from './creditActions';
 import { DEFAULT_VENUE_NAME, normalizeSettings, zelleNumberOf } from '../shared/settings';
 import { openSpots } from '../shared/spots';
 import { MONEY_STATE, reopenBlockers, reopenBlockersRead, sqlText } from './finalize';
-import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenForAll } from './speed';
+import { directLoadForAll, fewerDb, fewerQueriesForAll, lastScreenAdminFlags, lastScreenForAll, setDirectLoadForAll, setFewerQueriesForAll, setLastScreenAdminForAll, setLastScreenForAll } from './speed';
 import { pendingRequestViews } from './creditActions';
 import { formatDateTime, formatShortDate, formatTimeRange, localParts, zonedTimeToUtc } from '../shared/time';
 import { adminLogin, adminLogout, hashGroupWord, requireAdmin, revokeAdminSessions, startAdminSession } from './auth';
@@ -338,6 +338,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await fewerQueriesForAll(ctx.db, group.id)) ? { speedFewerQueriesForAll: true } : {}),
     ...((await directLoadForAll(ctx.db, group.id)) ? { speedDirectLoadForAll: true } : {}),
     ...((await lastScreenForAll(ctx.db, group.id)) ? { speedLastScreenForAll: true } : {}),
+    // Zip 12 step C, Instant admin: only while on (off: the answer is exactly as before).
+    // One read of the row for both flags.
+    ...(await lastScreenAdminFlags(ctx, group.id)),
     // "Seat dots": every empty seat a dashed ring (display only).
     ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
     seatDotsForAll: await seatDotsForAll(ctx.db, group.id),
@@ -2316,6 +2319,18 @@ export async function setSpeedDirectLoadSwitch(ctx: Ctx, body: Record<string, un
   const on = v.bool(body.on, 'on');
   await setDirectLoadForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'speed_direct_load_on' : 'speed_direct_load_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/speed-last-screen-admin-switch { on }: "Instant admin" (Zip 12 step C). The organizer phone keeps a copy of its dashboard
+ * (money in it, shown dimmed) and draws it at once with every action held. Alex: never switch it on for the first time on a game day.
+ */
+export async function setSpeedLastScreenAdminSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setLastScreenAdminForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'speed_last_screen_admin_on' : 'speed_last_screen_admin_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

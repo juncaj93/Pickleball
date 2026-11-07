@@ -192,6 +192,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Load games at once" on`;
     case 'speed_direct_load_off':
       return `${who} switched "Load games at once" off`;
+    case 'speed_last_screen_admin_on':
+      return `${who} switched "Instant admin" on`;
+    case 'speed_last_screen_admin_off':
+      return `${who} switched "Instant admin" off`;
     case 'speed_last_screen_on':
       return `${who} switched "Show last screen at once" on`;
     case 'speed_last_screen_off':

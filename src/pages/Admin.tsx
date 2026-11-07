@@ -1,12 +1,15 @@
 import { InstantContext, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { type ActOptions, opTap, useAction } from './admin/action';
-import { type CSSProperties, Fragment, type FormEvent, type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type CSSProperties, Fragment, type FormEvent, type ReactElement, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminDashboard, AdminSessionView } from '../../shared/api';
 import { SuggestionCards } from './admin/SuggestionCards';
 import { courtCards } from './admin/doNow';
 import { formatPrice } from '../../shared/money';
 import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, localParts, weekLabel, weekStart } from '../../shared/time';
-import { api, ApiError, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { api, ApiError, demoOn, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
+import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
+import { asOfText } from '../lastScreen';
+import '../admin-held.css';
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
@@ -45,6 +48,38 @@ export function AdminApp() {
   const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend, demo], tracker);
   const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
   useRefreshOnReturn(load.refresh);
+  // Zip 12 step C, "Instant admin" (src/lastAdmin.ts): this phone's copy of its last dashboard, drawn at once with every action held and money
+  // dimmed until the first fresh answer. Read once per page open; never in Pretend or the demo.
+  const [saved] = useState(() => (!pretend && !demoOn() ? readLastAdmin() : null));
+  const [savedShown, setSavedShown] = useState(false);
+  // A copy waits at most LAST_ADMIN_HOLD_MS for the fresh answer (a stalled link, a session revoked elsewhere); then the usual loading shows.
+  const [holdOver, setHoldOver] = useState(false);
+  useEffect(() => {
+    if (!saved) return undefined;
+    const t = setTimeout(() => setHoldOver(true), LAST_ADMIN_HOLD_MS);
+    return () => clearTimeout(t);
+  }, [saved]);
+  const holding = !load.data && !load.error && !!saved && !holdOver;
+  useEffect(() => {
+    if (holding) setSavedShown(true);
+  }, [holding]);
+  useEffect(() => {
+    if (load.data) saveLastAdmin(load.data, { pretend: !!pretend, demo: demoOn() });
+  }, [load.data, pretend]);
+  useEffect(() => {
+    if (load.error?.status === 401) signedOutLastAdmin();
+  }, [load.error]);
+  const shownView = instant.view ?? load.data ?? null;
+  if (holding || (savedShown && shownView)) {
+    // One wrapper for the whole page life once the copy was shown, so the fresh answer updates the same screen in place (nothing remounts).
+    return (
+      <HeldAdmin held={holding} savedAt={saved!.savedAt} tz={(shownView ?? saved!.view).group.timezone}>
+        <InstantContext.Provider value={instant.store}>
+          <Dashboard d={shownView ?? saved!.view} reload={load.reload} quiet={load.quiet} live={!pretend && !holding} />
+        </InstantContext.Provider>
+      </HeldAdmin>
+    );
+  }
   if (load.loading && !load.data && !load.error) {
     return (
       <>
@@ -54,7 +89,15 @@ export function AdminApp() {
       </>
     );
   }
-  if (load.error?.status === 401) return <Login onDone={load.reload} />;
+  if (load.error?.status === 401)
+    return (
+      <Login
+        onDone={async () => {
+          signedInLastAdmin();
+          await load.reload();
+        }}
+      />
+    );
   if (load.error && !load.data) {
     return (
       <>
@@ -69,6 +112,61 @@ export function AdminApp() {
     <InstantContext.Provider value={instant.store}>
       <Dashboard d={instant.view!} reload={load.reload} quiet={load.quiet} live={!pretend} />
     </InstantContext.Provider>
+  );
+}
+
+/**
+ * Zip 12 step C, the organizer's saved copy while it is held: an inert wrapper (nothing can be tapped, typed or focused), money dimmed (each
+ * element showing a $ amount is marked once drawn), and a small "as of 2:14 PM" under the header. When the fresh answer lands the wrapper stays
+ * (so the same screen updates in place) but lets go: money brightens softly, and only the parts whose words changed fade in.
+ */
+function HeldAdmin({ held, savedAt, tz, children }: { held: boolean; savedAt: number; tz: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // The pill floats just above the tab bar (it covers no card words there), out of the page's flow.
+  const [bottom, setBottom] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!held || !root) return;
+    markMoney(root);
+    const bar = root.querySelector('.tabbar');
+    setBottom(bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) + 8 : 96);
+  }, [held]);
+  // Watching starts while the copy is held (the fresh answer is drawn in the same step that lets go), and stops 1.5 s after it lands.
+  const stopWatching = useRef<(() => void) | null>(null);
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (held && root && !stopWatching.current) stopWatching.current = fadeChanges(root, 60_000);
+    if (!held && stopWatching.current) {
+      const stop = stopWatching.current;
+      const t = setTimeout(() => {
+        stop();
+        stopWatching.current = null;
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+  }, [held]);
+  useEffect(
+    () => () => {
+      stopWatching.current?.();
+      stopWatching.current = null;
+    },
+    [],
+  );
+  return (
+    <div ref={ref} className="admin-held" data-held-admin={held ? '' : undefined} inert={held} aria-busy={held || undefined}>
+      {held && (
+        <>
+          <p className="sr-only" role="status">
+            Your last organizer screen, {asOfText(savedAt, tz)}. Updating.
+          </p>
+          <span className="admin-asof" data-admin-asof aria-hidden="true" style={bottom !== null ? { bottom } : undefined}>
+            {asOfText(savedAt, tz)}
+          </span>
+        </>
+      )}
+      {children}
+    </div>
   );
 }
 
