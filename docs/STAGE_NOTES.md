@@ -2806,3 +2806,21 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
   kill switches `SPEED_LAST_SCREEN`, `SPEED_DIRECT_LOAD`, `SPEED_FEWER_QUERIES` in `wrangler.toml` (allowed; on in `[env.preview.vars]`); private links
   `?lastscreen=on`, `?directload=on`, `?fewerqueries=on`; Activity lines. No change-stamp pieces (the phones pick a flip up on their next full answer).
 - Preview seed: all three rows on (`PREVIEW_SWITCHES_ON`).
+### Before and after (Sat Nov 7, 2026, about 12:30 to 2:00 AM Eastern; fake data, preview only)
+- Method: the same fake world on two previews, `speed-before` (main `fb44afc`'s build) and `preview-zip12` (this branch, all three switches on).
+  `e2e/speed-measure.cjs`: Chrome's network presets (fast 3G 562 ms / 1.44 Mbps; slow 3G 2000 ms / 400 kbps), a 390 px phone that already picked a name;
+  "first visit" = empty browser (cookie only), "repeat" = the same browser opening again; 3 runs each, medians. Server time: 15 calls each with curl,
+  medians (each includes about 210 ms of this sandbox's own network path; see status). Trips: `scripts/count-queries.ts` (local copy of the fake world).
+  Numbers here differ from the 9c check's (another network path), so compare before with after, not with 9c.
+- First useful screen, before -> after: fast 3G first visit 5.0 s -> 4.5 s, repeat 3.0 s -> 1.5 s (the saved copy; the fresh screen at 2.3 s); slow 3G
+  first visit 15.0 s -> 15.0 s (unchanged: the app download itself, about 175 KB of script, 33 KB of style and a 77 KB font; splitting the admin code out is
+  the parked item 5), repeat 9.0 s -> 4.4 s (saved copy; fresh at 6.8 s).
+- Requests on the first screen: 8 before and after. On a repeat visit 3 of them (script, style, font) now come from the phone's own copy, no network.
+- Server time per call, before -> after: player screen 947 -> 339 ms, version check 569 -> 274 ms, dashboard 1566 -> 586 ms, Money 590 -> 364 ms,
+  organizer version 253 -> 211 ms, status 214 -> 220 ms, History 228 -> 236 ms (the last three within noise).
+- Trips per call (main -> switch on): player screen 47 -> 7, version check 21 -> 4, dashboard 81 -> 21, Money 27 -> 8, organizer version 4 -> 3,
+  History 4 -> 3, status 1 -> 1. With the three switches off the player screen asks 2 more tiny questions than main (the two new rows) and the
+  dashboard 3 more, the same way every earlier switch added its own row; with `SPEED_FEWER_QUERIES` on those are free.
+- Server work per request (Workers CPU, estimated locally as the handler time minus the database's own time): the same with the switch off and on
+  (player screen about 2.3 ms, dashboard about 7 ms, Money about 0.9 ms). A first version copied every remembered answer and cost about twice that; it
+  was replaced before review by handing each early answer out once with no copy. Live Workers CPU could not be read from this session.
