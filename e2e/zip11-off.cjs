@@ -74,6 +74,8 @@ async function main() {
   const db = new DatabaseSync(a);
   // Both look switches OFF: Alert cards and Seat dots (main knows only the first; neither row may be left).
   const gone = db.prepare("DELETE FROM task_log WHERE task IN ('alert_cards_on', 'seat_dots_on')").run();
+  // Like live (Sat Nov 7): the three Zip 12 speed rows are off there too.
+  db.prepare("DELETE FROM task_log WHERE task IN ('speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on')").run();
   db.close();
   if (gone.changes !== 2) throw new Error(`expected the Alert cards and Seat dots rows in the seed, found ${gone.changes}`);
   copyFileSync(a, b);

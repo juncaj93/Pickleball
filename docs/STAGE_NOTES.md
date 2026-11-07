@@ -3016,3 +3016,12 @@ change, no migration, nothing deployed to production.
 ### Preview
 - https://preview-zip11.pickleball-club-9h0.pages.dev, fake database re-seeded. On there: every switch on live, plus Alert cards and Seat dots.
   Seed: Harper is a Thursday regular (the Want in card with balls).
+
+### After Alex tested the preview (Sat Nov 7, 2026, late morning Eastern)
+- Preview looked good in light and dark. Answers: (a) 16 px balls matching the real Next week card: right; (b) keep the long organizer titles on
+  two lines, words unchanged. "Ship it" with BOTH switches OFF (ALERT_CARDS and SEAT_DOTS); Alex turns them on himself after testing on his phone.
+- Main had moved (Zip 12, PR #94, `6ab20fb`, live as `63f84d33`). Rebased on it: conflicts only where both added a switch (kept both); the Seat dots
+  row sits above the three speed rows (newest first). The Seat dots read is the shared switch question, so Zip 12's "Fewer database trips" answers it
+  from its one read (no extra trip). The preview list keeps the three speed rows on (Zip 12's own tests use them; they are off on live).
+- Retested on top of Zip 12: unit 2328 passed, 1 skipped, 0 failed (138 files); browser zip11 26/26, zip12 26/26, zip10, zip7, zip6, zip9,
+  instant-taps, money-rework all pass; `e2e/zip11-off.cjs` 44/44 against main `6ab20fb` with every look and speed switch off, as on live.
