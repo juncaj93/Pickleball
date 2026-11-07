@@ -12,12 +12,18 @@ import { adminV2Allowed } from '../shared/adminV2';
 
 export const HIDDEN_TASK = 'hidden_from_players';
 
+/** hiddenGameIds' one read, word for word (SPEED_FEWER_QUERIES sends it early, together with others: server/speed.ts). */
+export function hiddenGameIdsRead(groupId: string): { sql: string; values: unknown[] } {
+  return { sql: "SELECT session_id FROM task_log WHERE group_id = ? AND task = ? AND kind = 'mark' AND session_id IS NOT NULL", values: [groupId, HIDDEN_TASK] };
+}
+
 /** The games hidden from players (any group member's screen), as ids. */
 export async function hiddenGameIds(db: D1Database, groupId: string): Promise<Set<string>> {
   try {
+    const r = hiddenGameIdsRead(groupId);
     const { results } = await db
-      .prepare("SELECT session_id FROM task_log WHERE group_id = ? AND task = ? AND kind = 'mark' AND session_id IS NOT NULL")
-      .bind(groupId, HIDDEN_TASK)
+      .prepare(r.sql)
+      .bind(...r.values)
       .all<{ session_id: string }>();
     return new Set(results.map((r) => r.session_id));
   } catch {

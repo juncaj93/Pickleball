@@ -13,6 +13,7 @@ import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 import * as alerts from './alerts';
 import * as tasks from './tasks';
 import { goText } from './go';
+import { type FewerQueriesDb, withFewerQueries } from './speed';
 import { isWrite, VIEW_ONLY_ALLOWED_WRITES, VIEW_ONLY_MESSAGE, viewOnlyCookie, viewOnlyDb } from './viewOnly';
 
 type Handler = (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>;
@@ -141,6 +142,9 @@ route('PUT', '/api/admin/short-games-switch', admin.setShortGamesSwitch);
 route('PUT', '/api/admin/card-time-switch', admin.setCardTimeSwitch);
 route('PUT', '/api/admin/card-cleanup-switch', admin.setCardCleanupSwitch);
 route('PUT', '/api/admin/alert-cards-switch', admin.setAlertCardsSwitch);
+route('PUT', '/api/admin/speed-fewer-queries-switch', admin.setSpeedFewerQueriesSwitch);
+route('PUT', '/api/admin/speed-direct-load-switch', admin.setSpeedDirectLoadSwitch);
+route('PUT', '/api/admin/speed-last-screen-switch', admin.setSpeedLastScreenSwitch);
 route('PUT', '/api/admin/tonight-glow-switch', admin.setTonightGlowSwitch);
 route('PUT', '/api/admin/color-cleanup-switch', admin.setColorCleanupSwitch);
 route('PUT', '/api/admin/player-cards-switch', admin.setPlayerCardsSwitch);
@@ -162,6 +166,8 @@ route('POST', '/api/cron/tick', (ctx) => tasks.cronTick(ctx));
 
 export async function handleApi(req: Request, env: Env, nowMs = Date.now(), waitUntil?: (work: Promise<unknown>) => void): Promise<Response> {
   let ctx = makeCtx(req, env, nowMs, waitUntil);
+  // SPEED_FEWER_QUERIES (server/speed.ts): the request's database while it is on; stepped aside once the answer is ready.
+  let fewer: FewerQueriesDb | null = null;
   try {
     // "Pretend it's...": only for the signed-in organizer, and look-only.
     const pretend = req.headers.get(PRETEND_HEADER);
@@ -201,10 +207,15 @@ export async function handleApi(req: Request, env: Env, nowMs = Date.now(), wait
       throw new HttpError(404, 'not_found', 'Not found.');
     }
     const body = req.method === 'POST' || req.method === 'PUT' ? await readJson(req) : {};
+    const speed = withFewerQueries(ctx);
+    ctx = speed.ctx;
+    fewer = speed.db;
     const result = await match.handler(ctx, body);
+    fewer?.finish();
     if (result instanceof Response) return result;
     return json(result, 200, ctx.setCookies.map((c) => ({ 'Set-Cookie': c })));
   } catch (err) {
+    fewer?.finish();
     if (err instanceof HttpError) {
       return json({ error: err.code, message: err.message }, err.status, ctx.setCookies.map((c) => ({ 'Set-Cookie': c })));
     }

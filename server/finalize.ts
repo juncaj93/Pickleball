@@ -192,18 +192,23 @@ async function usedOn(ctx: Ctx, sessionId: string, playerId: string): Promise<nu
  * who still have it, but a pending refund request is holding part of it.
  * Both empty means Reopen is allowed.
  */
-export async function reopenBlockers(ctx: Ctx, sessionId: string): Promise<{ spent: string[]; requested: string[] }> {
-  const { results } = await ctx.db
-    .prepare(
-      `SELECT p.display_name AS name, SUM(l.amount_cents) AS back,
+/** reopenBlockers' one read, word for word (SPEED_FEWER_QUERIES sends the dashboard's, one per finalized game, in one trip). */
+export const reopenBlockersRead = (sessionId: string) => ({
+  sql: `SELECT p.display_name AS name, SUM(l.amount_cents) AS back,
          (SELECT COALESCE(SUM(CASE kind WHEN 'kept' THEN amount_cents WHEN 'used' THEN -amount_cents ELSE -(amount_cents - five_cents) END), 0)
             FROM credit_ledger x WHERE x.player_id = l.player_id AND x.ended_at IS NULL) AS pot,
          (SELECT COALESCE(SUM(amount_cents), 0) FROM refund_requests r WHERE r.player_id = l.player_id AND r.status = 'pending') AS reserved
        FROM credit_ledger l JOIN players p ON p.id = l.player_id
        WHERE l.kind = 'kept' AND l.session_id = ? AND l.ended_at IS NULL AND l.reason IN ('finalized', 'not_played')
        GROUP BY l.player_id ORDER BY p.display_name`,
-    )
-    .bind(sessionId)
+  values: [sessionId] as unknown[],
+});
+
+export async function reopenBlockers(ctx: Ctx, sessionId: string): Promise<{ spent: string[]; requested: string[] }> {
+  const r = reopenBlockersRead(sessionId);
+  const { results } = await ctx.db
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<{ name: string; back: number; pot: number; reserved: number }>();
   return {
     spent: results.filter((r) => r.pot < r.back).map((r) => r.name),

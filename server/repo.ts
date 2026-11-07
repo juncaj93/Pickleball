@@ -157,10 +157,22 @@ export async function getGroup(db: D1Database): Promise<GroupRow | null> {
   return db.prepare('SELECT * FROM groups ORDER BY created_at LIMIT 1').first<GroupRow>();
 }
 
+/** A read, word for word, so SPEED_FEWER_QUERIES can send it early together with others (server/speed.ts prefetch). */
+export interface ReadSpec {
+  sql: string;
+  values: unknown[];
+}
+
+/** Every game's id and start time (credit history lines name their game). */
+export const sessionStartsRead = (groupId: string): ReadSpec => ({ sql: 'SELECT id, starts_at FROM sessions WHERE group_id = ?', values: [groupId] });
+
+export const playersRead = (groupId: string): ReadSpec => ({ sql: 'SELECT * FROM players WHERE group_id = ? ORDER BY sort_order, display_name', values: [groupId] });
+
 export async function getPlayers(db: D1Database, groupId: string): Promise<PlayerRow[]> {
+  const r = playersRead(groupId);
   const { results } = await db
-    .prepare('SELECT * FROM players WHERE group_id = ? ORDER BY sort_order, display_name')
-    .bind(groupId)
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<PlayerRow>();
   return results;
 }
@@ -171,11 +183,15 @@ export async function getPlayers(db: D1Database, groupId: string): Promise<Playe
  * name in Settings. Null when there is none. The organizer pays the venue
  * themselves, so this person is never counted as a player who owes.
  */
+/** organizerIdOf's first read (only asked when the group has a saved organizer id). */
+export const organizerIdRead = (group: Pick<GroupRow, 'id' | 'organizer_player_id'>): ReadSpec => ({ sql: 'SELECT id FROM players WHERE id = ? AND group_id = ?', values: [group.organizer_player_id, group.id] });
+
 export async function organizerIdOf(db: D1Database, group: Pick<GroupRow, 'id' | 'organizer_player_id' | 'organizer_name'>): Promise<string | null> {
   if (group.organizer_player_id) {
+    const r = organizerIdRead(group);
     const p = await db
-      .prepare('SELECT id FROM players WHERE id = ? AND group_id = ?')
-      .bind(group.organizer_player_id, group.id)
+      .prepare(r.sql)
+      .bind(...r.values)
       .first<{ id: string }>();
     if (p) return p.id;
   }
@@ -247,13 +263,28 @@ export function visibleFrom(group: Pick<GroupRow, 'first_session_date' | 'timezo
   return new Date(zonedTimeToUtc(Number(m[1]), Number(m[2]), Number(m[3]), 0, 0, group.timezone)).toISOString();
 }
 
+export const sessionsRead = (groupId: string, endsAfterIso: string, startsFromIso = '0000'): ReadSpec => ({
+  sql: 'SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? AND (starts_at >= ? OR shown_early = 1) ORDER BY starts_at',
+  values: [groupId, endsAfterIso, startsFromIso],
+});
+
 export async function loadSessions(db: D1Database, groupId: string, endsAfterIso: string, startsFromIso = '0000'): Promise<SessionRow[]> {
+  const r = sessionsRead(groupId, endsAfterIso, startsFromIso);
   const { results } = await db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? AND (starts_at >= ? OR shown_early = 1) ORDER BY starts_at')
-    .bind(groupId, endsAfterIso, startsFromIso)
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<SessionRow>();
   return results;
 }
+
+export const rostersRead = (groupId: string, endsAfterIso: string, startsFromIso = '0000'): ReadSpec => ({
+  sql: `SELECT sp.*, p.display_name, p.phone_number
+       FROM session_players sp
+       JOIN sessions s ON s.id = sp.session_id
+       JOIN players p ON p.id = sp.player_id
+       WHERE s.group_id = ? AND s.ends_at > ? AND (s.starts_at >= ? OR s.shown_early = 1)`,
+  values: [groupId, endsAfterIso, startsFromIso],
+});
 
 export async function loadRosters(
   db: D1Database,
@@ -261,15 +292,10 @@ export async function loadRosters(
   endsAfterIso: string,
   startsFromIso = '0000',
 ): Promise<Map<string, RosterRow[]>> {
+  const r = rostersRead(groupId, endsAfterIso, startsFromIso);
   const { results } = await db
-    .prepare(
-      `SELECT sp.*, p.display_name, p.phone_number
-       FROM session_players sp
-       JOIN sessions s ON s.id = sp.session_id
-       JOIN players p ON p.id = sp.player_id
-       WHERE s.group_id = ? AND s.ends_at > ? AND (s.starts_at >= ? OR s.shown_early = 1)`,
-    )
-    .bind(groupId, endsAfterIso, startsFromIso)
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<RosterRow>();
   const map = new Map<string, RosterRow[]>();
   for (const r of results) {
@@ -280,14 +306,18 @@ export async function loadRosters(
   return map;
 }
 
-export async function loadRoster(db: D1Database, sessionId: string): Promise<RosterRow[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT sp.*, p.display_name, p.phone_number
+export const rosterRead = (sessionId: string): ReadSpec => ({
+  sql: `SELECT sp.*, p.display_name, p.phone_number
        FROM session_players sp JOIN players p ON p.id = sp.player_id
        WHERE sp.session_id = ?`,
-    )
-    .bind(sessionId)
+  values: [sessionId],
+});
+
+export async function loadRoster(db: D1Database, sessionId: string): Promise<RosterRow[]> {
+  const r = rosterRead(sessionId);
+  const { results } = await db
+    .prepare(r.sql)
+    .bind(...r.values)
     .all<RosterRow>();
   return results;
 }
@@ -422,19 +452,23 @@ export async function loadHiddenSessions(db: D1Database, group: GroupRow, nowMs:
  * someone still owes for an older game or an "I paid" claim is unanswered,
  * so neither ever drops off.
  */
-export async function lookbackIso(db: D1Database, groupId: string, nowMs: number, defaultMs: number): Promise<string> {
-  const usual = new Date(nowMs - defaultMs).toISOString();
-  const row = await db
-    .prepare(
-      `SELECT MIN(s.ends_at) AS oldest FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+export const lookbackRead = (groupId: string, nowMs: number, defaultMs: number): ReadSpec => ({
+  sql: `SELECT MIN(s.ends_at) AS oldest FROM session_players sp JOIN sessions s ON s.id = sp.session_id
        WHERE s.group_id = ? AND s.ends_at <= ?
          AND ((s.status <> 'canceled' AND sp.status = 'confirmed' AND sp.payment_status = 'unpaid')
            -- an unanswered "I paid" claim (seat that left, or a canceled game) stays on the organizer's Home
            OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL AND (sp.status <> 'confirmed' OR s.status = 'canceled'))
            -- an open late fee still owed (shared/lateFees.ts) stays on the player's Pay card and the organizer's Money tab
            OR (sp.payment_status = 'unpaid' AND ${OPEN_FEE('sp')}))`,
-    )
-    .bind(groupId, usual)
+  values: [groupId, new Date(nowMs - defaultMs).toISOString()],
+});
+
+export async function lookbackIso(db: D1Database, groupId: string, nowMs: number, defaultMs: number): Promise<string> {
+  const usual = new Date(nowMs - defaultMs).toISOString();
+  const r = lookbackRead(groupId, nowMs, defaultMs);
+  const row = await db
+    .prepare(r.sql)
+    .bind(...r.values)
     .first<{ oldest: string | null }>();
   // Sessions are loaded with ends_at > since, so step just before the oldest.
   return row?.oldest ? new Date(Date.parse(row.oldest) - 1).toISOString() : usual;

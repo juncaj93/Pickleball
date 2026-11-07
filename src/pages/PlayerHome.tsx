@@ -36,6 +36,8 @@ import '../motion.css';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
+import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
+import { rememberDirectLoad, takeEarly } from '../lib';
 
 /** The flat price of one game on this screen: a 1.5 hour game's own when the server priced it so ("Short games"), else the group's. */
 function flatOfGame(g: GroupView | null | undefined, sessionId: string): number {
@@ -240,7 +242,13 @@ export function PlayerHome({
   const demo = useDemoVersion();
   // Instant taps (INSTANT_TAPS): a poll that set off before a save never draws over it, and certain taps still saving are drawn in.
   const tracker = useInstantTracker();
-  const load = useLoad(() => api<GroupView>('GET', '/api/group'), [groupKey, viewAs?.id, pretend, demo], tracker);
+  // "Load games at once" (SPEED_DIRECT_LOAD, src/lib.ts): on the plain address the first answer may already be on its way.
+  // An early answer that is an error (no name, a group word needed, the link changed...) is never used: the page asks again, as today.
+  const load = useLoad(
+    () => (plain && !viewAs ? takeEarly<GroupView>('group')?.catch(() => api<GroupView>('GET', '/api/group')) : null) ?? api<GroupView>('GET', '/api/group'),
+    [groupKey, viewAs?.id, pretend, demo],
+    tracker,
+  );
   const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
@@ -261,6 +269,50 @@ export function PlayerHome({
   useEffect(() => {
     if (load.data && groupKey && !viewAs) storageSet('pb_group_key', groupKey);
   }, [load.data, groupKey, viewAs]);
+
+  // ---- Zip 12 speed switches (server/speed.ts). Never in View as, the demo or Pretend. ----
+  const ownPhone = !viewAs && !demoOn() && !pretend;
+  const savedPage = groupKey ?? 'plain';
+  // "Show last screen at once": the copy this phone kept last time (no money in it), drawn with every button held until the
+  // first fresh answer lands (src/lastScreen.ts). Read once per page open.
+  const [saved] = useState<SavedScreen | null>(() => (ownPhone ? readLastScreen(savedPage) : null));
+  // When the answer on screen arrived (the copy's "as of" time), and the answer itself, for the save made when the page is left.
+  const fresh = useRef<{ at: number; data: GroupView } | null>(null);
+  useEffect(() => {
+    if (!load.data || !ownPhone) return;
+    fresh.current = { at: Date.now(), data: load.data };
+    // Each fresh answer says whether the switches are on; the phone follows it (off: the copy and the memory are dropped).
+    rememberDirectLoad(load.data.directLoad === true);
+    // The sizes are read after the screen is drawn (an effect runs after the draw).
+    saveLastScreen(savedPage, load.data, Date.now(), undefined, measureLayout());
+  }, [load.data, ownPhone, savedPage]);
+  // Leaving the page (another app, the phone locked, closed): the copy keeps the screen's sizes as they are at that moment.
+  useEffect(() => {
+    if (!ownPhone) return undefined;
+    const keep = () => {
+      if (document.visibilityState === 'hidden' && fresh.current && !switchingRef.current) saveLastScreen(savedPage, fresh.current.data, fresh.current.at, undefined, measureLayout());
+    };
+    document.addEventListener('visibilitychange', keep);
+    window.addEventListener('pagehide', keep);
+    return () => {
+      document.removeEventListener('visibilitychange', keep);
+      window.removeEventListener('pagehide', keep);
+    };
+  }, [ownPhone, savedPage]);
+  // This address now answers "link not working", "group word needed" or "link only": the copy must not show again.
+  useEffect(() => {
+    if (load.error && (load.error.status === 403 || load.error.status === 404)) {
+      clearLastScreen();
+      // And never saved again from the answer still in memory (leaving the page would otherwise bring the copy back).
+      fresh.current = null;
+    }
+  }, [load.error]);
+  // "not you?": a copy kept for this name must never show for another.
+  const switchingRef = useRef(false);
+  switchingRef.current = switching;
+  useEffect(() => {
+    if (switching) clearLastScreen();
+  }, [switching]);
 
   const g = instant.view;
   const toast = useToast();
@@ -287,7 +339,8 @@ export function PlayerHome({
   useLayoutEffect(() => {
     if (!g || !firstData.current) return;
     firstData.current = false;
-    if (!canMove()) {
+    // The saved screen was already showing: the fresh one simply takes its place, without the first-load cascade.
+    if (!canMove() || savedShownRef.current) {
       setLive(true);
       return;
     }
@@ -299,6 +352,15 @@ export function PlayerHome({
     }, 900);
   }, [g]);
   useEffect(() => () => clearTimeout(cascadeTimer.current), []);
+  const savedShownRef = useRef(false);
+  const swapRef = useRef<Map<string, PlayerSessionView> | null | undefined>(undefined);
+  const [swapOver, setSwapOver] = useState(false);
+  const hasData = !!g;
+  useEffect(() => {
+    if (!hasData || !savedShownRef.current) return undefined;
+    const t = setTimeout(() => setSwapOver(true), 2500);
+    return () => clearTimeout(t);
+  }, [hasData]);
   const ptrBall = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -495,6 +557,12 @@ export function PlayerHome({
 
   const pickName = !!g && (switching || (!viewAs && !g.me));
   const tz = g?.group.timezone ?? DEFAULT_TIMEZONE;
+  // The saved copy shows only until the first fresh answer (or while that first answer failed: then with its error under it).
+  const showSaved = !g && !!saved && saved.view.sessions.length > 0;
+  if (showSaved) savedShownRef.current = true;
+  // The first fresh screen after the saved copy: each card is told how the copy drew it, so only what changed fades in (for 2.5 seconds).
+  if (g && swapRef.current === undefined) swapRef.current = savedShownRef.current && saved ? new Map(saved.view.sessions.map((s) => [s.id, s])) : null;
+  const swapFrom = swapOver ? null : (swapRef.current ?? null);
   const showChip = !!g && !!credit && !pickName && (credit.balanceCents > 0 || !!credit.pending);
   const chipStart = lastBalance.current;
 
@@ -538,8 +606,8 @@ export function PlayerHome({
         </div>
       )}
       <TopBar
-        eyebrow={g?.group.name ?? SITE_NAME}
-        title={!g ? SITE_NAME : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
+        eyebrow={g?.group.name ?? (showSaved ? saved!.view.group.name : SITE_NAME)}
+        title={!g ? (showSaved ? saved!.view.me!.name : SITE_NAME) : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
         titleExtra={
           g?.me && !pickName ? (
             <button className="not-you" aria-label="Not you?" onClick={() => setSwitching(true)}>
@@ -556,14 +624,15 @@ export function PlayerHome({
           ) : undefined
         }
       />
-      <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`}>
+      <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`} data-sw-main={swapFrom ? '' : undefined}>
         {/* Pull to refresh: the ball that shows in the gap the list leaves (motion only). */}
         {motion && (
           <div ref={ptrBall} className="m-ptr" aria-hidden="true">
             <Pickleball />
           </div>
         )}
-        {load.loading && !g && !load.error && <ScheduleSkeleton />}
+        {showSaved && <SavedScreenView saved={saved!} />}
+        {load.loading && !g && !load.error && !showSaved && <ScheduleSkeleton />}
         {load.error && load.error.status !== 404 && (!g || !!viewAs) && <ErrorState error={load.error} onRetry={load.reload} />}
 
         {g && pickName && (
@@ -679,6 +748,7 @@ export function PlayerHome({
                       setOverlay={setOverlay}
                       joinToast={joinToast}
                       celebrating={celebrating.has(s.id)}
+                      prev={swapFrom ? (swapFrom.get(s.id) ?? null) : undefined}
                       leaving={leaving}
                     />
                   </Fragment>
@@ -2094,10 +2164,25 @@ export function ScheduleRow({
   joinToast,
   celebrating,
   leaving,
+  held,
+  minHeight,
+  contentTop,
+  prev,
 }: {
   s: PlayerSessionView;
   g: GroupView;
   tier: WeekTier;
+  /** Zip 12, the saved copy of the last screen: drawn only, with no button, link or money line at all (src/lastScreen.ts). */
+  held?: boolean;
+  /** Zip 12, the saved copy: the height this card had on the live screen it copies (so nothing slides at the swap). */
+  minHeight?: number;
+  /** Zip 12, the saved copy: where this card's words started on the live screen (from the card's top), so they do not move at the swap. */
+  contentTop?: number;
+  /**
+   * Zip 12, the first fresh screen after the saved copy: this card as the copy showed it (null: the copy did not have it). Only what
+   * changed fades in (the balls and names, the status, a whole new card, and the buttons and money lines the copy never draws).
+   */
+  prev?: PlayerSessionView | null;
   onChanged: () => Promise<void>;
   /** Opened from a shared link to this session. */
   highlight?: boolean;
@@ -2265,7 +2350,7 @@ export function ScheduleRow({
   // The court on the tile's border and the time under it (always on; only the moved-game notice has a switch).
   const ts: TsKind | null = tsKind(court.kind, !!s.venueWaitlist);
   const flip = useCourtFlip(s.id, ts);
-  const asking = !!s.timeAsk && g.timeShift !== false && inSession && open;
+  const asking = !held && !!s.timeAsk && g.timeShift !== false && inSession && open;
   useEffect(() => {
     if (!asking) return undefined;
     return registerCant(s.id, () => {
@@ -2274,7 +2359,7 @@ export function ScheduleRow({
     });
   }, [asking, s.id]);
   // Shown only the first time this player sees this promotion on this phone (src/goodNews.ts).
-  const promoted = inSession && !!mine.promotion && !!g.me && seeGoodNews(goodNewsKey(g.me.id, s.id, mine.signupAt), demoOn() ? demoSessionNumber() : null);
+  const promoted = !held && inSession && !!mine.promotion && !!g.me && seeGoodNews(goodNewsKey(g.me.id, s.id, mine.signupAt), demoOn() ? demoSessionNumber() : null);
   const goodNews = promoted ? (s.courtState === 'opened' && mine.promotion === 'spot_opened' ? GOOD_NEWS.court_opened : GOOD_NEWS[mine.promotion!]) : null;
 
   const names = s.confirmed.map((p) => p.name);
@@ -2299,8 +2384,24 @@ export function ScheduleRow({
   // date tile, a filled I'm in, no waitlist words; a LATER game is a smaller tinted card with the same slots.
   const cleanup = g.cardCleanup === true;
   useTileCenter(rowRef, cleanup);
+  // Zip 12, the saved copy: the words start where they started on the live card (the live card's buttons can make the words sit higher
+  // than a card without them, which Card cleanup centers). Top-aligned, then moved down by what is missing.
+  const bodyRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const card = rowRef.current;
+    if (!held || contentTop === undefined || !body || !card) return;
+    const first = body.firstElementChild as HTMLElement | null;
+    if (!first) return;
+    body.style.justifyContent = 'flex-start';
+    body.style.paddingTop = '';
+    const now = first.getBoundingClientRect().top - card.getBoundingClientRect().top;
+    const delta = contentTop - now;
+    if (Math.abs(delta) > 0.5) body.style.paddingTop = `${parseFloat(getComputedStyle(body).paddingTop || '0') + delta}px`;
+  }, [held, contentTop]);
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
   const calLink =
+    !held &&
     isIn &&
     open &&
     (cardButtons ? (
@@ -2312,15 +2413,15 @@ export function ScheduleRow({
     ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
   const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
-  const dropLink = isIn && open && (
+  const dropLink = !held && isIn && open && (
     <button className="link-btn quiet-link drop-link" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
       Drop out
     </button>
   );
-  const payShows = isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || mine.useCreditCents > 0 || onTop);
+  const payShows = !held && isIn && !!mine && (mine.paymentStatus === 'paid' || mine.oweCents > 0 || mine.creditCents > 0 || mine.useCreditCents > 0 || onTop);
 
   // The gray "If 6 play, you get $5 back as credit." for someone who would be 5th or later (not joined, room left, not on a waitlist).
-  const notIn = open && !(inSession || waiting);
+  const notIn = !held && open && !(inSession || waiting);
   // The flat LATER row (switch off) puts the note in the middle column; every card (and every Card cleanup card) puts it under the button.
   const flatLater = tier === 'later' && !cleanup;
   const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? s.shortGame
@@ -2373,7 +2474,7 @@ export function ScheduleRow({
       {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
     </button>
   );
-  const leaveBtn = waiting && open && (
+  const leaveBtn = !held && waiting && open && (
     <button className="btn sched-btn outline" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
       {standbyWord ? 'Leave standby' : 'Leave waitlist'}
     </button>
@@ -2391,6 +2492,9 @@ export function ScheduleRow({
       className={`sched ${cleanup && tier === 'later' ? 'tier-next cl-later' : `tier-${tier}`}${cleanup ? ' cl' : ''}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
+      data-held={held ? 'yes' : undefined}
+      style={minHeight ? { minHeight } : undefined}
+      {...swapMarks(prev, s, names)}
       data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
       aria-labelledby={`s-${s.id}`}
@@ -2435,7 +2539,7 @@ export function ScheduleRow({
         {formatWeekday(s.startsAt, tz)}, {formatMonthDay(s.startsAt, tz)}, {formatTimeRange(s.startsAt, s.endsAt, tz)}
         {isIn ? ". You're in" : ''}
       </h2>
-      <div className="sched-body">
+      <div className="sched-body" ref={bodyRef}>
         {status !== null && (
           <div className="sched-head">
             <div className={`sched-status court-${court.kind}${cardButtons && isIn && open ? ' z9-status' : ''}`} data-court={court.kind}>
@@ -2521,5 +2625,109 @@ export function ScheduleRow({
         }}
       />
     </article>
+  );
+}
+
+/** Zip 12: which parts of a fresh card differ from how the saved copy drew it (data attributes; src/player-cards.css fades those in). */
+function swapMarks(prev: PlayerSessionView | null | undefined, s: PlayerSessionView, names: string[]): Record<string, string> {
+  if (prev === undefined) return {};
+  if (prev === null) return { 'data-sw': '', 'data-sw-card': '' };
+  const out: Record<string, string> = { 'data-sw': '' };
+  if (prev.confirmed.map((p) => p.name).join('\u0001') !== names.join('\u0001') || prev.countText !== s.countText) out['data-sw-balls'] = '';
+  if ((prev.mine?.status ?? null) !== (s.mine?.status ?? null) || prev.bookingStatus !== s.bookingStatus || prev.courtState !== s.courtState || prev.canceled !== s.canceled) out['data-sw-status'] = '';
+  return out;
+}
+
+const noop = () => {};
+const noopAsync = async () => {};
+
+/**
+ * Zip 12, "Show last screen at once" (src/lastScreen.ts): the saved copy, drawn with the same cards as the live screen while the
+ * fresh answer is on its way. Nothing in it can be tapped (`inert`, and the cards draw no button, link or money line at all). The small
+ * gray "as of 2:14 PM" sits where the All games button sits on the live screen, so it takes no room of its own. When the copy kept the
+ * sizes of the screen it came from (the same page width), each card keeps its height and the room above the list (the Pay card,
+ * notices) is held by a soft shimmer: nothing slides when the fresh screen takes its place.
+ */
+export function SavedScreenView({ saved }: { saved: SavedScreen }) {
+  const v = courtDisplay(saved.view);
+  // The same <html> markers the live screen sets (Card cleanup, Tonight glow, Color cleanup, Simpler cards), so the cards look the same.
+  useZip7Root(saved.view);
+  const tz = v.group.timezone;
+  const nowMs = Date.parse(v.now);
+  const mineOnly = storageGet(FILTER_KEY) === 'mine';
+  const filtered = mineOnly ? v.sessions.filter(isMineGame) : v.sessions;
+  const later = (s: PlayerSessionView) => weekTier(s.startsAt, nowMs, tz) === 'later';
+  const shown = v.homeCollapse ? filtered.filter((s) => !later(s)) : filtered.slice(0, SHOW_FIRST);
+  const layout = saved.layout && typeof window !== 'undefined' && saved.layout.width === window.innerWidth && Array.isArray(saved.layout.items) ? saved.layout : null;
+  // The page puts 20 px between the room above the list and the list (main is a 20 px stack).
+  const lead = layout ? layout.lead - 20 : 0;
+  const asOf = asOfText(saved.savedAt, tz);
+  const byId = new Map(filtered.map((s) => [s.id, s]));
+  const row = (s: PlayerSessionView, tier: WeekTier, h?: number, c?: number) => (
+    <ScheduleRow key={s.id} s={s} g={v} tier={tier} held minHeight={h} contentTop={c} onChanged={noopAsync} setOverlay={noop} joinToast={noop} />
+  );
+  const tag = (
+    <span className="saved-asof" data-saved-asof>
+      {asOf}
+    </span>
+  );
+  let body: ReactNode;
+  if (layout) {
+    // The live list as it was, piece for piece: a game the copy may not show (ended, canceled) keeps its room as a soft shimmer.
+    // As a fresh page load draws it, though: Home collapse folds the later games again, and otherwise only the first 6 cards show.
+    let cardsSeen = 0;
+    let inLater = false;
+    const items = layout.items.filter((it) => {
+      if (it.kind === 'line') inLater = it.tier === 'later';
+      if (v.homeCollapse && inLater) return false;
+      if (it.kind === 'card' && !v.homeCollapse && ++cardsSeen > SHOW_FIRST) return false;
+      return !(it.kind === 'line' && !v.homeCollapse && cardsSeen >= SHOW_FIRST);
+    });
+    let tagged = false;
+    let tier: WeekTier = 'this';
+    body = items.map((it, i) => {
+      if (it.kind === 'line') {
+        tier = it.tier as WeekTier;
+        const first = !tagged;
+        tagged = true;
+        return (
+          <div key={`line-${i}`} className={`week-break tier-${it.tier}`}>
+            <h3>{TIER_LABEL[it.tier as WeekTier]}</h3>
+            {first && tag}
+          </div>
+        );
+      }
+      const s = byId.get(it.id);
+      if (!s) return <div key={`gap-${it.id}`} className="saved-hold skel" data-saved-gap aria-hidden="true" style={{ height: it.h }} />;
+      return row(s, tier, it.h, it.c);
+    });
+  } else {
+    body = shown.map((s, i) => {
+      const tier = weekTier(s.startsAt, nowMs, tz);
+      const prev = i > 0 ? weekTier(shown[i - 1].startsAt, nowMs, tz) : null;
+      const header = prev !== tier ? TIER_LABEL[tier] : null;
+      return (
+        <Fragment key={s.id}>
+          {header && (
+            <div className={`week-break tier-${tier}`}>
+              <h3>{header}</h3>
+              {i === 0 && tag}
+            </div>
+          )}
+          {row(s, tier)}
+        </Fragment>
+      );
+    });
+  }
+  return (
+    <>
+      <p className="sr-only" role="status">
+        Your last screen, {asOf}. Updating.
+      </p>
+      {lead > 0 && <div className="saved-hold skel" data-saved-lead aria-hidden="true" style={{ height: lead }} />}
+      <div className={`schedule saved-copy${v.playerFix1 ? ' pf1' : ''}`} data-saved-copy inert aria-busy="true">
+        {body}
+      </div>
+    </>
   );
 }

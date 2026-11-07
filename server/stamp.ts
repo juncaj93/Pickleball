@@ -6,12 +6,13 @@ import { payAlwaysForAll } from './payAlways';
 import { payNoteForAll } from './payNote';
 import { playerFix1ForAll } from './playerFix1';
 import { instantTapsForAll } from './instantTaps';
-import { motionSetting } from './motion';
+import { motionSetting, motionSettingRead } from './motion';
+import { fewerDb } from './speed';
 import { homeCollapseForAll } from './homeCollapse';
 import { colorCleanupForAll, playerCardsForAll, tonightGlowForAll } from './zip7';
 import { paySheetForAll } from './paySheet';
 import { lateFeesForAll } from './lateFees';
-import { hiddenGameIds } from './hideGame';
+import { hiddenGameIds, hiddenGameIdsRead } from './hideGame';
 import { cardTimeForAll, shortGamesForAll } from './zip9';
 import { cardCleanupForAll } from './zip10';
 import { alertCardsForAll } from './zip11';
@@ -39,32 +40,36 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
   const upcomingFrom = new Date(ctx.nowMs - 36 * 3_600_000).toISOString();
   const pastFrom = new Date(ctx.nowMs - PAST_MS).toISOString();
   // withTime: this player's "Still in" answers (migration 0016). Everything else still works if that column is missing.
-  const queries = (withTime: boolean) => [
-    ctx.db
-      .prepare(
-        `SELECT id, status, starts_at, ends_at, court_state, booking_status, cancel_reason, finalized_at, final_price_cents, final_played_count, is_extra, note, holiday_hours_ok_at, updated_at
+  const reads = (withTime: boolean): { sql: string; values: unknown[] }[] => [
+    {
+      sql: `SELECT id, status, starts_at, ends_at, court_state, booking_status, cancel_reason, finalized_at, final_price_cents, final_played_count, is_extra, note, holiday_hours_ok_at, updated_at
          FROM sessions WHERE group_id = ? AND ends_at > ? ORDER BY starts_at`,
-      )
-      .bind(group.id, pastFrom),
-    ctx.db
-      .prepare(
-        `SELECT sp.session_id, sp.player_id, sp.status, sp.claim_seq, sp.confirm_seq, sp.attendance_confirmed_at, sp.promoted_at
+      values: [group.id, pastFrom],
+    },
+    {
+      sql: `SELECT sp.session_id, sp.player_id, sp.status, sp.claim_seq, sp.confirm_seq, sp.attendance_confirmed_at, sp.promoted_at
          FROM session_players sp JOIN sessions s ON s.id = sp.session_id
          WHERE s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id, sp.player_id`,
-      )
-      .bind(group.id, upcomingFrom),
-    ctx.db
-      .prepare(
-        `SELECT sp.session_id, sp.status, sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at, sp.late_drop_done_at${withTime ? ', sp.time_confirmed' : ''}
+      values: [group.id, upcomingFrom],
+    },
+    {
+      sql: `SELECT sp.session_id, sp.status, sp.payment_status, sp.paid_at, sp.self_paid_at, sp.payment_amount_cents, sp.refunded_at, sp.played, sp.late_drop_at, sp.late_drop_done_at${withTime ? ', sp.time_confirmed' : ''}
          FROM session_players sp JOIN sessions s ON s.id = sp.session_id
          WHERE sp.player_id = ? AND s.group_id = ? AND s.ends_at > ? ORDER BY sp.session_id`,
-      )
-      .bind(me, group.id, pastFrom),
-    ctx.db.prepare('SELECT id, kind, amount_cents, ended_at FROM credit_ledger WHERE group_id = ? AND player_id = ? ORDER BY created_at, id').bind(group.id, me),
-    ctx.db.prepare('SELECT id, status, amount_cents, resolved_at FROM refund_requests WHERE group_id = ? AND player_id = ? ORDER BY created_at, id').bind(group.id, me),
-    ctx.db.prepare('SELECT id, display_name, is_active FROM players WHERE group_id = ? ORDER BY id').bind(group.id),
-    ctx.db.prepare('SELECT is_regular, usual_days, is_active FROM players WHERE id = ? AND group_id = ?').bind(me, group.id),
+      values: [me, group.id, pastFrom],
+    },
+    { sql: 'SELECT id, kind, amount_cents, ended_at FROM credit_ledger WHERE group_id = ? AND player_id = ? ORDER BY created_at, id', values: [group.id, me] },
+    { sql: 'SELECT id, status, amount_cents, resolved_at FROM refund_requests WHERE group_id = ? AND player_id = ? ORDER BY created_at, id', values: [group.id, me] },
+    { sql: 'SELECT id, display_name, is_active FROM players WHERE group_id = ? ORDER BY id', values: [group.id] },
+    { sql: 'SELECT is_regular, usual_days, is_active FROM players WHERE id = ? AND group_id = ?', values: [me, group.id] },
   ];
+  const queries = (withTime: boolean) => reads(withTime).map((r) => ctx.db.prepare(r.sql).bind(...r.values));
+  // SPEED_FEWER_QUERIES (server/speed.ts): the two switch reads further down (player motion, hidden games) ride in the same trip.
+  await fewerDb(ctx)?.prefetch([
+    ...reads(true).map((r) => ({ kind: 'all' as const, ...r })),
+    { kind: 'first', ...motionSettingRead(group.id, 'player') },
+    { kind: 'all', ...hiddenGameIdsRead(group.id) },
+  ]);
   const [sessions, roster, mine, ledger, requests, players, self] = await ctx.db.batch(queries(true)).catch(() => ctx.db.batch(queries(false)));
   const part = (r: { results: unknown[] }) => JSON.stringify(r.results);
   const raw = [
