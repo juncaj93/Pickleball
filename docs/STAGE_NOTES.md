@@ -3159,3 +3159,24 @@ to production, nothing switched on, no live data read or changed. Each switch's 
 - The old Remove-from-game Undo never worked on live: confirming "Remove Indy?" also closed the Players sheet behind it, and closing that sheet sends
   the held Remove at once (reproduced on main: sent 0.1 s after the confirm). Fixed in `Sheet` (closes only for its own close), plus the toast with a
   button is drawn inside an open sheet (so the Undo can be tapped). Both ship live-on (bug fixes, no switch). `e2e/zip13.cjs` checks it.
+### Deploy (Sat Nov 7, 2026, 5:48 PM Eastern, a quiet window, on Alex's "ship it") - LIVE with all three switches OFF
+- PR #97 merged as `1a51512` (the same files as the tested branch). Before it main equaled live (production `5cb45263` = `aab306b`).
+- Tests on the final code: unit 2349 passed, 1 skipped, 0 failed (140 files); tsc and build clean; `e2e/zip13.cjs` 39/39; `e2e/zip13-off.cjs`
+  27/27 against main `aab306b`; full browser suite 50 of 54 clean, the other 4 the same as on main (`run.cjs` 10, `cancel-reason.cjs` 2,
+  `want-in.cjs` 1, `admin-r2.cjs` F4 1). A second fresh review of the preview fixes: nothing that moves money or changes anything with the
+  switches off; fixed from it: a banner drawn again in or out of a sheet keeps going and keeps its Undo ring, never moves into a sheet that is
+  sliding shut, and stays where it was on browsers without popovers. Noted for later: History's game sheet and the Edit charge sheet now stay open
+  after their inner confirm closes (they used to close by accident); a group created after October 2026 would still count October's $30.
+- Before: SQL export of the live database (`npx wrangler d1 export pickleball --remote`, 5:47 PM, 171,865 bytes, kept out of git, has phone
+  numbers) and Time Travel bookmark `00000ad6-00000000-0000511c-dc239ae140451b9177d226d67be68595` (5:47 PM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000ad6-00000000-0000511c-dc239ae140451b9177d226d67be68595`.
+- Production deployment `94869aa6-18d7-4a28-8843-0203ee9f51f0` = main `1a51512`. Rollback: the build live before it, `5cb45263-87af-486c-8d84-4b2e09de824c`
+  (main `aab306b`). Nothing is written by this deploy (no migration, no data change), so no data restore is needed for a rollback.
+- Money > Totals on live (worked out on a local copy of the backup with main and with this code, then confirmed with the read-only PIN):
+  November so far $42 (unchanged: 2 four-player games, $30 + 2 x $6). November projected 6 -> 7 courts (the Not booked Nov 24 game), court $288 -> $336,
+  total $318 -> $366, players pay $252 -> $294, your estimate $66 -> $72. October membership $0 -> $30 (so far and projected). December projected $0 -> $30
+  (no December games exist yet).
+- Read-only live check (pickleball-club-9h0.pages.dev): sign-in works (viewOnly), no Zip 13 field on the dashboard (all three off), no monthPlayed,
+  the summary address answers 404 (switch off), a switch save is refused 403, `/api/status` 200, the live script is this build (`index-DWzjDtiI.js`),
+  every organizer tab opens in a browser with no page errors, the old header and the old Players list show, the three Settings rows are there and off,
+  no Go to Admin. Rows unchanged (players 11, games 12).
