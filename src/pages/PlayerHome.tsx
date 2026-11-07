@@ -1090,7 +1090,8 @@ function FeeNotices({ g }: { g: GroupView }) {
               tone="blue"
               icon="ok"
               title={credit ? `Your ${credit} is back as credit` : `You no longer owe ${fee}`}
-              sub={n.why === 'sub' ? `Someone took your ${day} spot` : `For ${day}`}
+              // The date never splits across lines, and "spot" stays with it (non-breaking spaces; the same words).
+              sub={n.why === 'sub' ? `Someone took your ${day.replace(/ /g, '\u00a0')}\u00a0spot` : `For ${day.replace(/ /g, '\u00a0')}`}
               data={{ 'data-fee-notice': n.why }}
               action={
                 <button type="button" className="ac-btn ac-out" onClick={() => dismiss(n.id)}>
@@ -1781,7 +1782,7 @@ function SuggestionCard({
     // (A venue-waitlist game, "standby": no count, as before.)
     const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${day} needs ${MIN_PLAYERS - n} more` : `${day} has ${n} in`;
     const atLimit = cleanup && n >= g.group.maxPlayers;
-    const sub = standby ? undefined : short ? <AcBalls inCount={n} of={MIN_PLAYERS} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
+    const sub = standby ? undefined : short ? <AcBalls inCount={n} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
     return (
       <AlertCard
         as="section"

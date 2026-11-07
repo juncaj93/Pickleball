@@ -95,39 +95,43 @@ const FIT_FROM_WIDTH = 360;
  * On a narrower screen it keeps its size and wraps into two balanced lines (CSS text-wrap: balance). Look only; re-checked when the card
  * changes size or its words change.
  */
-export function useFitTitle(ref: RefObject<HTMLElement | null>, text: unknown) {
+export function useFitTitle(ref: RefObject<HTMLElement | null>) {
+  // What the last fit was done for: the words and the room. A redraw with the same words and width does nothing (no layout work).
+  const done = useRef<{ text: string | null; width: number }>({ text: null, width: -1 });
+  const fit = (el: HTMLElement) => {
+    const room = el.parentElement?.offsetWidth ?? 0;
+    if (done.current.text === el.textContent && Math.abs(done.current.width - room) < 0.5) return;
+    done.current = { text: el.textContent, width: room };
+    el.style.fontSize = '';
+    if (window.innerWidth < FIT_FROM_WIDTH) return;
+    // offsetHeight is the laid-out size (a card that is still scaling in its entrance animation measures right).
+    const lines = () => el.offsetHeight / (parseFloat(getComputedStyle(el).lineHeight) || 1);
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (lines() > 1.5 && size - 0.5 >= FIT_MIN_PX) {
+      size -= 0.5;
+      el.style.fontSize = `${size}px`;
+    }
+  };
+  // Every redraw: cheap unless the words changed.
+  useLayoutEffect(() => {
+    if (ref.current) fit(ref.current);
+  });
+  // The room changes (rotation, a resized window): fit again.
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    const fit = () => {
-      el.style.fontSize = '';
-      if (window.innerWidth < FIT_FROM_WIDTH) return;
-      const lines = () => el.getBoundingClientRect().height / (parseFloat(getComputedStyle(el).lineHeight) || 1);
-      let size = parseFloat(getComputedStyle(el).fontSize);
-      while (lines() > 1.5 && size - 0.5 >= FIT_MIN_PX) {
-        size -= 0.5;
-        el.style.fontSize = `${size}px`;
-      }
-    };
-    fit();
-    const parent = el.parentElement;
-    if (typeof ResizeObserver === 'undefined' || !parent) return;
-    let last = parent.getBoundingClientRect().width;
-    const ro = new ResizeObserver(() => {
-      const w = parent.getBoundingClientRect().width;
-      if (Math.abs(w - last) < 0.5) return;
-      last = w;
-      fit();
-    });
+    const parent = el?.parentElement;
+    if (!el || !parent || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => fit(el));
     ro.observe(parent);
     return () => ro.disconnect();
-  }, [ref, text]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref]);
 }
 
 /** A title that stays on one line (see useFitTitle), for the cards that draw their own rows. */
 export function AcTitle({ as: Tag = 'p', className = '', children, id }: { as?: 'p' | 'h2' | 'h3'; className?: string; children: ReactNode; id?: string }) {
   const ref = useRef<HTMLHeadingElement | null>(null);
-  useFitTitle(ref, children);
+  useFitTitle(ref);
   return (
     <Tag ref={ref} className={`ac-title${className ? ` ${className}` : ''}`} id={id}>
       {children}
@@ -220,7 +224,7 @@ export function AcX({ label, onX }: { label: string; onX: () => void }) {
  * The pickleballs as a sub line ("Tuesday needs 1 more"): the game card's own SpotDots, so the balls are the same component (Pickleball) and
  * the empty seats are the same `.dot` the game cards draw (and turn into dashed rings with Seat dots). One ball per player in, empty seats up to 4.
  */
-export function AcBalls({ inCount }: { inCount: number; of?: number }) {
+export function AcBalls({ inCount }: { inCount: number }) {
   return (
     <span className="ac-seats">
       <SpotDots names={Array.from({ length: Math.max(0, inCount) }, () => '')} />

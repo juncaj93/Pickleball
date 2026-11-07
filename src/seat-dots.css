@@ -19,7 +19,7 @@ html[data-seat-dots][data-theme='dark'] {
   --sd-ring: rgb(184 191 178 / 70%);
 }
 
-html[data-seat-dots] .dots .dot {
+html[data-seat-dots] .dots > .dot.dot {
   border-color: transparent;
   background-color: var(--sd-ring);
   -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='9' fill='none' stroke='%23000' stroke-width='1.9' pathLength='40' stroke-dasharray='2.4 1.6'/%3E%3C/svg%3E") center / 100% 100% no-repeat border-box;

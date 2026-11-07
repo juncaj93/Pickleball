@@ -12,7 +12,7 @@ import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
-import { AcIcon } from '../AlertCard';
+import { AcIcon, AcTitle } from '../AlertCard';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
@@ -393,7 +393,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         {cards ? (
           <div className="ac-row">
             <AcIcon name="owe" />
-            <h3 className="ac-title">{label}</h3>
+            <AcTitle as="h3">{label}</AcTitle>
           </div>
         ) : (
           <h3>{label}</h3>
@@ -439,7 +439,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
         <div className="ac-row">
           <AcIcon name="info" />
           <div className="ac-text">
-            <h3 className="ac-title">{title}</h3>
+            <AcTitle as="h3">{title}</AcTitle>
             <div className="ac-sub">{when(s, tz)}</div>
           </div>
         </div>

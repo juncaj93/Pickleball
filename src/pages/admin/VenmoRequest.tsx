@@ -1,6 +1,5 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { AcIcon, AcTitle } from '../../AlertCard';
-import { useState } from 'react';
 import { formatPrice } from '../../../shared/money';
 import { formatShortDate, formatTime, formatWeekdayShort, localParts } from '../../../shared/time';
 import { venmoUsername } from '../../../shared/venmoRequest';
