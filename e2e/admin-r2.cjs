@@ -550,7 +550,9 @@ async function main() {
     assert(hp.adminHidden === undefined, 'a screen with the switch off ignores the hide (dashboard without the header)');
     // View as picker
     await page.locator('.topbar-btn', { hasText: 'View as' }).click();
-    assert(!(await page.getByRole('dialog').innerText()).includes(target), 'not in View as');
+    // (The names to pick, not the whole sheet: since Zip 13 the "hidden" toast with its Undo sits inside an open sheet, so it can be tapped.)
+    await page.locator('dialog[open] .name-grid').waitFor();
+    assert(!(await page.locator('dialog[open] .name-grid button').allInnerTexts()).includes(target), 'not in View as');
     await page.keyboard.press('Escape');
     // Seats and money unchanged on the server.
     const seatsAfter = JSON.stringify(after.sessions.map((s) => s.roster.filter((r) => r.name === target).map((r) => [r.status, r.paymentStatus, r.owesCents, r.creditCents])));
@@ -563,7 +565,13 @@ async function main() {
     await (await reveal(page, C.id)).locator('.game-menu .icon-round').click();
     await page.getByRole('menuitem', { name: 'Players' }).click();
     await page.getByRole('dialog').waitFor();
-    assert(!(await page.getByRole('dialog').innerText()).includes(target) || !(await page.getByRole('dialog').locator('h3', { hasText: 'Add someone' }).count()), 'not offered under Add someone');
+    // (The sheet's own words, without a toast that sits inside it since Zip 13.)
+    const sheetText = await page.locator('dialog[open]').last().evaluate((d) => {
+      const c = d.cloneNode(true);
+      c.querySelectorAll('[data-banner]').forEach((b) => b.remove());
+      return c.textContent;
+    });
+    assert(!sheetText.includes(target) || !(await page.getByRole('dialog').locator('h3', { hasText: 'Add someone' }).count()), 'not offered under Add someone');
     await page.keyboard.press('Escape');
     // Hidden players list in Settings > Advanced, with Unhide.
     await tab(page, 'Settings');
