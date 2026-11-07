@@ -78,9 +78,9 @@ async function main() {
   const d0 = await dash();
   assert(d0.playersRedo === true && d0.swapButton === true && d0.adminUndo === true, 'the seed should have the three Zip 13 rows on');
   const UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
-  const phone = (width, scheme) => ({ viewport: { width, height: 900 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: 'reduce' });
+  const phone = (width, scheme, motion = false) => ({ viewport: { width, height: 900 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: motion ? 'no-preference' : 'reduce' });
   async function openAdmin(width = 390, scheme = 'light', opts = {}) {
-    const ctx = await browser.newContext(phone(width, scheme));
+    const ctx = await browser.newContext(phone(width, scheme, !!opts.motion));
     await ctx.addInitScript((delta) => {
       const Real = Date;
       class Shifted extends Real {
@@ -389,10 +389,10 @@ async function main() {
   });
 
   // ================================================================ 3 Undo on admin toasts
-  const undoCase = async (name, run, setup) =>
+  const undoCase = async (name, run, setup, motion = false) =>
     check(`Undo: ${name}: the toast has Undo at once; tapping it sends nothing and the database is exactly as before`, async () => {
       if (setup) await setup();
-      const { ctx, page, sent, errors } = await openAdmin();
+      const { ctx, page, sent, errors } = await openAdmin(390, 'light', { motion });
       const before = await snapshot();
       const n0 = sent.length;
       await run(page);
@@ -505,6 +505,34 @@ async function main() {
       const hit = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.toast-action'), { x: box.x + box.width / 2, y: box.y + box.height / 2 });
       assert(hit, 'the Undo over the open sheet can be tapped');
     },
+  );
+  await undoCase(
+    'Remove from a game, animations on (the confirm box slides shut first)',
+    async (page) => {
+      const d = await dash();
+      const g = d.sessions.find((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > NOW_MS + 48 * 3600_000 && s.confirmedCount >= 2);
+      let card = page.locator(`article#session-${g.id}`);
+      if (!(await card.count())) {
+        const all = page.locator('button', { hasText: /^Show all/ });
+        if (await all.count()) await all.click();
+        if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
+      }
+      await card.locator('button[aria-label^="Game menu"]').click();
+      await page.getByRole('menuitem', { name: /^Players/ }).click();
+      await page.locator('dialog[open] button', { hasText: /^Remove$/ }).first().click();
+      await page.locator('dialog[open] button', { hasText: /^Remove$/ }).last().click();
+      // The Undo must be what a finger lands on (the open sheet used to cover it for taps).
+      const undo = page.locator('[data-banner] .toast-action', { hasText: 'Undo' }).last();
+      await page.waitForTimeout(500);
+      if (process.env.E2E_DEBUG) console.log('      banners:', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('[data-banner]')].map((b) => [b.innerText.slice(0, 30), b.parentElement.tagName, b.parentElement.open, b.matches(':popover-open'), b.getBoundingClientRect().height]))), JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('dialog')].map((d) => [d.open, d.querySelector('h2')?.innerText]))));
+      await undo.waitFor();
+      await page.waitForTimeout(400);
+      const box = await undo.boundingBox();
+      const hit = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.toast-action'), { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      assert(hit, 'the Undo over the open sheet can be tapped');
+    },
+    undefined,
+    true,
   );
   await undoCase('Adjust credit', async (page) => {
     await tab(page, 'Players');

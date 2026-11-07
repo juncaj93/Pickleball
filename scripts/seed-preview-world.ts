@@ -625,8 +625,8 @@ export const PREVIEW_SWITCHES_ON = [
   // Zip 9 (live, switched on by Alex Fri Nov 6): Short games and Card time and buttons.
   'short_games_on',
   'card_time_buttons_on',
-  // Zip 10: Card cleanup. Alex, Sat Nov 7: NOT on live yet (it stays off until he flips it). Kept on in this fake world because its 11 and 12
-  // player games are built through it (the Zip 10 and Zip 11 browser tests use them); a preview that must look like live switches it off after a seed.
+  // Zip 10: Card cleanup. ON on live (the live row read with the read-only PIN after the Zip 12 deploy, Sat Nov 7, against an earlier note
+  // that it was not); the fake world's 11 and 12 player games are built through it too.
   'card_cleanup_on',
   // Zip 11 (live, Settings row off): Alert cards; on here because its redo is being built.
   'alert_cards_on',

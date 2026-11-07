@@ -178,6 +178,8 @@ interface Shown {
   msg: string;
   kind: ToastKind;
   opts: ToastOptions;
+  /** Set once it started to go (a tap, a swipe, its time): a banner drawn again in another place (into or out of a sheet) stays going. */
+  going?: boolean;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -208,7 +210,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       document.removeEventListener('close', again, true);
     };
   }, [keeping]);
-  const topSheet = keeping && typeof document !== 'undefined' ? ([...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].pop() ?? null) : null;
+  // The top sheet that is not sliding shut (a closing box takes no taps), and only where banners sit in the top layer (popover): an older
+  // browser would place a fixed banner inside a moving sheet wrongly, so there it stays where it always was.
+  const topSheet =
+    keeping && typeof document !== 'undefined' && typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype
+      ? ([...document.querySelectorAll<HTMLDialogElement>('dialog[open]:not(.m-closing)')].pop() ?? null)
+      : null;
   return (
     <ToastContext.Provider value={show}>
       {children}
@@ -235,10 +242,10 @@ const stayFor = (shown: Shown, motion: boolean) => shown.opts.stayMs ?? (shown.k
 /** A swipe down this far (px) sends the banner away; less and it glides back. */
 const SWIPE_DISMISS_PX = 36;
 
-/** The Undo ring: drains over exactly the Undo window. */
-function UndoRing({ ms }: { ms: number }) {
+/** The Undo ring: drains over exactly the Undo window (`spentMs` already gone when a banner is drawn again elsewhere: it picks up there). */
+function UndoRing({ ms, spentMs = 0 }: { ms: number; spentMs?: number }) {
   return (
-    <svg className="m-undo-ring" viewBox="0 0 24 24" aria-hidden="true" style={{ '--ring-ms': `${ms}ms` } as React.CSSProperties}>
+    <svg className="m-undo-ring" viewBox="0 0 24 24" aria-hidden="true" style={{ '--ring-ms': `${ms}ms`, ...(spentMs > 0 ? { '--ring-delay': `-${spentMs}ms` } : {}) } as React.CSSProperties}>
       <circle className="m-ring-back" cx="12" cy="12" r="9.5" />
       <circle className="m-ring-front" cx="12" cy="12" r="9.5" pathLength="100" />
     </svg>
@@ -247,7 +254,10 @@ function UndoRing({ ms }: { ms: number }) {
 
 function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void; stack?: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>('');
+  // A banner with a button can be drawn again elsewhere (into or out of a sheet): one that had started to go keeps going.
+  const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>(shown.going ? 'down' : '');
+  // How long it has been up already (0 for a new banner), so its time and its Undo ring carry on where they were.
+  const spentAtDraw = useRef(shown.opts.keep || shown.opts.action ? Math.max(0, Date.now() - Math.floor(shown.id)) : 0).current;
   const swipe = useRef<{ x: number; y: number } | null>(null);
   // Decided once, when it appears: the motion look (a raised card, spring in, glides under the finger).
   const motion = useRef(motionOn()).current;
@@ -294,6 +304,7 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
   gone.current = onGone;
   useEffect(() => {
     if (!leaving) return;
+    shown.going = true;
     const t = setTimeout(() => gone.current(), BANNER_TIMING.out);
     return () => clearTimeout(t);
   }, [leaving]);
@@ -369,7 +380,7 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
             setLeaving((v) => v || 'down');
           }}
         >
-          {motion && shown.opts.action.label === 'Undo' && <UndoRing ms={BANNER_TIMING.fadeIn + stayFor(shown, motion)} />}
+          {motion && shown.opts.action.label === 'Undo' && <UndoRing ms={BANNER_TIMING.fadeIn + stayFor(shown, motion)} spentMs={spentAtDraw} />}
           {shown.opts.action.label}
         </button>
       )}
