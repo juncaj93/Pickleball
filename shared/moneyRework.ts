@@ -42,3 +42,11 @@ export function gameHasMoney(f: MoneyFacts): boolean {
 
 /** The projected Totals card assumes this many players pay the usual price (3 x $14) for EVERY court in the month, finalized or not. */
 export const PROJECTED_PLAYERS_PER_COURT = 3;
+
+/**
+ * Zip 13 (Alex, Nov 7): the venue membership is paid every month from October 2026 on, games or not. From this month on, Money > Totals counts
+ * the $30 in "so far" for every month up to this one and in Projected for every month, even one with no game. Earlier months: as before (only
+ * a month with a game the venue is owed for, or this month).
+ */
+export const MEMBERSHIP_FROM = { year: 2026, month: 10 };
+export const membershipMonth = (year: number, month: number) => year > MEMBERSHIP_FROM.year || (year === MEMBERSHIP_FROM.year && month >= MEMBERSHIP_FROM.month);

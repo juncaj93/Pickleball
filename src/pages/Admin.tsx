@@ -541,7 +541,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
                 disabled={busy}
                 aria-label={`Mark ${r.name} paid for ${formatShortDate(r.session.startsAt, tz)}`}
                 onClick={() =>
-                  act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true, seen: r.seen, cents: r.cents }), `${r.name} marked paid`, opTap({ kind: 'paid', sessionId: r.session.id, playerId: r.playerId }, 'Mark paid'))
+                  act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true, seen: r.seen, cents: r.cents }), `${r.name} marked paid`, opTap({ kind: 'paid', sessionId: r.session.id, playerId: r.playerId }, 'Mark paid', ctx.d.adminUndo === true))
                 }
               >
                 Mark paid

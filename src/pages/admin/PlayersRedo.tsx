@@ -59,7 +59,7 @@ function CalIcon() {
 
 export function PencilIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M4 20l1-4L16.5 4.5a2 2 0 0 1 3 3L8 19z" />
       <path d="M14.5 6.5l3 3" />
     </svg>
@@ -139,8 +139,8 @@ export function PlayerDetailsSheet({ ctx, player, onClose, onEdit, children }: {
       title={player?.name ?? ''}
       onClose={onClose}
       className="pr-sheet"
-      hideClose
-      headerAction={
+      // The small pencil sits right after the name; the ✕ stays alone at the top right, as on the edit sheet.
+      titleAfter={
         player && (
           <button type="button" className="icon-btn pr-pen" onClick={() => onEdit(player)} aria-label={`Edit ${player.name}`} data-pr-edit>
             <PencilIcon />

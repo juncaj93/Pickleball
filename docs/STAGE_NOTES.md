@@ -3146,3 +3146,16 @@ to production, nothing switched on, no live data read or changed. Each switch's 
   preview after the seed).
 - Projected (fake November): before 19 courts, $930 total, players $789, your estimate $141; after 22 courts, $1,074, $915, $159 (3 Not booked
   games added; 2 canceled stay out).
+
+### After Alex looked at the preview (Sat Nov 7, 2026, about 4:00 PM Eastern): "ship it after these fixes"
+- Answers: Held stays "until finalized". Totals: every month from October 2026 counts the $30 membership, games or not (built; numbers in the
+  report). Swap: as is. The old Remove-from-game Undo: fixed (below). Branch name: fine.
+- Details sheet header: the pencil is a small 32 px circle right after the name, and the ✕ is back alone at the top right (the Sheet's own),
+  light and dark (`Sheet` `titleAfter`, new and optional).
+- "Undo is not showing on the preview": the Home card "Who owes you" / "Mark paid tonight" (`src/pages/Admin.tsx` TodoCard) was the one money tap
+  left without it (also the older non-rework Money page path). Both have it now. The preview's switch rows were right (Instant taps and Undo on).
+  Checked the preview defaults too: each re-seed put Alert cards, Seat dots and the four speed rows back on (then switched off by hand); the preview
+  seed now leaves them off as on live (`OFF_ON_LIVE`); local browser tests keep them on as before.
+- The old Remove-from-game Undo never worked on live: confirming "Remove Indy?" also closed the Players sheet behind it, and closing that sheet sends
+  the held Remove at once (reproduced on main: sent 0.1 s after the confirm). Fixed in `Sheet` (closes only for its own close), plus the toast with a
+  button is drawn inside an open sheet (so the Undo can be tapped). Both ship live-on (bug fixes, no switch). `e2e/zip13.cjs` checks it.

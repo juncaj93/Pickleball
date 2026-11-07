@@ -3,6 +3,7 @@ import type { D1Database } from './db';
 import { requireAdmin } from './auth';
 import { HttpError } from './http';
 import { spentByPlayer } from './adminR3';
+import { MEMBERSHIP_FROM } from '../shared/moneyRework';
 import { zip13For } from './zip13';
 import { monthMoneyOf } from './money';
 import { type GroupRow, organizerIdOf } from './repo';
@@ -57,8 +58,8 @@ async function organizerSpent(ctx: Ctx, group: GroupRow, year: number, month: nu
 }
 
 /**
- * The months before this one that can have a "Your cost so far" above $0: a month counts membership and courts only once a game in it was
- * finalized or a canceled game was charged (server/money.ts), so a past month with neither is $0 and is not read at all. One small read.
+ * The months before this one that can have a "Your cost so far" above $0: a month with a finalized or canceled game, and (Zip 13) every month
+ * from October 2026, which pays the membership anyway. A month before October with neither is $0 and is not read at all.
  */
 async function pastMonthsWithGames(ctx: Ctx, group: GroupRow): Promise<{ year: number; month: number }[]> {
   const { results } = await ctx.db
@@ -69,6 +70,11 @@ async function pastMonthsWithGames(ctx: Ctx, group: GroupRow): Promise<{ year: n
   for (const r of results) {
     const p = localParts(Date.parse(r.starts_at), group.timezone);
     seen.set(`${p.year}-${p.month}`, { year: p.year, month: p.month });
+  }
+  // From October 2026 every month pays the membership, games or not (Money Totals counts it), so each of those months is read too.
+  const now = localParts(ctx.nowMs, group.timezone);
+  for (let y = MEMBERSHIP_FROM.year, m = MEMBERSHIP_FROM.month; y < now.year || (y === now.year && m < now.month); m === 12 ? ((m = 1), y++) : m++) {
+    seen.set(`${y}-${m}`, { year: y, month: m });
   }
   return [...seen.values()];
 }

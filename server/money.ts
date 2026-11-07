@@ -19,7 +19,7 @@ import { loadLedger } from './credit';
 import { courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, rosterRead, type SessionRow, settingsOf } from './repo';
 import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
-import { PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
+import { membershipMonth, PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -188,8 +188,11 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
         const isCurrent = p.year === year && p.month === month;
         // Membership is a monthly fee: "so far" has it for the current month, or any month with a game the venue is already owed for; the
         // projected card also has it for a month whose only games are still coming.
-        const soFarMembership = isCurrent || rwSessions > 0 ? settings.monthlyMembershipCents : 0;
-        const projMembership = isCurrent || rwSessions + projAdded > 0 ? settings.monthlyMembershipCents : 0;
+        // Zip 13: from October 2026 every month pays the membership, games or not ("so far" for this month and earlier, Projected for every one).
+        const paysAnyway = membershipMonth(year, month);
+        const notAhead = year < p.year || (year === p.year && month <= p.month);
+        const soFarMembership = isCurrent || rwSessions > 0 || (paysAnyway && notAhead) ? settings.monthlyMembershipCents : 0;
+        const projMembership = isCurrent || rwSessions + projAdded > 0 || paysAnyway ? settings.monthlyMembershipCents : 0;
         const split = (courtsCents: number, playersCents: number, membership: number) => {
           const yourCost = Math.max(0, courtsCents + membership - playersCents);
           const courtPart = Math.max(0, courtsCents - playersCents);

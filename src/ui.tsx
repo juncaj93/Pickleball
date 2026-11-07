@@ -191,14 +191,22 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setShown((cur) => [...cur.filter((x) => x.opts.keep), next].slice(-3));
     setSpoken({ msg, kind });
   }, []);
-  // Only while an Undo banner (keep) is up: follow which sheet is open on top, so the banner can sit inside it (see below).
-  const keeping = shown.some((x) => x.opts.keep);
+  // Only while a banner with a button (Undo) is up: follow which sheet is open on top, so the banner can sit inside it (see below).
+  const keeping = shown.some((x) => x.opts.keep || x.opts.action);
   const [, setSheets] = useState(0);
   useEffect(() => {
     if (!keeping) return undefined;
-    const mo = new MutationObserver(() => setSheets((n) => n + 1));
+    const again = () => setSheets((n) => n + 1);
+    const mo = new MutationObserver(again);
     mo.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open'] });
-    return () => mo.disconnect();
+    // A sheet may have closed between the banner's first draw and this watcher starting (a confirm box that closes with the tap): look once now,
+    // and on every sheet's close too.
+    again();
+    document.addEventListener('close', again, true);
+    return () => {
+      mo.disconnect();
+      document.removeEventListener('close', again, true);
+    };
   }, [keeping]);
   const topSheet = keeping && typeof document !== 'undefined' ? ([...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].pop() ?? null) : null;
   return (
@@ -212,9 +220,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       </div>
       {shown.map((b, i) => {
         const banner = <Banner key={b.id} shown={b} stack={shown.length - 1 - i} onGone={() => setShown((cur) => cur.filter((x) => x.id !== b.id))} />;
-        // An Undo banner (keep) over an open sheet lives INSIDE that sheet: a modal sheet makes everything outside it untappable, so an Undo
-        // drawn outside would look tappable and not be. Moves out again when the sheet closes (its time keeps running).
-        return b.opts.keep && topSheet ? createPortal(<Fragment key={`${b.id}:in`}>{banner}</Fragment>, topSheet) : banner;
+        // A banner with a button (Undo) over an open sheet lives INSIDE that sheet: a modal sheet makes everything outside it untappable, so a
+        // button drawn outside would look tappable and not be (Zip 13; it was so for Remove from a game's Undo too). Moves out again when the
+        // sheet closes (its time keeps running). Banners without a button: exactly as before.
+        return (b.opts.keep || b.opts.action) && topSheet ? createPortal(<Fragment key={`${b.id}:in`}>{banner}</Fragment>, topSheet) : banner;
       })}
     </ToastContext.Provider>
   );
@@ -276,8 +285,8 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
   }, []);
   useEffect(() => {
     const stay = stayFor(shown, motion);
-    // An Undo banner (keep) that moved into or out of a sheet keeps its own clock (it was made at shown.id).
-    const spent = shown.opts.keep ? Math.max(0, Date.now() - Math.floor(shown.id)) : 0;
+    // A banner with a button that moved into or out of a sheet keeps its own clock (it was made at shown.id).
+    const spent = shown.opts.keep || shown.opts.action ? Math.max(0, Date.now() - Math.floor(shown.id)) : 0;
     const t = setTimeout(() => setLeaving((v) => v || 'down'), Math.max(0, BANNER_TIMING.fadeIn + stay - spent));
     return () => clearTimeout(t);
   }, [shown]);
@@ -385,6 +394,7 @@ export function Sheet({
   headerAction,
   className,
   hideClose,
+  titleAfter,
 }: {
   open: boolean;
   title: string;
@@ -396,6 +406,8 @@ export function Sheet({
   className?: string;
   /** No ✕ (a sheet whose header button is its only one; a tap outside or a swipe down still closes it). Left out: exactly as before. */
   hideClose?: boolean;
+  /** Something right after the title, on its line (the Players redo's small pencil). Left out: exactly as before. */
+  titleAfter?: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -450,7 +462,12 @@ export function Sheet({
       ref={ref}
       className={`sheet${className ? ` ${className}` : ''}${closing && !open ? ' m-closing' : ''}`}
       aria-labelledby={titleId}
-      onClose={onClose}
+      // Only this sheet's own close: a confirm box opened inside it (Remove X?) closing must not close this sheet too (Zip 13: that sent
+      // the held Remove at once, so its Undo always said "Too late").
+      onClose={(e) => {
+        if (e.target !== e.currentTarget) return;
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target !== ref.current) return;
         // A tap outside closes the sheet. If it landed on the tab bar, that tab gets the tap too.
@@ -503,7 +520,14 @@ export function Sheet({
               d.style.transform = '';
             }}
           >
-            <h2 id={titleId}>{title}</h2>
+            {titleAfter ? (
+              <div className="sheet-title-row">
+                <h2 id={titleId}>{title}</h2>
+                {titleAfter}
+              </div>
+            ) : (
+              <h2 id={titleId}>{title}</h2>
+            )}
             {headerAction}
             {!hideClose && (
               <button className="icon-btn" onClick={onClose} aria-label="Close">

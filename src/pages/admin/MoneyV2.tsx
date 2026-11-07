@@ -211,7 +211,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
       const r = s.roster.find((x) => x.playerId === op.playerId);
       if (r && !groupAtTap.current.has(opKey(op))) groupAtTap.current.set(opKey(op), isPaid(r));
     }
-    return rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success, op ? opTap(op) : undefined);
+    return rework && rwRun && op ? rwRun(op, fn, success) : plainRun(fn, success, op ? opTap(op, undefined, ctx.d.adminUndo === true) : undefined);
   };
   const busy = rework && rwRun ? false : actionBusy;
   const fin = s.finalized;

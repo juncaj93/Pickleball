@@ -261,3 +261,30 @@ describe('the preview seed', () => {
     expect(src).toContain('buildSeed(Date.now(), { zip13: true })');
   });
 });
+
+describe('Membership every month from October 2026 (Alex, Nov 7; Totals and the organizer Spent)', () => {
+  it('a month from October with no finalized game still counts $30 (so far up to this month, Projected for every month); before October as before', async () => {
+    const w = await world();
+    w.app.now = Date.parse('2027-01-15T17:00:00.000Z');
+    const { PIN: pin } = await import('./harness');
+    await w.organizer.call('POST', '/api/admin/login', { pin });
+    const t = async (m: string) => (await w.organizer.call('GET', `/api/admin/money?month=${m}`, undefined, rw)).data.rework;
+    // November 2026: games but none finalized: so far is the membership alone.
+    expect((await t('2026-11')).membershipCents).toBe(3000);
+    expect((await t('2026-11')).yourCostCents).toBe(3000);
+    // September 2026 (before October), no game: $0 as before.
+    expect((await t('2026-09')).membershipCents).toBe(0);
+    // February 2027 (ahead): nothing so far yet, but Projected has the membership.
+    const feb = await t('2027-02');
+    expect(feb.membershipCents).toBe(0);
+    expect(feb.projected.membershipCents).toBe(3000);
+    // The organizer's All time adds every month from October to now (Oct, Nov, Dec at $30 each at least, plus January).
+    await flip(w, 'players-redo-switch', true);
+    const me = (await dash(w)).me;
+    const sum = (await w.organizer.call('GET', `/api/admin/players/${me.id}/summary`)).data;
+    let expected = 0;
+    for (const m of ['2026-10', '2026-11', '2026-12', '2027-01']) expected += (await t(m)).yourCostCents;
+    expect(sum.allTime.spentCents).toBe(expected);
+    expect(expected).toBeGreaterThanOrEqual(4 * 3000);
+  });
+});

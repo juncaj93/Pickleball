@@ -99,6 +99,7 @@ async function main() {
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', (e) => errors.push(e.message));
+    if (process.env.E2E_DEBUG) page.on('console', (m) => /HOLDFIRE/.test(m.text()) && console.log('      ' + m.text().slice(0, 600)));
     const sent = [];
     page.on('request', (r) => r.method() !== 'GET' && r.url().includes('/api/') && sent.push(`${r.method()} ${new URL(r.url()).pathname}`));
     await page.goto(BASE + (opts.url ?? '/admin'));
@@ -194,14 +195,24 @@ async function main() {
     const dlg = page.locator('dialog.pr-sheet[open]');
     await dlg.waitFor();
     await dlg.locator('[data-pr-kv="month-spent"] b').filter({ hasText: '$' }).waitFor();
-    const m = await dlg.evaluate((el) => ({
+    const m = await dlg.evaluate((el) => {
+      const h2 = el.querySelector('.sheet-head h2').getBoundingClientRect();
+      const pen = el.querySelector('[data-pr-edit]').getBoundingClientRect();
+      const x = el.querySelector('.sheet-head [aria-label="Close"]').getBoundingClientRect();
+      const head = el.querySelector('.sheet-head').getBoundingClientRect();
+      return {
+      // Alex, Nov 7: the pencil in a small circle right next to the name; the ✕ alone at the top right, like the edit sheet.
+      penNextToName: pen.left - h2.right >= 0 && pen.left - h2.right <= 16 && Math.abs(pen.top + pen.height / 2 - (h2.top + h2.height / 2)) < 6 && pen.width <= 34,
+      closeRight: head.right - x.right < 20 && x.left - pen.right > 40,
       title: el.querySelector('.sheet-head h2').innerText,
       close: el.querySelectorAll('.sheet-head [aria-label="Close"]').length,
       pen: !!el.querySelector('[data-pr-edit]'),
       cards: [...el.querySelectorAll('[data-pr-card] h4')].map((h) => h.innerText),
       money: [...el.querySelectorAll('[data-pr-card="money"] .pr-kv span')].map((s) => s.innerText),
-    }));
-    assert(m.title === 'Avery' && m.pen && m.close === 0, JSON.stringify(m));
+      };
+    });
+    assert(m.title === 'Avery' && m.pen && m.close === 1, JSON.stringify(m));
+    assert(m.penNextToName && m.closeRight, `pencil next to the name, ✕ alone on the right: ${JSON.stringify(m)}`);
     assert(m.cards.join('|') === 'NOV 2026|MONEY|ALL TIME', m.cards.join('|'));
     assert(m.money.slice(0, 3).join('|') === 'Owes|Held for a game|Credit', m.money.join('|'));
     assert(page.url().endsWith('/admin'), 'still the same screen');
@@ -390,6 +401,7 @@ async function main() {
       // (A sheet that closes with the tap takes a moment; the banner then sits on the page again.)
       await page.waitForTimeout(700);
       await page.locator('[data-banner]').filter({ has: page.locator('.toast-action', { hasText: 'Undo' }) }).last().locator('.toast-action').click();
+      if (process.env.E2E_DEBUG) console.log('      after Undo:', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('[data-banner]')].map((b) => b.innerText + ' @' + b.parentElement.tagName))));
       await page.waitForTimeout(6500);
       const extra = sent.slice(n0).filter((x) => !/\/summary$/.test(x));
       assert(extra.length === 0, `sent: ${extra.join(', ')}`);
@@ -402,6 +414,10 @@ async function main() {
   await undoCase('Mark paid (Money)', async (page) => {
     await tab(page, 'Money');
     await moneyRow(page, 'Kai').getByRole('button', { name: /Mark paid/ }).click();
+  });
+  // Alex, Nov 7: Mark paid on Home (the "Who owes you" / "Mark paid tonight" card) showed no Undo; it has one now.
+  await undoCase('Mark paid (Home, Who owes you / Mark paid tonight)', async (page) => {
+    await page.locator('article[aria-label="Who owes you"] button, article[aria-label="Mark paid tonight"] button', { hasText: 'Mark paid' }).first().click();
   });
   await undoCase('Mark paid (Players sheet)', async (page) => {
     await tab(page, 'Players');
@@ -464,6 +480,32 @@ async function main() {
     await page.getByRole('menuitem', { name: /^Players/ }).click();
     await page.locator('dialog[open] button', { hasText: 'Give spot' }).first().click();
   });
+  await undoCase(
+    'Remove from a game (its own older Undo, now tappable over the open sheet)',
+    async (page) => {
+      const d = await dash();
+      const g = d.sessions.find((s) => !s.state.flags.canceled && Date.parse(s.startsAt) > NOW_MS + 48 * 3600_000 && s.confirmedCount >= 2);
+      let card = page.locator(`article#session-${g.id}`);
+      if (!(await card.count())) {
+        const all = page.locator('button', { hasText: /^Show all/ });
+        if (await all.count()) await all.click();
+        if (!(await card.count())) await page.locator(`div#session-${g.id}`).click();
+      }
+      await card.locator('button[aria-label^="Game menu"]').click();
+      await page.getByRole('menuitem', { name: /^Players/ }).click();
+      await page.locator('dialog[open] button', { hasText: /^Remove$/ }).first().click();
+      await page.locator('dialog[open] button', { hasText: /^Remove$/ }).last().click();
+      // The Undo must be what a finger lands on (the open sheet used to cover it for taps).
+      const undo = page.locator('[data-banner] .toast-action', { hasText: 'Undo' }).last();
+      await page.waitForTimeout(500);
+      if (process.env.E2E_DEBUG) console.log('      banners:', JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('[data-banner]')].map((b) => [b.innerText.slice(0, 30), b.parentElement.tagName, b.parentElement.open, b.matches(':popover-open'), b.getBoundingClientRect().height]))), JSON.stringify(await page.evaluate(() => [...document.querySelectorAll('dialog')].map((d) => [d.open, d.querySelector('h2')?.innerText]))));
+      await undo.waitFor();
+      await page.waitForTimeout(400);
+      const box = await undo.boundingBox();
+      const hit = await page.evaluate(({ x, y }) => !!document.elementFromPoint(x, y)?.closest('.toast-action'), { x: box.x + box.width / 2, y: box.y + box.height / 2 });
+      assert(hit, 'the Undo over the open sheet can be tapped');
+    },
+  );
   await undoCase('Adjust credit', async (page) => {
     await tab(page, 'Players');
     await page.locator('[data-pr-row="Casey"]').click();

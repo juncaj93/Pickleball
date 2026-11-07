@@ -643,9 +643,17 @@ export const PREVIEW_SWITCHES_ON = [
 /** Being built (Zip 13): Players redo, Swap to Alex, Undo on admin toasts. On the preview database; on a local world only when asked. */
 export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_undo_on'] as const;
 
+/**
+ * Rows that are OFF on live (repo records: Alert cards and Seat dots were left off, the four speed rows ship dark). Older local browser tests
+ * need them on, so the list above keeps them; the PREVIEW database leaves them out, so a preview behaves like live (PREVIEW SWITCHES RULE).
+ */
+export const OFF_ON_LIVE = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'] as const;
+
 function switchRows(nowMs: number, zip13: boolean): string {
   const at = new Date(nowMs).toISOString();
-  return [...PREVIEW_SWITCHES_ON, ...(zip13 ? ZIP13_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  // zip13 is only asked for by the preview database (and e2e/zip13.cjs): live's switch list there, plus the three Zip 13 rows.
+  const base = zip13 ? PREVIEW_SWITCHES_ON.filter((t) => !(OFF_ON_LIVE as readonly string[]).includes(t)) : PREVIEW_SWITCHES_ON;
+  return [...base, ...(zip13 ? ZIP13_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */
