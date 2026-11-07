@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 // Each test builds the fake world (a few seconds on a busy machine).
 vi.setConfig({ testTimeout: 60_000 });
+// PB_SPEED_FORCE=1 turns the switch on for every request, "off" included: then only the answers are compared, not the trips.
+const forcedRun = process.env.PB_SPEED_FORCE === '1';
 import { createNodeD1 } from '../dev/nodeD1';
 import { type Counted, countingDb } from '../dev/countingDb';
 import { handleApi } from '../server/app';
@@ -97,7 +99,7 @@ describe('SPEED_FEWER_QUERIES: same answers, byte for byte', () => {
           offTrips += off.trips;
           onTrips += on.trips;
         }
-        expect(onTrips).toBeLessThan(offTrips / 2);
+        if (!forcedRun) expect(onTrips).toBeLessThan(offTrips / 2);
       }, 60_000);
     }
   }
@@ -121,7 +123,7 @@ describe('SPEED_FEWER_QUERIES: trips', () => {
     }
   });
 
-  it('with the Settings rows off, asks the database exactly as many times as main did (the new rows cost nothing)', async () => {
+  it.skipIf(forcedRun)('with the Settings rows off, asks the database exactly as many times as main did (the new rows cost nothing)', async () => {
     // main's counts on this world, measured before Zip 12 (scripts/count-queries.ts): group 47, version 21, dashboard 81, money 27.
     const w = await world(Date.parse('2026-11-08T17:00:00.000Z'), true);
     const ck = w.phones.Casey;
@@ -140,7 +142,7 @@ describe('SPEED_FEWER_QUERIES: trips', () => {
     }
   });
 
-  it('the Settings row on: every phone gets fewer trips, with the same answer', async () => {
+  it.skipIf(forcedRun)('the Settings row on: every phone gets fewer trips, with the same answer', async () => {
     const w = await world(MOMENTS.weekend, true);
     const ck = w.phones.Indy;
     await w.call('GET', '/api/group', ck);
@@ -213,7 +215,7 @@ describe('SPEED_FEWER_QUERIES: the wrapper never answers from before a write', (
     expect(await ask()).toBeNull();
   });
 
-  it('kill switch off: the request keeps its own database (no wrapper at all)', () => {
+  it.skipIf(forcedRun)('kill switch off: the request keeps its own database (no wrapper at all)', () => {
     const raw = createNodeD1(':memory:');
     const ctx = makeCtx(new Request('https://x.example/api/group', { headers: ON }), { DB: raw, SPEED_FEWER_QUERIES: 'off' }, 0);
     const out = withFewerQueries(ctx);
