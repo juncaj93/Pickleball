@@ -5,6 +5,7 @@ import { api, ApiError, isDemo } from '../lib';
 import { useToast } from '../ui';
 import { canMove } from '../motion';
 import '../alert-cards.css';
+import { AcIcon, AcTitle } from '../AlertCard';
 
 /**
  * The one question after I'm in when a cash out is pending and the player's
@@ -71,10 +72,9 @@ export function CashOutPrompt({
     return (
       <div className={`cashout-prompt ac ac-blue ac-stacked${leaving ? ' m-leaving' : ''}`} role="dialog" aria-modal="false" aria-labelledby="cashout-q" data-cashout-prompt data-alert-card="blue">
         <div className="ac-row">
+          <AcIcon name="credit" />
           <div className="ac-text">
-            <p id="cashout-q" className="ac-title">
-              Use your {formatPrice(cents)} cash out for this game?
-            </p>
+            <AcTitle id="cashout-q">Use your {formatPrice(cents)} cash out for this game?</AcTitle>
             <div className="ac-sub">
               You asked {card.organizer} to cash out {formatPrice(card.requestCents)}
             </div>

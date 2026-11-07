@@ -150,6 +150,7 @@ function TimeBar({ s, tz, onChanged, onShowAll, card }: { s: PlayerSessionView; 
       <AlertCard
         as="div"
         tone="blue"
+        icon="clock"
         role="region"
         label={`${lines.title}. ${lines.was}.`}
         className={`ts-ac${state === 'gone' ? ' ts-gone' : ''}`}

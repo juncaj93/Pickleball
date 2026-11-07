@@ -178,6 +178,8 @@ export interface GroupView {
   directLoad?: boolean;
   /** Zip 12 "Show last screen at once" (server/speed.ts): this phone keeps a copy of what it shows (src/lastScreen.ts). Missing: nothing is kept, and an old copy is thrown away. */
   lastScreen?: boolean;
+  /** "Seat dots" is on for this screen (server/seatDots.ts): every empty seat a dashed ring. Missing: exactly as before. */
+  seatDots?: boolean;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -521,6 +523,9 @@ export interface AdminDashboard {
   lastScreenAdmin?: boolean;
   /** Settings > Feature switches > "Instant admin" is on (for everyone). */
   speedLastScreenAdminForAll?: boolean;
+  /** "Seat dots" is on for this screen / Settings row is on (for everyone). Display only. */
+  seatDots?: boolean;
+  seatDotsForAll?: boolean;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

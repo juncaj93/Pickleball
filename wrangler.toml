@@ -150,6 +150,10 @@ SPEED_LAST_SCREEN = "on"
 # Zip 12 step C "Instant admin": the organizer phone draws its saved copy of the dashboard at once (money dimmed, every action held). Allowed here;
 # who gets it is Settings > Feature switches > "Instant admin" (off at ship), plus /admin?lastscreenadmin=on. "off" = the kill switch.
 SPEED_LAST_SCREEN_ADMIN = "on"
+# "Seat dots" (shared/seatDots.ts): every EMPTY seat circle on the site (game cards, organizer cards, the Want in alert) becomes a slightly grayed
+# dashed ring; filled balls stay exactly as they are. Works with Alert cards on or off. Display only. "on" here only ALLOWS it; who gets it is
+# Settings > Feature switches > "Seat dots" (off at ship = nobody), plus a phone opened once with ?seatdots=on. "off" = the kill switch. Needs a deploy.
+SEAT_DOTS = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -190,6 +194,7 @@ SPEED_FEWER_QUERIES = "on"
 SPEED_DIRECT_LOAD = "on"
 SPEED_LAST_SCREEN = "on"
 SPEED_LAST_SCREEN_ADMIN = "on"
+SEAT_DOTS = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

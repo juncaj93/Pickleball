@@ -176,6 +176,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Adjust credit" on`;
     case 'adjust_credit_off':
       return `${who} switched "Adjust credit" off`;
+    case 'seat_dots_on':
+      return `${who} switched "Seat dots" on`;
+    case 'seat_dots_off':
+      return `${who} switched "Seat dots" off`;
     case 'alert_cards_on':
       return `${who} switched "Alert cards" on`;
     case 'alert_cards_off':

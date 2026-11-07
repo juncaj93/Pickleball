@@ -1,16 +1,147 @@
-// Zip 11, "Alert cards" (ALERT_CARDS, shared/zip11.ts). The one action-card look ("style B") every alert on the player screen and the
-// organizer Home uses while the switch is on: a slim tinted card with a thin matching border, no icon, a bold title, an optional gray
-// sub line, and ONE button on the right. Two or more choices go under the text (`actions`). A card that is fine to ignore gets a small
-// X (`onX`). Link-style extras (I paid, Use credit) sit under the title in the card's color (`links`).
+// Zip 11, "Alert cards" (ALERT_CARDS, shared/zip11.ts), redone Nov 7 ("ALERTS_A_final"). The one card every alert on the player screen and
+// the organizer Home uses while the switch is on: drawn like a game card (white surface, thin border, the same corners and fonts), a small
+// round icon badge on the left tinted by its color, a bold title, an optional gray line, and ONE button on the right. Two or more choices go
+// under the text (`actions`). A card that is fine to ignore gets a small round X (`onX`). Link-style extras (I paid, Use credit) sit under the
+// title in the card's color (`links`). The pickleballs are the game card's own (`AcBalls` draws them with SpotDots).
 // Only drawn with the switch on; with it off every alert keeps its old markup, untouched. Styles: src/alert-cards.css.
-import type { ReactNode } from 'react';
+import { type ReactNode, type RefObject, useLayoutEffect, useRef } from 'react';
+import { SpotDots } from './ui';
 import './alert-cards.css';
 
-/** The color system (Zip 7): green in / paid / join, amber owes, blue links, credit and booking, purple texting, gray neutral and canceled, red deadlines. */
+/** The color system (Zip 7): green in / paid / join, amber owes, blue links, credit, booking and changes, purple texting, gray neutral and canceled, red deadlines. */
 export type AcTone = 'green' | 'amber' | 'blue' | 'purple' | 'gray' | 'red';
+
+/** The badge icons (the mock's set, plus a calendar, a message, a person and an info mark for the organizer cards). */
+export type AcIconName = 'join' | 'owe' | 'ok' | 'credit' | 'clock' | 'stop' | 'text' | 'court' | 'person' | 'info';
+
+const ICON_PATHS: Record<AcIconName, ReactNode> = {
+  join: (
+    <>
+      <circle cx="9" cy="8" r="3.4" />
+      <path d="M3 20c0-3.5 2.7-5.6 6-5.6s6 2.1 6 5.6" />
+      <path d="M19 7v6M16 10h6" />
+    </>
+  ),
+  owe: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M14.5 9.2c-.6-.8-1.5-1.2-2.5-1.2-1.4 0-2.5.7-2.5 1.9 0 2.6 5 1.4 5 4 0 1.2-1.1 2-2.6 2-1.1 0-2.1-.5-2.7-1.4M12 6.2V8M12 16v1.8" />
+    </>
+  ),
+  ok: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12.5l2.7 2.7L16 9.5" />
+    </>
+  ),
+  credit: (
+    <>
+      <rect x="3" y="6" width="18" height="12" rx="3" />
+      <circle cx="12" cy="12" r="2.6" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.2 2" />
+    </>
+  ),
+  stop: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M7 7l10 10" />
+    </>
+  ),
+  text: <path d="M5 5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H10l-4.5 3.5V17H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" />,
+  court: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15" rx="2.5" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" />
+    </>
+  ),
+  person: (
+    <>
+      <circle cx="12" cy="8.5" r="3.6" />
+      <path d="M5 20c0-3.8 3.1-6 7-6s7 2.2 7 6" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5.5M12 7.6v.2" />
+    </>
+  ),
+};
+
+/** Each color's usual badge, when a card does not name its own. */
+const TONE_ICON: Record<AcTone, AcIconName> = { green: 'ok', amber: 'owe', blue: 'credit', purple: 'text', gray: 'info', red: 'stop' };
+
+/** The round badge on the left of a card (also used by the cards that draw their own rows). */
+export function AcIcon({ name }: { name: AcIconName }) {
+  return (
+    <span className="ac-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24">{ICON_PATHS[name]}</svg>
+    </span>
+  );
+}
+
+/** The smallest a title gets before it is allowed to wrap (screens 360 px and wider). */
+const FIT_MIN_PX = 13.5;
+/** Below this screen width a long title wraps to two balanced lines instead of shrinking. */
+const FIT_FROM_WIDTH = 360;
+
+/**
+ * Keeps a title on one line on screens 360 px and wider: when it would wrap, the font steps down by half a pixel (no lower than 13.5 px).
+ * On a narrower screen it keeps its size and wraps into two balanced lines (CSS text-wrap: balance). Look only; re-checked when the card
+ * changes size or its words change.
+ */
+export function useFitTitle(ref: RefObject<HTMLElement | null>) {
+  // What the last fit was done for: the words and the room. A redraw with the same words and width does nothing (no layout work).
+  const done = useRef<{ text: string | null; width: number }>({ text: null, width: -1 });
+  const fit = (el: HTMLElement) => {
+    const room = el.parentElement?.offsetWidth ?? 0;
+    if (done.current.text === el.textContent && Math.abs(done.current.width - room) < 0.5) return;
+    done.current = { text: el.textContent, width: room };
+    el.style.fontSize = '';
+    if (window.innerWidth < FIT_FROM_WIDTH) return;
+    // offsetHeight is the laid-out size (a card that is still scaling in its entrance animation measures right).
+    const lines = () => el.offsetHeight / (parseFloat(getComputedStyle(el).lineHeight) || 1);
+    let size = parseFloat(getComputedStyle(el).fontSize);
+    while (lines() > 1.5 && size - 0.5 >= FIT_MIN_PX) {
+      size -= 0.5;
+      el.style.fontSize = `${size}px`;
+    }
+  };
+  // Every redraw: cheap unless the words changed.
+  useLayoutEffect(() => {
+    if (ref.current) fit(ref.current);
+  });
+  // The room changes (rotation, a resized window): fit again.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const parent = el?.parentElement;
+    if (!el || !parent || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => fit(el));
+    ro.observe(parent);
+    return () => ro.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ref]);
+}
+
+/** A title that stays on one line (see useFitTitle), for the cards that draw their own rows. */
+export function AcTitle({ as: Tag = 'p', className = '', children, id }: { as?: 'p' | 'h2' | 'h3'; className?: string; children: ReactNode; id?: string }) {
+  const ref = useRef<HTMLHeadingElement | null>(null);
+  useFitTitle(ref);
+  return (
+    <Tag ref={ref} className={`ac-title${className ? ` ${className}` : ''}`} id={id}>
+      {children}
+    </Tag>
+  );
+}
 
 export function AlertCard({
   tone,
+  icon,
   title,
   titleId,
   titleAs = 'p',
@@ -29,6 +160,8 @@ export function AlertCard({
   data,
 }: {
   tone: AcTone;
+  /** The badge on the left; the color's usual one when left out. */
+  icon?: AcIconName;
   title: ReactNode;
   titleId?: string;
   /** The title's element: a heading where the old card had one (h2, h3), so screen readers can still jump between them. */
@@ -56,14 +189,14 @@ export function AlertCard({
   data?: Record<string, string | boolean | undefined>;
 }) {
   const Tag = as;
-  const Title = titleAs;
   return (
     <Tag className={`ac ac-${tone}${actions ? ' ac-stacked' : ''}${className ? ` ${className}` : ''}`} data-alert-card={tone} role={role} aria-label={label} {...data}>
       <div className="ac-row">
+        <AcIcon name={icon ?? TONE_ICON[tone]} />
         <div className="ac-text">
-          <Title className="ac-title" id={titleId}>
+          <AcTitle as={titleAs} id={titleId}>
             {title}
-          </Title>
+          </AcTitle>
           {sub !== undefined && sub !== null && sub !== '' && sub !== false && <div className={`ac-sub${subTone ? ` ac-sub-${subTone}` : ''}`}>{sub}</div>}
           {links && <div className="ac-links">{links}</div>}
         </div>
@@ -76,25 +209,25 @@ export function AlertCard({
   );
 }
 
-/** The small X on a card that is fine to ignore: 44 px to tap, a small mark to see. */
+/** The small round X on a card that is fine to ignore: 44 px to tap, a small mark to see. */
 export function AcX({ label, onX }: { label: string; onX: () => void }) {
   return (
     <button type="button" className="ac-x" aria-label={`Dismiss: ${label}`} data-dismiss onClick={onX}>
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
         <path d="M6 6l12 12M18 6 6 18" />
       </svg>
     </button>
   );
 }
 
-/** The pickleball circles as a sub line ("Tuesday needs 1 more"): one filled ball per player in, empty circles up to 4. */
-export function AcBalls({ inCount, of = 4 }: { inCount: number; of?: number }) {
-  const slots = Math.max(of, inCount);
+/**
+ * The pickleballs as a sub line ("Tuesday needs 1 more"): the game card's own SpotDots, so the balls are the same component (Pickleball) and
+ * the empty seats are the same `.dot` the game cards draw (and turn into dashed rings with Seat dots). One ball per player in, empty seats up to 4.
+ */
+export function AcBalls({ inCount }: { inCount: number }) {
   return (
-    <span className="ac-balls" role="img" aria-label={`${inCount} in${inCount < of ? `, ${of - inCount} more needed` : ''}`}>
-      {Array.from({ length: slots }, (_, i) => (
-        <span key={i} className={i < inCount ? 'ac-ball' : 'ac-ball ac-empty'} aria-hidden="true" />
-      ))}
+    <span className="ac-seats">
+      <SpotDots names={Array.from({ length: Math.max(0, inCount) }, () => '')} />
     </span>
   );
 }

@@ -196,6 +196,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (speedTest('directload')) headers[DIRECT_LOAD_HEADER] = 'on';
   if (speedTest('lastscreen')) headers[LAST_SCREEN_HEADER] = 'on';
   if (speedTest('lastscreenadmin')) headers[LAST_SCREEN_ADMIN_HEADER] = 'on';
+  // Seat dots private test switch for this phone (?seatdots=on; also on /admin, see server/seatDots.ts).
+  if (seatDotsTest()) headers['X-Seat-Dots'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -702,6 +704,16 @@ if (typeof window !== 'undefined') {
     if (want === 'on') storageSet(`pb_${name}`, 'on');
     else if (want === 'off') storageRemove(`pb_${name}`);
   }
+}
+
+/** "Seat dots" on this phone only (?seatdots=on, =off to stop; works on /admin too). Remembered in this browser. Look only. */
+export function seatDotsTest(): boolean {
+  return storageGet('pb_seatdots') === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('seatdots');
+  if (want === 'on') storageSet('pb_seatdots', 'on');
+  else if (want === 'off') storageRemove('pb_seatdots');
 }
 
 /**

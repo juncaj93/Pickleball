@@ -146,6 +146,7 @@ route('PUT', '/api/admin/speed-fewer-queries-switch', admin.setSpeedFewerQueries
 route('PUT', '/api/admin/speed-direct-load-switch', admin.setSpeedDirectLoadSwitch);
 route('PUT', '/api/admin/speed-last-screen-switch', admin.setSpeedLastScreenSwitch);
 route('PUT', '/api/admin/speed-last-screen-admin-switch', admin.setSpeedLastScreenAdminSwitch);
+route('PUT', '/api/admin/seat-dots-switch', admin.setSeatDotsSwitch);
 route('PUT', '/api/admin/tonight-glow-switch', admin.setTonightGlowSwitch);
 route('PUT', '/api/admin/color-cleanup-switch', admin.setColorCleanupSwitch);
 route('PUT', '/api/admin/player-cards-switch', admin.setPlayerCardsSwitch);

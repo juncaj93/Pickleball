@@ -1,0 +1,27 @@
+/* "Seat dots" (SEAT_DOTS). Every rule here sits under html[data-seat-dots] (set by src/zip7.ts useZip7Root while the switch is on for the
+ * screen), so with the switch off nothing here applies and every empty seat looks exactly as before.
+ *
+ * Every empty seat on the site is the one `.dot` that SpotDots draws (src/ui.tsx): the game cards, the organizer cards and rows, and the
+ * alert cards (they draw their seats with SpotDots too). Here it becomes a slightly grayed dashed ring of the same size, so nothing moves.
+ * The ring is a mask over the seat's own box: its color is a token (light and dark), its 10 even dashes come from the SVG below.
+ * Filled balls (the Pickleball component) are not touched. */
+
+html[data-seat-dots] {
+  /* The game card's muted ink at 70 percent, as in the mock: a soft gray ring on the white card, a soft light ring on the dark card. */
+  --sd-ring: rgb(74 79 70 / 70%);
+}
+@media (prefers-color-scheme: dark) {
+  html[data-seat-dots]:not([data-theme='light']) {
+    --sd-ring: rgb(184 191 178 / 70%);
+  }
+}
+html[data-seat-dots][data-theme='dark'] {
+  --sd-ring: rgb(184 191 178 / 70%);
+}
+
+html[data-seat-dots] .dots > .dot.dot {
+  border-color: transparent;
+  background-color: var(--sd-ring);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='9' fill='none' stroke='%23000' stroke-width='1.9' pathLength='40' stroke-dasharray='2.4 1.6'/%3E%3C/svg%3E") center / 100% 100% no-repeat border-box;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='10' r='9' fill='none' stroke='%23000' stroke-width='1.9' pathLength='40' stroke-dasharray='2.4 1.6'/%3E%3C/svg%3E") center / 100% 100% no-repeat border-box;
+}

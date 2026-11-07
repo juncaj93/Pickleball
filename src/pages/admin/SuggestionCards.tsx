@@ -69,6 +69,7 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
           <AlertCard
             key={c.key}
             tone="purple"
+            icon="text"
             label={`${KIND_LABEL[c.kind]}: ${c.when}`}
             data={{ 'data-suggest': c.kind, 'data-session': c.sessionId }}
             title={KIND_LABEL[c.kind]}
