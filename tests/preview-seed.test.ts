@@ -101,7 +101,7 @@ describe('fake-data preview seed', () => {
     expect(live.some((r) => r.paymentStatus === 'unpaid' && r.owesCents === 1400)).toBe(true); // owes $14
     expect(live.some((r) => r.paymentStatus === 'unpaid' && r.creditCents === 300 && r.owesCents === 1100)).toBe(true); // part credit
     const left = (dash.creditLedger as any[]).filter((l) => l.balanceCents > 0).map((l) => l.balanceCents).sort((a, b) => a - b);
-    expect(left).toEqual([300, 300, 300, 1400, 1400]); // Casey $3, Harper $14, Gray $14 (Gray's is reserved by the cash-out), Lane $3 and Morgan $3 (back from the late-canceled "Fee split $11" game)
+    expect(left).toEqual([300, 300, 800, 1400, 1400]); // Casey $8 ($3 and the Zip 11 +$5 adjustment), Harper $14, Gray $14 (Gray's is reserved by the cash-out), Lane $3 and Morgan $3 (back from the late-canceled "Fee split $11" game)
     expect((dash.refundRequests as any[]).map((r) => r.cents)).toEqual([1400]); // cash-out pending
     expect((dash.paymentClaims as any[]).length).toBe(1); // an "I paid" the organizer has not answered
   });
@@ -181,8 +181,8 @@ describe('fake-data preview seed', () => {
     for (const m of old) expect(counts[m], m).toBeGreaterThanOrEqual(2);
     for (const m of old) expect(counts[m], m).toBeLessThanOrEqual(4);
     expect(Object.keys(counts).sort()[0]).toBe('2025-12');
-    // Credit left is unchanged by the extra games, except the $3 Lane and Morgan got back from the late-canceled "Fee split $11" game.
-    expect((dash.creditLedger as any[]).filter((l) => l.balanceCents > 0).map((l) => l.balanceCents).sort((a, b) => a - b)).toEqual([300, 300, 300, 1400, 1400]);
+    // Credit left is unchanged by the extra games, except Casey's +$5 adjustment (Zip 11) and the $3 Lane and Morgan got back from the late-canceled "Fee split $11" game.
+    expect((dash.creditLedger as any[]).filter((l) => l.balanceCents > 0).map((l) => l.balanceCents).sort((a, b) => a - b)).toEqual([300, 300, 800, 1400, 1400]);
     // Still passes every live health check.
     const row = db.raw.prepare(HEALTH).get() as Record<string, number>;
     expect(Object.entries(row).filter(([k, n]) => !k.startsWith('info_') && Number(n) !== 0)).toEqual([]);

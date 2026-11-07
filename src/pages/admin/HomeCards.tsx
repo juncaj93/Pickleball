@@ -9,6 +9,8 @@ import type { AdminCtx } from '../Admin';
 import { tapsHeld, useTapsHeld } from './tapGuard';
 import { useAction } from './action';
 import '../../finalize.css';
+import { AlertCard } from '../../AlertCard';
+import { splitFirst } from '../../../shared/zip11';
 import { type GamePrice, gameFinalPreview, viewPrice } from '../../../shared/gameLength';
 
 const CREDIT_NOTE = 'Pickleball credit refund';
@@ -48,6 +50,52 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           press: true,
           what: 'Finalize',
         });
+  // Zip 11, Alert cards: a green (after the game) card. The same title, the same preview line, the same buttons under it.
+  if (ctx.d.alertCards === true) {
+    return (
+      <article className="ac ac-green ac-stacked finalize-card-ac" aria-label={`Finalize ${day}`} data-finalize={s.id} data-alert-card="green" tabIndex={-1}>
+        <div className="ac-row">
+          <div className="ac-text">
+            <p className="ac-title">
+              {day} · {n} in
+            </p>
+            <div className="ac-sub" data-finalize-preview>
+              {under ? `Only ${n} in. Cancel it (everyone paid gets credit) or finalize anyway at ${formatPrice(price)} each.` : gameFinalPreview(gp, n, formatPrice)}
+            </div>
+            {unconfirmed && (
+              <div className="ac-sub ac-sub-amber" role="note" data-unconfirmed-paid>
+                {unconfirmed}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="ac-actions">
+          {under ? (
+            <>
+              <button className="ac-btn ac-out" data-ac-tone="red" disabled={busy} onClick={() => !tapsHeld() && ctx.open('cancel', s.id)}>
+                Cancel session
+              </button>
+              <button className="ac-btn ac-out" disabled={busy} onClick={() => finalize(inNow.map((r) => r.playerId))}>
+                Finalize anyway
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="ac-btn" disabled={busy} data-everyone-played onClick={() => finalize(inNow.map((r) => r.playerId))}>
+                {saving ? 'Saving…' : 'Everyone played'}
+              </button>
+              <button className="ac-btn ac-out" disabled={busy} data-change-played onClick={() => !tapsHeld() && setChanging(true)}>
+                Change who played
+              </button>
+            </>
+          )}
+        </div>
+        <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
+          {changing && <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />}
+        </Sheet>
+      </article>
+    );
+  }
   return (
     <article className="card stack finalize-card" aria-label={`Finalize ${day}`} data-finalize={s.id} tabIndex={-1}>
       <div>
@@ -178,6 +226,46 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
       patch: (d) => ({ ...d, refundRequests: d.refundRequests.filter((x) => x.id !== r.id) }),
       what: action === 'refunded' ? 'Mark refunded' : 'Not now',
     });
+  // Zip 11, Alert cards: a blue (credit) card, the same three buttons under the text (Venmo, then Mark refunded once it was tapped, Not now).
+  if (ctx.d.alertCards === true) {
+    return (
+      <AlertCard
+        tone="blue"
+        label={`${r.name} requested a refund`}
+        data={{ 'data-refund-request': r.name }}
+        title={`${r.name} requested a refund of ${formatPrice(r.cents)}`}
+        sub={pay.addressed ? 'Cash out request' : `Cash out request · No Venmo saved for ${r.name}: pick them in Venmo.`}
+        actions={
+          <>
+            <a
+              className="ac-btn"
+              href={pay.url}
+              data-app-href={pay.appUrl}
+              data-refund-venmo
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Refund ${r.name} ${formatPrice(r.cents)} with Venmo`}
+              onClick={(e) => {
+                openVenmo(e, pay);
+                storageSet(`pb_refund_request_opened_${r.id}`, '1');
+                bump((x) => x + 1);
+              }}
+            >
+              Venmo
+            </a>
+            {tapped && (
+              <button className="ac-btn ac-out" disabled={busy} data-mark-refunded onClick={() => act('refunded', `${r.name} refunded`)}>
+                Mark refunded
+              </button>
+            )}
+            <button className="ac-btn ac-out" disabled={busy} data-not-now onClick={() => act('not_now', 'Put off for now')}>
+              Not now
+            </button>
+          </>
+        }
+      />
+    );
+  }
   return (
     <article className="card stack refund-request" aria-label={`${r.name} requested a refund`} data-refund-request={r.name}>
       <h3>
@@ -227,6 +315,29 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
       patch: (d) => ({ ...d, paymentClaims: (d.paymentClaims ?? []).filter((x) => !(x.sessionId === c.sessionId && x.playerId === c.playerId)) }),
       what: paid ? 'Paid' : "Didn't pay",
     });
+  // Zip 11, Alert cards: an amber (owes) card: the same words as a title and the rest, Paid and Didn't pay under it.
+  if (ctx.d.alertCards === true) {
+    const { title, rest } = splitFirst(paymentClaimText(c.name, c.cents, c.why, c.startsAt, ctx.d.group.timezone));
+    return (
+      <AlertCard
+        tone="amber"
+        label={`${c.name} payment not confirmed`}
+        data={{ 'data-payment-claim': c.name }}
+        title={title}
+        sub={rest || undefined}
+        actions={
+          <>
+            <button className="ac-btn" disabled={busy} data-claim-paid onClick={() => answer(true, `${c.name}'s ${formatPrice(c.cents)} is credit now`)}>
+              Paid
+            </button>
+            <button className="ac-btn ac-out" disabled={busy} data-claim-not-paid onClick={() => answer(false, 'Cleared')}>
+              Didn't pay
+            </button>
+          </>
+        }
+      />
+    );
+  }
   return (
     <article className="card stack payment-claim" aria-label={`${c.name} payment not confirmed`} data-payment-claim={c.name}>
       <h3>{paymentClaimText(c.name, c.cents, c.why, c.startsAt, ctx.d.group.timezone)}</h3>

@@ -8,7 +8,7 @@ import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFall
 import { creditBackNote } from '../../shared/pricing';
 import { formatTime, DEFAULT_TIMEZONE, playerDay, suggestDay, wantInSubline, wantInTitle, formatMonthDay, formatShortDate, cardTime, cardTimeText, formatTimeRange, formatWeekday, localParts, ordinal, weekTier, type WeekTier } from '../../shared/time';
 import { creditHintText, creditUsedMessage, droppedText, joinedCreditText } from '../../shared/credit';
-import { adjustedPlayerLine, latestAdjustment } from '../../shared/adjustCredit';
+import { adjustedPlayerLine, latestAdjustment, signedPrice } from '../../shared/adjustCredit';
 import { feeClearedNotice, lateDropDialogText, lateDropToast, lateFeeLabel } from '../../shared/lateFees';
 import { MIN_PLAYERS } from '../../shared/spots';
 import { CashOutPrompt } from './CashOutPrompt';
@@ -25,6 +25,7 @@ import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
+import { AcBalls, AlertCard } from '../AlertCard';
 import { tileDay, type TileDay } from '../../shared/zip7';
 import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
 import { courtStatus } from '../../shared/court';
@@ -190,7 +191,6 @@ const GOOD_NEWS = {
 export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, showDue = !noCourt): string {
   // A really full game has a real waitlist, court or no court: say so.
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
-  if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
   // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
   return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
@@ -350,11 +350,13 @@ export function PlayerHome({
     rememberCelebrated(plan.next, new Set(g.sessions.map((x) => x.id)));
     const cash = planCashOut(g.credit.history, cashOutSeen(), Date.parse(g.now));
     if (cash.show) rememberCashOuts(cash.next);
-    const notices: { msg: string; ball?: boolean }[] = [];
-    if (cash.show) notices.push({ msg: `${g.group.organizerName ?? 'The organizer'} sent your ${formatPrice(cash.show.cents)}` });
+    const notices: { msg: string; ball?: boolean; ok?: boolean }[] = [];
+    if (cash.show) notices.push({ msg: `${g.group.organizerName ?? 'The organizer'} sent your ${formatPrice(cash.show.cents)}`, ...(g.alertCards === true ? { ok: true } : {}) });
     if (plan.now.length) notices.push({ msg: `Game on! ${plan.now[0].confirmed.length} in`, ball: true });
+    // Zip 11, Alert cards: "Alex sent your $10" carries an OK (it only closes the banner, which still goes by itself).
+    const optsOf = (n: { ball?: boolean; ok?: boolean }) => (n.ok ? { ball: n.ball, action: { label: 'OK', onClick: () => {} } } : { ball: n.ball });
     // Not cleaned up on purpose: the memory above is already saved, so a repeat of this effect must not cancel them.
-    notices.forEach((n, i) => (i === 0 ? toast(n.msg, 'ok', { ball: n.ball }) : setTimeout(() => toast(n.msg, 'ok', { ball: n.ball }), i * NOTICE_GAP_MS)));
+    notices.forEach((n, i) => (i === 0 ? toast(n.msg, 'ok', optsOf(n)) : setTimeout(() => toast(n.msg, 'ok', optsOf(n)), i * NOTICE_GAP_MS)));
     const first = firstPlan.current;
     firstPlan.current = false;
     if (plan.now.length && !(motionOn() && first)) {
@@ -364,7 +366,7 @@ export function PlayerHome({
     }
   }, [g, switching, viewAs, toast]);
   // "Use the $10 you asked to cash out for this game?" after I'm in, only when it matters (the server decides).
-  const [cashOut, setCashOut] = useState<{ sessionId: string; cents: number } | null>(null);
+  const [cashOut, setCashOut] = useState<{ sessionId: string; cents: number; requestCents?: number } | null>(null);
   /** My own tap on I'm in / Yes: "Game on!" when it completed the 4th player, else "You're in". */
   const joinToast = useCallback(
     (sessionId: string, before: number, res: JoinResponse, noCourt = false) => {
@@ -380,7 +382,7 @@ export function PlayerHome({
         }
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
-      if (offer) return setCashOut({ sessionId, cents: offer.cents });
+      if (offer) return setCashOut({ sessionId, cents: offer.cents, requestCents: offer.requestCents });
       toast(joinedText(res, noCourt, flatOfGame(g, sessionId), showDue));
     },
     [toast, markCelebrated, burst, g, g?.payAlways],
@@ -499,7 +501,29 @@ export function PlayerHome({
   return (
     <InstantContext.Provider value={instant.store}>
       {/* "View as...": a small bar of its own above the player's real screen. */}
-      {viewAs && (
+      {viewAs && g?.alertCards === true && (
+        <div className="demo-bars">
+          {topBar}
+          {/* Zip 11, Alert cards: the same bar, drawn as a gray card with Exit on the right. */}
+          <div className="viewas-banner ac-viewas" role="region" aria-label="Viewing as a player">
+            <AlertCard
+              as="div"
+              tone="gray"
+              title={
+                <>
+                  Viewing as <strong>{viewAs.name}</strong>
+                </>
+              }
+              action={
+                <button type="button" className="ac-btn ac-out" onClick={onExit}>
+                  Exit
+                </button>
+              }
+            />
+          </div>
+        </div>
+      )}
+      {viewAs && g?.alertCards !== true && (
         <div className="demo-bars">
           {topBar}
           <div className="viewas-banner" role="region" aria-label="Viewing as a player">
@@ -580,13 +604,28 @@ export function PlayerHome({
             <FeeNotices g={view!} />
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
             {/* The organizer's hand adjustment to this player's credit (recent ones): always told, even with no pay card and no credit chip (credit taken to $0). */}
-            {view!.payDue.length === 0 && recentAdjustment && (
+            {view!.payDue.length === 0 && recentAdjustment && g.alertCards === true && <AdjustedCard adj={recentAdjustment} />}
+            {view!.payDue.length === 0 && recentAdjustment && g.alertCards !== true && (
               <p className="credit-adjusted" data-adjust-note data-adjust-home>
                 <b>{adjustedPlayerLine(recentAdjustment.deltaCents)}</b>
                 {recentAdjustment.note && <span>{recentAdjustment.note}</span>}
               </p>
             )}
-            {answered ? (
+            {answered && g.alertCards === true ? (
+              <AlertCard
+                as="section"
+                tone="green"
+                label="Your answer"
+                title={answered.text}
+                sub={`${formatShortDate(answered.startsAt, tz)} · ${cardTimeText(answered.startsAt, answered.endsAt, tz, g.group.usualMinutes)}`}
+                data={{ 'data-suggest-answer': true }}
+                action={
+                  <button type="button" className="ac-btn ac-out" onClick={() => setAnswered(null)}>
+                    Done
+                  </button>
+                }
+              />
+            ) : answered ? (
               <section className="card stack suggest" aria-label="Your answer">
                 <h2>{answered.text}</h2>
                 <p className="muted small">
@@ -674,7 +713,16 @@ export function PlayerHome({
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
         {plain && !viewAs && pickName && <OrganizerLink />}
       </main>
-      {cashOut && <CashOutPrompt key={cashOut.sessionId} sessionId={cashOut.sessionId} cents={cashOut.cents} onClose={() => setCashOut(null)} onChanged={load.reload} />}
+      {cashOut && (
+        <CashOutPrompt
+          key={cashOut.sessionId}
+          sessionId={cashOut.sessionId}
+          cents={cashOut.cents}
+          onClose={() => setCashOut(null)}
+          onChanged={load.reload}
+          {...(g?.alertCards === true ? { card: { requestCents: cashOut.requestCents ?? cashOut.cents, organizer: firstNameOf(g.group.organizerName) } } : {})}
+        />
+      )}
       {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} nowIso={g.now} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </InstantContext.Provider>
   );
@@ -881,6 +929,50 @@ function AddMyName({ onPick, onDone, onBack }: { onPick: (id: string) => Promise
   );
 }
 
+/** "Alex" from the organizer's saved name (the first word), or "the organizer". */
+function firstNameOf(name: string | null | undefined): string {
+  return (name ?? '').trim().split(/\s+/)[0] || 'the organizer';
+}
+
+/** Hand adjustments to this player's credit this phone closed with the X (Zip 11, Alert cards). Remembered on this phone only. */
+const ADJUST_SEEN_KEY = 'pb_adjust_seen';
+function readAdjustSeen(): string[] {
+  try {
+    const v = JSON.parse(storageGet(ADJUST_SEEN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Zip 11, Alert cards: "Credit adjusted: +$5" with Alex's reason under it, in blue (credit), and a small X. The X hides this one
+ * adjustment on this phone (a newer one shows again); without the switch the line shows as before, with no X.
+ */
+function AdjustedCard({ adj }: { adj: { deltaCents: number; note: string; at: string } }) {
+  const key = `${adj.at}:${adj.deltaCents}`;
+  const [seen, setSeen] = useState<string[]>(readAdjustSeen);
+  if (seen.includes(key)) return null;
+  return (
+    <AlertCard
+      tone="blue"
+      title={`Credit adjusted: ${signedPrice(adj.deltaCents)}`}
+      sub={adj.note || undefined}
+      data={{ 'data-adjust-note': true, 'data-adjust-home': true }}
+      onX={() => {
+        const next = [...readAdjustSeen().filter((x) => x !== key), key].slice(-50);
+        try {
+          storageSet(ADJUST_SEEN_KEY, JSON.stringify(next));
+        } catch {
+          /* it simply shows again next time */
+        }
+        setSeen(next);
+      }}
+      xLabel="Credit adjusted"
+    />
+  );
+}
+
 /** The ids of cleared-debt notices this phone dismissed (shared/lateFees.ts feeClearedNotice). */
 const FEE_SEEN_KEY = 'pb_fee_notices_seen';
 function readFeeSeen(): string[] {
@@ -910,6 +1002,32 @@ function FeeNotices({ g }: { g: GroupView }) {
     }
     setSeen(next);
   };
+  // Zip 11, Alert cards: "You no longer owe $14" with "Someone took your Tue, Nov 3 spot" under it, and Dismiss (same memory).
+  if (g.alertCards === true) {
+    return (
+      <>
+        {list.map((n) => {
+          const day = formatShortDate(n.startsAt, tz);
+          const fee = formatPrice(n.feeCents ?? g.group.priceCents);
+          const credit = n.creditCents > 0 ? formatPrice(n.creditCents) : null;
+          return (
+            <AlertCard
+              key={n.id}
+              tone="blue"
+              title={credit ? `Your ${credit} is back as credit` : `You no longer owe ${fee}`}
+              sub={n.why === 'sub' ? `Someone took your ${day} spot` : `For ${day}`}
+              data={{ 'data-fee-notice': n.why }}
+              action={
+                <button type="button" className="ac-btn ac-out" onClick={() => dismiss(n.id)}>
+                  Dismiss
+                </button>
+              }
+            />
+          );
+        })}
+      </>
+    );
+  }
   return (
     <>
       {list.map((n) => (
@@ -1303,6 +1421,120 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   // The organizer's latest hand adjustment to their credit (recent ones only), with the reason.
   const adjustNote = latestAdjustment(g.credit.history, Date.parse(g.now));
   const who = g.group.organizerName ?? 'The organizer';
+  // Zip 11, Alert cards: the same card as one amber action card. The same buttons with the same rules: Pay on the right (the Pay
+  // sheet or Venmo, exactly as below), and I paid / Use credit as links under the title whenever the card below would show them.
+  if (g.alertCards === true) {
+    const iPaidLink = (!pay.url || !showCredit || payTap.tapped) && (
+      <button type="button" className="ac-link" data-i-paid disabled={busy} onClick={() => paid.set(true)}>
+        {paid.busy ? 'Saving…' : 'I paid'}
+      </button>
+    );
+    const creditLink = showCredit && (
+      <button type="button" className="ac-link" data-use-credit disabled={busy} onClick={() => credit.use(dueByDate.map((o) => o.sessionId), total, g.credit.usableCents)}>
+        {credit.busy ? 'Saving…' : 'Use credit'}
+      </button>
+    );
+    const several = due.length > 1;
+    const lateList = several && due.some((o) => o.lateFee || detail(o));
+    return (
+      <AlertCard
+        as="section"
+        tone="amber"
+        className={enter ? 'm-enter' : ''}
+        label="Payment"
+        data={{ 'data-pay-card': true }}
+        title={<RollText text={title} />}
+        sub={
+          several ? (
+            <>
+              {due.length} games
+              {lateList && (
+                <span className="ac-sub-list">
+                  {' · '}
+                  {due.map((o) => `${formatShortDate(o.startsAt, tz)}${why(o)} ${formatPrice(o.amountCents)}`).join(', ')}
+                </span>
+              )}
+            </>
+          ) : detail(due[0]) ? (
+            `${formatPrice(due[0].amountCents)}, ${detail(due[0])}`
+          ) : undefined
+        }
+        links={
+          pay.url ? (
+            iPaidLink || creditLink ? (
+              <>
+                {iPaidLink}
+                {creditLink}
+              </>
+            ) : undefined
+          ) : creditLink || undefined
+        }
+        action={
+          pay.url ? (
+            <a
+              className="ac-btn"
+              href={pay.url}
+              data-app-href={pay.appUrl ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Pay ${formatPrice(total)} with Venmo`}
+              data-pay
+              onClick={(e) => {
+                if (sheetOn) {
+                  e.preventDefault();
+                  setSheet(true);
+                  return;
+                }
+                payTap.mark();
+                watchNoVenmo(pay);
+                openVenmo(e, pay);
+              }}
+            >
+              Pay
+            </a>
+          ) : (
+            <button type="button" className="ac-btn" data-i-paid disabled={busy} onClick={() => paid.set(true)}>
+              {paid.busy ? 'Saving…' : 'I paid'}
+            </button>
+          )
+        }
+      >
+        {adjustNote && (
+          <p className="ac-sub ac-extra" data-adjust-note>
+            <b>Credit adjusted: {signedPrice(adjustNote.deltaCents)}</b>
+            {adjustNote.note && <span> · {adjustNote.note}</span>}
+          </p>
+        )}
+        {!pay.url && <p className="ac-sub ac-extra">Pay {who} however you usually do.</p>}
+        {pay.url && !pay.prefilled && (
+          <div className="ac-sub ac-extra ac-note-row">
+            <span>
+              Send {formatPrice(total)} with the note <strong>{note}</strong>
+            </span>
+            <button type="button" className="ac-link" onClick={async () => ((await copyText(note)) ? toast('Note copied') : toast("Couldn't copy the note.", 'error'))}>
+              Copy note
+            </button>
+          </div>
+        )}
+        {sheetOn && (
+          <PaySheet
+            g={g}
+            open={sheet}
+            onClose={() => setSheet(false)}
+            cents={total}
+            pay={pay}
+            onTapPay={payTap.mark}
+            busy={busy}
+            saving={paid.busy}
+            onPaid={() => {
+              setSheet(false);
+              void paid.set(true);
+            }}
+          />
+        )}
+      </AlertCard>
+    );
+  }
   return (
     <section className={`card pay-card${enter ? ' m-enter' : ''}`} aria-label="Payment">
       <h2>
@@ -1419,15 +1651,14 @@ function SuggestionCard({
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
-  // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
-  // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
-  // warns first. With room, a game with no court booked reads like a normal one.
+  // At the max they would wait. A game really full beyond the max has a real waitlist, court or no court (as its card says), so the
+  // prompt warns first. With room, a game with no court booked reads like a normal one (src/courtDisplay.ts already drew a venue-waitlist
+  // game as a normal one, so the old "standby" form never showed; Zip 11 removed it).
   // "Card cleanup" (Zip 10): no waitlist and no cap, so the popup never says waitlist or standby ("12 are in. You'd make it 13.").
   const cleanup = g.cardCleanup === true;
-  const standby = !cleanup && s.courtState === 'waitlist';
-  const waitlistForm = !cleanup && !standby && s.confirmedCount >= g.group.maxPlayers;
+  const waitlistForm = !cleanup && s.confirmedCount >= g.group.maxPlayers;
   // At the database's 12 the popup only says how many are in (an I'm in there gets the plain refusal).
-  const subline = standby ? '' : cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
+  const subline = cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     if (instant && !yes) {
@@ -1462,6 +1693,35 @@ function SuggestionCard({
     }
   }
 
+  // Zip 11, Alert cards: "Tuesday needs 1 more" with the pickleball circles, or "Tuesday has 5 in" / "You'd make it 6", a green I'm in
+  // (the same Yes) and an X (the same No). Never a cap: "You'd make it 6" says only what one more makes.
+  if (g.alertCards === true) {
+    const word = suggestDay(s.startsAt, tz, Date.parse(g.now)).word;
+    const day = word.charAt(0).toUpperCase() + word.slice(1);
+    const n = s.confirmedCount;
+    const short = n < MIN_PLAYERS;
+    const title = short ? `${day} needs ${MIN_PLAYERS - n} more` : `${day} has ${n} in`;
+    const atLimit = cleanup && n >= g.group.maxPlayers;
+    const sub = short ? <AcBalls inCount={n} of={MIN_PLAYERS} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
+    return (
+      <AlertCard
+        as="section"
+        tone="green"
+        titleId="suggest-title"
+        label={title}
+        title={title}
+        sub={sub}
+        data={{ 'data-suggest-card': true }}
+        action={
+          <button type="button" className="ac-btn" disabled={busy} onClick={() => answer(true)}>
+            I'm in
+          </button>
+        }
+        onX={() => !busy && void answer(false)}
+        xLabel={`No thanks, ${title}`}
+      />
+    );
+  }
   return (
     <section className="card stack suggest" aria-labelledby="suggest-title">
       <h2 id="suggest-title">{wantInTitle(s.startsAt, tz, Date.parse(g.now), waitlistForm)}</h2>
@@ -1582,8 +1842,8 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: stri
 const NOTE_PILL_MAX = 18;
 const noteLook = (text: string) => (text.trim().length <= NOTE_PILL_MAX ? 'note-pill' : 'note-box');
 
+// Zip 11: the old "N on standby" count is gone (the screen draws a venue-waitlist game as a normal one, src/courtDisplay.ts).
 function countLine(s: PlayerSessionView): string {
-  if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   return s.countText;
 }
 
@@ -1856,7 +2116,8 @@ export function ScheduleRow({
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
   const waiting = mine?.status === 'waitlisted';
-  const courtWait = s.courtState === 'waitlist';
+  // src/courtDisplay.ts draws a venue-waitlist game as a normal one before it gets here, so this card never sees the court's waitlist
+  // (Zip 11 removed the "standby" words that only showed for it).
   const open = !s.canceled && !s.started;
   const nowMs = Date.parse(g.now);
   const motion = useMotion();
@@ -2024,8 +2285,6 @@ export function ScheduleRow({
   // Zip 7 switches. TONIGHT_GLOW: the tile wears TONIGHT or TOMORROW (Eastern calendar days). PLAYER_CARDS_SIMPLE: no court words or dot.
   const dayTag: TileDay | undefined = g.tonightGlow === true ? tileDay(s.startsAt, tz, nowMs, open && !s.canceled) : undefined;
   const simple = g.playerCardsSimple === true;
-  // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
-  const standbyWord = courtWait && !simple;
   // Zip 9, CARD_TIME_BUTTONS: the start and the length under the tile, and one joined Calendar | Directions button instead of the icon.
   const cardButtons = g.cardTimeButtons === true;
   // Zip 10, CARD_CLEANUP: no count text (only the circles, one row), the people icon before the names, the content centered to the
@@ -2044,7 +2303,7 @@ export function ScheduleRow({
       </a>
     ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
-  const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
+  const showCount = !s.canceled;
   const dropLink = isIn && open && (
     <button className="link-btn quiet-link drop-link" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
       Drop out
@@ -2056,7 +2315,7 @@ export function ScheduleRow({
   const notIn = open && !(inSession || waiting);
   // The flat LATER row (switch off) puts the note in the middle column; every card (and every Card cleanup card) puts it under the button.
   const flatLater = tier === 'later' && !cleanup;
-  const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? s.shortGame
+  const note = notIn && s.joinAs === 'in' && !s.full ? s.shortGame
         ? gameCreditBackNote(viewPrice(s, { pricePerPlayerCents: g.group.priceCents, typicalCourtCostCents: 0 }), s.confirmed.length, g.group.maxPlayers, formatPrice)
         : creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice)
       : null;
@@ -2068,7 +2327,7 @@ export function ScheduleRow({
   const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
   if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting)
-    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
+    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">Waitlist, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn && simple)
     // PLAYER_CARDS_SIMPLE: "You're in" and the calendar icon, nothing about the court.
     status = (
@@ -2103,12 +2362,12 @@ export function ScheduleRow({
 
   const joinBtn = notIn && (
     <button className={`btn sched-btn${flatLater ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
-      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
+      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = waiting && open && (
     <button className="btn sched-btn outline" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
-      {standbyWord ? 'Leave standby' : 'Leave waitlist'}
+      Leave waitlist
     </button>
   );
   const noteEl = note && (
@@ -2193,7 +2452,7 @@ export function ScheduleRow({
             ))}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} />}
           {!s.canceled && !waiting && !simple && !cleanup && (
-            <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
+            <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label="Waitlist" />
           )}
           {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
@@ -2207,7 +2466,7 @@ export function ScheduleRow({
 
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && (s.note.trim().length <= NOTE_PILL_MAX ? <span className="game-note note-pill">{s.note.trim()}</span> : <p className="game-note note-box">{s.note}</p>)}
-          {goodNews && <Notice tone="ok">{goodNews}</Notice>}
+          {goodNews && (g.alertCards === true ? <AlertCard as="div" tone="green" className="ac-inline" title={goodNews} data={{ 'data-good-news': true }} /> : <Notice tone="ok">{goodNews}</Notice>)}
           {flatLater && noteEl}
         </div>
 
@@ -2224,7 +2483,7 @@ export function ScheduleRow({
       {celebrating && motion && <Burst />}
       <ConfirmDialog
         open={askOut}
-        title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
+        title={waiting ? 'Leave the waitlist?' : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         body={
           waiting
             ? 'You lose your place in line.'
@@ -2238,7 +2497,7 @@ export function ScheduleRow({
                 )
               : 'Your spot opens up for someone else.'
         }
-        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
+        confirmLabel={waiting ? 'Leave waitlist' : fromNotice ? "Can't make it" : 'Drop out'}
         danger
         busy={busy}
         onConfirm={() => {

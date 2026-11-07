@@ -255,6 +255,12 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
     for (const n of ['Finley', 'Lane', 'Kai']) await join(n, previous2);
     for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray']) await orgPays(n, previous1);
     for (const n of ['Finley', 'Lane', 'Kai']) await orgPays(n, previous2);
+    // 1c. Zip 11: a past game that was booked and played and is NOT finalized (5 in, all paid $14): the organizer's Finalize card.
+    const toFinalize = await pastExtra(2, '');
+    await setCourt(toFinalize, 'booked');
+    for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray', 'Finley']) await join(n, toFinalize);
+    for (const n of ['Indy', 'Jordan', 'Morgan', 'Gray', 'Finley']) await orgPays(n, toFinalize);
+    summary.push('past game, booked, played, NOT finalized (5 in, all paid $14): the organizer sees the Finalize card');
     await at(Math.min(ms(previous1.endsAt) + 2 * HOUR, N));
     await w.org.ok('POST', `/api/admin/sessions/${previous1.id}/finalize`, { everyone: true });
     await at(Math.min(ms(previous2.endsAt) + 2 * HOUR, N));
@@ -483,6 +489,42 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   for (const n of ['Jordan', 'Indy']) await orgPays(n, twelve);
   summary.push(`Card cleanup games, no notes: "1 in" (Booked, Kai, 6:00 PM), "8 in" (Booked, Avery to Jordan, 5:30 PM; Avery and Blake paid), "12 in" (Booked, Orla and 11 more incl. ${NO_NUMBER} and ${LONG_NAME}, 5:00 PM; Jordan and Indy paid)`);
 
+  // 17. Zip 11 "Alert cards": one of every alert the preview did not have yet, so each card can be seen (all fake, real site rules):
+  //     a game moved after people were in (player "... moved to 7:30 PM" with Still in / Can't make it; organizer "Confirmed 0 of 3"),
+  //     a hand credit adjustment with a reason (player "Credit adjusted: +$5"), and a late drop that someone took ("You no longer owe $14").
+  //     The money ones only move fake money: Casey gets +$5 credit; Blake's $14 late-drop debt is cleared when Kai takes the spot.
+  const moved = await extraAt(19, 0, 5);
+  await setCourt(moved, 'booked');
+  for (const n of ['Indy', 'Jordan', 'Drew']) await join(n, moved);
+  const movedTo = ms(moved.startsAt) + 30 * 60_000;
+  await w.org.ok('PUT', `/api/admin/sessions/${moved.id}/time`, { startsAt: new Date(movedTo).toISOString(), endsAt: new Date(movedTo + 2 * HOUR).toISOString() });
+  summary.push("moved game (Booked, 7:00 PM moved to 7:30 PM after Indy, Jordan and Drew were in): each sees Still in / Can't make it; the organizer card says Confirmed 0 of 3");
+  await w.org.ok('PUT', '/api/admin/adjust-credit-switch', { on: true });
+  await refresh();
+  const casey = (dash.players as { id: string; name: string }[]).find((p) => p.name === 'Casey')!;
+  const caseyPot = (await (await w.pick('Casey')).ok('GET', '/api/group')).credit.balanceCents as number;
+  await w.org.ok('POST', `/api/admin/players/${casey.id}/credit-adjust`, { direction: 'add', cents: 500, seen: caseyPot, reason: 'Thanks for bringing balls' });
+  summary.push(`credit adjusted: Casey +$5 ("Thanks for bringing balls"), credit now ${(caseyPot + 500) / 100} dollars`);
+  // A regular with usual days (Tue and Thu) who has not answered the next one: Casey gets the "Want in" card ("Tuesday has 5 in",
+  // I'm in, X), stacked with the Credit adjusted card above it.
+  w.db.raw.prepare("UPDATE players SET usual_days = '2,4', is_regular = 1 WHERE id = ?").run(casey.id);
+  summary.push('Casey is a regular for Tue and Thu and has not answered the next one: Casey sees the Want in card');
+  let takenGame: any = null;
+  for (const hoursAhead of [9, 9.5, 8.5, 8]) {
+    try {
+      takenGame = await upcomingExtra(hoursAhead, '');
+      break;
+    } catch (err) {
+      if (!/game_exists/.test(String(err))) throw err;
+    }
+  }
+  if (takenGame) {
+    for (const n of ['Blake', 'Emery', 'Finley', 'Indy']) await join(n, takenGame);
+    await (await w.pick('Blake')).ok('POST', `/api/sessions/${takenGame.id}/withdraw`, {});
+    await join('Kai', takenGame);
+    summary.push('late drop taken: Blake dropped inside the 12 hours (owed $14), Kai took the spot: Blake sees "You no longer owe $14"');
+  }
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -532,8 +574,10 @@ export const PREVIEW_SWITCHES_ON = [
   // Zip 9 (live, switched on by Alex Fri Nov 6): Short games and Card time and buttons.
   'short_games_on',
   'card_time_buttons_on',
-  // Being built (Zip 10): Card cleanup.
+  // Zip 10 (live, switched on by Alex): Card cleanup.
   'card_cleanup_on',
+  // Being built (Zip 11): Alert cards.
+  'alert_cards_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

@@ -21,7 +21,8 @@ describe('the tick speed-up changes nothing', () => {
   it('the old alerts include the clock change and each start time', () => {
     const lines: string[] = golden.noMarks.alerts;
     expect(lines).toContain('Sat, Oct 31, 6:00 PM | s-2026-11-01-190:night | Sunday: 3 players in, need a 4th. Text the group: https://pickleball.juncaj.net/go/s-2026-11-01-190');
-    expect(lines.some((l) => l.startsWith('Sun, Nov 1, 6:15 AM | s-2026-11-01-190:gameday'))).toBe(true);
+    expect(lines.some((l) => l.includes(':gameday'))).toBe(false); // Zip 11: the game-day check is deleted
+    expect(lines.some((l) => l.startsWith('Sat, Oct 31, 9:00 PM | s-2026-11-01-190:cancel'))).toBe(true); // across the clock change
     expect(lines.some((l) => l.startsWith('Mon, Nov 2, 6:00 PM | s-2026-11-03-190:night'))).toBe(true); // 7:00 PM game
     expect(lines.some((l) => l.startsWith('Wed, Nov 4, 6:30 PM | s-2026-11-05-1930:night'))).toBe(true); // 7:30 PM game
     expect(lines.some((l) => l.startsWith('Tue, Nov 10, 8:15 AM | s-2026-11-10-200:nocourt'))).toBe(true); // 8:00 PM, no court

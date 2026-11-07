@@ -481,14 +481,14 @@ describe('TEXTS_R2: Telegram wording (clock brain)', () => {
       ['Mon, 10:30 PM', `Tomorrow: court canceled? Now cancel the session and text everyone: ${ADMIN}`],
     ]);
   });
-  it('#4 the game-day check is gone; it still exists with the switch off', () => {
+  it('#4 the game-day check is gone, with the switch on or off (Zip 11 deleted it)', () => {
     const day = (o: TaskOptions) => alertsOver([game('2026-11-03')], o, '2026-11-03T05:00:00Z', '2026-11-03T14:00:00Z');
     expect(day(R2).map((a) => a.id)).toEqual([]);
-    expect(day(OFF).map((a) => [when(a.at), a.id])).toEqual([['Tue, 7:15 AM', 'gameday']]);
+    expect(day(OFF).map((a) => a.id)).toEqual([]);
     // The Home card still reads the same on game day (it is the alert that went).
     const card = nextTasks(at('2026-11-03T12:30:00Z'), [game('2026-11-03')], new Set(), R2).find((t) => t.kind === 'cancel')!;
     expect(card.text).toBe('Tonight: only 3 players in. Cancel court before 8:00 AM.');
-    expect(card.alerts.map((a) => a.id)).not.toContain('gameday');
+    expect(card.alerts.map((a) => a.id as string)).not.toContain('gameday');
   });
   it('#8 finalize says Tonight for an evening game and Today for a daytime game', () => {
     const eve = alertsOver([game('2026-11-03', { confirmedCount: 5 })], R2, '2026-11-04T02:00:00Z', '2026-11-04T05:00:00Z');
@@ -622,7 +622,7 @@ describe('TEXTS_R2: switched off, nothing about the clock changes', () => {
     const plain = sweep();
     expect(plain.alerts.length).toBeGreaterThan(20);
     expect(plain.alerts.some((l) => l.includes('Tomorrow'))).toBe(false);
-    expect(plain.alerts.some((l) => l.includes(':gameday'))).toBe(true);
+    expect(plain.alerts.some((l) => l.includes(':gameday'))).toBe(false); // Zip 11: deleted
     const base = { ...OFF, links: { ...OFF.links, go: (id: string) => `https://pickleball.juncaj.net/go/${id}` } };
     const falsy = { ...base, textsR2: false };
     for (let now = at('2026-10-14T04:00:00Z'); now < at('2026-11-27T05:00:00Z'); now += 5 * MIN) {
@@ -721,7 +721,7 @@ describe('TEXTS_R2: the real tick endpoint', () => {
       `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
   });
-  it('OFF (the default): the same 48 hours send the old six, word for word', async () => {
+  it('OFF (the default): the same 48 hours send the old five, word for word (the old game-day check is gone, Zip 11)', async () => {
     const g = await setup({}, false);
     await runHours(g, 48);
     expect(g.sent).toEqual([
@@ -729,7 +729,6 @@ describe('TEXTS_R2: the real tick endpoint', () => {
       `Tuesday: only 3 players in. Cancel court: ${COURTRESERVE_CANCEL_URL}`,
       `Tuesday: court canceled? Now cancel the session and text everyone`,
       `Tue Nov 17 opens at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
-      `Tonight: only 3 players in. Cancel court before 8:00 AM: ${COURTRESERVE_CANCEL_URL}`,
       `Reminder: Tue Nov 17 opened at 7:00 AM. Book: ${COURTRESERVE_BOOKING_URL}\nThen set it to Booked`,
     ]);
   });
@@ -737,7 +736,7 @@ describe('TEXTS_R2: the real tick endpoint', () => {
     const g = await setup({ TEXTS_R2: 'off' });
     await runHours(g, 48);
     expect(g.sent[0]).toBe(`Tuesday: 3 players in, need a 4th. Text the group: ${GO}`);
-    expect(g.sent.length).toBe(6);
+    expect(g.sent.length).toBe(5);
   });
   it("a phone's private link never changes a Telegram alert (it is not tied to a phone)", async () => {
     const g = await setup({}, false);

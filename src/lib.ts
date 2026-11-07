@@ -188,6 +188,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (zip9Test('cardtime')) headers['X-Card-Time'] = 'on';
   // Zip 10 private test switch for this phone (?cardcleanup=on; also on /admin, see server/zip10.ts).
   if (zip10Test()) headers['X-Card-Cleanup'] = 'on';
+  // Zip 11 private test switch for this phone (?alertcards=on; also on /admin, see server/zip11.ts).
+  if (zip11Test()) headers['X-Alert-Cards'] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -694,6 +696,19 @@ if (typeof window !== 'undefined') {
     if (want === 'on') storageSet(`pb_${name}`, 'on');
     else if (want === 'off') storageRemove(`pb_${name}`);
   }
+}
+
+/**
+ * "Alert cards" (Zip 11) on this phone only, before it is on for everyone: open the site once with ?alertcards=on (=off turns it back
+ * off; works on /admin too). Remembered in this browser. Look only, safe on any phone.
+ */
+export function zip11Test(): boolean {
+  return storageGet('pb_alertcards') === 'on';
+}
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get('alertcards');
+  if (want === 'on') storageSet('pb_alertcards', 'on');
+  else if (want === 'off') storageRemove('pb_alertcards');
 }
 
 /**

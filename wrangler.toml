@@ -133,6 +133,12 @@ CARD_TIME_BUTTONS = "on"
 # "moved up from the waitlist" line too. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Card cleanup" (off at ship = nobody),
 # plus a phone opened once with ?cardcleanup=on. "off" = the kill switch. Needs a deploy.
 CARD_CLEANUP = "on"
+# "Alert cards" (Zip 11, shared/zip11.ts): every alert, notice, banner and popup on the player screen and the organizer Home gets one look: a slim
+# tinted card with a thin matching border, no icon, a bold title, an optional gray sub line and one button on the right (two-choice cards put both
+# buttons under the text; cards fine to ignore get a small X). Display only: every alert keeps its action, timing and order. "on" here only ALLOWS it;
+# who gets it is Settings > Feature switches > "Alert cards" (off at ship = nobody), plus a phone opened once with ?alertcards=on. "off" = the kill
+# switch. Needs a deploy.
+ALERT_CARDS = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -168,6 +174,7 @@ LAST_CALL_TEXTS = "on"
 SHORT_GAMES = "on"
 CARD_TIME_BUTTONS = "on"
 CARD_CLEANUP = "on"
+ALERT_CARDS = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

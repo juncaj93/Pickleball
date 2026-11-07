@@ -2,6 +2,7 @@
 // answer; Can't make it hands over to the game card's own Drop out flow (same 5-second Undo, same credit
 // banner). Nothing here moves money or a seat by itself. Off when the TIME_SHIFT switch is off.
 
+import { AlertCard } from './AlertCard';
 import { useEffect, useRef, useState } from 'react';
 import type { GroupView, PlayerSessionView } from '../shared/api';
 import { api, ApiError, isDemo } from './lib';
@@ -96,7 +97,7 @@ export function TimeBars({ view, onChanged, onShowAll }: { view: GroupView; onCh
   return (
     <section className="ts-bars" aria-label="Time changes">
       {shown.map((s) => (
-        <TimeBar key={`${s.id}-${s.startsAt}`} s={s} tz={view.group.timezone} onChanged={onChanged} onShowAll={onShowAll} />
+        <TimeBar key={`${s.id}-${s.startsAt}`} s={s} tz={view.group.timezone} onChanged={onChanged} onShowAll={onShowAll} card={view.alertCards === true} />
       ))}
       {!more && asks.length > MAX_SHOWN && (
         <button type="button" className="link-btn quiet-link ts-more" onClick={() => setMore(true)}>
@@ -107,7 +108,7 @@ export function TimeBars({ view, onChanged, onShowAll }: { view: GroupView; onCh
   );
 }
 
-function TimeBar({ s, tz, onChanged, onShowAll }: { s: PlayerSessionView; tz: string; onChanged: () => Promise<void>; onShowAll: () => void }) {
+function TimeBar({ s, tz, onChanged, onShowAll, card }: { s: PlayerSessionView; tz: string; onChanged: () => Promise<void>; onShowAll: () => void; card?: boolean }) {
   const toast = useToast();
   const [state, setState] = useState<'ask' | 'saving' | 'done' | 'gone'>('ask');
   const working = useRef(false);
@@ -142,6 +143,32 @@ function TimeBar({ s, tz, onChanged, onShowAll }: { s: PlayerSessionView; tz: st
   }
 
   const busy = state !== 'ask';
+  // Zip 11, Alert cards: the same two answers as a blue card, both buttons under the text. No clock icon.
+  if (card) {
+    const confirmed = state === 'done' || state === 'gone';
+    return (
+      <AlertCard
+        as="div"
+        tone="blue"
+        role="region"
+        label={`${lines.title}. ${lines.was}.`}
+        className={`ts-ac${state === 'gone' ? ' ts-gone' : ''}`}
+        data={{ 'data-time-bar': s.id }}
+        title={lines.title}
+        sub={lines.was}
+        actions={
+          <>
+            <button type="button" className="ac-btn ts-yes" disabled={busy} aria-busy={state === 'saving'} onClick={stillIn}>
+              {confirmed ? 'Confirmed' : state === 'saving' ? 'Saving…' : 'Still in'}
+            </button>
+            <button type="button" className="ac-btn ac-out ts-no" disabled={busy} onClick={cant}>
+              Can't make it
+            </button>
+          </>
+        }
+      />
+    );
+  }
   return (
     <div className={`ts-bar${state === 'gone' ? ' ts-gone' : ''}`} role="region" aria-label={`${lines.title}. ${lines.was}.`} data-time-bar={s.id}>
       <div className="ts-line1">

@@ -9,6 +9,7 @@ import { DISMISSIBLE } from './dismiss';
 import { DismissX } from './DismissX';
 import '../../suggestions.css';
 import '../../do-now.css';
+import { AlertCard } from '../../AlertCard';
 
 const KIND_LABEL: Record<SuggestionKind, string> = {
   promoted: 'Spot opened',
@@ -59,6 +60,44 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
     // Pretend it's... is a demo: a tap or X there never changes the phone's real list.
     if (!pretending) writeTapped(storageSet, next);
   };
+  // Zip 11, Alert cards: each text card as a purple (texting) card: the same words (the kind as the title, the game and who under
+  // it, the text's first words), the same Text link, the same X. A payment reminder's button says Remind.
+  if (ctx.d.alertCards === true) {
+    return (
+      <section className="ac-stack suggest-cards" aria-label="Texts to send">
+        {list.map((c) => (
+          <AlertCard
+            key={c.key}
+            tone="purple"
+            label={`${KIND_LABEL[c.kind]}: ${c.when}`}
+            data={{ 'data-suggest': c.kind, 'data-session': c.sessionId }}
+            title={KIND_LABEL[c.kind]}
+            sub={
+              <>
+                {c.when} · {c.who}
+                <span className="ac-preview" title={c.body}>
+                  {c.body}
+                </span>
+                {c.missing.length > 0 && <span className="ac-missing missing-numbers">Missing numbers: {c.missing.join(', ')}</span>}
+              </>
+            }
+            action={
+              <a className="ac-btn sg-text" href={smsHref(c.phones.length ? c.phones : null, c.body, isIOS)} onClick={() => tap(c)} aria-label={`Text: ${c.body}`}>
+                {c.kind === 'pay' ? 'Remind' : 'Text'}
+              </a>
+            }
+            onX={DISMISSIBLE.has(c.kind) ? () => tap(c) : undefined}
+            xLabel={`${KIND_LABEL[c.kind]}, ${c.when}`}
+          />
+        ))}
+        {shown.length > SHOWN && (
+          <button className="ac-more-link sg-more" onClick={() => setMore((v) => !v)}>
+            {more ? 'Show fewer' : `${shown.length - SHOWN} more`}
+          </button>
+        )}
+      </section>
+    );
+  }
   return (
     <section className="stack suggest-cards" aria-label="Texts to send">
       {list.map((c) => (

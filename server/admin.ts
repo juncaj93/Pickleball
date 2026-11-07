@@ -74,6 +74,7 @@ import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, sh
 import { zip9Allowed } from '../shared/zip9';
 import { isShortGame } from '../shared/gameLength';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
+import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
 import { capOf } from '../shared/settings';
 
@@ -296,6 +297,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     // The look: the Settings row, or this phone's private link (look only; seats follow the row alone).
     ...(group.card_cleanup === true || (await cardCleanupLook(ctx, group.id)) ? { cardCleanup: true } : {}),
     cardCleanupForAll: await cardCleanupForAll(ctx.db, group.id),
+    // Zip 11. "Alert cards": the one action-card look for every alert (display only).
+    ...((await alertCardsFor(ctx, group.id)) ? { alertCards: true } : {}),
+    alertCardsForAll: await alertCardsForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2287,6 +2291,15 @@ async function endWaitlists(ctx: Ctx, group: GroupRow): Promise<number> {
     for (const r of left) await withdraw(ctx.db, { ...group, card_cleanup: true }, s, r.player_id, ctx.nowMs);
   }
   return moved;
+}
+
+/** PUT /api/admin/alert-cards-switch { on }: Settings > Feature switches > "Alert cards" (Zip 11). Display only; moves nothing. */
+export async function setAlertCardsSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setAlertCardsForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'alert_cards_on' : 'alert_cards_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }
 
 /** PUT /api/admin/card-time-switch { on }: Settings > Feature switches > "Card time and buttons". Player cards only, display only. */

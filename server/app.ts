@@ -140,6 +140,7 @@ route('PUT', '/api/admin/last-call-switch', admin.setLastCallSwitch);
 route('PUT', '/api/admin/short-games-switch', admin.setShortGamesSwitch);
 route('PUT', '/api/admin/card-time-switch', admin.setCardTimeSwitch);
 route('PUT', '/api/admin/card-cleanup-switch', admin.setCardCleanupSwitch);
+route('PUT', '/api/admin/alert-cards-switch', admin.setAlertCardsSwitch);
 route('PUT', '/api/admin/tonight-glow-switch', admin.setTonightGlowSwitch);
 route('PUT', '/api/admin/color-cleanup-switch', admin.setColorCleanupSwitch);
 route('PUT', '/api/admin/player-cards-switch', admin.setPlayerCardsSwitch);
