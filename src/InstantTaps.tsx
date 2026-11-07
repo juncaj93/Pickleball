@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import './instant-taps.css';
 import { demoOn, isDemo, viewingAs } from './lib';
 import { BANNER_TIMING, useToast } from './ui';
-import { startHold } from './undoHold';
+import { startHold, trackHeld } from './undoHold';
 import { ADMIN_UNDO_MS } from '../shared/zip13';
 import { drawPatches, failureWords, LoadTracker, SaveLine, TapQueue, type TapResult } from './instant';
 
@@ -140,6 +140,8 @@ export function actingWhoChanged() {
   whoChanges++;
 }
 const actingAs = () => `${demoOn() ? 'demo' : 'live'}|${viewingAs() ?? ''}|${whoChanges}`;
+/** Who a save made now acts as (Undo on admin toasts: a held save checks it again when it goes). */
+export const actingStamp = actingAs;
 
 /**
  * The root of a screen's instant taps. `data` is what the server sent, `reload` loads it again. Gives back the data with every tap still
@@ -180,7 +182,8 @@ export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Pro
         if (hold && msgNow) {
           toast(msgNow, 'ok', { keep: true, stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => void (hold.undo() ? toast('Undone. Nothing was saved.', 'ok', { keep: true }) : toast('Already saved. Change it back by hand.', 'ok')) } });
         }
-        const res = await q.run<R>({ key: tap.key, patch: tap.patch ?? null, save, ...(hold ? { hold: hold.decided } : {}) });
+        const ran = q.run<R>({ key: tap.key, patch: tap.patch ?? null, save, ...(hold ? { hold: hold.decided } : {}) });
+        const res = await (hold ? trackHeld(ran) : ran);
         unmark();
         if (res.status === 'ok' && hold) {
           // Said already, when it was tapped.

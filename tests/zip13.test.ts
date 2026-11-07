@@ -97,6 +97,7 @@ describe('Players redo: the numbers', () => {
   });
   it("the organizer's Spent is Money Totals \"Your cost so far\": 2 four-player games = $30 + 2 x ($48 - 3 x $14) = $42, every month summed for All time", async () => {
     const w = await world();
+    await flip(w, 'players-redo-switch', true);
     const me = (await dash(w)).me;
     const games = (await dash(w)).sessions.filter((s: any) => Date.parse(s.startsAt) > w.app.now).slice(0, 2);
     expect(monthOf(Date.parse(games[0].startsAt))).toBe(monthOf(Date.parse(games[1].startsAt)));
@@ -116,9 +117,12 @@ describe('Players redo: the numbers', () => {
     const sum2 = (await w.organizer.call('GET', `/api/admin/players/${me.id}/summary`, undefined, rw)).data;
     expect(sum2).toEqual(sum);
   });
-  it('the summary is organizer only, read only, and 404 for a player who is not in the group', async () => {
+  it('the summary is organizer only, read only, 404 for a player who is not in the group, and does not exist with the switch off', async () => {
     const w = await world();
     const d = await dash(w);
+    expect((await w.organizer.call('GET', `/api/admin/players/${d.players[1].id}/summary`)).status).toBe(404);
+    await flip(w, 'players-redo-switch', true);
+    expect((await w.organizer.call('GET', `/api/admin/players/${d.players[1].id}/summary`)).status).toBe(200);
     const ph = await playerPhone(w, 'Blair');
     expect((await ph.call('GET', `/api/admin/players/${d.players[1].id}/summary`)).status).toBe(401);
     expect((await w.organizer.call('GET', '/api/admin/players/00000000-0000-4000-8000-000000000000/summary')).status).toBe(404);

@@ -5,7 +5,8 @@ import { cancelByIso, cardTime, formatMonthDay, formatShortDate, formatTime, loc
 import { useRef, useState } from 'react';
 import { api, ApiError, useNow } from '../../lib';
 import { BANNER_TIMING, CourtReserveLink, PlayersLine, useToast } from '../../ui';
-import { type Hold, startHold } from '../../undoHold';
+import { type Hold, startHold, trackHeld } from '../../undoHold';
+import { actingStamp } from '../../InstantTaps';
 import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
@@ -319,13 +320,18 @@ function CardSwitchR2({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSess
                 if (!h.undo()) return void toast('Already saved. Change it back by hand.', 'ok');
                 if (mine === latest.current) onPicked(null);
                 toast('Undone. Nothing was saved.', 'ok', { keep: true });
+                // An older tap on this switch may have saved meanwhile: show what the server has now.
+                void ctx.reload().catch(() => {});
               },
             },
           });
         }
+        const as = hold ? actingStamp() : '';
         chain.current = chain.current.then(async () => {
           if (hold && !(await hold.decided)) return;
           try {
+            // Held: sent only as whoever the screen acted as when it was tapped (never into View as or Pretend's demo copy).
+            if (hold && actingStamp() !== as) throw new ApiError(409, 'screen_changed', 'Nothing was sent: the screen changed before it could save.');
             await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to });
             if (mine === latest.current && !hold) toast(said);
           } catch (err) {
@@ -346,6 +352,7 @@ function CardSwitchR2({ ctx, s, value, onPicked }: { ctx: AdminCtx; s: AdminSess
           }
           if (mine === latest.current) onPicked(null);
         });
+        if (hold) trackHeld(chain.current);
       }}
     />
   );

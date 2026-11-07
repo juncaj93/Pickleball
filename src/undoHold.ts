@@ -59,6 +59,32 @@ export function heldCount(): number {
   return waiting.size;
 }
 
+// The taps whose save was held, until they are settled (saved, failed or undone). Lets a change of who the screen acts as (View as,
+// Pretend, Sign out, your own player page) wait until every held save has really been sent as the organizer first.
+const tracked = new Set<Promise<unknown>>();
+/** Follow a held tap until it is settled. Returns the same promise. */
+export function trackHeld<T>(p: Promise<T>): Promise<T> {
+  tracked.add(p);
+  const drop = () => void tracked.delete(p);
+  p.then(drop, drop);
+  return p;
+}
+
+/** Let every held save go now and wait until each one has answered. */
+export async function flushHolds(): Promise<void> {
+  releaseAllHolds();
+  while (tracked.size > 0) await Promise.allSettled([...tracked]);
+}
+
+/**
+ * Run `fn` once no save is held or still on its way from a hold (at once, in the same tick, when there is none: with the switch off nothing
+ * changes). Used before anything that changes who the next save acts as.
+ */
+export function afterHolds(fn: () => void): void {
+  if (waiting.size === 0 && tracked.size === 0) return fn();
+  void flushHolds().then(fn, fn);
+}
+
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') releaseAllHolds(true);

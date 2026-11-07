@@ -9,7 +9,7 @@ import { formatDateTime, formatShortDate, formatTimeRange, fromLocalInputValue, 
 import { api, ApiError, demoOn, navigate, useDemoVersion, useLoad, useNow, usePretend, useRefreshOnReturn } from '../lib';
 import { fadeChanges, LAST_ADMIN_HOLD_MS, markMoney, readLastAdmin, saveLastAdmin, signedInLastAdmin, signedOutLastAdmin } from '../lastAdmin';
 import { asOfText } from '../lastScreen';
-import { heldCount, releaseAllHolds } from '../undoHold';
+import { afterHolds } from '../undoHold';
 import '../admin-held.css';
 import { useLiveUpdates } from '../live';
 import { DemoBar, PretendPicker } from './admin/Pretend';
@@ -265,10 +265,11 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   if (!viewing) swapAtView.current = swap;
   // Your own player page, the way a player opens it (the group's link): who it shows is this phone's own pick, as always. Nothing signs in or out.
   const goToMyPage = () => {
-    // A save still held for its Undo goes now (the toast with its Undo button does not follow you to the player page).
-    releaseAllHolds();
-    window.scrollTo(0, 0);
-    navigate(new URL(d.group.privateLink).pathname);
+    // A save still held for its Undo goes first, as the organizer (its toast does not follow you to the player page).
+    afterHolds(() => {
+      window.scrollTo(0, 0);
+      navigate(new URL(d.group.privateLink).pathname);
+    });
   };
   const todoCount = homeBadgeCount(d);
   // The organizer screens keep themselves fresh like the player side: one tiny "did anything change?" check every
@@ -404,11 +405,9 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
                       setViewing({ id: p.id, name: p.name });
                       window.scrollTo(0, 0);
                     };
-                    // Undo on admin toasts: a save still held for its Undo is sent first (as the organizer), then View as opens.
-                    if (heldCount() > 0) {
-                      releaseAllHolds();
-                      setTimeout(go, 0);
-                    } else go();
+                    // Undo on admin toasts: every save still held for its Undo is sent (as the organizer) and answered first, then View
+                    // as opens. Nothing held: at once, as before.
+                    afterHolds(go);
                   }}
                 >
                   {p.name}

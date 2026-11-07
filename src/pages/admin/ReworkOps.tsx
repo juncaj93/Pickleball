@@ -1,7 +1,8 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { BANNER_TIMING, useToast } from '../../ui';
-import { startHold } from '../../undoHold';
+import { startHold, trackHeld } from '../../undoHold';
+import { actingStamp } from '../../InstantTaps';
 import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { isDemo } from '../../lib';
 import { SaveLine, TapQueue } from '../../instant';
@@ -67,24 +68,30 @@ export function useReworkRun(ctx: AdminCtx): ((op: ReworkOp, save: () => Promise
   // Undo on admin toasts (ADMIN_UNDO, Zip 13): the toast at once with Undo, the save 5 seconds later unless Undo is tapped.
   const undo = ctx.d.adminUndo === true;
   return async (op, save, success) => {
+    // A second tap on a row that is still saving (or held) is ignored, with no toast (the buttons wait too).
+    if (undo && success && store.busy(opKey(op))) return false;
     const hold = undo && success ? startHold() : null;
+    // Who this tap acts as now: a held save that goes after View as or Pretend began is not sent (never into the demo copy).
+    const as = actingStamp();
     if (hold && success) {
       toast(success, 'ok', { keep: true, stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => void (hold.undo() ? toast('Undone. Nothing was saved.', 'ok', { keep: true }) : toast('Already saved. Change it back by hand.', 'ok')) } });
     }
-    const res = await store.queue.run({
+    const ran = store.queue.run({
       key: opKey(op),
       patch: op,
       ...(hold ? { hold: hold.decided } : {}),
       save: async () => {
+        if (hold && actingStamp() !== as) throw Object.assign(new Error('Nothing was sent: the screen changed before it could save.'), { status: 409 });
         const value = await save();
         if (success && !hold) toast(success);
         return value;
       },
     });
+    const res = await (hold ? trackHeld(ran) : ran);
     if (res.status === 'failed') {
       // The read-only PIN's refusal (and the demo's) is a plain note, not a red error.
       if (isDemo(res.error)) toast((res.error as Error).message);
-      else toast("Couldn't save, nothing changed", 'error');
+      else toast(hold && (res.error as { status?: number })?.status === 409 ? (res.error as Error).message : "Couldn't save, nothing changed", 'error');
     }
     return res.status === 'ok';
   };

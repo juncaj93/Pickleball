@@ -3,6 +3,7 @@ import type { D1Database } from './db';
 import { requireAdmin } from './auth';
 import { HttpError } from './http';
 import { spentByPlayer } from './adminR3';
+import { zip13For } from './zip13';
 import { monthMoneyOf } from './money';
 import { type GroupRow, organizerIdOf } from './repo';
 import * as v from './validate';
@@ -55,30 +56,28 @@ async function organizerSpent(ctx: Ctx, group: GroupRow, year: number, month: nu
   return m.rework?.yourCostCents ?? 0;
 }
 
-/** The months from the first game (or the first session date, whichever is earlier) up to this one, oldest first. */
-async function monthsSoFar(ctx: Ctx, group: GroupRow): Promise<{ year: number; month: number }[]> {
-  const first = await ctx.db.prepare('SELECT MIN(starts_at) AS at FROM sessions WHERE group_id = ?').bind(group.id).first<{ at: string | null }>();
-  const now = localParts(ctx.nowMs, group.timezone);
-  if (!first?.at) return [{ year: now.year, month: now.month }];
-  const f = localParts(Date.parse(first.at), group.timezone);
-  const out: { year: number; month: number }[] = [];
-  let y = f.year;
-  let mo = f.month;
-  // Never more than 10 years of months (a guard; the site started in 2026).
-  while ((y < now.year || (y === now.year && mo <= now.month)) && out.length < 120) {
-    out.push({ year: y, month: mo });
-    mo++;
-    if (mo === 13) {
-      mo = 1;
-      y++;
-    }
+/**
+ * The months before this one that can have a "Your cost so far" above $0: a month counts membership and courts only once a game in it was
+ * finalized or a canceled game was charged (server/money.ts), so a past month with neither is $0 and is not read at all. One small read.
+ */
+async function pastMonthsWithGames(ctx: Ctx, group: GroupRow): Promise<{ year: number; month: number }[]> {
+  const { results } = await ctx.db
+    .prepare("SELECT starts_at FROM sessions WHERE group_id = ? AND starts_at < ? AND (finalized_at IS NOT NULL OR status = 'canceled')")
+    .bind(group.id, monthRange(localParts(ctx.nowMs, group.timezone).year, localParts(ctx.nowMs, group.timezone).month, group.timezone).from)
+    .all<{ starts_at: string }>();
+  const seen = new Map<string, { year: number; month: number }>();
+  for (const r of results) {
+    const p = localParts(Date.parse(r.starts_at), group.timezone);
+    seen.set(`${p.year}-${p.month}`, { year: p.year, month: p.month });
   }
-  return out;
+  return [...seen.values()];
 }
 
 /** GET /api/admin/players/:id/summary: the details sheet's month and All time cards. Read only. */
 export async function playerSummary(ctx: Ctx): Promise<PlayerSummary> {
   const group = await requireAdmin(ctx);
+  // Only while the Players redo is on for this phone: with it off the address does not exist, as on main.
+  if (!(await zip13For(ctx, group.id, 'playersRedo'))) throw new HttpError(404, 'not_found', 'Not found.');
   const id = v.id(ctx.params.id, 'player');
   const exists = await ctx.db.prepare('SELECT id FROM players WHERE id = ? AND group_id = ?').bind(id, group.id).first();
   if (!exists) throw new HttpError(404, 'player_not_found', 'Player not found.');
@@ -92,8 +91,8 @@ export async function playerSummary(ctx: Ctx): Promise<PlayerSummary> {
   let allSpent: number;
   if (id === organizerId) {
     monthSpent = await organizerSpent(ctx, group, now.year, now.month);
-    allSpent = 0;
-    for (const m of await monthsSoFar(ctx, group)) allSpent += m.year === now.year && m.month === now.month ? monthSpent : await organizerSpent(ctx, group, m.year, m.month);
+    allSpent = monthSpent;
+    for (const m of await pastMonthsWithGames(ctx, group)) allSpent += await organizerSpent(ctx, group, m.year, m.month);
   } else {
     monthSpent = (await spentByPlayer(ctx.db, group.id, organizerId, range)).get(id) ?? 0;
     allSpent = (await spentByPlayer(ctx.db, group.id, organizerId)).get(id) ?? 0;

@@ -1,4 +1,5 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
+import { flushHolds } from '../../undoHold';
 import { clearLastAdmin, signedOutLastAdmin } from '../../lastAdmin';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
@@ -529,6 +530,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       <button
         className="btn ghost block"
         onClick={async () => {
+          // Undo on admin toasts: a save still held for its Undo goes (and lands) before signing out. Nothing held: no wait.
+          await flushHolds();
           setPretend(null);
           // Zip 12 step C: signing out throws this phone's saved organizer screen away first, and no answer still on its way may keep a
           // new one until the next sign-in (src/lastAdmin.ts).

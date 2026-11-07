@@ -23,6 +23,7 @@ import { BANNER_TIMING } from '../../ui';
 import { flushHold, startHold, undoHold, UNDO_MS } from '../../hold';
 import { AlertCard } from '../../AlertCard';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { useInstant } from '../../InstantTaps';
 import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { type AdminCtx } from '../Admin';
 import { CourtSwitch } from './CourtSwitch';
@@ -983,6 +984,9 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
 function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; onClose: () => void }) {
   const tz = ctx.d.group.timezone;
   const { busy, run } = useAction(ctx);
+  // Undo on admin toasts needs instant taps (the held save and its picture); without it a cancel saves at once, as before.
+  const instantOn = useInstant() !== null;
+  const toast = useToast();
   const reopening = s.state.flags.canceled;
   // "Were you charged for this court?" is only asked within 12 hours of the start. No is the default.
   const start = Date.parse(s.startsAt);
@@ -1177,7 +1181,7 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
         }
         // Undo on admin toasts (ADMIN_UNDO): the game shows canceled at once and the cancel waits 5 seconds (dropped on Undo: nothing moves,
         // no credit, no alert). The text for the group comes once it has really saved. Reopen is unchanged.
-        const undo = ctx.d.adminUndo === true && !reopening;
+        const undo = ctx.d.adminUndo === true && !reopening && instantOn;
         const why = reason.trim() || null;
         const ok = await run(
           () =>
@@ -1194,7 +1198,11 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 key: `cancel:${s.id}`,
                 undo: true,
                 patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, status: 'canceled', cancelReason: why, state: { ...x.state, flags: { ...x.state.flags, canceled: true } } } : x)) }),
-                onSaved: () => ctx.open('canceled', s.id),
+                // Once saved: the text for the group, unless another sheet is open by then (it is never pushed away).
+                onSaved: () => {
+                  if (document.querySelector('dialog[open]')) toast('Canceled. Text the group from the game\'s menu.');
+                  else ctx.open('canceled', s.id);
+                },
               }
             : undefined,
         );
