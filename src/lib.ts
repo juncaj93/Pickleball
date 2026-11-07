@@ -1,4 +1,4 @@
-import { DIRECT_LOAD_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
+import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 export class ApiError extends Error {
@@ -195,6 +195,7 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (speedTest('fewerqueries')) headers[SPEED_QUERIES_HEADER] = 'on';
   if (speedTest('directload')) headers[DIRECT_LOAD_HEADER] = 'on';
   if (speedTest('lastscreen')) headers[LAST_SCREEN_HEADER] = 'on';
+  if (speedTest('lastscreenadmin')) headers[LAST_SCREEN_ADMIN_HEADER] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -792,11 +793,11 @@ if (typeof window !== 'undefined') {
  * ?directload=on or ?lastscreen=on (the same word with =off turns it back off). Remembered in this browser. None of them changes
  * money or what a tap does; Show last screen at once draws this phone's saved copy (no money in it) with every button held.
  */
-export function speedTest(name: 'fewerqueries' | 'directload' | 'lastscreen'): boolean {
+export function speedTest(name: 'fewerqueries' | 'directload' | 'lastscreen' | 'lastscreenadmin'): boolean {
   return storageGet(`pb_${name}`) === 'on';
 }
 if (typeof window !== 'undefined') {
-  for (const name of ['fewerqueries', 'directload', 'lastscreen']) {
+  for (const name of ['fewerqueries', 'directload', 'lastscreen', 'lastscreenadmin']) {
     const want = new URLSearchParams(window.location.search).get(name);
     if (want === 'on') storageSet(`pb_${name}`, 'on');
     else if (want === 'off') storageRemove(`pb_${name}`);

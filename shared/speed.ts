@@ -11,6 +11,8 @@
 export const SPEED_QUERIES_HEADER = 'X-Speed-Queries';
 export const DIRECT_LOAD_HEADER = 'X-Direct-Load';
 export const LAST_SCREEN_HEADER = 'X-Last-Screen';
+/** Zip 12 step C, "Instant admin" (SPEED_LAST_SCREEN_ADMIN): the organizer phone's private test link /admin?lastscreenadmin=on sends this. */
+export const LAST_SCREEN_ADMIN_HEADER = 'X-Last-Screen-Admin';
 
 /** A wrangler.toml kill switch: allowed unless it says "off". Who gets it is Settings' call. */
 export function speedAllowed(flag: string | undefined | null): boolean {

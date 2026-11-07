@@ -584,6 +584,8 @@ export const PREVIEW_SWITCHES_ON = [
   'speed_fewer_queries_on',
   'speed_direct_load_on',
   'speed_last_screen_on',
+  // Being built (Zip 12 step C): Instant admin.
+  'speed_last_screen_admin_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

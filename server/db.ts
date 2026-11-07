@@ -96,6 +96,8 @@ export interface Env {
   SPEED_DIRECT_LOAD?: string;
   /** Zip 12 "Show last screen at once" (a returning player's phone draws its saved copy of the last screen, buttons held, then the fresh one): the kill switch, allowed unless "off". Settings > Feature switches, ?lastscreen=on. */
   SPEED_LAST_SCREEN?: string;
+  /** Zip 12 step C "Instant admin" (the organizer phone draws its saved copy of the dashboard, money dimmed, every action held, then the fresh one): the kill switch, allowed unless "off". Settings > Feature switches, /admin?lastscreenadmin=on. */
+  SPEED_LAST_SCREEN_ADMIN?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

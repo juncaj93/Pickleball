@@ -147,6 +147,9 @@ ALERT_CARDS = "on"
 SPEED_FEWER_QUERIES = "on"
 SPEED_DIRECT_LOAD = "on"
 SPEED_LAST_SCREEN = "on"
+# Zip 12 step C "Instant admin": the organizer phone draws its saved copy of the dashboard at once (money dimmed, every action held). Allowed here;
+# who gets it is Settings > Feature switches > "Instant admin" (off at ship), plus /admin?lastscreenadmin=on. "off" = the kill switch.
+SPEED_LAST_SCREEN_ADMIN = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -186,6 +189,7 @@ ALERT_CARDS = "on"
 SPEED_FEWER_QUERIES = "on"
 SPEED_DIRECT_LOAD = "on"
 SPEED_LAST_SCREEN = "on"
+SPEED_LAST_SCREEN_ADMIN = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

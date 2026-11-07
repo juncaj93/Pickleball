@@ -517,6 +517,10 @@ export interface AdminDashboard {
   speedFewerQueriesForAll?: boolean;
   speedDirectLoadForAll?: boolean;
   speedLastScreenForAll?: boolean;
+  /** Zip 12 step C "Instant admin" is on for this organizer phone (server/speed.ts): it keeps a copy of this answer (src/lastAdmin.ts). Missing: nothing kept, an old copy thrown away. */
+  lastScreenAdmin?: boolean;
+  /** Settings > Feature switches > "Instant admin" is on (for everyone). */
+  speedLastScreenAdminForAll?: boolean;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

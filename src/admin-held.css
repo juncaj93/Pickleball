@@ -1,0 +1,43 @@
+/* Zip 12 step C, "Instant admin" (src/lastAdmin.ts, HeldAdmin in src/pages/Admin.tsx). Dormant unless a saved organizer screen was shown on this
+   page open: the wrapper and its attributes only exist then. */
+.admin-held[data-held-admin] [data-held-money] {
+  opacity: 0.45;
+}
+.admin-held [data-held-money] {
+  transition: opacity 320ms ease-out;
+}
+/* The small "as of 2:14 PM" under the header, out of the page's flow (it adds no height, so nothing moves when it goes). */
+.admin-asof {
+  position: fixed;
+  top: 72px;
+  right: 12px;
+  z-index: 30;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 18px;
+  font-weight: 500;
+  color: var(--muted-fg);
+  background: var(--bg, #f2f2ee);
+  box-shadow: 0 0 0 1px var(--line);
+  pointer-events: none;
+}
+@keyframes admin-sw-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.admin-held [data-sw-changed] {
+  animation: admin-sw-in 320ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .admin-held [data-held-money] {
+    transition: none;
+  }
+  .admin-held [data-sw-changed] {
+    animation: none;
+  }
+}

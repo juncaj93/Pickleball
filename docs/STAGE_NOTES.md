@@ -2974,3 +2974,24 @@ merged and live first (production `f09f5aac-d683-49bd-a3cb-de9794278759` = main 
 - Items 3 and 6a on live: `/assets/*` sends `public, max-age=31536000, immutable`; a missing built file answers 404 no-store; the page, `/theme.js`,
   `/logo.png` keep `max-age=0, must-revalidate`; `/api` no-store; `logo.png` 3,171 bytes. The public page (fast 3G): first visit 5.2 s to
   "Who are you?", repeat 3.0 s with the script, the styles and the font from the phone's own copy (0 of them before).
+
+## Zip 12 step C: Instant admin (SPEED_LAST_SCREEN_ADMIN) - built Sat Nov 7, 2026 (morning, after the Zip 12 deploy); on a preview, waiting for "ship it"
+
+Alex: the admin screens should appear instantly too, like players. A separate step with its own switch, ships OFF. No schema change, nothing about money.
+- Server (`server/speed.ts`): task `speed_last_screen_admin_on`, kill switch `SPEED_LAST_SCREEN_ADMIN` (allowed; on in `[env.preview.vars]`), header
+  `X-Last-Screen-Admin` (`/admin?lastscreenadmin=on`), `PUT /api/admin/speed-last-screen-admin-switch` (refused for the read-only PIN like every save),
+  Activity lines. The dashboard carries `lastScreenAdmin: true` and `speedLastScreenAdminForAll: true` only while on (off: the answer is as before).
+- Phone (`src/lastAdmin.ts`, `HeldAdmin` in `src/pages/Admin.tsx`, `src/admin-held.css`): after a real-PIN dashboard answer with the switch on, the
+  whole answer is kept (money included; it is the organizer's own phone). On the next open, while the answer is on its way, the copy is drawn with the
+  real Dashboard inside one inert wrapper (no tap, typing or focus), every element showing a $ amount dimmed to 45 %, the version check paused, and a
+  small "as of 2:14 PM" pill under the header (out of the page's flow). The wrapper stays for the rest of the page's life, so the fresh answer updates
+  the same screen in place: money brightens over 320 ms and only elements whose words changed or that are new fade in (a watcher that starts while the
+  copy is held and stops 1.5 s after the swap). Never kept for the read-only PIN, Pretend or the demo. Thrown away on Sign out, a PIN change (the
+  Settings form), a 401 answer, older than 3 hours (the usual loading then), another build, the switch off. Settings row "Instant admin" (newest first),
+  hint "... Not on a game day the first time".
+- Found while testing: with the fresh answer here before its Instant-taps copy, one draw went down the normal path and rebuilt the screen (no in-place
+  update); and React's double mount in dev stopped the change watcher for good. Both fixed; `e2e/zip12-admin.cjs` covers them.
+- Tests: `tests/speed-admin.test.ts` (4), `e2e/zip12-admin.cjs` 15/15 (390/360/320 px, light and dark: at once, the tag, money dimmed, nothing
+  tappable or sent, tabs held, nothing moves at the swap, money bright after, a change fades in, 3 hours, Sign out, 401, PIN change by API and by the
+  Settings form, read-only PIN never keeps, switch off, the private link, the Settings row). `e2e/zip12-off.cjs` 25/25 against main `6ab20fb` (Instant
+  admin off = main on every screen, including a repeat open of the organizer Home). money-rework updated for the new row (17 above the group).

@@ -2,7 +2,7 @@ import type { Ctx } from './context';
 import type { D1Database, D1PreparedStatement, D1Result } from './db';
 import { newId } from './crypto';
 import { isReadSql } from './viewOnly';
-import { DIRECT_LOAD_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER, speedAllowed } from '../shared/speed';
+import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER, speedAllowed } from '../shared/speed';
 
 // Zip 12 (shared/speed.ts): SPEED_FEWER_QUERIES, SPEED_DIRECT_LOAD and SPEED_LAST_SCREEN. Each is on for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
@@ -24,6 +24,7 @@ import { DIRECT_LOAD_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER, speedAllo
 export const SPEED_FEWER_QUERIES_TASK = 'speed_fewer_queries_on';
 export const SPEED_DIRECT_LOAD_TASK = 'speed_direct_load_on';
 export const SPEED_LAST_SCREEN_TASK = 'speed_last_screen_on';
+export const SPEED_LAST_SCREEN_ADMIN_TASK = 'speed_last_screen_admin_on';
 
 /** The one switch question every feature switch asks, word for word (server/zip10.ts, zip9.ts, payAlways.ts, ...). */
 export const SWITCH_READ = "SELECT 1 AS x FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark' LIMIT 1";
@@ -293,3 +294,11 @@ export const lastScreenForAll = (db: D1Database, groupId: string) => forAll(db, 
 export const setLastScreenForAll = (db: D1Database, groupId: string, v: boolean, nowIso: string) => setForAll(db, groupId, SPEED_LAST_SCREEN_TASK, v, nowIso);
 /** SPEED_LAST_SCREEN for this phone: rides on /api/group; the page saves a copy only while it says yes, and throws it away when it says no. */
 export const lastScreenFor = (ctx: Ctx, groupId: string) => onFor(ctx, groupId, ctx.env.SPEED_LAST_SCREEN, LAST_SCREEN_HEADER, SPEED_LAST_SCREEN_TASK);
+
+export const lastScreenAdminForAll = (db: D1Database, groupId: string) => forAll(db, groupId, SPEED_LAST_SCREEN_ADMIN_TASK);
+export const setLastScreenAdminForAll = (db: D1Database, groupId: string, v: boolean, nowIso: string) => setForAll(db, groupId, SPEED_LAST_SCREEN_ADMIN_TASK, v, nowIso);
+/**
+ * Zip 12 step C, "Instant admin" (SPEED_LAST_SCREEN_ADMIN) for this organizer phone: rides on the dashboard answer. The organizer's phone keeps a
+ * copy of its dashboard while it says yes (src/lastAdmin.ts) and throws it away when it says no. Never for the read-only PIN (the page checks).
+ */
+export const lastScreenAdminFor = (ctx: Ctx, groupId: string) => onFor(ctx, groupId, ctx.env.SPEED_LAST_SCREEN_ADMIN, LAST_SCREEN_ADMIN_HEADER, SPEED_LAST_SCREEN_ADMIN_TASK);
