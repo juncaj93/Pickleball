@@ -3025,3 +3025,18 @@ change, no migration, nothing deployed to production.
   from its one read (no extra trip). The preview list keeps the three speed rows on (Zip 12's own tests use them; they are off on live).
 - Retested on top of Zip 12: unit 2328 passed, 1 skipped, 0 failed (138 files); browser zip11 26/26, zip12 26/26, zip10, zip7, zip6, zip9,
   instant-taps, money-rework all pass; `e2e/zip11-off.cjs` 44/44 against main `6ab20fb` with every look and speed switch off, as on live.
+
+### Deploy (Sat Nov 7, 2026, 11:05 AM Eastern, quiet window, on Alex's "ship it")
+- PR #95 merged as `c5c7ea1` (merge commit; same files as the tested branch head `a72c0ec`, rebased on Zip 12). Production deployment
+  `81e6391c-f361-460d-bec6-546e9e3df139` from main, with `ALERT_CARDS` and `SEAT_DOTS` allowed in `wrangler.toml` and both Settings rows OFF (no
+  `alert_cards_on` or `seat_dots_on` row in `task_log`). No migration, no data change. Alex switches them on himself after testing on his phone.
+- Before it: main equaled live (production `63f84d33-4e58-47dd-b841-51c2594fa2c3` = `6ab20fb`, Zip 12). SQL export
+  `live-before-alerts-redo-2026-11-07.sql` (166 KB, not committed, has phone numbers, in that session's scratch folder), Time Travel bookmark
+  `00000a7a-00000000-0000511c-ebabf3eaade4232a2678408d5844cff6` (10:54 AM Eastern). Integrity checks: all 21 columns 0 before and after.
+- Tests on the merged tree: tsc clean, unit 2328 passed, 1 skipped, 0 failed (138 files), build clean.
+- Read-only live check (pickleball-club-9h0.pages.dev): `/`, `/admin`, `/api/status`, `/api/group/version`, an old `/t/` address answer 200; the live
+  script is the local build (index-BiPZKo9_.js); view-only sign-in works; no `alertCards` or `seatDots` flag on the organizer or player screens,
+  both rows false; the speed rows still off; Card cleanup still on; Activity and Money 200; signed out 401. Rows: players 11, games 13, seats 28
+  (28 before the deploy too).
+- Rollback: the Settings rows off (no deploy); or `ALERT_CARDS` / `SEAT_DOTS` = "off" and a deploy; or Pages deployment
+  `63f84d33-4e58-47dd-b841-51c2594fa2c3` (Zip 12, 6ab20fb). No data was changed by the deploy, so no restore is needed.
