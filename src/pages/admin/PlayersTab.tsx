@@ -13,6 +13,7 @@ import { balanceOf, heldCents, isPlayed } from './todo';
 import '../../credit-admin.css';
 import { RollText } from '../../motion';
 import { PlayersListR3 } from './PlayersR3';
+import { PlayerDetailsSheet, PlayerEditSheet, PlayersRedoList } from './PlayersRedo';
 import { AdjustCreditRow, AdjustCreditSheet } from './AdjustCredit';
 import { signedPrice } from '../../../shared/adjustCredit';
 import { formatTime, formatWeekdayShort } from '../../../shared/time';
@@ -41,6 +42,36 @@ export function PlayersTab({ ctx }: { ctx: AdminCtx }) {
   const listed = r2 ? ctx.d.players.filter((p) => !p.adminHidden) : ctx.d.players;
   // Admin screens, round 3 (ADMIN_R3): the two-line rows with the round gear and "Add a person" as the last row. Same Edit sheet.
   const r3 = ctx.d.adminR3 === true;
+  // Players redo (PLAYERS_REDO, Zip 13): the new list and its two sheets. Off: everything below, exactly as before.
+  if (ctx.d.playersRedo === true) {
+    const adjust =
+      ctx.d.adjustCredit === true && editing && editing !== 'new' && ctx.d.me?.id !== editing.id
+        ? () => {
+            setAdjusting(editing);
+            setEditing(null);
+          }
+        : undefined;
+    return (
+      <>
+        <PlayersRedoList ctx={ctx} players={listed} onOpen={setViewing} onAdd={() => setEditing('new')} />
+        <PlayerDetailsSheet
+          ctx={ctx}
+          player={shown}
+          onClose={() => setViewing(null)}
+          onEdit={(p) => {
+            setViewing(null);
+            setEditing(p);
+          }}
+        >
+          {shown && ctx.d.me?.id !== shown.id && <PlayerMoney ctx={ctx} player={shown} bare />}
+        </PlayerDetailsSheet>
+        <PlayerEditSheet open={!!editing} title={editing === 'new' ? 'Add a person' : `Edit ${editing?.name ?? ''}`} onClose={() => setEditing(null)}>
+          {editing && <PlayerForm ctx={ctx} player={editing === 'new' ? null : editing} onDone={() => setEditing(null)} onAdjust={adjust} noPlays />}
+        </PlayerEditSheet>
+        {ctx.d.adjustCredit === true && <AdjustCreditSheet ctx={ctx} player={adjusting} onClose={() => setAdjusting(null)} />}
+      </>
+    );
+  }
   return (
     <>
       {r3 ? (
@@ -154,7 +185,7 @@ function CreditActions({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
       return void (await instantAct.run(
         () => api('POST', `/api/admin/players/${player.id}/credit-refund`, refunded ? { refunded: true, cents: refundCents } : { refunded: false, ...(latest ? { ledgerId: latest.id } : {}) }),
         refunded ? 'Credit marked refunded' : 'Credit refund undone',
-        { key: `refund:${player.id}`, what: refunded ? 'Mark refunded' : 'Undo' },
+        { key: `refund:${player.id}`, what: refunded ? 'Mark refunded' : 'Undo', ...(ctx.d.adminUndo === true ? { undo: true } : {}) },
       ));
     }
     setBusy(true);
@@ -246,7 +277,7 @@ function CreditSection({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) 
 }
 
 /** A player's page: their balance, then each session's money with Mark paid. */
-function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
+function PlayerMoney({ ctx, player, bare }: { ctx: AdminCtx; player: AdminPlayer; bare?: boolean }) {
   const tz = ctx.d.group.timezone;
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -266,7 +297,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
       return void (await instantAct.run(
         () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: player.id, paid, ...(seen ? { seen } : {}), ...(paid && row && row.owesCents > 0 ? { cents: row.owesCents } : {}) }),
         paid ? `${player.name} marked paid` : `${player.name} marked unpaid`,
-        opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: player.id }, paid ? 'Mark paid' : 'Unmark'),
+        opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: player.id }, paid ? 'Mark paid' : 'Unmark', ctx.d.adminUndo === true),
       ));
     }
     setBusy(true);
@@ -295,12 +326,14 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
     );
   }
   return (
-    <div className="stack">
-      <p className="p-summary">
+    <div className={`stack${bare ? ' pr-games' : ''}`}>
+      {/* The Players redo shows these three numbers in its Money card, so its copy starts at the credit history. */}
+      {!bare && <p className="p-summary">
         {owedCents > 0 ? <strong>Owes {formatPrice(owedCents)}</strong> : <span>Owes nothing</span>}
         {creditCents > 0 && <span className="p-bal credit"> · Credit {formatPrice(creditCents)}</span>}
         <span className="muted"> · {player.played} played</span>
-      </p>
+      </p>}
+      {bare && <h4 className="pr-h4">GAMES AND CREDIT</h4>}
       <CreditSection ctx={ctx} player={player} />
       {rows.length === 0 ? (
         <p className="muted">No sessions yet.</p>
@@ -367,7 +400,7 @@ function PlayerMoney({ ctx, player }: { ctx: AdminCtx; player: AdminPlayer }) {
   );
 }
 
-function PlayerForm({ ctx, player, onDone, onAdjust }: { ctx: AdminCtx; player: AdminPlayer | null; onDone: () => void; onAdjust?: () => void }) {
+function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx; player: AdminPlayer | null; onDone: () => void; onAdjust?: () => void; noPlays?: boolean }) {
   const toast = useToast();
   const [name, setName] = useState(player?.name ?? '');
   const [phone, setPhone] = useState(player?.phone ? formatPhone(player.phone) : '');
@@ -470,7 +503,8 @@ function PlayerForm({ ctx, player, onDone, onAdjust }: { ctx: AdminCtx; player: 
         />
         <span className="small muted">For refunds. Only you see this.</span>
       </label>
-      <div className="stack" style={{ gap: 6 }}>
+      {/* The Players redo (Zip 13) has no Plays or Usual days here: both keep what was saved (sent back unchanged). */}
+      {!noPlays && <><div className="stack" style={{ gap: 6 }}>
         <span className="small" style={{ fontWeight: 600 }}>
           Plays
         </span>
@@ -499,7 +533,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust }: { ctx: AdminCtx; player: 
             </button>
           ))}
         </div>
-      </div>
+      </div></>}
       <label className="check">
         <input type="checkbox" checked={!isActive} onChange={(e) => setActive(!e.target.checked)} />
         Hide from the name list

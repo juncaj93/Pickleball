@@ -331,7 +331,7 @@ function TotalsRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
       <section className="card mrw-card" data-card="so-far" aria-label="Owed to venue so far">
         <div className="mrw-card-head">
           <h3 className="mrw-card-title">Owed to venue so far</h3>
-          <span className="mrw-big amber" data-owed-total>
+          <span className="mrw-big amber" data-owed-total data-long={t.owedToVenueCents >= 100000 ? '' : undefined}>
             {formatPrice(t.owedToVenueCents)}
           </span>
         </div>
@@ -352,7 +352,8 @@ function TotalsRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
       <section className="card mrw-card" data-card="projected" aria-label={`Projected ${monthName(month).split(' ')[0]} total`}>
         <div className="mrw-card-head">
           <h3 className="mrw-card-title">Projected {monthName(month).split(' ')[0]} total</h3>
-          <span className="mrw-big" data-projected-total>
+          {/* (Zip 13: Projected now counts every game still to come, so a busy month can reach four digits; those draw a little smaller.) */}
+          <span className="mrw-big" data-projected-total data-long={p.totalCents >= 100000 ? '' : undefined}>
             {formatPrice(p.totalCents)}
           </span>
         </div>

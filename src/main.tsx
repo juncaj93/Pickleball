@@ -22,6 +22,8 @@ import './zip10.css';
 import './alert-cards.css';
 // Seat dots: every rule under <html data-seat-dots> (dormant with the switch off).
 import './seat-dots.css';
+// Zip 13, Swap to Alex: classes that only exist while it is on for the organizer.
+import './swap-button.css';
 
 function App() {
   const path = usePath();

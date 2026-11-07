@@ -26,7 +26,7 @@ export interface PendingTap<P> {
 /** The longest a saved tap waits for fresh data before it lets go of its patch and its key. */
 export const CONFIRM_WAIT_MS = 15_000;
 
-export type TapResult<R> = { status: 'ignored' } | { status: 'ok'; value: R } | { status: 'failed'; error: unknown };
+export type TapResult<R> = { status: 'ignored' } | { status: 'ok'; value: R } | { status: 'failed'; error: unknown } | { status: 'undone' };
 
 /**
  * Counts the screen's data loads, so an answer that started before a newer one was drawn is thrown away (a slow poll that set off
@@ -105,6 +105,11 @@ export interface RunOptions<P, R> {
   patch: P | null;
   /** The real save. */
   save: () => Promise<R>;
+  /**
+   * Undo on admin toasts (ADMIN_UNDO, src/undoHold.ts): the patch is drawn now, but the save only joins the line once this says true. False
+   * (Undo): the patch goes, nothing is ever sent, the result is 'undone'. Left out: the save joins the line at once, exactly as before.
+   */
+  hold?: Promise<boolean>;
 }
 
 /**
@@ -162,6 +167,14 @@ export class TapQueue<P> {
     const tap: PendingTap<P> = { id: this.next++, key: opts.key, patch: opts.patch, savedAt: null };
     this.pending.push(tap);
     this.onChange();
+    if (opts.hold) {
+      // Held for its Undo window: drawn, not sent. Other taps meanwhile save as usual (they do not wait behind it).
+      const go = await opts.hold;
+      if (!go) {
+        this.remove(tap);
+        return { status: 'undone' };
+      }
+    }
     // One save at a time, in tap order. A failed save does not stop the next one.
     const turn = this.line.add(opts.save);
     let value: R;

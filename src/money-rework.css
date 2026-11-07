@@ -631,6 +631,10 @@
 .mrw-big.amber {
   color: var(--tok-owes-fg);
 }
+/* A four-digit total ($1,026): a little smaller, so the card title beside it keeps its one line. Three digits: as before. */
+.mrw-big[data-long] {
+  font-size: 1.5rem;
+}
 .mrw-cols {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

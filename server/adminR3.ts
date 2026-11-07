@@ -51,8 +51,9 @@ export async function adminR3For(ctx: Ctx, groupId: string): Promise<boolean> {
  * with the fee kept (Money does count those as collected). The organizer's own seat is skipped (they pay the venue).
  * Only runs while round 3 is on. Must never break the dashboard, so the caller treats any failure as "no numbers".
  */
-export async function spentByPlayer(db: D1Database, groupId: string, organizerId: string | null): Promise<Map<string, number>> {
-  const sessions = (await loadSessions(db, groupId, '0000')).filter((s) => s.finalized_at && s.status !== 'canceled');
+export async function spentByPlayer(db: D1Database, groupId: string, organizerId: string | null, range?: { from: string; to: string }): Promise<Map<string, number>> {
+  // `range` (the Players redo, Zip 13): only games that start inside it (one month). Left out: every game, exactly as before.
+  const sessions = (await loadSessions(db, groupId, '0000')).filter((s) => s.finalized_at && s.status !== 'canceled' && (!range || (s.starts_at >= range.from && s.starts_at < range.to)));
   if (sessions.length === 0) return new Map();
   const rosters = await loadRosters(db, groupId, '0000');
   // The credit rows of one seat, found once (seatCredit only looks at rows of its own game and player).

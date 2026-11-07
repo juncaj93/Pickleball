@@ -109,6 +109,7 @@ import { cardTimeFor } from './zip9';
 import { cardCleanupLook } from './zip10';
 import { alertCardsFor } from './zip11';
 import { seatDotsFor } from './seatDots';
+import { goToAdminFor } from './zip13';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -318,6 +319,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...((await alertCardsFor(ctx, group.id)) ? { alertCards: true } : {}),
     // "Seat dots": every empty seat a dashed ring (display only).
     ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
+    // Zip 13, Swap to Alex: the "Go to Admin" pill, only on a phone signed in as the organizer (players: no trip, never there).
+    ...((await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,

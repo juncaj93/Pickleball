@@ -176,6 +176,18 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Adjust credit" on`;
     case 'adjust_credit_off':
       return `${who} switched "Adjust credit" off`;
+    case 'players_redo_on':
+      return `${who} switched "Players redo" on`;
+    case 'players_redo_off':
+      return `${who} switched "Players redo" off`;
+    case 'swap_button_on':
+      return `${who} switched "Swap to Alex" on`;
+    case 'swap_button_off':
+      return `${who} switched "Swap to Alex" off`;
+    case 'admin_undo_on':
+      return `${who} switched "Undo on admin toasts" on`;
+    case 'admin_undo_off':
+      return `${who} switched "Undo on admin toasts" off`;
     case 'seat_dots_on':
       return `${who} switched "Seat dots" on`;
     case 'seat_dots_off':

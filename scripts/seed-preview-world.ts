@@ -129,7 +129,12 @@ export interface Seed {
   summary: string[];
 }
 
-export async function buildSeed(startMs = Date.now()): Promise<Seed> {
+/**
+ * `zip13`: also the Zip 13 parts (the organizer's two games earlier this month, and the Players redo, Swap to Alex and Undo rows on). The
+ * preview database always gets them (npm run db:seed:preview); the local browser tests only when they ask (e2e/zip13.cjs), so every older
+ * test keeps the world it was written for, which is also what live looks like with the three switches off.
+ */
+export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean } = {}): Promise<Seed> {
   const w = new World();
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
@@ -273,6 +278,47 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   for (const n of ['Gray', 'Harper', 'Kai', 'Jordan']) await join(n, pastNeverBooked);
   await at(Math.min(ms(pastNeverBooked.endsAt) + HOUR, N));
   summary.push('past game, never booked, 4 in (Gray, Harper, Kai, Jordan), not finalized: shows "Did you guys play?"');
+
+  // 2b. Zip 13 (Players redo): the organizer played two 4-player games earlier THIS month (both booked, the 3 others paid $14, finalized at
+  //     the flat price, so no credit moves), so the organizer's own "Spent" on the Players page and Money Totals "Your cost so far" have
+  //     something to agree on ($30 + 2 x ($48 - 3 x $14) = $42). Only when there is room between the last past game and now, inside this
+  //     month; otherwise left out (the summary says so). The players used have no credit at this point, so nobody's pot changes.
+  if (opts.zip13) {
+    const monthStart = (() => {
+      const q = localParts(N, 'America/Detroit');
+      return zonedTimeToUtc(q.year, q.month, 1, 0, 0, 'America/Detroit');
+    })();
+    const step = 15 * 60_000;
+    let t = Math.ceil(Math.max(w.now + 2 * HOUR, monthStart + 2 * HOUR) / step) * step;
+    let made = 0;
+    for (const names of [['Indy', 'Jordan', 'Kai'], ['Lane', 'Morgan', 'Gray']]) {
+      let g: any = null;
+      while (!g && t + 2 * HOUR + 30 * 60_000 <= N - 30 * 60_000) {
+        try {
+          const res = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(t).toISOString(), endsAt: new Date(t + 2 * HOUR).toISOString(), note: null });
+          await refresh();
+          g = games().find((x) => x.id === res.id);
+        } catch (err) {
+          if (!/game_exists|time_taken/.test(String(err))) throw err;
+          t += 30 * 60_000;
+        }
+      }
+      if (!g) break;
+      await setCourt(g, 'booked');
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/me`, { in: true });
+      for (const n of names) await join(n, g);
+      for (const n of names) await orgPays(n, g);
+      await at(ms(g.endsAt) + 15 * 60_000);
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+      made++;
+      t = Math.ceil((w.now + HOUR) / step) * step;
+    }
+    summary.push(
+      made === 2
+        ? 'organizer played 2 four-player games earlier this month (Indy, Jordan, Kai; Lane, Morgan, Gray; all paid $14, finalized): organizer Spent this month = Money "Your cost so far"'
+        : `organizer this-month games: only ${made} of 2 fit before now (seeded early in the month); the organizer Spent check needs a later seed`,
+    );
+  }
 
   // Back to "now" for everything upcoming (the fake clock moves forward only).
   await at(N);
@@ -537,7 +583,7 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   backup.tables.player_devices = [];
   await w.settle();
 
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N);
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N, !!opts.zip13);
   return { sql, summary };
 }
 
@@ -579,8 +625,8 @@ export const PREVIEW_SWITCHES_ON = [
   // Zip 9 (live, switched on by Alex Fri Nov 6): Short games and Card time and buttons.
   'short_games_on',
   'card_time_buttons_on',
-  // Zip 10: Card cleanup. Alex, Sat Nov 7: NOT on live yet (it stays off until he flips it). Kept on in this fake world because its 11 and 12
-  // player games are built through it (the Zip 10 and Zip 11 browser tests use them); a preview that must look like live switches it off after a seed.
+  // Zip 10: Card cleanup. ON on live (the live row read with the read-only PIN after the Zip 12 deploy, Sat Nov 7, against an earlier note
+  // that it was not); the fake world's 11 and 12 player games are built through it too.
   'card_cleanup_on',
   // Zip 11 (live, Settings row off): Alert cards; on here because its redo is being built.
   'alert_cards_on',
@@ -594,9 +640,20 @@ export const PREVIEW_SWITCHES_ON = [
   'seat_dots_on',
 ] as const;
 
-function switchRows(nowMs: number): string {
+/** Being built (Zip 13): Players redo, Swap to Alex, Undo on admin toasts. On the preview database; on a local world only when asked. */
+export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_undo_on'] as const;
+
+/**
+ * Rows that are OFF on live (repo records: Alert cards and Seat dots were left off, the four speed rows ship dark). Older local browser tests
+ * need them on, so the list above keeps them; the PREVIEW database leaves them out, so a preview behaves like live (PREVIEW SWITCHES RULE).
+ */
+export const OFF_ON_LIVE = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'] as const;
+
+function switchRows(nowMs: number, zip13: boolean): string {
   const at = new Date(nowMs).toISOString();
-  return PREVIEW_SWITCHES_ON.map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  // zip13 is only asked for by the preview database (and e2e/zip13.cjs): live's switch list there, plus the three Zip 13 rows.
+  const base = zip13 ? PREVIEW_SWITCHES_ON.filter((t) => !(OFF_ON_LIVE as readonly string[]).includes(t)) : PREVIEW_SWITCHES_ON;
+  return [...base, ...(zip13 ? ZIP13_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

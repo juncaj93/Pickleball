@@ -349,6 +349,8 @@ html[data-motion='on'] .pop.m-toast.m-snap {
   stroke-dasharray: 100;
   stroke-dashoffset: 0;
   animation: m-ring-drain var(--ring-ms, 5000ms) linear forwards;
+  /* Zip 13: a banner drawn again elsewhere picks the drain up where it was (0 for a new banner: as before). */
+  animation-delay: var(--ring-delay, 0ms);
 }
 @keyframes m-ring-drain {
   to {

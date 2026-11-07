@@ -16,10 +16,10 @@ import type { Ctx } from './context';
 import { HttpError } from './http';
 import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
 import { loadLedger } from './credit';
-import { courtCostOf, flatOf, loadCancelCharges, loadRoster, organizerIdOf, rosterRead, type SessionRow, settingsOf } from './repo';
+import { courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, rosterRead, type SessionRow, settingsOf } from './repo';
 import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
-import { PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
+import { membershipMonth, PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
 import { adminHiddenGameIds, moneyReworkFor, sessionHasMoney } from './moneyRework';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -39,7 +39,6 @@ export function bottomLine(netCents: number, membershipCents: number, sessionsPl
 export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   const group = await requireAdmin(ctx);
   const tz = group.timezone;
-  const settings = settingsOf(group);
   const asked = ctx.url.searchParams.get('month');
   let year: number;
   let month: number;
@@ -53,6 +52,17 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     year = p.year;
     month = p.month;
   }
+  return monthMoneyOf(ctx, group, year, month);
+}
+
+/**
+ * One month's Money numbers (the Money tab, `GET /api/admin/money`). Also used by the Players redo (Zip 13) for the organizer's own
+ * "Spent", so the two can never disagree: `forceRework` gives the reworked Totals ("Your cost so far") even when the Money page rework
+ * is off for this phone. Read only.
+ */
+export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, month: number, forceRework = false): Promise<MonthlyMoney> {
+  const tz = group.timezone;
+  const settings = settingsOf(group);
   const from = new Date(zonedTimeToUtc(year, month, 1, 0, 0, tz)).toISOString();
   const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
 
@@ -61,7 +71,7 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
     .bind(group.id, from, to)
     .all<SessionRow>();
   // "Money page rework": a game the organizer hid from their lists is out of Totals too (nothing about it is deleted).
-  const rework = await moneyReworkFor(ctx, group.id);
+  const rework = forceRework || (await moneyReworkFor(ctx, group.id));
   const listHidden = rework ? await adminHiddenGameIds(ctx.db, group.id) : new Set<string>();
   const results = allResults;
   // The organizer pays the venue themselves: their own row is never money from players.
@@ -89,8 +99,8 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
   let splitGames = 0;
   // The reworked Totals (MONEY_REWORK) keep their own sums so the numbers above stay exactly as they were:
   //  so far = a game only once it is FINALIZED (its court and the fees players paid are added at that moment; a game not finalized yet adds
-  //  nothing), or a canceled one the venue charged (a cancel is its own settling); projected adds the games still to come (booked and coming up,
-  //  or played and not finalized yet) and assumes 3 players pay the usual price for EVERY court, finalized or not.
+  //  nothing), or a canceled one the venue charged (a cancel is its own settling); projected adds the games still to come (every one not canceled,
+  //  booked or not, since Zip 13; or played and not finalized yet) and assumes 3 players pay the usual price for EVERY court, finalized or not.
   let rwCourts = 0;
   let rwCollected = 0;
   let rwSessions = 0;
@@ -150,7 +160,9 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
         projPlayersCents += PROJECTED_PLAYERS_PER_COURT * flatOf(s, settings);
         rwCourts += state === 'played' ? cost : charged;
         rwCollected += kept;
-      } else if (state === 'not_finalized' || (state === 'upcoming' && s.status !== 'canceled' && s.booking_status === 'booked')) {
+      } else if (state === 'not_finalized' || state === 'upcoming') {
+        // Zip 13: every game still to come counts in Projected as if it will be played, whatever its court status (Booked, Not booked
+        // or Waitlist), until or unless it is canceled (a canceled game's state is 'canceled', so it never gets here). Display only.
         projAdded++;
         projPlayersCents += PROJECTED_PLAYERS_PER_COURT * flatOf(s, settings);
         projCourts += cost;
@@ -176,8 +188,11 @@ export async function monthlyMoney(ctx: Ctx): Promise<MonthlyMoney> {
         const isCurrent = p.year === year && p.month === month;
         // Membership is a monthly fee: "so far" has it for the current month, or any month with a game the venue is already owed for; the
         // projected card also has it for a month whose only games are still coming.
-        const soFarMembership = isCurrent || rwSessions > 0 ? settings.monthlyMembershipCents : 0;
-        const projMembership = isCurrent || rwSessions + projAdded > 0 ? settings.monthlyMembershipCents : 0;
+        // Zip 13: from October 2026 every month pays the membership, games or not ("so far" for this month and earlier, Projected for every one).
+        const paysAnyway = membershipMonth(year, month);
+        const notAhead = year < p.year || (year === p.year && month <= p.month);
+        const soFarMembership = isCurrent || rwSessions > 0 || (paysAnyway && notAhead) ? settings.monthlyMembershipCents : 0;
+        const projMembership = isCurrent || rwSessions + projAdded > 0 || paysAnyway ? settings.monthlyMembershipCents : 0;
         const split = (courtsCents: number, playersCents: number, membership: number) => {
           const yourCost = Math.max(0, courtsCents + membership - playersCents);
           const courtPart = Math.max(0, courtsCents - playersCents);

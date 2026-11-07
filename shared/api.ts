@@ -180,6 +180,8 @@ export interface GroupView {
   lastScreen?: boolean;
   /** "Seat dots" is on for this screen (server/seatDots.ts): every empty seat a dashed ring. Missing: exactly as before. */
   seatDots?: boolean;
+  /** Swap to Alex (Zip 13): this phone is signed in as the organizer (real PIN) and the switch is on: the "Go to Admin" pill. Missing for everyone else. */
+  goToAdmin?: true;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -397,6 +399,16 @@ export interface AdminPlayer {
   adminHidden?: boolean;
   /** Admin screens round 3 only: money they have paid for games they played, ever, in cents (the Players page "$108 spent"). */
   spentCents?: number;
+  /** Players redo (Zip 13) only: games played this month (the same rule as `played`), for the one-line rows. */
+  monthPlayed?: number;
+}
+
+/** Players redo (Zip 13): a player's details sheet, month and All time (GET /api/admin/players/:id/summary). Organizer only. */
+export interface PlayerSummary {
+  month: { label: string; played: number; spentCents: number };
+  allTime: { played: number; spentCents: number };
+  /** This is the organizer: Spent is Money Totals "Your cost so far" (membership + court - what players paid). */
+  organizer: boolean;
 }
 
 /** One line in History > Activity. */
@@ -526,6 +538,17 @@ export interface AdminDashboard {
   /** "Seat dots" is on for this screen / Settings row is on (for everyone). Display only. */
   seatDots?: boolean;
   seatDotsForAll?: boolean;
+  /** Zip 13 (shared/zip13.ts), each only while on (off: the answer is exactly as before). The Players redo, its Settings row. */
+  playersRedo?: true;
+  playersRedoForAll?: true;
+  /** With the Players redo on: the month the list counts "played" for ("NOV 2026"). */
+  playersRedoMonth?: string;
+  /** Swap to Alex: the title swap and Go to Admin, and its Settings row. */
+  swapButton?: true;
+  swapButtonForAll?: true;
+  /** Undo on admin toasts (5 seconds, the save waits), and its Settings row. */
+  adminUndo?: true;
+  adminUndoForAll?: true;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

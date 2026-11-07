@@ -3072,3 +3072,90 @@ change, no migration, nothing deployed to production.
   from its one read (no extra trip). The preview list keeps the three speed rows on (Zip 12's own tests use them; they are off on live).
 - Retested on top of Zip 12: unit 2328 passed, 1 skipped, 0 failed (138 files); browser zip11 26/26, zip12 26/26, zip10, zip7, zip6, zip9,
   instant-taps, money-rework all pass; `e2e/zip11-off.cjs` 44/44 against main `6ab20fb` with every look and speed switch off, as on live.
+
+## Zip 13: Players redo (PLAYERS_REDO), Swap to Alex (SWAP_BUTTON), Undo on admin toasts (ADMIN_UNDO), projected costs fix - built Sat Nov 7, 2026 (afternoon, a quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 13" brief (`START_HERE.md`, `SITE_RULES.md`, mockups p6_E, p5_details, p5_edit, p10_headers section A, p10_alex_c, mock5/6/9.html). One PR.
+NO database schema change, no migration. Zip 12 and Instant admin were merged and live first (production `5cb45263` = main `aab306b`). Nothing deployed
+to production, nothing switched on, no live data read or changed. Each switch's full description is its row in `docs/FEATURE_SWITCHES.md`.
+
+### Item 1: Players redo (`PLAYERS_REDO`, ships OFF)
+- `src/pages/admin/PlayersRedo.tsx`, `src/players-redo.css`, used by `PlayersTab.tsx` only while on (off: the same code path as main). Sizes from mock6.html
+  (?v=E); colors are the site's tokens (warn/ok/info, the same money colors as everywhere), so light, dark and Color cleanup follow. The month label is the
+  site's section line (`week-break`), "Add a person" is the site's `btn ghost block small` (the More sessions look, 44 px), the sheets are the site's
+  `Sheet` (new optional `className` and `hideClose` props; left out = as before).
+- Numbers: `server/playersRedo.ts`. Row "N played" = the old list's all-time rule counted for this month (dashboard `monthPlayed`, one grouped read,
+  only while on). Details: `GET /api/admin/players/:id/summary` (read only). A player's Spent = the old round 3 rule (`spentByPlayer`, now with an
+  optional month range). The organizer's Spent = Money Totals "Your cost so far" from the SAME function (`monthlyMoney` became `monthMoneyOf(ctx, group,
+  year, month, forceRework)`; Money's own answer is unchanged), All time = the sum of that number for every month from the first game.
+- OLD list (answer to the brief): "N played" was ALL TIME (in, game not canceled, game over, not marked "did not play"); round 3's "$108 spent" was ALL
+  TIME money paid for games played and finalized, minus credit back; the organizer's own row showed $0 spent (organizer skipped).
+- "Held" in the code: money a player put toward a game that is not FINALIZED yet (cash or credit on a paid seat), plus credit on a seat that still owes,
+  plus an unconfirmed "I paid" (`heldCents` in `todo.ts`). A game that was played but not finalized still counts as held (the brief said "not happened yet").
+### Item 2: Swap to Alex (`SWAP_BUTTON`, ships OFF)
+- Header: no ORGANIZER label; "Admin" + gray swap icon are one 44 px button (`TopBar` `onTitle`); "View as…" reads "View as". It opens the group's
+  link (your own player page; who it shows is this phone's own pick; nothing signs in or out).
+- Player page: "Go to Admin" pill under the end line (`src/swap-button.css`; 30 px, 13 px, 1 px line, no fill; the gap under the line equals the gap above
+  it, measured 24 px / 24 px). Server checked: `goToAdminFor` in `server/zip13.ts` (a phone with no organizer cookie gets nothing and costs no trip;
+  the read-only PIN does not count; an expired or other group's session does not count). Also at the bottom of a View as page (latched from the organizer
+  screen, because View as answers from the demo copy, which has no switch rows).
+### Item 3: Undo on admin toasts (`ADMIN_UNDO`, ships OFF)
+- Method (a) for every action: the save is HELD 5 seconds (`src/undoHold.ts`; `hold` on `TapQueue.run` in `src/instant.ts`) and dropped on Undo, so an
+  undone tap never reaches the server (no record, no history line, no Telegram, no credit). Hidden or closed page: every held save goes at once, with
+  keepalive. Built on Instant taps (on live); without it everything saves at once as before. The existing `src/hold.ts` (Remove from game, Drop out) was
+  not reused because it allows one hold at a time (a second tap sends the first), and the brief wants two quick taps to each keep their own Undo.
+- Toasts: the same banner; new optional `keep` (stays its own time, up to 3 stack, 72 px apart). Found: a modal sheet makes everything outside it
+  untappable, so an Undo toast over an open sheet looked tappable but was not (this is also true of the older Remove-from-game Undo on main, left as is).
+  Undo banners are drawn inside the open sheet and move out when it closes.
+- Has Undo / no Undo: see the `ADMIN_UNDO` row in `docs/FEATURE_SWITCHES.md`.
+### Item 4: Projected costs (no switch, live at deploy)
+- `server/money.ts`: a game still to come counts in Projected whatever its court status, until it is canceled. Old Totals tests that pinned "only
+  Booked counts" now say what the new rule adds (`tests/projectedZip13.ts`).
+### Trips and cost
+- With the speed switch "decide" (live), the three new switch rows are answered from the one switch read (no new trip); `tests/speed-queries.test.ts`
+  counts them as not-main. The player page adds nothing for players (no organizer cookie: no read). The summary endpoint runs only when a row is tapped.
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing wrong with the three switches off. Fixed from it (all only with Undo on): (1) a held save could go out after "Pretend it's..." began or
+  ended, into the wrong database (the demo copy, or live from a demo tap): every held save now checks who it acts as when it goes, and Pretend,
+  View as, Sign out and your own player page first wait until every held save has been sent and answered (`afterHolds`, `flushHolds`); (2) View
+  as right after two quick held taps could drop the second (same fix); a court switch Undo after a second tap now reloads; Cancel's Undo only
+  with Instant taps on, and its "text the group" sheet never pushes another open sheet away; a second tap on a held Money row shows nothing; the
+  summary address only exists with the Players redo on; the organizer's All time reads only months that had a finalized or canceled game.
+- Left as is (said in the report): a fourth quick held tap drops the oldest Undo banner (its save still goes); a held tap saves after taps made
+  after it that had no Undo (they are different things); "N played" updates on the next change, not the moment a game ends.
+### Tests (Sat Nov 7, 2026)
+- Unit and API: 2348 passed, 1 skipped, 0 failed (140 files); tsc clean; build clean. New: `tests/zip13.test.ts` (15). Updated for the projected
+  rule: 15 older Totals tests in 6 files (`tests/projectedZip13.ts` says what the new rule adds); `tests/speed-queries.test.ts` (the Zip 13 rows
+  are not main's); `tests/readonly-pin.test.ts` (the summary read with the redo on, still writes nothing).
+- Browser: `e2e/zip13.cjs` 36/36 (list rows 46 px one line at 390/360/320 light and dark, chips, details and edit sheets, organizer Spent = Money,
+  header at 390/360/320 light and dark, swap and back light and dark, View as, a player never sees it, 13 Undo cases each with the whole database
+  compared before and after and no request sent, left alone saves once, polls never flip it, two quick taps, Undo off, Settings rows, private link,
+  projected). `e2e/zip13-off.cjs` 27/27 against main `aab306b` (all three off = main on every player and organizer screen, light and dark, 390/360/320
+  Players, the organizer's own player page, Settings apart from the three rows, Totals apart from the projected card, a Mark paid tap).
+- Full `npm run test:e2e` once, 2 at a time: 48 of 54 scripts clean (money-rework updated for the three new Settings rows). The other 6:
+  `run.cjs` (10), `cancel-reason.cjs` (2), `want-in.cjs` (1), `admin-r2.cjs` F4 (1) fail the same way on main (known since Zip 9 / 12);
+  `round2.cjs` passed alone (load); `player-fix1.cjs` "I paid on tonight's card" fails 2 of 3 runs on main too (flaky there).
+- The Zip 13 seed parts (two organizer games this month, the three rows on) go to the preview database always and to a local test world only when
+  asked (`SEED_ZIP13=1`, e2e/zip13.cjs), so every older test keeps its world.
+### Preview
+- https://preview-zip13.pickleball-club-9h0.pages.dev (fake database re-seeded Sat Nov 7, about 3:00 PM Eastern). On there: every switch on live
+  per the repo records (the Zip 11 read of the live rows: Adjust credit, Admin layout v2, round 2 and 3, Card cleanup, Card time and buttons, Color
+  cleanup, Home collapse, Instant taps, Last call texts, Late-cancel fee split, Late drops owe $14, Money rework, Ask for payment, No Venmo? note, Pay
+  sheet, Simpler player cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow, Venmo request, both animation switches),
+  plus Players redo, Swap to Alex and Undo on admin toasts. Off there as on live: Alert cards, Seat dots and the four speed rows (switched off on the
+  preview after the seed).
+- Projected (fake November): before 19 courts, $930 total, players $789, your estimate $141; after 22 courts, $1,074, $915, $159 (3 Not booked
+  games added; 2 canceled stay out).
+
+### After Alex looked at the preview (Sat Nov 7, 2026, about 4:00 PM Eastern): "ship it after these fixes"
+- Answers: Held stays "until finalized". Totals: every month from October 2026 counts the $30 membership, games or not (built; numbers in the
+  report). Swap: as is. The old Remove-from-game Undo: fixed (below). Branch name: fine.
+- Details sheet header: the pencil is a small 32 px circle right after the name, and the ✕ is back alone at the top right (the Sheet's own),
+  light and dark (`Sheet` `titleAfter`, new and optional).
+- "Undo is not showing on the preview": the Home card "Who owes you" / "Mark paid tonight" (`src/pages/Admin.tsx` TodoCard) was the one money tap
+  left without it (also the older non-rework Money page path). Both have it now. The preview's switch rows were right (Instant taps and Undo on).
+  Checked the preview defaults too: each re-seed put Alert cards, Seat dots and the four speed rows back on (then switched off by hand); the preview
+  seed now leaves them off as on live (`OFF_ON_LIVE`); local browser tests keep them on as before.
+- The old Remove-from-game Undo never worked on live: confirming "Remove Indy?" also closed the Players sheet behind it, and closing that sheet sends
+  the held Remove at once (reproduced on main: sent 0.1 s after the confirm). Fixed in `Sheet` (closes only for its own close), plus the toast with a
+  button is drawn inside an open sheet (so the Undo can be tapped). Both ship live-on (bug fixes, no switch). `e2e/zip13.cjs` checks it.

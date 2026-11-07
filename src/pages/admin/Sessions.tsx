@@ -23,6 +23,7 @@ import { BANNER_TIMING } from '../../ui';
 import { flushHold, startHold, undoHold, UNDO_MS } from '../../hold';
 import { AlertCard } from '../../AlertCard';
 import { Chip, ConfirmDialog, CourtIcon, CourtReserveLink, Notice, PlayersLine, Sheet, SmsDraft, useToast } from '../../ui';
+import { useInstant } from '../../InstantTaps';
 import { type CourtKind, type CourtSwitch as CourtSwitchValue, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { type AdminCtx } from '../Admin';
 import { CourtSwitch } from './CourtSwitch';
@@ -262,6 +263,7 @@ export function CardSwitch({ ctx, s, value }: { ctx: AdminCtx; s: AdminSessionVi
       label={`Court status for ${formatShortDate(s.startsAt, ctx.d.group.timezone)}`}
       onPick={async (to) => {
         setPicked(to);
+        // (Undo on admin toasts lives on the round 2 switch, CardR2.tsx, the one live uses; this older one is unchanged.)
         await run(() => api('POST', `/api/admin/sessions/${s.id}/court-status`, { status: to }), to === 'booked' ? 'Court booked' : to === 'waitlist' ? 'On the waitlist' : 'Court not booked', { key: 'court' });
         setPicked(null);
       }}
@@ -653,7 +655,8 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   useEffect(() => () => flushHold(), []);
   const live = !s.state.flags.canceled && !s.state.flags.started;
   const act = (playerId: string, action: string, msg: string) =>
-    run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg, { key: `roster:${playerId}` });
+    // Undo on admin toasts (ADMIN_UNDO): adding someone (Give spot) waits 5 seconds too; Remove already has its own Undo above.
+    run(() => api('POST', `/api/admin/sessions/${s.id}/roster`, { playerId, action }), msg, { key: `roster:${playerId}`, ...(ctx.d.adminUndo === true ? { undo: true } : {}) });
   const inRoster = new Set(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted').map((r) => r.playerId));
   const others = ctx.d.players.filter((p) => p.isActive && !p.adminHidden && !inRoster.has(p.id));
   // "Card cleanup" (Zip 10): no Max players cap and no waitlist; only the database's 12 stops a Give spot.
@@ -784,14 +787,14 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const feeRows = s.roster.filter((r) => r.lateFee);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId }, paid ? 'Mark paid' : 'Unmark'));
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId }, paid ? 'Mark paid' : 'Unmark', ctx.d.adminUndo === true));
   const price = viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
   const played = isPlayed(s);
   const fin = s.finalized;
   const myId = s.roster.find((r) => r.isOrganizer)?.playerId ?? ctx.d.me?.id ?? null;
   const setCourtPaid = (paid: boolean) =>
     run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due', { key: `court:${s.id}` });
-  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.', opTap({ kind: 'reopen', sessionId: s.id }, 'Reopen'));
+  const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.', opTap({ kind: 'reopen', sessionId: s.id }, 'Reopen', ctx.d.adminUndo === true));
 
   const moneyLine = (r: AdminRosterEntry) => payMoneyLine(r, s, tz);
 
@@ -936,7 +939,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
                           className="btn small secondary"
                           disabled={busy}
                           data-unmark-credit={r.name}
-                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit'))}
+                          onClick={() => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: false, seen: r.moneySeen }), `${r.name}'s credit put back`, opTap({ kind: 'creditUndo', sessionId: s.id, playerId: r.playerId }, 'Unmark credit', ctx.d.adminUndo === true))}
                         >
                           Unmark
                         </button>
@@ -981,6 +984,9 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
 function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; onClose: () => void }) {
   const tz = ctx.d.group.timezone;
   const { busy, run } = useAction(ctx);
+  // Undo on admin toasts needs instant taps (the held save and its picture); without it a cancel saves at once, as before.
+  const instantOn = useInstant() !== null;
+  const toast = useToast();
   const reopening = s.state.flags.canceled;
   // "Were you charged for this court?" is only asked within 12 hours of the start. No is the default.
   const start = Date.parse(s.startsAt);
@@ -1173,6 +1179,10 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
           if (cents === null) return setAmountError('Enter an amount like 48 or 48.50.');
           chargedCents = cents;
         }
+        // Undo on admin toasts (ADMIN_UNDO): the game shows canceled at once and the cancel waits 5 seconds (dropped on Undo: nothing moves,
+        // no credit, no alert). The text for the group comes once it has really saved. Reopen is unchanged.
+        const undo = ctx.d.adminUndo === true && !reopening && instantOn;
+        const why = reason.trim() || null;
         const ok = await run(
           () =>
             api(
@@ -1183,9 +1193,21 @@ function CancelSheet({ ctx, s, onClose }: { ctx: AdminCtx; s: AdminSessionView; 
                 : { decision: 'cancel', confirm: true, ...(chargedCents > 0 ? { chargedCents } : {}), ...(askWaived ? { venueWaived: waived } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}) },
             ),
           reopening ? 'Session reopened' : 'Session canceled',
+          undo
+            ? {
+                key: `cancel:${s.id}`,
+                undo: true,
+                patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, status: 'canceled', cancelReason: why, state: { ...x.state, flags: { ...x.state.flags, canceled: true } } } : x)) }),
+                // Once saved: the text for the group, unless another sheet is open by then (it is never pushed away).
+                onSaved: () => {
+                  if (document.querySelector('dialog[open]')) toast('Canceled. Text the group from the game\'s menu.');
+                  else ctx.open('canceled', s.id);
+                },
+              }
+            : undefined,
         );
         // After a cancel, go straight to the text for the group and who to pay back.
-        if (ok) (reopening ? onClose() : ctx.open('canceled', s.id));
+        if (ok) (reopening || undo ? onClose() : ctx.open('canceled', s.id));
       }}
       onCancel={onClose}
     />

@@ -1,4 +1,5 @@
 // Final independent review (MONEY_REWORK): Totals, month counts and the hide rules, attacked with real data and hand-computed numbers.
+import { COURT, comingUnbooked, PLAYERS } from './projectedZip13';
 import { describe, expect, it } from 'vitest';
 import { MONEY_REWORK_HEADER } from '../shared/moneyRework';
 import { canHide } from '../src/pages/admin/moneyRework';
@@ -152,7 +153,9 @@ describe('review-final: Totals hand-computed', () => {
     const t = (await money(w, monthOf(Date.parse(s0.startsAt)))).rework;
     expect(t).toMatchObject({ courtSessions: 0, collectedCents: 0 });
     // Four in at the flat $14 (4 or more: floor(56/4)=14): 4 x 14 = 5600, court 4800.
-    expect(t.projected).toMatchObject({ addedCourts: 1, courtCostCents: 4800, playersPayCents: 4200 });
+// (+ x: the month's other games still to come, not booked; Zip 13 counts them in Projected as if played.)
+    const x = await comingUnbooked(w.organizer, monthOf(Date.parse(s0.startsAt)), [s0.id]);
+    expect(t.projected).toMatchObject({ addedCourts: 1 + x, courtCostCents: 4800 + x * COURT, playersPayCents: 4200 + x * PLAYERS });
   });
 
   it('C4 a hidden game that has NO money never changes any number', async () => {

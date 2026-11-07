@@ -29,6 +29,7 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const gp = viewPrice(s, ctx.d.group.settings);
   const price = gp.flatCents;
   const { busy: saving, run } = useRun(ctx);
+  const undo = ctx.d.adminUndo === true;
   // Dimmed for a moment right after "Yes, we played" brings this card in under the finger.
   const held = useTapsHeld();
   const busy = saving || held;
@@ -46,9 +47,13 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
           // Instant taps (INSTANT_TAPS): the price and the credit are the server's, so the button shows it is working; only where Money
           // files the game moves at once (finalized games that are fully paid go to Previous games). A failed save moves it back.
           key: `finalize:${s.id}`,
-          patch: (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, finalizing: true } : x)) }),
-          press: true,
+          // Undo on admin toasts (ADMIN_UNDO): the card goes at once and the save waits 5 seconds (dropped on Undo, then the card is back).
+          patch: undo
+            ? (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, finalizing: true, needsFinalize: false } : x)) })
+            : (d) => ({ ...d, sessions: d.sessions.map((x) => (x.id === s.id ? { ...x, finalizing: true } : x)) }),
+          press: !undo,
           what: 'Finalize',
+          ...(undo ? { undo: true } : {}),
         });
   // Zip 11, Alert cards: a green (after the game) card. The same title, the same preview line, the same buttons under it.
   if (ctx.d.alertCards === true) {
@@ -226,6 +231,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
       key: `refund:${r.id}`,
       patch: (d) => ({ ...d, refundRequests: d.refundRequests.filter((x) => x.id !== r.id) }),
       what: action === 'refunded' ? 'Mark refunded' : 'Not now',
+      ...(ctx.d.adminUndo === true ? { undo: true } : {}),
     });
   // Zip 11, Alert cards: a blue (credit) card, the same three buttons under the text (Venmo, then Mark refunded once it was tapped, Not now).
   if (ctx.d.alertCards === true) {
@@ -317,6 +323,7 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
       key: `claim:${c.sessionId}:${c.playerId}`,
       patch: (d) => ({ ...d, paymentClaims: (d.paymentClaims ?? []).filter((x) => !(x.sessionId === c.sessionId && x.playerId === c.playerId)) }),
       what: paid ? 'Paid' : "Didn't pay",
+      ...(ctx.d.adminUndo === true ? { undo: true } : {}),
     });
   // Zip 11, Alert cards: an amber (owes) card: the same words as a title and the rest, Paid and Didn't pay under it.
   if (ctx.d.alertCards === true) {

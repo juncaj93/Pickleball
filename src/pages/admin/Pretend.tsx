@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { afterHolds } from '../../undoHold';
 import type { AdminDashboard } from '../../../shared/api';
 import { formatShortDate, formatTime, fromLocalInputValue, localParts, toLocalInputValue, zonedTimeToUtc } from '../../../shared/time';
 import { nightLastCallMs } from '../../../shared/tasks';
@@ -48,7 +49,8 @@ export function PretendPicker({ d, onPicked }: { d: AdminDashboard; onPicked: ()
   const [value, setValue] = useState(() => toLocalInputValue(new Date(on ?? Date.now()).toISOString(), tz));
   const { game, opening, presets } = pretendPresets(d, Date.now());
   const pick = (ms: number) => {
-    setPretend(ms);
+    // Undo on admin toasts: a save still held for its Undo goes to the real site first (nothing held: at once, as before).
+    afterHolds(() => setPretend(ms));
     onPicked();
   };
   const typed = fromLocalInputValue(value, tz);
@@ -108,7 +110,7 @@ export function DemoBar({ tz }: { tz: string }) {
           Reset
         </button>
         {at !== null && (
-          <button className="btn small" onClick={() => setPretend(null)}>
+          <button className="btn small" onClick={() => afterHolds(() => setPretend(null))}>
             End
           </button>
         )}

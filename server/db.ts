@@ -100,6 +100,10 @@ export interface Env {
   SPEED_LAST_SCREEN_ADMIN?: string;
   /** "Seat dots" (every empty seat a dashed ring): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?seatdots=on (server/seatDots.ts). Display only. */
   SEAT_DOTS?: string;
+  /** Zip 13 kill switches (shared/zip13.ts), each allowed unless "off". Who gets them: Settings > Feature switches, or the private links. */
+  PLAYERS_REDO?: string;
+  SWAP_BUTTON?: string;
+  ADMIN_UNDO?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

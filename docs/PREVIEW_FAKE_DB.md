@@ -63,6 +63,7 @@ Production is bound to the real database and was not changed.
 | Past game, no note, about 2 days after the earlier Tue (Zip 11; Wednesday or Thursday seeds only, like the old extras) | Played, Court booked, **not finalized** | 5 in (Indy, Jordan, Morgan, Gray, Finley), all paid $14: the organizer's **Finalize** card |
 | Extra game, no note, about 5 days after the seed, moved from 7:00 to 7:30 PM (Zip 11) | **Booked, 3 in** | Indy, Jordan and Drew joined at 7:00 PM: each sees the moved-game card (Still in / Can't make it); the organizer card says Confirmed 0 of 3 |
 | Extra game, no note, about 9 hours after the seed (Zip 11) | **Booked, 4 in** | Blake dropped inside the 12 hours (owed $14) and Christopher Vanderberg took the spot: Blake sees "You no longer owe $14" (Emery, Finley, Drew, Christopher Vanderberg in) |
+| Two past games earlier THIS month, no note (Zip 13; only when they fit between the last past game and the seed) | Played, Court booked, **finalized** at $14 | Orla (the organizer) + Indy, Jordan, Kai; and Orla + Lane, Morgan, Gray; all paid $14. The organizer's "Spent" on the Players redo equals Money Totals "Your cost so far" ($30 + 2 x ($48 - $42) = $42 when nothing else this month is finalized) |
 | Everything after | Normal empty games | The site makes these by itself |
 
 The three old extra games only exist when the two latest played games are about 5 days apart (a Wednesday or Thursday seed); a Sunday seed leaves them out.

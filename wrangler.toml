@@ -155,6 +155,15 @@ SPEED_LAST_SCREEN_ADMIN = "on"
 # Settings > Feature switches > "Seat dots" (off at ship = nobody), plus a phone opened once with ?seatdots=on. "off" = the kill switch. Needs a deploy.
 SEAT_DOTS = "on"
 
+# Zip 13 (shared/zip13.ts), all three admin only, "on" here only ALLOWS them; who gets them is Settings > Feature switches (off at ship = nobody),
+# plus /admin?playersredo=on, ?swapbutton=on, ?adminundo=on on one phone. "off" = the kill switch (needs a deploy).
+# PLAYERS_REDO: the admin Players tab redone (one-line rows, one money chip, details and edit sheets). Display only.
+# SWAP_BUTTON: tap "Admin" in the organizer header to jump to your own player page; "Go to Admin" at the bottom of it to come back. Organizer only.
+# ADMIN_UNDO: Undo for 5 seconds on the toast after a money or game action; the save waits those 5 seconds and is dropped on Undo.
+PLAYERS_REDO = "on"
+SWAP_BUTTON = "on"
+ADMIN_UNDO = "on"
+
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
 # tester on a preview link can't change real seats, payments or credit.
@@ -195,6 +204,9 @@ SPEED_DIRECT_LOAD = "on"
 SPEED_LAST_SCREEN = "on"
 SPEED_LAST_SCREEN_ADMIN = "on"
 SEAT_DOTS = "on"
+PLAYERS_REDO = "on"
+SWAP_BUTTON = "on"
+ADMIN_UNDO = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

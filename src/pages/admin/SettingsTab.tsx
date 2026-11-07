@@ -1,4 +1,5 @@
 import { type FormEvent, type KeyboardEvent, type ReactNode, useRef, useState } from 'react';
+import { flushHolds } from '../../undoHold';
 import { clearLastAdmin, signedOutLastAdmin } from '../../lastAdmin';
 import { parseDollars } from '../../../shared/money';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
@@ -466,7 +467,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -474,6 +475,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <Zip13Rows ctx={ctx} auto={auto} />
               <InstantAdminRow ctx={ctx} auto={auto} />
               <SeatDotsRow ctx={ctx} auto={auto} />
               <SpeedRows ctx={ctx} auto={auto} />
@@ -528,6 +530,8 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
       <button
         className="btn ghost block"
         onClick={async () => {
+          // Undo on admin toasts: a save still held for its Undo goes (and lands) before signing out. Nothing held: no wait.
+          await flushHolds();
           setPretend(null);
           // Zip 12 step C: signing out throws this phone's saved organizer screen away first, and no answer still on its way may keep a
           // new one until the next sign-in (src/lastAdmin.ts).
@@ -1339,6 +1343,16 @@ function AlertCardsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 function InstantAdminRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="speedLastScreenAdminAll" path="/api/admin/speed-last-screen-admin-switch" name="Instant admin" hint="Your organizer screens show at once, money dimmed, taps wait for fresh data. Not on a game day the first time" flag={!!ctx.d.speedLastScreenAdminForAll} dataAttr="data-speed-last-screen-admin-all" />
 }
+/** Zip 13 rows (server/zip13.ts), newest first. All organizer only. Off: only /admin?adminundo=on, ?swapbutton=on, ?playersredo=on. */
+function Zip13Rows({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return (
+    <>
+      <Zip7Row ctx={ctx} auto={auto} rowKey="adminUndoAll" path="/api/admin/admin-undo-switch" name="Undo on admin toasts" hint="5 seconds to undo Mark paid, Finalize, Cancel and more. The save waits, so Undo leaves no trace" flag={!!ctx.d.adminUndoForAll} dataAttr="data-admin-undo-all" />
+      <Zip7Row ctx={ctx} auto={auto} rowKey="swapButtonAll" path="/api/admin/swap-button-switch" name="Swap to Alex" hint="Tap Admin at the top for your player page, Go to Admin to come back" flag={!!ctx.d.swapButtonForAll} dataAttr="data-swap-button-all" />
+      <Zip7Row ctx={ctx} auto={auto} rowKey="playersRedoAll" path="/api/admin/players-redo-switch" name="Players redo" hint="One-line rows with one money chip, details and edit sheets" flag={!!ctx.d.playersRedoForAll} dataAttr="data-players-redo-all" />
+    </>
+  );
+}
 /** Zip 12 speed rows (server/speed.ts). None of them changes money or what a tap does. Off: only ?fewerqueries=on / ?directload=on / ?lastscreen=on. */
 function SpeedRows({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return (
@@ -1493,6 +1507,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <Zip13Rows ctx={ctx} auto={auto} />
       <InstantAdminRow ctx={ctx} auto={auto} />
       <SeatDotsRow ctx={ctx} auto={auto} />
       <SpeedRows ctx={ctx} auto={auto} />

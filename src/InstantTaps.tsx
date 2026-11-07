@@ -1,7 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './instant-taps.css';
 import { demoOn, isDemo, viewingAs } from './lib';
-import { useToast } from './ui';
+import { BANNER_TIMING, useToast } from './ui';
+import { startHold, trackHeld } from './undoHold';
+import { ADMIN_UNDO_MS } from '../shared/zip13';
 import { drawPatches, failureWords, LoadTracker, SaveLine, TapQueue, type TapResult } from './instant';
 
 // Instant taps (INSTANT_TAPS) for a whole screen: the player page and the organizer page each make one root (useInstantRoot) and put
@@ -29,6 +31,12 @@ export interface InstantTap<R, T = any> {
   press?: boolean;
   /** The words for a failure, when the caller knows better (part of a multi-game save went through). Return null for the usual words. */
   failText?: (err: unknown) => string | null;
+  /**
+   * Undo on admin toasts (ADMIN_UNDO, Zip 13): the toast (`saved`, which must be words, not a function) shows at once with Undo for 5
+   * seconds and the save waits that long (src/undoHold.ts); Undo drops it before anything is sent. `onHeld` runs as soon as the hold
+   * starts (the caller closes its sheet then). Left out: exactly as before.
+   */
+  undo?: boolean;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -132,6 +140,8 @@ export function actingWhoChanged() {
   whoChanges++;
 }
 const actingAs = () => `${demoOn() ? 'demo' : 'live'}|${viewingAs() ?? ''}|${whoChanges}`;
+/** Who a save made now acts as (Undo on admin toasts: a held save checks it again when it goes). */
+export const actingStamp = actingAs;
 
 /**
  * The root of a screen's instant taps. `data` is what the server sent, `reload` loads it again. Gives back the data with every tap still
@@ -166,9 +176,18 @@ export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Pro
         // Who this tap acts as, now. If the save waits in line and the screen changes meanwhile (View as ended, another name), it is not sent.
         const as = actingAs();
         const save = () => (actingAs() === as ? tap.save() : Promise.reject(Object.assign(new Error('Nothing was sent: the screen changed before it could save.'), { status: 409 })));
-        const res = await q.run<R>({ key: tap.key, patch: tap.patch ?? null, save });
+        // Undo on admin toasts: say it now, with Undo; the save waits 5 seconds (a second tap on the same thing meanwhile is ignored).
+        const msgNow = tap.undo && typeof tap.saved === 'string' ? tap.saved : null;
+        const hold = msgNow ? startHold() : null;
+        if (hold && msgNow) {
+          toast(msgNow, 'ok', { keep: true, stayMs: ADMIN_UNDO_MS - BANNER_TIMING.fadeIn, action: { label: 'Undo', onClick: () => void (hold.undo() ? toast('Undone. Nothing was saved.', 'ok', { keep: true }) : toast('Already saved. Change it back by hand.', 'ok')) } });
+        }
+        const ran = q.run<R>({ key: tap.key, patch: tap.patch ?? null, save, ...(hold ? { hold: hold.decided } : {}) });
+        const res = await (hold ? trackHeld(ran) : ran);
         unmark();
-        if (res.status === 'ok') {
+        if (res.status === 'ok' && hold) {
+          // Said already, when it was tapped.
+        } else if (res.status === 'ok') {
           const msg = typeof tap.saved === 'function' ? tap.saved(res.value) : tap.saved;
           if (msg) toast(msg);
         } else if (res.status === 'failed' && !tap.quietFail) {

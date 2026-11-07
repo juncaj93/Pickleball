@@ -4,6 +4,7 @@ import { type Ctx, makeCtx } from './context';
 import type { Env } from './db';
 import { HttpError, json, readJson } from './http';
 import * as player from './player';
+import * as playersRedo from './playersRedo';
 import { refundCreditBalance, resolveRefundRequest } from './creditActions';
 import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
@@ -147,6 +148,11 @@ route('PUT', '/api/admin/speed-direct-load-switch', admin.setSpeedDirectLoadSwit
 route('PUT', '/api/admin/speed-last-screen-switch', admin.setSpeedLastScreenSwitch);
 route('PUT', '/api/admin/speed-last-screen-admin-switch', admin.setSpeedLastScreenAdminSwitch);
 route('PUT', '/api/admin/seat-dots-switch', admin.setSeatDotsSwitch);
+// Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
+route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));
+route('PUT', '/api/admin/swap-button-switch', admin.setZip13Switch('swapButton'));
+route('PUT', '/api/admin/admin-undo-switch', admin.setZip13Switch('adminUndo'));
+route('GET', '/api/admin/players/:id/summary', (ctx) => playersRedo.playerSummary(ctx));
 route('PUT', '/api/admin/tonight-glow-switch', admin.setTonightGlowSwitch);
 route('PUT', '/api/admin/color-cleanup-switch', admin.setColorCleanupSwitch);
 route('PUT', '/api/admin/player-cards-switch', admin.setPlayerCardsSwitch);
