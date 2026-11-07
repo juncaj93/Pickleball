@@ -34,7 +34,8 @@ async function pickName(browser) {
 }
 
 async function once(browser, state, net) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, storageState: state });
+  // A true first visit: only the name cookie, nothing in the browser's storage (no saved copy, no remembered switch) and no cache.
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, storageState: { cookies: state.cookies, origins: [] } });
   const page = await ctx.newPage();
   const cdp = await ctx.newCDPSession(page);
   await cdp.send('Network.enable');
