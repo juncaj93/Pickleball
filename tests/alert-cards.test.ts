@@ -134,28 +134,37 @@ describe('the look (src/alert-cards.css)', () => {
     const [light, dark1, dark2] = blocks();
     expect(light && dark1 && dark2).toBeTruthy();
     expect(dark2).toEqual(dark1);
-    for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) for (const k of ['bg', 'line', 'fill', 'fill-ink', 'ink']) expect(light[`ac-${tone}-${k}`], `${tone}-${k}`).toMatch(/^#/);
+    for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) for (const k of ['tint', 'fill', 'fill-ink', 'ink']) expect(light[`ac-${tone}-${k}`], `${tone}-${k}`).toMatch(/^#/);
+    // The card is the game card's own surface (src/player-cards.css --pc-card, --pc-line, --pc-ink, --pc-muted, --pc-ring), light and dark.
+    expect([light['ac-card'], light['ac-line'], light['ac-title'], light['ac-sub'], light['ac-ring']]).toEqual(['#ffffff', '#dad9cf', '#18241d', '#4a4f46', '#18241d']);
+    expect([dark1['ac-card'], dark1['ac-line'], dark1['ac-title'], dark1['ac-sub'], dark1['ac-ring']]).toEqual(['#18221c', '#2b3a31', '#f1f3ec', '#b8bfb2', '#d5dacf']);
+    const pc = readFileSync(new URL('../src/player-cards.css', import.meta.url), 'utf8');
+    for (const v of ['#ffffff', '#dad9cf', '#18221c', '#2b3a31', '#d5dacf']) expect(pc).toContain(v);
   });
 
-  it('every text and button pair is 4.5:1 or better, light and dark (title, sub line, filled button, outline button, link)', () => {
+  it('every text and button pair is 4.5:1 or better, light and dark (title, sub line, filled button, outline button, link); badge icons 3:1', () => {
     for (const t of blocks()) {
       for (const tone of ['green', 'amber', 'blue', 'purple', 'gray', 'red']) {
-        const bg = t[`ac-${tone}-bg`];
+        const bg = t['ac-card'];
+        expect(contrast(t[`ac-${tone}-ink`], t[`ac-${tone}-tint`]), `${tone} badge icon`).toBeGreaterThanOrEqual(3);
         expect(contrast(t['ac-title'], bg), `${tone} title`).toBeGreaterThanOrEqual(4.5);
         expect(contrast(t['ac-sub'], bg), `${tone} sub`).toBeGreaterThanOrEqual(4.5);
         expect(contrast(t[`ac-${tone}-fill-ink`], t[`ac-${tone}-fill`]), `${tone} filled button`).toBeGreaterThanOrEqual(4.5);
         expect(contrast(t[`ac-${tone}-ink`], bg), `${tone} outline and link`).toBeGreaterThanOrEqual(4.5);
       }
-      expect(contrast(t['ac-red-ink'], t['ac-red-bg']), 'red sub line').toBeGreaterThanOrEqual(4.5);
+      expect(contrast(t['ac-red-ink'], t['ac-card']), 'red sub line').toBeGreaterThanOrEqual(4.5);
     }
   });
 
-  it('the stylesheet is loaded last (after zip10.css), and the AlertCard piece draws no icon', () => {
+  it('the stylesheets are loaded last (after zip10.css); the alert balls are the game card\'s own SpotDots, no ball of its own', () => {
     const main = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
     expect(main.indexOf("import './alert-cards.css'")).toBeGreaterThan(main.indexOf("import './zip10.css'"));
     const piece = readFileSync(new URL('../src/AlertCard.tsx', import.meta.url), 'utf8');
-    // The only svg in the piece is the X.
-    expect(piece.match(/<svg/g)).toHaveLength(1);
+    // Two svgs: the badge and the X. No ball or circle drawing of its own: the balls come from SpotDots (the game card's).
+    expect(piece.match(/<svg/g)).toHaveLength(2);
+    expect(piece).toContain('<SpotDots');
+    expect(piece).not.toMatch(/ball-skin|className="ball/);
+    expect(main.indexOf("import './seat-dots.css'")).toBeGreaterThan(main.indexOf("import './alert-cards.css'"));
   });
 
   it('organizer card words are their own words split at the first sentence', () => {
@@ -228,5 +237,45 @@ describe('the preview', () => {
   it('the kill switch is allowed on live and on the preview (wrangler.toml)', () => {
     const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
     expect(toml.match(/^ALERT_CARDS = "on"$/gm)).toHaveLength(2);
+  });
+});
+
+describe('Seat dots (SEAT_DOTS)', () => {
+  const SD = { header: 'X-Seat-Dots', path: '/api/admin/seat-dots-switch' };
+  it('ships off; the private header turns it on for one phone; the Settings row for everyone, logged; the kill switch beats both', async () => {
+    const w = await world();
+    expect('seatDots' in (await group(w))).toBe(false);
+    expect((await dash(w)).seatDotsForAll).toBe(false);
+    expect((await group(w, { [SD.header]: 'on' })).seatDots).toBe(true);
+    expect((await dash(w, { [SD.header]: 'on' })).seatDots).toBe(true);
+    const blair = await playerPhone(w, 'Blair');
+    const v0 = (await blair.call('GET', '/api/group/version')).data.v;
+    expect((await w.organizer.call('PUT', SD.path, { on: true })).status).toBe(200);
+    expect((await group(w)).seatDots).toBe(true);
+    expect((await blair.call('GET', '/api/group/version')).data.v).not.toBe(v0);
+    const act = (await w.organizer.call('GET', '/api/admin/activity')).data.entries.find((e: { action: string }) => e.action === 'seat_dots_on');
+    expect(activityText({ ...act }, 'America/Detroit', 'Alex')).toBe('Alex switched "Seat dots" on');
+    expect((await blair.call('PUT', SD.path, { on: false })).status).toBe(401);
+    await w.organizer.call('PUT', SD.path, { on: false });
+    expect('seatDots' in (await group(w))).toBe(false);
+    expect((await blair.call('GET', '/api/group/version')).data.v).toBe(v0);
+    const k = await world({ SEAT_DOTS: 'off' });
+    await k.organizer.call('PUT', SD.path, { on: true });
+    expect('seatDots' in (await group(k, { [SD.header]: 'on' }))).toBe(false);
+  });
+  it('every rule in src/seat-dots.css is under <html data-seat-dots>, and it only touches the empty seat (never a ball)', () => {
+    const css = readFileSync(new URL('../src/seat-dots.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const rules = css.split('}').map((r) => r.split('{')[0].trim()).filter((sel) => sel && !sel.startsWith('@'));
+    for (const sel of rules) for (const part of sel.split(',')) expect(part.trim(), part).toMatch(/^html\[data-seat-dots\]/);
+    expect(css).not.toMatch(/\.ball/);
+    const ui = readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8');
+    // One empty-seat component, used by SpotDots.
+    expect(ui.match(/className="dot"/g)).toHaveLength(1);
+    expect(ui).toContain('<EmptySeat key={i} />');
+  });
+  it('the kill switch is allowed on live and on the preview (wrangler.toml), and the preview has it on', () => {
+    const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+    expect(toml.match(/^SEAT_DOTS = "on"$/gm)).toHaveLength(2);
+    expect(PREVIEW_SWITCHES_ON).toContain('seat_dots_on');
   });
 });

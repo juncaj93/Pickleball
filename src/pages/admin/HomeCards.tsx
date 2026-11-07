@@ -9,7 +9,7 @@ import type { AdminCtx } from '../Admin';
 import { tapsHeld, useTapsHeld } from './tapGuard';
 import { useAction } from './action';
 import '../../finalize.css';
-import { AlertCard } from '../../AlertCard';
+import { AcIcon, AcTitle, AlertCard } from '../../AlertCard';
 import { splitFirst } from '../../../shared/zip11';
 import { type GamePrice, gameFinalPreview, viewPrice } from '../../../shared/gameLength';
 
@@ -55,10 +55,11 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     return (
       <article className="ac ac-green ac-stacked finalize-card-ac" aria-label={`Finalize ${day}`} data-finalize={s.id} data-alert-card="green" tabIndex={-1}>
         <div className="ac-row">
+          <AcIcon name="ok" />
           <div className="ac-text">
-            <h3 className="ac-title">
+            <AcTitle as="h3">
               {day} · {n} in
-            </h3>
+            </AcTitle>
             <div className="ac-sub" data-finalize-preview>
               {under ? `Only ${n} in. Cancel it (everyone paid gets credit) or finalize anyway at ${formatPrice(price)} each.` : gameFinalPreview(gp, n, formatPrice)}
             </div>
@@ -231,6 +232,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
     return (
       <AlertCard
         tone="blue"
+        icon="credit"
         label={`${r.name} requested a refund`}
         titleAs="h3"
         data={{ 'data-refund-request': r.name }}
@@ -322,6 +324,7 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
     return (
       <AlertCard
         tone="amber"
+        icon="owe"
         label={`${c.name} payment not confirmed`}
         titleAs="h3"
         data={{ 'data-payment-claim': c.name }}

@@ -817,6 +817,14 @@ export function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
  * The circles. `oneRow` ("Card cleanup", Zip 10): every ball stays on one row at its usual size; when there are more than the row
  * holds, they tuck slightly under each other instead of wrapping (src/zip10.css, from `--n`, the number of circles).
  */
+/**
+ * An empty seat: the ONE place an empty seat is drawn (game cards, organizer cards and rows, the alert cards, through SpotDots). A plain
+ * outlined circle; with "Seat dots" on (src/seat-dots.css, <html data-seat-dots>) a slightly grayed dashed ring of the same size.
+ */
+export function EmptySeat() {
+  return <span className="dot" />;
+}
+
 export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean }) {
   const slots = Math.max(MIN_PLAYERS, names.length);
   // Only balls that appeared since the last look spin in; the first look at a card is still.
@@ -839,7 +847,7 @@ export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me
       aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}
     >
       {Array.from({ length: slots }, (_, i) =>
-        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} /> : <span key={i} className="dot" />,
+        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} /> : <EmptySeat key={i} />,
       )}
     </span>
   );

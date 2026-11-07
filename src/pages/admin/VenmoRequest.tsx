@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+import { AcIcon, AcTitle } from '../../AlertCard';
 import { useState } from 'react';
 import { formatPrice } from '../../../shared/money';
 import { formatShortDate, formatTime, formatWeekdayShort, localParts } from '../../../shared/time';
@@ -41,12 +43,13 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
         return (
           <article key={s.id} className={ctx.d.alertCards === true ? 'ac ac-amber vr-card-ac' : 'card vr-card'} data-vr-card={s.id} {...(ctx.d.alertCards === true ? { 'data-alert-card': 'amber' } : {})}>
             <div className="vr-head">
+              {ctx.d.alertCards === true && <AcIcon name="owe" />}
               <div className="vr-title-wrap">
-                <h3 className={ctx.d.alertCards === true ? 'vr-title ac-title' : 'vr-title'}>
+                <VrTitle cards={ctx.d.alertCards === true}>
                   {formatWeekdayShort(s.startsAt, tz)}
                   {games.filter((g) => dayKey(Date.parse(g.s.startsAt), tz) === dayKey(Date.parse(s.startsAt), tz)).length > 1 ? ` ${formatTime(s.startsAt, tz)}` : ''} game: {rows.length}{' '}
                   {rows.length === 1 ? "hasn't" : "haven't"} paid
-                </h3>
+                </VrTitle>
                 <p className={ctx.d.alertCards === true ? 'small muted vr-sub ac-sub' : 'small muted vr-sub'}>
                   {common !== null ? `${formatPrice(common)} each` : 'Amounts differ'}
                   {s.state.flags.canceled ? ' · Canceled late, fee kept' : s.court ? ' · Court booked' : ''}
@@ -56,7 +59,7 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                 Remind
               </button>
             </div>
-            <ul className="vr-rows" aria-label={`Who owes for ${formatShortDate(s.startsAt, tz)}`}>
+            <ul className={ctx.d.alertCards === true ? 'vr-rows ac-body' : 'vr-rows'} aria-label={`Who owes for ${formatShortDate(s.startsAt, tz)}`}>
               {rows.map((r) => {
                 const has = venmoUsername(ctx.d.players.find((p) => p.id === r.playerId)?.venmo ?? null) !== null;
                 return (
@@ -82,4 +85,10 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
       )}
     </section>
   );
+}
+
+/** The card's title: with Alert cards on it keeps to one line (AcTitle); off, the same h3 as before. */
+function VrTitle({ cards, children }: { cards: boolean; children: ReactNode }) {
+  if (cards) return <AcTitle as="h3" className="vr-title">{children}</AcTitle>;
+  return <h3 className="vr-title">{children}</h3>;
 }

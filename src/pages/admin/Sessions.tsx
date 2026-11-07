@@ -185,6 +185,7 @@ export function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
       <AlertCard
         as="div"
         tone="purple"
+        icon="clock"
         className="ts-check-ac"
         data={{ 'data-time-check': true }}
         title={`Confirmed ${c.confirmedCount} of ${c.inCount}`}

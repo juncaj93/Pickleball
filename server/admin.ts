@@ -81,6 +81,7 @@ import { zip9Allowed } from '../shared/zip9';
 import { isShortGame } from '../shared/gameLength';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
+import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
 import { DB_LIMIT_MESSAGE, zip10Allowed } from '../shared/zip10';
 import { capOf } from '../shared/settings';
 
@@ -337,6 +338,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await fewerQueriesForAll(ctx.db, group.id)) ? { speedFewerQueriesForAll: true } : {}),
     ...((await directLoadForAll(ctx.db, group.id)) ? { speedDirectLoadForAll: true } : {}),
     ...((await lastScreenForAll(ctx.db, group.id)) ? { speedLastScreenForAll: true } : {}),
+    // "Seat dots": every empty seat a dashed ring (display only).
+    ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
+    seatDotsForAll: await seatDotsForAll(ctx.db, group.id),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2357,6 +2361,15 @@ async function endWaitlists(ctx: Ctx, group: GroupRow): Promise<number> {
     for (const r of left) await withdraw(ctx.db, { ...group, card_cleanup: true }, s, r.player_id, ctx.nowMs);
   }
   return moved;
+}
+
+/** PUT /api/admin/seat-dots-switch { on }: Settings > Feature switches > "Seat dots". Display only; moves nothing. */
+export async function setSeatDotsSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setSeatDotsForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'seat_dots_on' : 'seat_dots_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }
 
 /** PUT /api/admin/alert-cards-switch { on }: Settings > Feature switches > "Alert cards" (Zip 11). Display only; moves nothing. */

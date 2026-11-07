@@ -16,6 +16,7 @@ import { hiddenGameIds, hiddenGameIdsRead } from './hideGame';
 import { cardTimeForAll, shortGamesForAll } from './zip9';
 import { cardCleanupForAll } from './zip10';
 import { alertCardsForAll } from './zip11';
+import { seatDotsForAll } from './seatDots';
 
 /** A new fingerprint at least this often, so clock-driven changes (tonight, game day 8:00 AM, started) show up. */
 const TIME_BUCKET_MS = 10 * 60_000;
@@ -111,6 +112,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     ...((await cardCleanupForAll(ctx.db, group.id)) ? ['cl'] : []),
     // Zip 11: the same rule.
     ...((await alertCardsForAll(ctx.db, group.id)) ? ['ac'] : []),
+    // Seat dots: the same rule.
+    ...((await seatDotsForAll(ctx.db, group.id)) ? ['sd'] : []),
     // The organizer changing the player animations in Settings (nothing is added until the row is first used).
     (await motionSetting(ctx.db, group.id, 'player')) ?? '',
     // The organizer removing a canceled game from the player screen (or putting it back).

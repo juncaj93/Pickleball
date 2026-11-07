@@ -578,6 +578,7 @@ export function PlayerHome({
             <AlertCard
               as="div"
               tone="gray"
+              icon="person"
               title={
                 <>
                   Viewing as <strong>{viewAs.name}</strong>
@@ -685,6 +686,7 @@ export function PlayerHome({
               <AlertCard
                 as="section"
                 tone="green"
+                icon="ok"
                 label="Your answer"
                 title={answered.text}
                 sub={`${formatShortDate(answered.startsAt, tz)} · ${cardTimeText(answered.startsAt, answered.endsAt, tz, g.group.usualMinutes)}`}
@@ -1027,6 +1029,7 @@ function AdjustedCard({ adj }: { adj: { deltaCents: number; note: string; at: st
   return (
     <AlertCard
       tone="blue"
+      icon="credit"
       title={`Credit adjusted: ${signedPrice(adj.deltaCents)}`}
       sub={adj.note || undefined}
       data={{ 'data-adjust-note': true, 'data-adjust-home': true }}
@@ -1085,6 +1088,7 @@ function FeeNotices({ g }: { g: GroupView }) {
             <AlertCard
               key={n.id}
               tone="blue"
+              icon="ok"
               title={credit ? `Your ${credit} is back as credit` : `You no longer owe ${fee}`}
               sub={n.why === 'sub' ? `Someone took your ${day} spot` : `For ${day}`}
               data={{ 'data-fee-notice': n.why }}
@@ -1511,6 +1515,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
       <AlertCard
         as="section"
         tone="amber"
+        icon="owe"
         className={enter ? 'm-enter' : ''}
         label="Payment"
         titleAs="h2"
@@ -1781,6 +1786,7 @@ function SuggestionCard({
       <AlertCard
         as="section"
         tone="green"
+        icon="join"
         titleId="suggest-title"
         titleAs="h2"
         label={title}

@@ -509,6 +509,10 @@ export async function buildSeed(startMs = Date.now()): Promise<Seed> {
   // I'm in, X), stacked with the Credit adjusted card above it.
   w.db.raw.prepare("UPDATE players SET usual_days = '2,4', is_regular = 1 WHERE id = ?").run(casey.id);
   summary.push('Casey is a regular for Tue and Thu and has not answered the next one: Casey sees the Want in card');
+  // A Thursday-only regular (Harper): the next Thursday game, when it has fewer than 4 in, shows "Thursday needs 1 more" with the balls.
+  const harper = (dash.players as { id: string; name: string }[]).find((p) => p.name === 'Harper')!;
+  w.db.raw.prepare("UPDATE players SET usual_days = '4', is_regular = 1 WHERE id = ?").run(harper.id);
+  summary.push('Harper is a regular for Thursday: Harper sees the Want in card for the next Thursday game');
   let takenGame: any = null;
   for (const hoursAhead of [9, 9.5, 8.5, 8]) {
     try {
@@ -578,12 +582,14 @@ export const PREVIEW_SWITCHES_ON = [
   // Zip 10: Card cleanup. Alex, Sat Nov 7: NOT on live yet (it stays off until he flips it). Kept on in this fake world because its 11 and 12
   // player games are built through it (the Zip 10 and Zip 11 browser tests use them); a preview that must look like live switches it off after a seed.
   'card_cleanup_on',
-  // Zip 11 (merged, not live yet): Alert cards.
+  // Zip 11 (live, Settings row off): Alert cards; on here because its redo is being built.
   'alert_cards_on',
-  // Being built (Zip 12): the three speed switches.
+  // Zip 12 (live, Settings rows off): the three speed switches, kept on here for its own browser tests and phone tests.
   'speed_fewer_queries_on',
   'speed_direct_load_on',
   'speed_last_screen_on',
+  // Being built: Seat dots.
+  'seat_dots_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

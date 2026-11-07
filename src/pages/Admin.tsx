@@ -12,6 +12,7 @@ import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
+import { AcIcon } from '../AlertCard';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
@@ -389,8 +390,15 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     const label = item.kind === 'tonight' ? 'Mark paid tonight' : 'Who owes you';
     return (
       <article className={cards ? 'ac ac-amber' : `card stack${item.kind === 'tonight' ? ' tonight' : ''}`} aria-label={label} {...(cards ? { 'data-alert-card': 'amber' } : {})}>
-        {cards ? <h3 className="ac-title">{label}</h3> : <h3>{label}</h3>}
-        <ul className="rows">
+        {cards ? (
+          <div className="ac-row">
+            <AcIcon name="owe" />
+            <h3 className="ac-title">{label}</h3>
+          </div>
+        ) : (
+          <h3>{label}</h3>
+        )}
+        <ul className={cards ? 'rows ac-body' : 'rows'}>
           {item.rows.map((r) => (
             <li key={`${r.session.id}-${r.playerId}`}>
               <span className="who">
@@ -428,9 +436,12 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   return (
     <article className={cards ? 'ac ac-gray' : 'card stack'} aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`} {...(cards ? { 'data-alert-card': 'gray' } : {})}>
       {cards ? (
-        <div>
-          <h3 className="ac-title">{title}</h3>
-          <div className="ac-sub">{when(s, tz)}</div>
+        <div className="ac-row">
+          <AcIcon name="info" />
+          <div className="ac-text">
+            <h3 className="ac-title">{title}</h3>
+            <div className="ac-sub">{when(s, tz)}</div>
+          </div>
         </div>
       ) : (
         <div>
@@ -438,7 +449,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
           <div className="small muted">{when(s, tz)}</div>
         </div>
       )}
-      <ul className="rows">
+      <ul className={cards ? 'rows ac-body' : 'rows'}>
         {lateDrops(s).map((r) => (
           <li key={r.playerId}>
             <span className="who">

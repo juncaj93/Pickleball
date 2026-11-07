@@ -154,7 +154,11 @@ async function main() {
           borderW: cs.borderTopWidth,
           titleColor: title ? getComputedStyle(title).color : null,
           subColor: sub ? getComputedStyle(sub).color : null,
-          icons: c.querySelectorAll('svg:not(.ac-x svg)').length,
+          badge: c.querySelectorAll(':scope .ac-icon, :scope > .ac-row > .ac-icon, :scope .vr-head > .ac-icon').length,
+          titleLines: title ? Math.round(title.getBoundingClientRect().height / parseFloat(getComputedStyle(title).lineHeight)) : 0,
+          titleSize: title ? parseFloat(getComputedStyle(title).fontSize) : 0,
+          wrappedBtn: [...c.querySelectorAll('.ac-btn')].some((b) => b.getBoundingClientRect().height > 44),
+          balls: [...c.querySelectorAll('.ac-seats .ball, .ac-seats .dot')].map((b) => { const r = b.getBoundingClientRect(); return { w: r.width, h: r.height }; }),
           btns,
         };
       }),
@@ -165,31 +169,35 @@ async function main() {
   function lookChecks(list, width, label) {
     for (const c of list) {
       assert(c.left >= 0 && c.right <= width + 0.5, `${label}: card "${c.title}" is outside the screen (${c.left}..${c.right} of ${width})`);
-      assert(c.icons === 0, `${label}: card "${c.title}" has an icon`);
+      assert(c.badge >= 1, `${label}: card "${c.title}" has no icon badge`);
+      assert(!c.wrappedBtn, `${label}: a button on "${c.title}" wraps its words`);
+      for (const b of c.balls) assert(Math.abs(b.w - b.h) < 0.5 && b.w === 16, `${label}: a ball on "${c.title}" is ${b.w} x ${b.h} (not a 16 px circle)`);
+      if (c.title && width >= 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, /.test(c.title)) assert(c.titleLines === 1, `${label}: "${c.title}" wraps at ${width} (${c.titleLines} lines, ${c.titleSize} px)`);
+      if (c.title && width < 360 && !/requested a refund|tapped I paid|haven't paid|hasn't paid|going, /.test(c.title)) assert(c.titleLines <= 2, `${label}: "${c.title}" takes ${c.titleLines} lines at ${width}`);
       assert(c.borderW !== '0px', `${label}: card "${c.title}" has no border`);
       assert(contrast(c.titleColor, c.bg) >= 4.5, `${label}: title of "${c.title}" is ${contrast(c.titleColor, c.bg).toFixed(2)}:1`);
       if (c.subColor) assert(contrast(c.subColor, c.bg) >= 4.5, `${label}: sub line of "${c.title}" is ${contrast(c.subColor, c.bg).toFixed(2)}:1`);
       for (const b of c.btns) {
         assert(b.right <= width + 0.5 && b.left >= 0, `${label}: "${b.text}" on "${c.title}" is outside the screen`);
         if (/ac-btn/.test(b.cls)) {
-          assert(b.h >= 40, `${label}: "${b.text}" is ${b.h} px tall`);
+          assert(b.h >= 37.5, `${label}: "${b.text}" is ${b.h} px tall`);
           const filled = b.bg !== 'rgba(0, 0, 0, 0)';
           const ink = contrast(b.color, filled ? b.bg : c.bg);
           assert(ink >= 4.5, `${label}: "${b.text}" on "${c.title}" text is ${ink.toFixed(2)}:1`);
         }
-        if (/ac-x/.test(b.cls)) assert(b.h >= 44, `${label}: the X on "${c.title}" is ${b.h} px tall`);
+        if (/ac-x/.test(b.cls)) assert(b.h === 24 && b.w === 24, `${label}: the X on "${c.title}" is ${b.w} x ${b.h}`);
       }
       assert(!/waitlist|standby/i.test(c.text), `${label}: "${c.title}" says waitlist or standby: ${c.text}`);
     }
   }
 
   // Who sees what in the fake world (see the seed's summary).
-  const PLAYERS = ['Blake', 'Casey', 'Indy', 'Jordan', 'Gray', 'Kai'];
+  const PLAYERS = ['Blake', 'Casey', 'Harper', 'Indy', 'Jordan', 'Gray', 'Kai', 'Lane'];
 
   // ------------------------------------------------------------ ON (from the seed)
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
-      await check(`player alert cards, ${scheme} ${width} px: one look, inside the screen, 4.5:1, 40 px buttons, no waitlist words`, async () => {
+      await check(`player alert cards, ${scheme} ${width} px: one look, inside the screen, 4.5:1, 38 px buttons, badges, round balls, one-line titles, no waitlist words`, async () => {
         const seen = new Set();
         for (const name of PLAYERS) {
           const p = await openPlayer(name, { width, scheme });
@@ -314,6 +322,116 @@ async function main() {
     await a.ctx.close();
   });
 
+  // ------------------------------------------------------------ The balls: the game card's own, side by side
+  for (const scheme of ['light', 'dark']) {
+    await check(`balls side by side, ${scheme}: the Want in card's balls and seats are the game card's (same component, same colors, perfect circles)`, async () => {
+      const p = await openPlayer('Harper', { scheme });
+      const want = p.page.locator('[data-suggest-card]');
+      assert(await want.count(), 'Harper has no Want in card');
+      assert(/needs \d more/.test(await want.innerText()), `Harper's card is not a "needs N more": ${await want.innerText()}`);
+      const game = p.page.locator('.schedule > .sched.tier-next').filter({ has: p.page.locator('.dots .dot') }).first();
+      assert(await game.count(), 'no Next week game card with an empty seat');
+      const look = (root) =>
+        root.evaluate((el) => {
+          const ball = el.querySelector('.dots .ball');
+          const dot = el.querySelector('.dots .dot');
+          const skin = ball && getComputedStyle(ball.querySelector('.ball-skin'));
+          const holes = ball && getComputedStyle(ball.querySelector('.ball-holes'));
+          const ds = dot && getComputedStyle(dot);
+          const br = ball && ball.getBoundingClientRect();
+          const dr = dot && dot.getBoundingClientRect();
+          return {
+            ball: ball && { w: br.width, h: br.height, fill: skin.fill, stroke: skin.stroke, sw: skin.strokeWidth, holes: holes.fill, n: ball.querySelectorAll('.ball-holes circle').length, cls: ball.getAttribute('class') },
+            dot: dot && { w: dr.width, h: dr.height, mask: ds.maskImage || ds.webkitMaskImage, bg: ds.backgroundColor, border: ds.borderTopColor },
+          };
+        });
+      const a = await look(want);
+      const g = await look(game);
+      assert(a.ball && g.ball, 'a ball is missing');
+      for (const k of ['fill', 'stroke', 'sw', 'holes', 'n', 'cls']) assert(a.ball[k] === g.ball[k], `ball ${k}: alert ${a.ball[k]} vs game card ${g.ball[k]}`);
+      assert(a.ball.w === a.ball.h && a.ball.w === g.ball.w, `ball size: alert ${a.ball.w}x${a.ball.h} vs game card ${g.ball.w}x${g.ball.h}`);
+      assert(a.dot && g.dot, 'an empty seat is missing');
+      assert(a.dot.w === a.dot.h && a.dot.w === g.dot.w, `seat size: alert ${a.dot.w} vs game card ${g.dot.w}`);
+      // Seat dots is on in the fake world: both are the same dashed ring.
+      assert(/url\(/.test(a.dot.mask) && a.dot.mask === g.dot.mask && a.dot.bg === g.dot.bg, `seat ring: alert ${a.dot.mask.slice(0, 30)} ${a.dot.bg} vs game card ${g.dot.mask.slice(0, 30)} ${g.dot.bg}`);
+      await still(p.page);
+      await want.screenshot({ path: path.join(SHOTS, `zip11-side-alert-${scheme}.png`) });
+      await game.screenshot({ path: path.join(SHOTS, `zip11-side-game-${scheme}.png`) });
+      await p.ctx.close();
+    });
+  }
+
+  // ------------------------------------------------------------ Every alert card, one picture each, with a real game card (for the contact sheet)
+  for (const scheme of ['light', 'dark']) {
+    await check(`every alert card and a game card at 390, ${scheme}: one picture each`, async () => {
+      const dir = path.join(SHOTS, 'zip11-cards');
+      mkdirSync(dir, { recursive: true });
+      const seen = new Set();
+      let n = 0;
+      const grab = async (page, who) => {
+        await still(page);
+        const list = page.locator('[data-alert-card]');
+        for (let i = 0; i < (await list.count()); i++) {
+          const el = list.nth(i);
+          const t = ((await el.locator('.ac-title').first().innerText().catch(() => '')) || (await el.innerText())).replace(/\s+/g, ' ').replace(/\$\d+|\d+/g, 'N');
+          if (seen.has(t) || !(await el.isVisible())) continue;
+          seen.add(t);
+          await el.screenshot({ path: path.join(dir, `${scheme}-${String(++n).padStart(2, '0')}-${who}.png`) });
+        }
+      };
+      for (const name of [...PLAYERS, 'Harper']) {
+        const p = await openPlayer(name, { scheme });
+        await grab(p.page, name);
+        if (name === 'Gray') {
+          const join = p.page.locator('.schedule article [data-join]').first();
+          if (await join.count()) {
+            await join.click();
+            await p.page.locator('[data-cashout-prompt]').waitFor({ timeout: 5000 }).catch(() => {});
+            await p.page.waitForTimeout(400);
+            await grab(p.page, 'Gray-cashout');
+          }
+        }
+        if (name === 'Harper') {
+          const game = p.page.locator('.schedule > .sched.tier-next').filter({ has: p.page.locator('.dots .dot') }).first();
+          await game.screenshot({ path: path.join(dir, `${scheme}-99-game-card.png`) });
+        }
+        await p.ctx.close();
+      }
+      const a = await openAdmin({ scheme });
+      await grab(a.page, 'organizer');
+      await a.ctx.close();
+      assert(n >= 12, `only ${n} different cards`);
+    });
+  }
+
+  // ------------------------------------------------------------ Seat dots
+  await check('Seat dots: on = every empty seat a dashed ring (game cards, organizer cards); off = the old solid circle, with Alert cards on or off', async () => {
+    const ringOf = async (page) => page.evaluate(() => [...document.querySelectorAll('.dots .dot')].map((d) => { const st = getComputedStyle(d); return /url\(/.test(st.maskImage || st.webkitMaskImage || ''); }));
+    for (const ac of [true, false]) {
+      assert((await put(real, '/api/admin/alert-cards-switch', { on: ac })).ok(), 'alert cards switch');
+      for (const sd of [true, false]) {
+        assert((await put(real, '/api/admin/seat-dots-switch', { on: sd })).ok(), 'seat dots switch');
+        const p = await openPlayer('Harper');
+        const rings = await ringOf(p.page);
+        assert(rings.length > 3, 'no empty seats on the player screen');
+        assert(rings.every((r) => r === sd), `player seats with alert cards ${ac}, seat dots ${sd}: ${rings.join(',')}`);
+        assert((await p.page.evaluate(() => document.documentElement.hasAttribute('data-seat-dots'))) === sd, 'the html attribute');
+        if (sd && ac) await shot(p.page, 'seatdots-on-player-390-light');
+        if (!sd && !ac) await shot(p.page, 'seatdots-off-player-390-light');
+        await p.ctx.close();
+        const a = await openAdmin();
+        const ar = await ringOf(a.page);
+        assert(ar.length > 0 && ar.every((r) => r === sd), `organizer seats with alert cards ${ac}, seat dots ${sd}`);
+        await a.ctx.close();
+      }
+    }
+    // The private link: one phone only.
+    const t = await openPlayer('Harper', { query: '?seatdots=on' });
+    assert((await ringOf(t.page)).every(Boolean), '?seatdots=on did not turn the rings on for this phone');
+    await t.ctx.close();
+    assert((await put(real, '/api/admin/alert-cards-switch', { on: true })).ok() && (await put(real, '/api/admin/seat-dots-switch', { on: true })).ok(), 'both back on');
+  });
+
   await check('the old /t/ link opens the home page', async () => {
     const ctx = await browser.newContext(phone(390));
     const page = await ctx.newPage();
@@ -344,7 +462,7 @@ async function main() {
     assert(back.ok(), 'switch back on');
   });
 
-  await check('Settings > Feature switches has the "Alert cards" row', async () => {
+  await check('Settings > Feature switches has the "Seat dots" and "Alert cards" rows', async () => {
     const a = await openAdmin();
     await a.page.getByRole('button', { name: /Settings/ }).last().click();
     await a.page.waitForTimeout(400);
@@ -353,6 +471,8 @@ async function main() {
     await row.waitFor({ timeout: 4000 });
     assert(/Alert cards/.test(await row.innerText()), 'no Alert cards row');
     assert(await row.locator('input[data-alert-cards-all]').isChecked(), 'the row is not on in the fake world');
+    const sd = a.page.locator('[data-row="seatDotsAll"]');
+    assert(/Seat dots/.test(await sd.innerText()) && (await sd.locator('input[data-seat-dots-all]').isChecked()), 'no Seat dots row, or it is off in the fake world');
     await a.ctx.close();
   });
 
