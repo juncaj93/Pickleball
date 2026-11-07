@@ -2,7 +2,7 @@ import '@fontsource-variable/bricolage-grotesque/opsz.css';
 import './styles.css';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { usePath } from './lib';
+import { startEarlyLoads, usePath } from './lib';
 import { ToastProvider } from './ui';
 import { SetupPage } from './pages/Setup';
 import { PlayerHome } from './pages/PlayerHome';
@@ -32,6 +32,8 @@ function App() {
 }
 
 watchKeyboard();
+// Zip 12, "Load games at once" (SPEED_DIRECT_LOAD): on the plain address, both first questions leave now (only while the switch is on).
+startEarlyLoads(window.location.pathname);
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -532,8 +532,12 @@ export const PREVIEW_SWITCHES_ON = [
   // Zip 9 (live, switched on by Alex Fri Nov 6): Short games and Card time and buttons.
   'short_games_on',
   'card_time_buttons_on',
-  // Being built (Zip 10): Card cleanup.
+  // Zip 10 (live, Card cleanup).
   'card_cleanup_on',
+  // Being built (Zip 12): the three speed switches.
+  'speed_fewer_queries_on',
+  'speed_direct_load_on',
+  'speed_last_screen_on',
 ] as const;
 
 function switchRows(nowMs: number): string {

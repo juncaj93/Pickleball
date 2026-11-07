@@ -133,6 +133,14 @@ CARD_TIME_BUTTONS = "on"
 # "moved up from the waitlist" line too. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Card cleanup" (off at ship = nobody),
 # plus a phone opened once with ?cardcleanup=on. "off" = the kill switch. Needs a deploy.
 CARD_CLEANUP = "on"
+# Zip 12 speed switches (shared/speed.ts, server/speed.ts). None changes money, what a screen says or what a tap does. "on" here only ALLOWS each;
+# who gets it is Settings > Feature switches (off at ship = nobody), plus a phone opened once with ?fewerqueries=on / ?directload=on / ?lastscreen=on.
+# "off" = the kill switch (needs a deploy). SPEED_FEWER_QUERIES: fewer database trips per screen, same answers byte for byte. SPEED_DIRECT_LOAD: the
+# plain address asks for the games together with its set-up check. SPEED_LAST_SCREEN: a returning player's phone draws its saved copy of the last
+# screen (no money in it) with every button held until the fresh answer lands.
+SPEED_FEWER_QUERIES = "on"
+SPEED_DIRECT_LOAD = "on"
+SPEED_LAST_SCREEN = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -168,6 +176,9 @@ LAST_CALL_TEXTS = "on"
 SHORT_GAMES = "on"
 CARD_TIME_BUTTONS = "on"
 CARD_CLEANUP = "on"
+SPEED_FEWER_QUERIES = "on"
+SPEED_DIRECT_LOAD = "on"
+SPEED_LAST_SCREEN = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

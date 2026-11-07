@@ -1,3 +1,4 @@
+import { DIRECT_LOAD_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 export class ApiError extends Error {
@@ -188,6 +189,10 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (zip9Test('cardtime')) headers['X-Card-Time'] = 'on';
   // Zip 10 private test switch for this phone (?cardcleanup=on; also on /admin, see server/zip10.ts).
   if (zip10Test()) headers['X-Card-Cleanup'] = 'on';
+  // Zip 12 private test switches for this phone (?fewerqueries=on, ?directload=on, ?lastscreen=on; see server/speed.ts).
+  if (speedTest('fewerqueries')) headers[SPEED_QUERIES_HEADER] = 'on';
+  if (speedTest('directload')) headers[DIRECT_LOAD_HEADER] = 'on';
+  if (speedTest('lastscreen')) headers[LAST_SCREEN_HEADER] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
@@ -765,4 +770,52 @@ if (typeof window !== 'undefined') {
   const want = new URLSearchParams(window.location.search).get('motionadmin');
   if (want === 'on') storageSet(MOTION_ADMIN_KEY, 'on');
   else if (want === 'off') storageRemove(MOTION_ADMIN_KEY);
+}
+
+/**
+ * Zip 12 speed switches on this phone only, before they are on for everyone: open the site once with ?fewerqueries=on,
+ * ?directload=on or ?lastscreen=on (the same word with =off turns it back off). Remembered in this browser. None of them changes
+ * money or what a tap does; Show last screen at once draws this phone's saved copy (no money in it) with every button held.
+ */
+export function speedTest(name: 'fewerqueries' | 'directload' | 'lastscreen'): boolean {
+  return storageGet(`pb_${name}`) === 'on';
+}
+if (typeof window !== 'undefined') {
+  for (const name of ['fewerqueries', 'directload', 'lastscreen']) {
+    const want = new URLSearchParams(window.location.search).get(name);
+    if (want === 'on') storageSet(`pb_${name}`, 'on');
+    else if (want === 'off') storageRemove(`pb_${name}`);
+  }
+}
+
+/**
+ * "Load games at once" (SPEED_DIRECT_LOAD). The plain site address normally asks "is this site set up?" (/api/status) and only then
+ * for the games (/api/group). With the switch on, the last games answer said so (`directLoad`) and this phone remembers it: the next
+ * time the page opens, both questions go out together, the moment the code starts. The set-up answer still decides what the page
+ * shows (not set up, link only, the group word, or the games); the early games answer is only used if the games are what it shows.
+ * Off (the answer no longer says so): forgotten at once, and the page asks one after the other again.
+ */
+const DIRECT_LOAD_KEY = 'pb_direct_load';
+export function directLoadOn(): boolean {
+  return speedTest('directload') || storageGet(DIRECT_LOAD_KEY) === 'on';
+}
+export function rememberDirectLoad(on: boolean) {
+  if (on) storageSet(DIRECT_LOAD_KEY, 'on');
+  else storageRemove(DIRECT_LOAD_KEY);
+}
+const early: { status?: Promise<unknown>; group?: Promise<unknown> } = {};
+/** Called once by src/main.tsx before the first draw: starts both questions for the plain address when the switch is on. */
+export function startEarlyLoads(path: string) {
+  if (!/^\/?$/.test(path) || !directLoadOn() || demoOn()) return;
+  early.status = api('GET', '/api/status');
+  early.group = api('GET', '/api/group');
+  // Never an "unhandled" error: whoever takes it handles it, and an answer nobody takes is simply dropped.
+  early.status.catch(() => {});
+  early.group.catch(() => {});
+}
+/** The early answer for this question, once (a reload or a retry asks again). */
+export function takeEarly<T>(name: 'status' | 'group'): Promise<T> | null {
+  const p = early[name] as Promise<T> | undefined;
+  delete early[name];
+  return p ?? null;
 }

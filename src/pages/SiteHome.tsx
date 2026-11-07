@@ -1,9 +1,10 @@
 import { type FormEvent, useState } from 'react';
 import { SITE_NAME } from '../../shared/settings';
-import { api, ApiError, navigate, storageGet, useLoad } from '../lib';
-import { TopBar } from '../Shell';
+import { api, ApiError, demoOn, navigate, storageGet, takeEarly, useLoad } from '../lib';
+import { readLastScreen } from '../lastScreen';
+import { ModeButton, TopBar } from '../Shell';
 import { ErrorState, Notice, Spinner } from '../ui';
-import { PlayerHome } from './PlayerHome';
+import { PlayerHome, SavedScreenView } from './PlayerHome';
 
 interface Status {
   setupComplete: boolean;
@@ -18,8 +19,21 @@ interface Status {
  * is set. Link-only groups get a short "open your link" screen.
  */
 export function SiteHome() {
-  const status = useLoad(() => api<Status>('GET', '/api/status'));
+  // "Load games at once" (SPEED_DIRECT_LOAD, src/lib.ts): the first answer may already be on its way.
+  const status = useLoad(() => takeEarly<Status>('status') ?? api<Status>('GET', '/api/status'));
   const s = status.data;
+  // "Show last screen at once" (src/lastScreen.ts): this phone's saved copy of the games, buttons held, while the checks run.
+  const [saved] = useState(() => (demoOn() ? null : readLastScreen('plain')));
+  if (status.loading && !s && saved && saved.view.sessions.length > 0) {
+    return (
+      <>
+        <TopBar eyebrow={saved.view.group.name} title={saved.view.me!.name} tools={<ModeButton preview={false} />} />
+        <main className="page stack-lg">
+          <SavedScreenView saved={saved} />
+        </main>
+      </>
+    );
+  }
   if (status.loading && !s) {
     return (
       <>

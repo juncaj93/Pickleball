@@ -22,6 +22,8 @@ async function world(at: number, zip910: boolean, extraEnv: Record<string, strin
   const { sql } = await buildSeed(at);
   const raw = createNodeD1(':memory:');
   raw.raw.exec(sql);
+  // The seed turns the Zip 12 rows on (the preview rule); these tests switch them per request, so they start off.
+  raw.raw.exec("DELETE FROM task_log WHERE session_id IS NULL AND kind = 'mark' AND task LIKE 'speed_%'");
   if (!zip910) raw.raw.exec(`DELETE FROM task_log WHERE session_id IS NULL AND kind = 'mark' AND task IN (${ZIP9_10.map((t) => `'${t}'`).join(', ')})`);
   const c: Counted = { trips: 0, statements: 0, sql: [] };
   const env: any = { DB: countingDb(raw, c), MOTION: 'on', MOTION_ADMIN: 'on', ...extraEnv };
