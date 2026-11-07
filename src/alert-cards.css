@@ -338,9 +338,9 @@ html[data-alert-cards] .ac-x {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
+  width: 44px;
   height: 44px;
-  margin: 0 -6px 0 -2px;
+  margin: 0 -10px 0 -6px;
   padding: 0;
   border: 0;
   background: none;

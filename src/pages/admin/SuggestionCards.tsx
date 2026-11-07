@@ -82,7 +82,7 @@ export function SuggestionCards({ ctx }: { ctx: AdminCtx }) {
               </>
             }
             action={
-              <a className="ac-btn sg-text" href={smsHref(c.phones.length ? c.phones : null, c.body, isIOS)} onClick={() => tap(c)} aria-label={`Text: ${c.body}`}>
+              <a className="ac-btn sg-text" href={smsHref(c.phones.length ? c.phones : null, c.body, isIOS)} onClick={() => tap(c)} aria-label={`${c.kind === 'pay' ? 'Remind' : 'Text'}: ${c.body}`}>
                 {c.kind === 'pay' ? 'Remind' : 'Text'}
               </a>
             }

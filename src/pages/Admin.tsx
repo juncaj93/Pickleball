@@ -389,7 +389,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     const label = item.kind === 'tonight' ? 'Mark paid tonight' : 'Who owes you';
     return (
       <article className={cards ? 'ac ac-amber' : `card stack${item.kind === 'tonight' ? ' tonight' : ''}`} aria-label={label} {...(cards ? { 'data-alert-card': 'amber' } : {})}>
-        {cards ? <p className="ac-title">{label}</p> : <h3>{label}</h3>}
+        {cards ? <h3 className="ac-title">{label}</h3> : <h3>{label}</h3>}
         <ul className="rows">
           {item.rows.map((r) => (
             <li key={`${r.session.id}-${r.playerId}`}>
@@ -429,7 +429,7 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
     <article className={cards ? 'ac ac-gray' : 'card stack'} aria-label={`${title}: ${formatShortDate(s.startsAt, tz)}`} {...(cards ? { 'data-alert-card': 'gray' } : {})}>
       {cards ? (
         <div>
-          <p className="ac-title">{title}</p>
+          <h3 className="ac-title">{title}</h3>
           <div className="ac-sub">{when(s, tz)}</div>
         </div>
       ) : (

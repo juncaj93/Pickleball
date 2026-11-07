@@ -363,7 +363,8 @@ function Action({ ctx, task, b, primary, nowMs, card }: { ctx: AdminCtx; task: T
   const cls = look ? `ac-btn${look.out ? ' ac-out' : ''}` : `btn small${primary ? '' : ' secondary'}`;
   const tone = look ? { 'data-ac-tone': look.tone } : {};
   const label = look ? look.label : b.label;
-  const spoken = look && look.label !== b.label ? { 'aria-label': b.label } : {};
+  // The spoken name starts with the visible words (voice control), then the old full label: "Text: Text the group to confirm".
+  const spoken = look && look.label !== b.label ? { 'aria-label': `${look.label}: ${b.label}` } : {};
   // Instant taps (INSTANT_TAPS): the shared helper (action.ts) shows this button working and keeps a second tap out. Off: as before.
   const instantOn = useInstant() !== null;
   const instantAct = useAction(ctx);

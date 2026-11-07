@@ -191,6 +191,7 @@ const GOOD_NEWS = {
 export function joinedText(d: JoinResponse, noCourt = false, priceCents = 0, showDue = !noCourt): string {
   // A really full game has a real waitlist, court or no court: say so.
   if (d.result === 'waitlisted') return `You're #${d.position} on the waitlist`;
+  if (!noCourt && d.result === 'standby') return `You're on standby, #${d.position}`;
   // `showDue`: the card shows "$ due" for this game (a booked court, or "Ask for payment on every game" is on).
   return joinedCreditText("You're in", d.result === 'confirmed' ? (d.creditCents ?? 0) : 0, priceCents, showDue);
 }
@@ -1442,6 +1443,7 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
         tone="amber"
         className={enter ? 'm-enter' : ''}
         label="Payment"
+        titleAs="h2"
         data={{ 'data-pay-card': true }}
         title={<RollText text={title} />}
         sub={
@@ -1651,14 +1653,15 @@ function SuggestionCard({
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
-  // At the max they would wait. A game really full beyond the max has a real waitlist, court or no court (as its card says), so the
-  // prompt warns first. With room, a game with no court booked reads like a normal one (src/courtDisplay.ts already drew a venue-waitlist
-  // game as a normal one, so the old "standby" form never showed; Zip 11 removed it).
+  // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
+  // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
+  // warns first. With room, a game with no court booked reads like a normal one.
   // "Card cleanup" (Zip 10): no waitlist and no cap, so the popup never says waitlist or standby ("12 are in. You'd make it 13.").
   const cleanup = g.cardCleanup === true;
-  const waitlistForm = !cleanup && s.confirmedCount >= g.group.maxPlayers;
+  const standby = !cleanup && s.courtState === 'waitlist';
+  const waitlistForm = !cleanup && !standby && s.confirmedCount >= g.group.maxPlayers;
   // At the database's 12 the popup only says how many are in (an I'm in there gets the plain refusal).
-  const subline = cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
+  const subline = standby ? '' : cleanup && s.confirmedCount >= g.group.maxPlayers ? `${s.confirmedCount} are in.` : wantInSubline(s.confirmedCount, cleanup ? Number.POSITIVE_INFINITY : g.group.maxPlayers);
 
   async function answer(yes: boolean) {
     if (instant && !yes) {
@@ -1700,21 +1703,23 @@ function SuggestionCard({
     const day = word.charAt(0).toUpperCase() + word.slice(1);
     const n = s.confirmedCount;
     const short = n < MIN_PLAYERS;
-    const title = short ? `${day} needs ${MIN_PLAYERS - n} more` : `${day} has ${n} in`;
+    // (A venue-waitlist game, "standby": no count, as before.)
+    const title = standby ? wantInTitle(s.startsAt, tz, Date.parse(g.now), false) : short ? `${day} needs ${MIN_PLAYERS - n} more` : `${day} has ${n} in`;
     const atLimit = cleanup && n >= g.group.maxPlayers;
-    const sub = short ? <AcBalls inCount={n} of={MIN_PLAYERS} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
+    const sub = standby ? undefined : short ? <AcBalls inCount={n} of={MIN_PLAYERS} /> : waitlistForm ? "You'd be on the waitlist" : atLimit ? undefined : `You'd make it ${n + 1}`;
     return (
       <AlertCard
         as="section"
         tone="green"
         titleId="suggest-title"
+        titleAs="h2"
         label={title}
         title={title}
         sub={sub}
         data={{ 'data-suggest-card': true }}
         action={
           <button type="button" className="ac-btn" disabled={busy} onClick={() => answer(true)}>
-            I'm in
+            {waitlistForm ? 'Join waitlist' : "I'm in"}
           </button>
         }
         onX={() => !busy && void answer(false)}
@@ -1842,8 +1847,8 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: stri
 const NOTE_PILL_MAX = 18;
 const noteLook = (text: string) => (text.trim().length <= NOTE_PILL_MAX ? 'note-pill' : 'note-box');
 
-// Zip 11: the old "N on standby" count is gone (the screen draws a venue-waitlist game as a normal one, src/courtDisplay.ts).
 function countLine(s: PlayerSessionView): string {
+  if (s.courtState === 'waitlist') return `${s.waitlist.length} on standby`;
   return s.countText;
 }
 
@@ -2116,8 +2121,9 @@ export function ScheduleRow({
   const mine = s.mine;
   const inSession = mine?.status === 'confirmed';
   const waiting = mine?.status === 'waitlisted';
-  // src/courtDisplay.ts draws a venue-waitlist game as a normal one before it gets here, so this card never sees the court's waitlist
-  // (Zip 11 removed the "standby" words that only showed for it).
+  // src/courtDisplay.ts draws an open venue-waitlist game as a normal one before it gets here; a game that already STARTED on a court
+  // still on Waitlist keeps it, so the standby words below stay (a Zip 11 fresh review found them still reachable, so they are kept).
+  const courtWait = s.courtState === 'waitlist';
   const open = !s.canceled && !s.started;
   const nowMs = Date.parse(g.now);
   const motion = useMotion();
@@ -2285,6 +2291,8 @@ export function ScheduleRow({
   // Zip 7 switches. TONIGHT_GLOW: the tile wears TONIGHT or TOMORROW (Eastern calendar days). PLAYER_CARDS_SIMPLE: no court words or dot.
   const dayTag: TileDay | undefined = g.tonightGlow === true ? tileDay(s.startsAt, tz, nowMs, open && !s.canceled) : undefined;
   const simple = g.playerCardsSimple === true;
+  // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
+  const standbyWord = courtWait && !simple;
   // Zip 9, CARD_TIME_BUTTONS: the start and the length under the tile, and one joined Calendar | Directions button instead of the icon.
   const cardButtons = g.cardTimeButtons === true;
   // Zip 10, CARD_CLEANUP: no count text (only the circles, one row), the people icon before the names, the content centered to the
@@ -2303,7 +2311,7 @@ export function ScheduleRow({
       </a>
     ));
   // PLAYER_CARDS_SIMPLE: the spots count is always there (a venue-waitlist game reads like any other game).
-  const showCount = !s.canceled;
+  const showCount = !s.canceled && (simple || s.confirmed.length > 0 || !courtWait);
   const dropLink = isIn && open && (
     <button className="link-btn quiet-link drop-link" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
       Drop out
@@ -2315,7 +2323,7 @@ export function ScheduleRow({
   const notIn = open && !(inSession || waiting);
   // The flat LATER row (switch off) puts the note in the middle column; every card (and every Card cleanup card) puts it under the button.
   const flatLater = tier === 'later' && !cleanup;
-  const note = notIn && s.joinAs === 'in' && !s.full ? s.shortGame
+  const note = notIn && !courtWait && s.joinAs === 'in' && !s.full ? s.shortGame
         ? gameCreditBackNote(viewPrice(s, { pricePerPlayerCents: g.group.priceCents, typicalCourtCostCents: 0 }), s.confirmed.length, g.group.maxPlayers, formatPrice)
         : creditBackNote(g.group.priceCents, s.confirmed.length, g.group.maxPlayers, formatPrice)
       : null;
@@ -2327,7 +2335,7 @@ export function ScheduleRow({
   const reasonShown = s.canceled && s.courtState !== 'not_opened' && !!s.cancelReason;
   if (s.canceled) status = <span className={`st-canceled${reasonShown ? ` ${noteLook(s.cancelReason!)}` : ''}`}>{s.courtState === 'not_opened' ? court.playerText : s.cancelReason ? `Canceled - ${s.cancelReason}` : 'Canceled'}</span>;
   else if (waiting)
-    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">Waitlist, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
+    status = simple ? <span className="st-wait on-waitlist">On the waitlist</span> : <span className="st-wait">{courtWait ? 'Standby' : 'Waitlist'}, {ordinal(mine.waitlistPosition ?? 1)} in line</span>;
   else if (isIn && simple)
     // PLAYER_CARDS_SIMPLE: "You're in" and the calendar icon, nothing about the court.
     status = (
@@ -2362,12 +2370,12 @@ export function ScheduleRow({
 
   const joinBtn = notIn && (
     <button className={`btn sched-btn${flatLater ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
-      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : s.joinAs === 'in' ? "I'm in" : 'Join waitlist'}
+      {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
     </button>
   );
   const leaveBtn = waiting && open && (
     <button className="btn sched-btn outline" disabled={busy} aria-busy={busy} onClick={() => setAskOut(true)}>
-      Leave waitlist
+      {standbyWord ? 'Leave standby' : 'Leave waitlist'}
     </button>
   );
   const noteEl = note && (
@@ -2452,7 +2460,7 @@ export function ScheduleRow({
             ))}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} />}
           {!s.canceled && !waiting && !simple && !cleanup && (
-            <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label="Waitlist" />
+            <NamesLine names={s.waitlist.map((w) => w.name)} me={g.me?.name} everyone={everyone} label={courtWait ? 'Standby' : 'Waitlist'} />
           )}
           {waiting && !s.canceled && !simple && !cleanup && <p className="sched-sub">You're in if someone drops.</p>}
           {/* Only for someone who was in (or waiting on) the game: nobody else paid for it. */}
@@ -2483,7 +2491,7 @@ export function ScheduleRow({
       {celebrating && motion && <Burst />}
       <ConfirmDialog
         open={askOut}
-        title={waiting ? 'Leave the waitlist?' : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
+        title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}
         body={
           waiting
             ? 'You lose your place in line.'
@@ -2497,7 +2505,7 @@ export function ScheduleRow({
                 )
               : 'Your spot opens up for someone else.'
         }
-        confirmLabel={waiting ? 'Leave waitlist' : fromNotice ? "Can't make it" : 'Drop out'}
+        confirmLabel={waiting ? (standbyWord ? 'Leave standby' : 'Leave waitlist') : fromNotice ? "Can't make it" : 'Drop out'}
         danger
         busy={busy}
         onConfirm={() => {

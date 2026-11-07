@@ -13,6 +13,7 @@ export function AlertCard({
   tone,
   title,
   titleId,
+  titleAs = 'p',
   sub,
   subTone,
   links,
@@ -30,6 +31,8 @@ export function AlertCard({
   tone: AcTone;
   title: ReactNode;
   titleId?: string;
+  /** The title's element: a heading where the old card had one (h2, h3), so screen readers can still jump between them. */
+  titleAs?: 'p' | 'h2' | 'h3';
   /** One gray line under the title (or a node such as the pickleball circles). */
   sub?: ReactNode;
   /** The sub line in another color ("Cancel the court before 7:00 AM" in red). */
@@ -53,13 +56,14 @@ export function AlertCard({
   data?: Record<string, string | boolean | undefined>;
 }) {
   const Tag = as;
+  const Title = titleAs;
   return (
     <Tag className={`ac ac-${tone}${actions ? ' ac-stacked' : ''}${className ? ` ${className}` : ''}`} data-alert-card={tone} role={role} aria-label={label} {...data}>
       <div className="ac-row">
         <div className="ac-text">
-          <p className="ac-title" id={titleId}>
+          <Title className="ac-title" id={titleId}>
             {title}
-          </p>
+          </Title>
           {sub !== undefined && sub !== null && sub !== '' && sub !== false && <div className={`ac-sub${subTone ? ` ac-sub-${subTone}` : ''}`}>{sub}</div>}
           {links && <div className="ac-links">{links}</div>}
         </div>

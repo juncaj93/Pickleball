@@ -214,10 +214,9 @@ describe('dead code that is gone (Zip 11)', () => {
     expect('gamedayCheck' in taskTimes(game(3), opts(false))).toBe(false);
   });
 
-  it('the player screen has no standby words left (the server makes no standby seats; a venue-waitlist game is drawn as a normal one)', () => {
+  it('the standby words are KEPT: a game that already started on a court still on Waitlist reaches the card (fresh review, Zip 11)', () => {
     const src = readFileSync(new URL('../src/pages/PlayerHome.tsx', import.meta.url), 'utf8');
-    const code = src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-    for (const w of ['Join standby', 'Leave standby', 'on standby', "'Standby'"]) expect(code, w).not.toContain(w);
+    for (const w of ['Join standby', 'Leave standby', 'on standby']) expect(src, w).toContain(w);
   });
 });
 

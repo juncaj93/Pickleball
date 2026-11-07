@@ -56,9 +56,9 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
       <article className="ac ac-green ac-stacked finalize-card-ac" aria-label={`Finalize ${day}`} data-finalize={s.id} data-alert-card="green" tabIndex={-1}>
         <div className="ac-row">
           <div className="ac-text">
-            <p className="ac-title">
+            <h3 className="ac-title">
               {day} · {n} in
-            </p>
+            </h3>
             <div className="ac-sub" data-finalize-preview>
               {under ? `Only ${n} in. Cancel it (everyone paid gets credit) or finalize anyway at ${formatPrice(price)} each.` : gameFinalPreview(gp, n, formatPrice)}
             </div>
@@ -232,6 +232,7 @@ export function RefundRequestCard({ ctx, r }: { ctx: AdminCtx; r: RefundRequestV
       <AlertCard
         tone="blue"
         label={`${r.name} requested a refund`}
+        titleAs="h3"
         data={{ 'data-refund-request': r.name }}
         title={`${r.name} requested a refund of ${formatPrice(r.cents)}`}
         sub={pay.addressed ? 'Cash out request' : `Cash out request · No Venmo saved for ${r.name}: pick them in Venmo.`}
@@ -322,6 +323,7 @@ export function PaymentClaimCard({ ctx, c }: { ctx: AdminCtx; c: AdminDashboard[
       <AlertCard
         tone="amber"
         label={`${c.name} payment not confirmed`}
+        titleAs="h3"
         data={{ 'data-payment-claim': c.name }}
         title={title}
         sub={rest || undefined}

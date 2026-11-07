@@ -2756,3 +2756,62 @@ merged and live first (production `9c94c864` = main `624c60f`). The full descrip
 - Also fixed from its notes: a look-only test phone on a full game says "Join waitlist" again (what its tap does); the Want in? popup at 12 says only
   "12 are in." Notes kept: switching the row on while the kill switch is "off" moves nobody (the kill switch wins); after switching the row off again, a
   game left at 11 or 12 shows in `more_in_than_max` (expected).
+
+### Deploy (Fri Nov 6, 2026; recorded with Zip 11)
+- Zip 10 is live: production deployment `f09f5aac-d683-49bd-a3cb-de9794278759` = main `fb44afc` (PR #92). The build live before it was Zip 9,
+  `9c94c864-11cd-4471-a004-f4eeddefb1e3`: that is the rollback. Alex switched Card cleanup on (the live `card_cleanup_on` row exists, read Sat Nov 7).
+  The Time Travel bookmark of that deploy was not recorded in this file.
+
+## Zip 11: Alert cards (ALERT_CARDS): one action-card look for every player and organizer alert, plus dead code removal - built Fri Nov 6 to Sat Nov 7, 2026 (overnight, a quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 11" brief (`START_HERE.md`, `SITE_RULES.md`, the ALERTS-player, ALERTS-organizer and player-screen-with-action-card mockups). One PR.
+NO database schema change, no migration. Nothing deployed to production, nothing switched on, no live data changed. Only reads of the live
+database (the switch rows, the count of texted /t/ links, the count of old "standby" Activity lines). Zip 10 was merged and live first.
+
+### A. The look (`ALERT_CARDS`, ships OFF, look only)
+- `src/AlertCard.tsx` (the one card: tone, bold title, gray sub line, one button on the right, or two or more under the text, an optional X, links
+  under the title) and `src/alert-cards.css` (every rule under `html[data-alert-cards]`, set by `src/zip7.ts useZip7Root`; tokens light, dark, dark).
+  Every text and button pair is 4.5:1 or better (checked in `tests/alert-cards.test.ts` and in the browser). Buttons 40 px to see, 44 px to tap.
+- Player (`src/pages/PlayerHome.tsx`, `src/timeShift.tsx`, `src/pages/CashOutPrompt.tsx`): Want in ("Tuesday needs 1 more" with the circles,
+  "Tuesday has 5 in" / "You'd make it 6"; I'm in = the old Yes, X = the old No), Pay card (Pay on the right opens the Pay sheet or Venmo as before; I paid
+  and Use credit links show under exactly the old conditions), cleared debt ("You no longer owe $14", "Someone took your Tue, Nov 3 spot", Dismiss),
+  Credit adjusted (+ an X that hides that one adjustment on this phone), the cash-out question (same place at the bottom, blue card, mock words), the
+  "Alex sent your $10" banner (gets an OK that only closes it), the moved game (Still in / Can't make it under the text), the answer card after Want in
+  (Done), the good-news line in a card, the View as bar (gray card, Exit), and every bottom banner (tinted, no icon; red for errors).
+- Organizer Home (`DoNow.tsx`, `SuggestionCards.tsx`, `HomeCards.tsx`, `VenmoRequest.tsx`, `Admin.tsx`, `Sessions.tsx`): the words are each card's own
+  words split at the first sentence into a title and a gray sub line (`splitFirst`, `shared/zip11.ts`); buttons get the mock's short labels (the old
+  label stays as the spoken name). See the switch row in `docs/FEATURE_SWITCHES.md` for the full list.
+- Switch: Settings row "Alert cards" (newest first), `PUT /api/admin/alert-cards-switch`, `task_log` row `alert_cards_on`, kill switch `ALERT_CARDS` in
+  `wrangler.toml` (allowed; on in `[env.preview.vars]`), private link `?alertcards=on` (header `X-Alert-Cards`, any phone: look only), Activity lines,
+  player stamp piece `ac` only while on.
+
+### B. Dead code removed (not switchable)
+- `/t/<token>` link page (`src/pages/LinkPage.tsx`): no screen ever made one (the organizer route `POST /api/admin/sessions/:id/links` has no button),
+  and the live database holds 0 rows in `session_action_tokens` (read Sat Nov 7). An old `/t/...` address now opens the home page. Kept on purpose: the
+  server routes `/api/link`, `/api/link/act` and the links route (tests use them; harmless without the page). Follow-up for a later zip.
+- "I booked it" task button (`bookedButton`, the `'booked'` task action): nothing drew it (the court switch sets Booked). Removed from the brain.
+- The game-day check (6:15 / 7:15 AM Telegram, alert id `gameday`): it only ran with Texts round 2 OFF (on live it was already off); deleted for good.
+  A one-off check ran main's brain and this one at all 12,684 ticks of both sweeps: the new cards and alerts were the old ones minus exactly those two
+  things. `tests/fixtures/tick-golden.json` lost only its 9 `:gameday` lines (and its two card fingerprints); `tests/golden-wording.test.ts` has the new ones.
+- Standby words: KEPT, not removed. The fresh review proved one path still reaches them: a game that already started on a court still set to
+  Waitlist (never marked Booked) keeps its court state, so from the start to the end of that game the card can say "0 on standby" / "Standby, 2nd
+  in line" (`shared/court.ts` decides "started" before "waitlist"). By the brief's rule (still used, so keep it), they stay exactly as on main. The
+  server never answers a "standby" join any more; the organizer History line "X joined standby" also stays (7 old live log lines read that way).
+
+### C. Last-call wording (report only, nothing changed)
+- The "Last call texts" group text (`shared/lastCall.ts`, 4 or more in) ends with "Need to back out? Do it by ... to avoid cancel fees." Players read it
+  in the group chat. No player screen says "last call".
+
+### D. Preview seed
+- `alert_cards_on` in `PREVIEW_SWITCHES_ON` (with every switch on live). New fake states: a moved game (Indy, Jordan, Drew), Casey +$5 credit adjusted and
+  a regular for Tue and Thu (Want in), Blake's late drop taken by Kai (cleared debt), and a played game to finalize (Wednesday or Thursday seeds).
+
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking. Fixed from it: (1) the standby words were still reachable (see B): put back exactly as main has them; (2) with the switch on, the
+  Want in button says "Join waitlist" when the tap really joins a waitlist (only with Card cleanup off). Also from its notes: the X is a full 44 x 44
+  px; card titles are headings again where the old cards had one (h2 Pay and Want in, h3 organizer cards); each short button's spoken name starts
+  with its visible words ("Text: Text the group to confirm", "Remind: ..."); the TEXTS_R2 row in `docs/FEATURE_SWITCHES.md` says the game-day
+  check cannot come back. Checked by the reviewer: OFF falls back to the old markup everywhere, hook order is fine, nothing about money, seats or
+  texts reads the switch, and main's brain minus the two deleted things gives the new golden fingerprints exactly.
+- Notes kept: the dashboard always carries `alertCardsForAll` (false when off), as every switch does (one more small read per request); the old
+  `/api/link` routes stay (see B).
