@@ -423,20 +423,37 @@ async function main() {
       await ctx.close();
     }
   });
-  await check('the organizer screens are unchanged in dark (no in-between look on admin cards)', async () => {
-    const ctx = await browser.newContext(phone(390, 'dark', 2));
+  // Alex, Nov 8 (after the preview): the organizer cards get the same dark look; light unchanged.
+  const adminLook = async (width, scheme) => {
+    const ctx = await browser.newContext(phone(width, scheme, 2));
     await shift(ctx, NOW_MS);
     await post(ctx.request, '/api/admin/login', { pin: PIN });
     await ctx.addInitScript(() => localStorage.setItem('pb_alerts', 'all'));
     const page = await ctx.newPage();
     await page.goto(BASE + '/admin?alerts=all');
     await page.locator('.tabbar').waitFor();
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(900);
     const cards = await look(page);
-    assert(cards.length > 0, 'admin has cards');
-    assert(await page.evaluate(() => !document.documentElement.hasAttribute('data-ac-player')), 'no player attribute on admin');
-    for (const c of cards) assert(c.bw === '1px', `admin "${c.title}": ${c.bw}`);
+    await noSideways(page, `admin ${width} ${scheme}`);
+    if (width === 390) await shot(page, `admin-${scheme}`);
     await ctx.close();
+    return cards;
+  };
+  for (const width of [390, 360, 320]) {
+    await check(`organizer Home dark ${width} px: every alert card has the 1.5 px border, a tinted fill, words 4.5:1 or better`, async () => {
+      const cards = await adminLook(width, 'dark');
+      assert(cards.length >= 3, `admin cards: ${cards.length}`);
+      const tones = new Set(cards.map((c) => c.tone));
+      for (const c of cards) {
+        assert(c.bw === '1.5px', `admin "${c.title}": border ${c.bw}`);
+        assert(c.bg !== 'rgb(24, 34, 28)', `admin "${c.title}": plain card color ${c.bg}`);
+        assert(c.titleRatio >= 4.5 && c.subRatio >= 4.5, `admin "${c.title}": contrast ${c.titleRatio.toFixed(2)} / ${c.subRatio.toFixed(2)}`);
+      }
+      assert(tones.size >= 2, `several tones: ${[...tones]}`);
+    });
+  }
+  await check('organizer Home light: unchanged (1 px border, plain white card)', async () => {
+    for (const c of await adminLook(390, 'light')) assert(c.bw === '1px' && c.bg === 'rgb(255, 255, 255)', `admin "${c.title}": ${c.bw} ${c.bg}`);
   });
 
   await browser.close();

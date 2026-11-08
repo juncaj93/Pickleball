@@ -3426,3 +3426,12 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
 ### Preview
 - https://preview-zip16.pickleball-club-9h0.pages.dev, fake database re-seeded Sun Nov 8 (the cards last until Sun Nov 15). Switch rows on:
   every row on live (repo records) plus Game day card and Second Chance (as on the Zip 14 and 15 previews) plus After-game cards.
+
+### After Alex tested the preview (Sun Nov 8, 2026, afternoon Eastern)
+- "Ship it". Answers: (a) no card for a no-show who paid (their final price did not change): as built; (b) the dark look on the organizer
+  cards too, same values, light unchanged: done (the CSS no longer needs the player-screen mark; `usePlayerAlertLook` removed);
+  (c) the X remembered per phone: as built.
+- Retested: `tests/after-game.test.ts` 16/16; `e2e/zip16.cjs` 28/28 (adds organizer Home dark at 390/360/320: 1.5 px border, tinted fill,
+  4.5:1 words, nothing sideways; light unchanged); `e2e/zip16-off.cjs` 40/40 against main (organizer Home dark now differs from main only
+  by the card colors, the same intended difference).
+

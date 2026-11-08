@@ -56,15 +56,3 @@ export function adminTileDay(d: { tonightGlow?: boolean; now: string; group: { t
   return tileDay(s.startsAt, d.group.timezone, Date.parse(d.now), !s.state.flags.canceled && !s.state.flags.started);
 }
 
-/**
- * Zip 16: marks the page as the player screen (html[data-ac-player]) while it is on screen, so the dark-mode "in-between" look of the alert
- * cards (src/alert-cards.css, the Zip 16 part) applies to the player's cards only. Look only; it does nothing without the Alert cards switch.
- */
-export function usePlayerAlertLook(active = true) {
-  useLayoutEffect(() => {
-    if (!active) return;
-    const root = document.documentElement;
-    root.setAttribute('data-ac-player', 'on');
-    return () => root.removeAttribute('data-ac-player');
-  }, [active]);
-}

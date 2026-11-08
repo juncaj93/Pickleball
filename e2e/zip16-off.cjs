@@ -1,11 +1,11 @@
-/* Zip 16: the After-game cards switch OFF must be exactly today's site, with ONE intended difference: the dark-mode look of the player alert
- * cards (it rides on Alert cards, already on live). This runs today's main (a git worktree, path in MAIN_DIR) and this branch side by side on
+/* Zip 16: the After-game cards switch OFF must be exactly today's site, with ONE intended difference: the dark-mode look of the alert
+ * cards (player and organizer) (it rides on Alert cards, already on live). This runs today's main (a git worktree, path in MAIN_DIR) and this branch side by side on
  * two copies of the same fake world (the Zip 16 world: Parker $5 back, Rowan $8 back from two games, Quinn owes $3 more after a reopen and
  * redo), with the After-game cards row OFF, and compares:
  *  - the rendered HTML of the player homes (Parker, Rowan, Quinn, Casey, Jordan, Gray, Blake, Indy) at 390, 360 and 320 wide, light and dark;
  *  - every element's look (colors, borders, sizes, fonts) on those screens: identical in light; identical in dark except the alert cards'
  *    fill, border and badge colors (the intended difference);
- *  - organizer Home light and dark, Settings apart from the one new row, Players, Money and History;
+ *  - organizer Home light and dark (dark: the same one intended difference), Settings apart from the one new row, Players, Money and History;
  *  - the answers: no Zip 16 key in the player answer or the dashboard.
  *
  *   MAIN_DIR=/path/to/main-worktree node e2e/zip16-off.cjs
@@ -167,7 +167,7 @@ async function main() {
       for (const who of ['Parker', 'Rowan', 'Quinn', 'Casey'])
         await same(`player home ${who}, ${width} px, ${scheme}: identical${scheme === 'dark' ? ' apart from the alert card colors' : ''} (no after-game card, the old owe card words)`, { who, url: '/', scheme, width, styles: true });
     for (const who of ['Jordan', 'Gray', 'Blake', 'Indy']) await same(`player home ${who}, 390 px, ${scheme}: identical${scheme === 'dark' ? ' apart from the alert card colors' : ''}`, { who, url: '/', scheme, styles: true });
-    await same(`organizer Home, 390 px, ${scheme}: identical (looks too)`, { who: 'admin', url: '/admin', scheme, styles: true });
+    await same(`organizer Home, 390 px, ${scheme}: identical${scheme === 'dark' ? ' apart from the alert card colors' : ''} (looks too)`, { who: 'admin', url: '/admin', scheme, styles: true });
     await same(`organizer Settings, ${scheme}: identical apart from the one new switch row`, { who: 'admin', url: '/admin', scheme, tabName: 'Settings' }, (h) =>
       h.replace(/<div class="set-row-wrap" data-row="afterGameCardAll">.*?<\/label><\/div>/gs, ''),
     );

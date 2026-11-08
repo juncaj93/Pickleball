@@ -650,9 +650,9 @@ html[data-alert-cards] .short-ac {
   margin-top: 10px;
 }
 
-/* ---------- Zip 16: the dark-mode "in-between" look for the player alert cards (aftergame_mock.html, the .ph.dark.mid rules) ----------
- * Alex's phone: in dark mode a card was almost the page color, so its shape was hard to see. On the player screen only
- * (html[data-ac-player], set by PlayerHome while it is on screen) and in dark mode only: a 1.5 px border, a fill that is the card color
+/* ---------- Zip 16: the dark-mode "in-between" look for every alert card (aftergame_mock.html, the .ph.dark.mid rules) ----------
+ * Alex's phone: in dark mode a card was almost the page color, so its shape was hard to see. Player cards, and the organizer cards too
+ * (Alex, Nov 8, after the preview: same values). In dark mode only: a 1.5 px border, a fill that is the card color
  * mixed 62% with the card's own tint (blue credit and info, amber owes, green in and good news, gray neutral), a border that is the card
  * line mixed 45% with the card's own line color, and a slightly tinted round badge (the card's ink at 12%). Buttons unchanged.
  * Light mode: nothing here applies, so it stays exactly as it was. Rides on the Alert cards switch (already on live); no new switch. */
@@ -681,7 +681,7 @@ html[data-alert-cards] [data-ac-tone='red'] {
   --t-line: var(--ac-red-line);
 }
 @media (prefers-color-scheme: dark) {
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) {
+  html[data-alert-cards]:not([data-theme='light']) {
     /* The mock's dark line colors (--gline, --aline, --bline, --nline); purple and red follow the same step (the mock has none). */
     --ac-green-line: #2b5a40;
     --ac-amber-line: #5a4720;
@@ -690,24 +690,24 @@ html[data-alert-cards] [data-ac-tone='red'] {
     --ac-gray-line: #3a403b;
     --ac-red-line: #6a3430;
   }
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) .ac,
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) .pop.toast {
+  html[data-alert-cards]:not([data-theme='light']) .ac,
+  html[data-alert-cards]:not([data-theme='light']) .pop.toast {
     border-width: 1.5px;
     background: color-mix(in srgb, var(--ac-card) 62%, var(--t-tint));
     border-color: color-mix(in srgb, var(--ac-line) 45%, var(--t-line));
   }
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) .ac .ac-icon,
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) .pop.toast .toast-icon {
+  html[data-alert-cards]:not([data-theme='light']) .ac .ac-icon,
+  html[data-alert-cards]:not([data-theme='light']) .pop.toast .toast-icon {
     background: color-mix(in srgb, var(--t-ink) 12%, transparent);
   }
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) .pop.toast {
+  html[data-alert-cards]:not([data-theme='light']) .pop.toast {
     --t-line: var(--ac-green-line);
   }
-  html[data-alert-cards][data-ac-player]:not([data-theme='light']) .pop.toast.pop-error {
+  html[data-alert-cards]:not([data-theme='light']) .pop.toast.pop-error {
     --t-line: var(--ac-red-line);
   }
 }
-html[data-alert-cards][data-ac-player][data-theme='dark'] {
+html[data-alert-cards][data-theme='dark'] {
   --ac-green-line: #2b5a40;
   --ac-amber-line: #5a4720;
   --ac-blue-line: #363f78;
@@ -715,19 +715,19 @@ html[data-alert-cards][data-ac-player][data-theme='dark'] {
   --ac-gray-line: #3a403b;
   --ac-red-line: #6a3430;
 }
-html[data-alert-cards][data-ac-player][data-theme='dark'] .ac,
-html[data-alert-cards][data-ac-player][data-theme='dark'] .pop.toast {
+html[data-alert-cards][data-theme='dark'] .ac,
+html[data-alert-cards][data-theme='dark'] .pop.toast {
   border-width: 1.5px;
   background: color-mix(in srgb, var(--ac-card) 62%, var(--t-tint));
   border-color: color-mix(in srgb, var(--ac-line) 45%, var(--t-line));
 }
-html[data-alert-cards][data-ac-player][data-theme='dark'] .ac .ac-icon,
-html[data-alert-cards][data-ac-player][data-theme='dark'] .pop.toast .toast-icon {
+html[data-alert-cards][data-theme='dark'] .ac .ac-icon,
+html[data-alert-cards][data-theme='dark'] .pop.toast .toast-icon {
   background: color-mix(in srgb, var(--t-ink) 12%, transparent);
 }
-html[data-alert-cards][data-ac-player][data-theme='dark'] .pop.toast {
+html[data-alert-cards][data-theme='dark'] .pop.toast {
   --t-line: var(--ac-green-line);
 }
-html[data-alert-cards][data-ac-player][data-theme='dark'] .pop.toast.pop-error {
+html[data-alert-cards][data-theme='dark'] .pop.toast.pop-error {
   --t-line: var(--ac-red-line);
 }

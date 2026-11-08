@@ -262,21 +262,22 @@ describe('the card words', () => {
   });
 });
 
-describe('dark-mode in-between look (rides on Alert cards, player screen only, light untouched)', () => {
+describe('dark-mode in-between look (rides on Alert cards, player and organizer, light untouched)', () => {
   const css = readFileSync('src/alert-cards.css', 'utf8');
   const part = css.slice(css.indexOf('/* ---------- Zip 16'));
-  it('every new look rule is dark-only and under the player screen attribute; the mock numbers are used', () => {
+  it('every new look rule is dark-only; the mock numbers are used', () => {
     // Outside the two dark blocks only the --t-line names (no colors at all) are set.
-    const light = part.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media \(prefers-color-scheme: dark\) \{[\s\S]*?\n\}\n/, '').replace(/html\[data-alert-cards\]\[data-ac-player\]\[data-theme='dark'\][^{]*\{[^}]*\}/g, '');
+    const light = part.replace(/\/\*[\s\S]*?\*\//g, '').replace(/@media \(prefers-color-scheme: dark\) \{[\s\S]*?\n\}\n/, '').replace(/html\[data-alert-cards\]\[data-theme='dark'\][^{]*\{[^}]*\}/g, '');
     expect(light).not.toMatch(/background|border|#[0-9a-f]{6}/i);
     expect(part).toContain('color-mix(in srgb, var(--ac-card) 62%, var(--t-tint))');
     expect(part).toContain('color-mix(in srgb, var(--ac-line) 45%, var(--t-line))');
     expect(part).toContain('border-width: 1.5px');
     for (const c of ['#2b5a40', '#5a4720', '#363f78', '#3a403b']) expect(part).toContain(c);
   });
-  it('the player screen sets the attribute; the organizer screens do not', () => {
-    expect(readFileSync('src/pages/PlayerHome.tsx', 'utf8')).toContain('usePlayerAlertLook()');
-    expect(readFileSync('src/pages/Admin.tsx', 'utf8')).not.toContain('usePlayerAlertLook');
+  it('applies to every alert card (player and organizer) under the Alert cards attribute, dark only', () => {
+    expect(part).not.toContain('data-ac-player');
+    expect(readFileSync('src/pages/PlayerHome.tsx', 'utf8')).not.toContain('usePlayerAlertLook');
+    for (const sel of part.match(/^html\[[^{]*\{/gm) ?? []) expect(sel).toMatch(/^html\[data-alert-cards\]/);
   });
 });
 

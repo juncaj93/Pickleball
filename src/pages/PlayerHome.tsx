@@ -24,7 +24,7 @@ import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, SwapIcon, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
-import { usePlayerAlertLook, useZip7Root } from '../zip7';
+import { useZip7Root } from '../zip7';
 import { AcBalls, AlertCard } from '../AlertCard';
 import { afterGameCard, oweMoreText } from '../../shared/afterGame';
 import { tileDay, type TileDay } from '../../shared/zip7';
@@ -334,8 +334,6 @@ export function PlayerHome({
   useLayoutEffect(() => () => setMotion(false), []);
   // Zip 7 switches (Tonight glow, Color cleanup, Simpler player cards): <html> attributes, only while their answer is yes.
   useZip7Root(g);
-  // Zip 16: the player screen's alert cards get the dark-mode in-between look (src/alert-cards.css; look only, light mode untouched).
-  usePlayerAlertLook();
   // Preview only (g.preview exists only where PREVIEW_CALM is set, never on live): ?as=Harper opens the page as that fake player, the same
   // as picking the name on Who are you?. On live the server never says preview, so the link does nothing.
   const asTried = useRef(false);

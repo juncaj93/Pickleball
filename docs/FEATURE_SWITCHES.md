@@ -114,14 +114,15 @@ All of them only show or hide things, EXCEPT `LATE_FEES`, `LATE_FEE_SPLIT` and `
   (`shared/previewCalm.ts`, now the Second Chance cards and Mark paid tonight) and the player page hides its alert cards (Zip 16: except the after-game card, and the owe card when it owes more after Finalize); the games are all
   there and every switch stays as it is. `?alerts=all` once per phone shows every alert (`?alerts=calm` goes back). Never on live.
 
-## Not switched (Zip 16): the dark-mode look of the player alert cards (rides on Alert cards, which is ON on live)
+## Not switched (Zip 16): the dark-mode look of the alert cards, player and organizer (rides on Alert cards, which is ON on live)
 - Alex's phone, dark mode: the alert cards were almost the page color. On the player screen, dark mode only, every alert card (Want in, you
   owe for one or several games, you no longer owe, credit adjusted, the cash-out question, the moved game, the "Alex sent your $10" banner,
   the answer card, the good-news line, the new after-game card) gets the approved in-between look (aftergame_mock.html, the `.ph.dark.mid`
   rules): a 1.5 px border, a fill of the dark card color mixed 62% with the card's own tint, a border of the card line mixed 45% with the
   card's own line color (`#363f78` blue, `#5a4720` amber, `#2b5a40` green, `#3a403b` gray; purple `#4a3d78` and red `#6a3430` follow the
-  same step), and a badge of the card's ink at 12%. Buttons unchanged. Light mode and the organizer screens are unchanged.
-  Code: the Zip 16 part at the end of `src/alert-cards.css` (every rule under `html[data-ac-player]` and dark mode), `usePlayerAlertLook` in
-  `src/zip7.ts`, one call in `src/pages/PlayerHome.tsx`. To undo: delete that CSS part (or the one call) and deploy. Quickest off for the
+  same step), and a badge of the card's ink at 12%. Buttons unchanged. Light mode unchanged. The organizer's Home cards get the same look
+  (Alex, Nov 8, after the preview: "yes, do it too, same values").
+  Code: the Zip 16 part at the end of `src/alert-cards.css` (every rule under `html[data-alert-cards]` and dark mode). To undo: delete that
+  CSS part and deploy. Quickest off for the
   whole card family: Settings > Feature switches > "Alert cards" (that also turns off the card look itself).
 
