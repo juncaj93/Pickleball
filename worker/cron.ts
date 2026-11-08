@@ -4,11 +4,18 @@
 // Telegram secrets (server/tasks.ts). It has no public address, sends no
 // messages and holds no Telegram token. If a knock fails, the next one, 5
 // minutes later, catches up (alerts are sent up to an hour late, never twice).
-// Once an hour it also looks whether the weekly backup copy is due (worker/backup.ts, Zip 8).
+// Once an hour it also looks whether the weekly backup copy is due (worker/backup.ts, Zip 8). Since Zip 19 that look, and each step of
+// a copy, is its own run of this Worker (called through its private SELF binding), so the knock's run stays small and no run's CPU
+// grows with the data. The Worker still has no public address: only it can call itself, and every such call carries CRON_SECRET.
 
 import type { D1Database } from '../server/db';
-import { maybeWeeklyBackup } from './backup';
+import { checkThisTick, maybeWeeklyBackup, runStep, type BackupResult, type StepBody, type StepRunner } from './backup';
 import { viewOnlyDb } from '../server/viewOnly';
+
+/** The Worker's binding to itself (worker/wrangler.toml [[services]] SELF). */
+interface SelfBinding {
+  fetch(req: Request): Promise<Response>;
+}
 
 interface Env {
   /** Where the site lives, e.g. https://pickleball-club-9h0.pages.dev */
@@ -19,6 +26,27 @@ interface Env {
   DB?: D1Database;
   /** The private backup database `pickleball-backups` the weekly copy is saved in. */
   BACKUP?: D1Database;
+  /** This Worker itself (Zip 19): each backup run and step gets its own run and CPU allowance. Missing: done in the knock's run, as before. */
+  SELF?: SelfBinding;
+}
+
+const SECRET_HEADER = 'X-Backup-Secret';
+
+/** Ask this Worker (through SELF) to do `path` as its own run. */
+async function callSelf<T>(env: Env, path: string, body: unknown): Promise<T> {
+  const res = await env.SELF!.fetch(
+    new Request(`https://pickleball-alerts-clock${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json', [SECRET_HEADER]: env.CRON_SECRET ?? '' }, body: JSON.stringify(body) }),
+  );
+  const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? `${path} answered ${res.status}`);
+  return data;
+}
+
+/** Each step of a copy as its own run (SELF), or in this run when there is no SELF binding. */
+function stepRunner(env: Env, live: D1Database, store: D1Database): StepRunner {
+  const self: StepRunner = (body: StepBody) => callSelf<{ chars: number }>(env, '/backup/step', body);
+  const inline: StepRunner = (body: StepBody) => runStep(live, store, body, inline);
+  return env.SELF ? self : inline;
 }
 
 interface ScheduledCtx {
@@ -42,15 +70,52 @@ export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<nu
   }
 }
 
+/** The hourly look and, when due, the whole copy (its steps each in their own run). The live database is only ever read. */
+async function backupRun(env: Env, nowMs: number): Promise<BackupResult> {
+  // The live database is handed over wrapped so it can only be read: any write would quietly do nothing.
+  const live = env.DB ? viewOnlyDb(env.DB) : undefined;
+  return maybeWeeklyBackup(live, env.BACKUP, nowMs, live && env.BACKUP ? stepRunner(env, live, env.BACKUP) : undefined);
+}
+
 /** The weekly copy, on its own: it never delays or stops the knock, and a failure is only a log line (retried within the hour). */
 export async function backupTick(env: Env, nowMs = Date.now()): Promise<void> {
-  // The live database is handed over wrapped so it can only be read: any write would quietly do nothing.
-  const r = await maybeWeeklyBackup(env.DB ? viewOnlyDb(env.DB) : undefined, env.BACKUP, nowMs);
+  let r: BackupResult;
+  try {
+    // Only the ticks at minute 0 to 4 look at all (checked again inside), so the other 11 ticks an hour make no extra run.
+    if (env.SELF && env.DB && env.BACKUP && checkThisTick(nowMs)) {
+      r = await callSelf<BackupResult>(env, '/backup/run', { nowMs });
+    } else r = await backupRun(env, nowMs);
+  } catch (err) {
+    r = { made: false, reason: `failed: ${err instanceof Error ? err.message : 'unknown'}` };
+  }
   if (r.made) console.log(`weekly backup ${r.week}: ${r.bytes} bytes in ${r.parts} parts, ${r.kept} kept`);
   else if (r.reason.startsWith('failed')) console.log(`weekly backup ${r.reason}`);
 }
 
+/**
+ * Calls this Worker makes to itself (SELF): `/backup/run` (the hourly look and the copy) and `/backup/step` (one step). Anything else,
+ * or a call without the shared secret, is "Not found". (No route or workers.dev address points here, so only SELF can reach it.)
+ */
+export async function selfCall(req: Request, env: Env): Promise<Response> {
+  const secret = env.CRON_SECRET ?? '';
+  if (req.method !== 'POST' || !secret || req.headers.get(SECRET_HEADER) !== secret || !env.DB || !env.BACKUP) return new Response('Not found', { status: 404 });
+  const path = new URL(req.url).pathname;
+  try {
+    const body = (await req.json()) as Record<string, unknown>;
+    if (path === '/backup/run') return Response.json(await backupRun(env, Number(body.nowMs)));
+    if (path === '/backup/step') {
+      const live = viewOnlyDb(env.DB);
+      // This step, then the next one of its chain as its own run.
+      return Response.json(await runStep(live, env.BACKUP, body as unknown as StepBody, stepRunner(env, live, env.BACKUP)));
+    }
+  } catch (err) {
+    return Response.json({ error: err instanceof Error ? err.message : 'unknown' }, { status: 500 });
+  }
+  return new Response('Not found', { status: 404 });
+}
+
 export default {
+  fetch: selfCall,
   scheduled(_event: unknown, env: Env, ctx: ScheduledCtx) {
     // The knock first and on its own; the weekly copy only starts once the knock has its answer, so it can never cut the knock short.
     ctx.waitUntil(
