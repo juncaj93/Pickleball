@@ -25,7 +25,8 @@ Other ways to run it:
 1. Gets the backup, with read-only commands only:
    - the newest weekly copy from the private `pickleball-backups` database (plain SELECTs), and
    - a fresh export of live (`wrangler d1 export pickleball --remote`, a download; it is deleted when the test ends, since it has
-     phone numbers).
+     phone numbers). Cloudflare can hold other requests to the database for the second or two an export takes, so run it in a
+     quiet window, like the export taken before every deploy.
 2. Loads each one into a **throwaway database in memory** on this computer: every migration, then the same restore SQL
    `docs/RESTORE.md` step 1 makes (`scripts/restore-backup.mjs`), in one transaction, then the database's own foreign key check.
    The throwaway disappears when the test ends. It is never the live database and never `pickleball-preview`.
@@ -36,8 +37,12 @@ Other ways to run it:
      what they owe, pending cash-outs;
    - **the 21 integrity checks** (`scripts/integrity-checks.sql`, the same ones run before and after each deploy): the same answer
      on the copy as on the source.
-4. For live, it saves the export both ways a backup is made (the Settings > Backup file, which is also how weekly copies were
-   saved before Zip 19, and the way the weekly copy saves it since Zip 19) and checks both.
+4. For live, it saves the export both ways a backup is made and checks both: the Settings > Backup file (also how weekly copies
+   were saved before Zip 19), and a real run of the weekly copy code since Zip 19 (plan, steps, finish, `worker/backup.ts`) into a
+   throwaway store, joined back the way `node scripts/weekly-backup.mjs get` joins it.
+5. It also checks every row in the backup has every column the database has (a backup missing a column would otherwise restore
+   it as the default on both sides and look the same). A backup file from before Oct 28 has no Venmo column and fails this line:
+   that is expected for such an old file.
 
 The output has counts and dollar totals only: no names, no phone numbers.
 

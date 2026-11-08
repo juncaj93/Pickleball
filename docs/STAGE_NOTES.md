@@ -3453,3 +3453,70 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   live CSS; sign-in with the read-only PIN works (View only); no After-game cards row on (12 games); its switch flip is refused (403); the
   player answer has no Zip 16 key; the private header turns it on for one phone only (0 records on live right now) and leaves it off for
   everyone; no preview flag on live; Activity and Money answer 200.
+
+## Zip 19: backup safety (restore test, lighter weekly backup) - built Sun Nov 8, 2026
+
+Spec: the "zip 19" brief (`START_HERE.md`, `SITE_RULES.md`). One PR. Backup code, its tests and docs only: no screen, no switch, no
+schema change in the live database, no migration, no change to the site (the site build is identical to main, file for file, with the
+same build stamp). Only the clock Worker (`pickleball-alerts-clock`) is deployed. Built in a quiet window (Sunday afternoon).
+
+### 1. Restore test (`npm run restore-test`, docs/RESTORE_TEST.md)
+- `scripts/restore-test.ts` (command), `scripts/restore-test-lib.ts` (checks), `scripts/restore-test-run.ts` (entry). Loads the newest
+  weekly copy and a fresh export of live into THROWAWAY in-memory databases (node:sqlite, every migration, then the restore SQL from
+  docs/RESTORE.md in one transaction, then the foreign key check) and compares with the source: every column present, rows per table,
+  every value of every row, the copy's own saved counts, money (finalized games, credit, paid in, owed, cash-outs) and the 21 integrity
+  checks. For live it checks both ways a backup is made: the Settings > Backup file and a real run of the new weekly copy code.
+- Never writes to Cloudflare: one function (`wrangler()`) allows exactly `d1 export pickleball --remote --output <tmp>.sql` and
+  `d1 execute pickleball-backups --remote --json --command "SELECT ..."`; everything else is refused before it runs (tested).
+- First runs on live data, Sun Nov 8 (3:56 PM and 6:03 PM): PASS 3 of 3 both times. Weekly copy 2026-11-08: 376 rows, all match, its
+  saved counts match. Fresh export (381 rows) as a download file and through the new weekly code (plan, 3 steps, finish): all match.
+  Money the same on both sides: 2 of 13 games finalized (5 canceled), credit $0.00, paid in $84.00, owed $182.00 on 13 unpaid seats.
+  All 21 integrity checks the same on the copy as on live (19 problem checks at 0).
+- Found by it: feature switches are NOT in any backup (they live in `task_log`, left out on purpose since Zip 8), so after a real restore
+  every Settings feature switch is off (35 rows on live) and the Telegram alert switches come back On. Written in docs/RESTORE.md; the
+  test prints a NOTE listing them. Question for Alex (not changed: it would change the "View as" demo copy, a screen).
+
+### 2. Lighter weekly backup (worker/backup.ts, worker/cron.ts, worker/wrangler.toml)
+- Before: one run read every table into the Worker and wrote it back out: 13.0 ms CPU on live (Sun Nov 8, 3:00 AM); on the fake preview
+  data (about 4 times live) 19.2 ms middle, 30.3 ms worst (Cloudflare analytics, 12 runs).
+- Now: the database writes the JSON itself (`json_object`, 16 columns a call, D1 refuses over about 63), and the copy is made by separate
+  runs of the clock Worker through its private binding to itself (`SELF`, no public address, every call carries CRON_SECRET and a run
+  must be for the real time): a coordinator, a plan (is it due, one measure of every table, the copy marked INCOMPLETE), steps of about
+  60,000 characters (each step starts the next, chains of 20) and a finish (the same measure again, then the header in and the newest 8
+  kept, in one transaction). Same file as before, character for character (tested locally and on Cloudflare).
+- After, on the same fake data on Cloudflare (Nov 8, 168 runs): hand-off from the knock 1.4 ms middle (2.8 worst), coordinator 2.5 ms
+  (4.1 worst), plan / steps / finish 2.0 ms middle, 90% under 3.5 ms, 99% under 8.0 ms, one run of 144 at 12.6 ms. 0 errors. A 47-step
+  copy (51 runs from one clock run) worked; a copy is capped at 45 steps (about 2.7 MB, about 20 times live) with a log line.
+- Safety: the live database is only read, through the read-only wrapper, every statement a SELECT (tested). A copy appears only when its
+  last step is saved; until then `weekly_backup_progress` marks it INCOMPLETE (shown that way by `node scripts/weekly-backup.mjs list`),
+  and nothing can list, fetch or restore it. A failed step, or any change to the data while copying (rows, rowids, sizes, number columns,
+  times, first and last letters), throws the attempt away; the next hourly look starts over. Finished copies are never touched by that,
+  and pruning (newest 8) only runs after a whole new copy. The first run after the deploy keeps the 2 copies already there (tested with
+  copies made by the old code). Every table in the schema is either backed up or listed in `BACKUP_LEFT_OUT` with a reason (tested).
+- Schedule unchanged: Sunday from 3:00 AM Eastern, checked once an hour. Kill paths: remove the `[[services]]` SELF block (back to one
+  run) or the two `[[d1_databases]]` blocks (no copies); the knock is unaffected either way.
+
+### Fresh review (independent, did not write the code)
+- No blockers (fuzzed the framing with 60 random layouts: always identical). Fixed from it: the live restore test now runs the real
+  weekly code (plan, steps, finish) and checks every column is present; the fingerprint also covers times and first and last letters
+  (a same-length status change and a rewritten time are now caught, tested); a run must be for the real time (within 10 minutes);
+  column names checked in the measure; an empty measure answer is an error, not "no rows"; the step cap set to what was tested (45);
+  docs say 60,000 per step, the fallback without SELF is for today's size only, and an export can hold the database for a second.
+- The reviewer's worry that Cloudflare stops one request after 32 Worker runs was tested: 51 runs (47 steps) worked twice, with three
+  Workers and with one Worker calling itself.
+
+### Tests (Sun Nov 8, 2026, final code, rebased on main 6f535d7 with Zip 16)
+- Unit: 2423 passed, 1 skipped, 0 failed (145 files); `tsc -b` clean. New: `tests/backup-zip19.test.ts` (15: same file as the old code
+  and Settings > Backup character for character, tricky text; wide tables; every schema table covered and every column restored; a
+  failed step leaves an INCOMPLETE copy nothing can use and the next look makes a whole one; changes while copying (amount, new row,
+  removed row, same-length status, rewritten time) are never saved as one copy; steps of about 60,000 characters join exactly; over 20
+  steps as several chains; the main run's statement budget; the clock's self-calls, the secret and the time guard; old copies kept and
+  restorable; the read-only wrapper), `tests/restore-test.test.ts` (5: PASS on a good backup, the exact FAIL lines for a missing row, a
+  changed amount and a copy that will not load, weekly and file modes, the live export deleted after, writes refused).
+- OFF equals main: nothing a user sees changed. The site built from this branch and from main (same build stamp) is identical, all 20
+  files; the Pages site is not redeployed.
+- Browser: full `npm run test:e2e` once, 3 at a time on their own ports (390 light; no screen changed): 56 scripts, 1968 checks passed.
+  Failing as on main (rule 7): run.cjs (10), cancel-reason (2), want-in (1), admin-r2 F4 (1). circles, round2, audit-player-flows,
+  motion and admin-motion failed one check each under the parallel load and pass alone (186 of 186).
+- Restore test on live data: PASS 3 of 3 (above). CPU on Cloudflare: above (temporary test Workers on the fake preview data and a scratch
+  database, all deleted after).

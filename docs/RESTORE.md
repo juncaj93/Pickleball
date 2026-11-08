@@ -111,7 +111,7 @@ On a computer with this project (the same setup used to deploy), in a terminal i
 
 ### Copies made in steps (since Zip 19)
 
-The copy is the same file as before, but it is made in small steps (about 100,000 characters each), each its own run of the clock
+The copy is the same file as before, but it is made in small steps (about 60,000 characters each), each its own run of the clock
 Worker, so it stays well under the free plan's CPU guideline however big the data gets (one big run took about 13 ms on Nov 8).
 
 - An unfinished copy (a step failed, or the data changed while copying) is **never** listed by `list`, never fetched by `get`, and
@@ -120,7 +120,8 @@ Worker, so it stays well under the free plan's CPU guideline however big the dat
 - All steps run within a few seconds, and the copy checks at the end that no table changed while it was copying (row counts, row
   numbers, sizes and the money columns); if one did, the attempt is thrown away and redone the next hour, so a copy is still one moment.
 - To go back to the one-run copy: remove the `[[services]]` block (SELF) at the end of `worker/wrangler.toml` and deploy the
-  Worker. The steps then run inside the knock's run (same file, more CPU in that run).
+  Worker. The steps then run inside the knock's run (same file, more CPU in that run, and about two database calls per step in
+  that one run, so only for today's size, not for a copy many times bigger).
 - Never delete the `pickleball-backups` database unless you mean to throw every weekly copy away.
 
 ## Undoing a mistake from the last 7 days without a file

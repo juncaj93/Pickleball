@@ -4,7 +4,7 @@
 import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createNodeD1 } from '../dev/nodeD1';
 import { BACKUP_TABLES, backupObject } from '../server/backupData';
 import type { D1Database } from '../server/db';
@@ -223,6 +223,10 @@ describe('safety', () => {
       ['an amount, same number of characters', () => ctx.app.db.raw.prepare('UPDATE session_players SET payment_amount_cents = 1300 WHERE id = ?').run(seat.id)],
       ['a new Activity row', () => ctx.app.db.raw.prepare("INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at) SELECT 'late', id, NULL, 'organizer', 'test', '{}', '2026-11-15T08:00:01Z' FROM groups").run()],
       ['a removed device', () => ctx.app.db.raw.prepare('DELETE FROM player_devices WHERE rowid = (SELECT MIN(rowid) FROM player_devices)').run()],
+      // Same length (both 9 letters): caught by the first and last letters.
+      ['a seat confirmed -> withdrawn', () => ctx.app.db.raw.prepare("UPDATE session_players SET status = 'withdrawn' WHERE rowid = (SELECT MIN(rowid) FROM session_players WHERE status = 'confirmed')").run()],
+      // Same length, same first and last letters: caught by the time in *_at columns.
+      ['a time rewritten', () => ctx.app.db.raw.prepare("UPDATE players SET created_at = '2026-01-01T00:00:00.000Z' WHERE rowid = (SELECT MIN(rowid) FROM players)").run()],
     ];
     for (const [what, change] of changes) {
       let n = 0;
@@ -239,7 +243,7 @@ describe('safety', () => {
     expect((await weeklyBackup(ctx.app.db, backups, SUN)).made).toBe(true);
   });
 
-  it('in steps: each step copies about 100,000 characters, and the pieces join into exactly the one-shot file', async () => {
+  it('in steps: each step copies about 60,000 characters, and the pieces join into exactly the one-shot file', async () => {
     const ctx = await busyGroup();
     bigActivity(ctx);
     const backups = store();
@@ -328,6 +332,7 @@ describe('safety', () => {
     const logs: string[] = [];
     const log = console.log;
     console.log = (m: string) => logs.push(m);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(SUN); // the Worker's own clock agrees with the tick's time
     try {
       await backupTick(env, SUN + 10 * 60_000); // 3:10 AM: not a looking tick, no call at all
       expect(paths).toEqual([]);
@@ -335,10 +340,20 @@ describe('safety', () => {
     } finally {
       console.log = log;
     }
-    expect(paths[0]).toBe('/backup/run');
-    expect(paths.slice(1).every((p) => p === '/backup/step')).toBe(true);
-    expect(paths.length).toBeGreaterThan(5);
-    expect(logs.join('\n')).toMatch(new RegExp(`^weekly backup 2026-11-15: \\d+ bytes in ${paths.length - 1} parts, 1 kept$`));
+    // The knock's run calls /backup/run once; that run calls the plan, the first step (each step calls the next), and the finish.
+    const steps = paths.filter((p) => p === '/backup/step').length;
+    expect(paths).toEqual(['/backup/run', '/backup/plan', ...Array(steps).fill('/backup/step'), '/backup/finish']);
+    expect(steps).toBeGreaterThan(4);
+    expect(logs.join('\n')).toMatch(new RegExp(`^weekly backup 2026-11-15: \\d+ bytes in ${steps} parts, 1 kept$`));
+    // Not due (this week has its copy): /backup/run asks the plan, which says no; nothing else runs.
+    paths.length = 0;
+    clock.mockReturnValue(SUN + 3600_000);
+    await backupTick(env, SUN + 3600_000);
+    expect(paths).toEqual(['/backup/run', '/backup/plan']);
+    // A run for a time far from the Worker's own clock is refused (it could make copies that push real ones out).
+    const far = await selfCall(new Request('https://x/backup/run', { method: 'POST', headers: { 'X-Backup-Secret': 'shh' }, body: JSON.stringify({ nowMs: SUN + 30 * DAY }) }), env);
+    expect(far.status).toBe(400);
+    clock.mockRestore();
     for (const [secret, method] of [['', 'POST'], ['wrong', 'POST'], ['shh', 'GET']]) {
       const res = await selfCall(new Request('https://x/backup/run', { method, headers: { 'X-Backup-Secret': secret }, body: method === 'POST' ? '{}' : undefined }), env);
       expect(res.status, `${secret} ${method}`).toBe(404);

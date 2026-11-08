@@ -16,9 +16,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { backupObject } from '../server/backupData';
 import { isReadSql } from '../server/viewOnly';
-import { backupText } from '../worker/backup';
+import { weeklyBackup } from '../worker/backup';
 import { joinParts } from './weekly-backup.mjs';
-import { type Backup, compare, fileSource, loadExport, printReport, type Report } from './restore-test-lib';
+import { type Backup, compare, emptyDb, fileSource, loadExport, printReport, type Report } from './restore-test-lib';
 
 export type Runner = (args: string[]) => string;
 
@@ -85,10 +85,16 @@ export async function liveReports(run: Runner, nowIso = new Date().toISOString()
   const group = source.raw.prepare('SELECT name FROM groups LIMIT 1').get() as { name: string } | undefined;
   if (!group) throw new Error('The live export has no group.');
   const download = JSON.parse(JSON.stringify(await backupObject(source, group.name, nowIso))) as Backup;
-  const weekly = JSON.parse((await backupText(source, group.name, nowIso)).text) as Backup;
+  // The real weekly copy code (plan, steps, finish; worker/backup.ts) run on the export, saved into a throwaway store, joined back.
+  const store = emptyDb();
+  const made = await weeklyBackup(source, store, Date.parse(nowIso), { force: true });
+  if (!made.made) throw new Error(`the weekly copy code did not make a copy of the export: ${made.reason}`);
+  const header = store.raw.prepare('SELECT id, bytes, parts, rows_json FROM weekly_backups').get() as { id: string; bytes: number; parts: number; rows_json: string };
+  const pieces = store.raw.prepare('SELECT part, data FROM weekly_backup_parts WHERE backup_id = ? ORDER BY part').all(header.id) as { part: number; data: string }[];
+  const weekly = joinParts(header, pieces) as Backup;
   return [
     compare(`fresh export of live (${when(nowIso)} Eastern), saved as a Settings > Backup file (also the format of weekly copies before Zip 19)`, source, download),
-    compare('the same export, saved the way the weekly copy saves it since Zip 19', source, weekly),
+    compare(`the same export, saved by the weekly copy code since Zip 19 (plan, ${made.parts} steps, finish)`, source, weekly, JSON.parse(header.rows_json)),
   ];
 }
 
@@ -99,15 +105,15 @@ export async function main(argv: string[], run: Runner = npxRunner, out: (s: str
     if (args[0] === '--file') {
       if (!args[1]) throw new Error('Usage: npm run restore-test -- --file <backup file.json>');
       const backup = JSON.parse(readFileSync(args[1], 'utf8')) as Backup;
-      reports.push(compare(`backup file ${args[1]}`, fileSource(backup), backup));
+      reports.push(compare(`backup file ${args[1]}`, fileSource(backup), backup, undefined, true));
     } else if (args[0] === '--weekly') {
       const w = fetchWeekly(run, args[1]);
-      reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header));
+      reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header, true));
     } else if (args[0] === '--live') {
       reports.push(...(await liveReports(run)));
     } else if (args.length === 0) {
       const w = fetchWeekly(run);
-      reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header));
+      reports.push(compare(w.label, fileSource(w.backup), w.backup, w.header, true));
       reports.push(...(await liveReports(run)));
     } else {
       throw new Error('Usage: npm run restore-test  [-- --weekly [week] | -- --live | -- --file <backup.json>]');

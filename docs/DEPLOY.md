@@ -11,7 +11,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 4. Time Travel bookmark: `npx wrangler d1 time-travel info pickleball` (write the bookmark in the stage notes).
 5. Integrity checks, all 21 columns should be 0 (read-only):
    `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks.sql)"`
-6. Optional: `npm run restore-test` (docs/RESTORE_TEST.md). Read-only, about 10 seconds. It proves the newest weekly copy
+6. Optional: `npm run restore-test` (docs/RESTORE_TEST.md). Read-only, about 10 seconds (its live export can hold the site's
+   database for a second or two, like step 3). It proves the newest weekly copy
    and a fresh export of live load back with the same rows, money and integrity checks. Not required for a deploy.
 
 ## Deploy

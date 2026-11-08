@@ -5,10 +5,13 @@
 //
 // Lighter since Zip 19 (the one run took about 13 ms of CPU on Sun Nov 8; the free plan's guideline is 10 ms):
 // - The database itself writes each table out as JSON text (rowJsonSql), so the Worker never turns rows into objects and back.
-// - The copy is made in small STEPS (about 100,000 characters each), and each step is its own run of the clock Worker (it calls itself
-//   through its private SELF binding, worker/cron.ts), so no run's CPU grows with the data. A plan step reads only sizes first.
-// - One moment: all steps run within seconds, and the plan's fingerprint of every table (rows, rowids, sizes, number sums) is taken
-//   again at the end. If anything changed, the attempt is thrown away and tried again at the next hourly look.
+// - The copy is made in small STEPS (about 60,000 characters each), and each step is its own run of the clock Worker (it calls itself
+//   through its private SELF binding, worker/cron.ts), so no run's CPU grows with the data. A plan run reads only sizes first, a finish
+//   run checks and saves the header; each run measured 1 to 4 ms typical on Cloudflare (Nov 8, fake data four times live's size).
+// - One moment: all steps run within seconds, and the plan's fingerprint of every table (rows, rowids, sizes, sums of the number
+//   columns, the times in *_at columns, and the first and last letter of each text) is taken again at the end. If anything changed,
+//   the attempt is thrown away and tried again at the next hourly look. (A text edit that keeps its length and its first and last
+//   letter, in those few seconds, would not be noticed.)
 // - All or nothing: an unfinished copy has a row in weekly_backup_progress (INCOMPLETE in `node scripts/weekly-backup.mjs list`) and
 //   no row in weekly_backups, so nothing can list, fetch or restore it. Its header row and the end of its progress row are written in
 //   one transaction. The next attempt clears unfinished pieces only, never a finished copy.
@@ -40,8 +43,11 @@ export const STEP_CHARS = 60_000;
 export const CHAIN_STEPS = 20;
 /** The plan measures each table in buckets of this many rows; a step never splits a bucket. */
 export const BUCKET_ROWS = 25;
-/** A copy needing more steps than this (about 4.8 MB) is refused with a log line: far beyond this group, so a sign something is wrong. */
-export const MAX_STEPS = 80;
+/**
+ * A copy needing more steps than this (about 2.7 MB, about 20 times live on Nov 8) is refused with a log line. 47 steps (51 Worker runs
+ * from one clock run) were tested on Cloudflare on Nov 8; past that is untested, so raise STEP_CHARS before raising this.
+ */
+export const MAX_STEPS = 45;
 /** A copy is due on Sunday from this Eastern hour... */
 export const BACKUP_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -200,10 +206,22 @@ async function columnsOf(db: D1Database): Promise<{ group: string | null; names:
   return { group: row?.g ?? null, names, numbers };
 }
 
-/** The measure's SQL: ONE statement, one column per table, each a JSON list of buckets [rows, first rowid, last rowid, size, sum]. */
+/**
+ * The measure's SQL: ONE statement, one column per table, each a JSON list of buckets [rows, first rowid, last rowid, size, sum]. The
+ * sum weighs every whole-number column, the time in every *_at column, and the first and last letter of every text column, so most
+ * edits change it even when the size stays the same.
+ */
 export function measureSql(names: Record<string, string[]>, numbers: Record<string, string[]>): string {
   const parts = BACKUP_TABLES.map((t) => {
-    const sum = numbers[t].length ? numbers[t].map((c, i) => `COALESCE("${c}", 0) * ${2 * i + 3}`).join(' + ') : '0';
+    for (const c of [...names[t], ...numbers[t]]) if (!NAME.test(c)) throw new Error(`Bad column name: ${c}`);
+    if (!names[t].length) throw new Error(`No columns for ${t}`);
+    const terms = names[t].map((c, i) => {
+      const w = 2 * i + 3;
+      if (numbers[t].includes(c)) return `COALESCE("${c}", 0) * ${w}`;
+      const time = /_at$/.test(c) ? ` + COALESCE(julianday("${c}"), 0) * ${w + 1}` : '';
+      return `(COALESCE(unicode("${c}"), 0) + COALESCE(unicode(substr("${c}", -1)), 0) * 7)${time} * ${w}`;
+    });
+    const sum = terms.join(' + ');
     return `(SELECT json_group_array(json_array(n, lo, hi, len, sum) ORDER BY lo) FROM (SELECT COUNT(*) AS n, MIN(rowid) AS lo, MAX(rowid) AS hi, TOTAL(length(${rowJsonSql(names[t])})) AS len, TOTAL(${sum}) AS sum FROM ${t} GROUP BY rowid / ${BUCKET_ROWS})) AS "${t}"`;
   });
   return `SELECT ${parts.join(', ')}`;
@@ -215,10 +233,16 @@ export function measureSql(names: Record<string, string[]>, numbers: Record<stri
  * the same answer, or the data changed while copying. Only a few numbers per bucket come back, so it costs the Worker almost nothing.
  */
 async function measure(db: D1Database, names: Record<string, string[]>, numbers: Record<string, string[]>): Promise<Record<string, Bucket[]>> {
-  const row = (await db.prepare(measureSql(names, numbers)).first<Record<string, string | null>>()) ?? {};
-  return Object.fromEntries(
-    BACKUP_TABLES.map((t) => [t, (JSON.parse(row[t] ?? '[]') as number[][]).map(([n, lo, hi, len, sum]) => ({ n: Number(n), lo: Number(lo), hi: Number(hi), len: Number(len), sum: Number(sum) }))]),
+  const row = await db.prepare(measureSql(names, numbers)).first<Record<string, string | null>>();
+  if (!row) throw new Error('The measure read came back empty.');
+  const out = Object.fromEntries(
+    BACKUP_TABLES.map((t) => {
+      if (typeof row[t] !== 'string') throw new Error(`The measure of ${t} came back empty.`);
+      return [t, (JSON.parse(row[t]!) as number[][]).map(([n, lo, hi, len, sum]) => ({ n: Number(n), lo: Number(lo), hi: Number(hi), len: Number(len), sum: Number(sum) }))];
+    }),
   );
+  if (!out.groups?.length) throw new Error('The measure found no group.');
+  return out;
 }
 
 /** Cut the copy into steps of about STEP_CHARS characters, never splitting a bucket. The pieces, joined, are exactly backupText's file. */
@@ -301,75 +325,107 @@ function clearUnfinished(store: D1Database) {
   ];
 }
 
+/** Everything the finish needs from the plan (passed between runs as JSON). */
+export type Finish = {
+  id: string;
+  week: string;
+  nowIso: string;
+  names: Record<string, string[]>;
+  numbers: Record<string, string[]>;
+  before: Record<string, Bucket[]>;
+  rows: Record<string, number>;
+  parts: number;
+  bytes: number;
+};
+export type Plan = Omit<Finish, 'bytes'> & { steps: StepBody[] };
+export type PlanResult = { result: BackupResult } | { plan: Plan };
+
 /**
- * Make this week's copy if one is due. `live` is only read. `store` is the backup database. `force` skips the "is it due" check
- * (used by tests and by a manual run). `step` runs each step; by default in this same run.
+ * The plan (its own run): is a copy due, the tables' columns and measure (one moment), the steps, and the copy marked INCOMPLETE
+ * (a progress row) after clearing any unfinished attempt. Three database calls on each side at most.
  */
-export async function weeklyBackup(
-  live: D1Database,
-  store: D1Database,
-  nowMs: number,
-  opts: { force?: boolean; step?: StepRunner } = {},
-): Promise<BackupResult> {
-  // Six database calls in all, plus one per step: each call costs the Worker CPU of its own.
+export async function planCopy(live: D1Database, store: D1Database, nowMs: number, force = false): Promise<PlanResult> {
   const ready = await store.batch([
     ...BACKUP_SCHEMA.map((sql) => store.prepare(sql)),
     store.prepare('SELECT week, created_at AS createdAt FROM weekly_backups ORDER BY created_at DESC LIMIT 1'),
   ]);
   const newest = (ready.at(-1)!.results[0] as { week: string; createdAt: string } | undefined) ?? null;
-  if (!opts.force && !backupDue(nowMs, newest)) return { made: false, reason: 'not due' };
+  if (!force && !backupDue(nowMs, newest)) return { result: { made: false, reason: 'not due' } };
   const week = weekOf(nowMs);
-  if (newest?.week === week && opts.force) return { made: false, reason: 'this week already has a copy' };
+  if (newest?.week === week && force) return { result: { made: false, reason: 'this week already has a copy' } };
   const { group, names, numbers } = await columnsOf(live);
-  if (!group) return { made: false, reason: 'no group' };
+  if (!group) return { result: { made: false, reason: 'no group' } };
   const nowIso = new Date(nowMs).toISOString();
   const before = await measure(live, names, numbers);
   const id = crypto.randomUUID();
   const steps = planSteps(id, group, nowIso, before, names);
-  if (steps.length > MAX_STEPS) return { made: false, reason: `failed: the copy would need ${steps.length} steps (over ${MAX_STEPS}); not made` };
+  if (steps.length > MAX_STEPS) return { result: { made: false, reason: `failed: the copy would need ${steps.length} steps (over ${MAX_STEPS}); not made` } };
   const rows = Object.fromEntries(BACKUP_TABLES.map((t) => [t, before[t].reduce((n, b) => n + b.n, 0)]));
   // Clear any unfinished attempt and start this one (INCOMPLETE until its last step).
   await store.batch([
     ...clearUnfinished(store),
     store.prepare('INSERT INTO weekly_backup_progress (id, week, started_at, steps, done) VALUES (?, ?, ?, ?, 0)').bind(id, week, nowIso, steps.length),
   ]);
-  const inline: StepRunner = (body) => runStep(live, store, body, inline);
-  const run: StepRunner = opts.step ?? inline;
-  let bytes = 0;
-  // In order, each chain of up to 20 steps started once (each step starts the next). A failed step stops everything: the copy stays
-  // INCOMPLETE (progress row, no header) and is cleared next time.
-  for (let i = 0; i < steps.length; i += CHAIN_STEPS) {
-    const chain = steps.slice(i, i + CHAIN_STEPS);
-    bytes += (await run({ ...chain[0], rest: chain.slice(1) })).chars;
-  }
-  // The same measure again: anything added, removed or changed while copying means this is not one moment. Throw it away; next hour.
-  const after = await measure(live, names, numbers);
-  if (JSON.stringify(after) !== JSON.stringify(before)) {
+  return { plan: { id, week, nowIso, names, numbers, before, rows, parts: steps.length, steps } };
+}
+
+/**
+ * The finish (its own run): the same measure again (anything added, removed or changed while copying means this is not one moment:
+ * thrown away, redone next hour), then in ONE transaction the header row in (only if every step was saved), the progress row out, and
+ * the newest 8 kept. If the header did not go in there are still at most 8 copies, so the pruning deletes nothing.
+ */
+export async function finishCopy(live: D1Database, store: D1Database, f: Finish): Promise<BackupResult> {
+  const after = await measure(live, f.names, f.numbers);
+  if (JSON.stringify(after) !== JSON.stringify(f.before)) {
     await store.batch(clearUnfinished(store));
     return { made: false, reason: 'failed: the data changed while copying; tried again at the next hourly look' };
   }
-  // One transaction: the header row in only if every step was saved, the progress row out, then keep the newest 8 (their pieces first).
-  // If the header did not go in, there are still at most 8 copies, so the pruning deletes nothing. `week` is unique: never two copies.
   const keep = `SELECT id FROM weekly_backups ORDER BY created_at DESC LIMIT ${KEEP_COPIES}`;
   const [, done, , , kept] = await store.batch([
     store
       .prepare('INSERT INTO weekly_backups (id, week, created_at, bytes, parts, rows_json) SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT done FROM weekly_backup_progress WHERE id = ?) = ?')
-      .bind(id, week, nowIso, bytes, steps.length, JSON.stringify(rows), id, steps.length),
-    store.prepare('DELETE FROM weekly_backup_progress WHERE id = ? AND id IN (SELECT id FROM weekly_backups)').bind(id),
+      .bind(f.id, f.week, f.nowIso, f.bytes, f.parts, JSON.stringify(f.rows), f.id, f.parts),
+    store.prepare('DELETE FROM weekly_backup_progress WHERE id = ? AND id IN (SELECT id FROM weekly_backups)').bind(f.id),
     store.prepare(`DELETE FROM weekly_backup_parts WHERE backup_id NOT IN (${keep}) AND backup_id NOT IN (SELECT id FROM weekly_backup_progress)`),
     store.prepare(`DELETE FROM weekly_backups WHERE id NOT IN (${keep})`),
     store.prepare('SELECT COUNT(*) AS n FROM weekly_backups'),
   ]);
   if (!done.meta.changes) return { made: false, reason: 'failed: not every step was saved; tried again at the next hourly look' };
-  return { made: true, week, bytes, parts: steps.length, rows, kept: Number((kept.results[0] as { n: number }).n) };
+  return { made: true, week: f.week, bytes: f.bytes, parts: f.parts, rows: f.rows, kept: Number((kept.results[0] as { n: number }).n) };
+}
+
+/** How the plan, the steps and the finish are run: in this same run by default, or each as its own Worker run (worker/cron.ts). */
+export type Runners = {
+  step?: StepRunner;
+  plan?: (nowMs: number, force: boolean) => Promise<PlanResult>;
+  finish?: (f: Finish) => Promise<BackupResult>;
+};
+
+/**
+ * Make this week's copy if one is due: the plan, the steps (each chain of up to 20 started once; each step starts the next), the
+ * finish. `live` is only read; `store` is the backup database. `force` skips the "is it due" check (tests and a manual run). A failed
+ * step stops everything: the copy stays INCOMPLETE (progress row, no header) and the next attempt clears it.
+ */
+export async function weeklyBackup(live: D1Database, store: D1Database, nowMs: number, opts: { force?: boolean } & Runners = {}): Promise<BackupResult> {
+  const planned = await (opts.plan ?? ((n, f) => planCopy(live, store, n, f)))(nowMs, opts.force ?? false);
+  if ('result' in planned) return planned.result;
+  const { steps, ...plan } = planned.plan;
+  const inline: StepRunner = (body) => runStep(live, store, body, inline);
+  const run: StepRunner = opts.step ?? inline;
+  let bytes = 0;
+  for (let i = 0; i < steps.length; i += CHAIN_STEPS) {
+    const chain = steps.slice(i, i + CHAIN_STEPS);
+    bytes += (await run({ ...chain[0], rest: chain.slice(1) })).chars;
+  }
+  return (opts.finish ?? ((f) => finishCopy(live, store, f)))({ ...plan, bytes });
 }
 
 /** The clock's hourly look: never throws (a failed copy is retried on the next hourly look). */
-export async function maybeWeeklyBackup(live: D1Database | undefined, store: D1Database | undefined, nowMs: number, step?: StepRunner): Promise<BackupResult> {
+export async function maybeWeeklyBackup(live: D1Database | undefined, store: D1Database | undefined, nowMs: number, runners: StepRunner | Runners = {}): Promise<BackupResult> {
   if (!live || !store) return { made: false, reason: 'not set up' };
   if (!checkThisTick(nowMs)) return { made: false, reason: 'not this tick' };
   try {
-    return await weeklyBackup(live, store, nowMs, { step });
+    return await weeklyBackup(live, store, nowMs, typeof runners === 'function' ? { step: runners } : runners);
   } catch (err) {
     return { made: false, reason: `failed: ${err instanceof Error ? err.message : 'unknown'}` };
   }

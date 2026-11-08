@@ -134,7 +134,7 @@ export type Report = { label: string; ok: boolean; checks: Check[]; notes: strin
  * Compare a source with the copy restored from `backup`. `header` (a weekly copy's own row counts, saved when it was made) is checked
  * too when given. Never throws for a bad backup: a restore that fails is a FAIL line saying why.
  */
-export function compare(label: string, source: Db, backup: Backup, header?: Record<string, number>): Report {
+export function compare(label: string, source: Db, backup: Backup, header?: Record<string, number>, fromFile = false): Report {
   const checks: Check[] = [];
   const notes: string[] = [];
   const add = (ok: boolean, line: string) => checks.push({ ok, line });
@@ -147,7 +147,16 @@ export function compare(label: string, source: Db, backup: Backup, header?: Reco
     return { label, ok: false, checks, notes };
   }
 
-  // 1. Rows per table, and every value of every row.
+  // 1. Every column the database has is in the backup's rows (a backup missing a column would restore it as its default on both sides).
+  const known = columnsOf(copy);
+  const missingCols = TABLES.flatMap((t) => {
+    const want = [...known[t]];
+    const rowsT = backup.tables[t] ?? [];
+    return want.filter((c) => rowsT.some((r) => !(c in r))).map((c) => `${t}.${c}`);
+  });
+  add(!missingCols.length, missingCols.length ? `the backup's rows lack columns: ${missingCols.join(', ')}` : "columns: every row in the backup has every column the database has");
+
+  // 2. Rows per table, and every value of every row.
   const src = tablesOf(source);
   const got = tablesOf(copy);
   const counts: string[] = [];
@@ -171,20 +180,20 @@ export function compare(label: string, source: Db, backup: Backup, header?: Reco
     }
   }
   const total = TABLES.reduce((n, t) => n + got[t].length, 0);
-  if (rowsOk) add(true, `rows: all ${total} rows in ${TABLES.length} tables match the source, every value (${counts.join(', ')})`);
+  if (rowsOk) add(true, `rows: all ${total} rows in ${TABLES.length} tables match the source, every value (${counts.join(', ')})${fromFile ? '; the source here is the file itself, put in row by row' : ''}`);
   if (header) {
     const off = TABLES.filter((t) => header[t] !== undefined && header[t] !== got[t].length);
     add(!off.length, off.length ? `the copy's own saved counts disagree: ${off.map((t) => `${t} saved ${header[t]}, restored ${got[t].length}`).join('; ')}` : "rows: the weekly copy's own saved counts match");
   }
 
-  // 2. Money.
+  // 3. Money.
   const m1 = money(source);
   const m2 = money(copy);
   const moneyLine = `finalized games ${m2.finalized_games} of ${m2.games} (${m2.canceled_games} canceled), total credit ${dollars(m2.total_credit_cents)} (${m2.players_with_credit} players), paid in ${dollars(m2.paid_cents)}, owed ${dollars(m2.owed_cents)} on ${m2.unpaid_seats} unpaid seats, pending cash-outs ${m2.pending_cash_outs} (${dollars(m2.pending_cash_out_cents)})`;
   const moneyOff = Object.keys(m1).filter((k) => m1[k] !== m2[k]);
   add(!moneyOff.length, moneyOff.length ? `money differs: ${moneyOff.map((k) => `${k} source ${m1[k]}, copy ${m2[k]}`).join('; ')}` : `money matches: ${moneyLine}`);
 
-  // 3. The integrity checks. Feature switches live in task_log, which a backup leaves out (worker/backup.ts BACKUP_LEFT_OUT), so a
+  // 4. The integrity checks. Feature switches live in task_log, which a backup leaves out (worker/backup.ts BACKUP_LEFT_OUT), so a
   // real restore turns them all off. One check reads a switch (Card cleanup lifts the cap to 12), so the source's switch rows are put
   // into the copy first to compare like for like, and a NOTE says which switches a restore would turn off.
   const bare = integrity(copy);

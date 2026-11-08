@@ -9,7 +9,7 @@
 // grows with the data. The Worker still has no public address: only it can call itself, and every such call carries CRON_SECRET.
 
 import type { D1Database } from '../server/db';
-import { checkThisTick, maybeWeeklyBackup, runStep, type BackupResult, type StepBody, type StepRunner } from './backup';
+import { checkThisTick, finishCopy, type Finish, maybeWeeklyBackup, planCopy, type PlanResult, type Runners, runStep, type BackupResult, type StepBody, type StepRunner } from './backup';
 import { viewOnlyDb } from '../server/viewOnly';
 
 /** The Worker's binding to itself (worker/wrangler.toml [[services]] SELF). */
@@ -49,6 +49,16 @@ function stepRunner(env: Env, live: D1Database, store: D1Database): StepRunner {
   return env.SELF ? self : inline;
 }
 
+/** The plan, every step and the finish each as its own run (SELF); without SELF, all in this run. */
+function runners(env: Env, live: D1Database, store: D1Database): Runners {
+  if (!env.SELF) return {};
+  return {
+    plan: (nowMs, force) => callSelf<PlanResult>(env, '/backup/plan', { nowMs, force }),
+    step: stepRunner(env, live, store),
+    finish: (f) => callSelf<BackupResult>(env, '/backup/finish', f),
+  };
+}
+
 interface ScheduledCtx {
   waitUntil(work: Promise<unknown>): void;
 }
@@ -74,7 +84,7 @@ export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<nu
 async function backupRun(env: Env, nowMs: number): Promise<BackupResult> {
   // The live database is handed over wrapped so it can only be read: any write would quietly do nothing.
   const live = env.DB ? viewOnlyDb(env.DB) : undefined;
-  return maybeWeeklyBackup(live, env.BACKUP, nowMs, live && env.BACKUP ? stepRunner(env, live, env.BACKUP) : undefined);
+  return maybeWeeklyBackup(live, env.BACKUP, nowMs, live && env.BACKUP ? runners(env, live, env.BACKUP) : {});
 }
 
 /** The weekly copy, on its own: it never delays or stops the knock, and a failure is only a log line (retried within the hour). */
@@ -93,7 +103,8 @@ export async function backupTick(env: Env, nowMs = Date.now()): Promise<void> {
 }
 
 /**
- * Calls this Worker makes to itself (SELF): `/backup/run` (the hourly look and the copy) and `/backup/step` (one step). Anything else,
+ * Calls this Worker makes to itself (SELF): `/backup/run` (the hourly look and the copy, which calls the rest), `/backup/plan`,
+ * `/backup/step` (one step and the rest of its chain) and `/backup/finish`. Anything else,
  * or a call without the shared secret, is "Not found". (No route or workers.dev address points here, so only SELF can reach it.)
  */
 export async function selfCall(req: Request, env: Env): Promise<Response> {
@@ -102,7 +113,12 @@ export async function selfCall(req: Request, env: Env): Promise<Response> {
   const path = new URL(req.url).pathname;
   try {
     const body = (await req.json()) as Record<string, unknown>;
-    if (path === '/backup/run') return Response.json(await backupRun(env, Number(body.nowMs)));
+    // The clock time a run is for must be the real time (within 10 minutes): a far-off time could make copies that push real ones out.
+    const nowMs = Number(body.nowMs);
+    if ((path === '/backup/run' || path === '/backup/plan') && !(Math.abs(nowMs - Date.now()) <= 10 * 60_000)) return Response.json({ error: 'not the current time' }, { status: 400 });
+    if (path === '/backup/run') return Response.json(await backupRun(env, nowMs));
+    if (path === '/backup/plan') return Response.json(await planCopy(viewOnlyDb(env.DB), env.BACKUP, nowMs, body.force === true));
+    if (path === '/backup/finish') return Response.json(await finishCopy(viewOnlyDb(env.DB), env.BACKUP, body as unknown as Finish));
     if (path === '/backup/step') {
       const live = viewOnlyDb(env.DB);
       // This step, then the next one of its chain as its own run.
