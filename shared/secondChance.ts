@@ -95,6 +95,8 @@ export interface ScGame {
   /** 'organizer_fee_kept' (the venue charged): never a Second Chance. */
   canceledBy: string | null;
   createdAt: string;
+  /** Made with "+ Add game" (regular Tue/Thu games are made by the site, never same-day adds). */
+  extra: boolean;
   /** Everyone in, the organizer included. */
   inCount: number;
   /** Paid seats of the other players, plus the organizer's own seat when they are in (they pay the venue, never the group). */
@@ -152,6 +154,7 @@ export function isChance(g: ScGame, nowMs: number, tz: string): boolean {
 
 /** A game added on its own day. `alsoToday` (preview test only): a game added on the real today counts too. */
 export function isSameDay(g: ScGame, tz: string, alsoToday: string | null = null): boolean {
+  if (!g.extra) return false;
   const made = dayKey(Date.parse(g.createdAt), tz);
   return made === dayKey(Date.parse(g.startsAt), tz) || (alsoToday !== null && made === alsoToday);
 }
@@ -228,7 +231,8 @@ export function pingInMessage(startsAt: string, inCount: number, paidCount: numb
   const reach = unpaid.filter((u) => !!u.phone);
   const none = unpaid.filter((u) => !u.phone).map((u) => u.name);
   const parts = [head];
-  if (reach.length && textLink) parts.push(`Text ${reach.length === 1 ? reach[0].name : `the ${reach.length}`} who ${reach.length === 1 ? "hasn't" : "haven't"} paid: ${textLink}`);
+  // No names in the words that become the link (a name can never change which words are linked); the sheet it opens names them.
+  if (reach.length && textLink) parts.push(`Text the ${reach.length} who ${reach.length === 1 ? "hasn't" : "haven't"} paid: ${textLink}`);
   if (none.length) parts.push(`No phone saved for ${names(none)}.`);
   return parts.join('\n');
 }

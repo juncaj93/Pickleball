@@ -237,7 +237,7 @@ async function main() {
     const d = await dash();
     const t = d.secondChance.fakeTelegrams.filter((x) => x.sessionId === same.id);
     assert(t.length === 1, `${t.length} Telegrams`);
-    assert(/^Tonight 8:30 PM: 4 in, 2 of 4 paid\.\nText Kai who hasn't paid: http:\/\/localhost:\d+\/admin\?unpaid=[0-9a-f-]{36}\nNo phone saved for Reese\.$/.test(t[0].text), t[0].text);
+    assert(/^Tonight 8:30 PM: 4 in, 2 of 4 paid\.\nText the 1 who hasn't paid: http:\/\/localhost:\d+\/admin\?unpaid=[0-9a-f-]{36}\nNo phone saved for Reese\.$/.test(t[0].text), t[0].text);
   });
 
   await check("Telegram 1's link: the sheet opens Messages to ONLY the unpaid player with a phone, with the exact text", async () => {

@@ -82,6 +82,7 @@ describe('the rules (shared/secondChance.ts)', () => {
     canceledAt: '2026-11-11T02:00:00.000Z', // Tue Nov 10, 9:00 PM EST: the night before
     canceledBy: 'organizer',
     createdAt: '2026-10-01T00:00:00.000Z',
+    extra: false,
     inCount: 3,
     paidCount: 1,
     unpaid: [],
@@ -118,11 +119,13 @@ describe('the rules (shared/secondChance.ts)', () => {
     expect(secondChanceCards([{ ...open, booked: true }], noon, TZ, 'site')).toEqual([]);
   });
   it('same-day add: a game made on its own day; a normal game (made earlier) gets no card', () => {
-    const add = { ...base, canceled: false, canceledAt: null, inCount: 1, createdAt: '2026-11-11T15:00:00.000Z' };
+    const add = { ...base, canceled: false, canceledAt: null, inCount: 1, createdAt: '2026-11-11T15:00:00.000Z', extra: true };
     const [c] = secondChanceCards([add], noon, TZ, 'pickleball.juncaj.net');
     expect(c).toMatchObject({ kind: 'open', origin: 'sameday', step: 3, inCount: 1 });
     expect(c.kind === 'open' && c.groupText).toBe("Hey guys, anyone want to play tonight at 7:30? I added it to the site. If 4 sign up and pay, I'll book a court.\n\npickleball.juncaj.net");
     expect(secondChanceCards([{ ...add, createdAt: '2026-11-01T15:00:00.000Z' }], noon, TZ, 'site')).toEqual([]);
+    // A regular game the site made that same day (first session date set to today, new usual days): not a same-day add.
+    expect(secondChanceCards([{ ...add, extra: false }], noon, TZ, 'site')).toEqual([]);
   });
   it('TEXT 1 and TEXT 2, exactly, with the line breaks and the site time style', () => {
     expect(reopenText(base.startsAt, base.startsAt, TZ, noon, '[link]')).toBe(
@@ -142,7 +145,7 @@ describe('the rules (shared/secondChance.ts)', () => {
       { playerId: 'b', name: 'Nathan', owesCents: 1400, phone: null },
     ];
     expect(pingInMessage(base.startsAt, 4, 2, unpaid, TZ, noon, 'https://x/admin?unpaid=1')).toBe(
-      "Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText Joe who hasn't paid: https://x/admin?unpaid=1\nNo phone saved for Nathan.",
+      "Tonight 7:30 PM: 4 in, 2 of 4 paid.\nText the 1 who hasn't paid: https://x/admin?unpaid=1\nNo phone saved for Nathan.",
     );
     expect(pingInMessage(base.startsAt, 4, 2, [unpaid[0], { ...unpaid[0], name: 'Sam' }], TZ, noon, 'L')).toContain("Text the 2 who haven't paid: L");
     expect(pingPaidMessage(base.startsAt, 4, 4, TZ, noon, COURTRESERVE_BOOKING_URL)).toBe(`4 paid for tonight 7:30 PM. Book it now: ${COURTRESERVE_BOOKING_URL}`);
@@ -384,5 +387,74 @@ describe('who can use it', () => {
     expect(JSON.stringify(g)).not.toMatch(/secondChance|sc_/);
     expect((await blair.call('POST', `/api/admin/sessions/${s.id}/second-chance`, { action: 'booking' }, ON)).status).toBe(401);
     expect((await blair.call('PUT', '/api/admin/second-chance-switch', { on: false })).status).toBe(401);
+  });
+});
+
+describe('fixes from the fresh review', () => {
+  it('the cutoff cancel: refused unless the card is at its cutoff step now, and refused once 4 had paid (court may be booked)', async () => {
+    const w = await world();
+    await switchOn(w);
+    w.app.now = Date.parse('2026-10-27T16:00:00Z');
+    await w.organizer.call('POST', '/api/admin/sessions', { startsAt: '2026-10-27T23:00:00.000Z', endsAt: '2026-10-28T01:00:00.000Z' });
+    const s = (await dash(w)).sessions.find((x: any) => x.startsAt === '2026-10-27T23:00:00.000Z');
+    await join(w, 'Blair', s.id);
+    // Noon: not inside the two hours yet.
+    expect((await act(w, s.id, { action: 'cancel' })).status).toBe(409);
+    // 4 in and paid (Telegram 2 went), then one drops back to 3 inside the two hours: the fee question path, not the one-tap cancel.
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
+    for (const n of ['Casey', 'Devon']) await join(w, n, s.id);
+    for (const n of ['Blair', 'Casey', 'Devon']) await markPaid(w, s.id, n);
+    expect(w.sent.some((t) => /^4 paid/.test(t))).toBe(true);
+    await (await playerPhone(w, 'Devon')).call('POST', `/api/sessions/${s.id}/withdraw`, {});
+    w.app.now = Date.parse('2026-10-27T21:30:00Z');
+    expect((await dash(w)).secondChance.cards.find((c: any) => c.sessionId === s.id)).toMatchObject({ step: 'cutoff' });
+    const r = await act(w, s.id, { action: 'cancel' });
+    expect(r.status).toBe(409);
+    expect(r.data.error).toBe('maybe_booked');
+    expect((await dash(w)).sessions.find((x: any) => x.id === s.id).status).not.toBe('canceled');
+  });
+  it('reopen again with a time: finishes a time change that did not save (the game is already reopened from the card)', async () => {
+    const w = await world();
+    await switchOn(w);
+    const s = await canceledWithThree(w);
+    expect((await act(w, s.id, { action: 'reopen' })).status).toBe(200);
+    const again = await act(w, s.id, { action: 'reopen', minutes: 21 * 60 });
+    expect(again.status).toBe(200);
+    expect((await dash(w)).sessions.find((x: any) => x.id === s.id).startsAt).toBe('2026-10-28T01:00:00.000Z');
+    expect((await dash(w)).secondChance.cards[0].groupText).toContain('at 9:00 (instead of 8:00)');
+  });
+  it('Telegram too slow to answer: the claim stays (never sent twice); the hour limit is not a try', async () => {
+    let calls = 0;
+    const w = await world({
+      TELEGRAM_FETCH: (async () => {
+        calls++;
+        throw Object.assign(new Error('slow'), { name: 'TimeoutError' });
+      }) as typeof fetch,
+    });
+    await switchOn(w);
+    w.app.now = Date.parse('2026-10-27T16:00:00Z');
+    const s = await tue(w);
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
+    for (const n of ['Blair', 'Casey', 'Devon']) await join(w, n, s.id);
+    const after4 = calls;
+    await join(w, 'Emery', s.id);
+    await markPaid(w, s.id, 'Blair');
+    const rows = w.app.db.raw.prepare("SELECT kind FROM task_log WHERE session_id = ? AND task = 'sc_ping_in'").all(s.id) as any[];
+    expect(rows.map((r) => r.kind).sort()).toEqual(['failed', 'sent']);
+    expect(calls).toBe(after4); // no second try of Telegram 1
+  });
+  it('nothing before 7:00 AM; the 7:00 AM clock sends what came due overnight', async () => {
+    const w = await world({ CRON_SECRET: 'c'.repeat(40) });
+    await switchOn(w);
+    w.app.now = Date.parse('2026-10-27T09:00:00Z'); // Tue 5:00 AM
+    const s = await tue(w);
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
+    for (const n of ['Blair', 'Casey', 'Devon']) await join(w, n, s.id);
+    expect(w.sent).toEqual([]);
+    w.app.now = Date.parse('2026-10-27T11:05:00Z'); // 7:05 AM
+    await w.organizer.call('POST', '/api/cron/tick', {}, { 'X-Cron-Secret': 'c'.repeat(40) });
+    await w.app.settle();
+    expect(w.sent).toHaveLength(1);
+    expect(w.sent[0]).toMatch(/^Tonight 8:00 PM: 4 in, 1 of 4 paid\./);
   });
 });

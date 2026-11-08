@@ -27,7 +27,7 @@ import {
   type ScGame,
   type ScUnpaid,
 } from '../shared/secondChance';
-import { connected, deliver, prefsOf, type AlertRow } from './alerts';
+import { connected, deliver, PAUSED_PREFIX, prefsOf, TIMEOUT_ERROR, type AlertRow } from './alerts';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { newId } from './crypto';
@@ -148,6 +148,7 @@ function gameOf(s: SessionRow, facts: ReturnType<typeof factsOf>, marks: MarkRow
     canceledAt: s.canceled_at,
     canceledBy: s.canceled_by,
     createdAt: s.created_at ?? '1970-01-01T00:00:00.000Z',
+    extra: !!s.is_extra,
     ...facts,
     marks: new Set(mine.filter((m) => m.kind === 'mark').map((m) => m.task)),
     reopenedFrom: mine.find((m) => m.kind === 'mark' && m.task === SC.reopened)?.detail ?? null,
@@ -218,7 +219,9 @@ export async function secondChanceAction(
   const nowMs = await scNowMs(ctx, group);
   const tz = group.timezone;
   const organizerId = await organizerIdOf(ctx.db, group);
-  const game = gameOf(session, factsOf(await loadRoster(ctx.db, session.id), organizerId), await marksFor(ctx.db, group.id, [session.id]));
+  const rows = await marksFor(ctx.db, group.id, [session.id]);
+  const game = gameOf(session, factsOf(await loadRoster(ctx.db, session.id), organizerId), rows);
+  const sentMarks = new Set(rows.filter((m) => m.kind === 'sent').map((m) => m.task));
 
   if (action === 'booking' || action === 'dismiss') {
     await mark(ctx.db, group.id, session.id, action === 'booking' ? SC.booking : SC.dismissed, null, ctx.nowIso);
@@ -227,35 +230,49 @@ export async function secondChanceAction(
 
   if (action === 'cancel') {
     if (session.status === 'canceled') return { ok: true, changed: false };
-    if (!counts(game, nowMs, tz)) throw new HttpError(409, 'not_same_day', 'This game is booked or not today. Use the gear menu to cancel it.');
+    // Only what the card offers right now: a reopened or same-day game still under 4 inside the last two hours (a 4th who joined since the
+    // screen was drawn, a booked game, a regular game: refused, look again).
+    const card = secondChanceCards([game], nowMs, tz, '', pretendNoon(ctx) ? dayKey(ctx.nowMs, tz) : null)[0];
+    if (!card || card.kind !== 'open' || card.step !== 'cutoff') throw new HttpError(409, 'changed', 'This game just changed. Look again.');
+    // Once 4 had paid (Telegram 2 went), the court may have been booked on CourtReserve: the usual cancel asks about the fee instead.
+    if (sentMarks.has(SC.pingPaid)) throw new HttpError(409, 'maybe_booked', 'Four had paid, so the court may be booked. Use the gear menu > Cancel session to answer the fee question.');
     // Never booked, so no fee: the plain cancel (everyone's money back as credit), with the late-fee question answered for it.
     const out = await tools.decide(ctx, { decision: 'cancel', confirm: true, venueWaived: true, chargedCents: 0 });
     await mark(ctx.db, group.id, session.id, SC.cut, null, ctx.nowIso);
     return out;
   }
 
-  // Reopen.
-  if (!isChance(game, nowMs, tz)) {
-    if (game.marks.has(SC.reopened) && session.status !== 'canceled') return { ok: true, changed: false };
-    throw new HttpError(409, 'not_second_chance', 'This game is not a Second Chance game any more. Look again.');
-  }
+  // Reopen. Already reopened from the card (a retry after a time change that did not save): only the time change is left to do.
+  const already = game.marks.has(SC.reopened) && session.status !== 'canceled';
+  if (!already && !isChance(game, nowMs, tz)) throw new HttpError(409, 'not_second_chance', 'This game is not a Second Chance game any more. Look again.');
   const choices = pickTimes(session.starts_at, tz, nowMs);
   const minutes = body.minutes === undefined || body.minutes === null ? null : Number(body.minutes);
   if (minutes !== null && !choices.includes(minutes)) throw new HttpError(400, 'invalid_time', 'Pick one of the times shown.');
   const p = localParts(Date.parse(session.starts_at), tz);
   const newStart = minutes === null ? session.starts_at : new Date(zonedTimeToUtc(p.year, p.month, p.day, Math.floor(minutes / 60), minutes % 60, tz)).toISOString();
   const moved = newStart !== session.starts_at;
+  const length = Date.parse(session.ends_at) - Date.parse(session.starts_at);
+  const move = () => tools.reschedule(ctx, { startsAt: newStart, endsAt: new Date(Date.parse(newStart) + length).toISOString() });
+  if (already) {
+    if (moved) await move();
+    return { ok: true, changed: moved };
+  }
   if (moved) {
     const clash = await ctx.db.prepare('SELECT 1 AS x FROM sessions WHERE group_id = ? AND starts_at = ? AND id <> ?').bind(group.id, newStart, session.id).first();
     if (clash) throw new HttpError(409, 'time_taken', "There's already a game at that time. Pick another time.");
   }
-  await tools.decide(ctx, { decision: 'reopen' });
-  // The original time goes with the mark, for TEXT 2's "(instead of 7:30)".
+  // The mark first (the original time goes with it, for TEXT 2's "(instead of 7:30)"), so a reopened game is never left without its card;
+  // taken back if the reopen itself does not go through.
   await mark(ctx.db, group.id, session.id, SC.reopened, session.starts_at, ctx.nowIso);
-  if (moved) {
-    const length = Date.parse(session.ends_at) - Date.parse(session.starts_at);
-    await tools.reschedule(ctx, { startsAt: newStart, endsAt: new Date(Date.parse(newStart) + length).toISOString() });
+  try {
+    await tools.decide(ctx, { decision: 'reopen' });
+  } catch (err) {
+    if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') {
+      await ctx.db.prepare("DELETE FROM task_log WHERE session_id = ? AND task = ? AND kind = 'mark'").bind(session.id, SC.reopened).run();
+    }
+    throw err;
   }
+  if (moved) await move();
   return { ok: true, changed: true };
 }
 
@@ -280,9 +297,11 @@ export async function secondChanceTakesReached(ctx: Ctx, group: GroupRow, s: Ses
 
 /** A failed Telegram is tried again on later taps or ticks, at most this many times in all. */
 const MAX_TRIES = 3;
+/** No Telegram before this hour (Eastern). */
+export const QUIET_UNTIL_HOUR = 7;
 
 /** The routes after which a game's Telegrams are checked (joins, pays, the organizer's roster and payment taps). */
-const TAP = /^\/api\/(?:admin\/)?sessions\/([^/]+)\/(?:join|paid|use-credit|use-cash-out|confirm|still-in|payment|roster|me|claim|second-chance|booking|court-status|court|time|decision)$/;
+const TAP = /^\/api\/(?:admin\/)?sessions\/([^/]+)\/(?:join|withdraw|paid|use-credit|undo-credit|use-cash-out|confirm|still-in|decline|payment|roster|me|claim|second-chance|booking|court-status|court|time|decision)$/;
 
 /**
  * Before a tap runs (server/app.ts): is it a tap on a game whose Telegrams must be checked afterwards? The game's id, or null. The one
@@ -295,8 +314,9 @@ export async function tapWatch(ctx: Ctx, method: string, path: string): Promise<
   if (!m) return null;
   if (ctx.env.SANDBOX || isPretend(ctx.db) || viewOnlyCookie(ctx) || !secondChanceAllowed(ctx.env.SECOND_CHANCE)) return null;
   try {
-    const g = await ctx.db.prepare('SELECT id FROM groups ORDER BY created_at LIMIT 1').first<{ id: string }>();
-    return g && (await secondChanceForAll(ctx.db, g.id)) ? decodeURIComponent(m[1]) : null;
+    // One read, no group needed (the site has one group): the Settings row.
+    const on = await ctx.db.prepare("SELECT 1 AS x FROM task_log WHERE session_id IS NULL AND task = ? AND kind = 'mark' LIMIT 1").bind(SECOND_CHANCE.task).first();
+    return on ? decodeURIComponent(m[1]) : null;
   } catch {
     return null;
   }
@@ -338,6 +358,8 @@ export async function checkPings(ctx: Ctx, sessionId: string | null, group: Grou
   }
   const nowMs = await scNowMs(ctx, g);
   const tz = g.timezone;
+  // Never in the night: nothing before 7:00 AM (the 7:00 AM tick sends what came due overnight).
+  if (localParts(nowMs, tz).hour < QUIET_UNTIL_HOUR) return 0;
   const rows = sessionId
     ? [await getSession(ctx.db, g.id, sessionId)].filter((s): s is SessionRow => !!s)
     : (
@@ -367,24 +389,36 @@ export async function checkPings(ctx: Ctx, sessionId: string | null, group: Grou
       due === 'in'
         ? pingInMessage(s.starts_at, facts.inCount, facts.paidCount, facts.unpaid, tz, nowMs, facts.unpaid.some((u) => !!u.phone) ? `${site}/admin?unpaid=${s.id}` : null)
         : pingPaidMessage(s.starts_at, facts.inCount, facts.paidCount, tz, nowMs, COURTRESERVE_BOOKING_URL);
-    // Claimed before sending (the table's unique index): two taps at once can never both send it.
+    // Claimed before sending (the table's unique index): two taps at once can never both send it. Only while the game is still on and
+    // not booked: a cancel or booking saved since this check read the game stops it here.
+    const claimId = newId();
     const claim = await ctx.db
-      .prepare("INSERT OR IGNORE INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, ?, ?, 'sent', ?, ?)")
-      .bind(newId(), g.id, s.id, task, text, ctx.nowIso)
+      .prepare(
+        `INSERT OR IGNORE INTO task_log (id, group_id, session_id, task, kind, detail, at)
+         SELECT ?1, ?2, ?3, ?4, 'sent', ?5, ?6 WHERE EXISTS (SELECT 1 FROM sessions WHERE id = ?3 AND status <> 'canceled' AND booking_status <> 'booked')`,
+      )
+      .bind(claimId, g.id, s.id, task, text, ctx.nowIso)
       .run();
     if (claim.meta.changes !== 1) continue;
     if (fake) {
       sent++;
       continue;
     }
+    // The same rules as the clock's own alerts (server/tasks.ts): the hour's limit is not a try (the claim goes back, a later tap or tick
+    // sends it); Telegram too slow to answer may still have delivered it, so the claim stays (a missed alert beats a double one); any other
+    // failure gives the claim back and counts as a try.
     const send = async () => {
       const out = await deliver(ctx, g.id, text);
       if (out.ok) return true;
-      // Not sent: give the claim back (a later tap or tick tries again) and write down why.
-      await ctx.db.batch([
-        ctx.db.prepare("DELETE FROM task_log WHERE session_id = ? AND task = ? AND kind = 'sent'").bind(s.id, task),
-        ctx.db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, ?, ?, 'failed', ?, ?)").bind(newId(), g.id, s.id, task, out.error, ctx.nowIso),
-      ]);
+      if (out.error.startsWith(PAUSED_PREFIX)) {
+        await ctx.db.prepare('DELETE FROM task_log WHERE id = ?').bind(claimId).run();
+        return false;
+      }
+      const logFailure = ctx.db
+        .prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) VALUES (?, ?, ?, ?, 'failed', ?, ?)")
+        .bind(newId(), g.id, s.id, task, out.error.slice(0, 200), ctx.nowIso);
+      if (out.error === TIMEOUT_ERROR) await logFailure.run();
+      else await ctx.db.batch([ctx.db.prepare('DELETE FROM task_log WHERE id = ?').bind(claimId), logFailure]);
       return false;
     };
     // After a tap the answer does not wait for Telegram (the same as every other alert); the clock waits for it.

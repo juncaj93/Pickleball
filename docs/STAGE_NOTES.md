@@ -3299,8 +3299,21 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
 - `[env.preview.vars]` has `SECOND_CHANCE_TEST = "on"` (never production): `/admin?noontest=on` pretends it is noon on game day for these
   features only, and the Telegrams are a visible fake ("Telegram (preview, not sent)" on Home). See `docs/PREVIEW_FAKE_DB.md`.
 
+### Fresh review (an independent reviewer who did not write the code)
+- Fixed from it: (1) with the row off a tap read the group and the row: now only the row (one small read per tap on a game, said in
+  FEATURE_SWITCHES); (2) a Telegram that timed out was sent again on the next tap, and the hour's limit used up a try: now the clock's own
+  rules (timeout keeps the claim, the limit is not a try); (3) the cutoff cancel was allowed on any same-day not-booked game: now only while the
+  card is at its cutoff step, and once 4 had paid it refuses (the court may be booked; the gear menu's Cancel session asks about the fee);
+  (4) a reopen whose time change failed could not be finished: the mark is written first (taken back if the reopen fails) and Reopen again
+  finishes the move; (5) a regular game the site made that day (a new first session date) could get a same-day card: now only + Add game
+  games; (6) the Telegram claim now checks the game is still on and not booked. Also: nothing before 7:00 AM; no names in the words that
+  become Telegram 1's link ("Text the 1 who hasn't paid"); drop out, Undo credit and Can't make it check the Telegrams too.
+- Left as is (said in the report): a Telegram whose background send is cut off when the worker stops is lost (the claim stays); the old
+  "has 4 now, it's on" alert stays off for these games even after Telegram 1 ran out of tries; a fake Telegram on the preview comes from taps
+  only (the preview has no clock).
+
 ### Tests (Sun Nov 8, 2026)
-- Unit: `tests/second-chance.test.ts` (20): the rules, TEXT 1 and 2 exactly, the Telegram wording, fires once (4 paid before 4 in, 6 in 4
+- Unit: `tests/second-chance.test.ts` (23): the rules, TEXT 1 and 2 exactly, the Telegram wording, fires once (4 paid before 4 in, 6 in 4
   paid, dropouts, booked, canceled, alerts off), exactly 3 (2 in shows nothing), reopen then Use credit to the cent, the cutoff cancel,
   switch off = main, a player refused, the preview fake and pretend noon (and never on live). `tests/speed-queries.test.ts`: the new row is
   not main's.

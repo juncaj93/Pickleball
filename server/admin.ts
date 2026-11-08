@@ -2253,7 +2253,6 @@ function courtBody(value: unknown): number | null {
   return court;
 }
 
-/** PUT /api/admin/game-day-card-switch { on }: Settings > Feature switches > "Game day card" (Zip 14). Display only; moves nothing. */
 /** PUT /api/admin/second-chance-switch { on }: Settings > Feature switches > "Second Chance" (Zip 15). */
 export async function setSecondChanceSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
@@ -2268,6 +2267,7 @@ export function secondChanceTap(ctx: Ctx, body: Record<string, unknown>) {
   return secondChanceAction(ctx, body, { decide, reschedule });
 }
 
+/** PUT /api/admin/game-day-card-switch { on }: Settings > Feature switches > "Game day card" (Zip 14). Display only; moves nothing. */
 export async function setGameDayCardSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const on = v.bool(body.on, 'on');
