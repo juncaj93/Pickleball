@@ -59,7 +59,7 @@ async function main() {
   const outFile = outIdx >= 0 ? args[outIdx + 1] : null;
 
   console.log('Building the fake world on a throwaway in-memory copy...');
-  const { sql, summary } = await buildSeed(Date.now(), { zip13: true });
+  const { sql, summary } = await buildSeed(Date.now(), { zip13: true, preview: true });
   for (const s of summary) console.log('  - ' + s);
 
   if (outFile) writeFileSync(outFile, sql);

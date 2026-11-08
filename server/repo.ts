@@ -76,6 +76,8 @@ export interface SessionRow {
   credits_issued_at: string | null;
   court_number: string | null; // no longer shown or changed
   court_state: 'waitlist' | 'opened' | 'not_opened' | null;
+  /** Zip 14 (migration 0017): which court, 1 to 16, or null (not set). Optional: a database before 0017 has no such column. */
+  court?: number | null;
   shown_early: number;
   holiday_hours_ok_at: string | null;
   day_before_done_at: string | null;

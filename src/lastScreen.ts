@@ -110,6 +110,8 @@ function sanitizeGame(s: PlayerSessionView, nowMs: number): PlayerSessionView {
     joinAs: s.joinAs,
     holiday: s.holiday,
     courtState: s.courtState,
+    // Zip 14: the court number (look only), so the saved copy draws the same game day card.
+    ...(s.court !== undefined ? { court: s.court } : {}),
     extra: s.extra,
     note: s.note,
     bookingOpen: s.bookingOpen,
@@ -166,6 +168,7 @@ export function sanitize(v: GroupView, nowMs: number): GroupView {
     ...(v.cardCleanup ? { cardCleanup: true } : {}),
     ...(v.playerFix1 ? { playerFix1: true } : {}),
     ...(v.alertCards ? { alertCards: true } : {}),
+    ...(v.gameDayCard ? { gameDayCard: true as const } : {}),
     lastScreen: true,
     now: new Date(nowMs).toISOString(),
     sessions: v.sessions.filter((s) => keepGame(s, nowMs)).map((s) => sanitizeGame(s, nowMs)),

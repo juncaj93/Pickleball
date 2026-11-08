@@ -13,6 +13,8 @@ export interface Zip7Flags {
   alertCards?: boolean;
   /** Seat dots, SEAT_DOTS (src/seat-dots.css): rides on the same hook. */
   seatDots?: boolean;
+  /** Zip 14, GAME_DAY_CARD (src/gameday.css): rides on the same hook. */
+  gameDayCard?: boolean;
 }
 
 const ATTRS: [keyof Zip7Flags, string][] = [
@@ -22,6 +24,7 @@ const ATTRS: [keyof Zip7Flags, string][] = [
   ['cardCleanup', 'data-card-cleanup'],
   ['alertCards', 'data-alert-cards'],
   ['seatDots', 'data-seat-dots'],
+  ['gameDayCard', 'data-game-day'],
 ];
 
 /** Sets the <html> attributes for the switches that are on for this screen; takes them off when the screen goes away. */
@@ -32,8 +35,9 @@ export function useZip7Root(flags: Zip7Flags | null | undefined, active = true) 
   const cl = !!flags?.cardCleanup && active;
   const ac = !!flags?.alertCards && active;
   const sd = !!flags?.seatDots && active;
+  const gd = !!flags?.gameDayCard && active;
   useLayoutEffect(() => {
-    const on: Record<string, boolean> = { tonightGlow: tg, colorCleanup: cc, playerCardsSimple: pc, cardCleanup: cl, alertCards: ac, seatDots: sd };
+    const on: Record<string, boolean> = { tonightGlow: tg, colorCleanup: cc, playerCardsSimple: pc, cardCleanup: cl, alertCards: ac, seatDots: sd, gameDayCard: gd };
     const root = document.documentElement;
     const set: string[] = [];
     for (const [key, attr] of ATTRS) {
@@ -43,7 +47,7 @@ export function useZip7Root(flags: Zip7Flags | null | undefined, active = true) 
       }
     }
     return () => set.forEach((a) => root.removeAttribute(a));
-  }, [tg, cc, pc, cl, ac, sd]);
+  }, [tg, cc, pc, cl, ac, sd, gd]);
 }
 
 /** TONIGHT_GLOW on: which tag a date tile on the organizer Home wears (undefined with the switch off, so the tile stays exactly as before). */

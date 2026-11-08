@@ -24,6 +24,7 @@ import './alert-cards.css';
 import './seat-dots.css';
 // Zip 13, Swap to Alex: classes that only exist while it is on for the organizer.
 import './swap-button.css';
+import './gameday.css';
 
 function App() {
   const path = usePath();

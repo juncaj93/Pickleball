@@ -9,7 +9,7 @@ import { handleApi } from '../../server/app';
 import { ADMIN_COOKIE } from '../../server/context';
 import { randomToken, sha256 } from '../../server/crypto';
 import type { D1Database, D1PreparedStatement, D1Result } from '../../server/db';
-import { backupToSql } from '../../scripts/backup-sql.mjs';
+import { backupToSql, TABLES } from '../../scripts/backup-sql.mjs';
 
 type Value = string | number | null | Uint8Array;
 
@@ -92,7 +92,10 @@ export async function createSandbox(SQL: SqlJsStatic, backup: unknown, migration
   const db = new SQL.Database();
   db.exec('PRAGMA foreign_keys = ON;');
   for (const m of migrations) db.exec(m);
-  db.exec(backupToSql(backup));
+  // Only the columns this copy's tables have (Zip 14): a backup with a newer column (sessions.court) still loads after a rollback.
+  const columns: Record<string, Set<string>> = {};
+  for (const t of TABLES) columns[t] = new Set((db.exec(`PRAGMA table_info(${t})`)[0]?.values ?? []).map((r) => String(r[1])));
+  db.exec(backupToSql(backup, columns));
   const group = db.exec('SELECT id FROM groups LIMIT 1')[0]?.values[0]?.[0];
   const token = randomToken();
   db.run('INSERT INTO admin_sessions (id, group_id, token_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)', [

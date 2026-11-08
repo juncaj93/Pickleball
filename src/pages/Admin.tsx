@@ -32,6 +32,7 @@ import { HomeGame, useOpenGames } from './admin/HomeV2';
 import { HistoryTab } from './admin/HistoryTab';
 import { ClearChoices, FindSubLink } from './admin/LateFees';
 import { boxMinutes, ShortGameHeadsUp } from './admin/ShortGame';
+import { CourtRow } from '../GameDay';
 
 type Tab = 'home' | 'players' | 'money' | 'history' | 'settings';
 
@@ -788,6 +789,9 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   const [start, setStart] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultStartMinutes));
   const [end, setEnd] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultEndMinutes));
   const [note, setNote] = useState('');
+  // Zip 14 (GAME_DAY_CARD): the court, picked on the court map. Off: no row, and nothing is sent.
+  const courtOn = ctx.d.gameDayCard === true;
+  const [court, setCourt] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function add(e: FormEvent) {
@@ -799,7 +803,7 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
     if (Date.parse(endsAt) <= Date.parse(startsAt)) return setError('The end time must be after the start time.');
     setBusy(true);
     try {
-      await api('POST', '/api/admin/sessions', { startsAt, endsAt, note: note.trim() || null });
+      await api('POST', '/api/admin/sessions', { startsAt, endsAt, note: note.trim() || null, ...(courtOn && court !== null ? { court } : {}) });
       await ctx.reload();
       toast('Game added');
       onDone();
@@ -848,9 +852,10 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
         </label>
       </div>
       <ShortGameHeadsUp ctx={ctx} minutes={boxMinutes(start, end)} />
+      {courtOn && <CourtRow value={court} onChange={setCourt} />}
       <label className="field">
         Note (optional)
-        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder="Court 3, bring water" />
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder={courtOn ? 'Bring water' : 'Court 3, bring water'} />
       </label>
       {error && <Notice tone="danger">{error}</Notice>}
       <button className="btn block big" type="submit" disabled={busy}>

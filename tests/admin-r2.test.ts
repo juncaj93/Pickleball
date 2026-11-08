@@ -95,7 +95,7 @@ describe('ADMIN_R2 switch', () => {
   });
   it('S9 no migration was added for it', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql'));
-    expect(files.at(-1)).toBe('0016_time_confirmed.sql');
+    expect(files.at(-1)).toBe('0017_court.sql'); // Zip 14 added 0017 (the court column); this feature itself still adds none
   });
 });
 

@@ -23,6 +23,8 @@ export interface PlayerSessionView {
   canceled: boolean;
   /** Why the organizer canceled (up to 40 characters), or null. Only set for a canceled game. */
   cancelReason: string | null;
+  /** Zip 14 "Game day card" (server/gameDay.ts): the court, 1 to 16. Only while the switch is on for this screen AND a court is set; missing otherwise. */
+  court?: number;
   started: boolean;
   bookingStatus: BookingStatus;
   venueName: string | null;
@@ -182,6 +184,10 @@ export interface GroupView {
   seatDots?: boolean;
   /** Swap to Alex (Zip 13): this phone is signed in as the organizer (real PIN) and the switch is on: the "Go to Admin" pill. Missing for everyone else. */
   goToAdmin?: true;
+  /** Zip 14 "Game day card" is on for this screen (server/gameDay.ts): the game day card, court numbers on the games. Missing: exactly as before. */
+  gameDayCard?: true;
+  /** Zip 14, PREVIEW ONLY (GAME_DAY_TEST): this phone asked to see the next game's date as today. Never on live. */
+  gameDayTest?: true;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -310,6 +316,9 @@ export interface AdminSessionView {
   id: string;
   startsAt: string;
   endsAt: string;
+  /** Zip 14: the court number, 1 to 16, only while "Game day card" is on for this screen and a court is set (missing otherwise).
+   *  (Not `court`: that is the court cost, below.) */
+  courtNum?: number;
   status: SessionRecordStatus;
   bookingStatus: BookingStatus;
   venueName: string | null;
@@ -549,6 +558,10 @@ export interface AdminDashboard {
   /** Undo on admin toasts (5 seconds, the save waits), and its Settings row. */
   adminUndo?: true;
   adminUndoForAll?: true;
+  /** Zip 14 "Game day card" (shared/gameDay.ts), only while on (off: the answer is exactly as before): the Court row and map on Add game and
+   *  Edit game, and the game's court on each AdminSessionView; and its Settings row. */
+  gameDayCard?: true;
+  gameDayCardForAll?: true;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

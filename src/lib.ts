@@ -1,5 +1,6 @@
 import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
 import { ZIP13 } from '../shared/zip13';
+import { GAME_DAY_CARD, GAME_DAY_TEST } from '../shared/gameDay';
 import { leavingWithHolds } from './undoHold';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
@@ -200,6 +201,10 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (speedTest('lastscreenadmin')) headers[LAST_SCREEN_ADMIN_HEADER] = 'on';
   // Seat dots private test switch for this phone (?seatdots=on; also on /admin, see server/seatDots.ts).
   if (seatDotsTest()) headers['X-Seat-Dots'] = 'on';
+  // Zip 14 "Game day card" private test switch for this phone (?gameday=on; also on /admin), and the preview-only "next game as today"
+  // (?gamedaytest=on; the server ignores it unless GAME_DAY_TEST is set, which only previews have). See server/gameDay.ts.
+  if (gameDayTest(GAME_DAY_CARD.link)) headers[GAME_DAY_CARD.header] = 'on';
+  if (gameDayTest(GAME_DAY_TEST.link)) headers[GAME_DAY_TEST.header] = 'on';
   // Zip 13 private test switches for this phone (/admin?playersredo=on, ?swapbutton=on, ?adminundo=on; see server/zip13.ts).
   for (const z of Object.values(ZIP13)) if (zip13Test(z.link)) headers[z.header] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
@@ -723,6 +728,21 @@ if (typeof window !== 'undefined') {
     const want = new URLSearchParams(window.location.search).get(z.link);
     if (want === 'on') storageSet(`pb_${z.link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${z.link}`);
+  }
+}
+
+/**
+ * Zip 14 on this phone only: ?gameday=on (the Game day card before it is on for everyone; works on /admin too, where it also shows the
+ * Court row) and ?gamedaytest=on (preview only: the next game's date shown as today). The same word with =off ends it. Remembered here.
+ */
+export function gameDayTest(link: string): boolean {
+  return storageGet(`pb_${link}`) === 'on';
+}
+if (typeof window !== 'undefined') {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link]) {
+    const want = new URLSearchParams(window.location.search).get(link);
+    if (want === 'on') storageSet(`pb_${link}`, 'on');
+    else if (want === 'off') storageRemove(`pb_${link}`);
   }
 }
 
