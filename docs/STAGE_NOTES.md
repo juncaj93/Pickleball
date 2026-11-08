@@ -3197,3 +3197,30 @@ nothing switched on, no live data read or changed. The switch's full description
   (6 played)" (`src/pages/CreditSheet.tsx`, `shared/credit.ts` creditChanges). A player who never paid sees the amber top card "You owe $9 for
   Tue, Nov 3" with "final price" (`PlayerHome.tsx` owe card) and Pay / I paid / Use credit. A paid player never owes more after Finalize (the final
   price is at most $14); the only "owe more" is a late fee (no-show, LATE_FEES), on the same top card.
+
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing wrong with the switch off (every new key and the stamp piece only while on; the switch read is the shared one, no new trip; CSS
+  under `html[data-game-day]` or new class names; who can set a court; GAME_DAY_TEST cannot reach live; the migration on SQLite).
+- Fixed from it: Add game with the switch off now ignores a court, as main does (it was refused); the add is one insert; the court map is
+  measured after it opens and scrolls on a very short screen; "Court TBD" keeps its words in its spoken label; one pop-up id per card; the
+  saved-copy Directions is not a link; the demo copy leaves out columns its tables lack (and the main rollback note above).
+
+### Tests (Sun Nov 8, 2026)
+- Unit and API: 2361 passed, 1 skipped, 0 failed (141 files); tsc clean; build clean. New: `tests/gameday.test.ts` (12). Updated: the seven
+  "no migration" pins now name 0017, `tests/zip13.test.ts` (the preview seed rule), `tests/speed-queries.test.ts` (the new row is not main's).
+- Browser: `e2e/zip14.cjs` 21/21 (the card at 390/360/320, light and dark; map; pop-up; Directions on iPhone and Android; Reduce Motion;
+  Thursday card; I paid; Edit game and Add game Court row; a player and the read-only PIN refused; the Settings row; the preview test link).
+  `e2e/zip14-off.cjs` 29/29 against main `1a51512` (switch off = main on every player and organizer screen, light and dark, Indy at
+  390/360/320, Edit game and Add game, Settings apart from the new row; main itself running on the migrated database with courts set). Once,
+  under load, its two 320 px checks differed and passed alone and in a full rerun (29/29).
+- Full `npm run test:e2e` once, 2 at a time, each script on its own port (several scripts share a default port, so a plain parallel run
+  collides): 49 of 55 clean; `money-rework` updated for the new Settings row (36/36). The other 5 fail the same way on main: `run.cjs` (10),
+  `cancel-reason.cjs` (2), `want-in.cjs` (1, the View as demo; rerun on main this session: same), `admin-r2.cjs` F4 (1), `player-fix1.cjs`
+  "I paid on tonight's card" (rerun on main this session: same).
+
+### Preview
+- https://preview-zip14.pickleball-club-9h0.pages.dev. Migration 0017 applied to `pickleball-preview` first (Sun Nov 8, about 12:00 AM
+  Eastern), then re-seeded. On there (repo records of live): every row on live (Adjust credit, Admin layout v2, round 2 and 3, Card cleanup,
+  Card time and buttons, Color cleanup, Home collapse, Instant taps, Last call texts, Late-cancel fee split, Late drops owe $14, Money rework,
+  Ask for payment, No Venmo? note, Pay sheet, Simpler player cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow,
+  Venmo request, both animation switches) plus Game day card. Off as on live: Alert cards, Seat dots, the four speed rows, the three Zip 13 rows.
