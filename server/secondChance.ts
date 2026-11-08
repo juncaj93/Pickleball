@@ -209,6 +209,11 @@ export async function secondChanceView(
   };
 }
 
+/** Preview only: PREVIEW_CALM is set (only [env.preview.vars] has it), whatever this phone asked. Always false on live. */
+export function previewSiteFor(ctx: Ctx): boolean {
+  return (ctx.env.PREVIEW_CALM ?? '').trim().toLowerCase() === 'on';
+}
+
 /** Preview only (shared/previewCalm.ts): show only this zip's cards, unless this phone opened ?alerts=all. Always false on live. */
 export function previewCalmFor(ctx: Ctx): boolean {
   if ((ctx.env.PREVIEW_CALM ?? '').trim().toLowerCase() !== 'on') return false;

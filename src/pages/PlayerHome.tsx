@@ -26,6 +26,7 @@ import { ModeButton, SwapIcon, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
 import { AcBalls, AlertCard } from '../AlertCard';
+import { afterGameCard, oweMoreText } from '../../shared/afterGame';
 import { tileDay, type TileDay } from '../../shared/zip7';
 import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
 import { courtStatus } from '../../shared/court';
@@ -333,6 +334,23 @@ export function PlayerHome({
   useLayoutEffect(() => () => setMotion(false), []);
   // Zip 7 switches (Tonight glow, Color cleanup, Simpler player cards): <html> attributes, only while their answer is yes.
   useZip7Root(g);
+  // Preview only (g.preview exists only where PREVIEW_CALM is set, never on live): ?as=Harper opens the page as that fake player, the same
+  // as picking the name on Who are you?. On live the server never says preview, so the link does nothing.
+  const asTried = useRef(false);
+  useEffect(() => {
+    if (!g || g.preview !== true || viewAs || asTried.current) return;
+    const want = new URLSearchParams(window.location.search).get('as')?.trim().toLowerCase();
+    if (!want) return;
+    asTried.current = true;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('as');
+    window.history.replaceState(window.history.state, '', url.toString());
+    const p = g.players.find((x) => x.name.toLowerCase() === want) ?? g.players.find((x) => x.name.toLowerCase().split(/\s+/)[0] === want);
+    if (!p || g.me?.id === p.id) return;
+    void api('POST', '/api/me', { playerId: p.id })
+      .then(() => load.quiet())
+      .catch(() => {});
+  }, [g, viewAs, load]);
   const motion = useMotion();
   // The first-load cascade plays once per page open (not on refreshes, filter taps or name switches). `live` turns on
   // when it is over: anything that appears from then on is a real change.
@@ -681,6 +699,8 @@ export function PlayerHome({
             />
             <FeeNotices g={view!} />
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
+            {/* Zip 16 (AFTER_GAME_CARD): "$5 back to your credit" after Finalize, once, until closed or 7 days old. */}
+            {g.afterGameCard === true && <AfterGameCard g={view!} />}
             {/* The organizer's hand adjustment to this player's credit (recent ones): always told, even with no pay card and no credit chip (credit taken to $0). */}
             {view!.payDue.length === 0 && recentAdjustment && g.alertCards === true && <AdjustedCard adj={recentAdjustment} />}
             {view!.payDue.length === 0 && recentAdjustment && g.alertCards !== true && (
@@ -719,6 +739,13 @@ export function PlayerHome({
               view!.suggestion && <SuggestionCard key={view!.suggestion.sessionId} g={view!} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
             )}
             </>
+            )}
+            {/* Preview only (calm): just this zip's cards, the owe card when it owes more after Finalize and the after-game card. */}
+            {g.previewCalm === true && g.afterGameCard === true && (
+              <>
+                {view!.payDue.length > 0 && view!.payDue.every((o) => !!o.more) && <PayCard g={view!} onChanged={load.reload} enter={live} />}
+                <AfterGameCard g={view!} />
+              </>
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
@@ -1062,6 +1089,57 @@ function AdjustedCard({ adj }: { adj: { deltaCents: number; note: string; at: st
       }}
       xLabel="Credit adjusted"
     />
+  );
+}
+
+/** Credit records whose after-game card this phone closed with the X (Zip 16). Remembered on this phone only. */
+const AFTER_GAME_SEEN_KEY = 'pb_after_game_seen';
+function readAfterGameSeen(): string[] {
+  try {
+    const v = JSON.parse(storageGet(AFTER_GAME_SEEN_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Zip 16, "After-game cards" (shared/afterGame.ts): "$5 back to your credit" / "Tue, Nov 3: final price $9 (6 played)", blue, with an X.
+ * The amount is the sum of the credit records Finalize wrote (sent as they are by the server), never worked out again here. Two or more
+ * games: one card. The X hides those records on this phone (a newer one shows again); 7 days after the credit it goes by itself.
+ * Closing it changes no money.
+ */
+function AfterGameCard({ g }: { g: GroupView }) {
+  const tz = g.group.timezone;
+  const [seen, setSeen] = useState<string[]>(readAfterGameSeen);
+  const card = afterGameCard(g.afterGame, seen, Date.parse(g.now), (iso) => formatShortDate(iso, tz), formatPrice);
+  if (!card) return null;
+  const close = () => {
+    const next = [...readAfterGameSeen().filter((x) => !card.ids.includes(x)), ...card.ids].slice(-50);
+    try {
+      storageSet(AFTER_GAME_SEEN_KEY, JSON.stringify(next));
+    } catch {
+      /* it simply shows again next time */
+    }
+    setSeen(next);
+  };
+  const data = { 'data-after-game': true, 'data-after-game-cents': String(card.cents) };
+  if (g.alertCards === true) {
+    return <AlertCard as="section" tone="blue" icon="credit" label="Credit back" title={card.title} sub={card.sub} data={data} onX={close} xLabel={card.title} />;
+  }
+  return (
+    <div className="fee-notice" {...data}>
+      <Notice tone="ok">
+        <span className="fee-notice-row">
+          <span>
+            <b>{card.title}</b> · {card.sub}
+          </span>
+          <button type="button" className="btn small ghost" aria-label={`Dismiss: ${card.title}`} data-dismiss onClick={close}>
+            Dismiss
+          </button>
+        </span>
+      </Notice>
+    </div>
   );
 }
 
@@ -1530,6 +1608,8 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
     );
     const several = due.length > 1;
     const lateList = several && due.some((o) => o.lateFee || detail(o));
+    // Zip 16 (AFTER_GAME_CARD): one game that owes more after Finalize reads "You owe $2 more" / "Tue, Nov 3: final price $11 (5 played)".
+    const more = !several ? oweMoreText(due[0], (iso) => formatShortDate(iso, tz), formatPrice) : null;
     return (
       <AlertCard
         as="section"
@@ -1539,9 +1619,11 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
         label="Payment"
         titleAs="h2"
         data={{ 'data-pay-card': true }}
-        title={<RollText text={title} />}
+        title={<RollText text={more ? more.title : title} />}
         sub={
-          several ? (
+          more ? (
+            more.sub
+          ) : several ? (
             <>
               {due.length} games
               {lateList && (

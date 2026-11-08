@@ -140,6 +140,21 @@ export interface CreditView {
   history: CreditEntryView[];
 }
 
+/** Zip 16 (shared/afterGame.ts): one credit record Finalize wrote for this player (credit_ledger kind 'kept', reason 'finalized'). */
+export interface AfterGameCredit {
+  /** The ledger row's id. */
+  id: string;
+  sessionId: string;
+  startsAt: string;
+  /** The row's amount, as written, to the cent. */
+  cents: number;
+  /** The game's stored final price (sessions.final_price_cents), or null if it is not known. */
+  finalPriceCents: number | null;
+  playedCount: number | null;
+  /** When the credit was given. */
+  at: string;
+}
+
 export interface GroupView {
   group: { name: string; timezone: string; venmoUrl: string | null; organizerName: string | null; /** Apple Pay / Zelle number for the Pay sheet; "" = none to show; missing = the default. */ zelleNumber?: string; priceCents: number; maxPlayers: number; usualMinutes: number };
   players: { id: string; name: string }[];
@@ -190,6 +205,12 @@ export interface GroupView {
   gameDayCard?: true;
   /** Zip 14, PREVIEW ONLY (GAME_DAY_TEST): this phone asked to see the next game's date as today. Never on live. */
   gameDayTest?: true;
+  /** Zip 16 "After-game cards" is on for this screen (server/afterGame.ts). Missing: exactly as before (no card, owe card as before). */
+  afterGameCard?: true;
+  /** Zip 16, only while on: this player's own credit back from Finalize in the last 7 days (the real ledger rows). */
+  afterGame?: AfterGameCredit[];
+  /** Preview only (PREVIEW_CALM is set, previews only): the site is a preview, so ?as=Name may pick that name on this phone. Never on live. */
+  preview?: true;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
   lateFees?: boolean;
   /**
@@ -215,6 +236,11 @@ export interface GroupView {
     signupAt: string;
     /** An open late fee (shared/lateFees.ts): "(late drop)", "(canceled late)" or "(did not play)" after the date. */
     lateFee?: LateFeeKind;
+    /**
+     * Zip 16 "After-game cards" (shared/afterGame.ts), only while on: this seat was paid at a lower price before Finalize (its cash is
+     * held on the seat) and now owes the rest. The game's stored final price and how many played. Missing: exactly as before.
+     */
+    more?: { finalPriceCents: number; playedCount: number | null };
   }[];
   /**
    * What to pay now, for the card at the top of the screen: owed sessions
@@ -564,6 +590,8 @@ export interface AdminDashboard {
    *  Edit game, and the game's court on each AdminSessionView; and its Settings row. */
   gameDayCard?: true;
   gameDayCardForAll?: true;
+  /** Zip 16 "After-game cards" (shared/afterGame.ts): its Settings row. */
+  afterGameCardForAll?: true;
   /** Zip 15 "Second Chance" (shared/secondChance.ts), only while on (off: the answer is exactly as before): the Home cards, the Request
    *  buttons and the Edit sheet wording; and its Settings row. */
   secondChance?: {

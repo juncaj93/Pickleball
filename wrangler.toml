@@ -179,6 +179,13 @@ GAME_DAY_CARD = "on"
 # SECOND_CHANCE_TEST (pretend noon on game day, fake Telegrams) is deliberately NOT here: it exists only for previews, below.
 SECOND_CHANCE = "on"
 
+# Zip 16 "After-game cards" (shared/afterGame.ts): after the organizer finalizes a game, a player whose final price is below what they paid
+# sees one blue card the next time they open the site ("$5 back to your credit", X to close, gone after 7 days); a player who paid a lower
+# price earlier and now owes more sees "You owe $2 more" on the owe card that is already there. Display only. "on" here only ALLOWS it;
+# who gets it is Settings > Feature switches > "After-game cards" (off at ship = nobody), plus a phone opened once with ?aftergame=on.
+# "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+AFTER_GAME_CARD = "on"
+
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
 # tester on a preview link can't change real seats, payments or credit.
@@ -226,6 +233,7 @@ GAME_DAY_CARD = "on"
 # Preview only (never in [vars] above): lets a phone opened with ?gamedaytest=on see the next game as if it were today.
 GAME_DAY_TEST = "on"
 SECOND_CHANCE = "on"
+AFTER_GAME_CARD = "on"
 # Preview only (never in [vars] above): ?noontest=on pretends it is noon on game day for the Second Chance cards, and the two Telegrams
 # are a visible fake (shown on Home, never sent).
 SECOND_CHANCE_TEST = "on"

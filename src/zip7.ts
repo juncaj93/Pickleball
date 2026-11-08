@@ -55,3 +55,4 @@ export function adminTileDay(d: { tonightGlow?: boolean; now: string; group: { t
   if (d.tonightGlow !== true) return undefined;
   return tileDay(s.startsAt, d.group.timezone, Date.parse(d.now), !s.state.flags.canceled && !s.state.flags.started);
 }
+

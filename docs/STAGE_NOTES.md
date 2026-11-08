@@ -3365,3 +3365,73 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
 - Read-only live check (backup address, reads only, nothing tapped, so no Telegram or text): sign-in with the read-only PIN works (View only);
   no Second Chance data or Settings row on (12 games); no preview-only key on live (no calm, no pretend, no fake Telegrams); the phone's
   private link (/admin?secondchance=on) answers with the real clock; Activity and Money answer 200; the live code has the compact Mark paid card.
+
+## Zip 16: After-game cards (AFTER_GAME_CARD) and the dark-mode look of the player alert cards - built Sun Nov 8, 2026 (a quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 16" brief (`START_HERE.md`, `SITE_RULES.md`, mockups aftergame_mock.html / aftergame_light_dark.png and
+alerts_current_mock.html). One PR. NO database schema change, no migration. Nothing deployed to production, nothing switched on, no live data
+read or changed. The switch's full description is its row in `docs/FEATURE_SWITCHES.md`.
+
+### Item 1: the dark-mode look of every player alert card (no new switch; rides on Alert cards, ON on live)
+- The mock's `.ph.dark.mid` rules on the site's real card component and tokens: a 1.5 px border, the fill `color-mix(card 62%, the card's
+  tint)`, the border `color-mix(card line 45%, the card's line color)` (blue `#363f78`, amber `#5a4720`, green `#2b5a40`, gray `#3a403b`
+  from the mock; purple `#4a3d78` and red `#6a3430` follow the same step, no player card uses them except the error banner), and the badge
+  the card's ink at 12%. Buttons unchanged. Light mode unchanged. Player screen only (`html[data-ac-player]`, set by PlayerHome), so the
+  organizer screens keep today's look (a cheap follow-up if Alex wants it there too).
+- Chrome (Android phones) draws a 1.5 px border as 1 px (it rounds borders down to whole pixels); iPhone Safari draws 1.5 px. The tint and
+  border color carry the shape either way.
+
+### Item 2: After-game cards (`AFTER_GAME_CARD`, ships OFF)
+- `shared/afterGame.ts` (the words, the 7 days, combining), `server/afterGame.ts` (the switch, the player's own records), `AfterGameCard` in
+  `src/pages/PlayerHome.tsx`. The server hands over the player's own live ledger rows (kind 'kept', reason 'finalized', last 7 days) with
+  their game's stored final price; the card adds them up. No second sum anywhere.
+- Owes more: CAN happen without a late fee. Finalize holds a paid seat's cash and owes the rest whenever the seat paid less than the new final
+  price: a Reopen and a redo with fewer players after someone paid the lower price, the flat price raised before Finalize, or a 1.5 hour game
+  made longer with Short games on (`server/finalize.ts`, the `paid < price` branch). So it is built, as the owe card that is already there
+  (one card, same Pay, I paid and Use credit), reworded "You owe $3 more" / "Fri, Nov 6: final price $14 (4 played)". It stays until paid,
+  like today's owe card (no X: it is a debt).
+- Not a card: a player who did not play ($14 back as credit, reason `not_played`), a final price equal to what they paid.
+
+### Preview
+- Seed (`ZIP16_CAST`, `SEED_ZIP16=1`): Parker ($5, one game), Rowan ($8, two games), Quinn (owes $3 more). `/?as=Parker` (preview only).
+
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking: no wrong amount, no other player's data, no money read or written, OFF answers byte for byte main's, the preview flag
+  and ?as unreachable on live, finalize.ts and credit.ts untouched.
+- Fixed from it: a code comment that promised a "future time" check the code does not make (comment corrected); one lost indent in
+  Settings; FEATURE_SWITCHES now says the switch read also runs on the "anything changed?" check and the dashboard.
+- Left as is (said in the report): a seat paid at the lower price entirely with credit that owes more after a redo keeps today's owe
+  words (same amount); Mark paid confirming an I paid after Finalize, and Unmark of the latest cash, also write `finalized` credit records,
+  so they get the card too (real money above the final price; the 7 days start then); a closed card comes back after a Reopen and redo;
+  the card can still say "$5 back" for up to 7 days after that credit was spent (true as history).
+
+
+### Tests (Sun Nov 8, 2026)
+- Unit on the final code: 2403 passed, 1 skipped, 1 failed: `audit-money` "the calendar file and the status endpoint carry no money"
+  (a random id in the calendar file can hold "555-"; untouched by this zip; 5 of 5 reruns pass). Earlier full run on the same code: 2404
+  passed. New: `tests/after-game.test.ts` (16: off = main, the row, the private link, the kill switch, the card equals the ledger row and the
+  credit change to the cent, no card at an equal price or for a no-show, two games combined, the X, 7 days, Reopen and redo, privacy,
+  owes more on and off, the preview seed). `tests/speed-queries.test.ts`: the new row is not main's.
+- Browser: `e2e/zip16.cjs` 25/25 (390/360/320 light and dark: Parker, Quinn; Rowan's combined card; chip equals card; X with no request and
+  no money change; 7 days; another player and a phone with no name; ?as=Parker; the Settings row and ?aftergame=on; the dark look on every
+  player alert card type at 390/360/320 incl. 4.5:1 words, the banner and the cash-out question; light unchanged; organizer unchanged).
+  `e2e/zip16-off.cjs` 40/40 against main `98a208a` (switch off = main on player homes at 390/360/320 light and dark, HTML and every
+  element's look, with the alert card colors in dark the one intended difference; organizer Home, Settings apart from the new row, Players,
+  Money, History; no Zip 16 key in any answer).
+- Full `npm run test:e2e` once, 3 at a time on their own ports: 52 of 57 clean; `money-rework` updated for the new Settings row (36/36). The
+  other 4 fail the same way on main `98a208a` (rerun there this session): `run.cjs` (10; 125 under the parallel load, 10 alone, the same as
+  main), `cancel-reason.cjs` (2), `want-in.cjs` (1, View as demo), `admin-r2.cjs` F4 (1).
+- Chrome draws a 1.5 px border as 1 px (it rounds to whole pixels), so the browser checks read the rule that applies.
+
+### Preview
+- https://preview-zip16.pickleball-club-9h0.pages.dev, fake database re-seeded Sun Nov 8 (the cards last until Sun Nov 15). Switch rows on:
+  every row on live (repo records) plus Game day card and Second Chance (as on the Zip 14 and 15 previews) plus After-game cards.
+
+### After Alex tested the preview (Sun Nov 8, 2026, afternoon Eastern)
+- "Ship it". Answers: (a) no card for a no-show who paid (their final price did not change): as built; (b) the dark look on the organizer
+  cards too, same values, light unchanged: done (the CSS no longer needs the player-screen mark; `usePlayerAlertLook` removed);
+  (c) the X remembered per phone: as built.
+- Retested: `tests/after-game.test.ts` 16/16; `e2e/zip16.cjs` 28/28 (adds organizer Home dark at 390/360/320: 1.5 px border, tinted fill,
+  4.5:1 words, nothing sideways; light unchanged); `e2e/zip16-off.cjs` 40/40 against main (organizer Home dark now differs from main only
+  by the card colors, the same intended difference).
+
