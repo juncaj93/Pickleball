@@ -3350,3 +3350,18 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   more"). `e2e/zip15-off.cjs` 19/19 against main `ca50151`. The older scripts that touch the Mark paid card: admin-audit, admin-v2, court,
   instant-taps, late-fees, zip6, zip8, zip11, zip13, layout-polish, admin-sweep clean; admin-r2 F4, money-rework 6 and run.cjs (10) fail as
   on main. Preview redeployed and re-seeded (game day Tue Dec 1).
+
+### Deploy (Sun Nov 8, 2026, about 1:05 PM Eastern, a quiet window, on Alex's "ship it") - LIVE with SECOND_CHANCE OFF
+- Alex's answers after round 2: the cancel reason stays as is (the X hides the card); the Dec 1 preview day is fine; no note on screen on
+  previews for ?alerts=all or ?noontest=on (removed before the deploy; the links still work).
+- Before: main equaled live (production `c96a56e0-b5b6-475a-8946-0cf732357346` = `ca50151`). PR #99 merged as `3d9cdc1` (no difference from
+  the tested branch). Unit on the final code: 2388 passed, 0 failed. SQL export of live (`npx wrangler d1 export pickleball --remote`, 1:04 PM,
+  177,380 bytes, kept out of git) and Time Travel bookmark `00000bca-00000000-0000511d-11dd99c3bfee9227e642d6ef6a970f66` (1:04 PM). Whole
+  database only if ever needed: `npx wrangler d1 time-travel restore pickleball --bookmark=00000bca-00000000-0000511d-11dd99c3bfee9227e642d6ef6a970f66`.
+  Integrity checks: all 21 columns 0 before and after. No migration (no database change in this zip).
+- Production deployment `7cb52031-ed92-4574-ae0b-d4248d4e4d3d` = main `3d9cdc1`. ROLLBACK: Pages deployment `c96a56e0-b5b6-475a-8946-0cf732357346`
+  (Zip 14, `ca50151`); no data step needed. Quickest off for Second Chance: it is already off (Settings > Feature switches > "Second Chance").
+  The compact Mark paid card is live for everyone (no switch); to undo it alone, see FEATURE_SWITCHES "Not switched (Zip 15 round 2)".
+- Read-only live check (backup address, reads only, nothing tapped, so no Telegram or text): sign-in with the read-only PIN works (View only);
+  no Second Chance data or Settings row on (12 games); no preview-only key on live (no calm, no pretend, no fake Telegrams); the phone's
+  private link (/admin?secondchance=on) answers with the real clock; Activity and Money answer 200; the live code has the compact Mark paid card.
