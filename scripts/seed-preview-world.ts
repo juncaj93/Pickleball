@@ -125,6 +125,8 @@ export const LONG_NAME = 'Christopher Vanderberg';
 export const WITH_VENMO = ['Avery', 'Harper', 'Indy', 'Kai', 'Lane'];
 /** Zip 16 (After-game cards): six more made-up players, only in worlds with the Zip 16 parts (the preview database). */
 export const ZIP16_CAST = ['Parker', 'Quinn', 'Rowan', 'Sage', 'Tatum', 'Uma'];
+/** Zip 17: made-up players with 1, 2 and 3 unpaid past games (in that order), only in the preview and the Zip 17 tests. */
+export const NUDGE_CAST = ['Vic', 'Wren', 'Zoe'] as const;
 const CAST = ['Avery', 'Blake', 'Casey', 'Drew', 'Emery', 'Finley', 'Gray', 'Harper', 'Indy', 'Jordan', 'Kai', 'Lane', 'Morgan'];
 
 export interface Seed {
@@ -139,10 +141,11 @@ export interface Seed {
  * `zip14`: also the Zip 14 parts (two extra games tonight, one on Court 3 and one with no court yet, and the Game day card row on).
  * `zip15`: also the Zip 15 parts (Second Chance: the game day below, and the Second Chance row on).
  * `zip16`: also the Zip 16 parts (After-game cards: six more made-up players and three games finalized at the seed, and the row on).
+ * `zip17`: also the Zip 17 parts (Vic, Wren and Zoe with 1, 2 and 3 unpaid past games, and the Unpaid nudge row on).
  * `preview`: the preview database (npm run db:seed:preview): the Zip 13, 14 and 15 parts, and the switch rows exactly as live has them
  * (plus the one being built), never the rows that are off on live.
  */
-export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; zip16?: boolean; preview?: boolean } = {}): Promise<Seed> {
+export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; zip16?: boolean; zip17?: boolean; preview?: boolean } = {}): Promise<Seed> {
   const w = new World();
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
@@ -288,6 +291,42 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
   const orgPays = (name: string, g: any) => w.org.ok('POST', `/api/admin/sessions/${g.id}/payment`, { playerId: w.ids[name], paid: true });
   const setCourt = (g: any, status: 'booked' | 'waitlist' | 'not_booked') => w.org.ok('POST', `/api/admin/sessions/${g.id}/court-status`, { status });
 
+  // 0b. Zip 17 (Unpaid nudge): three made-up players who never paid, with 1, 2 and 3 unpaid PAST games (Vic, Wren, Zoe). Three
+  //     morning games (7:00 AM or the next free half hour, never a regular game's time) on the day of the booked game below and the two days after it, so three
+  //     different dates, all before the last past game: always over when the preview opens. The organizer is in each (pays the venue).
+  //     Finalized once the clock reaches now (below), so no Finalize card waits on admin Home.
+  const nudgeGames: any[] = [];
+  if (opts.zip17 || opts.preview) {
+    for (const [i, name] of NUDGE_CAST.entries()) await w.org.ok('POST', '/api/admin/players', { name, phone: `(313) 555-01${70 + i}` });
+    await refresh();
+    for (const p of dash.players as { id: string; name: string }[]) w.ids[p.name] = p.id;
+    for (const day of [0, 1, 2]) {
+      const p = localParts(ms(pastBooked.startsAt) + day * DAY, 'America/Detroit');
+      // 7:00 AM, or the next free half hour (another zip's made-up games may already sit on these mornings).
+      let made: any = null;
+      for (const shift of [0, 30, 60, 90, 120, 150, 180]) {
+        const start = zonedTimeToUtc(p.year, p.month, p.day, 7, 0, 'America/Detroit') + shift * 60_000;
+        const res = await w.org.call('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: null });
+        if (res.status === 409) continue;
+        if (res.status >= 300) throw new Error(`POST /api/admin/sessions -> ${res.status} ${res.text.slice(0, 300)}`);
+        made = res.data;
+        break;
+      }
+      if (!made) throw new Error('no free morning for a Zip 17 game');
+      await refresh();
+      nudgeGames.push(games().find((g) => g.id === made.id));
+    }
+    const [ga, gb, gc] = nudgeGames;
+    for (const g of nudgeGames) {
+      await setCourt(g, 'booked');
+      await w.org.ok('POST', `/api/admin/sessions/${g.id}/me`, { in: true });
+    }
+    // Vic: 1 game. Wren: 2. Zoe: 3. Nobody pays.
+    for (const n of NUDGE_CAST) await join(n, ga);
+    for (const n of NUDGE_CAST.slice(1)) await join(n, gb);
+    await join(NUDGE_CAST[2], gc);
+  }
+
   // 1. A past game that WAS booked, everyone paid $14, 5 played, finalized: $11 each, $3 credit back each.
   await at(ms(pastBooked.startsAt) - 3 * DAY);
   for (const n of ['Avery', 'Blake', 'Casey', 'Drew', 'Emery']) await join(n, pastBooked);
@@ -370,6 +409,11 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
 
   // Back to "now" for everything upcoming (the fake clock moves forward only).
   await at(N);
+  // 1a, finished (Zip 17): the three nudge games are over; Finalize them at the flat price (4, 3 and 2 played: $14 each, nobody paid).
+  if (nudgeGames.length) {
+    for (const g of nudgeGames) await w.org.ok('POST', `/api/admin/sessions/${g.id}/finalize`, { everyone: true });
+    summary.push(`Zip 17 (Unpaid nudge): ${NUDGE_CAST[0]} owes $14 for 1 past game, ${NUDGE_CAST[1]} $28 for 2, ${NUDGE_CAST[2]} $42 for 3 (signing up is blocked); open the preview with ?as=${NUDGE_CAST[0]}, ?as=${NUDGE_CAST[1]} or ?as=${NUDGE_CAST[2]}`);
+  }
 
   // 3. The canceled game (with a reason). Three players paid $14 first, so it comes back to them as credit.
   await setCourt(u4, 'booked');
@@ -817,6 +861,9 @@ export const ZIP15_SWITCHES_ON = ['second_chance_on'] as const;
 /** Being built (Zip 16): After-game cards. On the preview database and on a local world that asks for it (e2e/zip16.cjs). */
 export const ZIP16_SWITCHES_ON = ['after_game_card_on'] as const;
 
+/** Being built (Zip 17): Unpaid nudge. On the preview database and on a local world that asks for it (e2e/zip17.cjs). */
+export const ZIP17_SWITCHES_ON = ['unpaid_nudge_on'] as const;
+
 /**
  * Rows that are OFF on live. Empty since the Zip 14 deploy (Sun Nov 8, 1:20 AM Eastern): the live rows read with the read-only PIN showed
  * Alert cards, Seat dots, the four speed rows and the three Zip 13 rows all ON (the repo notes had them off). Add a row here only after
@@ -827,14 +874,14 @@ export const OFF_ON_LIVE: readonly string[] = [];
 /** The local world e2e/zip13.cjs was written for leaves these six rows off (unchanged since Zip 13; not about live). */
 const ZIP13_LOCAL_OFF = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'];
 
-function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; zip16?: boolean; preview?: boolean }): string {
+function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; zip16?: boolean; zip17?: boolean; preview?: boolean }): string {
   const at = new Date(nowMs).toISOString();
   // The preview database (and e2e/zip13.cjs): live's switch list, without the rows that are off on live. e2e/zip13.cjs adds the three
   // Zip 13 rows, and so does the preview database (they are ON on live, read Nov 8). Zip 14's row: the preview and e2e/zip14.cjs.
   const likeLive = !!opts.zip13 || !!opts.preview;
   const off: readonly string[] = opts.preview ? OFF_ON_LIVE : ZIP13_LOCAL_OFF;
   const base = likeLive ? PREVIEW_SWITCHES_ON.filter((t) => !off.includes(t)) : PREVIEW_SWITCHES_ON;
-  return [...base, ...(opts.zip13 ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : []), ...(opts.zip15 || opts.preview ? ZIP15_SWITCHES_ON : []), ...(opts.zip16 || opts.preview ? ZIP16_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  return [...base, ...(opts.zip13 ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : []), ...(opts.zip15 || opts.preview ? ZIP15_SWITCHES_ON : []), ...(opts.zip16 || opts.preview ? ZIP16_SWITCHES_ON : []), ...(opts.zip17 || opts.preview ? ZIP17_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

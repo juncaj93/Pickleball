@@ -168,6 +168,12 @@ export interface ToastOptions {
    * at the bottom, so two quick taps each keep their own Undo. Left out (every other toast): one banner at a time, exactly as before.
    */
   keep?: boolean;
+  /**
+   * Unpaid nudge (UNPAID_NUDGE, Zip 17): a second, smaller line under the message (the message is then bold), and the nudge look (the
+   * inverse of the page: a dark banner on a light page, a light one on a dark page, no badge). Left out: exactly as before.
+   */
+  sub?: string;
+  nudge?: boolean;
 }
 type ToastFn = (msg: string, kind?: ToastKind, opts?: ToastOptions) => void;
 
@@ -191,7 +197,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     if (msg === DEMO_MESSAGE || msg === VIEW_ONLY_MESSAGE) kind = 'ok';
     const next = { id: Date.now() + Math.random(), msg, kind, opts };
     setShown((cur) => [...cur.filter((x) => x.opts.keep), next].slice(-3));
-    setSpoken({ msg, kind });
+    setSpoken({ msg: opts.sub ? `${msg} ${opts.sub}` : msg, kind });
   }, []);
   // Only while a banner with a button (Undo) is up: follow which sheet is open on top, so the banner can sit inside it (see below).
   const keeping = shown.some((x) => x.opts.keep || x.opts.action);
@@ -312,7 +318,7 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
     <div
       ref={ref}
       popover="manual"
-      className={`pop toast${shown.kind === 'error' ? ' pop-error' : ''}${shown.opts.ball ? ' pop-ball' : ''}${motion ? ' m-toast' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
+      className={`pop toast${shown.opts.nudge ? ' toast-nudge' : ''}${shown.kind === 'error' ? ' pop-error' : ''}${shown.opts.ball ? ' pop-ball' : ''}${motion ? ' m-toast' : ''}${leaving ? ` leaving-${leaving}` : ''}`}
       data-banner
       // Screen readers hear the message through the live regions; a banner with a button must stay reachable.
       aria-hidden={shown.opts.action ? undefined : true}
@@ -353,6 +359,7 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
         else if (dy > 18) setLeaving('down');
       }}
     >
+      {!shown.opts.nudge && (
       <span className="toast-icon" aria-hidden="true">
         {shown.opts.ball ? (
           <Pickleball />
@@ -364,7 +371,15 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
           </svg>
         )}
       </span>
-      <span className="toast-msg">{shown.msg}</span>
+      )}
+      {shown.opts.sub ? (
+        <span className="toast-msg toast-two">
+          <b>{shown.msg}</b>
+          <small>{shown.opts.sub}</small>
+        </span>
+      ) : (
+        <span className="toast-msg">{shown.msg}</span>
+      )}
       {shown.opts.action && (
         <button
           className="toast-action"
