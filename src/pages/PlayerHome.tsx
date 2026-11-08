@@ -36,6 +36,7 @@ import '../motion.css';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
+import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
 
@@ -1903,7 +1904,7 @@ const CHECK = (
  * blue TONIGHT strip where the weekday would be. Extra (added by hand): an
  * ink tile (cream in dark mode). A check badge on the corner when you're in.
  */
-function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string; day?: TileDay }) {
+function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day, weekday }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string; day?: TileDay; weekday?: boolean }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   // TONIGHT_GLOW on: `day` is given (tonight, tomorrow or null) and decides the tag; off, `day` is undefined and the old blue TONIGHT strip is drawn.
@@ -1924,6 +1925,8 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: stri
       <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`}>
         {ts && <TileBorders />}
         {tag}
+        {/* Zip 14, the game day card: the weekday under the TONIGHT strip too (TONIGHT, TUE, 10, NOV), as in the approved mock. */}
+        {weekday && (day === 'tonight' || (day === undefined && tonight)) && <span className="dow">{TILE_DOW[p.weekday]}</span>}
         <span className="day">{p.day}</span>
         <span className="mon">{month}</span>
       </div>
@@ -2392,8 +2395,11 @@ export function ScheduleRow({
   const moneyFresh = useJustChanged(moneyKey, 700);
   const paidFresh = useJustChanged(mine?.paymentStatus === 'paid', 700);
   const tonight = open && playerDay(s.startsAt, tz, nowMs).word === 'tonight';
+  // Zip 14, GAME_DAY_CARD (src/GameDay.tsx): today's game (or, on a preview with ?gamedaytest=on, the next game's date) is the game day card.
+  // Off: false, and every line below draws exactly what it did.
+  const gameDay = isGameDayCard(g, s, tonight);
   // Zip 7 switches. TONIGHT_GLOW: the tile wears TONIGHT or TOMORROW (Eastern calendar days). PLAYER_CARDS_SIMPLE: no court words or dot.
-  const dayTag: TileDay | undefined = g.tonightGlow === true ? tileDay(s.startsAt, tz, nowMs, open && !s.canceled) : undefined;
+  const dayTag: TileDay | undefined = g.tonightGlow === true ? (gameDay ? 'tonight' : tileDay(s.startsAt, tz, nowMs, open && !s.canceled)) : undefined;
   const simple = g.playerCardsSimple === true;
   // Standby is the venue-waitlist game's word for the list; PLAYER_CARDS_SIMPLE says waitlist (or nothing) everywhere.
   const standbyWord = courtWait && !simple;
@@ -2419,8 +2425,10 @@ export function ScheduleRow({
     if (Math.abs(delta) > 0.5) body.style.paddingTop = `${parseFloat(getComputedStyle(body).paddingTop || '0') + delta}px`;
   }, [held, contentTop]);
   // Once you're signed up: at the right end of the status line (the tap area reaches past the icon).
+  // The game day card has its own two buttons (Court, Directions) instead: no calendar or arrow button on game day.
   const calLink =
     !held &&
+    !gameDay &&
     isIn &&
     open &&
     (cardButtons ? (
@@ -2508,7 +2516,7 @@ export function ScheduleRow({
     <article
       ref={rowRef}
       id={`row-${s.id}`}
-      className={`sched ${cleanup && tier === 'later' ? 'tier-next cl-later' : `tier-${tier}`}${cleanup ? ' cl' : ''}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
+      className={`sched ${cleanup && tier === 'later' ? 'tier-next cl-later' : `tier-${tier}`}${cleanup ? ' cl' : ''}${gameDay ? ' gd' : ''}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-held={held ? 'yes' : undefined}
@@ -2516,17 +2524,19 @@ export function ScheduleRow({
       {...swapMarks(prev, s, names)}
       data-mine={isIn ? 'in' : undefined}
       data-extra={s.extra ? 'yes' : undefined}
+      data-game-day={gameDay ? (s.court ?? 'tbd') : undefined}
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={tonight && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={(tonight || gameDay) && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} weekday={gameDay} />
         <div className="sched-when-col">
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows
           // where it ends, on a second short line, so nobody is misled.
           const t = cardTime(s.startsAt, s.endsAt, tz, g.group.usualMinutes);
           // CARD_TIME_BUTTONS: the start, and under it a smaller gray line with the length ("2 hours", "1.5 hours"), on every card.
-          if (cardButtons) {
+          // The game day card always has both lines ("7:30 PM", "2 hours"), as in the approved mock.
+          if (cardButtons || gameDay) {
             const length = lengthWords(gameMinutes(s.startsAt, s.endsAt));
             return (
               <div className={`sched-time z9-time${tsClass(ts, flip)}`} data-sched-time data-ts={ts ?? undefined}>
@@ -2566,19 +2576,20 @@ export function ScheduleRow({
             </div>
           </div>
         )}
+        {gameDay && <GameDayButtons court={s.court ?? null} organizerName={g.group.organizerName} dayLabel={formatShortDate(s.startsAt, tz)} held={held} />}
         <div className="sched-main">
           {showCount &&
             (cleanup ? (
               // Card cleanup: the circles alone (the same size as before; past 4 they keep coming on the same row), the count is read out.
               <div className="in-line cl-balls">
-                <SpotDots names={names} me={g.me?.name} celebrate={celebrating} oneRow />
+                <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} oneRow />
               </div>
             ) : (
               <div className="in-line">
                 <span className="in-count">
                   <RollText text={simple ? s.countText : countLine(s)} />
                 </span>
-                <SpotDots names={names} me={g.me?.name} celebrate={celebrating} />
+                <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} />
               </div>
             ))}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} />}
@@ -2611,7 +2622,7 @@ export function ScheduleRow({
         {!flatLater && noteEl}
       </div>
 
-      {celebrating && motion && <Burst />}
+      {celebrating && motion && !gameDay && <Burst />}
       <ConfirmDialog
         open={askOut}
         title={waiting ? (standbyWord ? 'Leave standby?' : 'Leave the waitlist?') : `Out for ${suggestDay(s.startsAt, tz, nowMs).word}?`}

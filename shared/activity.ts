@@ -188,6 +188,12 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Undo on admin toasts" on`;
     case 'admin_undo_off':
       return `${who} switched "Undo on admin toasts" off`;
+    case 'game_day_card_on':
+      return `${who} switched "Game day card" on`;
+    case 'game_day_card_off':
+      return `${who} switched "Game day card" off`;
+    case 'session_court_changed':
+      return `${who} ${typeof d.to === 'number' ? `set the court${forDay} to Court ${d.to}` : `cleared the court${forDay}`}`;
     case 'seat_dots_on':
       return `${who} switched "Seat dots" on`;
     case 'seat_dots_off':

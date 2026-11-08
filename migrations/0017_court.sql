@@ -1,0 +1,19 @@
+-- Zip 14, "Court number per game" (Alex approved Nov 6, 3:32 PM): which of the
+-- venue's 16 courts a game is on. The organizer picks it on the court map in
+-- Add game / Edit game; players see "Court 3" on the game day card (switch
+-- GAME_DAY_CARD). NULL = not set yet (the card says "Court TBD").
+--
+-- One new nullable column on sessions, 1 to 16 or NULL. Every existing game
+-- stays NULL: nothing is filled, copied or guessed here. The game's note (where
+-- the court used to be typed by hand) is not read, changed or moved.
+--
+-- Not the retired court_number TEXT column from 0005 (never shown or changed
+-- since Part 4): that one stays exactly as it is, so an old value can never
+-- show up on a card.
+--
+-- Additive only: nothing existing is dropped, renamed or rewritten, and code
+-- that ignores this column (the build before Zip 14) keeps working, so a
+-- rollback to that build needs no database change.
+-- Rollback of the column itself (never needed for a code rollback):
+--   ALTER TABLE sessions DROP COLUMN court;
+ALTER TABLE sessions ADD COLUMN court INTEGER CHECK (court IS NULL OR (court >= 1 AND court <= 16));

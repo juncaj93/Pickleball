@@ -45,7 +45,7 @@ async function world(at: number, zip910: boolean, extraEnv: Record<string, strin
       if (k !== 'set-cookie') headersOut.push([k, v]);
     });
     // mainTrips: what main asks (main has no Zip 12 or Zip 13 rows: the reads of `speed_...` and the three Zip 13 rows are taken out).
-    const speedReads = (c.seq ?? []).filter((x) => x.includes('"speed_') || /"(players_redo_on|swap_button_on|admin_undo_on)"/.test(x)).length;
+    const speedReads = (c.seq ?? []).filter((x) => x.includes('"speed_') || /"(players_redo_on|swap_button_on|admin_undo_on|game_day_card_on)"/.test(x)).length;
     return { status: res.status, text, headers: headersOut, trips: c.trips, mainTrips: c.trips - speedReads, cookie: res.headers.getSetCookie().map((x) => x.split(';')[0]).join('; ') };
   };
   const login = await call('POST', '/api/admin/login', '', { pin: previewPin() });

@@ -82,6 +82,8 @@ import { isShortGame } from '../shared/gameLength';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
+import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDay';
+import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
 import { monthPlayedCounts } from './playersRedo';
 import type { Zip13Switch } from '../shared/zip13';
@@ -234,6 +236,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
   const swap = await zip13Flags(ctx, group.id, 'swapButton');
   const undo = await zip13Flags(ctx, group.id, 'adminUndo');
+  // Zip 14 (server/gameDay.ts): the Court row and each game's court, only while on (off: this answer is exactly main's).
+  const gameDay = await gameDayCardFlags(ctx, group.id);
   const month = redo.on ? await monthPlayedCounts(ctx, group) : null;
   return {
     // Signed in with the read-only PIN (server/viewOnly.ts): the screens show "View only". Absent for the real PIN, so its answer is unchanged.
@@ -258,6 +262,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
       hiddenFromPlayers: hiddenIds.has(s.id),
       ...(moneyRework && listHidden.has(s.id) ? { hiddenFromList: true } : {}),
+      ...(gameDay.on && courtOrNull(s.court) !== null ? { courtNum: courtOrNull(s.court)! } : {}),
     })),
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
@@ -358,6 +363,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(swap.forAll ? { swapButtonForAll: true as const } : {}),
     ...(undo.on ? { adminUndo: true as const } : {}),
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
+    ...(gameDay.on ? { gameDayCard: true as const } : {}),
+    ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -1830,6 +1837,9 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   const note = v.optionalText(body.note, 'note', 80);
+  // Zip 14: the court from the Court row (only there while "Game day card" is on; off, a court is turned down as if the field did not exist).
+  const court = courtBody(body.court);
+  if (court !== null && !(await gameDayCardFor(ctx, group.id))) throw new HttpError(400, 'invalid_court', 'Courts are not on yet.');
   const tz = group.timezone;
   const clash = await ctx.db
     .prepare('SELECT id, status FROM sessions WHERE group_id = ? AND starts_at = ?')
@@ -1855,11 +1865,13 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
       )
       .bind(id, group.id, startsAt, endsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso)
       .run();
+    // A separate step only when a court was picked, so a game added without one is exactly the old insert.
+    if (court !== null) await ctx.db.prepare('UPDATE sessions SET court = ? WHERE id = ?').bind(court, id).run();
   } catch (err) {
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There's already a game at ${formatDateTime(startsAt, tz)}.`);
     throw err;
   }
-  await audit(ctx.db, group.id, id, 'session_added', { startsAt, note }, ctx.nowIso);
+  await audit(ctx.db, group.id, id, 'session_added', { startsAt, note, ...(court !== null ? { court } : {}) }, ctx.nowIso);
   return { id };
 }
 
@@ -2210,6 +2222,40 @@ export async function setSessionNote(ctx: Ctx, body: Record<string, unknown>) {
   await ctx.db.prepare('UPDATE sessions SET note = ?, updated_at = ? WHERE id = ?').bind(note, ctx.nowIso, session.id).run();
   await audit(ctx.db, group.id, session.id, 'session_note_changed', { from: session.note ?? null, to: note }, ctx.nowIso);
   return { ok: true, changed: true, note };
+}
+
+/**
+ * PUT /api/admin/sessions/:id/court-number { court }: Zip 14, which of the venue's courts (1 to 16) the game is on; null clears it.
+ * Organizer only (adminSession: the organizer's sign-in; the read-only PIN is refused before this runs, app.ts), and only while
+ * "Game day card" is on for this phone (off: the Court row does not exist, so neither does this). Players have no way to set it.
+ * Touches only sessions.court (and updated_at, so every screen notices on its next 5-second check); the note is never read or changed.
+ */
+export async function setCourtNumber(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  if (!(await gameDayCardFor(ctx, group.id))) throw new HttpError(404, 'not_found', 'Not found.');
+  const court = courtBody(body.court);
+  const was = courtOrNull(session.court);
+  if (was === court) return { ok: true, changed: false, court };
+  await ctx.db.prepare('UPDATE sessions SET court = ?, updated_at = ? WHERE id = ?').bind(court, ctx.nowIso, session.id).run();
+  await audit(ctx.db, group.id, session.id, 'session_court_changed', { from: was, to: court }, ctx.nowIso);
+  return { ok: true, changed: true, court };
+}
+
+/** A court from a request: a whole number 1 to 16, or null / missing for "not set". Anything else is turned down. */
+function courtBody(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const court = courtOrNull(value);
+  if (court === null) throw new HttpError(400, 'invalid_court', 'Pick a court from 1 to 16.');
+  return court;
+}
+
+/** PUT /api/admin/game-day-card-switch { on }: Settings > Feature switches > "Game day card" (Zip 14). Display only; moves nothing. */
+export async function setGameDayCardSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setGameDayCardForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'game_day_card_on' : 'game_day_card_off', {}, ctx.nowIso);
+  return { ok: true, on };
 }
 
 /**

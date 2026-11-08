@@ -133,8 +133,11 @@ export interface Seed {
  * `zip13`: also the Zip 13 parts (the organizer's two games earlier this month, and the Players redo, Swap to Alex and Undo rows on). The
  * preview database always gets them (npm run db:seed:preview); the local browser tests only when they ask (e2e/zip13.cjs), so every older
  * test keeps the world it was written for, which is also what live looks like with the three switches off.
+ * `zip14`: also the Zip 14 parts (two extra games tonight, one on Court 3 and one with no court yet, and the Game day card row on).
+ * `preview`: the preview database (npm run db:seed:preview): the Zip 13 and Zip 14 parts, and the switch rows exactly as live has them
+ * (plus the one being built), never the rows that are off on live.
  */
-export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean } = {}): Promise<Seed> {
+export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; zip14?: boolean; preview?: boolean } = {}): Promise<Seed> {
   const w = new World();
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
@@ -576,6 +579,32 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean } 
     summary.push(`late drop taken: Blake dropped inside the 12 hours (owed $14), ${LONG_NAME} took the spot: Blake sees "You no longer owe $14"`);
   }
 
+  // 16. Zip 14 (Game day card): two extra games TONIGHT (Eastern; the next day when seeded at 9 PM or later, like step 14), so the game day card
+  //     shows both looks side by side: "Court 3" (4 in: Indy paid cash, Jordan, Kai, Morgan owe) and "Court TBD" (3 in: Indy, Jordan, Kai, all
+  //     owe). The court is set through the real organizer path (the switch on for that one call, then back off: the seed's switch rows decide).
+  //     Every other game keeps no court. The regular game on another day stays as it is ("a game on another day").
+  if (opts.zip14 || opts.preview) {
+    const taken = new Set(games().map((g) => ms(g.startsAt)));
+    const slots = [[17, 0], [22, 0], [15, 0], [12, 0], [10, 0]].map(([h, m]) => zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift, h, m, 'America/Detroit'));
+    const free = slots.filter((t) => t > N + 30 * 60_000 && eastDate(t) === tonightDate && !taken.has(t)).sort((a, b) => a - b);
+    if (free.length >= 2) {
+      await w.org.ok('PUT', '/api/admin/game-day-card-switch', { on: true });
+      const made: any[] = [];
+      for (const [i, start] of free.slice(0, 2).entries()) {
+        const res = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: null, ...(i === 0 ? { court: 3 } : {}) });
+        await refresh();
+        const g = games().find((x) => x.id === res.id);
+        await setCourt(g, 'booked');
+        for (const n of i === 0 ? ['Indy', 'Jordan', 'Kai', 'Morgan'] : ['Indy', 'Jordan', 'Kai']) await join(n, g);
+        if (i === 0) await orgPays('Indy', g);
+        made.push(g);
+      }
+      await w.org.ok('PUT', '/api/admin/game-day-card-switch', { on: false });
+      await refresh();
+      summary.push(`Zip 14: two extra games tonight: ${new Date(free[0]).toISOString()} on Court 3 (Indy paid, Jordan, Kai, Morgan owe) and ${new Date(free[1]).toISOString()} with no court (Indy, Jordan, Kai owe)`);
+    } else summary.push('Zip 14: no room for two more games tonight (seeded too late in the day); the game day card shows on the tonight game only');
+  }
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -583,7 +612,7 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean } 
   backup.tables.player_devices = [];
   await w.settle();
 
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N, !!opts.zip13);
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + switchRows(N, opts);
   return { sql, summary };
 }
 
@@ -640,8 +669,12 @@ export const PREVIEW_SWITCHES_ON = [
   'seat_dots_on',
 ] as const;
 
-/** Being built (Zip 13): Players redo, Swap to Alex, Undo on admin toasts. On the preview database; on a local world only when asked. */
+/** Zip 13 (live since Sat Nov 7 with these three rows OFF): Players redo, Swap to Alex, Undo on admin toasts. Only on a local world that asks
+ *  for them (e2e/zip13.cjs); the preview database leaves them off, as on live (PREVIEW SWITCHES RULE). */
 export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_undo_on'] as const;
+
+/** Being built (Zip 14): Game day card. On the preview database and on a local world that asks for it (e2e/zip14.cjs). */
+export const ZIP14_SWITCHES_ON = ['game_day_card_on'] as const;
 
 /**
  * Rows that are OFF on live (repo records: Alert cards and Seat dots were left off, the four speed rows ship dark). Older local browser tests
@@ -649,11 +682,13 @@ export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_un
  */
 export const OFF_ON_LIVE = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'] as const;
 
-function switchRows(nowMs: number, zip13: boolean): string {
+function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; preview?: boolean }): string {
   const at = new Date(nowMs).toISOString();
-  // zip13 is only asked for by the preview database (and e2e/zip13.cjs): live's switch list there, plus the three Zip 13 rows.
-  const base = zip13 ? PREVIEW_SWITCHES_ON.filter((t) => !(OFF_ON_LIVE as readonly string[]).includes(t)) : PREVIEW_SWITCHES_ON;
-  return [...base, ...(zip13 ? ZIP13_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  // The preview database (and e2e/zip13.cjs): live's switch list, without the rows that are off on live. e2e/zip13.cjs adds the three
+  // Zip 13 rows; the preview database does not (they are off on live since the Zip 13 deploy). Zip 14's row: the preview and e2e/zip14.cjs.
+  const likeLive = !!opts.zip13 || !!opts.preview;
+  const base = likeLive ? PREVIEW_SWITCHES_ON.filter((t) => !(OFF_ON_LIVE as readonly string[]).includes(t)) : PREVIEW_SWITCHES_ON;
+  return [...base, ...(opts.zip13 && !opts.preview ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

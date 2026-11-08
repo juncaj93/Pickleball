@@ -1,0 +1,578 @@
+/* Zip 14, "Game day card" (GAME_DAY_CARD, shared/gameDay.ts). Sizes, colors, spacing and motion copied from the approved mocks
+   (mock10.html for the card, courtmap_mock.html / courtpicker_mock.html for the map). Every CARD rule sits under html[data-game-day]
+   (set by src/zip7.ts useZip7Root only while the switch is on for this screen), so with it off nothing here touches a card. The map
+   (.cm) and the organizer's Court row (.gd-court-row) only exist while the switch is on. Light and dark: the site's two theme rules. */
+
+:root {
+  --gd-blue: #2a3fb0;
+  --gd-mut: #6a6e66;
+  --gd-line: #dcdcd5;
+  --gd-note-bg: #f3f3ef;
+}
+:root[data-theme='dark'] {
+  --gd-blue: #a5b5ee;
+  --gd-mut: #9aa097;
+  --gd-line: #2b312d;
+  --gd-note-bg: #121815;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --gd-blue: #a5b5ee;
+    --gd-mut: #9aa097;
+    --gd-line: #2b312d;
+    --gd-note-bg: #121815;
+  }
+}
+
+/* ---- Every THIS WEEK card while the switch is on: the 17 px "You're in" and 7 px above the balls (mock10 .in, .bl) ---- */
+html[data-game-day] .schedule > .sched.tier-this .sched-status .st-in {
+  font-size: 17px;
+}
+html[data-game-day] .schedule > .sched.tier-this .sched-main {
+  margin-top: 2px; /* + the body's 5 px gap = 7 px */
+}
+
+/* ---- The game day card (the day of the game) ---- */
+html[data-game-day] .schedule > .sched.gd {
+  gap: 12px;
+}
+/* The tile column: 66 px, so TONIGHT and the weekday both fit (mock10 .tn .dt). */
+html[data-game-day] .schedule > .sched.gd .sched-tilecol {
+  width: 66px;
+  gap: 6px;
+}
+html[data-game-day] .schedule > .sched.gd .tile.ptile {
+  --z7-r: 13px;
+  --z7-bw: 2px;
+  border-width: 2px;
+  border-radius: 13px;
+  padding: 0 0 6px;
+  overflow: hidden;
+}
+html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
+  padding: 3px 0;
+  margin: 0 0 3px;
+  font-size: 8.5px;
+  letter-spacing: 0.06em;
+}
+html[data-game-day] .schedule > .sched.gd .ptile .dow,
+html[data-game-day] .schedule > .sched.gd .ptile .mon {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+}
+html[data-game-day] .schedule > .sched.gd .ptile .day {
+  display: block;
+  font-size: 27px;
+  line-height: 1.05;
+  margin: 0;
+}
+/* The glow pulse at 2.4 s (the shimmer stays the Tonight card's 3.6 s). Reduce Motion: src/zip7.css holds both still. */
+html[data-game-day][data-tonight-glow] .schedule > .sched.gd .tile.day-tonight {
+  animation-duration: 2.4s;
+}
+/* The check badge just outside the tile's top-right corner (its center on the corner). */
+html[data-game-day] .schedule > .sched.gd .tile-wrap > .tile-check {
+  width: 22px;
+  height: 22px;
+  top: -11px;
+  right: -11px;
+}
+html[data-game-day] .schedule > .sched.gd .tile-wrap > .tile-check svg {
+  width: 13px;
+  height: 13px;
+}
+/* "7:30 PM" and "2 hours" under the tile. */
+html[data-game-day] .schedule > .sched.gd .sched-time {
+  font-size: 14px;
+  line-height: 1.2;
+}
+html[data-game-day] .schedule > .sched.gd .sched-time .z9-length {
+  font-size: 12px;
+}
+/* The ball row: the real balls, still (no ripple), 16 px like the mock, 7 px below the buttons. */
+html[data-game-day] .schedule > .sched.gd .sched-main {
+  margin-top: 2px;
+}
+html[data-game-day] .schedule > .sched.gd .dots.one-row {
+  --cl-ball: 16px;
+}
+
+/* The two buttons: equal halves, 30 px tall, a hairline blue border at 45 %, 2 % blue fill, blue 600 13.5 px text, radius 10. */
+.gd-btns {
+  position: relative;
+  display: flex;
+  gap: 8px;
+  margin-top: 1px; /* + the body's 5 px gap = 6 px under "You're in" */
+}
+.gd-btn {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--gd-blue) 45%, transparent);
+  background: color-mix(in srgb, var(--gd-blue) 2%, transparent);
+  color: var(--gd-blue);
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.gd-btn svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+/* A 44 px tall tap area around the 30 px drawing. */
+.gd-btn::before {
+  content: '';
+  position: absolute;
+  inset: -7px 0;
+}
+.gd-btn:active {
+  background: color-mix(in srgb, var(--gd-blue) 10%, transparent);
+}
+.gd-btn:focus-visible {
+  outline: 2.5px solid var(--gd-blue);
+  outline-offset: 2px;
+}
+.gd-btn:disabled {
+  cursor: default;
+}
+/* No court yet: muted hairline, no blue, no fill (looks like it is not a button). */
+.gd-btn.gd-tbd {
+  color: var(--gd-mut);
+  border-color: var(--gd-line);
+  background: transparent;
+}
+.gd-btn.gd-tbd:active {
+  background: transparent;
+}
+/* A narrow phone (320 to 340 wide): a touch smaller, so "Directions" and its arrow still fit on one line. */
+@media (max-width: 340px) {
+  .gd-btns {
+    gap: 6px;
+  }
+  .gd-btn {
+    font-size: 13px;
+    gap: 4px;
+    padding: 0 4px;
+  }
+  .gd-btn svg {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* "Alex will add it soon.": a small pop-up right under the buttons, over the card (nothing moves), gone by itself after about 3 s. */
+.gd-pop {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 5;
+  width: max-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--gd-line);
+  background: var(--gd-note-bg);
+  color: var(--gd-mut);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 10%);
+  pointer-events: none;
+  animation: gd-pop 3s ease both;
+}
+@keyframes gd-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  8%,
+  80% {
+    opacity: 1;
+    transform: none;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gd-pop {
+    animation: gd-pop-still 3s step-end both;
+  }
+  @keyframes gd-pop-still {
+    0%,
+    99% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
+/* =====================================================================================================================
+   The court map (courtpicker_mock.html .hp / .pl / .cl, the approved "K" panel of courtmap_mock.html)
+   ===================================================================================================================== */
+dialog.cm {
+  position: fixed;
+  inset: auto;
+  top: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  width: min(340px, calc(100vw - 32px));
+  max-width: none;
+  max-height: none;
+  box-sizing: border-box;
+  padding: 6px 0 14px;
+  overflow: visible;
+  border-radius: 24px;
+  border: 1px solid rgb(20 30 24 / 12%);
+  background: linear-gradient(180deg, #fff, #f4f8f3);
+  box-shadow: 0 14px 36px rgb(20 40 28 / 22%);
+  color: #1c2420;
+  font-family: var(--body, inherit);
+}
+dialog.cm[open] {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  animation: cm-in 0.18s ease-out;
+}
+dialog.cm::backdrop {
+  background: rgb(10 14 12 / 28%);
+}
+@keyframes cm-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(6px) scale(0.98);
+  }
+}
+.cm-x {
+  position: absolute;
+  top: -13px;
+  right: -9px;
+  z-index: 10;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: #1c2420;
+  border: 1px solid rgb(20 30 24 / 12%);
+  box-shadow: 0 1px 3px rgb(20 40 28 / 18%);
+  cursor: pointer;
+}
+.cm-x::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+}
+.cm-x svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+}
+.cm-st {
+  perspective: 800px;
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+.cm-pl {
+  display: block;
+  width: 94%;
+  margin: -46px 0 -30px;
+  padding: 10px 12px;
+  box-sizing: border-box;
+  transform: rotateX(46deg);
+  transform-origin: 50% 60%;
+  border-radius: 16px;
+  background-image: linear-gradient(rgb(47 143 91 / 16%) 1px, transparent 1px), linear-gradient(90deg, rgb(47 143 91 / 16%) 1px, transparent 1px);
+  background-size: 26px 26px;
+}
+.cm-rw {
+  display: flex;
+  margin-bottom: 16px;
+  position: relative;
+}
+.cm-rw:last-child {
+  z-index: 6;
+}
+.cm-pr {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  height: 50px;
+}
+.cm-wk {
+  flex: 0 0 44px;
+}
+.cm-cl {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  background: #fff;
+  color: #6a7169;
+  border: 1px solid #e3e7df;
+  box-shadow:
+    0 9px 0 #cfd5cb,
+    0 12px 14px rgb(20 40 28 / 12%);
+}
+button.cm-cl {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+button.cm-cl:focus-visible {
+  outline: 2.5px solid #2f8f5b;
+  outline-offset: 2px;
+}
+/* The game's court: green, lifted, with the Tonight card's glow (2.4 s) and light sweep (3.6 s). */
+.cm-cl.me {
+  z-index: 6;
+  overflow: hidden;
+  border: 0;
+  background: linear-gradient(160deg, #4fc487, #2a8a56);
+  color: #fff;
+  animation: cm-glow 2.4s ease-in-out infinite;
+}
+.cm-cl.me::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 35%, rgb(255 255 255 / 40%) 50%, transparent 65%);
+  background-size: 300% 100%;
+  background-position: 130% 0;
+  animation: cm-sweep 3.6s ease-in-out infinite;
+}
+@keyframes cm-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 9px 0 #1c5a39,
+      0 0 5px 0 rgb(60 200 130 / 32%);
+  }
+  50% {
+    box-shadow:
+      0 9px 0 #1c5a39,
+      0 0 15px 2px rgb(60 200 130 / 80%);
+  }
+}
+/* The same sweep as the Tonight tile (src/zip7.css z7-sweep), under its own name so the map never depends on that switch. */
+@keyframes cm-sweep {
+  0%,
+  55% {
+    background-position: 130% 0;
+  }
+  100% {
+    background-position: -30% 0;
+  }
+}
+.cm-pick .cm-cl.me {
+  overflow: visible;
+}
+.cm-ent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgb(47 143 91 / 45%);
+  background: #fff;
+  color: #6a7169;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+}
+.cm-ent span {
+  padding-left: 0.14em;
+}
+.cm-ent svg {
+  display: block;
+  flex: none;
+  width: 9px;
+  height: 9px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.cm-clear {
+  position: relative;
+  margin-top: 8px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--gd-line);
+  background: var(--pc-card, #fff);
+  color: var(--gd-mut);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.cm-clear::before {
+  content: '';
+  position: absolute;
+  inset: -8px -4px;
+}
+.cm-clear[aria-pressed='true'] {
+  color: var(--gd-blue);
+  border-color: color-mix(in srgb, var(--gd-blue) 45%, transparent);
+}
+
+/* Dark */
+:root[data-theme='dark'] dialog.cm {
+  background: linear-gradient(180deg, #0c1812, #0a120e);
+  border: 1px solid rgb(255 255 255 / 14%);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 50%);
+  color: #f1f3ef;
+}
+:root[data-theme='dark'] dialog.cm::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+:root[data-theme='dark'] .cm-x {
+  background: #000;
+  color: #fff;
+  border: 1px solid rgb(255 255 255 / 20%);
+  box-shadow: none;
+}
+:root[data-theme='dark'] .cm-pl {
+  background-image: linear-gradient(rgb(110 230 170 / 14%) 1px, transparent 1px), linear-gradient(90deg, rgb(110 230 170 / 14%) 1px, transparent 1px);
+}
+:root[data-theme='dark'] .cm-cl:not(.me) {
+  background: #2f3d36;
+  color: #b9c8bf;
+  border: 0;
+  box-shadow: 0 9px 0 #121a16;
+}
+:root[data-theme='dark'] .cm-ent {
+  background: transparent;
+  color: #b9c8bf;
+  border-color: rgb(110 230 170 / 35%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) dialog.cm {
+    background: linear-gradient(180deg, #0c1812, #0a120e);
+    border: 1px solid rgb(255 255 255 / 14%);
+    box-shadow: 0 18px 44px rgb(0 0 0 / 50%);
+    color: #f1f3ef;
+  }
+  :root:not([data-theme='light']) dialog.cm::backdrop {
+    background: rgb(0 0 0 / 40%);
+  }
+  :root:not([data-theme='light']) .cm-x {
+    background: #000;
+    color: #fff;
+    border: 1px solid rgb(255 255 255 / 20%);
+    box-shadow: none;
+  }
+  :root:not([data-theme='light']) .cm-pl {
+    background-image: linear-gradient(rgb(110 230 170 / 14%) 1px, transparent 1px), linear-gradient(90deg, rgb(110 230 170 / 14%) 1px, transparent 1px);
+  }
+  :root:not([data-theme='light']) .cm-cl:not(.me) {
+    background: #2f3d36;
+    color: #b9c8bf;
+    border: 0;
+    box-shadow: 0 9px 0 #121a16;
+  }
+  :root:not([data-theme='light']) .cm-ent {
+    background: transparent;
+    color: #b9c8bf;
+    border-color: rgb(110 230 170 / 35%);
+  }
+}
+
+/* Reduce Motion: the court holds still with a steady glow, no sweep, the panel just appears. */
+@media (prefers-reduced-motion: reduce) {
+  dialog.cm[open] {
+    animation: none;
+  }
+  .cm-cl.me {
+    animation: none;
+    box-shadow:
+      0 9px 0 #1c5a39,
+      0 0 12px 2px rgb(60 200 130 / 60%);
+  }
+  .cm-cl.me::after {
+    display: none;
+  }
+}
+
+/* ---- The organizer's Court row (Add game, Edit game): "Court  Not set ›" in blue until picked, then "Court 3 ›" ---- */
+.gd-court-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 0 14px;
+  /* The site's own field look (src/styles.css inputs), so it sits with Date, Start and End in light and dark. */
+  border-radius: var(--r-md, 14px);
+  border: 1px solid var(--line-strong, #c9c9c2);
+  background: var(--surface, #fff);
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  cursor: pointer;
+  text-align: left;
+}
+.gd-court-row .gd-court-label {
+  color: var(--ink-2, var(--gd-mut));
+  font-weight: 600;
+}
+.gd-court-row .gd-court-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.gd-court-row .gd-court-value.unset {
+  color: var(--gd-blue);
+}
+.gd-court-row .gd-chev {
+  width: 8px;
+  height: 13px;
+  fill: none;
+  stroke: var(--ink-2, var(--gd-mut));
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.gd-court-row:focus-visible {
+  outline: 2.5px solid var(--gd-blue);
+  outline-offset: 2px;
+}

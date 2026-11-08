@@ -110,6 +110,8 @@ import { cardCleanupLook } from './zip10';
 import { alertCardsFor } from './zip11';
 import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
+import { gameDayCardFor, gameDayTestFor } from './gameDay';
+import { courtOrNull } from '../shared/gameDay';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -278,6 +280,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
 
   // PAY_SHEET: the Apple Pay / Zelle number goes to a player's phone only when the sheet is on for that phone.
   const paySheetOn = await paySheetFor(ctx, group.id);
+  // Zip 14 "Game day card" (server/gameDay.ts): the flag and each game's court only while on, so off this answer is exactly main's.
+  const gameDay = await gameDayCardFor(ctx, group.id);
   return {
     group: {
       name: group.name,
@@ -321,13 +325,20 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
     // Zip 13, Swap to Alex: the "Go to Admin" pill, only on a phone signed in as the organizer (players: no trip, never there).
     ...((await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
+    ...(gameDay ? { gameDayCard: true as const } : {}),
+    // Preview only (GAME_DAY_TEST is never set on live): this phone sees the next game's date as today.
+    ...(gameDay && gameDayTestFor(ctx) ? { gameDayTest: true as const } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
     feeNotices,
     sessions: sessions
       .filter((s) => Date.parse(s.ends_at) > ctx.nowMs && !hiddenIds.has(s.id))
-      .map((s) => playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift, lateFees)),
+      .map((s) => {
+        const view = playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift, lateFees);
+        const court = gameDay ? courtOrNull(s.court) : null;
+        return court !== null ? { ...view, court } : view;
+      }),
     owed,
     payDue: owed.filter((o) => {
       // A late fee shows on the top card at once (it is owed now, whatever the hour).

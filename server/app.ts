@@ -115,6 +115,7 @@ route('POST', '/api/admin/sessions/:id/court-status', admin.setCourtStatus);
 route('GET', '/api/admin/version', (ctx) => admin.adminVersion(ctx));
 route('POST', '/api/admin/sessions/:id/show', admin.showSession);
 route('PUT', '/api/admin/sessions/:id/note', admin.setSessionNote);
+route('PUT', '/api/admin/sessions/:id/court-number', admin.setCourtNumber);
 route('POST', '/api/admin/sessions/:id/hide', admin.hideFromPlayers);
 route('POST', '/api/admin/sessions/:id/holiday-hours', admin.holidayHours);
 route('POST', '/api/admin/sessions/:id/card-done', admin.cardDone);
@@ -148,6 +149,7 @@ route('PUT', '/api/admin/speed-direct-load-switch', admin.setSpeedDirectLoadSwit
 route('PUT', '/api/admin/speed-last-screen-switch', admin.setSpeedLastScreenSwitch);
 route('PUT', '/api/admin/speed-last-screen-admin-switch', admin.setSpeedLastScreenAdminSwitch);
 route('PUT', '/api/admin/seat-dots-switch', admin.setSeatDotsSwitch);
+route('PUT', '/api/admin/game-day-card-switch', admin.setGameDayCardSwitch);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));
 route('PUT', '/api/admin/swap-button-switch', admin.setZip13Switch('swapButton'));

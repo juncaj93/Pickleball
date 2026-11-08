@@ -11,6 +11,7 @@ import type { AdminCtx } from '../Admin';
 import { CourtSwitch } from './CourtSwitch';
 import { HideAgain, useAction } from './Sessions';
 import { boxMinutes, ShortGameHeadsUp } from './ShortGame';
+import { CourtRow } from '../../GameDay';
 
 /**
  * "Edit game": the court status, the date and times, and the CourtReserve
@@ -35,6 +36,10 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const labelOn = ctx.d.adminV2 === true;
   const [label, setLabel] = useState(s.note ?? '');
   const labelChanged = labelOn && label.trim() !== (s.note ?? '');
+  // Zip 14 (GAME_DAY_CARD): the Court row, picked on the court map, saved with Save. Off: no row, never changed.
+  const courtOn = ctx.d.gameDayCard === true;
+  const [court, setCourt] = useState<number | null>(s.courtNum ?? null);
+  const courtChanged = courtOn && court !== (s.courtNum ?? null);
   // The game's length (2 hours usually): a new start moves the end with it, unless the end is changed by hand.
   const lengthMin = Math.max(30, Math.round((Date.parse(s.endsAt) - Date.parse(s.startsAt)) / 60_000));
   const pickStart = (v: string) => {
@@ -59,12 +64,12 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
   const timeChanged = !started && !!startsAt && !!endsAt && (minute(startsAt) !== minute(s.startsAt) || minute(endsAt) !== minute(s.endsAt));
   const statusChanged = status !== current;
 
-  const savedText = () => (timeChanged || labelChanged ? 'Game saved' : 'Court status saved');
+  const savedText = () => (timeChanged || labelChanged ? 'Game saved' : courtChanged && !statusChanged ? (court === null ? 'Court cleared' : `Court ${court} saved`) : 'Court status saved');
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!timeChanged && !statusChanged && !labelChanged) return onDone(false, false);
+    if (!timeChanged && !statusChanged && !labelChanged && !courtChanged) return onDone(false, false);
     let moved = false;
     const easing = motion && canMove();
     const ok = await run(async () => {
@@ -72,6 +77,7 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
       if (timeChanged) moved = !!(await api<{ changed: boolean }>('PUT', `/api/admin/sessions/${s.id}/time`, { startsAt, endsAt })).changed;
       if (statusChanged) await api('POST', `/api/admin/sessions/${s.id}/court-status`, { status });
       if (labelChanged) await api('PUT', `/api/admin/sessions/${s.id}/note`, { note: label.trim() });
+      if (courtChanged) await api('PUT', `/api/admin/sessions/${s.id}/court-number`, { court });
     }, easing ? undefined : savedText());
     if (ok && easing) {
       // The green Saved shows, then the toast comes up and the sheet slides away.
@@ -129,10 +135,11 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
           )}
         </>
       )}
+      {courtOn && <CourtRow value={court} onChange={setCourt} />}
       {labelOn && (
         <label className="field" data-label-field>
           Label
-          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder="Veteran's Day, Court 3" autoComplete="off" />
+          <input type="text" value={label} onChange={(e) => setLabel(e.target.value)} maxLength={80} placeholder={courtOn ? "Veteran's Day" : "Veteran's Day, Court 3"} autoComplete="off" />
         </label>
       )}
       {error && <p className="field-error">{error}</p>}

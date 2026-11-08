@@ -104,6 +104,10 @@ export interface Env {
   PLAYERS_REDO?: string;
   SWAP_BUTTON?: string;
   ADMIN_UNDO?: string;
+  /** Zip 14 "Game day card" (shared/gameDay.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?gameday=on. Display only. */
+  GAME_DAY_CARD?: string;
+  /** Zip 14, PREVIEW ONLY: "on" lets a phone with ?gamedaytest=on see the next game as if it were today. Only [env.preview.vars] has it; never production. */
+  GAME_DAY_TEST?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).
