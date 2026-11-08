@@ -3435,3 +3435,21 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   4.5:1 words, nothing sideways; light unchanged); `e2e/zip16-off.cjs` 40/40 against main (organizer Home dark now differs from main only
   by the card colors, the same intended difference).
 
+
+### Deploy (Sun Nov 8, 2026, about 4:07 PM Eastern, a quiet window, on Alex's "ship it") - LIVE with AFTER_GAME_CARD OFF; the dark card look LIVE-ON
+- Before: main equaled live (production `7cb52031-ed92-4574-ae0b-d4248d4e4d3d` = `3d9cdc1`; main `98a208a` added docs only). PR #101 merged as
+  `a120464`. Unit on the final code: 2404 passed, 0 failed. Full browser suite on the final code: 51 of 57 clean in the parallel run; circles
+  and money-rework passed alone (18/18, 36/36); run, cancel-reason, want-in and admin-r2 fail exactly as on main `98a208a`.
+- SQL export of live (`npx wrangler d1 export pickleball --remote`, 4:06 PM, 177,321 bytes, has phone numbers, kept out of git) in that
+  session's scratch folder as `live-before-zip16-2026-11-08.sql`: it does NOT survive the session ending. The durable restore point is the
+  Time Travel bookmark `00000bf6-00000000-0000511d-972d84ae208dbc5a9cd7a460431345e4` (4:06 PM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000bf6-00000000-0000511d-972d84ae208dbc5a9cd7a460431345e4`.
+  Integrity checks: all 19 read 0 before and after. No migration (no database change in this zip).
+- Production deployment `e1d94f71-c6dd-492e-8f4e-d52370d32348` = main `a120464`. ROLLBACK: Pages deployment
+  `7cb52031-ed92-4574-ae0b-d4248d4e4d3d` (Zip 15, `3d9cdc1`); no data step needed. Quickest off for the cards: already off (Settings >
+  Feature switches > "After-game cards"). The dark card look is live for everyone (player and organizer, dark mode only); to undo it alone,
+  see FEATURE_SWITCHES "Not switched (Zip 16)".
+- Read-only live check (backup address, sign-in and reads only): the live script is the local build's file; the dark look rule is in the
+  live CSS; sign-in with the read-only PIN works (View only); no After-game cards row on (12 games); its switch flip is refused (403); the
+  player answer has no Zip 16 key; the private header turns it on for one phone only (0 records on live right now) and leaves it off for
+  everyone; no preview flag on live; Activity and Money answer 200.
