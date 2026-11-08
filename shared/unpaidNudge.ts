@@ -78,7 +78,7 @@ const MAX_DATES = 4;
 /**
  * The owe card's second line. One game: "For Tue, Nov 3". Several: "$14 each: Nov 3 and Nov 5" (same amounts), "Nov 3 and Nov 5" (amounts
  * differ), "$14 each: Nov 3, 5 and 10" (three or more in one month: the month only when it changes), "$14 each: 5 games since Oct 29" (more
- * than four). Always one line.
+ * than four days). Two games on one day: "Nov 8 (2 games)". Always one line.
  */
 export function oweLine(due: readonly { startsAt: string; amountCents: number }[], tz: string): string {
   if (due.length === 0) return '';
@@ -86,16 +86,25 @@ export function oweLine(due: readonly { startsAt: string; amountCents: number }[
   if (sorted.length === 1) return `For ${formatShortDate(sorted[0].startsAt, tz)}`;
   const same = sorted.every((o) => o.amountCents === sorted[0].amountCents);
   const lead = same ? `${formatPrice(sorted[0].amountCents)} each: ` : '';
-  if (sorted.length > MAX_DATES) return `${lead}${sorted.length} games since ${formatMonthDay(sorted[0].startsAt, tz)}`;
-  const parts = sorted.map((o) => formatMonthDay(o.startsAt, tz));
-  if (parts.length === 2) return `${lead}${parts[0]} and ${parts[1]}`;
-  // Three or four: "Nov 3, 5 and 10" (the month word once per month).
+  // One entry per day: two games on the same day read "Nov 8 (2 games)", never "Nov 8 and Nov 8".
+  const days: { label: string; n: number }[] = [];
+  for (const o of sorted) {
+    const label = formatMonthDay(o.startsAt, tz);
+    const last = days[days.length - 1];
+    if (last && last.label === label) last.n++;
+    else days.push({ label, n: 1 });
+  }
+  if (days.length === 1) return `${lead}${sorted.length} games on ${days[0].label}`;
+  if (days.length > MAX_DATES) return `${lead}${sorted.length} games since ${days[0].label}`;
+  const tail = (d: { n: number }) => (d.n > 1 ? ` (${d.n} games)` : '');
+  if (days.length === 2) return `${lead}${days[0].label}${tail(days[0])} and ${days[1].label}${tail(days[1])}`;
+  // Three or four days: "Nov 3, 5 and 10" (the month word once per month).
   let month = '';
-  const short = parts.map((p) => {
-    const [m, d] = p.split(' ');
-    const out = m === month ? d : p;
+  const short = days.map((d) => {
+    const [m, day] = d.label.split(' ');
+    const out = m === month ? day : d.label;
     month = m;
-    return out;
+    return `${out}${tail(d)}`;
   });
   return `${lead}${short.slice(0, -1).join(', ')} and ${short[short.length - 1]}`;
 }

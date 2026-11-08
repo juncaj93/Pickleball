@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { buildSmallPreview, SMALL_NAMES, smallSwitchRows } from '../scripts/preview-world-small';
 import { createNodeD1 } from '../dev/nodeD1';
 
-const TIMES = ['2026-11-08T23:30:00.000Z', '2026-11-10T14:00:00.000Z', '2026-11-12T03:00:00.000Z', '2026-11-14T17:00:00.000Z'];
+const TIMES = ['2026-11-08T23:30:00.000Z', '2026-11-09T00:05:00.000Z', '2026-11-10T14:00:00.000Z', '2026-11-12T03:00:00.000Z', '2026-11-14T17:00:00.000Z'];
 
 describe('the small preview world (npm run db:seed:preview)', () => {
   for (const iso of TIMES) {

@@ -272,17 +272,18 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
     return g;
   };
   const lg = await upcomingAt(11, 'Late-fee test');
-  for (const n of ['Vic', 'Wren', 'Quinn', SMALL_LONG]) await join(n, lg);
+  // (Not Vic, Wren or Zoe: a drop there is a fee, and their counts must stay 1, 2 and 3.)
+  for (const n of ['Quinn', 'Rowan', 'Sage', SMALL_LONG]) await join(n, lg);
   await orgPays(SMALL_LONG, lg);
-  summary.push('"Late-fee test" (11 hours out, inside its cancel-by): Vic, Wren, Quinn, Christopher Vanderberg in; a drop leaves 3 and owes $14');
+  summary.push('"Late-fee test" (11 hours out, inside its cancel-by): Quinn, Rowan, Sage, Christopher Vanderberg in; a drop leaves 3 and owes $14');
 
   // 13. Late-cancel fee split: 10 hours out, Booked, 6 in (Alex, Parker, Vic, Wren, Quinn, Christopher Vanderberg); Parker and Christopher
   //     Vanderberg paid. Cancel it and answer No: each owes $9, the two who paid get $5 back.
   const sg = await upcomingAt(10, 'Fee split test');
   await orgIn(sg);
-  for (const n of ['Parker', 'Vic', 'Wren', 'Quinn', SMALL_LONG]) await join(n, sg);
+  for (const n of ['Parker', 'Quinn', 'Rowan', 'Sage', SMALL_LONG]) await join(n, sg);
   for (const n of ['Parker', SMALL_LONG]) await orgPays(n, sg);
-  summary.push('"Fee split test" (10 hours out): 6 in, Parker and Christopher Vanderberg paid; Cancel session > No: $9 each');
+  summary.push('"Fee split test" (10 hours out): 6 in (Alex, Parker, Quinn, Rowan, Sage, Christopher Vanderberg), Parker and Christopher Vanderberg paid; Cancel session > No: $9 each');
 
   // 14. Money page: "Mixed payments" (Parker and Christopher Vanderberg paid; Vic with Venmo and Wren without owe), "All paid" (4 of 4).
   const mixed = await upcomingAt(20, 'Mixed payments');
@@ -302,10 +303,11 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
   await w.org.ok('PUT', '/api/admin/late-fee-split', { on: true });
   const split11 = await upcomingAt(11.5, 'Fee split $11');
   await orgIn(split11);
-  for (const n of ['Parker', 'Quinn', SMALL_NO_NUMBER, SMALL_LONG]) await join(n, split11);
+  // (Not Quinn: one more debt would hide Quinn's "You owe $3 more" card, which shows only for a single owed game.)
+  for (const n of ['Parker', 'Rowan', SMALL_NO_NUMBER, SMALL_LONG]) await join(n, split11);
   await orgPays('Parker', split11);
   await w.org.ok('POST', `/api/admin/sessions/${split11.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
-  summary.push('"Fee split $11" (canceled late, fee kept): Quinn, Reese and Christopher Vanderberg owe $11; Parker paid $14 and got $3 back');
+  summary.push('"Fee split $11" (canceled late, fee kept): Rowan, Reese and Christopher Vanderberg owe $11; Parker paid $14 and got $3 back');
 
   // 16. A game TONIGHT and TOMORROW always exist (Tonight glow); 9 PM or later counts the next day as tonight.
   const pt = localParts(N, TZ);
@@ -318,15 +320,15 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
     if (eastDate(start) === tonightDate) {
       const tg = await makeAt(start, 120, 'Tonight test');
       await setCourt(tg, 'booked');
-      for (const n of ['Parker', 'Vic', 'Wren']) await join(n, tg);
-      summary.push('"Tonight test": Booked, 3 in (Parker, Vic, Wren)');
+      for (const n of ['Parker', 'Rowan', SMALL_LONG]) await join(n, tg);
+      summary.push('"Tonight test": Booked, 3 in (Parker, Rowan, Christopher Vanderberg)');
     }
   }
   const tomorrowStart = zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift + 1, 18, 45, TZ);
   if (!hasOpenGameOn(eastDate(tomorrowStart))) {
     const tm = await makeAt(tomorrowStart, 120, 'Tomorrow test');
-    for (const n of ['Quinn', SMALL_LONG]) await join(n, tm);
-    summary.push('"Tomorrow test": not booked, 2 in (Quinn, Christopher Vanderberg)');
+    for (const n of ['Sage', SMALL_LONG]) await join(n, tm);
+    summary.push('"Tomorrow test": not booked, 2 in (Sage, Christopher Vanderberg)');
   }
 
   // 17. Short games: one 1.5 hour game about 3 days out, Booked, 4 in: Parker paid $11; Vic, Wren and Quinn owe $11.
@@ -370,12 +372,13 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
         await refresh();
         const g = games().find((x) => x.id === res.id);
         await setCourt(g, 'booked');
-        for (const n of i === 0 ? ['Parker', 'Vic', 'Wren', 'Quinn'] : ['Parker', 'Vic', SMALL_LONG]) await join(n, g);
+        // (Not Vic, Wren or Quinn: tonight's money joins the owe card at once, and would change their cards.)
+        for (const n of i === 0 ? ['Parker', 'Rowan', 'Sage', SMALL_LONG] : ['Parker', 'Rowan', SMALL_LONG]) await join(n, g);
         if (i === 0) await orgPays('Parker', g);
       }
       await w.org.ok('PUT', '/api/admin/game-day-card-switch', { on: false });
       await refresh();
-      summary.push('game day: two extra games tonight, Court 3 (Parker paid; Vic, Wren, Quinn owe) and Court TBD (Parker, Vic, Christopher Vanderberg)');
+      summary.push('game day: two extra games tonight, Court 3 (Parker paid; Rowan, Sage, Christopher Vanderberg owe) and Court TBD (Parker, Rowan, Christopher Vanderberg)');
     } else summary.push('game day: no room for two more games tonight (seeded late); the card shows on the tonight game only');
   }
 
