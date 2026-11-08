@@ -484,6 +484,8 @@ The player link looks like `https://<your-site>.pages.dev/g/<random-key>`.
   ```
 - **Player link leaked:** Settings → Replace link. The old link stops working.
 - **Backup:** Settings → Backup → Download backup file. Restoring: see `docs/RESTORE.md`. (Download CSV is a report only.)
+- **Restore test:** `npm run restore-test` proves the newest weekly copy and a fresh export of live load back with the same
+  rows, money and integrity checks, in throwaway databases only (read-only; `docs/RESTORE_TEST.md`).
 - **Redeploy after a code change:** `npm run deploy`.
 - **New database changes:** add a numbered file in `migrations/`, then
   `npm run db:migrate:remote`.

@@ -104,8 +104,24 @@ On a computer with this project (the same setup used to deploy), in a terminal i
 
 - Did last Sunday's copy happen? Step 1 above lists it. The Worker's logs (Cloudflare dashboard > Workers >
   `pickleball-alerts-clock` > Logs) also show a line "weekly backup 2026-11-08: ... bytes" each time one is made.
+- Is it a good copy? Run the restore test: `npm run restore-test` (docs/RESTORE_TEST.md). It loads the newest copy and a fresh
+  export of live into throwaway databases and compares every row, the money and the 21 integrity checks. Read-only.
 - To stop the copies: remove the two `[[d1_databases]]` blocks at the end of `worker/wrangler.toml` and deploy the
   Worker (`npx wrangler deploy --config worker/wrangler.toml`). The alert clock keeps working either way.
+
+### Copies made in steps (since Zip 19)
+
+The copy is the same file as before, but it is made in small steps (about 60,000 characters each), each its own run of the clock
+Worker, so it stays well under the free plan's CPU guideline however big the data gets (one big run took about 13 ms on Nov 8).
+
+- An unfinished copy (a step failed, or the data changed while copying) is **never** listed by `list`, never fetched by `get`, and
+  never used by the restore test: it has no row in `weekly_backups` until its last step is saved. `list` shows it on its own line as
+  `INCOMPLETE ... Not usable`. The next hourly look clears its pieces and starts over. Finished copies are never touched by that.
+- All steps run within a few seconds, and the copy checks at the end that no table changed while it was copying (row counts, row
+  numbers, sizes and the money columns); if one did, the attempt is thrown away and redone the next hour, so a copy is still one moment.
+- To go back to the one-run copy: remove the `[[services]]` block (SELF) at the end of `worker/wrangler.toml` and deploy the
+  Worker. The steps then run inside the knock's run (same file, more CPU in that run, and about two database calls per step in
+  that one run, so only for today's size, not for a copy many times bigger).
 - Never delete the `pickleball-backups` database unless you mean to throw every weekly copy away.
 
 ## Undoing a mistake from the last 7 days without a file
@@ -143,3 +159,9 @@ Restoring a backup file also empties the "Do this now" log (`task_log`, Nov 2026
 tapped, which smart alerts went out, and the Smart alerts switch. After a restore, check Settings > Alerts >
 Smart alerts (it comes back On), and done tasks may show on Home again until tapped. An alert that came due
 in the hour before the restore could be sent once more.
+
+**Feature switches too (found by the restore test, Zip 19):** every switch in Settings > Feature switches is stored in that
+same `task_log` table, so after a restore **every feature switch is off** until it is turned on again (35 rows on live on
+Nov 8). The Telegram alert switches (Settings > Alerts, the `organizer_alerts` table) also come back all On. Before a real
+restore, write down which switches are on (or run `npm run restore-test -- --live`, whose NOTE line lists them), and set
+them again afterwards. Hidden games and players (Hide from list) are in `task_log` too and show again.

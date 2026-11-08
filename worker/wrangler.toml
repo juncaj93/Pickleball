@@ -26,3 +26,10 @@ database_id = "5c939453-ebef-4a1d-869e-9a952339d275"
 binding = "BACKUP"
 database_name = "pickleball-backups"
 database_id = "a532f080-7535-4d4d-8067-62ab6af928e4"
+
+# Zip 19: the Worker's private line to itself. The hourly backup look and each step of a weekly copy run as their own runs of this
+# Worker, each with its own CPU allowance (one big run took about 13 ms; each step is a few ms). No public address: only this Worker
+# can use it, and each call carries CRON_SECRET. Remove this block (and deploy) to go back to doing the copy inside the knock's run.
+[[services]]
+binding = "SELF"
+service = "pickleball-alerts-clock"

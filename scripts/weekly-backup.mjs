@@ -24,6 +24,19 @@ export function joinParts(header, parts) {
   return backup;
 }
 
+/** One line of "list". A copy whose pieces are not all there says INCOMPLETE (the Worker saves all or nothing, so this means damage). */
+export function listLine(r, when) {
+  const n = JSON.parse(r.rows_json);
+  const whole = r.have === undefined || Number(r.have) === Number(r.parts);
+  const mark = whole ? '' : `  INCOMPLETE (${r.have} of ${r.parts} pieces): do not restore from it`;
+  return `${r.week}  made ${when(r.created_at)} Eastern  players ${n.players}, games ${n.sessions}, seats ${n.session_players}, credit entries ${n.credit_ledger}${mark}`;
+}
+
+/** An unfinished copy (weekly_backup_progress): INCOMPLETE, not usable. */
+export function unfinishedLine(u, when) {
+  return `${u.week}  INCOMPLETE: started ${when(u.started_at)} Eastern, ${u.done} of ${u.steps} pieces saved. Not usable (it is not listed above and cannot be fetched); the next hourly look clears it and starts over.`;
+}
+
 function query(sql) {
   const out = execFileSync('npx', ['wrangler', 'd1', 'execute', DB, '--remote', '--json', '--command', sql], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] });
   return JSON.parse(out.slice(out.indexOf('[')))[0].results;
@@ -35,11 +48,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const [cmd, week] = process.argv.slice(2);
   try {
     if (cmd === 'list') {
-      const rows = query('SELECT week, created_at, bytes, rows_json FROM weekly_backups ORDER BY created_at DESC');
+      const rows = query('SELECT b.week, b.created_at, b.bytes, b.parts, b.rows_json, (SELECT COUNT(*) FROM weekly_backup_parts p WHERE p.backup_id = b.id) AS have FROM weekly_backups b ORDER BY b.created_at DESC');
       if (!rows.length) console.log('No weekly copies yet.');
-      for (const r of rows) {
-        const n = JSON.parse(r.rows_json);
-        console.log(`${r.week}  made ${when(r.created_at)} Eastern  players ${n.players}, games ${n.sessions}, seats ${n.session_players}, credit entries ${n.credit_ledger}`);
+      for (const r of rows) console.log(listLine(r, when));
+      // Zip 19: a copy being made in steps that did not finish. Never listed above, never restorable; the next attempt clears it.
+      if (query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'weekly_backup_progress'").length) {
+        for (const u of query('SELECT week, started_at, steps, done FROM weekly_backup_progress ORDER BY started_at DESC')) console.log(unfinishedLine(u, when));
       }
     } else if (cmd === 'get' && /^\d{4}-\d{2}-\d{2}$/.test(week ?? '')) {
       const [header] = query(`SELECT id, week, created_at, bytes, parts FROM weekly_backups WHERE week = '${week}'`);
