@@ -132,6 +132,8 @@ async function main() {
     let out = '';
     if (act) out = await act(page);
     await page.waitForTimeout(1500);
+    // A passing pop-up ("Game on! 5 in") can be caught mid-slide on either side; its spoken words (aria-live) are still compared.
+    await page.evaluate(() => document.querySelectorAll('.pop.toast').forEach((e) => e.remove()));
     const html = norm(await page.evaluate(() => document.documentElement.outerHTML.replace(/<head>.*<\/head>/s, '')));
     await ctx.close();
     return { html, out };

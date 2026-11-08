@@ -3317,4 +3317,14 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   paid, dropouts, booked, canceled, alerts off), exactly 3 (2 in shows nothing), reopen then Use credit to the cent, the cutoff cancel,
   switch off = main, a player refused, the preview fake and pretend noon (and never on live). `tests/speed-queries.test.ts`: the new row is
   not main's.
-- Browser: `e2e/zip15.cjs` (on) and `e2e/zip15-off.cjs` (off = main `ca50151`, needs `MAIN_DIR`, not in `npm run test:e2e`).
+- Full unit suite on the final code: 2384 passed, 1 skipped, 0 failed (143 files); tsc clean; build clean.
+- Browser: `e2e/zip15.cjs` 20/20 (steps 1 to 4 at 390/360/320 light and dark, Reopen at a new time with TEXT 2, Telegram 1 and its
+  unpaid-only sheet, Telegram 2 and step 4, each once, Request %20 and Text, Use credit to the cent, the cutoff cancel, the X, a player sees
+  nothing, the Settings row, the real clock). `e2e/zip15-off.cjs` 18/18 against main `ca50151` (organizer Home at 390/360/320 light and dark,
+  the Edit player sheet's old note, Settings apart from the new row, Players, Money, History, four player homes, no key in any answer, a join
+  writes nothing). It ignores a passing "Game on!" pop-up caught mid-slide (its spoken words are still compared).
+- Full `npm run test:e2e` once on the final code, 2 at a time, each script on its own port: 51 of 56 clean (`money-rework` updated for the
+  new Settings row). The other 5 fail the same way on main: `run.cjs` (10), `cancel-reason.cjs` (2), `want-in.cjs` (1, View as demo),
+  `admin-r2.cjs` F4 (1), and `money-rework.cjs` check 6 "Hide from list" (re-run on main `ca50151` this session: same failure).
+- Preview: https://preview-zip15.pickleball-club-9h0.pages.dev, the fake database re-seeded Sun Nov 8 with the fixed code. Switch rows on
+  there: every row the repo records as on live (all of them, read Nov 8) plus Game day card and Second Chance.
