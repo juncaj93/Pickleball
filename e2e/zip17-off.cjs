@@ -170,11 +170,7 @@ async function main() {
     { who: 'admin', url: '/admin', tabName: 'Settings' },
     (h) => h.replace(/<div class="set-row-wrap" data-row="unpaidNudgeAll">.*?<\/label><\/div>/gs, ''),
   );
-  // Organizer Home is not changed by this zip. Its long card titles shrink to fit by a timing-dependent helper (src/AlertCard.tsx useFitTitle:
-  // it remembers the width it measured before shrinking, so a later redraw can leave a title unshrunk); the same code on main lands either
-  // way depending on load timing. Only that one inline font size (and the button width it moves) is left out of the comparison.
-  const fitFree = (h) => h.replace(/(<h3 class="ac-title[^"]*") style="[^"]*"/g, '$1');
-  for (const scheme of ['light', 'dark']) await same(`organizer Home, ${scheme}: identical (apart from the shrink-to-fit title size)`, { who: 'admin', url: '/admin', scheme }, fitFree);
+  for (const scheme of ['light', 'dark']) await same(`organizer Home, ${scheme}: identical`, { who: 'admin', url: '/admin', scheme });
   for (const t of ['Players', 'Money', 'History']) await same(`organizer ${t}, light: identical`, { who: 'admin', url: '/admin', tabName: t });
   await check('API with the switch off: no Zip 17 key in the player answer (Zoe) or the dashboard', async () => {
     const ctx = await browser.newContext();
