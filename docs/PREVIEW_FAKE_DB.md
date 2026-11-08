@@ -29,7 +29,31 @@ The wiring lives in two places, both already in place:
 
 Production is bound to the real database and was not changed.
 
+## The fixed names (Alex, Sun Nov 8, 2026): reuse these, do not add new ones
+
+The preview database holds ONLY these 10 names (`npm run db:seed:preview` builds `scripts/preview-world-small.ts`, which refuses to finish
+with any other name). A new zip gives its scenario to one of them, and adds a line here. The older, bigger world below (Avery to Morgan) is
+only for the local browser tests now (`scripts/seed-preview-world.ts`); it never goes to the preview database.
+
+| Name | What it is for on the preview |
+| --- | --- |
+| **Alex** | The organizer (PIN below) and the organizer's own player: pays the venue, never the group. In most games. |
+| **Vic** | Unpaid nudge: owes $14 for 1 past game ("For Tue, Nov 3"). Venmo saved. In many upcoming games (owes, I paid self-reported on the 8-in game). |
+| **Wren** | Unpaid nudge: owes $28 for 2 past games. No Venmo saved. The Second Chance card's no-Venmo player. |
+| **Zoe** | Unpaid nudge: owes $42 for 3 past games: I'm in is blocked while Unpaid nudge is on. |
+| **Quinn** | After-game cards: "You owe $3 more" after a redo. Tapped I paid on the next game, then dropped (the claim card on Home). Owes $11 on "Fee split $11". |
+| **Rowan** | After-game cards: $8 back from two games (credit left over). Thursday regular (Want in card). Venmo saved. |
+| **Parker** | After-game cards: $5 back. The reliable payer: paid cash on most games, paid then got credit on the Second Chance game. Venmo saved. |
+| **Reese** | No phone number and no Venmo (Text all skips Reese). $14 cash-out pending (Home card). Late drop that Christopher took ("You no longer owe $14"). |
+| **Sage** | After-game cards: $8 back. Credit adjusted +$5 ("Thanks for bringing balls"). Tue and Thu regular (Want in card). |
+| **Christopher Vanderberg** | The long name (Money rows, toasts). Venmo saved. Took Reese's late-dropped spot. Owes $11 on "Fee split $11". |
+
+Links (calm previews only; never on live): `/?as=Vic`, `/?as=Wren`, `/?as=Zoe`, `/?as=Quinn` and so on pick that name on the phone.
+Not on the small preview: games with 11 or 12 in (there are only 10 names; the local browser tests still have them).
+
 ## The practice group
+(Below: the OLDER big world, now only for the local browser tests.)
+
 
 - Name on screen: **Pickleball Bros (PREVIEW, fake data)**. If you ever see that
   name, you are on the practice copy.

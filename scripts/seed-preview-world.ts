@@ -38,13 +38,13 @@ export function previewPin(): string {
   if (!m) throw new Error('Could not find the preview PIN line in docs/PREVIEW_FAKE_DB.md.');
   return m[1];
 }
-const SETUP_TOKEN = 'preview-seed-setup-token-0123456789';
+export const SETUP_TOKEN = 'preview-seed-setup-token-0123456789';
 const ORIGIN = 'https://preview.example';
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
 // ---- a tiny phone/browser that talks to the in-memory site -----------------------------------------------
-class Phone {
+export class Phone {
   cookies = new Map<string, string>();
   groupKey: string | null = null;
   constructor(private world: World) {}
@@ -84,7 +84,7 @@ class Phone {
   }
 }
 
-class World {
+export class World {
   db = createNodeD1(':memory:');
   env: Env = { DB: this.db, SETUP_TOKEN };
   now = Date.now();
@@ -796,7 +796,7 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
 }
 
 /** Rows the backup format does not carry, cleared first so a re-seed starts clean (and no PIN lockout carries over). */
-function wipeExtras(): string {
+export function wipeExtras(): string {
   return ['organizer_alerts', 'login_attempts', 'rate_events', 'task_log', 'admin_sessions'].map((t) => `DELETE FROM ${t};`).join('\n') + '\n';
 }
 
@@ -874,7 +874,7 @@ export const OFF_ON_LIVE: readonly string[] = [];
 /** The local world e2e/zip13.cjs was written for leaves these six rows off (unchanged since Zip 13; not about live). */
 const ZIP13_LOCAL_OFF = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'];
 
-function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; zip16?: boolean; zip17?: boolean; preview?: boolean }): string {
+export function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; zip16?: boolean; zip17?: boolean; preview?: boolean }): string {
   const at = new Date(nowMs).toISOString();
   // The preview database (and e2e/zip13.cjs): live's switch list, without the rows that are off on live. e2e/zip13.cjs adds the three
   // Zip 13 rows, and so does the preview database (they are ON on live, read Nov 8). Zip 14's row: the preview and e2e/zip14.cjs.
@@ -885,7 +885,7 @@ function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; zip
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */
-function extraRows(w: World): string {
+export function extraRows(w: World): string {
   const row = w.db.raw.prepare('SELECT * FROM organizer_alerts').get() as Record<string, unknown> | undefined;
   if (!row) return '';
   const cols = Object.keys(row);
