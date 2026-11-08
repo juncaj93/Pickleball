@@ -87,7 +87,7 @@ async function main() {
   async function admin(width = 390, scheme = 'light', url = '/admin?noontest=on') {
     const ctx = await browser.newContext(phone(width, scheme));
     await ctx.route('https://venmo.com/**', (r) => r.abort());
-    await ctx.route('https://mobileapp.courtreserve.com/**', (r) => r.fulfill({ status: 200, body: 'CourtReserve' }));
+    await ctx.route(/courtreserve\.com/, (r) => r.fulfill({ status: 200, body: 'CourtReserve' }));
     await post(ctx.request, '/api/admin/login', { pin: PIN });
     const page = await ctx.newPage();
     await page.goto(BASE + url);
@@ -145,7 +145,7 @@ async function main() {
         const book = await card.locator('[data-sc-book]').boundingBox();
         const box = await card.boundingBox();
         assert(book.width > box.width - 40, `Book a court ${Math.round(book.width)} of ${Math.round(box.width)} px`);
-        assert((await card.locator('[data-sc-book]').getAttribute('href')).startsWith('https://mobileapp.courtreserve.com/'), 'CourtReserve link');
+        assert((await card.locator('[data-sc-book]').getAttribute('href')).includes('courtreserve.com/Online/Reservations/Bookings/'), 'CourtReserve link');
         assert((await card.locator('[data-sc-book]').getAttribute('target')) === '_blank', 'another tab');
         await page.locator(`[data-sc-card="sameday"][data-session="${same.id}"]`).waitFor();
         await layout(page, `${width} ${scheme}`);
@@ -257,7 +257,7 @@ async function main() {
     for (const n of ['Kai', 'Reese']) assert((await post(real, `/api/admin/sessions/${same.id}/payment`, { playerId: idOf(n), paid: true }, NOON)).ok(), n);
     await post(real, `/api/admin/sessions/${same.id}/payment`, { playerId: idOf('Reese'), paid: true }, NOON);
     const t = (await dash()).secondChance.fakeTelegrams.filter((x) => x.sessionId === same.id);
-    assert(t.length === 2 && /^4 paid for tonight 8:30 PM\. Book it now: https:\/\/mobileapp\.courtreserve\.com\//.test(t[0].text), JSON.stringify(t));
+    assert(t.length === 2 && /^4 paid for tonight 8:30 PM\. Book it now: \S*courtreserve\.com\/Online\/Reservations\//.test(t[0].text), JSON.stringify(t));
     for (const scheme of ['light', 'dark'])
       for (const width of [390, 360, 320]) {
         const { ctx, page } = await admin(width, scheme);
