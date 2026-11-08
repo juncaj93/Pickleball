@@ -2397,7 +2397,8 @@ export function ScheduleRow({
   const tonight = open && playerDay(s.startsAt, tz, nowMs).word === 'tonight';
   // Zip 14, GAME_DAY_CARD (src/GameDay.tsx): today's game (or, on a preview with ?gamedaytest=on, the next game's date) is the game day card.
   // Off: false, and every line below draws exactly what it did.
-  const gameDay = isGameDayCard(g, s, tonight);
+  // Until the game ends, not only until it starts (Court stays up for late arrivals).
+  const gameDay = isGameDayCard(g, s, !s.canceled && playerDay(s.startsAt, tz, nowMs).word === 'tonight');
   // Zip 7 switches. TONIGHT_GLOW: the tile wears TONIGHT or TOMORROW (Eastern calendar days). PLAYER_CARDS_SIMPLE: no court words or dot.
   const dayTag: TileDay | undefined = g.tonightGlow === true ? (gameDay ? 'tonight' : tileDay(s.startsAt, tz, nowMs, open && !s.canceled)) : undefined;
   const simple = g.playerCardsSimple === true;

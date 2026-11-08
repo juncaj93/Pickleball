@@ -416,6 +416,28 @@ async function main() {
     await ctx.close();
   });
 
+  await check('during the game (started, not ended) the card keeps Court 3 and Directions for late arrivals; once it ends it is gone', async () => {
+    const during = Date.parse(courtGame.startsAt) + 30 * 60_000;
+    const after = Date.parse(courtGame.endsAt) + 5 * 60_000;
+    await clock(during);
+    try {
+      const a = await openPlayer('Indy', 390, 'light', { at: during });
+      const c = card(a.page, courtGame.id);
+      assert((await c.getAttribute('class')).includes(' gd'), 'still the game day card while playing');
+      assert((await c.getByRole('button', { name: /Court 3/ }).count()) === 1 && (await c.locator('[data-gd-directions]').count()) === 1, 'Court 3 and Directions');
+      await c.getByRole('button', { name: /Court 3/ }).click();
+      assert((await a.page.locator('dialog.cm[open] .cm-cl.me').innerText()) === '3', 'the map still opens on 3');
+      await shot(a.page, 'during-game');
+      await a.ctx.close();
+      await clock(after);
+      const b = await openPlayer('Indy', 390, 'light', { at: after });
+      assert((await card(b.page, courtGame.id).count()) === 0, 'the ended game is off the screen');
+      await b.ctx.close();
+    } finally {
+      await clock(NOW_MS);
+    }
+  });
+
   await check('preview only: ?gamedaytest=on shows the NEXT game as the game day card on a day with no game (late Saturday, every game that day over)', async () => {
     await clock(SAT_MS);
     try {

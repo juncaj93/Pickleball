@@ -3177,14 +3177,20 @@ nothing switched on, no live data read or changed. The switch's full description
   phone), so with the switch off every organizer screen is main's. Alex can still fill in courts ahead with the private link.
 - Rollback: the build before Zip 14 (main `1a51512`) works unchanged on the migrated database (`e2e/zip14-off.cjs` runs main on it with courts
   set). One exception found by the fresh review: main's View as / Pretend demo builds its copy from main's migrations (no `court`) and loads a
-  backup that has it, so on main with the column present the demo will not start. If a rollback to main needs View as, also run
-  `ALTER TABLE sessions DROP COLUMN court` (courts are lost; nothing else). This build's demo leaves out any column its tables lack
+  backup that has it, so on main with the column present the demo will not start ("Something went wrong: table sessions has no column named
+  court"). ROLLBACK STEP, one command, only after rolling the code back to a build before Zip 14 (it deletes every saved court; nothing else):
+  `npx wrangler d1 execute pickleball --remote --command "ALTER TABLE sessions DROP COLUMN court;"`
+  Tested on the preview Sun Nov 8, about 1:15 AM Eastern: main `1a51512` deployed to `preview-zip14-rollback` on the preview database with the
+  column: View as failed with that message; after the same command on `pickleball-preview` (`--env preview`): View as opened. The preview was then
+  put back (`--file migrations/0017_court.sql`, then a re-seed). To go forward again later: run 0017's ALTER once more (the migrations table
+  already lists it). This build's demo leaves out any column its tables lack
   (`backupToSql(backup, columns)`), so later rollbacks are safe.
 
 ### Item 2: the game day card (`GAME_DAY_CARD`, ships OFF)
 - `src/GameDay.tsx` (buttons, pop-up, court map, Court row), `src/gameday.css` (sizes, colors, motion from the mocks; card rules under
   `html[data-game-day]`), `ScheduleRow` in `src/pages/PlayerHome.tsx`. Game day = the Tonight state (the game's Eastern date, not started, not
-  canceled), the same rule the TONIGHT tile uses. The other THIS WEEK cards only get the 17 px "You're in" and 7 px above the balls (the mock).
+  canceled), the same rule the TONIGHT tile uses. Alex, Nov 8 (after the preview): the card stays until the game ENDS, not only until it
+  starts, so Court is there for late arrivals (`e2e/zip14.cjs` "during the game", 22/22). The other THIS WEEK cards only get the 17 px "You're in" and 7 px above the balls (the mock).
 - The court map is a native `<dialog>` (above an open sheet too), placed under the button that opened it, moved up when there is no room.
 - Directions: `directionsUrl(COURT_ADDRESS)` from `shared/zip9.ts` (the one address), on every game day card, court or not, in or not.
 - Preview only: `?gamedaytest=on` (needs `GAME_DAY_TEST = "on"`, which only `[env.preview.vars]` has): the next game's date is drawn as today.

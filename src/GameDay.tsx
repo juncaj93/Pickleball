@@ -29,10 +29,14 @@ export function gameDayTestDate(g: GroupView): string | null {
   return next ? dateKey(next.startsAt, g.group.timezone) : null;
 }
 
-/** Is this game shown as the game day card: the switch on, the game still to come today (or the preview test's date), not canceled. */
-export function isGameDayCard(g: GroupView, s: PlayerSessionView, tonight: boolean): boolean {
-  if (g.gameDayCard !== true || s.canceled || s.started) return false;
-  if (tonight) return true;
+/**
+ * Is this game shown as the game day card: the switch on, not canceled, and on today's date (or the preview test's date) until it ENDS
+ * (Alex, Nov 8: Court stays on the card while the game is being played, for late arrivals). `today`: the game's Eastern date is today.
+ * A game that has ended is no longer on the player screen at all (the server leaves it out).
+ */
+export function isGameDayCard(g: GroupView, s: PlayerSessionView, today: boolean): boolean {
+  if (g.gameDayCard !== true || s.canceled) return false;
+  if (today) return true;
   const test = gameDayTestDate(g);
   return test !== null && dateKey(s.startsAt, g.group.timezone) === test;
 }
