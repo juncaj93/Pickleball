@@ -134,10 +134,11 @@ export interface Seed {
  * preview database always gets them (npm run db:seed:preview); the local browser tests only when they ask (e2e/zip13.cjs), so every older
  * test keeps the world it was written for, which is also what live looks like with the three switches off.
  * `zip14`: also the Zip 14 parts (two extra games tonight, one on Court 3 and one with no court yet, and the Game day card row on).
- * `preview`: the preview database (npm run db:seed:preview): the Zip 13 and Zip 14 parts, and the switch rows exactly as live has them
+ * `zip15`: also the Zip 15 parts (Second Chance: the game day below, and the Second Chance row on).
+ * `preview`: the preview database (npm run db:seed:preview): the Zip 13, 14 and 15 parts, and the switch rows exactly as live has them
  * (plus the one being built), never the rows that are off on live.
  */
-export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; zip14?: boolean; preview?: boolean } = {}): Promise<Seed> {
+export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; preview?: boolean } = {}): Promise<Seed> {
   const w = new World();
   const summary: string[] = [];
   const N = startMs; // "now" for the person tapping; everything below is placed around it
@@ -607,6 +608,59 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
     } else summary.push('Zip 14: no room for two more games tonight (seeded too late in the day); the game day card shows on the tonight game only');
   }
 
+  // 17. Zip 15 (Second Chance): the NEXT Tuesday or Thursday after today (Eastern), "game day" D. Open the preview once with
+  //     /admin?noontest=on and that phone sees these cards as if it were noon on D (preview only; ?noontest=off to stop).
+  //     - 7:30 PM, Not booked: Orla (the organizer), Harper (Venmo saved, paid $14 cash) and Gray (no Venmo) in, canceled the night before:
+  //       the Second Chance card. The cancel turned Harper's $14 into credit, so after Reopen she can tap Use credit.
+  //     - 6:00 PM, Not booked: Orla and Blake in (2), canceled the night before: NO card (exactly 3 only).
+  //     - 8:30 PM, Not booked, added that day ("same-day add"): Avery paid, Kai (Venmo) and Reese (no phone, no Venmo) owe. Alex taps
+  //       I'm in on it: 4 in, 2 of 4 paid -> Telegram 1 (fake, shown on Home) naming Reese; Mark paid Kai and Reese -> step 4 + Telegram 2.
+  //     The cancels go through the real site (money and all); only the two "canceled at" times and the 8:30 game's "made at" are then set
+  //     to the night before / that morning, the one hand edit, since the fake clock cannot run into the future.
+  if (opts.zip15 || opts.preview) {
+    const tz = 'America/Detroit';
+    let dKey: { y: number; m: number; d: number } | null = null;
+    for (let i = 1; i <= 7 && !dKey; i++) {
+      const q = localParts(N + i * DAY, tz);
+      const wd = new Date(Date.UTC(q.year, q.month - 1, q.day, 12)).getUTCDay();
+      if (wd === 2 || wd === 4) dKey = { y: q.year, m: q.month, d: q.day };
+    }
+    const D = dKey!;
+    const atD = (h: number, m: number, dayOffset = 0) => zonedTimeToUtc(D.y, D.m, D.d + dayOffset, h, m, tz);
+    const nightBefore = new Date(atD(21, 0, -1)).toISOString();
+    // The wanted time, or the nearest free half hour (an older step may already have a game there).
+    const make = async (h: number, m: number) => {
+      for (const shift of [0, -30, 30, -60, 60, -90, 90]) {
+        const start = atD(h, m) + shift * 60_000;
+        const res = await w.org.call('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: null });
+        if (res.status === 409) continue;
+        if (res.status >= 300) throw new Error(`POST /api/admin/sessions -> ${res.status} ${res.text.slice(0, 300)}`);
+        await refresh();
+        return games().find((x) => x.id === res.data.id);
+      }
+      throw new Error('no free time on game day for a Zip 15 game');
+    };
+    const chance = await make(19, 30);
+    await w.org.ok('POST', `/api/admin/sessions/${chance.id}/me`, { in: true });
+    for (const n of ['Harper', 'Gray']) await join(n, chance);
+    await orgPays('Harper', chance);
+    await w.org.ok('POST', `/api/admin/sessions/${chance.id}/decision`, { decision: 'cancel', confirm: true });
+    const two = await make(18, 0);
+    await w.org.ok('POST', `/api/admin/sessions/${two.id}/me`, { in: true });
+    await join('Blake', two);
+    await w.org.ok('POST', `/api/admin/sessions/${two.id}/decision`, { decision: 'cancel', confirm: true });
+    w.db.raw.prepare('UPDATE sessions SET canceled_at = ? WHERE id IN (?, ?)').run(nightBefore, chance.id, two.id);
+    const same = await make(20, 30);
+    for (const n of ['Avery', 'Kai', NO_NUMBER]) await join(n, same);
+    await orgPays('Avery', same);
+    w.db.raw.prepare('UPDATE sessions SET created_at = ? WHERE id = ?').run(new Date(atD(10, 0)).toISOString(), same.id);
+    await refresh();
+    const day = `${D.y}-${String(D.m).padStart(2, '0')}-${String(D.d).padStart(2, '0')}`;
+    const t = (g: any) => localParts(ms(g.startsAt), tz);
+    const hm = (g: any) => `${t(g).hour % 12 || 12}:${String(t(g).minute).padStart(2, '0')} PM`;
+    summary.push(`Zip 15 (game day ${day}): ${hm(chance)} canceled the night before with 3 in (Orla, Harper paid then credit, Gray): the Second Chance card; ${hm(two)} canceled with 2 in (Orla, Blake): no card; ${hm(same)} added that day, not booked: Avery paid, Kai and ${NO_NUMBER} owe`);
+  }
+
   // Hand the world to the caller as SQL.
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
@@ -678,6 +732,9 @@ export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_un
 /** Being built (Zip 14): Game day card. On the preview database and on a local world that asks for it (e2e/zip14.cjs). */
 export const ZIP14_SWITCHES_ON = ['game_day_card_on'] as const;
 
+/** Being built (Zip 15): Second Chance. On the preview database and on a local world that asks for it (e2e/zip15.cjs). */
+export const ZIP15_SWITCHES_ON = ['second_chance_on'] as const;
+
 /**
  * Rows that are OFF on live. Empty since the Zip 14 deploy (Sun Nov 8, 1:20 AM Eastern): the live rows read with the read-only PIN showed
  * Alert cards, Seat dots, the four speed rows and the three Zip 13 rows all ON (the repo notes had them off). Add a row here only after
@@ -688,14 +745,14 @@ export const OFF_ON_LIVE: readonly string[] = [];
 /** The local world e2e/zip13.cjs was written for leaves these six rows off (unchanged since Zip 13; not about live). */
 const ZIP13_LOCAL_OFF = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'];
 
-function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; preview?: boolean }): string {
+function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; zip15?: boolean; preview?: boolean }): string {
   const at = new Date(nowMs).toISOString();
   // The preview database (and e2e/zip13.cjs): live's switch list, without the rows that are off on live. e2e/zip13.cjs adds the three
   // Zip 13 rows, and so does the preview database (they are ON on live, read Nov 8). Zip 14's row: the preview and e2e/zip14.cjs.
   const likeLive = !!opts.zip13 || !!opts.preview;
   const off: readonly string[] = opts.preview ? OFF_ON_LIVE : ZIP13_LOCAL_OFF;
   const base = likeLive ? PREVIEW_SWITCHES_ON.filter((t) => !off.includes(t)) : PREVIEW_SWITCHES_ON;
-  return [...base, ...(opts.zip13 ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  return [...base, ...(opts.zip13 ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : []), ...(opts.zip15 || opts.preview ? ZIP15_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

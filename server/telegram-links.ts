@@ -21,7 +21,9 @@ export interface TextLink {
 /** The organizer's page: the Open site button under every message already goes there. */
 export function isAdminPage(url: string): boolean {
   try {
-    return new URL(url).pathname.replace(/\/$/, '') === '/admin';
+    const u = new URL(url);
+    // Zip 15: /admin?unpaid=<game> (Telegram 1's "Text the 2 who haven't paid") is a real link, not the plain Open site page.
+    return u.pathname.replace(/\/$/, '') === '/admin' && !u.searchParams.has('unpaid');
   } catch {
     return false;
   }
@@ -63,6 +65,9 @@ export function linkText(text: string, plain: (url: string) => boolean = () => f
  */
 export function ourAddress(siteUrl: string, courtReserve: readonly string[]): (url: string) => boolean {
   const site = siteUrl.replace(/\/$/, '');
-  const go = new RegExp(`^${site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/go/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$`);
-  return (url: string) => courtReserve.includes(url) || (/^https:\/\//.test(site) && go.test(url));
+  const esc = site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const go = new RegExp(`^${esc}/go/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$`);
+  // Zip 15: Telegram 1's link to the organizer's own page, which shows the unpaid players' text (sign-in needed; no phone in the link).
+  const unpaid = new RegExp(`^${esc}/admin\\?unpaid=[0-9a-f-]{36}$`);
+  return (url: string) => courtReserve.includes(url) || (/^https:\/\//.test(site) && (go.test(url) || unpaid.test(url)));
 }

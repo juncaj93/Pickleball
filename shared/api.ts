@@ -562,6 +562,18 @@ export interface AdminDashboard {
    *  Edit game, and the game's court on each AdminSessionView; and its Settings row. */
   gameDayCard?: true;
   gameDayCardForAll?: true;
+  /** Zip 15 "Second Chance" (shared/secondChance.ts), only while on (off: the answer is exactly as before): the Home cards, the Request
+   *  buttons and the Edit sheet wording; and its Settings row. */
+  secondChance?: {
+    /** "Now" for these features (the real clock; a preview phone with ?noontest=on: noon on game day). */
+    now: string;
+    cards: import('./secondChance').ScCard[];
+    /** Preview only: the Telegrams are a visible fake, shown on Home. */
+    preview?: true;
+    fakeTelegrams?: { at: string; sessionId: string; text: string }[];
+    pretendNoon?: true;
+  };
+  secondChanceForAll?: true;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */
   venmoRequest?: boolean;
   /** Settings > Feature switches > "Venmo request" is on (for everyone). */

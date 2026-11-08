@@ -4,6 +4,7 @@ import { newId } from './crypto';
 import { isReadSql } from './viewOnly';
 import { ZIP13_TASKS } from '../shared/zip13';
 import { GAME_DAY_CARD } from '../shared/gameDay';
+import { SECOND_CHANCE } from '../shared/secondChance';
 import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER, speedAllowed } from '../shared/speed';
 
 // Zip 12 (shared/speed.ts): SPEED_FEWER_QUERIES, SPEED_DIRECT_LOAD and SPEED_LAST_SCREEN. Each is on for a request when:
@@ -77,7 +78,7 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
   const speedAnswer = (values: unknown[]): { x: 1 } | null | undefined => {
     const [groupId, task] = values as [string, string];
     // (The Zip 13 rows and Zip 14's Game day card row too: they are answered by the same read, so they add no trip either.)
-    if (!speedKnown || typeof task !== 'string' || !(task.startsWith('speed_') || ZIP13_TASKS.has(task) || task === GAME_DAY_CARD.task)) return undefined;
+    if (!speedKnown || typeof task !== 'string' || !(task.startsWith('speed_') || ZIP13_TASKS.has(task) || task === GAME_DAY_CARD.task || task === SECOND_CHANCE.task)) return undefined;
     return speedKnown.get(String(groupId))?.has(task) ? { x: 1 } : null;
   };
   // Answers sent early (prefetch), one per question that will ask for it: each is handed out once, as is (no copy). A read the

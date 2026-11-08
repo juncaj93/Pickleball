@@ -19,6 +19,8 @@ import * as v from './validate';
 import { setSmartAlerts, smartAlertsOn } from './tasks';
 import { isAdminPage, linkText, ourAddress, type TextLink } from './telegram-links';
 import { textsR2ForAlerts } from './textsR2';
+import { secondChanceTakesReached } from './secondChance';
+import { MIN_PLAYERS } from '../shared/spots';
 
 /** A bug can't send more than this many alerts in an hour (test alerts count too). */
 export const MAX_ALERTS_PER_HOUR = 20;
@@ -306,6 +308,10 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null, dropperOwesCe
   if (!watch) return;
   try {
     const after = people(await loadRoster(ctx.db, watch.session.id));
+    // Zip 15 (server/secondChance.ts): with Second Chance on for everyone, a game today that is not booked gets Telegram 1 or 2 at 4 in
+    // instead of "has 4 now, it's on" (it is not on until the court is booked). Only costs a read when this tap reached 4.
+    const reached = watch.before.length < MIN_PLAYERS && after.length >= MIN_PLAYERS;
+    const prefs = reached && (await secondChanceTakesReached(ctx, watch.group, watch.session)) ? { ...watch.prefs, reachedMin: false } : watch.prefs;
     const input = {
       actor: watch.actor,
       before: watch.before,
@@ -314,7 +320,7 @@ export async function afterTap(ctx: Ctx, watch: AlertWatch | null, dropperOwesCe
       deadlineMs: deadlineMs({ startsAt: watch.session.starts_at, cancellationDeadlineAt: watch.session.cancellation_deadline_at }, settingsOf(watch.group)),
       nowMs: ctx.nowMs,
       timezone: watch.group.timezone,
-      prefs: watch.prefs,
+      prefs,
       // Zip 10, "Card cleanup" on for this tap (it rides on the group row): no waitlist words.
       ...(watch.group.card_cleanup === true ? { noWaitlist: true } : {}),
     };

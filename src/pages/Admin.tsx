@@ -25,6 +25,7 @@ import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/tod
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { DoNowCard, useServerNow } from './admin/DoNow';
 import { OwedVenmoCards } from './admin/VenmoRequest';
+import { RequestButton, SecondChanceHome, UnpaidTextSheet } from './admin/SecondChance';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
@@ -454,6 +455,9 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
     item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');
   return (
     <>
+      {/* Zip 15, Second Chance (only while on): same-day game cards at the top of Home, and Telegram 1's "text who hasn't paid" sheet. */}
+      <SecondChanceHome ctx={ctx} />
+      <UnpaidTextSheet ctx={ctx} />
       {refunds.length > 0 && (
         <section className="stack" aria-label="Refund requests">
           {refunds.map((item) => (
@@ -547,6 +551,8 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
               >
                 Mark paid
               </button>
+              {/* Zip 15, Second Chance (only while on): Request (Venmo) or Text, one person at a time. */}
+              <RequestButton ctx={ctx} s={r.session} playerId={r.playerId} name={r.name} owesCents={r.cents} />
             </li>
           ))}
         </ul>

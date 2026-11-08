@@ -501,7 +501,7 @@ function PlayerForm({ ctx, player, onDone, onAdjust, noPlays }: { ctx: AdminCtx;
           spellCheck={false}
           placeholder="@Name or venmo.com/u/Name"
         />
-        <span className="small muted">For refunds. Only you see this.</span>
+        <span className="small muted">{ctx.d.secondChance ? 'For refunds and requests. Only you see this.' : 'For refunds. Only you see this.'}</span>
       </label>
       {/* The Players redo (Zip 13) has no Plays or Usual days here: both keep what was saved (sent back unchanged). */}
       {!noPlays && <><div className="stack" style={{ gap: 6 }}>
