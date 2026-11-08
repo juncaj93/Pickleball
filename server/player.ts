@@ -111,6 +111,7 @@ import { alertCardsFor } from './zip11';
 import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
 import { gameDayCardFor, gameDayTestFor } from './gameDay';
+import { previewCalmFor } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 
 const SELF_ADDS_PER_HOUR = 3;
@@ -326,6 +327,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Zip 13, Swap to Alex: the "Go to Admin" pill, only on a phone signed in as the organizer (players: no trip, never there).
     ...((await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
+    // Preview only (shared/previewCalm.ts): never on live.
+    ...(previewCalmFor(ctx) ? { previewCalm: true as const } : {}),
     // Preview only (GAME_DAY_TEST is never set on live): this phone sees the next game's date as today.
     ...(gameDay && gameDayTestFor(ctx) ? { gameDayTest: true as const } : {}),
     now: ctx.nowIso,

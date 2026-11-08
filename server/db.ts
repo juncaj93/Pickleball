@@ -112,6 +112,8 @@ export interface Env {
   SECOND_CHANCE?: string;
   /** Zip 15, PREVIEW ONLY: "on" lets a phone with ?noontest=on pretend it is noon on game day (these features only) and makes the two Telegrams a visible fake. Only [env.preview.vars] has it; never production. */
   SECOND_CHANCE_TEST?: string;
+  /** PREVIEW ONLY (shared/previewCalm.ts): "on" shows only the zip's own cards by default (?alerts=all shows everything). Never production. */
+  PREVIEW_CALM?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

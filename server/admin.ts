@@ -83,7 +83,7 @@ import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip1
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
 import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDay';
-import { secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
+import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
 import { monthPlayedCounts } from './playersRedo';
@@ -371,6 +371,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     ...(secondChance.on ? { secondChance: await secondChanceView(ctx, group, sessions, rosters, organizerId, sessionViews, playerLinkFor(ctx, group)) } : {}),
     ...(secondChance.forAll ? { secondChanceForAll: true as const } : {}),
+    // Preview only (shared/previewCalm.ts): never on live.
+    ...(previewCalmFor(ctx) ? { previewCalm: true as const } : {}),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }

@@ -3328,3 +3328,19 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   `admin-r2.cjs` F4 (1), and `money-rework.cjs` check 6 "Hide from list" (re-run on main `ca50151` this session: same failure).
 - Preview: https://preview-zip15.pickleball-club-9h0.pages.dev, the fake database re-seeded Sun Nov 8 with the fixed code. Switch rows on
   there: every row the repo records as on live (all of them, read Nov 8) plus Game day card and Second Chance.
+
+### Round 2 (Alex tested the preview, Sun Nov 8): answers and three fixes - on the preview again, waiting for "ship it"
+- Answers: Game day card stays as it is (ON in the preview). "Paid" keeps counting an unconfirmed I paid; Telegram 2 now says so:
+  "4 paid for tonight 7:30 PM (1 not confirmed yet). Book it now" (the real number; none: no note). The cancel reason: there is no clean way
+  to tell a "short a player" cancel from a holiday one (the reason is free text, optional, and Alex may leave it empty), so the card shows for
+  any cancel that fits the rule and the X hides it.
+- Fix 1, the time list: every half hour from 4:00 to 9:30 PM still ahead, none left out. Round 1 hid times another game already started at;
+  it no longer does (the server still refuses such a time, with a message). The preview's game day now has no other game on the half hours.
+- Fix 2, calm previews (`PREVIEW_CALM`, previews only, `shared/previewCalm.ts`): admin Home shows only the Second Chance cards and Mark paid
+  tonight; the player page hides its alert cards; `?alerts=all` shows everything on that phone. Every switch stays as on live. Also: "pretend
+  noon" now stays on the Second Chance game's day after Reopen (it used to look only for the canceled game, so after a Reopen it could jump to
+  another day; the old preview day hid this).
+- Fix 3, the compact Mark paid card: LIVE for everyone, no switch (PM leaning; a pure cleanup and the old layout was the problem). See the
+  "Not switched (Zip 15 round 2)" part of FEATURE_SWITCHES.md. The Second Chance cards use the same rows (now with Mark paid on each row).
+  OFF-equals-main has this one intended difference: `e2e/zip15-off.cjs` compares Home without that card, and compares the card by its people,
+  amounts and Mark paid buttons (identical to main).

@@ -237,10 +237,15 @@ export function pingInMessage(startsAt: string, inCount: number, paidCount: numb
   return parts.join('\n');
 }
 
-/** TELEGRAM 2: "4 paid for tonight 7:30 PM. Book it now: <CourtReserve>" ("4 paid, 6 in for ..." when more are in). */
-export function pingPaidMessage(startsAt: string, inCount: number, paidCount: number, tz: string, nowMs: number, bookUrl: string): string {
+/**
+ * TELEGRAM 2: "4 paid for tonight 7:30 PM. Book it now: <CourtReserve>" ("4 paid, 6 in for ..." when more are in). A paid seat that is a
+ * player's own "I paid" the organizer has not confirmed yet still counts (as the x of y paid pill does), and the message says how many:
+ * "4 paid for tonight 7:30 PM (1 not confirmed yet). Book it now: ..." (Alex, Nov 8).
+ */
+export function pingPaidMessage(startsAt: string, inCount: number, paidCount: number, tz: string, nowMs: number, bookUrl: string, unconfirmed = 0): string {
   const who = inCount > paidCount ? `${paidCount} paid, ${inCount} in` : `${paidCount} paid`;
-  return `${who} for ${dayWordR2(startsAt, tz, nowMs)} ${formatTime(startsAt, tz)}. Book it now: ${bookUrl}`;
+  const note = unconfirmed > 0 ? ` (${unconfirmed} not confirmed yet)` : '';
+  return `${who} for ${dayWordR2(startsAt, tz, nowMs)} ${formatTime(startsAt, tz)}${note}. Book it now: ${bookUrl}`;
 }
 
 /** Which Telegram (if any) is due for a game right now. Each at most once; Telegram 1 never after Telegram 2. */

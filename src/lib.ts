@@ -2,6 +2,7 @@ import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED
 import { ZIP13 } from '../shared/zip13';
 import { GAME_DAY_CARD, GAME_DAY_TEST } from '../shared/gameDay';
 import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
+import { PREVIEW_CALM } from '../shared/previewCalm';
 import { leavingWithHolds } from './undoHold';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
@@ -210,6 +211,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // preview-only "pretend it's noon on game day" (?noontest=on; the server ignores it unless SECOND_CHANCE_TEST is set, only on previews).
   if (gameDayTest(SECOND_CHANCE.link)) headers[SECOND_CHANCE.header] = 'on';
   if (gameDayTest(SECOND_CHANCE_TEST.link)) headers[SECOND_CHANCE_TEST.header] = 'on';
+  // Preview only (shared/previewCalm.ts): ?alerts=all shows every alert on this phone (?alerts=calm goes back to this zip's cards only).
+  if (storageGet('pb_alerts') === 'all') headers[PREVIEW_CALM.header] = 'all';
   // Zip 13 private test switches for this phone (/admin?playersredo=on, ?swapbutton=on, ?adminundo=on; see server/zip13.ts).
   for (const z of Object.values(ZIP13)) if (zip13Test(z.link)) headers[z.header] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
@@ -750,6 +753,12 @@ if (typeof window !== 'undefined') {
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);
   }
+}
+
+if (typeof window !== 'undefined') {
+  const want = new URLSearchParams(window.location.search).get(PREVIEW_CALM.link);
+  if (want === 'all') storageSet('pb_alerts', 'all');
+  else if (want === 'calm') storageRemove('pb_alerts');
 }
 
 /** "Seat dots" on this phone only (?seatdots=on, =off to stop; works on /admin too). Remembered in this browser. Look only. */

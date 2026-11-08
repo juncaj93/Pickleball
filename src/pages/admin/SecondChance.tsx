@@ -12,14 +12,15 @@ import { paymentTextR2 } from '../../../shared/textsR2';
 import { siteAddress } from '../../../shared/messages';
 import { COURTRESERVE_BOOKING_URL } from '../../../shared/settings';
 import { dayTime, minutesLabel, pickTimes, type ScCard, type ScUnpaid, unpaidText } from '../../../shared/secondChance';
-import { formatTime, localParts, zonedTimeToUtc } from '../../../shared/time';
+import { formatTime, localParts } from '../../../shared/time';
 import { venmoRequestLinks } from '../../../shared/venmoRequest';
 import { MIN_PLAYERS } from '../../../shared/spots';
 import { AlertCard } from '../../AlertCard';
 import { api, isIOS, openVenmo } from '../../lib';
 import { Sheet } from '../../ui';
 import type { AdminCtx } from '../Admin';
-import { useAction } from './action';
+import { opTap, useAction } from './action';
+import { MarkPaidRows, type MpRow } from './MarkPaidRows';
 import '../../second-chance.css';
 
 const ExtIcon = () => (
@@ -60,10 +61,9 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
   const act = useAction(ctx);
   const nowMs = Date.parse(ctx.d.secondChance!.now);
   const own = localParts(Date.parse(c.startsAt), tz);
-  // Times another game already has that day are left out (the server would refuse them).
-  const taken = new Set(ctx.d.sessions.filter((x) => x.id !== c.sessionId).map((x) => x.startsAt));
-  const isoAt = (m: number) => new Date(zonedTimeToUtc(own.year, own.month, own.day, Math.floor(m / 60), m % 60, tz)).toISOString();
-  const times = pickTimes(c.startsAt, tz, nowMs).filter((m) => !taken.has(isoAt(m)));
+  // Every half hour in the range, none left out (Alex, Nov 8). A time another game already starts at is refused by the server, with a
+  // message that says so; nothing is hidden here.
+  const times = pickTimes(c.startsAt, tz, nowMs);
   const [minutes, setMinutes] = useState(own.hour * 60 + own.minute);
   const dismiss = () => act.run(() => tap(c.sessionId, { action: 'dismiss' }), 'Hidden for today');
   const when = dayTime(c.startsAt, tz);
@@ -223,20 +223,28 @@ function dayWord(iso: string, tz: string, _nowMs: number): string {
   return localParts(Date.parse(iso), tz).hour >= 17 ? 'Tonight' : 'Today';
 }
 
-/** The unpaid players on a card: name, amount, and Request (Venmo) or Text. */
-function UnpaidRows({ ctx, s, unpaid, nowMs }: { ctx: AdminCtx; s: AdminSessionView; unpaid: ScUnpaid[]; nowMs: number }) {
+/** The unpaid players on a card: the compact rows (MarkPaidRows), with Mark paid and Request (Venmo) or Text. */
+function UnpaidRows({ ctx, s, unpaid }: { ctx: AdminCtx; s: AdminSessionView; unpaid: ScUnpaid[]; nowMs: number }) {
+  const act = useAction(ctx);
+  const rows: MpRow[] = unpaid.map((u) => ({ key: u.playerId, playerId: u.playerId, name: u.name, cents: u.owesCents, session: s }));
   return (
-    <ul className="sc-rows" aria-label={`Not paid yet for ${dayTime(s.startsAt, ctx.d.group.timezone)}`} data-sc-unpaid>
-      {unpaid.map((u) => (
-        <li key={u.playerId} data-sc-row={u.name}>
-          <span className="sc-name">
-            <strong>{u.name}</strong>
-            {u.owesCents > 0 && <span className="sc-owes"> {formatPrice(u.owesCents)}</span>}
-          </span>
-          <RequestButton ctx={ctx} s={s} playerId={u.playerId} name={u.name} owesCents={u.owesCents} nowMs={nowMs} />
-        </li>
-      ))}
-    </ul>
+    <div className="sc-unpaid" data-sc-unpaid>
+      <MarkPaidRows
+        ctx={ctx}
+        rows={rows}
+        showDates={false}
+        disabled={act.busy}
+        label={`Not paid yet for ${dayTime(s.startsAt, ctx.d.group.timezone)}`}
+        onMark={(m) => {
+          const r = s.roster.find((x) => x.playerId === m.playerId);
+          void act.run(
+            () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: m.playerId, paid: true, ...(r ? { seen: r.moneySeen } : {}), cents: m.cents }),
+            `${m.name} marked paid`,
+            opTap({ kind: 'paid', sessionId: s.id, playerId: m.playerId }, 'Mark paid', ctx.d.adminUndo === true),
+          );
+        }}
+      />
+    </div>
   );
 }
 

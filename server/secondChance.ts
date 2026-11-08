@@ -36,6 +36,7 @@ import { HttpError } from './http';
 import { isPretend } from './pretend';
 import { confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow } from './repo';
 import { viewOnlyCookie } from './viewOnly';
+import { PREVIEW_CALM } from '../shared/previewCalm';
 import * as v from './validate';
 
 /** The one switch question every feature switch asks, word for word (server/speed.ts answers it from one read when it can). */
@@ -84,21 +85,29 @@ function pretendNoon(ctx: Ctx): boolean {
  */
 export async function scNowMs(ctx: Ctx, group: GroupRow): Promise<number> {
   if (!pretendNoon(ctx)) return ctx.nowMs;
+  // The games these features are about, still to come: canceled with exactly 3 in, reopened from the card, or added with + Add game.
   const { results } = await ctx.db
     .prepare(
-      `SELECT s.starts_at, s.canceled_at FROM sessions s WHERE s.group_id = ? AND s.status = 'canceled' AND s.starts_at > ? AND s.booking_status <> 'booked'
-         AND (SELECT COUNT(*) FROM session_players sp WHERE sp.session_id = s.id AND sp.status = 'confirmed') = ?
-       ORDER BY s.starts_at LIMIT 20`,
+      `SELECT s.starts_at, s.canceled_at, s.status, s.is_extra, s.created_at,
+         (SELECT COUNT(*) FROM session_players sp WHERE sp.session_id = s.id AND sp.status = 'confirmed') AS n,
+         EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = ? AND t.kind = 'mark') AS reopened
+       FROM sessions s WHERE s.group_id = ? AND s.starts_at > ? AND s.booking_status <> 'booked'
+         AND (s.status = 'canceled' OR s.is_extra = 1 OR EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = ? AND t.kind = 'mark'))
+       ORDER BY s.starts_at LIMIT 60`,
     )
-    .bind(group.id, ctx.nowIso, MIN_PLAYERS - 1)
-    .all<{ starts_at: string; canceled_at: string | null }>()
-    .catch(() => ({ results: [] as { starts_at: string; canceled_at: string | null }[] }));
-  // The first one canceled the night before its day (a real Second Chance game), else the first one at all.
+    .bind(SC.reopened, group.id, ctx.nowIso, SC.reopened)
+    .all<{ starts_at: string; canceled_at: string | null; status: string; is_extra: number; created_at: string; n: number; reopened: number }>()
+    .catch(() => ({ results: [] as { starts_at: string; canceled_at: string | null; status: string; is_extra: number; created_at: string; n: number; reopened: number }[] }));
   const tz = group.timezone;
-  const nightBefore = (r: { starts_at: string; canceled_at: string | null }) =>
-    !!r.canceled_at && dayKey(Date.parse(r.canceled_at) + 86_400_000, tz) === dayKey(Date.parse(r.starts_at), tz);
-  const row = results.find(nightBefore) ?? results[0];
-  if (row) return noonOf(dayKey(Date.parse(row.starts_at), tz), tz);
+  const day = (iso: string) => dayKey(Date.parse(iso), tz);
+  const nightBefore = (r: { starts_at: string; canceled_at: string | null }) => !!r.canceled_at && dayKey(Date.parse(r.canceled_at) + 86_400_000, tz) === day(r.starts_at);
+  // First a Second Chance game (canceled the night before with 3 in, or already reopened from the card), then a same-day add, then any
+  // canceled game with 3 in. The pretend day stays on that game's day through every step.
+  const row =
+    results.find((r) => (r.status === 'canceled' && Number(r.n) === MIN_PLAYERS - 1 && nightBefore(r)) || (r.status !== 'canceled' && !!r.reopened)) ??
+    results.find((r) => r.status !== 'canceled' && !!r.is_extra && day(r.created_at) === day(r.starts_at)) ??
+    results.find((r) => r.status === 'canceled' && Number(r.n) === MIN_PLAYERS - 1);
+  if (row) return noonOf(day(row.starts_at), tz);
   for (let i = 0; i < 8; i++) {
     const ms = ctx.nowMs + i * 86_400_000;
     const wd = new Date(`${dayKey(ms, group.timezone)}T12:00:00Z`).getUTCDay();
@@ -134,7 +143,9 @@ export function factsOf(roster: readonly RosterRow[], organizerId: string | null
   const unpaid: ScUnpaid[] = others
     .filter((r) => r.payment_status !== 'paid')
     .map((r) => ({ playerId: r.player_id, name: r.display_name, owesCents: owes.get(r.player_id) ?? 0, phone: r.phone_number }));
-  return { inCount: inRows.length, paidCount: paid, unpaid };
+  // Paid by the player's own "I paid", not confirmed by the organizer yet (Mark paid confirms it): still counted, and Telegram 2 says how many.
+  const unconfirmed = others.filter((r) => r.payment_status === 'paid' && !!r.self_paid_at).length;
+  return { inCount: inRows.length, paidCount: paid, unpaid, unconfirmed };
 }
 
 function gameOf(s: SessionRow, facts: ReturnType<typeof factsOf>, marks: MarkRow[]): ScGame {
@@ -149,7 +160,9 @@ function gameOf(s: SessionRow, facts: ReturnType<typeof factsOf>, marks: MarkRow
     canceledBy: s.canceled_by,
     createdAt: s.created_at ?? '1970-01-01T00:00:00.000Z',
     extra: !!s.is_extra,
-    ...facts,
+    inCount: facts.inCount,
+    paidCount: facts.paidCount,
+    unpaid: facts.unpaid,
     marks: new Set(mine.filter((m) => m.kind === 'mark').map((m) => m.task)),
     reopenedFrom: mine.find((m) => m.kind === 'mark' && m.task === SC.reopened)?.detail ?? null,
   };
@@ -194,6 +207,12 @@ export async function secondChanceView(
     ...(isPreviewTest(ctx) ? { preview: true as const, fakeTelegrams: fake } : {}),
     ...(pretendNoon(ctx) ? { pretendNoon: true as const } : {}),
   };
+}
+
+/** Preview only (shared/previewCalm.ts): show only this zip's cards, unless this phone opened ?alerts=all. Always false on live. */
+export function previewCalmFor(ctx: Ctx): boolean {
+  if ((ctx.env.PREVIEW_CALM ?? '').trim().toLowerCase() !== 'on') return false;
+  return (ctx.req.headers.get(PREVIEW_CALM.header) ?? '').toLowerCase() !== 'all';
 }
 
 // ---------- The card's taps ----------
@@ -388,7 +407,7 @@ export async function checkPings(ctx: Ctx, sessionId: string | null, group: Grou
     const text =
       due === 'in'
         ? pingInMessage(s.starts_at, facts.inCount, facts.paidCount, facts.unpaid, tz, nowMs, facts.unpaid.some((u) => !!u.phone) ? `${site}/admin?unpaid=${s.id}` : null)
-        : pingPaidMessage(s.starts_at, facts.inCount, facts.paidCount, tz, nowMs, COURTRESERVE_BOOKING_URL);
+        : pingPaidMessage(s.starts_at, facts.inCount, facts.paidCount, tz, nowMs, COURTRESERVE_BOOKING_URL, facts.unconfirmed);
     // Claimed before sending (the table's unique index): two taps at once can never both send it. Only while the game is still on and
     // not booked: a cancel or booking saved since this check read the game stops it here.
     const claimId = newId();

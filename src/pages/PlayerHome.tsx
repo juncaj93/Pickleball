@@ -665,6 +665,9 @@ export function PlayerHome({
 
         {g && !pickName && (
           <>
+            {/* Preview only (shared/previewCalm.ts): the alert cards stay hidden unless the phone opened ?alerts=all. */}
+            {g.previewCalm !== true && (
+            <>
             <TimeBars
               view={view!}
               onChanged={load.reload}
@@ -714,6 +717,8 @@ export function PlayerHome({
             ) : (
               // The court-display view: a game with no court reads like a normal one here too (suggestion.noCourt is set there).
               view!.suggestion && <SuggestionCard key={view!.suggestion.sessionId} g={view!} onChanged={load.reload} onJoined={setAnswered} joinToast={joinToast} />
+            )}
+            </>
             )}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
@@ -2609,7 +2614,7 @@ export function ScheduleRow({
 
           {s.extra && <span className="sr-only">Extra game</span>}
           {s.note && (s.note.trim().length <= NOTE_PILL_MAX ? <span className="game-note note-pill">{s.note.trim()}</span> : <p className="game-note note-box">{s.note}</p>)}
-          {goodNews && (g.alertCards === true ? <AlertCard as="div" tone="green" className="ac-inline" title={goodNews} data={{ 'data-good-news': true }} /> : <Notice tone="ok">{goodNews}</Notice>)}
+          {goodNews && g.previewCalm !== true && (g.alertCards === true ? <AlertCard as="div" tone="green" className="ac-inline" title={goodNews} data={{ 'data-good-news': true }} /> : <Notice tone="ok">{goodNews}</Notice>)}
           {flatLater && noteEl}
         </div>
 

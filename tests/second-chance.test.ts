@@ -458,3 +458,48 @@ describe('fixes from the fresh review', () => {
     expect(w.sent[0]).toMatch(/^Tonight 8:00 PM: 4 in, 1 of 4 paid\./);
   });
 });
+
+describe('round 2 (Alex, Nov 8)', () => {
+  it('Reopen offers EVERY half hour from 4:00 to 9:30 PM still ahead, none missing', () => {
+    const start = '2026-12-02T01:00:00.000Z'; // Tue Dec 1, 8:00 PM EST
+    const noon = Date.parse('2026-12-01T17:00:00.000Z');
+    const all = Array.from({ length: 12 }, (_, i) => 16 * 60 + i * 30);
+    expect(pickTimes(start, TZ, noon)).toEqual(all);
+    // 6:10 PM: the past ones go, every later one stays.
+    expect(pickTimes(start, TZ, Date.parse('2026-12-01T23:10:00.000Z'))).toEqual(all.filter((m) => m > 18 * 60 + 10));
+  });
+  it('Telegram 2 counts an unconfirmed I paid and says so: "(1 not confirmed yet)"', async () => {
+    expect(pingPaidMessage('2026-11-12T00:30:00.000Z', 4, 4, TZ, Date.parse('2026-11-11T17:00:00.000Z'), 'B', 1)).toBe('4 paid for tonight 7:30 PM (1 not confirmed yet). Book it now: B');
+    expect(pingPaidMessage('2026-11-12T00:30:00.000Z', 4, 4, TZ, Date.parse('2026-11-11T17:00:00.000Z'), 'B', 0)).toBe('4 paid for tonight 7:30 PM. Book it now: B');
+    const w = await world();
+    await switchOn(w);
+    w.app.now = Date.parse('2026-10-27T16:00:00Z');
+    const s = await tue(w);
+    await w.organizer.call('POST', `/api/admin/sessions/${s.id}/me`, { in: true });
+    for (const n of ['Blair', 'Casey', 'Devon']) await join(w, n, s.id);
+    for (const n of ['Blair', 'Casey']) await markPaid(w, s.id, n);
+    // Devon taps I paid on the site (not confirmed): 4 paid -> Telegram 2 with the note.
+    await (await playerPhone(w, 'Devon')).call('POST', `/api/sessions/${s.id}/paid`, { paid: true });
+    await w.app.settle();
+    expect(w.sent.at(-1)).toBe(`4 paid for tonight 8:00 PM (1 not confirmed yet). Book it now: ${COURTRESERVE_BOOKING_URL}`);
+  });
+  it('preview calm: PREVIEW_CALM only on a preview; ?alerts=all (the header) shows everything; never on live', async () => {
+    const calm = await world({ PREVIEW_CALM: 'on' });
+    expect((await dash(calm, {})).previewCalm).toBe(true);
+    expect((await dash(calm, { 'X-Preview-Alerts': 'all' })).previewCalm).toBeUndefined();
+    const blair = await playerPhone(calm, 'Blair');
+    expect((await blair.call('GET', '/api/group')).data.previewCalm).toBe(true);
+    expect((await blair.call('GET', '/api/group', undefined, { 'X-Preview-Alerts': 'all' })).data.previewCalm).toBeUndefined();
+    const live = await world();
+    expect((await dash(live, {})).previewCalm).toBeUndefined();
+    expect((await (await playerPhone(live, 'Blair')).call('GET', '/api/group')).data.previewCalm).toBeUndefined();
+  });
+  it('wrangler.toml: PREVIEW_CALM and SECOND_CHANCE_TEST only in [env.preview.vars]; SECOND_CHANCE allowed on live (the Settings row decides)', async () => {
+    const toml = (await import('node:fs')).readFileSync('wrangler.toml', 'utf8');
+    const [live, preview] = toml.split('[env.preview.vars]');
+    expect(live).not.toMatch(/^PREVIEW_CALM|^SECOND_CHANCE_TEST/m);
+    expect(preview).toMatch(/^PREVIEW_CALM = "on"$/m);
+    expect(preview).toMatch(/^SECOND_CHANCE_TEST = "on"$/m);
+    expect(live).toMatch(/^SECOND_CHANCE = "on"$/m);
+  });
+});

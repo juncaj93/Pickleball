@@ -24,6 +24,7 @@ import { handleApi } from '../server/app';
 import type { Env } from '../server/db';
 import { backupToSql } from './backup-sql.mjs';
 import { localParts, zonedTimeToUtc } from '../shared/time';
+import { holidayFor } from '../shared/holidays';
 
 export const FAKE_GROUP_NAME = 'Pickleball Bros (PREVIEW, fake data)';
 
@@ -608,23 +609,39 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
     } else summary.push('Zip 14: no room for two more games tonight (seeded too late in the day); the game day card shows on the tonight game only');
   }
 
-  // 17. Zip 15 (Second Chance): the NEXT Tuesday or Thursday after today (Eastern), "game day" D. Open the preview once with
+  // 17. Zip 15 (Second Chance): the next Tuesday or Thursday after today (Eastern) with no other game on it (else the first free day), "game day" D. Open the preview once with
   //     /admin?noontest=on and that phone sees these cards as if it were noon on D (preview only; ?noontest=off to stop).
   //     - 7:30 PM, Not booked: Orla (the organizer), Harper (Venmo saved, paid $14 cash) and Gray (no Venmo) in, canceled the night before:
   //       the Second Chance card. The cancel turned Harper's $14 into credit, so after Reopen she can tap Use credit.
-  //     - 6:00 PM, Not booked: Orla and Blake in (2), canceled the night before: NO card (exactly 3 only).
-  //     - 8:30 PM, Not booked, added that day ("same-day add"): Avery paid, Kai (Venmo) and Reese (no phone, no Venmo) owe. Alex taps
+  //     - 5:15 PM, Not booked: Orla and Blake in (2), canceled the night before: NO card (exactly 3 only).
+  //     - 8:15 PM, Not booked, added that day ("same-day add"): Avery paid, Kai (Venmo) and Reese (no phone, no Venmo) owe. Alex taps
   //       I'm in on it: 4 in, 2 of 4 paid -> Telegram 1 (fake, shown on Home) naming Reese; Mark paid Kai and Reese -> step 4 + Telegram 2.
   //     The cancels go through the real site (money and all); only the two "canceled at" times and the 8:30 game's "made at" are then set
   //     to the night before / that morning, the one hand edit, since the fake clock cannot run into the future.
   if (opts.zip15 || opts.preview) {
     const tz = 'America/Detroit';
+    // Round 2 (Alex, Nov 8): Reopen's time list must have every half hour free (a time another game starts at is refused). So game day D
+    // is the next Tuesday or Thursday whose only game is the regular one, still empty: that regular game IS the Second Chance game (as
+    // in real life). Else the first day with no game at all, with an extra game at 7:30 PM.
+    const onDay = (t: number) => games().filter((g) => eastDate(ms(g.startsAt)) === eastDate(t));
     let dKey: { y: number; m: number; d: number } | null = null;
-    for (let i = 1; i <= 7 && !dKey; i++) {
-      const q = localParts(N + i * DAY, tz);
+    let regular: any = null;
+    for (let i = 1; i <= 42 && !dKey; i++) {
+      const t = N + i * DAY;
+      const q = localParts(t, tz);
       const wd = new Date(Date.UTC(q.year, q.month - 1, q.day, 12)).getUTCDay();
-      if (wd === 2 || wd === 4) dKey = { y: q.year, m: q.month, d: q.day };
+      const day = onDay(t);
+      // (Not a holiday: a holiday game brings its own notices.)
+      if ((wd === 2 || wd === 4) && day.length === 1 && !holidayFor(day[0].startsAt, tz) && !day[0].extra && !day[0].state.flags.canceled && day[0].roster.length === 0) {
+        dKey = { y: q.year, m: q.month, d: q.day };
+        regular = day[0];
+      }
     }
+    for (let i = 1; i <= 21 && !dKey; i++) {
+      const q = localParts(N + i * DAY, tz);
+      if (onDay(N + i * DAY).length === 0) dKey = { y: q.year, m: q.month, d: q.day };
+    }
+    if (!dKey) throw new Error('no free day in three weeks for the Zip 15 game day');
     const D = dKey!;
     const atD = (h: number, m: number, dayOffset = 0) => zonedTimeToUtc(D.y, D.m, D.d + dayOffset, h, m, tz);
     const nightBefore = new Date(atD(21, 0, -1)).toISOString();
@@ -640,17 +657,18 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
       }
       throw new Error('no free time on game day for a Zip 15 game');
     };
-    const chance = await make(19, 30);
+    const chance = regular ?? (await make(19, 30));
     await w.org.ok('POST', `/api/admin/sessions/${chance.id}/me`, { in: true });
     for (const n of ['Harper', 'Gray']) await join(n, chance);
     await orgPays('Harper', chance);
     await w.org.ok('POST', `/api/admin/sessions/${chance.id}/decision`, { decision: 'cancel', confirm: true });
-    const two = await make(18, 0);
+    // Off the half-hour grid, so Reopen's time list has no clash with it.
+    const two = await make(17, 15);
     await w.org.ok('POST', `/api/admin/sessions/${two.id}/me`, { in: true });
     await join('Blake', two);
     await w.org.ok('POST', `/api/admin/sessions/${two.id}/decision`, { decision: 'cancel', confirm: true });
     w.db.raw.prepare('UPDATE sessions SET canceled_at = ? WHERE id IN (?, ?)').run(nightBefore, chance.id, two.id);
-    const same = await make(20, 30);
+    const same = await make(20, 15);
     for (const n of ['Avery', 'Kai', NO_NUMBER]) await join(n, same);
     await orgPays('Avery', same);
     w.db.raw.prepare('UPDATE sessions SET created_at = ? WHERE id = ?').run(new Date(atD(10, 0)).toISOString(), same.id);

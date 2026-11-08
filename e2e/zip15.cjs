@@ -2,7 +2,8 @@
  *
  *   node e2e/zip15.cjs      (also run by npm run test:e2e)
  *
- * Seeded Sun Nov 8 at noon Eastern; game day is Tue Nov 10 (a game canceled Mon night with 3 in, one with 2 in, a same-day game with 3 in).
+ * Seeded Sun Nov 8 at noon Eastern; game day is Tue Dec 1 (the regular 8:00 PM game canceled Mon night with 3 in, a 5:15 PM one with 2 in, a same-day 8:15 PM game
+ * with 3 in; no other game that day, so every half hour is free). PREVIEW_CALM on, as on the preview (?alerts=all shows everything).
  * Its own dev server with SECOND_CHANCE_TEST=on (as on a preview: pretend noon, fake Telegrams); nothing touches Cloudflare or the live site.
  * Checks: steps 1 to 4 on admin Home at 390, 360 and 320 wide, light and dark (one line titles, full-width buttons, nothing sideways), the X,
  * Reopen at a new time (TEXT 2 under the purple button), the 2-in game shows nothing, Telegram 1 (fake, on Home) and its unpaid-only sheet,
@@ -20,7 +21,7 @@ const PORT = Number(process.env.E2E_PORT) || 5419;
 const BASE = `http://localhost:${PORT}`;
 const SEED_ISO = '2026-11-08T17:00:00.000Z'; // Sun Nov 8, 12:00 PM Eastern
 const SEED_MS = Date.parse(SEED_ISO);
-const GAME_NOON_MS = Date.parse('2026-11-10T17:00:00.000Z'); // Tue Nov 10, 12:00 PM Eastern (game day, the real clock)
+const GAME_NOON_MS = Date.parse('2026-12-01T17:00:00.000Z'); // Tue Dec 1, 12:00 PM Eastern (game day, the real clock)
 const SHOTS = process.env.E2E_SHOTS || path.join(__dirname, 'screenshots');
 const PIN = /PIN `(\d{6})`/.exec(readFileSync(path.join(ROOT, 'docs/PREVIEW_FAKE_DB.md'), 'utf8'))[1];
 const NOON = { 'X-Second-Chance-Noon': 'on' };
@@ -52,7 +53,7 @@ async function main() {
   if (seeded.status !== 0) throw new Error(`could not build the fake world: ${seeded.stderr || seeded.stdout}`);
   const server = spawn('npx', ['vite', '--port', String(PORT), '--strictPort'], {
     cwd: ROOT,
-    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip15-setup-token-0123456789', DEV_CLOCK: '1', SECOND_CHANCE_TEST: 'on' },
+    env: { ...process.env, DEV_DB: dbFile, SETUP_TOKEN: 'zip15-setup-token-0123456789', DEV_CLOCK: '1', SECOND_CHANCE_TEST: 'on', PREVIEW_CALM: 'on' },
     stdio: 'ignore',
     detached: true,
   });
@@ -76,11 +77,11 @@ async function main() {
   const dash = async (headers = NOON) => (await real.get(`${BASE}/api/admin/dashboard`, { headers })).json();
   const d0 = await dash();
   assert(d0.secondChance && d0.secondChanceForAll === true, 'the Zip 15 seed should have the Second Chance row on');
-  const tue = d0.sessions.filter((s) => s.startsAt.startsWith('2026-11-10T') || s.startsAt.startsWith('2026-11-11T0'));
+  const tue = d0.sessions.filter((s) => s.startsAt.startsWith('2026-12-01T') || s.startsAt.startsWith('2026-12-02T0'));
   const chance = tue.find((s) => s.status === 'canceled' && s.confirmedCount === 3);
   const two = tue.find((s) => s.status === 'canceled' && s.confirmedCount === 2);
   const same = tue.find((s) => s.roster.some((r) => r.name === 'Reese' && r.status === 'confirmed'));
-  assert(chance && two && same, 'the three Zip 15 games on Tue Nov 10');
+  assert(chance && two && same, 'the three Zip 15 games on Tue Dec 1');
   const idOf = (name) => d0.players.find((p) => p.name === name).id;
 
   const phone = (width, scheme) => ({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: scheme, reducedMotion: 'reduce' });
@@ -119,7 +120,7 @@ async function main() {
     assert(c && c.kind === 'chance' && c.step === 1, `step 1 expected: ${JSON.stringify(c)}`);
   });
 
-  await check('the real clock on game day (no pretend): the same cards at noon Tue Nov 10', async () => {
+  await check('the real clock on game day (no pretend): the same cards at noon Tue Dec 1', async () => {
     await clock(GAME_NOON_MS);
     try {
       const d = await dash({});
@@ -131,6 +132,77 @@ async function main() {
     }
   });
 
+  await check('calm preview (PREVIEW_CALM): Home shows only the Second Chance cards and Mark paid; ?alerts=all shows every alert; the player page hides its alert cards', async () => {
+    const { ctx, page } = await admin();
+    await page.locator('[data-sc-cards]').waitFor();
+    const kinds = await page.evaluate(() => [...document.querySelectorAll('main article.ac, main section.do-now, main [data-refund-request], main [data-payment-claim], main [data-finalize], main [data-vr-cards]')].map((e) => e.getAttribute('aria-label') || e.className));
+    const extra = kinds.filter((k) => !/Mark paid tonight|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
+    assert((await page.locator('[data-preview-calm]').count()) === 1, 'no calm note');
+    assert((await page.locator('[data-mp-card]').count()) === 1, 'the Mark paid card');
+    assert(extra.length === 0, `other alert cards on the calm Home: ${extra.join(' | ')}`);
+    const calmCount = await page.locator('main article.ac').count();
+    await page.goto(BASE + '/admin?alerts=all');
+    await page.locator('.tabbar').waitFor();
+    await page.waitForTimeout(800);
+    assert((await page.locator('[data-preview-calm]').count()) === 0, 'calm note with ?alerts=all');
+    assert((await page.locator('main article.ac').count()) > calmCount + 2, 'every alert should show with ?alerts=all');
+    await page.goto(BASE + '/admin?alerts=calm');
+    await page.locator('[data-preview-calm]').waitFor();
+    await ctx.close();
+    const pc = await browser.newContext(phone(390, 'light'));
+    await post(pc.request, '/api/me', { playerId: idOf('Casey') });
+    const pp = await pc.newPage();
+    await pp.goto(BASE + '/');
+    await pp.locator('.schedule article').first().waitFor();
+    const cards = await pp.locator('main > .ac, main > section.ac, [data-suggest], [data-pay-card], [data-adjust-note]').count();
+    assert(cards === 0, `${cards} alert cards on the calm player page`);
+    await pp.goto(BASE + '/?alerts=all');
+    await pp.locator('.schedule article').first().waitFor();
+    await pp.waitForTimeout(800);
+    assert((await pp.locator('main .ac').count()) > 0, 'no alert card on the player page with ?alerts=all (Casey has the Want in and credit cards)');
+    await pc.close();
+  });
+
+  for (const scheme of ['light', 'dark']) {
+    for (const width of [390, 360, 320]) {
+      await check(`compact Mark paid card, ${width} px, ${scheme}: 50 px rows, name and price on one line, 34 px buttons with 14 px words, the date once in the header, 5 then "N more"`, async () => {
+        const { ctx, page } = await admin(width, scheme);
+        const card = page.locator('[data-mp-card]').first();
+        await card.waitFor();
+        const m = await card.evaluate((c) => {
+          const rows = [...c.querySelectorAll('.mp-row')];
+          const r = c.getBoundingClientRect();
+          return {
+            rows: rows.length,
+            heights: rows.map((x) => Math.round(x.getBoundingClientRect().height)),
+            btn: [...c.querySelectorAll('.mp-btn, .mp-row .sc-req')].map((b) => ({ h: Math.round(b.getBoundingClientRect().height), fs: getComputedStyle(b).fontSize, r: getComputedStyle(b).borderTopLeftRadius, cut: b.scrollWidth > b.clientWidth + 1, out: b.getBoundingClientRect().right > r.right + 0.5 })),
+            nameFs: getComputedStyle(c.querySelector('.mp-name strong')).fontSize,
+            priceFs: getComputedStyle(c.querySelector('.mp-price')).fontSize,
+            date: c.querySelector('.mp-date')?.textContent ?? null,
+            rowDates: c.querySelectorAll('.mp-when').length,
+            more: c.querySelector('[data-mp-more]')?.textContent ?? null,
+            leftGap: Math.round(rows[0].querySelector('.mp-name').getBoundingClientRect().left - r.left),
+            one: rows.every((x) => Math.round(x.querySelector('.mp-name').getBoundingClientRect().height) <= 24),
+          };
+        });
+        assert(m.rows === 5 && m.heights.every((h) => h === 50), `rows ${m.rows}, heights ${m.heights}`);
+        assert(m.btn.every((b) => b.h === 34 && b.fs === '14px' && b.r === '10px' && !b.cut && !b.out), `buttons ${JSON.stringify(m.btn.slice(0, 3))}`);
+        assert(m.nameFs === '16px' && m.priceFs === '14px', `name ${m.nameFs} price ${m.priceFs}`);
+        assert(m.date === 'Sun, Nov 8' && m.rowDates === 0, `date ${m.date}, ${m.rowDates} row dates`);
+        assert(/^\d+ more$/.test(m.more), `more: ${m.more}`);
+        assert(m.leftGap <= 16, `empty left column ${m.leftGap} px`);
+        assert(m.one, 'a name or price wrapped');
+        await layout(page, `Mark paid card ${width} ${scheme}`);
+        if (width === 390) await card.screenshot({ path: path.join(SHOTS, `zip15-markpaid-${scheme}.png`) });
+        // "N more" opens the rest; Mark paid still works from a row (instant taps, Undo as before).
+        const total = Number(m.more.split(' ')[0]) + 5;
+        await card.locator('[data-mp-more]').click();
+        assert((await card.locator('.mp-row').count()) === total, 'not every row after N more');
+        await ctx.close();
+      });
+    }
+  }
+
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
       await check(`step 1 and the same-day card, ${width} px, ${scheme}: the mock's words, one-line title, full-width Book a court, nothing sideways`, async () => {
@@ -138,7 +210,7 @@ async function main() {
         const card = page.locator(`[data-sc-card="chance"][data-session="${chance.id}"]`);
         await card.waitFor();
         const title = await card.locator('.ac-title').innerText();
-        assert(/^Tue 7:30 PM was 1 short$/.test(title), title);
+        assert(/^Tue 8:00 PM was 1 short$/.test(title), title);
         assert((await card.locator('.ac-sub').innerText()) === 'Check if a court is open tonight.', 'sub line');
         const lines = await card.locator('.ac-title').evaluate((e) => Math.round(e.offsetHeight / parseFloat(getComputedStyle(e).lineHeight)));
         if (width >= 360) assert(lines === 1, `title on ${lines} lines`);
@@ -165,12 +237,12 @@ async function main() {
     const step2 = page.locator('[data-sc-step="2"]');
     await step2.waitFor({ timeout: 10000 });
     assert((await step2.locator('.ac-title').innerText()) === 'Court open tonight?', 'step 2 title');
-    assert((await step2.locator('.ac-sub').innerText()) === 'Reopen Tue 7:30 PM, or pick a new time.', 'step 2 sub');
-    assert((await step2.locator('[data-sc-time] span').innerText()) === '7:30 PM', 'the original time first');
+    assert((await step2.locator('.ac-sub').innerText()) === 'Reopen Tue 8:00 PM, or pick a new time.', 'step 2 sub');
+    assert((await step2.locator('[data-sc-time] span').innerText()) === '8:00 PM', 'the original time first');
     const opts = await step2.locator('[data-sc-time] option').allInnerTexts();
-    const taken = (await dash()).sessions.filter((s) => s.startsAt.startsWith('2026-11-1') && s.id !== chance.id).map((s) => s.startsAt);
-    assert(opts.length > 5 && opts[0] === '4:00 PM' && opts.at(-1) === '9:30 PM', opts.join(','));
-    assert(!opts.includes('8:00 PM') || !taken.includes('2026-11-11T01:00:00.000Z'), 'the 8:00 PM regular game time is offered');
+    // Round 2 (Alex): EVERY half hour from 4:00 to 9:30 PM, none missing.
+    const every = ['4:00', '4:30', '5:00', '5:30', '6:00', '6:30', '7:00', '7:30', '8:00', '8:30', '9:00', '9:30'].map((t) => `${t} PM`);
+    assert(opts.join(',') === every.join(','), `the time list: ${opts.join(', ')}`);
     for (const width of [390, 320]) {
       await page.setViewportSize({ width, height: 900 });
       await layout(page, `step 2 at ${width}`);
@@ -190,12 +262,12 @@ async function main() {
     assert((await card.locator('.ac-title').innerText()) === 'Reopened for 9:00 PM', 'title');
     assert((await card.locator('.ac-sub').innerText()) === '3 of 4 signed up. Text the group.', 'sub');
     const text = await card.locator('[data-sc-preview]').innerText();
-    assert(text.startsWith('Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight at 9:00 (instead of 7:30), so I reopened signups for 9:00.\n\nIf 4 sign up and pay'), text);
+    assert(text.startsWith('Hey guys, we canceled to avoid fees since we were down 1. A few courts are open tonight at 9:00 (instead of 8:00), so I reopened signups for 9:00.\n\nIf 4 sign up and pay'), text);
     const href = await card.locator('[data-sc-text]').getAttribute('href');
     assert(/^sms:\?&?body=|^sms:\?body=|^sms:&body=/.test(href) || href.startsWith('sms:'), href);
     assert(!/sms:\+?\d/.test(href), 'Text the group must open with no recipients');
     const s = (await dash()).sessions.find((x) => x.id === chance.id);
-    assert(s.status !== 'canceled' && s.startsAt === '2026-11-11T02:00:00.000Z' && s.confirmedCount === 3, JSON.stringify({ st: s.status, at: s.startsAt, n: s.confirmedCount }));
+    assert(s.status !== 'canceled' && s.startsAt === '2026-12-02T02:00:00.000Z' && s.confirmedCount === 3, JSON.stringify({ st: s.status, at: s.startsAt, n: s.confirmedCount }));
     const harper = s.roster.find((r) => r.name === 'Harper');
     assert(harper.paymentStatus === 'unpaid' && harper.owesCents === 1400, 'Harper owes again (her $14 is credit)');
     await layout(page, 'step 3 at 360 dark');
@@ -203,13 +275,13 @@ async function main() {
     await ctx.close();
   });
 
-  await check('Request and Text on the cards: Venmo with %20 (never +), the amount and "Pickleball Tue Nov 10"; Gray (no Venmo) gets Text', async () => {
+  await check('Request and Text on the cards: Venmo with %20 (never +), the amount and "Pickleball Tue Dec 1"; Gray (no Venmo) gets Text', async () => {
     const { ctx, page } = await admin();
     const card = page.locator(`[data-sc-card="reopened"]`);
     const req = card.locator('[data-sc-request="Harper"]');
     const href = await req.getAttribute('href');
-    assert(href === 'https://venmo.com/?txn=charge&recipients=harper-fake&amount=14&note=Pickleball%20Tue%20Nov%2010', href);
-    assert((await req.getAttribute('data-app-href')) === 'venmo://paycharge?txn=charge&recipients=harper-fake&amount=14&note=Pickleball%20Tue%20Nov%2010', 'app link');
+    assert(href === 'https://venmo.com/?txn=charge&recipients=harper-fake&amount=14&note=Pickleball%20Tue%20Dec%201', href);
+    assert((await req.getAttribute('data-app-href')) === 'venmo://paycharge?txn=charge&recipients=harper-fake&amount=14&note=Pickleball%20Tue%20Dec%201', 'app link');
     assert(!href.includes('+'), 'a plus sign');
     const text = await card.locator('[data-sc-textone="Gray"]').getAttribute('href');
     assert(text.startsWith('sms:') && /Gray%2C%20you%20owe%20%2414/.test(text), text);
@@ -237,7 +309,7 @@ async function main() {
     const d = await dash();
     const t = d.secondChance.fakeTelegrams.filter((x) => x.sessionId === same.id);
     assert(t.length === 1, `${t.length} Telegrams`);
-    assert(/^Tonight 8:30 PM: 4 in, 2 of 4 paid\.\nText the 1 who hasn't paid: http:\/\/localhost:\d+\/admin\?unpaid=[0-9a-f-]{36}\nNo phone saved for Reese\.$/.test(t[0].text), t[0].text);
+    assert(/^Tonight 8:15 PM: 4 in, 2 of 4 paid\.\nText the 1 who hasn't paid: http:\/\/localhost:\d+\/admin\?unpaid=[0-9a-f-]{36}\nNo phone saved for Reese\.$/.test(t[0].text), t[0].text);
   });
 
   await check("Telegram 1's link: the sheet opens Messages to ONLY the unpaid player with a phone, with the exact text", async () => {
@@ -247,24 +319,24 @@ async function main() {
     const href = await sheet.locator('[data-sc-unpaid-open]').getAttribute('href');
     const kai = d0.players.find((p) => p.name === 'Kai').phone.replace(/\D/g, '');
     assert(href.includes(kai) && href.split(',').length === 1, href);
-    assert(decodeURIComponent(href.split('body=')[1]).startsWith("Hey, we have 4 in for tonight at 8:30. Please pay on the site and I'll book the court.\n\n"), href);
+    assert(decodeURIComponent(href.split('body=')[1]).startsWith("Hey, we have 4 in for tonight at 8:15. Please pay on the site and I'll book the court.\n\n"), href);
     assert((await sheet.innerText()).includes('no phone saved for Reese'), 'Reese named');
     await page.screenshot({ path: path.join(SHOTS, 'zip15-unpaid-sheet.png') });
     await ctx.close();
   });
 
-  await check('Mark paid Kai and Reese: Telegram 2 once ("4 paid for tonight 8:30 PM. Book it now"), the card turns green: step 4 at 390/360/320, light and dark', async () => {
+  await check('Mark paid Kai and Reese: Telegram 2 once ("4 paid for tonight 8:15 PM. Book it now"), the card turns green: step 4 at 390/360/320, light and dark', async () => {
     for (const n of ['Kai', 'Reese']) assert((await post(real, `/api/admin/sessions/${same.id}/payment`, { playerId: idOf(n), paid: true }, NOON)).ok(), n);
     await post(real, `/api/admin/sessions/${same.id}/payment`, { playerId: idOf('Reese'), paid: true }, NOON);
     const t = (await dash()).secondChance.fakeTelegrams.filter((x) => x.sessionId === same.id);
-    assert(t.length === 2 && /^4 paid for tonight 8:30 PM\. Book it now: \S*courtreserve\.com\/Online\/Reservations\//.test(t[0].text), JSON.stringify(t));
+    assert(t.length === 2 && /^4 paid for tonight 8:15 PM\. Book it now: \S*courtreserve\.com\/Online\/Reservations\//.test(t[0].text), JSON.stringify(t));
     for (const scheme of ['light', 'dark'])
       for (const width of [390, 360, 320]) {
         const { ctx, page } = await admin(width, scheme);
         const card = page.locator(`[data-sc-step="4"][data-session="${same.id}"]`);
         await card.waitFor();
         assert((await card.locator('.ac-title').innerText()) === '4 signed up and paid', 'title');
-        assert((await card.locator('.ac-sub').innerText()) === 'Book a court for Tue 8:30 PM.', 'sub');
+        assert((await card.locator('.ac-sub').innerText()) === 'Book a court for Tue 8:15 PM.', 'sub');
         assert((await card.getAttribute('data-alert-card')) === 'green', 'green');
         await layout(page, `step 4 ${width} ${scheme}`);
         if (width === 390) await page.screenshot({ path: path.join(SHOTS, `zip15-step4-${scheme}.png`) });
@@ -284,7 +356,7 @@ async function main() {
 
   await check('the X hides the Second Chance card for that game', async () => {
     // A fresh canceled-with-3 game on the same day, canceled "the night before" (the real cancel, then its time set back as the seed does).
-    const made = await (await post(real, '/api/admin/sessions', { startsAt: '2026-11-10T21:00:00.000Z', endsAt: '2026-11-10T23:00:00.000Z' })).json();
+    const made = await (await post(real, '/api/admin/sessions', { startsAt: '2026-12-01T21:00:00.000Z', endsAt: '2026-12-01T23:00:00.000Z' })).json();
     await post(real, `/api/admin/sessions/${made.id}/me`, { in: true });
     for (const n of ['Drew', 'Emery']) {
       const ph = (await browser.newContext()).request;
@@ -295,7 +367,7 @@ async function main() {
     assert(cx.ok(), `cancel: ${await cx.text()}`);
     const { DatabaseSync } = require('node:sqlite');
     const db = new DatabaseSync(dbFile);
-    db.prepare('UPDATE sessions SET canceled_at = ? WHERE id = ?').run('2026-11-10T02:00:00.000Z', made.id);
+    db.prepare('UPDATE sessions SET canceled_at = ? WHERE id = ?').run('2026-12-01T02:00:00.000Z', made.id);
     db.close();
     const { ctx, page } = await admin();
     const card = page.locator(`[data-sc-card="chance"][data-session="${made.id}"]`);
@@ -306,7 +378,7 @@ async function main() {
   });
 
   await check('cutoff: a reopened game still at 3 two hours before (7:00 PM for 9:00) asks "Still short, cancel it?"; Cancel game cancels, money back as credit', async () => {
-    await clock(Date.parse('2026-11-11T00:00:00.000Z')); // Tue 7:00 PM (the real clock; no pretend needed)
+    await clock(Date.parse('2026-12-02T00:00:00.000Z')); // Tue Dec 1, 7:00 PM (the real clock; no pretend needed)
     // Harper paid with credit above; Gray still owes. Drop to 3: Harper, Gray and Orla are in.
     const { ctx, page } = await admin(390, 'light', '/admin?noontest=off');
     const card = page.locator(`[data-sc-step="cutoff"][data-session="${chance.id}"]`);

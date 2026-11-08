@@ -26,6 +26,7 @@ import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeC
 import { DoNowCard, useServerNow } from './admin/DoNow';
 import { OwedVenmoCards } from './admin/VenmoRequest';
 import { RequestButton, SecondChanceHome, UnpaidTextSheet } from './admin/SecondChance';
+import { MarkPaidRows, type MpRow, sharedDate } from './admin/MarkPaidRows';
 import { PlayersTab } from './admin/PlayersTab';
 import { SettingsTab } from './admin/SettingsTab';
 import { MoneyTab } from './admin/MoneyTab';
@@ -453,6 +454,23 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   const rest = items.filter((i) => i.kind !== 'finalize' && !refunds.includes(i));
   const key = (item: TodoItem) =>
     item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');
+  // Preview only (shared/previewCalm.ts): just this zip's cards (Second Chance, Mark paid tonight); ?alerts=all shows every card.
+  if (ctx.d.previewCalm === true) {
+    const markPaid = items.filter((i) => i.kind === 'tonight');
+    return (
+      <>
+        <p className="small muted sc-pretend" data-preview-calm>
+          Preview: only this zip's cards. Open with ?alerts=all to see every alert.
+        </p>
+        <SecondChanceHome ctx={ctx} />
+        <UnpaidTextSheet ctx={ctx} />
+        {markPaid.map((item) => (
+          <TodoCard key={key(item)} ctx={ctx} item={item} />
+        ))}
+        <SessionsSection ctx={ctx} />
+      </>
+    );
+  }
   return (
     <>
       {/* Zip 15, Second Chance (only while on): same-day game cards at the top of Home, and Telegram 1's "text who hasn't paid" sheet. */}
@@ -522,6 +540,31 @@ function TodoCard({ ctx, item }: { ctx: AdminCtx; item: TodoItem }) {
   const cards = ctx.d.alertCards === true;
   if (item.kind === 'owed' || item.kind === 'tonight') {
     const label = item.kind === 'tonight' ? 'Mark paid tonight' : 'Who owes you';
+    // Zip 15 round 2 (Alex, Nov 8; live for everyone, a pure cleanup): the compact rows (src/pages/admin/MarkPaidRows.tsx) in the alert
+    // card look (on live). The same rows, the same Mark paid tap (Undo, instant taps); the shared date once in the header.
+    if (cards) {
+      const rows: MpRow[] = item.rows.map((r) => ({ key: `${r.session.id}-${r.playerId}`, playerId: r.playerId, name: r.name, cents: r.cents, session: r.session }));
+      const date = sharedDate(rows, tz);
+      return (
+        <article className="ac ac-amber mp-card" aria-label={label} data-alert-card="amber" data-mp-card>
+          <div className="mp-head">
+            <AcIcon name="owe" />
+            <AcTitle as="h3">{label}</AcTitle>
+            {date && <span className="mp-date">{date}</span>}
+          </div>
+          <MarkPaidRows
+            ctx={ctx}
+            rows={rows}
+            showDates={!date}
+            disabled={busy}
+            onMark={(m) => {
+              const r = item.rows.find((x) => x.session.id === m.session.id && x.playerId === m.playerId)!;
+              void act(() => api('POST', `/api/admin/sessions/${r.session.id}/payment`, { playerId: r.playerId, paid: true, seen: r.seen, cents: r.cents }), `${r.name} marked paid`, opTap({ kind: 'paid', sessionId: r.session.id, playerId: r.playerId }, 'Mark paid', ctx.d.adminUndo === true));
+            }}
+          />
+        </article>
+      );
+    }
     return (
       <article className={cards ? 'ac ac-amber' : `card stack${item.kind === 'tonight' ? ' tonight' : ''}`} aria-label={label} {...(cards ? { 'data-alert-card': 'amber' } : {})}>
         {cards ? (

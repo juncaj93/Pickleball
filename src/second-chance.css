@@ -58,7 +58,12 @@ html[data-alert-cards] .sc-card .sc-time {
   overflow-wrap: anywhere;
 }
 
-/* Who has not paid: one line each, the Request (or Text) button on the right. */
+/* Who has not paid on a Second Chance card: the compact rows (src/mark-paid.css), 12 px under what is above them. */
+.sc-unpaid {
+  margin-top: 12px;
+}
+
+/* (Older rows look, kept for the plain card with Alert cards off.) */
 .sc-rows {
   list-style: none;
   margin: 12px 0 0;

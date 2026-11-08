@@ -3,7 +3,8 @@
  * same-day game with a paid and unpaid mix, Venmo saved for some), with the Second Chance row OFF, at noon on that game day (Tue Nov 10), and
  * compares the rendered HTML: organizer Home at 390, 360 and 320 wide, light and dark (the screen this zip changes), the other organizer tabs,
  * the player Edit sheet (the Venmo note), Settings apart from the one new row, and player homes. Also: the dashboard has no Zip 15 key, and
- * a player tap (I'm in) writes no Second Chance row with the switch off.
+ * a player tap (I'm in) writes no Second Chance row with the switch off. Round 2: the compact Mark paid card is live for everyone, so Home
+ * is compared without it, and the card is compared by its people, amounts and buttons.
  *
  *   MAIN_DIR=/path/to/main-worktree node e2e/zip15-off.cjs
  *
@@ -146,6 +147,24 @@ async function main() {
       if (x.out !== y.out) throw new Error(`main «${x.out}» branch «${y.out}»`);
     });
   };
+  // The Home money card (Mark paid tonight / Who owes you) from both sides: main's old rows, this branch's compact rows.
+  const stripMarkPaid = (h) => h.replace(/<article class="[^"]*" aria-label="(Mark paid tonight|Who owes you)".*?<\/article>/gs, '<article MARKPAID/>');
+  const markPaidContent = async (page) => {
+    for (const more of await page.locator('[data-mp-more]').all()) await more.click();
+    return JSON.stringify(
+      await page.evaluate(() =>
+        [...document.querySelectorAll('article[aria-label="Mark paid tonight"], article[aria-label="Who owes you"]')].map((a) => ({
+          card: a.getAttribute('aria-label'),
+          rows: [...a.querySelectorAll('li')].map((li) => {
+            const name = li.querySelector('strong').textContent.trim();
+            const price = (li.textContent.match(/\$\d+(\.\d\d)?/) || [''])[0];
+            const buttons = [...li.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') || b.textContent.trim());
+            return `${name} ${price} ${buttons.join('|')}`;
+          }),
+        })),
+      ),
+    );
+  };
   const editKai = async (page) => {
     await page.locator('[data-pr-row="Kai"]').click();
     await page.locator('[data-pr-edit]').click();
@@ -153,7 +172,9 @@ async function main() {
     return (await page.locator('dialog.sheet[open]').last().innerText()).includes('For refunds. Only you see this.') ? 'old note' : 'NEW NOTE';
   };
   for (const scheme of ['light', 'dark']) {
-    for (const width of [390, 360, 320]) await same(`organizer Home, ${width} px, ${scheme}: identical (no Second Chance card, no Request button)`, { who: 'admin', url: '/admin?noontest=on&secondchance=off', scheme, width });
+    // Round 2: the Mark paid card's compact rows are live for everyone (the one intended difference); checked below by its content.
+    for (const width of [390, 360, 320])
+      await same(`organizer Home, ${width} px, ${scheme}: identical apart from the compact Mark paid card (no Second Chance card, no Request button)`, { who: 'admin', url: '/admin?noontest=on&secondchance=off', scheme, width }, stripMarkPaid);
     await same(`organizer Edit player sheet, ${scheme}: identical, the old Venmo note`, { who: 'admin', url: '/admin', scheme, tabName: 'Players', act: editKai });
     await same(
       `organizer Settings, ${scheme}: identical apart from the one new switch row`,
@@ -161,6 +182,12 @@ async function main() {
       (h) => h.replace(/<div class="set-row-wrap" data-row="secondChanceAll">.*?<\/label><\/div>/gs, ''),
     );
   }
+  await check('the Mark paid card: the same people, amounts and Mark paid buttons as main (only the layout is new), light', async () => {
+    const [x, y] = await Promise.all([screen(A, { who: 'admin', url: '/admin', scheme: 'light', act: markPaidContent }), screen(B, { who: 'admin', url: '/admin', scheme: 'light', act: markPaidContent })]);
+    if (x.out !== y.out) throw new Error(`main «${x.out.slice(0, 600)}» branch «${y.out.slice(0, 600)}»`);
+    // (Both cards together have more than 5 people, so "N more" is part of what was compared.)
+    if (!/Mark paid tonight/.test(x.out) || !JSON.parse(x.out).some((c) => c.rows.length > 5)) throw new Error(`the world should have a long money card: ${x.out.slice(0, 200)}`);
+  });
   for (const t of ['Players', 'Money', 'History']) await same(`organizer ${t}, light: identical`, { who: 'admin', url: '/admin', scheme: 'light', tabName: t });
   for (const who of ['Kai', 'Harper', 'Reese', 'Indy']) await same(`player home, ${who}, light: identical`, { who, url: '/', scheme: 'light' });
   // Last: it taps on the branch's copy only.
