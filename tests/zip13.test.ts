@@ -254,7 +254,7 @@ describe('Undo on admin toasts: the held save (src/undoHold.ts, src/instant.ts)'
 });
 
 describe('the preview seed', () => {
-  it('local test worlds get the three Zip 13 rows only when asked; the preview database (since Zip 14) leaves them off, as on live', async () => {
+  it('local test worlds get the three Zip 13 rows only when asked; the preview database has them on, as live does (read Nov 8)', async () => {
     const { ZIP13_SWITCHES_ON, buildSeed } = await import('../scripts/seed-preview-world');
     expect([...ZIP13_SWITCHES_ON].sort()).toEqual(Object.values(ZIP13).map((z) => z.task).sort());
     const src = (await import('node:fs')).readFileSync('scripts/seed-preview.ts', 'utf8');
@@ -262,7 +262,8 @@ describe('the preview seed', () => {
     const at = Date.parse('2026-11-07T17:00:00.000Z');
     const rows = (sql: string) => ZIP13_SWITCHES_ON.filter((t) => sql.includes(`'preview-${t}'`));
     expect(rows((await buildSeed(at, { zip13: true })).sql)).toHaveLength(3);
-    expect(rows((await buildSeed(at, { zip13: true, preview: true })).sql)).toHaveLength(0);
+    expect(rows((await buildSeed(at, { zip13: true, preview: true })).sql)).toHaveLength(3);
+    expect(rows((await buildSeed(at)).sql)).toHaveLength(0);
   }, 60_000);
 });
 
