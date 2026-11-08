@@ -83,6 +83,7 @@ import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip1
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
 import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDay';
+import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
@@ -369,6 +370,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
+    // Zip 16 "After-game cards" (server/afterGame.ts): its Settings row, only while on.
+    ...((await afterGameCardForAll(ctx.db, group.id)) ? { afterGameCardForAll: true as const } : {}),
     ...(secondChance.on ? { secondChance: await secondChanceView(ctx, group, sessions, rosters, organizerId, sessionViews, playerLinkFor(ctx, group)) } : {}),
     ...(secondChance.forAll ? { secondChanceForAll: true as const } : {}),
     // Preview only (shared/previewCalm.ts): never on live.
@@ -2275,6 +2278,15 @@ export async function setGameDayCardSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setGameDayCardForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'game_day_card_on' : 'game_day_card_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/after-game-card-switch { on }: Settings > Feature switches > "After-game cards" (Zip 16). Display only; moves no money. */
+export async function setAfterGameCardSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setAfterGameCardForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'after_game_card_on' : 'after_game_card_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

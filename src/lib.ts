@@ -1,6 +1,7 @@
 import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
 import { ZIP13 } from '../shared/zip13';
 import { GAME_DAY_CARD, GAME_DAY_TEST } from '../shared/gameDay';
+import { AFTER_GAME_CARD } from '../shared/afterGame';
 import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
 import { PREVIEW_CALM } from '../shared/previewCalm';
 import { leavingWithHolds } from './undoHold';
@@ -207,6 +208,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // (?gamedaytest=on; the server ignores it unless GAME_DAY_TEST is set, which only previews have). See server/gameDay.ts.
   if (gameDayTest(GAME_DAY_CARD.link)) headers[GAME_DAY_CARD.header] = 'on';
   if (gameDayTest(GAME_DAY_TEST.link)) headers[GAME_DAY_TEST.header] = 'on';
+  // Zip 16 "After-game cards" private test switch for this phone (?aftergame=on, =off ends it). See server/afterGame.ts.
+  if (gameDayTest(AFTER_GAME_CARD.link)) headers[AFTER_GAME_CARD.header] = 'on';
   // Zip 15 "Second Chance" private test switch for this phone (/admin?secondchance=on: the Home cards, never a Telegram), and the
   // preview-only "pretend it's noon on game day" (?noontest=on; the server ignores it unless SECOND_CHANCE_TEST is set, only on previews).
   if (gameDayTest(SECOND_CHANCE.link)) headers[SECOND_CHANCE.header] = 'on';
@@ -748,7 +751,8 @@ export function gameDayTest(link: string): boolean {
 }
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link]) {
+  // Zip 16 too: ?aftergame=on.
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);

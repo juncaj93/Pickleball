@@ -111,7 +111,8 @@ import { alertCardsFor } from './zip11';
 import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
 import { gameDayCardFor, gameDayTestFor } from './gameDay';
-import { previewCalmFor } from './secondChance';
+import { previewCalmFor, previewSiteFor } from './secondChance';
+import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
 
 const SELF_ADDS_PER_HOUR = 3;
@@ -185,6 +186,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
   const hiddenIds = await hiddenFromPlayers(ctx, group.id, sessions);
+  // Zip 16 "After-game cards" (server/afterGame.ts): the owe card's "more" and the credit-back list, only while on (off: exactly main's).
+  const afterGame = await afterGameCardFor(ctx, group.id);
 
   const owed: GroupView['owed'] = [];
   const feeNotices: NonNullable<GroupView['feeNotices']> = [];
@@ -220,6 +223,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
         reminder: ctx.nowMs >= Date.parse(s.ends_at) + DAY_MS,
         signupAt: mine!.confirmed_at ?? mine!.claimed_at,
         ...(fee ? { lateFee: fee } : {}),
+        // Zip 16: paid a lower price before Finalize (that cash is held on the seat) and owes the rest now.
+        ...(afterGame && !fee && s.finalized_at && seat.cashCents > 0 && s.final_price_cents !== null && s.final_price_cents !== undefined
+          ? { more: { finalPriceCents: s.final_price_cents, playedCount: s.final_played_count ?? null } }
+          : {}),
       });
     }
     if (!meIsOrganizer) {
@@ -327,6 +334,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Zip 13, Swap to Alex: the "Go to Admin" pill, only on a phone signed in as the organizer (players: no trip, never there).
     ...((await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
+    // Zip 16 "After-game cards": the flag and this player's own credit back from Finalize (last 7 days), only while on.
+    ...(afterGame ? { afterGameCard: true as const, afterGame: me && !meIsOrganizer ? afterGameCredits(ledger, sessions, me.id, ctx.nowMs) : [] } : {}),
+    // Preview only (PREVIEW_CALM exists only in [env.preview.vars]): lets ?as=Name pick that name on a preview phone. Never on live.
+    ...(previewSiteFor(ctx) ? { preview: true as const } : {}),
     // Preview only (shared/previewCalm.ts): never on live.
     ...(previewCalmFor(ctx) ? { previewCalm: true as const } : {}),
     // Preview only (GAME_DAY_TEST is never set on live): this phone sees the next game's date as today.

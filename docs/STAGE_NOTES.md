@@ -3365,3 +3365,33 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
 - Read-only live check (backup address, reads only, nothing tapped, so no Telegram or text): sign-in with the read-only PIN works (View only);
   no Second Chance data or Settings row on (12 games); no preview-only key on live (no calm, no pretend, no fake Telegrams); the phone's
   private link (/admin?secondchance=on) answers with the real clock; Activity and Money answer 200; the live code has the compact Mark paid card.
+
+## Zip 16: After-game cards (AFTER_GAME_CARD) and the dark-mode look of the player alert cards - built Sun Nov 8, 2026 (a quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 16" brief (`START_HERE.md`, `SITE_RULES.md`, mockups aftergame_mock.html / aftergame_light_dark.png and
+alerts_current_mock.html). One PR. NO database schema change, no migration. Nothing deployed to production, nothing switched on, no live data
+read or changed. The switch's full description is its row in `docs/FEATURE_SWITCHES.md`.
+
+### Item 1: the dark-mode look of every player alert card (no new switch; rides on Alert cards, ON on live)
+- The mock's `.ph.dark.mid` rules on the site's real card component and tokens: a 1.5 px border, the fill `color-mix(card 62%, the card's
+  tint)`, the border `color-mix(card line 45%, the card's line color)` (blue `#363f78`, amber `#5a4720`, green `#2b5a40`, gray `#3a403b`
+  from the mock; purple `#4a3d78` and red `#6a3430` follow the same step, no player card uses them except the error banner), and the badge
+  the card's ink at 12%. Buttons unchanged. Light mode unchanged. Player screen only (`html[data-ac-player]`, set by PlayerHome), so the
+  organizer screens keep today's look (a cheap follow-up if Alex wants it there too).
+- Chrome (Android phones) draws a 1.5 px border as 1 px (it rounds borders down to whole pixels); iPhone Safari draws 1.5 px. The tint and
+  border color carry the shape either way.
+
+### Item 2: After-game cards (`AFTER_GAME_CARD`, ships OFF)
+- `shared/afterGame.ts` (the words, the 7 days, combining), `server/afterGame.ts` (the switch, the player's own records), `AfterGameCard` in
+  `src/pages/PlayerHome.tsx`. The server hands over the player's own live ledger rows (kind 'kept', reason 'finalized', last 7 days) with
+  their game's stored final price; the card adds them up. No second sum anywhere.
+- Owes more: CAN happen without a late fee. Finalize holds a paid seat's cash and owes the rest whenever the seat paid less than the new final
+  price: a Reopen and a redo with fewer players after someone paid the lower price, the flat price raised before Finalize, or a 1.5 hour game
+  made longer with Short games on (`server/finalize.ts`, the `paid < price` branch). So it is built, as the owe card that is already there
+  (one card, same Pay, I paid and Use credit), reworded "You owe $3 more" / "Fri, Nov 6: final price $14 (4 played)". It stays until paid,
+  like today's owe card (no X: it is a debt).
+- Not a card: a player who did not play ($14 back as credit, reason `not_played`), a final price equal to what they paid.
+
+### Preview
+- Seed (`ZIP16_CAST`, `SEED_ZIP16=1`): Parker ($5, one game), Rowan ($8, two games), Quinn (owes $3 more). `/?as=Parker` (preview only).
+
