@@ -120,11 +120,13 @@ describe('setting a court (organizer only)', () => {
     // The note is never touched.
     expect((w.app.db.raw.prepare('SELECT note FROM sessions WHERE id = ?').get(s.id) as { note: string | null }).note).toBe(s.note ?? null);
   });
-  it('Add game takes a court with the switch on, and turns one down with it off', async () => {
+  it('Add game takes a court with the switch on, and ignores one with it off (as main does)', async () => {
     const w = await world();
     const at = new Date(w.app.now + 3 * DAY).toISOString().slice(0, 13) + ':00:00.000Z';
     const end = new Date(Date.parse(at) + 2 * HOUR).toISOString();
-    expect((await w.organizer.call('POST', '/api/admin/sessions', { startsAt: at, endsAt: end, note: null, court: 4 })).status).toBe(400);
+    const off = await w.organizer.call('POST', '/api/admin/sessions', { startsAt: new Date(Date.parse(at) + 5 * DAY).toISOString(), endsAt: new Date(Date.parse(at) + 5 * DAY + 2 * HOUR).toISOString(), note: null, court: 4 });
+    expect(off.status, off.text).toBe(200);
+    expect(courtOf(w, off.data.id)).toBeNull();
     const r = await w.organizer.call('POST', '/api/admin/sessions', { startsAt: at, endsAt: end, note: null, court: 4 }, ON);
     expect(r.status, r.text).toBe(200);
     expect(courtOf(w, r.data.id)).toBe(4);
@@ -177,5 +179,25 @@ describe('shared helpers', () => {
     expect(COURT_ROWS.flat().sort((a, b) => a - b)).toEqual(Array.from({ length: 16 }, (_, i) => i + 1));
     expect(tbdText('Alex Juncaj')).toBe('Alex will add it soon.');
     expect(tbdText('')).toBe('The organizer will add it soon.');
+  });
+});
+
+describe('rollback safety of the demo copy (View as / Pretend), Zip 14 review', () => {
+  it('a backup taken with sessions.court set still loads into a demo copy built WITHOUT 0017 (the column is left out), and with it the court survives', async () => {
+    const { default: initSqlJs } = await import('sql.js');
+    const { createSandbox } = await import('../src/demo/sandbox');
+    const { ORIGIN } = await import('./harness');
+    const w = await world();
+    const s = await firstSession(w);
+    w.app.db.raw.prepare('UPDATE sessions SET court = 5 WHERE id = ?').run(s.id);
+    const backup = (await w.organizer.call('GET', '/api/admin/backup')).data;
+    expect(backup.tables.sessions.find((x: any) => x.id === s.id).court).toBe(5);
+    const all = readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
+    const SQL = await initSqlJs();
+    const old = await createSandbox(SQL, backup, all.filter((f) => f < '0017').map((f) => readFileSync(`migrations/${f}`, 'utf8')), ORIGIN);
+    expect((await old.request('GET', '/api/admin/dashboard', undefined, {}, w.app.now)).status).toBe(200);
+    const now = await createSandbox(SQL, backup, all.map((f) => readFileSync(`migrations/${f}`, 'utf8')), ORIGIN);
+    const d = await (await now.request('GET', '/api/admin/dashboard', undefined, ON, w.app.now)).json();
+    expect(d.sessions.find((x: any) => x.id === s.id).courtNum).toBe(5);
   });
 });

@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { COURT_ROWS, TBD_POP_MS, tbdText } from '../shared/gameDay';
 import { COURT_ADDRESS, directionsUrl } from '../shared/zip9';
 import { localParts } from '../shared/time';
@@ -42,6 +42,7 @@ export function GameDayButtons({ court, organizerName, dayLabel, held }: { court
   const [mapOpen, setMapOpen] = useState(false);
   const [pop, setPop] = useState(0);
   const courtRef = useRef<HTMLButtonElement>(null);
+  const popId = useId();
   const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
   // The pop-up goes by itself; a second tap starts it again (a new key restarts its fade).
   useEffect(() => {
@@ -56,16 +57,24 @@ export function GameDayButtons({ court, organizerName, dayLabel, held }: { court
           Court {court}
         </button>
       ) : (
-        <button type="button" className="gd-btn gd-tbd" data-gd-court="tbd" aria-label="Court not set yet" aria-describedby={pop ? 'gd-pop' : undefined} disabled={held} onClick={() => setPop((n) => n + 1)}>
+        <button type="button" className="gd-btn gd-tbd" data-gd-court="tbd" aria-label="Court TBD, not set yet" aria-describedby={pop ? popId : undefined} disabled={held} onClick={() => setPop((n) => n + 1)}>
           Court TBD
         </button>
       )}
-      <a className="gd-btn" href={directionsUrl(COURT_ADDRESS, ua)} target="_blank" rel="noopener noreferrer" data-gd-directions aria-label={`Directions to the courts for ${dayLabel}`} tabIndex={held ? -1 : undefined}>
-        <DirectionsArrowIcon />
-        Directions
-      </a>
+      {held ? (
+        // The saved copy of the last screen: drawn, never a link.
+        <span className="gd-btn" aria-hidden="true">
+          <DirectionsArrowIcon />
+          Directions
+        </span>
+      ) : (
+        <a className="gd-btn" href={directionsUrl(COURT_ADDRESS, ua)} target="_blank" rel="noopener noreferrer" data-gd-directions aria-label={`Directions to the courts for ${dayLabel}`}>
+          <DirectionsArrowIcon />
+          Directions
+        </a>
+      )}
       {pop > 0 && (
-        <span key={pop} id="gd-pop" className="gd-pop" role="status" data-gd-pop>
+        <span key={pop} id={popId} className="gd-pop" role="status" data-gd-pop>
           {tbdText(organizerName)}
         </span>
       )}
@@ -101,17 +110,16 @@ export function CourtMap({
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   const [top, setTop] = useState<number | null>(null);
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-  // Under the button that opened it (the X needs 14 px above the panel), moved up if it would run off the bottom of the screen.
+  // Opened first, then measured (a closed dialog has no height): under the button that opened it (the X needs 14 px above the panel),
+  // moved up if it would run off the bottom of the screen. A screen too short for it lets the panel scroll (gameday.css).
   useLayoutEffect(() => {
-    if (!open) return;
     const d = ref.current;
     if (!d) return;
+    if (!open) {
+      if (d.open) d.close();
+      return;
+    }
+    if (!d.open) d.showModal();
     const h = d.offsetHeight || 300;
     const vh = window.innerHeight;
     const a = anchor?.current?.getBoundingClientRect();

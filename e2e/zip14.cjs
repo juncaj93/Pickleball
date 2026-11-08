@@ -267,7 +267,7 @@ async function main() {
       const { ctx, page } = await openPlayer('Indy', 390, scheme);
       const c = card(page, tbdGame.id);
       const h0 = (await c.boundingBox()).height;
-      await c.getByRole('button', { name: /Court not set yet/ }).click();
+      await c.getByRole('button', { name: /Court TBD, not set yet/ }).click();
       const pop = c.locator('[data-gd-pop]');
       await pop.waitFor();
       assert((await pop.innerText()) === 'Organizer will add it soon.', await pop.innerText());

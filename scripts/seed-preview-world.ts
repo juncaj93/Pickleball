@@ -587,7 +587,8 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
     const taken = new Set(games().map((g) => ms(g.startsAt)));
     // No slot that ends after midnight (Edit game cannot save a game whose end falls on the next day; a known gap, see STAGE_NOTES Zip 14).
     const slots = [[17, 0], [21, 30], [15, 0], [12, 0], [10, 0]].map(([h, m]) => zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift, h, m, 'America/Detroit'));
-    const free = slots.filter((t) => t > N + 30 * 60_000 && eastDate(t) === tonightDate && !taken.has(t)).sort((a, b) => a - b);
+    // In the order above (the evening first, so both cards stay "game day" for as much of the day as possible), then by time.
+    const free = slots.filter((t) => t > N + 30 * 60_000 && eastDate(t) === tonightDate && !taken.has(t)).slice(0, 2).sort((a, b) => a - b);
     if (free.length >= 2) {
       await w.org.ok('PUT', '/api/admin/game-day-card-switch', { on: true });
       const made: any[] = [];

@@ -30,7 +30,12 @@ function literal(v) {
 const NAME = /^[a-z_][a-z0-9_]*$/;
 
 /** The backup as SQL statements, one per line. Throws if the file isn't a backup. */
-export function backupToSql(backup) {
+/**
+ * `columns` (optional, Zip 14): the columns each table really has where the SQL will run. A backup column the table does not have is left
+ * out instead of failing, so a backup taken with a newer column (sessions.court, migration 0017) still loads into an older layout. Left
+ * out: every column is written, as before.
+ */
+export function backupToSql(backup, columns) {
   if (!backup || backup.format !== 'pickleball-backup' || backup.version !== 1 || typeof backup.tables !== 'object') {
     throw new Error('This is not a Pickleball Bros backup file.');
   }
@@ -50,7 +55,8 @@ export function backupToSql(backup) {
   const canceled = backup.tables.sessions.filter((s) => s.status === 'canceled').map((s) => s.id);
   for (const t of TABLES) {
     for (const row of backup.tables[t] ?? []) {
-      const cols = Object.keys(row);
+      const known = columns && columns[t];
+      const cols = Object.keys(row).filter((c) => !known || known.has(c));
       for (const c of cols) if (!NAME.test(c)) throw new Error(`Bad column name in backup: ${c}`);
       const values = cols.map((c) => (t === 'sessions' && c === 'status' && row[c] === 'canceled' ? literal('planned') : literal(row[c])));
       out.push(`INSERT INTO ${t} (${cols.join(', ')}) VALUES (${values.join(', ')});`);

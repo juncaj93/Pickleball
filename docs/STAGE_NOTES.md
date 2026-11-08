@@ -3159,3 +3159,41 @@ to production, nothing switched on, no live data read or changed. Each switch's 
 - The old Remove-from-game Undo never worked on live: confirming "Remove Indy?" also closed the Players sheet behind it, and closing that sheet sends
   the held Remove at once (reproduced on main: sent 0.1 s after the confirm). Fixed in `Sheet` (closes only for its own close), plus the toast with a
   button is drawn inside an open sheet (so the Undo can be tapped). Both ship live-on (bug fixes, no switch). `e2e/zip13.cjs` checks it.
+
+## Zip 14: Court number per game (migration 0017) and the Game day card (GAME_DAY_CARD) - built Sat Nov 7 to Sun Nov 8, 2026 (quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 14" brief (`START_HERE.md`, mockups mock10.html / p11_court.png / p11_tbd.png for the card, courtmap_mock.html for the map,
+courtpicker_mock.html for the organizer picker). One PR. ONE schema change (approved by Alex Nov 6, 3:32 PM). Nothing deployed to production,
+nothing switched on, no live data read or changed. The switch's full description is its row in `docs/FEATURE_SWITCHES.md`.
+
+### Item 1: court number per game
+- `migrations/0017_court.sql`: `sessions.court INTEGER CHECK (court IS NULL OR court BETWEEN 1 AND 16)`. Additive only; every existing game stays
+  NULL; the note is never read or changed. NOT the retired `court_number TEXT` column from 0005 (never shown since Part 4), which stays untouched,
+  so an old value can never show on a card.
+- Organizer only: `PUT /api/admin/sessions/:id/court-number { court }` (1 to 16, null clears; refused for players 401, the read-only PIN 403,
+  and 404 while the switch is off for that phone) and an optional `court` on Add game (ignored while off, as main ignores it; one insert).
+  Activity line "Alex set the court for Tue Nov 10 to Court 3" / "cleared the court".
+- The Court row (Add game, Edit game) and the picker are behind GAME_DAY_CARD too (Settings row or `/admin?gameday=on` on the organizer's
+  phone), so with the switch off every organizer screen is main's. Alex can still fill in courts ahead with the private link.
+- Rollback: the build before Zip 14 (main `1a51512`) works unchanged on the migrated database (`e2e/zip14-off.cjs` runs main on it with courts
+  set). One exception found by the fresh review: main's View as / Pretend demo builds its copy from main's migrations (no `court`) and loads a
+  backup that has it, so on main with the column present the demo will not start. If a rollback to main needs View as, also run
+  `ALTER TABLE sessions DROP COLUMN court` (courts are lost; nothing else). This build's demo leaves out any column its tables lack
+  (`backupToSql(backup, columns)`), so later rollbacks are safe.
+
+### Item 2: the game day card (`GAME_DAY_CARD`, ships OFF)
+- `src/GameDay.tsx` (buttons, pop-up, court map, Court row), `src/gameday.css` (sizes, colors, motion from the mocks; card rules under
+  `html[data-game-day]`), `ScheduleRow` in `src/pages/PlayerHome.tsx`. Game day = the Tonight state (the game's Eastern date, not started, not
+  canceled), the same rule the TONIGHT tile uses. The other THIS WEEK cards only get the 17 px "You're in" and 7 px above the balls (the mock).
+- The court map is a native `<dialog>` (above an open sheet too), placed under the button that opened it, moved up when there is no room.
+- Directions: `directionsUrl(COURT_ADDRESS)` from `shared/zip9.ts` (the one address), on every game day card, court or not, in or not.
+- Preview only: `?gamedaytest=on` (needs `GAME_DAY_TEST = "on"`, which only `[env.preview.vars]` has): the next game's date is drawn as today.
+- Found, not fixed (older bug, not this zip): Edit game cannot save a game whose end is past midnight (10 PM to 12 AM): the end box is read on
+  the start's date, so it looks earlier than the start and the time save answers 400. The preview seed avoids such slots.
+
+### Item 3 (read-only question, nothing built): after Finalize, what a player sees
+- No notice or card is made for the finalize itself. The game leaves the player screen once it ends. Credit back shows only as the CREDIT chip at
+  the top (the new total; with the page open it counts up from the old amount and pulses once), and its sheet line "Nov 4: $5 back from Nov 3
+  (6 played)" (`src/pages/CreditSheet.tsx`, `shared/credit.ts` creditChanges). A player who never paid sees the amber top card "You owe $9 for
+  Tue, Nov 3" with "final price" (`PlayerHome.tsx` owe card) and Pay / I paid / Use credit. A paid player never owes more after Finalize (the final
+  price is at most $14); the only "owe more" is a late fee (no-show, LATE_FEES), on the same top card.

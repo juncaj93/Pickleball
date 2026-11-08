@@ -1837,9 +1837,8 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   const note = v.optionalText(body.note, 'note', 80);
-  // Zip 14: the court from the Court row (only there while "Game day card" is on; off, a court is turned down as if the field did not exist).
-  const court = courtBody(body.court);
-  if (court !== null && !(await gameDayCardFor(ctx, group.id))) throw new HttpError(400, 'invalid_court', 'Courts are not on yet.');
+  // Zip 14: the court from the Court row (only there while "Game day card" is on). Off: ignored, exactly as main ignores a field it does not know.
+  const court = body.court !== undefined && body.court !== null && (await gameDayCardFor(ctx, group.id)) ? courtBody(body.court) : null;
   const tz = group.timezone;
   const clash = await ctx.db
     .prepare('SELECT id, status FROM sessions WHERE group_id = ? AND starts_at = ?')
@@ -1860,13 +1859,12 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   try {
     await ctx.db
       .prepare(
-        `INSERT INTO sessions (id, group_id, starts_at, ends_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+        // One insert. The court column is named only when a court was picked, so a game added without one is exactly the old insert.
+        `INSERT INTO sessions (id, group_id, starts_at, ends_at, cancellation_deadline_at, is_extra, note, shown_early, created_at, updated_at${court !== null ? ', court' : ''})
+         VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?${court !== null ? ', ?' : ''})`,
       )
-      .bind(id, group.id, startsAt, endsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso)
+      .bind(id, group.id, startsAt, endsAt, defaultDeadline(startsAt, settings), note, early, ctx.nowIso, ctx.nowIso, ...(court !== null ? [court] : []))
       .run();
-    // A separate step only when a court was picked, so a game added without one is exactly the old insert.
-    if (court !== null) await ctx.db.prepare('UPDATE sessions SET court = ? WHERE id = ?').bind(court, id).run();
   } catch (err) {
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'game_exists', `There's already a game at ${formatDateTime(startsAt, tz)}.`);
     throw err;

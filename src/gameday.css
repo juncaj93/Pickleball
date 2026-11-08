@@ -237,7 +237,7 @@ dialog.cm {
   margin: 0;
   width: min(340px, calc(100vw - 32px));
   max-width: none;
-  max-height: none;
+  max-height: calc(100dvh - 34px);
   box-sizing: border-box;
   padding: 6px 0 14px;
   overflow: visible;
@@ -576,4 +576,15 @@ button.cm-cl:focus-visible {
 .gd-court-row:focus-visible {
   outline: 2.5px solid var(--gd-blue);
   outline-offset: 2px;
+}
+
+/* A very short screen (a phone on its side): the panel scrolls, and the X moves inside its corner so it is never cut off. */
+@media (max-height: 520px) {
+  dialog.cm {
+    overflow-y: auto;
+  }
+  .cm-x {
+    top: 6px;
+    right: 6px;
+  }
 }
