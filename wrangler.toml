@@ -171,6 +171,14 @@ ADMIN_UNDO = "on"
 # GAME_DAY_TEST (the "see the next game as today" link, ?gamedaytest=on) is deliberately NOT here: it exists only for previews, below.
 GAME_DAY_CARD = "on"
 
+# Zip 15 "Second Chance" (shared/secondChance.ts): same-day games that are not booked. A game canceled the night before with exactly 3 in
+# gets a card on admin Home (Book a court, then Reopen game at the same or a new time, then Text the group); a game added on its own day
+# gets a Text the group card; Telegram 1 at 4 in (not all paid) and Telegram 2 at 4 paid, once each per game; Venmo Request buttons on
+# Home. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Second Chance" (off at ship = nobody), plus a phone opened
+# once with /admin?secondchance=on (cards only; the Telegrams follow the Settings row alone). "off" = the kill switch. Needs a deploy.
+# SECOND_CHANCE_TEST (pretend noon on game day, fake Telegrams) is deliberately NOT here: it exists only for previews, below.
+SECOND_CHANCE = "on"
+
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
 # tester on a preview link can't change real seats, payments or credit.
@@ -217,6 +225,12 @@ ADMIN_UNDO = "on"
 GAME_DAY_CARD = "on"
 # Preview only (never in [vars] above): lets a phone opened with ?gamedaytest=on see the next game as if it were today.
 GAME_DAY_TEST = "on"
+SECOND_CHANCE = "on"
+# Preview only (never in [vars] above): ?noontest=on pretends it is noon on game day for the Second Chance cards, and the two Telegrams
+# are a visible fake (shown on Home, never sent).
+SECOND_CHANCE_TEST = "on"
+# Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
+PREVIEW_CALM = "on"
 
 [[env.preview.d1_databases]]
 binding = "DB"

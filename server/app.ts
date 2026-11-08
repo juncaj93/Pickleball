@@ -14,6 +14,7 @@ import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 import * as alerts from './alerts';
 import * as tasks from './tasks';
 import { goText } from './go';
+import { afterTap as secondChanceAfterTap, tapWatch as secondChanceWatch } from './secondChance';
 import { type FewerQueriesDb, withFewerQueries } from './speed';
 import { isWrite, VIEW_ONLY_ALLOWED_WRITES, VIEW_ONLY_MESSAGE, viewOnlyCookie, viewOnlyDb } from './viewOnly';
 
@@ -150,6 +151,9 @@ route('PUT', '/api/admin/speed-last-screen-switch', admin.setSpeedLastScreenSwit
 route('PUT', '/api/admin/speed-last-screen-admin-switch', admin.setSpeedLastScreenAdminSwitch);
 route('PUT', '/api/admin/seat-dots-switch', admin.setSeatDotsSwitch);
 route('PUT', '/api/admin/game-day-card-switch', admin.setGameDayCardSwitch);
+// Zip 15 (server/secondChance.ts): Second Chance.
+route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
+route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));
 route('PUT', '/api/admin/swap-button-switch', admin.setZip13Switch('swapButton'));
@@ -220,7 +224,11 @@ export async function handleApi(req: Request, env: Env, nowMs = Date.now(), wait
     const speed = withFewerQueries(ctx);
     ctx = speed.ctx;
     fewer = speed.db;
+    // Zip 15 (server/secondChance.ts): a tap on a game, with Second Chance on for everyone, gets its two Telegrams checked after it. The
+    // switch is read here, before the tap (off: nothing happens after the tap). Only the send itself goes on after the answer.
+    const watched = await secondChanceWatch(ctx, req.method, ctx.url.pathname);
     const result = await match.handler(ctx, body);
+    await secondChanceAfterTap(ctx, watched);
     fewer?.finish();
     if (result instanceof Response) return result;
     return json(result, 200, ctx.setCookies.map((c) => ({ 'Set-Cookie': c })));

@@ -11,7 +11,7 @@ if (!out) throw new Error('Usage: vite-node scripts/load-seed-local.ts -- <file.
 const startMs = at ? Date.parse(at) : Date.now();
 if (Number.isNaN(startMs)) throw new Error(`Not a time: ${at}`);
 // SEED_ZIP13=1: also the Zip 13 parts (e2e/zip13.cjs); left out, the world every older test was written for.
-const { sql } = await buildSeed(startMs, { zip13: process.env.SEED_ZIP13 === '1', zip14: process.env.SEED_ZIP14 === '1' });
+const { sql } = await buildSeed(startMs, { zip13: process.env.SEED_ZIP13 === '1', zip14: process.env.SEED_ZIP14 === '1', zip15: process.env.SEED_ZIP15 === '1' });
 rmSync(out, { force: true });
 const db = createNodeD1(out);
 db.raw.exec(sql);

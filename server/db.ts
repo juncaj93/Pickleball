@@ -108,6 +108,12 @@ export interface Env {
   GAME_DAY_CARD?: string;
   /** Zip 14, PREVIEW ONLY: "on" lets a phone with ?gamedaytest=on see the next game as if it were today. Only [env.preview.vars] has it; never production. */
   GAME_DAY_TEST?: string;
+  /** Zip 15 "Second Chance" (shared/secondChance.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?secondchance=on. */
+  SECOND_CHANCE?: string;
+  /** Zip 15, PREVIEW ONLY: "on" lets a phone with ?noontest=on pretend it is noon on game day (these features only) and makes the two Telegrams a visible fake. Only [env.preview.vars] has it; never production. */
+  SECOND_CHANCE_TEST?: string;
+  /** PREVIEW ONLY (shared/previewCalm.ts): "on" shows only the zip's own cards by default (?alerts=all shows everything). Never production. */
+  PREVIEW_CALM?: string;
   /**
    * The read-only organizer PIN (Cloudflare secret, never in git): signs in to every organizer screen with every save refused.
    * Missing or not 6 to 12 digits = off (server/viewOnly.ts).

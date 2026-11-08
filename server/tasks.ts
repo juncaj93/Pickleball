@@ -22,6 +22,7 @@ import { TEXTS_R2_TASK, textsR2ForAlerts } from './textsR2';
 import { HIDDEN_GAME_TASK, MONEY_REWORK_TASK, sessionHasMoney } from './moneyRework';
 import { moneyReworkAllowed } from '../shared/moneyRework';
 import * as v from './validate';
+import { tickPings } from './secondChance';
 
 const DAY_MS = 86_400_000;
 /** Sessions the tick looks at: ended up to this long ago (the post-game note), up to the booking window ahead. */
@@ -233,6 +234,8 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   if (!group) return { ok: true, sent: 0, failed: 0, skipped: 'no_group' };
   if (!connected(ctx.env)) return { ok: true, sent: 0, failed: 0, skipped: 'not_connected' };
   if (!prefsOf((alertRows.results[0] as unknown as AlertRow | undefined) ?? null).enabled) return { ok: true, sent: 0, failed: 0, skipped: 'alerts_off' };
+  // Zip 15 (server/secondChance.ts): today's not-booked games, Telegram 1 (4 in) and 2 (4 paid), each once. Off: one switch read.
+  await tickPings(ctx, group);
   if (offRows.results.length > 0) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
 
   const settings = settingsOf(group);

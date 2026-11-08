@@ -83,6 +83,7 @@ import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip1
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
 import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDay';
+import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
 import { monthPlayedCounts } from './playersRedo';
@@ -239,6 +240,14 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   // Zip 14 (server/gameDay.ts): the Court row and each game's court, only while on (off: this answer is exactly main's).
   const gameDay = await gameDayCardFlags(ctx, group.id);
   const month = redo.on ? await monthPlayedCounts(ctx, group) : null;
+  const sessionViews = sessions.map((s) => ({
+    ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
+    hiddenFromPlayers: hiddenIds.has(s.id),
+    ...(moneyRework && listHidden.has(s.id) ? { hiddenFromList: true } : {}),
+    ...(gameDay.on && courtOrNull(s.court) !== null ? { courtNum: courtOrNull(s.court)! } : {}),
+  }));
+  // Zip 15 (server/secondChance.ts): the Home cards, only while on (off: this answer is exactly main's).
+  const secondChance = await secondChanceFlags(ctx, group.id);
   return {
     // Signed in with the read-only PIN (server/viewOnly.ts): the screens show "View only". Absent for the real PIN, so its answer is unchanged.
     ...(viewOnlyCookie(ctx) ? { viewOnly: true as const } : {}),
@@ -258,12 +267,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       hasGroupWord: !!group.group_word_hash,
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR3 ? { spentCents: spent.get(p.id) ?? 0 } : {}), ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}), ...(month ? { monthPlayed: month.counts.get(p.id) ?? 0 } : {}) })),
-    sessions: sessions.map((s) => ({
-      ...adminSessionView(s, rosters.get(s.id) ?? [], players, ctx.nowMs, settings, group.timezone, organizerId, potFor(s.id), s.status === 'canceled' ? (charges.get(s.id) ?? null) : null, blockers.get(s.id) ?? { spent: [], requested: [] }, timeShift),
-      hiddenFromPlayers: hiddenIds.has(s.id),
-      ...(moneyRework && listHidden.has(s.id) ? { hiddenFromList: true } : {}),
-      ...(gameDay.on && courtOrNull(s.court) !== null ? { courtNum: courtOrNull(s.court)! } : {}),
-    })),
+    sessions: sessionViews,
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
     creditLedger,
@@ -365,6 +369,10 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
+    ...(secondChance.on ? { secondChance: await secondChanceView(ctx, group, sessions, rosters, organizerId, sessionViews, playerLinkFor(ctx, group)) } : {}),
+    ...(secondChance.forAll ? { secondChanceForAll: true as const } : {}),
+    // Preview only (shared/previewCalm.ts): never on live.
+    ...(previewCalmFor(ctx) ? { previewCalm: true as const } : {}),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
   };
 }
@@ -2245,6 +2253,20 @@ function courtBody(value: unknown): number | null {
   const court = courtOrNull(value);
   if (court === null) throw new HttpError(400, 'invalid_court', 'Pick a court from 1 to 16.');
   return court;
+}
+
+/** PUT /api/admin/second-chance-switch { on }: Settings > Feature switches > "Second Chance" (Zip 15). */
+export async function setSecondChanceSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setSecondChanceForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'second_chance_on' : 'second_chance_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** POST /api/admin/sessions/:id/second-chance { action, minutes? } (server/secondChance.ts): the card's taps, through decide and reschedule. */
+export function secondChanceTap(ctx: Ctx, body: Record<string, unknown>) {
+  return secondChanceAction(ctx, body, { decide, reschedule });
 }
 
 /** PUT /api/admin/game-day-card-switch { on }: Settings > Feature switches > "Game day card" (Zip 14). Display only; moves nothing. */

@@ -3230,3 +3230,123 @@ nothing switched on, no live data read or changed. The switch's full description
   Card time and buttons, Color cleanup, Home collapse, Instant taps, Last call texts, Late-cancel fee split, Late drops owe $14, Money rework,
   Ask for payment, No Venmo? note, Pay sheet, Simpler player cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow,
   Venmo request, both animation switches) plus Game day card. Off as on live: Alert cards, Seat dots, the four speed rows, the three Zip 13 rows.
+
+### Deploy (Sun Nov 8, 2026, about 1:20 AM Eastern, a quiet window, on Alex's "ship it") - LIVE with GAME_DAY_CARD OFF
+- Alex's answers after the preview: keep the 66 px tile; keep the pop-up under the buttons; keep Court on the card until the game ENDS (built,
+  `e2e/zip14.cjs` 22/22); confirm the Zip 13 rows at deploy (below).
+- Before: main equaled live (production `94869aa6-18d7-4a28-8843-0203ee9f51f0` = `1a51512`). PR #98 merged as `ca50151`. Unit on merged main:
+  2361 passed, 0 failed. SQL export of live (`npx wrangler d1 export pickleball --remote`, 1:04 AM, 175,641 bytes, kept out of git) and Time
+  Travel bookmark `00000b31-00000000-0000511d-bf201bc82d56daa739cdd2fb5a514aba` (1:04 AM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000b31-00000000-0000511d-bf201bc82d56daa739cdd2fb5a514aba`.
+  Integrity checks: all 21 columns 0 before and after the migration.
+- Migration 0017 applied to live (`npx wrangler d1 migrations apply pickleball --remote`): 13 games, 0 with a court, the 5 notes untouched.
+- Production deployment `c96a56e0-b5b6-475a-8946-0cf732357346` = main `ca50151`. ROLLBACK: Pages deployment `94869aa6-18d7-4a28-8843-0203ee9f51f0`
+  (Zip 13, `1a51512`), then, only if View as is needed on that build, `npx wrangler d1 execute pickleball --remote --command "ALTER TABLE sessions
+  DROP COLUMN court;"` (tested on the preview, see Item 1). Quickest off: Settings > Feature switches > "Game day card" (it is already off).
+- Read-only live check (backup address; the custom one does not answer from this sandbox): the live script is the local build's file; sign-in
+  with the read-only PIN works (View only); no Game day card flag and no court anywhere (12 games); the `?gameday=on` header turns it on for one
+  phone only; setting a court and flipping the switch are refused (403); the player answer has no Game day keys; the preview-only test header
+  does nothing on live; Activity and Money answer 200.
+- FOUND on live (Q4): the three Zip 13 rows (Players redo, Swap to Alex, Undo on admin toasts) are ON for everyone, and so are Alert cards, Seat
+  dots and all four speed rows: every Settings row is on except Game day card. The repo notes had several of them off. The preview seed now
+  matches (OFF_ON_LIVE empty) and the preview was re-seeded with them on.
+- Later fix (not done, Alex Nov 8): Edit game cannot save a game whose end is past midnight (see Item 2).
+
+## Zip 15: Second Chance (SECOND_CHANCE): same-day games, the two Telegrams, Venmo Request on Home - built Sun Nov 8, 2026 (a quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 15" brief (`START_HERE.md`, `SITE_RULES.md`, mockups mock11.html / p12_*.png for the Home card, edit_sheet_mock5.html for the
+one wording change). One PR. NO database schema change, no migration. Nothing deployed to production, nothing switched on, no live data
+read or changed. The switch's full description is its row in `docs/FEATURE_SWITCHES.md`.
+
+### Housekeeping
+- Zip 14's leftover commit `67d58aa` (preview seed matches the live switch rows, deploy notes) was cherry-picked here: it touched only
+  `scripts/seed-preview-world.ts`, `docs/PREVIEW_FAKE_DB.md`, `docs/STAGE_NOTES.md` and the seed's own test in `tests/zip13.test.ts`.
+
+### What it does (all behind SECOND_CHANCE, ships OFF)
+- Rules in one place: `shared/secondChance.ts` (which games count, the card steps, the texts, the Telegram wording, which Telegram is due).
+  Server: `server/secondChance.ts` (switch, card data on the dashboard, the card taps, the Telegrams). Screen: `src/pages/admin/SecondChance.tsx`,
+  `src/second-chance.css` (the cards are the site's own alert card, `AlertCard`, Zip 11; sizes from mock11.html).
+- Reopen reuses the canceled game: step 2's Reopen game calls the site's own Reopen (`decide` with 'reopen' in `server/admin.ts`): the same
+  `sessions` row goes back to Not booked, its people stay in, a paid seat that became credit at the cancel owes again (their credit is still
+  in their pot: "Already paid for the canceled game? Tap Use Credit"). A new time then goes through the site's own time change
+  (`reschedule`), so the Moved-game notice asks the people in. No new status, no schema change. The original time is kept with the
+  `sc_reopened` mark for TEXT 2's "(instead of 7:30)".
+- "The night before" = canceled on the Eastern day before the game's date. A game canceled the morning of is not a Second Chance game.
+- The cutoff's Cancel game is the site's own cancel with the late-fee question answered "waived" (never booked, so no fee): everyone's money
+  goes back as credit, the same as any cancel.
+- Telegrams: checked inside the tap after every tap on a game (joins, pays, Use credit, the organizer's Mark paid, roster and I'm in) and on
+  the 5-minute clock. Claimed in `task_log` (kind 'sent', one per game by the table's unique index) before sending; only the send itself
+  runs after the answer. A failed send gives the claim back (3 tries in all). With the switch on for everyone, a not-booked game today no
+  longer gets the older "has 4 now, it's on" alert (Telegram 1 or 2 replaces it); booked games keep it.
+- Telegram 1's link is `/admin?unpaid=<game>`: the organizer's own page (sign-in needed) opens a sheet with Messages to ONLY the unpaid
+  players who have a phone. No phone number ever travels in a link. The Telegram link filter (`server/telegram-links.ts`) accepts exactly
+  that address and nothing looser.
+- CourtReserve deep link: no documented way to link to one date and time slot (CourtReserve's help pages only describe the booking page and
+  the public booking link), so Telegram 2 and the Book a court buttons use the site's usual booking page (`COURTRESERVE_BOOKING_URL`).
+- Request: Venmo through the Remind sheet's own builder (`venmoRequestLinks`): `venmo://paycharge?...` on a phone with the
+  `https://venmo.com/?txn=charge&recipients=USER&amount=14&note=Pickleball%20Tue%20Nov%2010` fallback, real %20. The brief's
+  `venmo.com/USER?...` form is the one that showed "+" on Alex's phone in Zip 6, so it was kept as is ("keep whatever already works").
+
+### Different from the brief or the mock
+- The organizer counts in "3 in" and as paid ("4 signed up and paid" = 3 other players paid plus Alex), the same as the x of y paid pill and
+  the rule that the organizer never pays the group.
+- "Paid" includes an unconfirmed I paid (the same as the x of y paid pill). Alex still taps Mark paid.
+- The step 3 and same-day cards also list who has not paid, with Request or Text (the brief asks for Request on the Second Chance card;
+  the mock has no rows). On a phone the Mark paid list puts Mark paid and Request under the name (a long name keeps its line).
+- With Alert cards off (not the case on live) the cards fall back to a plain card with the same words and buttons.
+
+### Preview
+- `[env.preview.vars]` has `SECOND_CHANCE_TEST = "on"` (never production): `/admin?noontest=on` pretends it is noon on game day for these
+  features only, and the Telegrams are a visible fake ("Telegram (preview, not sent)" on Home). See `docs/PREVIEW_FAKE_DB.md`.
+
+### Fresh review (an independent reviewer who did not write the code)
+- Fixed from it: (1) with the row off a tap read the group and the row: now only the row (one small read per tap on a game, said in
+  FEATURE_SWITCHES); (2) a Telegram that timed out was sent again on the next tap, and the hour's limit used up a try: now the clock's own
+  rules (timeout keeps the claim, the limit is not a try); (3) the cutoff cancel was allowed on any same-day not-booked game: now only while the
+  card is at its cutoff step, and once 4 had paid it refuses (the court may be booked; the gear menu's Cancel session asks about the fee);
+  (4) a reopen whose time change failed could not be finished: the mark is written first (taken back if the reopen fails) and Reopen again
+  finishes the move; (5) a regular game the site made that day (a new first session date) could get a same-day card: now only + Add game
+  games; (6) the Telegram claim now checks the game is still on and not booked. Also: nothing before 7:00 AM; no names in the words that
+  become Telegram 1's link ("Text the 1 who hasn't paid"); drop out, Undo credit and Can't make it check the Telegrams too.
+- Left as is (said in the report): a Telegram whose background send is cut off when the worker stops is lost (the claim stays); the old
+  "has 4 now, it's on" alert stays off for these games even after Telegram 1 ran out of tries; a fake Telegram on the preview comes from taps
+  only (the preview has no clock).
+
+### Tests (Sun Nov 8, 2026)
+- Unit: `tests/second-chance.test.ts` (23): the rules, TEXT 1 and 2 exactly, the Telegram wording, fires once (4 paid before 4 in, 6 in 4
+  paid, dropouts, booked, canceled, alerts off), exactly 3 (2 in shows nothing), reopen then Use credit to the cent, the cutoff cancel,
+  switch off = main, a player refused, the preview fake and pretend noon (and never on live). `tests/speed-queries.test.ts`: the new row is
+  not main's.
+- Full unit suite on the final code: 2384 passed, 1 skipped, 0 failed (143 files); tsc clean; build clean.
+- Browser: `e2e/zip15.cjs` 20/20 (steps 1 to 4 at 390/360/320 light and dark, Reopen at a new time with TEXT 2, Telegram 1 and its
+  unpaid-only sheet, Telegram 2 and step 4, each once, Request %20 and Text, Use credit to the cent, the cutoff cancel, the X, a player sees
+  nothing, the Settings row, the real clock). `e2e/zip15-off.cjs` 18/18 against main `ca50151` (organizer Home at 390/360/320 light and dark,
+  the Edit player sheet's old note, Settings apart from the new row, Players, Money, History, four player homes, no key in any answer, a join
+  writes nothing). It ignores a passing "Game on!" pop-up caught mid-slide (its spoken words are still compared).
+- Full `npm run test:e2e` once on the final code, 2 at a time, each script on its own port: 51 of 56 clean (`money-rework` updated for the
+  new Settings row). The other 5 fail the same way on main: `run.cjs` (10), `cancel-reason.cjs` (2), `want-in.cjs` (1, View as demo),
+  `admin-r2.cjs` F4 (1), and `money-rework.cjs` check 6 "Hide from list" (re-run on main `ca50151` this session: same failure).
+- Preview: https://preview-zip15.pickleball-club-9h0.pages.dev, the fake database re-seeded Sun Nov 8 with the fixed code. Switch rows on
+  there: every row the repo records as on live (all of them, read Nov 8) plus Game day card and Second Chance.
+
+### Round 2 (Alex tested the preview, Sun Nov 8): answers and three fixes - on the preview again, waiting for "ship it"
+- Answers: Game day card stays as it is (ON in the preview). "Paid" keeps counting an unconfirmed I paid; Telegram 2 now says so:
+  "4 paid for tonight 7:30 PM (1 not confirmed yet). Book it now" (the real number; none: no note). The cancel reason: there is no clean way
+  to tell a "short a player" cancel from a holiday one (the reason is free text, optional, and Alex may leave it empty), so the card shows for
+  any cancel that fits the rule and the X hides it.
+- Fix 1, the time list: every half hour from 4:00 to 9:30 PM still ahead, none left out. Round 1 hid times another game already started at;
+  it no longer does (the server still refuses such a time, with a message). The preview's game day now has no other game on the half hours.
+- Fix 2, calm previews (`PREVIEW_CALM`, previews only, `shared/previewCalm.ts`): admin Home shows only the Second Chance cards and Mark paid
+  tonight; the player page hides its alert cards; `?alerts=all` shows everything on that phone. Every switch stays as on live. Also: "pretend
+  noon" now stays on the Second Chance game's day after Reopen (it used to look only for the canceled game, so after a Reopen it could jump to
+  another day; the old preview day hid this).
+- Fix 3, the compact Mark paid card: LIVE for everyone, no switch (PM leaning; a pure cleanup and the old layout was the problem). See the
+  "Not switched (Zip 15 round 2)" part of FEATURE_SWITCHES.md. The Second Chance cards use the same rows (now with Mark paid on each row).
+  OFF-equals-main has this one intended difference: `e2e/zip15-off.cjs` compares Home without that card, and compares the card by its people,
+  amounts and Mark paid buttons (identical to main).
+- Tests (round 2, Sun Nov 8): unit 2388 passed, 1 skipped, 0 failed (`tests/second-chance.test.ts` 27: every half hour, "(1 not
+  confirmed yet)", calm flag only on a preview). `e2e/zip15.cjs` 27/27 (adds: the full time list, the calm Home and player page with and
+  without ?alerts=all, the compact card at 390/360/320 light and dark: 50 px rows, 34 px buttons, 14 px words, the date once, 5 then "N
+  more"). `e2e/zip15-off.cjs` 19/19 against main `ca50151`. The older scripts that touch the Mark paid card: admin-audit, admin-v2, court,
+  instant-taps, late-fees, zip6, zip8, zip11, zip13, layout-polish, admin-sweep clean; admin-r2 F4, money-rework 6 and run.cjs (10) fail as
+  on main. Preview redeployed and re-seeded (game day Tue Dec 1).

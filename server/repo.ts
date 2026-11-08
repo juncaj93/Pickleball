@@ -90,6 +90,8 @@ export interface SessionRow {
   final_price_cents: number | null;
   final_played_count: number | null;
   updated_at: string;
+  /** When the game was made (Zip 15 reads it: a game added on its own day). Every SELECT * has it. */
+  created_at?: string;
 }
 
 export interface RosterRow {
