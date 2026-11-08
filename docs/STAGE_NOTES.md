@@ -3344,3 +3344,9 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   "Not switched (Zip 15 round 2)" part of FEATURE_SWITCHES.md. The Second Chance cards use the same rows (now with Mark paid on each row).
   OFF-equals-main has this one intended difference: `e2e/zip15-off.cjs` compares Home without that card, and compares the card by its people,
   amounts and Mark paid buttons (identical to main).
+- Tests (round 2, Sun Nov 8): unit 2388 passed, 1 skipped, 0 failed (`tests/second-chance.test.ts` 27: every half hour, "(1 not
+  confirmed yet)", calm flag only on a preview). `e2e/zip15.cjs` 27/27 (adds: the full time list, the calm Home and player page with and
+  without ?alerts=all, the compact card at 390/360/320 light and dark: 50 px rows, 34 px buttons, 14 px words, the date once, 5 then "N
+  more"). `e2e/zip15-off.cjs` 19/19 against main `ca50151`. The older scripts that touch the Mark paid card: admin-audit, admin-v2, court,
+  instant-taps, late-fees, zip6, zip8, zip11, zip13, layout-polish, admin-sweep clean; admin-r2 F4, money-rework 6 and run.cjs (10) fail as
+  on main. Preview redeployed and re-seeded (game day Tue Dec 1).
