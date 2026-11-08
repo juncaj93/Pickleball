@@ -3520,3 +3520,18 @@ same build stamp). Only the clock Worker (`pickleball-alerts-clock`) is deployed
   motion and admin-motion failed one check each under the parallel load and pass alone (186 of 186).
 - Restore test on live data: PASS 3 of 3 (above). CPU on Cloudflare: above (temporary test Workers on the fake preview data and a scratch
   database, all deleted after).
+
+### Deploy (Sun Nov 8, 2026, 6:48 PM Eastern, a quiet window): NOT DONE, the deploy command was blocked by this session's permissions
+- PR #103 merged as `7937806` (main tree = the tested branch). Main equals live for the site (no site file changed; site not redeployed).
+- Restore points taken first (6:48 PM): SQL export of live `live-before-zip19-2026-11-08.sql` (178,664 bytes, scratch folder only,
+  phone numbers, not in git); Time Travel bookmarks live `00000c19-00000000-0000511d-73dcea1596518a17c4010ce0b4444d11` and
+  pickleball-backups `0000003c-00000000-0000511d-ee9cee549e1613218ebfc5be836d0102`. Integrity checks: all 21 columns 0.
+- `npx wrangler deploy --config worker/wrangler.toml` was refused by the session's permission check, so the clock Worker still runs
+  version `ff418c61-0bb4-48b0-8296-13be55545889` (Zip 8 code) and the Nov 15 copy will use the old one-run code unless deployed first.
+  The Worker has its CRON_SECRET (needed for the self-calls). To deploy (any quiet window, not Mon 6 PM to Tue 11 PM): from main,
+  `npx wrangler deploy --config worker/wrangler.toml`. ROLLBACK: `npx wrangler rollback ff418c61-0bb4-48b0-8296-13be55545889 --config worker/wrangler.toml`.
+- After a deploy, check: the next top-of-the-hour tick shows 3 runs of pickleball-alerts-clock (knock, /backup/run, /backup/plan) with
+  0 errors in Cloudflare analytics; `node scripts/weekly-backup.mjs list` still shows the 2 copies (2026-11-08, 2026-11-01) and no
+  INCOMPLETE line. Next weekly copy: Sun Nov 15 from 3:00 AM Eastern; then `npm run restore-test`.
+- Public pages on live answer 200 (/, /admin, /api/status, /api/group/version). Temporary test Workers, the relay project and the
+  scratch database used for the CPU numbers are deleted (checked: only the real Workers, databases and site remain).
