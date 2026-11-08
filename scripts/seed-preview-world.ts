@@ -671,26 +671,31 @@ export const PREVIEW_SWITCHES_ON = [
   'seat_dots_on',
 ] as const;
 
-/** Zip 13 (live since Sat Nov 7 with these three rows OFF): Players redo, Swap to Alex, Undo on admin toasts. Only on a local world that asks
- *  for them (e2e/zip13.cjs); the preview database leaves them off, as on live (PREVIEW SWITCHES RULE). */
+/** Zip 13: Players redo, Swap to Alex, Undo on admin toasts. ON on live (read with the read-only PIN, Sun Nov 8), so ON on the preview
+ *  database too; on a local world only when asked (e2e/zip13.cjs). */
 export const ZIP13_SWITCHES_ON = ['players_redo_on', 'swap_button_on', 'admin_undo_on'] as const;
 
 /** Being built (Zip 14): Game day card. On the preview database and on a local world that asks for it (e2e/zip14.cjs). */
 export const ZIP14_SWITCHES_ON = ['game_day_card_on'] as const;
 
 /**
- * Rows that are OFF on live (repo records: Alert cards and Seat dots were left off, the four speed rows ship dark). Older local browser tests
- * need them on, so the list above keeps them; the PREVIEW database leaves them out, so a preview behaves like live (PREVIEW SWITCHES RULE).
+ * Rows that are OFF on live. Empty since the Zip 14 deploy (Sun Nov 8, 1:20 AM Eastern): the live rows read with the read-only PIN showed
+ * Alert cards, Seat dots, the four speed rows and the three Zip 13 rows all ON (the repo notes had them off). Add a row here only after
+ * reading it off on live; the preview database leaves these out so a preview behaves like live (PREVIEW SWITCHES RULE).
  */
-export const OFF_ON_LIVE = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'] as const;
+export const OFF_ON_LIVE: readonly string[] = [];
+
+/** The local world e2e/zip13.cjs was written for leaves these six rows off (unchanged since Zip 13; not about live). */
+const ZIP13_LOCAL_OFF = ['alert_cards_on', 'seat_dots_on', 'speed_fewer_queries_on', 'speed_direct_load_on', 'speed_last_screen_on', 'speed_last_screen_admin_on'];
 
 function switchRows(nowMs: number, opts: { zip13?: boolean; zip14?: boolean; preview?: boolean }): string {
   const at = new Date(nowMs).toISOString();
   // The preview database (and e2e/zip13.cjs): live's switch list, without the rows that are off on live. e2e/zip13.cjs adds the three
-  // Zip 13 rows; the preview database does not (they are off on live since the Zip 13 deploy). Zip 14's row: the preview and e2e/zip14.cjs.
+  // Zip 13 rows, and so does the preview database (they are ON on live, read Nov 8). Zip 14's row: the preview and e2e/zip14.cjs.
   const likeLive = !!opts.zip13 || !!opts.preview;
-  const base = likeLive ? PREVIEW_SWITCHES_ON.filter((t) => !(OFF_ON_LIVE as readonly string[]).includes(t)) : PREVIEW_SWITCHES_ON;
-  return [...base, ...(opts.zip13 && !opts.preview ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
+  const off: readonly string[] = opts.preview ? OFF_ON_LIVE : ZIP13_LOCAL_OFF;
+  const base = likeLive ? PREVIEW_SWITCHES_ON.filter((t) => !off.includes(t)) : PREVIEW_SWITCHES_ON;
+  return [...base, ...(opts.zip13 ? ZIP13_SWITCHES_ON : []), ...(opts.zip14 || opts.preview ? ZIP14_SWITCHES_ON : [])].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
 /** Alert switches for the one fake group (everything on, like a fresh group). No Telegram token exists in previews, so nothing is sent. */

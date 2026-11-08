@@ -3230,3 +3230,24 @@ nothing switched on, no live data read or changed. The switch's full description
   Card time and buttons, Color cleanup, Home collapse, Instant taps, Last call texts, Late-cancel fee split, Late drops owe $14, Money rework,
   Ask for payment, No Venmo? note, Pay sheet, Simpler player cards, Player fixes, Short games, Texts round 2, Moved-game notice, Tonight glow,
   Venmo request, both animation switches) plus Game day card. Off as on live: Alert cards, Seat dots, the four speed rows, the three Zip 13 rows.
+
+### Deploy (Sun Nov 8, 2026, about 1:20 AM Eastern, a quiet window, on Alex's "ship it") - LIVE with GAME_DAY_CARD OFF
+- Alex's answers after the preview: keep the 66 px tile; keep the pop-up under the buttons; keep Court on the card until the game ENDS (built,
+  `e2e/zip14.cjs` 22/22); confirm the Zip 13 rows at deploy (below).
+- Before: main equaled live (production `94869aa6-18d7-4a28-8843-0203ee9f51f0` = `1a51512`). PR #98 merged as `ca50151`. Unit on merged main:
+  2361 passed, 0 failed. SQL export of live (`npx wrangler d1 export pickleball --remote`, 1:04 AM, 175,641 bytes, kept out of git) and Time
+  Travel bookmark `00000b31-00000000-0000511d-bf201bc82d56daa739cdd2fb5a514aba` (1:04 AM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000b31-00000000-0000511d-bf201bc82d56daa739cdd2fb5a514aba`.
+  Integrity checks: all 21 columns 0 before and after the migration.
+- Migration 0017 applied to live (`npx wrangler d1 migrations apply pickleball --remote`): 13 games, 0 with a court, the 5 notes untouched.
+- Production deployment `c96a56e0-b5b6-475a-8946-0cf732357346` = main `ca50151`. ROLLBACK: Pages deployment `94869aa6-18d7-4a28-8843-0203ee9f51f0`
+  (Zip 13, `1a51512`), then, only if View as is needed on that build, `npx wrangler d1 execute pickleball --remote --command "ALTER TABLE sessions
+  DROP COLUMN court;"` (tested on the preview, see Item 1). Quickest off: Settings > Feature switches > "Game day card" (it is already off).
+- Read-only live check (backup address; the custom one does not answer from this sandbox): the live script is the local build's file; sign-in
+  with the read-only PIN works (View only); no Game day card flag and no court anywhere (12 games); the `?gameday=on` header turns it on for one
+  phone only; setting a court and flipping the switch are refused (403); the player answer has no Game day keys; the preview-only test header
+  does nothing on live; Activity and Money answer 200.
+- FOUND on live (Q4): the three Zip 13 rows (Players redo, Swap to Alex, Undo on admin toasts) are ON for everyone, and so are Alert cards, Seat
+  dots and all four speed rows: every Settings row is on except Game day card. The repo notes had several of them off. The preview seed now
+  matches (OFF_ON_LIVE empty) and the preview was re-seeded with them on.
+- Later fix (not done, Alex Nov 8): Edit game cannot save a game whose end is past midnight (see Item 2).
