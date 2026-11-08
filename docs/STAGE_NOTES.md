@@ -3405,3 +3405,24 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
   so they get the card too (real money above the final price; the 7 days start then); a closed card comes back after a Reopen and redo;
   the card can still say "$5 back" for up to 7 days after that credit was spent (true as history).
 
+
+### Tests (Sun Nov 8, 2026)
+- Unit on the final code: 2403 passed, 1 skipped, 1 failed: `audit-money` "the calendar file and the status endpoint carry no money"
+  (a random id in the calendar file can hold "555-"; untouched by this zip; 5 of 5 reruns pass). Earlier full run on the same code: 2404
+  passed. New: `tests/after-game.test.ts` (16: off = main, the row, the private link, the kill switch, the card equals the ledger row and the
+  credit change to the cent, no card at an equal price or for a no-show, two games combined, the X, 7 days, Reopen and redo, privacy,
+  owes more on and off, the preview seed). `tests/speed-queries.test.ts`: the new row is not main's.
+- Browser: `e2e/zip16.cjs` 25/25 (390/360/320 light and dark: Parker, Quinn; Rowan's combined card; chip equals card; X with no request and
+  no money change; 7 days; another player and a phone with no name; ?as=Parker; the Settings row and ?aftergame=on; the dark look on every
+  player alert card type at 390/360/320 incl. 4.5:1 words, the banner and the cash-out question; light unchanged; organizer unchanged).
+  `e2e/zip16-off.cjs` 40/40 against main `98a208a` (switch off = main on player homes at 390/360/320 light and dark, HTML and every
+  element's look, with the alert card colors in dark the one intended difference; organizer Home, Settings apart from the new row, Players,
+  Money, History; no Zip 16 key in any answer).
+- Full `npm run test:e2e` once, 3 at a time on their own ports: 52 of 57 clean; `money-rework` updated for the new Settings row (36/36). The
+  other 4 fail the same way on main `98a208a` (rerun there this session): `run.cjs` (10; 125 under the parallel load, 10 alone, the same as
+  main), `cancel-reason.cjs` (2), `want-in.cjs` (1, View as demo), `admin-r2.cjs` F4 (1).
+- Chrome draws a 1.5 px border as 1 px (it rounds to whole pixels), so the browser checks read the rule that applies.
+
+### Preview
+- https://preview-zip16.pickleball-club-9h0.pages.dev, fake database re-seeded Sun Nov 8 (the cards last until Sun Nov 15). Switch rows on:
+  every row on live (repo records) plus Game day card and Second Chance (as on the Zip 14 and 15 previews) plus After-game cards.
