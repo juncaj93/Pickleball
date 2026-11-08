@@ -166,9 +166,6 @@ html[data-alert-cards] .sc-card .sc-time {
   white-space: pre-wrap;
   font-size: 14px;
 }
-.sc-pretend {
-  margin: 0;
-}
 
 /* A narrow phone (320 px): the two buttons keep one line each. */
 @media (max-width: 359px) {

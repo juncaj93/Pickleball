@@ -459,9 +459,6 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
     const markPaid = items.filter((i) => i.kind === 'tonight');
     return (
       <>
-        <p className="small muted sc-pretend" data-preview-calm>
-          Preview: only this zip's cards. Open with ?alerts=all to see every alert.
-        </p>
         <SecondChanceHome ctx={ctx} />
         <UnpaidTextSheet ctx={ctx} />
         {markPaid.map((item) => (

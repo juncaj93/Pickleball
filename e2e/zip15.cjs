@@ -137,17 +137,23 @@ async function main() {
     await page.locator('[data-sc-cards]').waitFor();
     const kinds = await page.evaluate(() => [...document.querySelectorAll('main article.ac, main section.do-now, main [data-refund-request], main [data-payment-claim], main [data-finalize], main [data-vr-cards]')].map((e) => e.getAttribute('aria-label') || e.className));
     const extra = kinds.filter((k) => !/Mark paid tonight|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
-    assert((await page.locator('[data-preview-calm]').count()) === 1, 'no calm note');
+    // No note on screen (Alex, Nov 8: the links work, nothing says so).
+    assert((await page.locator('[data-preview-calm], [data-sc-pretend]').count()) === 0, 'a preview note on screen');
     assert((await page.locator('[data-mp-card]').count()) === 1, 'the Mark paid card');
     assert(extra.length === 0, `other alert cards on the calm Home: ${extra.join(' | ')}`);
     const calmCount = await page.locator('main article.ac').count();
     await page.goto(BASE + '/admin?alerts=all');
     await page.locator('.tabbar').waitFor();
     await page.waitForTimeout(800);
-    assert((await page.locator('[data-preview-calm]').count()) === 0, 'calm note with ?alerts=all');
     assert((await page.locator('main article.ac').count()) > calmCount + 2, 'every alert should show with ?alerts=all');
     await page.goto(BASE + '/admin?alerts=calm');
-    await page.locator('[data-preview-calm]').waitFor();
+    // (Instant admin first draws this phone's saved copy, which still has every alert; the fresh answer replaces it.)
+    let back = -1;
+    for (let i = 0; i < 40 && back !== calmCount; i++) {
+      await page.waitForTimeout(250);
+      back = await page.locator('main article.ac').count();
+    }
+    assert(back === calmCount, `back to the calm Home with ?alerts=calm: ${back} cards, ${calmCount} before`);
     await ctx.close();
     const pc = await browser.newContext(phone(390, 'light'));
     await post(pc.request, '/api/me', { playerId: idOf('Casey') });

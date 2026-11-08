@@ -41,14 +41,9 @@ export function SecondChanceHome({ ctx }: { ctx: AdminCtx }) {
   const sc = ctx.d.secondChance;
   if (!sc) return null;
   const fake = sc.preview ? (sc.fakeTelegrams ?? []) : [];
-  if (sc.cards.length === 0 && fake.length === 0 && !sc.pretendNoon) return null;
+  if (sc.cards.length === 0 && fake.length === 0) return null;
   return (
     <section className={`sc-cards${ctx.d.alertCards === true ? ' ac-stack' : ' stack'}`} aria-label="Same-day games" data-sc-cards>
-      {sc.pretendNoon && (
-        <p className="small muted sc-pretend" data-sc-pretend>
-          Preview: pretending it's noon on game day for these cards. Open with ?noontest=off to stop.
-        </p>
-      )}
       {sc.cards.map((c) => (c.kind === 'chance' ? <ChanceCard key={c.sessionId} ctx={ctx} c={c} /> : <OpenCard key={c.sessionId} ctx={ctx} c={c} />))}
       {fake.length > 0 && <FakeTelegrams ctx={ctx} list={fake} />}
     </section>
