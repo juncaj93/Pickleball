@@ -434,9 +434,10 @@ button.cm-cl:focus-visible {
   margin-top: 8px;
   padding: 5px 14px;
   border-radius: 999px;
-  border: 1px solid var(--gd-line);
-  background: var(--pc-card, #fff);
-  color: var(--gd-mut);
+  /* The organizer screens' own tokens (src/styles.css), so it follows light and dark there. */
+  border: 1px solid var(--line-strong, var(--gd-line));
+  background: var(--surface, #fff);
+  color: var(--ink-2, var(--gd-mut));
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;

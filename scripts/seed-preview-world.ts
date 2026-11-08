@@ -580,12 +580,13 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
   }
 
   // 16. Zip 14 (Game day card): two extra games TONIGHT (Eastern; the next day when seeded at 9 PM or later, like step 14), so the game day card
-  //     shows both looks side by side: "Court 3" (4 in: Indy paid cash, Jordan, Kai, Morgan owe) and "Court TBD" (3 in: Indy, Jordan, Kai, all
-  //     owe). The court is set through the real organizer path (the switch on for that one call, then back off: the seed's switch rows decide).
+  //     shows both looks side by side: "Court 3" (4 in: Indy paid cash, Jordan, Kai, Morgan owe) and "Court TBD" (3 in: Indy, Jordan and the
+  //     long name, all owe). The court is set through the real organizer path (the switch on for that one call, then back off: the seed's switch rows decide).
   //     Every other game keeps no court. The regular game on another day stays as it is ("a game on another day").
   if (opts.zip14 || opts.preview) {
     const taken = new Set(games().map((g) => ms(g.startsAt)));
-    const slots = [[17, 0], [22, 0], [15, 0], [12, 0], [10, 0]].map(([h, m]) => zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift, h, m, 'America/Detroit'));
+    // No slot that ends after midnight (Edit game cannot save a game whose end falls on the next day; a known gap, see STAGE_NOTES Zip 14).
+    const slots = [[17, 0], [21, 30], [15, 0], [12, 0], [10, 0]].map(([h, m]) => zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift, h, m, 'America/Detroit'));
     const free = slots.filter((t) => t > N + 30 * 60_000 && eastDate(t) === tonightDate && !taken.has(t)).sort((a, b) => a - b);
     if (free.length >= 2) {
       await w.org.ok('PUT', '/api/admin/game-day-card-switch', { on: true });
@@ -595,13 +596,13 @@ export async function buildSeed(startMs = Date.now(), opts: { zip13?: boolean; z
         await refresh();
         const g = games().find((x) => x.id === res.id);
         await setCourt(g, 'booked');
-        for (const n of i === 0 ? ['Indy', 'Jordan', 'Kai', 'Morgan'] : ['Indy', 'Jordan', 'Kai']) await join(n, g);
+        for (const n of i === 0 ? ['Indy', 'Jordan', 'Kai', 'Morgan'] : ['Indy', 'Jordan', LONG_NAME]) await join(n, g);
         if (i === 0) await orgPays('Indy', g);
         made.push(g);
       }
       await w.org.ok('PUT', '/api/admin/game-day-card-switch', { on: false });
       await refresh();
-      summary.push(`Zip 14: two extra games tonight: ${new Date(free[0]).toISOString()} on Court 3 (Indy paid, Jordan, Kai, Morgan owe) and ${new Date(free[1]).toISOString()} with no court (Indy, Jordan, Kai owe)`);
+      summary.push(`Zip 14: two extra games tonight: ${new Date(free[0]).toISOString()} on Court 3 (Indy paid, Jordan, Kai, Morgan owe) and ${new Date(free[1]).toISOString()} with no court (Indy, Jordan, ${LONG_NAME} owe)`);
     } else summary.push('Zip 14: no room for two more games tonight (seeded too late in the day); the game day card shows on the tonight game only');
   }
 
