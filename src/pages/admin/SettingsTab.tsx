@@ -476,7 +476,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           ) : (
             <>
               <AfterGameRow ctx={ctx} auto={auto} />
-      <SecondChanceRow ctx={ctx} auto={auto} />
+              <SecondChanceRow ctx={ctx} auto={auto} />
               <GameDayRow ctx={ctx} auto={auto} />
               <Zip13Rows ctx={ctx} auto={auto} />
               <InstantAdminRow ctx={ctx} auto={auto} />

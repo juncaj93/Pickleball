@@ -26,7 +26,7 @@ export function afterGameAllowed(flag: string | undefined | null): boolean {
   return (flag ?? 'on').trim().toLowerCase() !== 'off';
 }
 
-/** Still young enough to show: given less than 7 days ago (and not in the future by more than a minute of clock difference). */
+/** Still young enough to show: given less than 7 days ago. */
 export function afterGameFresh(atIso: string, nowMs: number): boolean {
   const at = Date.parse(atIso);
   return Number.isFinite(at) && nowMs - at < AFTER_GAME_DAYS * DAY_MS;
