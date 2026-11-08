@@ -3395,3 +3395,13 @@ read or changed. The switch's full description is its row in `docs/FEATURE_SWITC
 ### Preview
 - Seed (`ZIP16_CAST`, `SEED_ZIP16=1`): Parker ($5, one game), Rowan ($8, two games), Quinn (owes $3 more). `/?as=Parker` (preview only).
 
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking: no wrong amount, no other player's data, no money read or written, OFF answers byte for byte main's, the preview flag
+  and ?as unreachable on live, finalize.ts and credit.ts untouched.
+- Fixed from it: a code comment that promised a "future time" check the code does not make (comment corrected); one lost indent in
+  Settings; FEATURE_SWITCHES now says the switch read also runs on the "anything changed?" check and the dashboard.
+- Left as is (said in the report): a seat paid at the lower price entirely with credit that owes more after a redo keeps today's owe
+  words (same amount); Mark paid confirming an I paid after Finalize, and Unmark of the latest cash, also write `finalized` credit records,
+  so they get the card too (real money above the final price; the 7 days start then); a closed card comes back after a Reopen and redo;
+  the card can still say "$5 back" for up to 7 days after that credit was spent (true as history).
+
