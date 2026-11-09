@@ -24,8 +24,12 @@ function findClipping(opts) {
   const shown = (el) => {
     if (!el.isConnected) return false;
     // The inside of a closed section is not drawn (only its summary line is).
-    const closed = el.closest('details:not([open])');
-    if (closed && !el.closest('details:not([open]) > summary')) return false;
+    // (Sections inside sections: every closed one on the way up counts.)
+    for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+      if (d.open) continue;
+      const sum = d.querySelector(':scope > summary');
+      if (!sum || !sum.contains(el)) return false;
+    }
     if (el.closest('.sr-only, [aria-hidden="true"] .sr-only')) return false;
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
