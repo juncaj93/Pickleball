@@ -3641,7 +3641,7 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
   cast: 10 players, 63 games. Checked: Vic $14 / "For Tue, Nov 3", Wren $28, Zoe $42 (every I'm in dimmed), Quinn "You owe $3 more", the
   Who are you? list is the 10 names.
 
-## Zip 21: Error alerts (ERROR_ALERTS): a short Telegram to Alex when the clock, the backup or the database fails, or the clock stopped - built Sun Nov 8, 2026 (night, a quiet window); merged, site NOT deployed yet
+## Zip 21: Error alerts (ERROR_ALERTS): a short Telegram to Alex when the clock, the backup or the database fails, or the clock stopped - built Sun Nov 8, 2026 (night, a quiet window); LIVE with ERROR_ALERTS OFF
 
 Spec: the "zip 21" brief (`START_HERE.md`, `SITE_RULES.md`). No schema change, no migration, 0 database writes. The switch's full
 description is its row in `docs/FEATURE_SWITCHES.md`. PR #107 merged as `eb17ab3`.
@@ -3672,12 +3672,21 @@ description is its row in `docs/FEATURE_SWITCHES.md`. PR #107 merged as `eb17ab3
   (the same 10 "Last call" checks), cancel-reason (2), want-in (1), admin-r2 F4 (1). circles failed 2 under load, 18/18 alone.
 - Fresh independent review: no blockers; its five fixes are in `ce0d9f1`.
 
-### Deploy (Sun Nov 8, about 10:30 PM Eastern, quiet window)
-- Main equaled live first: production `854a346f` = `8a10eba` (main since: docs only); clock Worker version `26aa96ec`.
-- Restore points (10:26 PM): SQL export `live-before-zip21-2026-11-09.sql` (181,112 bytes, session scratch folder, NOT saved into
-  pickleball-backups because the site was not deployed); Time Travel bookmark `00000c49-00000000-0000511e-4d22c28b9678b5ba6f7ffa4c9fb8d3db`.
-  Integrity checks: all 21 read 0.
-- Deployed: the error box Worker only, version `61e964e5-624a-4aa6-826a-f9b010d65847` (inert: nothing binds to it yet).
-- NOT deployed: the site (`npm run deploy` was blocked by the session's permission settings) and so the clock Worker was held back too.
-  To finish, from main, in a quiet window: `npm run deploy`, then `npx wrangler deploy --config worker/wrangler.toml`.
-  Rollbacks then: Pages deployment `854a346f-66cd-4d69-b3a2-dd3623afd33c`; clock Worker `npx wrangler rollback 26aa96ec-8fb8-41a0-85a7-247db5415e86 --config worker/wrangler.toml`.
+### Deploy (Sun Nov 8, 2026, 11:08 PM Eastern, quiet window, Alex's OK) - LIVE with ERROR_ALERTS OFF
+- Before: main `eb17ab3` (nothing from Zip 18 merged yet); live site `854a346f` = `8a10eba` (main since: Zip 21 only); clock `26aa96ec`.
+  Unit on main: 2507 passed, 1 skipped, 0 failed (149 files).
+- Restore points (10:26 PM): SQL export saved as `export-20261109042447` in pickleball-backups (checked against the file); Time Travel
+  bookmark `00000c49-00000000-0000511e-4d22c28b9678b5ba6f7ffa4c9fb8d3db`. Integrity checks: all 21 read 0 before and after. No migration.
+- Deployed: error box `61e964e5-624a-4aa6-826a-f9b010d65847`; site production `c8176a1b-4380-4ad8-b4cf-03e7afc94389` = main `eb17ab3`
+  (a first try from a detached checkout went to a PREVIEW, `6feb4737`, branch "HEAD": fake database, no Telegram, harmless; deploy from a
+  detached checkout needs `npm run deploy -- --branch main`); clock Worker `6b12b5f8-8d3f-4356-a493-97cd92af03d3` (schedule */5 unchanged).
+- ROLLBACK: Pages deployment `854a346f-66cd-4d69-b3a2-dd3623afd33c`; clock
+  `npx wrangler rollback 26aa96ec-8fb8-41a0-85a7-247db5415e86 --config worker/wrangler.toml`. No data step needed.
+- Read-only live check (backup address; the custom domain is blocked by this sandbox's proxy; sign in and reads only, nothing tapped):
+  site and /api/status 200, View only, Error alerts switch OFF, the TEST button and the switch row in the live code, Money and Activity
+  200, 12 games, 38 switch rows on.
+- Clock after: the 11:10, 11:15 and 11:20 PM ticks ran on `6b12b5f8`, success, 0 errors, 1 outgoing request each (the knock, no report),
+  1.4 to 2.1 ms CPU. Site Functions 0 errors. The box got 1 request per tick (the "off" note; each tick ran on a fresh copy of the
+  site, so it is every tick, not hourly): about 288 a day while off, free, no database writes.
+- D1's exact "daily limit" wording is unconfirmed: if it does not say "limit", it shows as "database errors on the site" (3 in 10 minutes).
+- Alex's answers: error alerts follow only their own switch (not "Telegram alerts to me"). Alex taps the TEST button and switches it on.
