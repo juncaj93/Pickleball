@@ -3640,3 +3640,44 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
 - Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (main `8a10eba`), the fake database re-seeded ONCE at 7:42 PM with the small
   cast: 10 players, 63 games. Checked: Vic $14 / "For Tue, Nov 3", Wren $28, Zoe $42 (every I'm in dimmed), Quinn "You owe $3 more", the
   Who are you? list is the 10 names.
+
+## Zip 21: Error alerts (ERROR_ALERTS): a short Telegram to Alex when the clock, the backup or the database fails, or the clock stopped - built Sun Nov 8, 2026 (night, a quiet window); merged, site NOT deployed yet
+
+Spec: the "zip 21" brief (`START_HERE.md`, `SITE_RULES.md`). No schema change, no migration, 0 database writes. The switch's full
+description is its row in `docs/FEATURE_SWITCHES.md`. PR #107 merged as `eb17ab3`.
+
+### What it does (all behind ERROR_ALERTS, ships OFF)
+- Rules and words: `shared/errorAlerts.ts` (one pure rule book, `boxStep`). Site side: `server/errorAlerts.ts`. Clock Worker: `worker/cron.ts`
+  `report()`. Memory: `worker/box.ts`, a new Worker `pickleball-error-box` with one free SQLite Durable Object (no public address, no
+  secrets), bound to the site as `ERROR_BOX` (production only; previews have none).
+- 1: the tick fails (`server/tasks.ts` wraps `cronTick`; job "game check" or "smart alerts"); the clock Worker also reports "no answer at all".
+- 2: the weekly backup failed or INCOMPLETE (the clock Worker posts `/api/cron/report`); 1 backup message a day (it retries hourly).
+- 3: the database's free daily limit (at once), 3 database errors in 10 minutes, or 5 server errors in 10 minutes (memory only, per Worker run).
+- 4: no tick reached the site for 20 minutes to 12 hours (said on the next tick; longer = the alerts were paused, start fresh).
+- Limits: 1 an hour per kind, 6 a day (Eastern), the rest said once as "N more errors in the last hour". Failed sends logged once.
+- The switch row always wins: ticks tell the box (on: every tick; off: about once an hour), so a restore can't leave alerts on.
+- While off, the one difference from main: the tick reads the switch row in its same single trip (7 questions, not 6) and tells the box "off"
+  about once an hour after its answer. Nothing a person sees changes.
+
+### Different from the brief
+- "Last sent" is not in KV: the Cloudflare token here has no KV permission. The Durable Object is free, outside the database's limits count
+  as far as Cloudflare's docs say (not confirmed either way), and runs one request at a time (no races in the limiter).
+- The private per-phone test link is the TEST button (an alert goes to Telegram, not a phone screen).
+- Branch name is the session's assigned branch (`claude/new-session-np0md5`); the PR title is "🎾21.erroralert".
+
+### Tests (Sun Nov 8, 2026, final code)
+- Unit: 2507 passed, 1 skipped, 0 failed (149 files); `tsc -b` clean. New `tests/error-alerts.test.ts` (51).
+- Browser: `e2e/zip21.cjs` 8/8 (the row and TEST button at 390/360/320, light and dark); `e2e/zip21-off.cjs` 18/18 against main `52803c2`.
+  Full suite once, 4 at a time: 52 of 59 clean. Fixed for the new top row: money-rework (9), zip16 (row order). Same as main: run.cjs
+  (the same 10 "Last call" checks), cancel-reason (2), want-in (1), admin-r2 F4 (1). circles failed 2 under load, 18/18 alone.
+- Fresh independent review: no blockers; its five fixes are in `ce0d9f1`.
+
+### Deploy (Sun Nov 8, about 10:30 PM Eastern, quiet window)
+- Main equaled live first: production `854a346f` = `8a10eba` (main since: docs only); clock Worker version `26aa96ec`.
+- Restore points (10:26 PM): SQL export `live-before-zip21-2026-11-09.sql` (181,112 bytes, session scratch folder, NOT saved into
+  pickleball-backups because the site was not deployed); Time Travel bookmark `00000c49-00000000-0000511e-4d22c28b9678b5ba6f7ffa4c9fb8d3db`.
+  Integrity checks: all 21 read 0.
+- Deployed: the error box Worker only, version `61e964e5-624a-4aa6-826a-f9b010d65847` (inert: nothing binds to it yet).
+- NOT deployed: the site (`npm run deploy` was blocked by the session's permission settings) and so the clock Worker was held back too.
+  To finish, from main, in a quiet window: `npm run deploy`, then `npx wrangler deploy --config worker/wrangler.toml`.
+  Rollbacks then: Pages deployment `854a346f-66cd-4d69-b3a2-dd3623afd33c`; clock Worker `npx wrangler rollback 26aa96ec-8fb8-41a0-85a7-247db5415e86 --config worker/wrangler.toml`.
