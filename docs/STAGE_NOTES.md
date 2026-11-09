@@ -3881,3 +3881,16 @@ value (admin only). Built on main `cc2ccb7` (Zip 18 and Zip 23 live).
 - Off-equals-main: the site built from this branch and from main differ only in that one CSS value (and the build time stamp); no server
   code changed. Fresh reviewer skipped for this version (look only, one value, under 150 lines; the review of the dropped item 1 is moot).
 - Preview: https://preview-zip22.pickleball-club-9h0.pages.dev (refreshed with this code; fake database not re-seeded).
+
+### Deploy (Mon Nov 9, 2026, 1:18 PM Eastern, a quiet window, on Alex's "ship it") - LIVE, no switch (one look value, test fixes)
+- Before: main equaled live (production `4eb74063-4151-4f59-8248-d570e967b98d` = main `cc2ccb7`, Zip 23). PR #112 merged as `28d5444`.
+  Unit 2537 passed, 0 failed; full browser suite 61 of 61 clean (above).
+- SQL export of live (1:18 PM, 183,152 bytes) saved as `export-20261109181909` in `pickleball-backups` (checked against the file).
+  Time Travel bookmark `00000d07-00000000-0000511e-4a5e10cca22259baae8d46e78f62a0d9` (1:18 PM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000d07-00000000-0000511e-4a5e10cca22259baae8d46e78f62a0d9`.
+  Integrity checks: all 21 read 0 before and after. No migration.
+- Production deployment `03db156d-89bf-4a4e-9a4a-2ca2c8a39401` = main `28d5444`. ROLLBACK: Pages deployment
+  `4eb74063-4151-4f59-8248-d570e967b98d` (Zip 23, `cc2ccb7`); no data step needed.
+- Live check (read only, no sign-in: no read-only PIN in this session; the custom domain is not reachable from this sandbox, the backup
+  address is): home and /api/status 200; the live CSS has the folded TONIGHT word at 6.75 px; /api/admin/dashboard answers 401 without a
+  sign-in. Not done: a signed-in look with the read-only PIN.
