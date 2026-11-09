@@ -12,6 +12,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5233;
@@ -59,9 +60,12 @@ async function main() {
     } catch {}
     await new Promise((r) => setTimeout(r, 500));
   }
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.parse('2026-10-30T09:00:00-04:00') }) });
+  // The server AND every browser page on Fri Oct 30, 9:00 AM (View as runs its demo copy on the phone's own clock; Zip 22: without the
+  // browser pin the demo check only passed before Thu Nov 5, 2026).
+  const clock = fixedClock(BASE);
+  await clock.set(Date.parse('2026-10-30T09:00:00-04:00'));
 
-  const browser = await chromium.launch();
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const setup = (await browser.newContext()).request;
   const made = await post(setup, '/api/setup', {

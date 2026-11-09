@@ -9,6 +9,7 @@ const { spawn } = require('node:child_process');
 const { rmSync, mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { fixedClock } = require('./fixed-clock.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5281;
@@ -58,9 +59,11 @@ async function main() {
     } catch {}
     await sleep(500);
   }
-  await fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: Date.now() }) });
-
-  const browser = await chromium.launch();
+  // Zip 22: a fixed Monday, Nov 9, 2026, 12:00 PM Eastern, for the server and every browser page. With the real clock, F4 ("only THIS
+  // WEEK starts expanded") failed from Friday to Sunday, when this week has no games left to show.
+  const clock = fixedClock(BASE);
+  await clock.set(Date.parse('2026-11-09T12:00:00-05:00'));
+  const browser = clock.pin(await chromium.launch());
   const post = (req, url, data) => req.post(BASE + url, { data, headers: { Origin: BASE } });
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const made = await post((await browser.newContext()).request, '/api/setup', {
@@ -78,7 +81,7 @@ async function main() {
   for (const h of d.hiddenSessions || []) await post(areq, `/api/admin/sessions/${h.id}/show`, { shown: true });
   await put(areq, '/api/admin/group', { organizerName: 'Alex' });
   d = await dash();
-  const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > Date.now() + 36 * 3600_000);
+  const ahead = d.sessions.filter((s) => !s.state.flags.past && Date.parse(s.startsAt) > clock.now() + 36 * 3600_000);
   const idOf = (n) => d.players.find((p) => p.name === n).id;
   const phones = {};
   for (const n of NAMES) {
@@ -130,7 +133,7 @@ async function main() {
 
   // A holiday game (the next Thanksgiving) so the holiday tab can be checked on any day this runs.
   {
-    const y = new Date(Date.now() + 36 * 3600_000);
+    const y = new Date(clock.now() + 36 * 3600_000);
     const year = y.getUTCMonth() > 10 || (y.getUTCMonth() === 10 && y.getUTCDate() > 26) ? y.getUTCFullYear() + 1 : y.getUTCFullYear();
     const startsAt = new Date(`${year}-11-26T19:00:00-05:00`).toISOString();
     const endsAt = new Date(`${year}-11-26T21:00:00-05:00`).toISOString();
