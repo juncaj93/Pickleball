@@ -64,7 +64,7 @@ function liveVars() {
 
 async function main() {
   mkdirSync(SHOTS, { recursive: true });
-  const dbFile = path.join(ROOT, '.data', 'zip18.sqlite');
+  const dbFile = path.join(ROOT, '.data', `zip18-${PORT}.sqlite`);
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   rmSync(dbFile, { force: true });
   const seeded = spawnSync('npx', ['vite-node', 'scripts/load-small-local.ts', '--', dbFile, SEED_ISO], { cwd: ROOT, encoding: 'utf8' });
@@ -90,7 +90,7 @@ async function main() {
   const browser = await chromium.launch();
 
   /** One phone. `as`: 'organizer' (signed in), or a player name picked on this phone, optionally also signed in as organizer. */
-  async function phone({ width = 390, scheme = 'light', alerts = 'calm', signedIn = false, xmas = false } = {}) {
+  async function phone({ width = 390, scheme = 'light', alerts = 'calm', signedIn = false, xmas = false, atMs = NOW_MS } = {}) {
     const ctx = await browser.newContext({ viewport: { width, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: 'reduce' });
     await ctx.addInitScript(
       ({ delta, alerts }) => {
@@ -110,7 +110,7 @@ async function main() {
           if (alerts === 'all') localStorage.setItem('pb_alerts', 'all');
         } catch {}
       },
-      { delta: NOW_MS - Date.now(), alerts },
+      { delta: atMs - Date.now(), alerts },
     );
     await ctx.route('https://venmo.com/**', (r) => r.abort());
     if (xmas) await ctx.route(`${BASE}/logo.png`, (r) => r.fulfill({ path: path.join(ROOT, 'public/logo-xmas.png'), contentType: 'image/png' }));
@@ -400,6 +400,128 @@ async function main() {
     assert(m.goAdmin === 0 && m.swap === null, JSON.stringify(m));
   });
 
+
+  // ---------------- Pretend it's... (the same demo copy as View as) ----------------
+  // For EVERY button in the Pretend it's... section: the organizer Home and View as a player in the next game, drawn while pretending,
+  // must equal the real site with its clock really set to that moment (dev server clock and the phone's clock both moved there). The demo
+  // copy is taken from the data as it is right before each pair, and the real visit comes right after, so both start from the same data.
+  const setClock = (ms) => fetch(`${BASE}/__dev/clock`, { method: 'POST', body: JSON.stringify({ atMs: ms }) });
+  const mainHtml = (page) => page.evaluate(() => document.querySelector('main.page').outerHTML);
+  const topHtml = (page) => page.evaluate(() => document.querySelector('.topbar').outerHTML);
+  async function openAdmin(page) {
+    await page.goto(`${BASE}/admin`);
+    await page.locator('.tabbar').waitFor({ timeout: 20000 });
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(500);
+  }
+  const presetInfo = await (async () => {
+    const { ctx, page } = await phone({ signedIn: true });
+    await openAdmin(page);
+    await page.locator('.topbar-btn', { hasText: 'View as' }).click();
+    const labels = await page.locator('.pretend-presets button').allTextContents();
+    const forLine = await page.locator('.pretend-pick p.small:not(.muted)').first().textContent();
+    await ctx.close();
+    return { labels, forLine };
+  })();
+  // The next game (the one the presets are for) and someone in it, and someone not in it.
+  const nextGame = await (async () => {
+    const { ctx } = await phone({ signedIn: true });
+    const d = await (await ctx.request.get(BASE + '/api/admin/dashboard')).json();
+    await ctx.close();
+    const g = d.sessions.filter((x) => x.status !== 'canceled' && Date.parse(x.startsAt) > NOW_MS)[0];
+    return g;
+  })();
+  const inNext = (nextGame.players || nextGame.roster || []).map((p) => p.name).find((n) => n && n !== 'Alex' && ids[n]);
+  console.log(`  (pretend presets: ${presetInfo.labels.join(' | ')}; ${presetInfo.forLine}; in that game: ${inNext})`);
+  // Booking day (the game whose booking opens next): 7:00 AM Eastern on the day its booking opens, typed in the date-and-time box.
+  const bookingDay7 = await (async () => {
+    const { ctx } = await phone({ signedIn: true });
+    const d = await (await ctx.request.get(BASE + '/api/admin/dashboard')).json();
+    await ctx.close();
+    const opening = d.sessions.filter((x) => x.status !== 'canceled' && Date.parse(x.startsAt) > NOW_MS).find((x) => Date.parse(x.bookingOpensAt) > NOW_MS);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(opening.bookingOpensAt));
+    return { typed: `${day}T07:00`, id: opening.id };
+  })();
+  const pretendAt = {};
+  const pretendCards = {};
+  const moments = [...presetInfo.labels.map((label) => ({ label, typed: null })), { label: `Booking day, 7:00 AM (typed ${bookingDay7.typed})`, typed: bookingDay7.typed }];
+  for (const { label, typed } of moments) {
+    await check(`Pretend it's "${label}": organizer Home and View as ${inNext} and Vic equal the real site at that moment; nothing leaves the page`, async () => {
+      await setClock(NOW_MS);
+      const org = await phone({ signedIn: true, alerts: 'all' });
+      const sent = [];
+      org.page.on('request', (r) => {
+        if (r.url().includes('/api/') && r.method() !== 'GET') sent.push(`${r.method()} ${r.url()}`);
+      });
+      await openAdmin(org.page);
+      await org.page.locator('.topbar-btn', { hasText: 'View as' }).click();
+      if (typed) {
+        await org.page.locator('#pretend-at').fill(typed);
+        await org.page.locator('.pretend-custom button[type="submit"]').click();
+      } else await org.page.locator('.pretend-presets button', { hasText: label }).click();
+      await org.page.locator('.pretend-bar', { hasText: 'Demo, nothing is saved' }).waitFor();
+      await org.page.waitForLoadState('networkidle');
+      await org.page.waitForTimeout(800);
+      const at = await org.page.evaluate(() => document.querySelector('.pretend-bar')?.textContent || '');
+      // The pretend moment, read from the page's own clock (the app's src/lib.ts module, the same instance the screens use).
+      pretendAt[label] = await org.page.evaluate(async () => (await import('/src/lib.ts')).pretendMs());
+      const adminP = norm(await mainHtml(org.page));
+      // Every Do this now card for the moment (the first one shows, the rest sit under "+N more": opened here, after the comparison copy).
+      if (await org.page.locator('.dn-more').count()) await org.page.locator('.dn-more').click();
+      const cards = await org.page.evaluate(() => [...document.querySelectorAll('[data-task]')].map((e) => e.getAttribute('data-task')));
+      pretendCards[label] = cards;
+      // The booking game's own card on Home (new layout: the booking prompt is the "Book" cell in its footer, data-court-need).
+      // Later weeks start folded on Home: the booking game is opened here (a tap on its row) to read its footer.
+      const opened = await org.page.locator(`[data-game-open="${bookingDay7.id}"]`).count();
+      if (!opened && (await org.page.locator(`#session-${bookingDay7.id}`).count())) {
+        await org.page.locator(`#session-${bookingDay7.id}`).click();
+        await org.page.locator(`[data-game-open="${bookingDay7.id}"]`).waitFor({ timeout: 5000 }).catch(() => {});
+      }
+      const bookCell = await org.page.evaluate((id) => {
+        const open = document.querySelector(`[data-game-open="${id}"]`);
+        return { card: !!document.getElementById(`session-${id}`), folded: !open, need: !!open?.querySelector('[data-court-need]') };
+      }, bookingDay7.id);
+      bookCell.foldedAtFirst = !opened;
+      const playerP = {};
+      for (const who of [inNext, 'Vic']) {
+        await org.page.locator('.topbar-btn', { hasText: 'View as' }).click();
+        await org.page.locator('.name-grid button', { hasText: new RegExp(`^${who}$`) }).click();
+        await org.page.waitForFunction((n) => document.querySelector('.topbar h1')?.textContent === n, who, { timeout: 20000 });
+        await org.page.locator('.schedule article').first().waitFor();
+        await org.page.waitForLoadState('networkidle');
+        await org.page.waitForTimeout(600);
+        playerP[who] = { html: norm(await topHtml(org.page)) + norm(await mainHtml(org.page)), gameDay: await org.page.locator('[data-game-day-buttons]').count() };
+        if (label === presetInfo.labels[0] && who === inNext) await org.page.screenshot({ path: path.join(SHOTS, `zip18-pretend-gameday-${who.toLowerCase()}.png`) });
+        await org.page.locator('.viewas-banner button, .viewas-banner .ac-btn', { hasText: 'Exit' }).click();
+        await org.page.locator('.tabbar').waitFor();
+      }
+      await org.ctx.close();
+      assert(sent.length === 0, `requests that save left the page: ${sent.join(', ')}`);
+      // The same moment on the real site: the pretend time from the preset list (computed the way the page does).
+      const ms = pretendAt[label];
+      assert(typeof ms === 'number', `no time for ${label} (${at})`);
+      await setClock(ms);
+      const realOrg = await phone({ signedIn: true, alerts: 'all', atMs: ms });
+      await openAdmin(realOrg.page);
+      const adminR = norm(await mainHtml(realOrg.page));
+      await realOrg.ctx.close();
+      if (adminR !== adminP) throw new Error(`organizer Home: ${diffAt(adminR, adminP)}`);
+      for (const who of [inNext, 'Vic']) {
+        const real = await phone({ alerts: 'all', atMs: ms });
+        await openAs(real.page, who);
+        const r = norm(await topHtml(real.page)) + norm(await mainHtml(real.page));
+        await real.ctx.close();
+        if (r !== playerP[who].html) throw new Error(`View as ${who}: ${diffAt(r, playerP[who].html)}`);
+      }
+      // The right cards for the moment: the Game day card on game day for a player in the game, the booking card when booking opens.
+      if (/^Game day/.test(label)) assert(playerP[inNext].gameDay > 0, `${inNext} has no Game day card at ${label}`);
+      // The booking card starts at the 6:45 AM heads-up on booking day (the court opens at 7:00 AM): not there yet at 12:00 AM, there at 7:00 AM.
+      if (/^Booking opens/.test(label)) assert(!bookCell.need && !cards.includes('book') && !cards.includes('court_book'), `a booking prompt already at ${label}: ${JSON.stringify(bookCell)} ${cards.join(',')}`);
+      if (/^Booking day/.test(label)) assert(bookCell.need || cards.includes('book') || cards.includes('court_book'), `no booking prompt at ${label} (${new Date(ms).toISOString()}): ${JSON.stringify(bookCell)} ${cards.join(',')}`);
+      await setClock(NOW_MS);
+      console.log(`      (${label} = ${new Date(pretendAt[label]).toISOString()}: organizer cards ${[...new Set(cards)].join(', ') || 'none'}; booking game on Home ${bookCell.foldedAtFirst ? 'folded at first' : 'open'}, Book cell once open ${bookCell.need ? 'yes' : 'no'}; ${inNext}'s Game day card ${playerP[inNext].gameDay > 0 ? 'yes' : 'no'})`);
+    });
+  }
   await browser.close();
   console.log(`\nzip18: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

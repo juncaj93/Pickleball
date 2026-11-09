@@ -5,11 +5,12 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import initSqlJs from 'sql.js';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createSandbox, type Sandbox } from '../src/demo/sandbox';
 import { buildSmallPreview, SMALL_NAMES } from '../scripts/preview-world-small';
 import { Client, ORIGIN, TestApp } from './harness';
 import { switchEnvOf } from '../server/zip18';
+import { routeList } from '../server/app';
 
 const NOW = Date.parse('2026-11-09T17:00:00.000Z'); // Mon Nov 9, 12:00 PM Eastern
 const PREVIEW_PIN = /PIN `(\d{6})`/.exec(readFileSync('docs/PREVIEW_FAKE_DB.md', 'utf8'))![1];
@@ -57,8 +58,8 @@ async function demo(w: W, withExtras = true): Promise<Sandbox> {
   const extras = withExtras ? (await w.organizer.call('GET', '/api/admin/demo-extras')).data : null;
   return createSandbox(await initSqlJs(), backup, migrations(), ORIGIN, extras);
 }
-async function viewAs(sb: Sandbox, w: W, name: string, method = 'GET', path = '/api/group', body?: unknown) {
-  const res = await sb.request(method, path, body, { 'X-View-As': w.ids[name] }, w.app.now);
+async function viewAs(sb: Sandbox, w: W, name: string, method = 'GET', path = '/api/group', body?: unknown, atMs = w.app.now) {
+  const res = await sb.request(method, path, body, { 'X-View-As': w.ids[name] }, atMs);
   return { status: res.status, data: await res.json() };
 }
 /** What can differ between a player's own phone and View as of the same player: only the View as marker itself. */
@@ -113,7 +114,7 @@ describe('Zip 18: View as answers exactly what the player sees (the live switche
 });
 
 describe('Zip 18: View as writes nothing real', () => {
-  it('every player tap in View as (I\'m in, I paid, Drop out, Still in, Use credit, a cash out) changes only the copy; the real database is identical', async () => {
+  it('every player tap in View as (I\'m in, I paid, Drop out, Still in, a cash out request) changes only the copy; the real database is identical', async () => {
     const w = await world();
     const before = w.snapshot();
     const sb = await demo(w);
@@ -196,4 +197,72 @@ describe('Zip 18: the swap on the organizer\'s own player page', () => {
     // View as Alex on the live site (reads are allowed there): never.
     expect((await org.call('GET', '/api/group', undefined, { 'X-View-As': w.ids.Alex })).data.goToAdmin).toBeUndefined();
   }, 120_000);
+});
+
+describe('Zip 18 addition: Pretend it\'s... is the same copy, at another moment', () => {
+  /** Game day 7:00 AM Eastern for the next game (the first Pretend button). */
+  const gameDay7 = (startsAt: string) => {
+    const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Detroit', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(startsAt));
+    return Date.parse(`${p}T12:00:00.000Z`); // 7:00 AM EST (November)
+  };
+
+  it('Pretend + View as at game day 7:00 AM = that player\'s own phone at that moment, for every name (the copy has the live switches)', async () => {
+    const w = await world();
+    const d = (await w.organizer.call('GET', '/api/admin/dashboard')).data;
+    const next = d.sessions.filter((x: any) => x.status !== 'canceled' && Date.parse(x.startsAt) > NOW)[0];
+    const at = gameDay7(next.startsAt);
+    const sb = await demo(w); // taken now, like the page does when Pretend starts
+    const seen: Record<string, any> = {};
+    for (const name of SMALL_NAMES) seen[name] = (await viewAs(sb, w, name, 'GET', '/api/group', undefined, at)).data;
+    w.app.now = at; // the real site, really at that moment
+    for (const name of SMALL_NAMES) {
+      const own = (await (await phoneOf(w, name)).call('GET', '/api/group')).data;
+      expect(same(seen[name]), name).toEqual(same(own));
+      expect(seen[name].gameDayCard, name).toBe(true);
+      expect(seen[name].cardCleanup, name).toBe(true);
+    }
+    // The organizer screen too (the dashboard the Pretend Home draws from), apart from its own change counter.
+    const strip = (x: any) => {
+      const { version: _v, ...rest } = x;
+      return rest;
+    };
+    const pretendDash = await (await sb.request('GET', '/api/admin/dashboard', undefined, {}, at)).json();
+    const realDash = (await w.organizer.call('GET', '/api/admin/dashboard')).data;
+    expect(strip(pretendDash).sessions).toEqual(strip(realDash).sessions);
+    expect(pretendDash.now).toBe(realDash.now);
+  }, 180_000);
+
+  it('nothing is saved: EVERY save address of the site, tapped in Pretend (and as each kind of viewer), leaves the real database identical and sends no Telegram or any network request', async () => {
+    const w = await world({ ...liveVars(), TELEGRAM_BOT_TOKEN: '123:fake', TELEGRAM_CHAT_ID: '42' });
+    const telegram = vi.fn(async () => new Response('{"ok":true}'));
+    (w.app.env as any).TELEGRAM_FETCH = telegram;
+    const d = (await w.organizer.call('GET', '/api/admin/dashboard')).data;
+    const next = d.sessions.filter((x: any) => x.status !== 'canceled' && Date.parse(x.startsAt) > NOW)[0];
+    const at = gameDay7(next.startsAt);
+    const before = w.snapshot();
+    const sb = await demo(w);
+    const net = vi.spyOn(globalThis, 'fetch');
+    const saves = routeList().filter((r) => r.method !== 'GET' && !r.path.startsWith('/api/cron') && r.path !== '/api/admin/logout');
+    const fill = (path: string) =>
+      path
+        .replace(/players\/:param/, `players/${w.ids.Vic}`)
+        .replace(/sessions\/:param/, `sessions/${next.id}`)
+        .replace(/:param/g, next.id);
+    const bodies: unknown[] = [{}, { paid: true, playerId: w.ids.Vic }, { on: true }, { decision: 'cancel', confirm: true, reason: 'Pretend' }, { status: 'booked' }, { in: true }];
+    let ok = 0;
+    for (const r of saves)
+      for (const body of bodies)
+        for (const headers of [{}, { 'X-View-As': w.ids.Vic }, { 'X-View-As': w.ids.Zoe }]) {
+          const res = await sb.request(r.method, fill(r.path), body, headers, at);
+          if (res.status === 200) ok++;
+        }
+    // Plenty of them really saved in the copy (sign-ups, paid taps, court switch, cancel, texts marked, Second Chance, switches) ...
+    expect(ok).toBeGreaterThan(40);
+    // ... and none of it reached the real site, a Telegram, or the network.
+    expect(w.snapshot()).toEqual(before);
+    await w.app.settle();
+    expect(telegram).not.toHaveBeenCalled();
+    expect(net).not.toHaveBeenCalled();
+    net.mockRestore();
+  }, 300_000);
 });

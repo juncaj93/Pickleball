@@ -3676,14 +3676,28 @@ data read or changed.
 - This phone's own private test links (?nudge=on and so on) still apply in View as on that phone, as on /?as= on that phone.
 - View as taps (Still in, I'm in, I paid, Drop out...) save only in the copy in that tab, and the live site refuses a View as save with
   403 "Demo only" anyway. A Still in tapped in View as never reached a player's real answer, before or after this zip. Not changed.
-- Side effect, wanted: "Pretend it's..." uses the same copy, so its organizer screens now also see the real switch rows and card marks.
+- "Pretend it's..." (Alex's addition, same evening): SAME cause. Its buttons put the organizer's tab in the same demo copy (`src/lib.ts`
+  `demoOn()` covers both, every request goes to `src/demo` at the pretend time; the old server-side `X-Pretend-Now` path in
+  `server/app.ts` is not used by any screen). So the one fix above covers both: one shared path, nothing per mode, any future switch
+  included. The 30-minute timer and the buttons are unchanged.
+- Pretend times checked (e2e/zip18.cjs, small cast at Mon Nov 9 noon; the next game is a Mon Nov 9 extra game, the next booking is
+  Thu Nov 26, booking day Thu Nov 12): every button, Game day 7:00 AM, Game day 8:30 AM, Day before 4:00 PM, Last call, Booking opens
+  12:00 AM, After the game, plus 7:00 AM on booking day typed in the date box. At each one the organizer Home and View as Parker (in that
+  game) and Vic equal the real site with its clock really at that moment. Parker has the Game day card on game day; the night-before,
+  cancel and finalize cards come and go by the moment; the booking prompt is not there yet at 12:00 AM (it starts at the 6:55 AM heads-up)
+  and is there at 7:00 AM.
+- Found (not changed, a question for Alex): on booking day the game 14 days out sits in a later week, which Home shows folded (round 2),
+  so its "Book" button shows only after tapping the game open. Same on the real site; the Telegram heads-up still goes.
 
 ### Tests (Sun Nov 8, 2026)
-- Unit: `tests/zip18.test.ts` (10): on the small preview cast with every live switch, View as = that player's own phone key for key
+- Unit: `tests/zip18.test.ts` (12): on the small preview cast with every live switch, View as = that player's own phone key for key
   for all 10 names (Vic, Wren, Zoe included); the switches really on in View as (and all off without the extras, the old bug); a
   Settings row off and a kill switch "off" follow into View as; the organizer's own name in View as has no swap; every View as tap leaves
   the real database identical, table by table; the live site refuses a View as save; demo-extras is organizer only, returns no secret,
-  writes nothing; a server before Zip 18 still starts the copy; the swap only on the organizer's own name. Updated: three older tests
+  writes nothing; a server before Zip 18 still starts the copy; the swap only on the organizer's own name; Pretend at game day 7:00 AM +
+  View as = each of the 10 players' own phone at that moment, and the organizer dashboard's games too; EVERY save address of the site
+  (sign-ups, paid taps, Mark paid, court switch, cancel, texts marked, Second Chance, switches...) tapped in Pretend as the organizer and
+  as players: the real database identical, no Telegram, no network request at all. Updated: three older tests
   that pinned the removed shortcuts (`pay-always` S6, `motion`, `motion-settings` M8) now pin "follows the rows".
 - Full unit suite on the final code: 2466 passed, 1 skipped, 0 failed (149 files); tsc clean; build clean.
 - Browser: `e2e/zip18.cjs` 43/43 (player header Vic, Alex header, Admin header at 390/360/320 light and dark; not you? works; the swap
