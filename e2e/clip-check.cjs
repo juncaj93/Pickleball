@@ -157,7 +157,7 @@ function findClipping(opts) {
       out.push(`outside its card: ${label(el)} at ${fmt(r)} in ${label(card)} (inner ${Math.round(c.left)},${Math.round(c.top)} to ${Math.round(c.right)},${Math.round(c.bottom)})`);
   }
   // 4: buttons, pills and tiles drawn on top of each other (siblings in one row).
-  const things = all.filter((el) => el.matches('button, a.ac-btn, .ac-btn, .pill, .pchip, [class*="chip"], .tile, .ptile, [class*="pill"], .cl-balls .dots, b, strong') && !el.closest('.hv2-a11y, .sr-only'));
+  const things = all.filter((el) => el.matches('button, a.ac-btn, .ac-btn, .pill, .pchip, [class*="chip"], .tile, .ptile, [class*="pill"], .cl-balls .dots, .pr-name') && !el.closest('.hv2-a11y, .sr-only'));
   for (let i = 0; i < things.length; i++)
     for (let j = i + 1; j < things.length; j++) {
       const a = things[i];
