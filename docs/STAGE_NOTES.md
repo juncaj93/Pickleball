@@ -3603,3 +3603,21 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
   (1, the sheet slide) and run.cjs (10, the "Last call" label found twice) fail the same way on main.
 - Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (re-seeded Sun Nov 8 with the Zip 16 and Zip 17 parts). Switch rows on there:
   every row the repo records as on live (all of them), plus Game day card, Second Chance, After-game cards (Zip 16) and Unpaid nudge.
+
+### Round 2 (Alex's "ship it", Sun Nov 8, evening): rebase onto Zip 16, the title fit fix, the small preview
+- Alex's answers: the owe card may show more than the sheet (fine); a past game with no court booked counts once over (fine); leftover credit
+  counts only after Use credit (as built).
+- Rebased onto main `6f535d7` (Zip 16 live). `server/owed.ts` takes Zip 16's `afterGame` option (its "owes more" field, same rule as its
+  inline loop). On the owe card Zip 16's "You owe $2 more" words win when present, else the nudge words. Zip 16's `?as=` link is kept; this
+  zip's own was dropped. Settings: Unpaid nudge sits above After-game cards (25 rows above the group).
+- Title shrink-to-fit fix (`src/AlertCard.tsx` `useFitTitle`, live for everyone, no switch, look only): a measurement taken before the title is
+  laid out is never remembered, and a full-size title that wraps is fitted again. Organizer Home now matches main's titles exactly.
+- Owe line: two games on one day read "Nov 8 (2 games)", never the same date twice (fresh review).
+- Small preview (`scripts/preview-world-small.ts`, `npm run db:seed:preview`): only Alex, Vic, Wren, Zoe, Quinn, Rowan, Parker, Reese, Sage
+  and Christopher Vanderberg; what each is for is the table in `docs/PREVIEW_FAKE_DB.md`. The big world stays for the local browser tests.
+  Switch rows like live (read with the read-only PIN, 7:05 PM: every row on) plus Unpaid nudge.
+- Fresh review of the rebase (independent): nothing harmful; fixed: Quinn's "$3 more" card hidden by extra debts in the small world, the
+  repeated date, two `.orig` files from the rebase (removed, `*.orig` ignored), docs; Vic, Wren and Zoe never get a fee in the small world.
+- Tests: unit 2433 passed on the rebased code; 2434 passed, 0 failed on the final code (145 files); tsc and build clean. Full browser suite once, 3 at a time:
+  53 of 58 clean; zip16 (the newest-row check, updated) 28/28 alone; zip17-off 30/30 against main `6f535d7` (History times compared to the
+  minute); run.cjs alone 219/229, the same 10 "Last call" checks as main; cancel-reason (2), want-in (1), admin-r2 F4 (1) as on main.
