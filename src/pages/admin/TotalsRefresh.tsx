@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { MonthlyMoney } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
 import { dollarsText, monthRowOf, pastMonths, perCourtDollars, projectedCard, soFarCard, type MonthRow, type TotalsCard } from '../../../shared/totalsRefresh';
@@ -67,8 +67,8 @@ function TotalsCardView({ kind, title, paidLabel, c }: { kind: 'sf' | 'pj'; titl
         </div>
         <div className="tr-yr">
           {per !== null && (
-            <span className={`tr-yp${credit ? ' credit' : ''}`} data-per-court={per}>
-              {dollarsText(per)}/court{credit ? ' credit' : ''}
+            <span className={`tr-yp${per < 0 ? ' credit' : ''}`} data-per-court={per}>
+              {dollarsText(per)}/court{per < 0 ? ' credit' : ''}
             </span>
           )}
           <span className={`tr-yn${credit ? ' credit' : ''}`} data-total={c.netCents}>
@@ -109,10 +109,17 @@ function MonthByMonth({ ctx }: { ctx: AdminCtx }) {
 function MonthRows({ ctx, months }: { ctx: AdminCtx; months: string[] }) {
   const pretend = usePretend();
   const demo = useDemoVersion();
+  // Two loads can overlap (the screen reloads when anything changes); whichever started last is the one drawn, so older rows never land on top.
+  const latest = useRef<Promise<MonthRow[]> | null>(null);
   const load = useLoad(
     async () => {
-      const answers = await Promise.all(months.map((m) => api<MonthlyMoney>('GET', `/api/admin/money?month=${m}`)));
-      return months.map((m, i) => (answers[i].rework ? monthRowOf(m, answers[i].rework!) : null)).filter((r): r is MonthRow => r !== null);
+      const mine = (async () => {
+        const answers = await Promise.all(months.map((m) => api<MonthlyMoney>('GET', `/api/admin/money?month=${m}`)));
+        return months.map((m, i) => (answers[i].rework ? monthRowOf(m, answers[i].rework!) : null)).filter((r): r is MonthRow => r !== null);
+      })();
+      latest.current = mine;
+      const rows = await mine;
+      return latest.current === mine ? rows : await latest.current!;
     },
     [months.join(','), pretend, demo, ctx.d.version],
   );
@@ -135,8 +142,8 @@ function MonthRows({ ctx, months }: { ctx: AdminCtx; months: string[] }) {
                 {credit && <small> credit</small>}
               </span>
               {r.perCourt !== null && (
-                <span className={`tr-mrow-sub${credit ? ' credit' : ''}`} data-month-per-court={r.perCourt}>
-                  {dollarsText(r.perCourt)}/court{credit ? ' credit' : ''}
+                <span className={`tr-mrow-sub${r.perCourt < 0 ? ' credit' : ''}`} data-month-per-court={r.perCourt}>
+                  {dollarsText(r.perCourt)}/court{r.perCourt < 0 ? ' credit' : ''}
                 </span>
               )}
             </span>

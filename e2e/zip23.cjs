@@ -294,6 +294,23 @@ async function main() {
     await ctx.close();
   });
 
+  await check('a tiny credit (49 cents over 1 game): the total says "$0.49 credit", and the $/court rounds to $0 and says plain "$0/court", never "$0/court credit"', async () => {
+    const mutate = (j) => {
+      if (!j.rework) return;
+      const r = j.rework;
+      r.membershipCents = 0;
+      r.courtSessions = 1;
+      r.courtCostCents = 4800;
+      r.owedToVenueCents = 4800;
+      r.collectedCents = 4849;
+      r.yourCostCents = 0;
+    };
+    const { ctx, page } = await openTotals({ mutate });
+    const t = await page.evaluate(() => ({ total: document.querySelector('[data-card="so-far"] [data-total]').textContent, per: document.querySelector('[data-card="so-far"] [data-per-court]').textContent }));
+    assert(t.total === '$0.49 credit' && t.per === '$0/court', JSON.stringify(t));
+    await ctx.close();
+  });
+
   // ---------------------------------------------------------------- the look (the mock's own values)
   for (const scheme of ['light', 'dark']) {
     await check(`the look, ${scheme}, iPhone Air 420 wide: the mock's sizes, spacing, borders and colors`, async () => {
