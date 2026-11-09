@@ -116,6 +116,10 @@ export interface Env {
   SECOND_CHANCE_TEST?: string;
   /** Zip 17 "Unpaid nudge" (shared/unpaidNudge.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?nudge=on. Refuses a player's own sign-up at 3 unpaid games. */
   UNPAID_NUDGE?: string;
+  /** Zip 21 "Error alerts" (shared/errorAlerts.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches (Alex's Telegram only). */
+  ERROR_ALERTS?: string;
+  /** Zip 21: the error box (worker/box.ts, a Durable Object in the Worker pickleball-error-box): what the error alerts remember. Missing = no error alerts. */
+  ERROR_BOX?: import('./errorAlerts').ErrorBoxNamespace;
   /** PREVIEW ONLY (shared/previewCalm.ts): "on" shows only the zip's own cards by default (?alerts=all shows everything). Never production. */
   PREVIEW_CALM?: string;
   /**

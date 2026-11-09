@@ -13,6 +13,7 @@ import { requireAdmin } from './auth';
 import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 import * as alerts from './alerts';
 import * as tasks from './tasks';
+import * as errorAlerts from './errorAlerts';
 import { goText } from './go';
 import { afterTap as secondChanceAfterTap, tapWatch as secondChanceWatch } from './secondChance';
 import { type FewerQueriesDb, withFewerQueries } from './speed';
@@ -152,6 +153,8 @@ route('PUT', '/api/admin/speed-last-screen-admin-switch', admin.setSpeedLastScre
 route('PUT', '/api/admin/seat-dots-switch', admin.setSeatDotsSwitch);
 route('PUT', '/api/admin/game-day-card-switch', admin.setGameDayCardSwitch);
 route('PUT', '/api/admin/unpaid-nudge-switch', admin.setUnpaidNudgeSwitch);
+route('PUT', '/api/admin/error-alerts-switch', admin.setErrorAlertsSwitch);
+route('POST', '/api/admin/error-alerts/test', (ctx) => errorAlerts.errorAlertTest(ctx));
 route('PUT', '/api/admin/after-game-card-switch', admin.setAfterGameCardSwitch);
 // Zip 15 (server/secondChance.ts): Second Chance.
 route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
@@ -179,6 +182,8 @@ route('POST', '/api/go', goText);
 
 // The cron Worker's 5-minute tick (secret header; anyone else gets Not found).
 route('POST', '/api/cron/tick', (ctx) => tasks.cronTick(ctx));
+// Zip 21: the clock Worker's own reports for the error alerts (the backup, or no answer from the site). Same secret.
+route('POST', '/api/cron/report', (ctx, body) => errorAlerts.cronReport(ctx, body, tasks.cronSecretOk(ctx)));
 
 export async function handleApi(req: Request, env: Env, nowMs = Date.now(), waitUntil?: (work: Promise<unknown>) => void): Promise<Response> {
   let ctx = makeCtx(req, env, nowMs, waitUntil);
@@ -240,6 +245,8 @@ export async function handleApi(req: Request, env: Env, nowMs = Date.now(), wait
       return json({ error: err.code, message: err.message }, err.status, ctx.setCookies.map((c) => ({ 'Set-Cookie': c })));
     }
     console.error('Unhandled API error', err);
+    // Zip 21 "Error alerts": counted in memory only; off or not set up, nothing at all.
+    errorAlerts.noteServerError(ctx, err);
     return json({ error: 'server_error', message: 'Something went wrong. Try again.' }, 500);
   }
 }

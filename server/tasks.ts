@@ -23,6 +23,7 @@ import { HIDDEN_GAME_TASK, MONEY_REWORK_TASK, sessionHasMoney } from './moneyRew
 import { moneyReworkAllowed } from '../shared/moneyRework';
 import * as v from './validate';
 import { tickPings } from './secondChance';
+import { afterTick, tickFailed, tickSwitchSql, tickWatch, type TickWatch } from './errorAlerts';
 
 const DAY_MS = 86_400_000;
 /** Sessions the tick looks at: ended up to this long ago (the post-game note), up to the booking window ahead. */
@@ -216,10 +217,30 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
   const secret = ctx.env.CRON_SECRET ?? '';
   if (!secret || !sameSecret(ctx.req.headers.get('X-Cron-Secret') ?? '', secret)) throw new HttpError(404, 'not_found', 'Not found.');
   if (ctx.env.SANDBOX || isPretend(ctx.db)) return { ok: true, sent: 0, failed: 0, skipped: 'demo' };
+  // Zip 21 "Error alerts" (server/errorAlerts.ts): off or not set up, the watch does nothing and the tick is exactly as before
+  // (the error goes on to the clock Worker as a 500, as always). On: a failed tick is reported, and every tick is noted (after the answer).
+  const watch = tickWatch(ctx.env);
+  try {
+    const result = await tickJobs(ctx, watch);
+    afterTick(ctx, watch);
+    return result;
+  } catch (err) {
+    tickFailed(ctx, watch, err);
+    throw err;
+  }
+}
+
+/** Is the cron Worker's secret on this request? (The clock Worker's own reports use the same secret.) */
+export function cronSecretOk(ctx: Ctx): boolean {
+  const secret = ctx.env.CRON_SECRET ?? '';
+  return !!secret && sameSecret(ctx.req.headers.get('X-Cron-Secret') ?? '', secret);
+}
+
+async function tickJobs(ctx: Ctx, watch: TickWatch): Promise<TickResult> {
   // One trip to the database for the group, both switches and the games: each separate call costs CPU on Cloudflare.
   // Each query finds the group the way getGroup does; the checks run in the same order as before.
   const theGroup = '(SELECT id FROM groups ORDER BY created_at LIMIT 1)';
-  const [groupRows, alertRows, offRows, sessionRows, textsR2Rows, reworkRows] = await ctx.db.batch([
+  const [groupRows, alertRows, offRows, sessionRows, textsR2Rows, reworkRows, errorAlertRows] = await ctx.db.batch([
     ctx.db.prepare('SELECT * FROM groups ORDER BY created_at LIMIT 1'),
     ctx.db.prepare(`SELECT * FROM organizer_alerts WHERE group_id = ${theGroup}`),
     ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND kind = 'off' LIMIT 1`),
@@ -229,7 +250,11 @@ export async function cronTick(ctx: Ctx): Promise<TickResult> {
     ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND session_id IS NULL AND task = '${TEXTS_R2_TASK}' AND kind = 'mark' LIMIT 1`),
     // MONEY_REWORK "on for everyone", same trip: a game hidden from the lists sends no alerts (the clock follows the switch for everyone).
     ctx.db.prepare(`SELECT 1 AS x FROM task_log WHERE group_id = ${theGroup} AND session_id IS NULL AND task = '${MONEY_REWORK_TASK}' AND kind = 'mark' LIMIT 1`),
+    // Zip 21 "Error alerts", same trip, only while set up (not set up: the trip is exactly as before).
+    ...(watch.ready ? [ctx.db.prepare(tickSwitchSql(theGroup))] : []),
   ]);
+  if (watch.ready) watch.on = (errorAlertRows?.results.length ?? 0) > 0;
+  watch.job = 'smart alerts';
   const group = (groupRows.results[0] as unknown as GroupRow | undefined) ?? null;
   if (!group) return { ok: true, sent: 0, failed: 0, skipped: 'no_group' };
   if (!connected(ctx.env)) return { ok: true, sent: 0, failed: 0, skipped: 'not_connected' };

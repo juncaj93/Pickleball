@@ -84,6 +84,7 @@ import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
 import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDay';
 import { setUnpaidNudgeForAll, unpaidNudgeForAll } from './unpaidNudge';
+import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
@@ -375,6 +376,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await afterGameCardForAll(ctx.db, group.id)) ? { afterGameCardForAll: true as const } : {}),
     ...(secondChance.on ? { secondChance: await secondChanceView(ctx, group, sessions, rosters, organizerId, sessionViews, playerLinkFor(ctx, group)) } : {}),
     ...(secondChance.forAll ? { secondChanceForAll: true as const } : {}),
+    // Zip 21 (server/errorAlerts.ts): the Settings row only (no screen changes; the alerts go to Telegram).
+    ...((await errorAlertsForAll(ctx.db, group.id)) ? { errorAlertsForAll: true as const } : {}),
     // Zip 17 (server/unpaidNudge.ts): the Settings row only (admin screens do not change).
     ...((await unpaidNudgeForAll(ctx.db, group.id)) ? { unpaidNudgeForAll: true as const } : {}),
     // Preview only (shared/previewCalm.ts): never on live.
@@ -2281,6 +2284,15 @@ export async function setGameDayCardSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setGameDayCardForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'game_day_card_on' : 'game_day_card_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/error-alerts-switch { on }: Settings > Feature switches > "Error alerts" (Zip 21). Telegram to Alex only; no screen changes. */
+export async function setErrorAlertsSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await switchErrorAlerts(ctx, group.id, on);
+  await audit(ctx.db, group.id, null, on ? 'error_alerts_on' : 'error_alerts_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 
