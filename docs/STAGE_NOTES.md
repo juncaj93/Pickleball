@@ -3767,4 +3767,8 @@ data read or changed.
   separate block with "Booked" left as dark text on dark (motion.css: in the stacked layout the highlight slides down; large-text.css:
   three rows of one height). The checker has a rule for it (the highlight must sit on the chosen choice); on main's code it fires at
   320 px with big text, on this branch it does not.
+  (The stacked highlight is placed by its top offset, not a sliding transform: the transform made Chrome's phone mode widen the page to
+  876 px at 150% text; layout-polish caught it, 200/200 after.)
+- Final checks on the round 2 code: zip18 73/73, layout-polish 200/200, admin-motion 28/28, admin-r2 27/27, zip14 22/22, zip13 39/39,
+  money-rework 36/36, zip18-off 28/28 against main; unit 2468 passed, 0 failed; tsc and build clean.
 
