@@ -3539,3 +3539,17 @@ same build stamp). Only the clock Worker (`pickleball-alerts-clock`) is deployed
   only after a real deploy (tests use a local stand-in). docs/DEPLOY.md "After"; docs/RESTORE.md.
 - Fresh review (independent): no blockers. Fixed from it: labels use the copy's own date (two asks in a week never clash); asked copies
   pruned on their own (never push out regular ones); smaller export pieces (D1's 100 KB statement limit is bytes); get never overwrites.
+
+### Deploy 2 (Sun Nov 8, 2026, 7:29 PM Eastern, quiet window): LIVE, first copy made by the new code and restore-tested
+- PR #105 merged as `91bb7c5`. Bookmarks first: live `00000c22-00000000-0000511e-097e6df1b028f781fe3886ea643f87ab`, pickleball-backups
+  `0000003e-00000000-0000511e-e5e28f6d63229cd88a1d5ff54a4359ff`. Clock Worker version `26aa96ec-8fb8-41a0-85a7-247db5415e86`.
+  ROLLBACK (to before Zip 19): `npx wrangler rollback ff418c61-0bb4-48b0-8296-13be55545889 --config worker/wrangler.toml`
+  (to deploy 1 only: `7a73e598-e6bc-4b40-a05c-08810d7cce1b`).
+- After 7:00 PM and after the deploy, the only two writes (both to pickleball-backups): the 6:48 PM pre-deploy export saved as
+  `export-20261109002841` (178,640 characters, 8 pieces, read back and compared with the file), and one copy request (7:29 PM).
+- The clock answered it at its 8:00 PM look by itself: `2026-11-08-asked-2000`, 132,779 characters in 3 pieces, complete (no INCOMPLETE,
+  no waiting request); the 3:00 AM and Nov 1 copies untouched. `npm run restore-test -- --weekly 2026-11-08-asked-2000`: PASS (382 rows,
+  every value, saved counts, money, 21 integrity checks). `npm run restore-test -- --live` at 8:06 PM: PASS 2 of 2.
+- Ticks 7:05 to 8:05 PM on the new versions: every 5 minutes, 0 errors, the knock (1 outgoing request) each time.
+- CPU on live (Cloudflare analytics, the 8:00 PM look that made the copy): 7 runs (knock, coordinator, plan, 3 steps, finish), 0 errors,
+  middle 1.8 ms, worst 6.6 ms; every run under 10 ms (this morning's one-run copy: 13.0 ms). Other ticks 1.3 to 3.5 ms.
