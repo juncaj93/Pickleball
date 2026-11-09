@@ -3846,3 +3846,17 @@ Admin only, display only. No database change, no new cost. Branch `claude/new-se
 - `e2e/zip23-off.cjs` (17, needs `MAIN_DIR`): with the switch OFF, the old Totals screen (6 sizes, two months), Settings (apart from the row), Home, Games, Players, History and the money answers equal main byte for byte; with it ON the Games tab and Home still equal main.
 - Older newest-row checks (`money-rework.cjs`, `zip16.cjs`) and `speed-queries` know the new top row.
 - Independent math review (a fresh reviewer): no wrong figure; two small fixes made (tiny credit label, a stale-rows race in Month by month); two notes kept above.
+
+### Deploy (Mon Nov 9, 2026, 11:48 AM Eastern, on Alex's "ship it") - LIVE with TOTALS_REFRESH OFF
+- Before: live = production `06058666-bfe7-4640-97e2-b2c2bf6a9b0a` (Zip 18, main `3868272`; main since then: docs only). Rebased onto Zip 18 (Zip 22 had not landed; Alex said not to wait: Zip 22 rebases onto this).
+  PR #110 merged as `cc2ccb7` (tree identical to the tested branch `76e42c2`).
+- Tests on the rebased code: unit 2537 passed, 0 failed (151 files); tsc clean. Full browser suite once, 4 lanes: 57 of 60 scripts clean. Three fail exactly as on main (same failing checks,
+  run on main `e119322`): run.cjs 219/229 (the 10 "Last call" checks), cancel-reason (2 timeouts), want-in (1). zip23 40/40, zip18 103/103, layout-polish 200/200, zip23-off 17/17 against main.
+- SQL export of live at 11:46 AM (182,367 bytes), saved with `node scripts/deploy-export.mjs save` as `export-20261109164620` in `pickleball-backups` (checked against the file).
+  Time Travel bookmark `00000cf1-00000000-0000511e-416e203a1abd0aa29f5d7951fe30cc44`. Integrity checks: all 21 read 0 before and after. No migration, no database write.
+- Production deployment `4eb74063-4151-4f59-8248-d570e967b98d` = main `cc2ccb7`. ROLLBACK: Pages deployment `06058666-bfe7-4640-97e2-b2c2bf6a9b0a` (Zip 18); no data step needed.
+  Quickest off: the row is already off (Settings > Feature switches > "Totals refresh"); kill switch `TOTALS_REFRESH = "off"`.
+- Live check (public only: the read-only PIN was not available to this session, and the custom domain does not resolve from the sandbox, so the backup address was used): home, headers, robots,
+  phone-size setup page and no browser errors pass; sign-in-only "setup code is configured" line fails as expected once a group exists; the organizer area answers 401 without the PIN;
+  the new switch route answers 401 (exists, needs the PIN); the shipped script has the new code. NOT checked live: the Settings row reads off, and Money > Totals (needs the read-only PIN).
+- Preview: https://preview-zip23.pickleball-club-9h0.pages.dev (fake database; one INSERT of the switch row, no re-seed).
