@@ -20,6 +20,9 @@ import { AcIcon, AcTitle } from '../AlertCard';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
 import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
+import { checkBookingTimes, isPickerLength } from '../../shared/bookingHours';
+import { PICKER_MINUTES } from '../../shared/gameLength';
+import { GameTimeCard, startForDate } from './admin/TimePicker';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
@@ -819,9 +822,21 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
   const chips = quickDates(Date.parse(ctx.d.now), tz);
   const [date, setDate] = useState(chips[0].iso);
   // The usual game time from Settings > Schedule; editable here for this one game.
-  const [start, setStart] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultStartMinutes));
+  // Zip 24 (BOOKING_HOURS): the tap-to-pick times. The length starts at the usual game's length when the picker offers it (else 2 hours),
+  // and the start is moved into the day's hours if the usual start does not fit that day. Off: the boxes below, exactly as before.
+  const picker = ctx.d.bookingHours === true;
+  const usualLen = ctx.d.group.settings.defaultEndMinutes - ctx.d.group.settings.defaultStartMinutes;
+  const [len, setLen] = useState(() => (isPickerLength(usualLen) ? usualLen : (PICKER_MINUTES[PICKER_MINUTES.length - 1] as number)));
+  const [start, setStart] = useState(() => {
+    const usual = minutesToHHMM(ctx.d.group.settings.defaultStartMinutes);
+    return picker ? startForDate(chips[0].iso, usual, isPickerLength(usualLen) ? usualLen : (PICKER_MINUTES[PICKER_MINUTES.length - 1] as number)) : usual;
+  });
   const [end, setEnd] = useState(() => minutesToHHMM(ctx.d.group.settings.defaultEndMinutes));
   const [note, setNote] = useState('');
+  const pickDate = (v: string) => {
+    setDate(v);
+    if (picker) setStart((cur) => startForDate(v, cur, len));
+  };
   // Zip 14 (GAME_DAY_CARD): the court, picked on the court map. Off: no row, and nothing is sent.
   const courtOn = ctx.d.gameDayCard === true;
   const [court, setCourt] = useState<number | null>(null);
@@ -831,8 +846,12 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
     e.preventDefault();
     setError(null);
     const startsAt = fromLocalInputValue(`${date}T${start}`, tz);
-    const endsAt = fromLocalInputValue(`${date}T${end}`, tz);
+    const endsAt = picker ? (startsAt ? new Date(Date.parse(startsAt) + len * 60_000).toISOString() : null) : fromLocalInputValue(`${date}T${end}`, tz);
     if (!startsAt || !endsAt) return setError('Pick a date, start time, and end time.');
+    if (picker) {
+      const r = checkBookingTimes(startsAt, endsAt, tz);
+      if (!r.ok) return setError(r.message);
+    }
     if (Date.parse(endsAt) <= Date.parse(startsAt)) return setError('The end time must be after the start time.');
     setBusy(true);
     try {
@@ -845,6 +864,31 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
     } finally {
       setBusy(false);
     }
+  }
+  if (picker) {
+    return (
+      <form className="stack add-game bh-form" onSubmit={add} data-bh-form="add">
+        <GameTimeCard
+          ctx={ctx}
+          date={date}
+          onDate={pickDate}
+          start={start}
+          onStart={setStart}
+          lengthMin={len}
+          onLength={setLen}
+          court={courtOn ? { value: court, onChange: setCourt } : null}
+          dateAttr="data-add-date"
+        />
+        <label className="bh-card bh-note">
+          <span className="bh-lab">Note (optional)</span>
+          <input className="bh-box" type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder={courtOn ? 'Bring water' : 'Court 3, bring water'} />
+        </label>
+        {error && <Notice tone="danger">{error}</Notice>}
+        <button className="btn block big" type="submit" disabled={busy}>
+          {busy ? 'Adding…' : 'Add game'}
+        </button>
+      </form>
+    );
   }
   return (
     <form className="stack add-game" onSubmit={add}>

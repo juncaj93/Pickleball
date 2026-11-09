@@ -1,0 +1,269 @@
+/* "Booking hours" (BOOKING_HOURS, Zip 24): the tap-to-pick game times on Add game and Edit game, from Alex's mock (mockups/picker_mock.html).
+   Only exists while the switch is on. The mock's looks, on the site's own tokens: the card is --surface, the boxes inside it are the sheet's
+   own background (so they read as inset), the real green for the picked chip and length, the real buttons for Save / Add game. Sizes that hold
+   text are rem, so big text scales; nothing is clipped (the boxes grow, the grid goes from 4 to 3 across when 4 would not fit). */
+
+/* Selected green: the site's court green; in dark mode the court switch's own lighter green with dark text. */
+.bh-form,
+.bh-grid-sheet {
+  --bh-on-bg: var(--court);
+  --bh-on-fg: #ffffff;
+  --bh-on-sub: rgb(255 255 255 / 85%);
+  --bh-blue: var(--gd-blue, #2a3fb0);
+}
+:root[data-theme='dark'] .bh-form,
+:root[data-theme='dark'] .bh-grid-sheet {
+  --bh-on-bg: #4cc27a;
+  --bh-on-fg: #06200f;
+  --bh-on-sub: rgb(6 32 15 / 78%);
+  --bh-blue: #a5b5ee;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .bh-form,
+  :root:not([data-theme='light']) .bh-grid-sheet {
+    --bh-on-bg: #4cc27a;
+    --bh-on-fg: #06200f;
+    --bh-on-sub: rgb(6 32 15 / 78%);
+    --bh-blue: #a5b5ee;
+  }
+}
+
+.sheet-body:has(.bh-form) {
+  padding-top: 10px;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+}
+.bh-form {
+  gap: 10px;
+}
+
+/* The two cards. */
+.bh-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 8px 12px 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.bh-top {
+  padding-top: 4px;
+  padding-bottom: 6px;
+}
+.bh-top .court-switch {
+  background: var(--sheet-bg);
+}
+.bh-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 6px;
+}
+/* A row with one cell (no Court row): the cell takes the whole row. */
+.bh-row:has(.bh-cell:only-child) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.bh-row + .bh-row {
+  margin-top: 4px;
+}
+.bh-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.bh-lab {
+  font-size: 0.94rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--ink);
+  margin-top: 4px;
+}
+
+/* An inset box: the sheet's own background inside the card. */
+.bh-card .bh-box,
+.bh-card input.bh-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 15px;
+  border: 1px solid var(--line-strong);
+  background: var(--sheet-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.0625rem;
+  line-height: 1.25;
+  text-align: left;
+  box-sizing: border-box;
+}
+.bh-card input.bh-box[type='date'] {
+  display: block;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+button.bh-box {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+button.bh-box:focus-visible,
+.bh-lenbtn:focus-visible,
+.bh-chip:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+.bh-end {
+  color: var(--ink-2);
+}
+.bh-updown {
+  flex: none;
+  width: 0.65rem;
+  height: 1rem;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The Court box (the site's own Court row, restyled to sit in the card): "Not set" in blue, a chevron at the right. */
+.bh-card .bh-courtbox {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 15px;
+}
+.bh-courtbox .gd-court-value {
+  width: 100%;
+  justify-content: space-between;
+  font-weight: 700;
+}
+.bh-courtbox .gd-court-value.unset {
+  color: var(--bh-blue);
+}
+
+/* Length: two buttons today (1.5 hr, 2 hr), each with its price under it. */
+.bh-len {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+.bh-lens {
+  display: flex;
+  gap: 7px;
+}
+.bh-lenbtn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 50px;
+  padding: 4px 4px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border: 1px solid var(--line-strong);
+  background: var(--sheet-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.97rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.bh-lenbtn small {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+.bh-lenbtn[aria-pressed='true'] {
+  background: var(--bh-on-bg);
+  border-color: var(--bh-on-bg);
+  color: var(--bh-on-fg);
+}
+.bh-lenbtn[aria-pressed='true'] small {
+  color: var(--bh-on-sub);
+}
+.bh-lenbtn:disabled {
+  opacity: 0.45;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+/* The note / label card. */
+.bh-note {
+  gap: 5px;
+}
+.bh-note .bh-lab {
+  margin-top: 2px;
+}
+
+/* The Start sheet. */
+.bh-gridcard {
+  container-type: inline-size;
+  padding: 10px 12px 12px;
+}
+.bh-ap {
+  margin: 12px 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.bh-ap:first-child {
+  margin-top: 2px;
+}
+.bh-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+/* Big text: four chips would not fit across, so three. */
+@container (max-width: 16rem) {
+  .bh-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.bh-chip {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 2px;
+  border-radius: 12px;
+  border: 1px solid var(--line-strong);
+  background: var(--sheet-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.bh-chip[aria-pressed='true'] {
+  background: var(--bh-on-bg);
+  border-color: var(--bh-on-bg);
+  color: var(--bh-on-fg);
+}
+.bh-chip:disabled {
+  opacity: 0.4;
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+/* The hours message (Settings > Schedule, and the rare Add / Edit backstop): the site's own danger notice, wrapping, never wider than its row. */
+.bh-message {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

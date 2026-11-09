@@ -87,6 +87,7 @@ import { setUnpaidNudgeForAll, unpaidNudgeForAll } from './unpaidNudge';
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
+import { bookingHoursFlags, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
@@ -241,6 +242,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
   // Zip 23 "Totals refresh" (server/totalsRefresh.ts): the new Totals look, only while on (off: this answer is exactly main's).
   const totals = await totalsRefreshFlags(ctx, group.id);
+  // Zip 24 "Booking hours" (server/bookingHours.ts): the tap-to-pick times and the hours rule, only while on (off: this answer is exactly main's).
+  const hours = await bookingHoursFlags(ctx, group.id);
   const swap = await zip13Flags(ctx, group.id, 'swapButton');
   const undo = await zip13Flags(ctx, group.id, 'adminUndo');
   // Zip 14 (server/gameDay.ts): the Court row and each game's court, only while on (off: this answer is exactly main's).
@@ -375,6 +378,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(totals.on ? { totalsRefresh: true as const } : {}),
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
+    ...(hours.on ? { bookingHours: true as const } : {}),
+    ...(hours.forAll ? { bookingHoursForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     // Zip 16 "After-game cards" (server/afterGame.ts): its Settings row, only while on.
@@ -1025,6 +1030,8 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A session can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
+  // Zip 24 "Booking hours": only a CHANGED start or end is looked at (an existing game outside the hours is never blocked for other edits).
+  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
   const deadline = defaultDeadline(startsAt, settingsOf(group));
   const move = ctx.db
     .prepare(
@@ -1658,6 +1665,13 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     wordHash = word === null ? null : await hashGroupWord(word);
   }
   const settings = normalizeSettings({ ...settingsOf(group), ...(body.settings as object) });
+  // Zip 24 "Booking hours": a CHANGED usual game time (Settings > Schedule) must sit inside the venue hours. Any other save is untouched.
+  {
+    const before = settingsOf(group);
+    if (settings.defaultStartMinutes !== before.defaultStartMinutes || settings.defaultEndMinutes !== before.defaultEndMinutes) {
+      await enforceUsualTime(ctx, group.id, settings.defaultStartMinutes, settings.defaultEndMinutes);
+    }
+  }
   // The Apple Pay / Zelle number lives inside settings_json (normalizeSettings only keeps the numbers, so it is put back here).
   let zelleRaw: string | undefined = (() => {
     try {
@@ -1858,6 +1872,8 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   if (length <= 0) throw new HttpError(400, 'invalid_time', 'The end time must be after the start time.');
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
+  // Zip 24 "Booking hours": a new game must sit inside the venue hours.
+  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
   const note = v.optionalText(body.note, 'note', 80);
   // Zip 14: the court from the Court row (only there while "Game day card" is on). Off: ignored, exactly as main ignores a field it does not know.
   const court = body.court !== undefined && body.court !== null && (await gameDayCardFor(ctx, group.id)) ? courtBody(body.court) : null;
@@ -2307,6 +2323,15 @@ export async function setUnpaidNudgeSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setUnpaidNudgeForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'unpaid_nudge_on' : 'unpaid_nudge_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/booking-hours-switch { on }: Settings > Feature switches > "Booking hours" (Zip 24). Only refuses a game outside the venue hours; moves no money. */
+export async function setBookingHoursSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setBookingHoursForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'booking_hours_on' : 'booking_hours_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

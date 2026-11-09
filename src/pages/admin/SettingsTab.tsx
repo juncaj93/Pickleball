@@ -5,6 +5,8 @@ import { parseDollars } from '../../../shared/money';
 import { UNPAID_LIMIT } from '../../../shared/unpaidNudge';
 import { DEFAULT_VENUE_NAME, DEFAULT_ZELLE_NUMBER, type GroupSettings, hhmmToMinutes, minutesLabel, minutesToHHMM, SETTING_LIMITS } from '../../../shared/settings';
 import { finalPrice } from '../../../shared/pricing';
+import { checkUsualTime, hoursMessageAnyDay } from '../../../shared/bookingHours';
+import '../../booking-hours.css';
 import { setPretend, api, ApiError, copyText, getTheme, navigate, setTheme, storageGet, storageSet, type ThemeChoice, VIEW_ONLY_MESSAGE } from '../../lib';
 import { ConfirmDialog, Notice, parseWhole, Sheet, useToast } from '../../ui';
 import { formatDateTime, formatShortDate, formatTime, localParts } from '../../../shared/time';
@@ -468,7 +470,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -476,6 +478,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <BookingHoursRow ctx={ctx} auto={auto} />
               <TotalsRefreshRow ctx={ctx} auto={auto} />
               <ErrorAlertsRow ctx={ctx} auto={auto} />
               <UnpaidNudgeRow ctx={ctx} auto={auto} />
@@ -750,6 +753,15 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
     setStart(v);
     if (next !== null && oldStart !== null && oldEnd !== null && oldEnd > oldStart) setEnd(minutesToHHMM(Math.min(next + (oldEnd - oldStart), 23 * 60 + 59)));
   };
+  // Zip 24 (BOOKING_HOURS): the usual time (Tuesday and Thursday games) must sit inside the venue hours. The message sits under the boxes
+  // and Save is off while the times are outside them. (The server refuses it too.) Off: nothing here, exactly as before.
+  const hoursOn = ctx.d.bookingHours === true;
+  const sMin = hhmmToMinutes(start);
+  const tMin = hhmmToMinutes(end);
+  const outsideHours = hoursOn && sMin !== null && tMin !== null && tMin > sMin && (() => {
+    const r = checkUsualTime(sMin, tMin);
+    return !r.ok && r.why === 'hours';
+  })();
   async function save(e: FormEvent) {
     e.preventDefault();
     const s = hhmmToMinutes(start);
@@ -805,8 +817,13 @@ function UsualTimeRow({ ctx }: { ctx: AdminCtx }) {
               <input type="time" step={300} value={end} onChange={(e) => setEnd(e.target.value)} required aria-invalid={problem ? true : undefined} />
             </label>
           </div>
+          {outsideHours && (
+            <div className="bh-message" data-bh-message>
+              <Notice tone="danger">{hoursMessageAnyDay()}</Notice>
+            </div>
+          )}
           {problem && <Notice tone="danger">{problem}</Notice>}
-          <button className="btn block" type="submit" disabled={busy}>
+          <button className="btn block" type="submit" disabled={busy || outsideHours}>
             {busy ? 'Saving…' : 'Save'}
           </button>
         </form>
@@ -1350,6 +1367,10 @@ function AlertCardsRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 function InstantAdminRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="speedLastScreenAdminAll" path="/api/admin/speed-last-screen-admin-switch" name="Instant admin" hint="Your organizer screens show at once, money dimmed, taps wait for fresh data. Not on a game day the first time" flag={!!ctx.d.speedLastScreenAdminForAll} dataAttr="data-speed-last-screen-admin-all" />
 }
+/** Zip 24, "Booking hours" (BOOKING_HOURS, server/bookingHours.ts): tap-to-pick game times, and a game outside the venue hours is refused. Organizer only. Off: only /admin?bookinghours=on. */
+function BookingHoursRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="bookingHoursAll" path="/api/admin/booking-hours-switch" name="Booking hours" hint="Tap-to-pick times on Add game and Edit game. A game outside the venue hours is blocked" flag={!!ctx.d.bookingHoursForAll} dataAttr="data-booking-hours-all" />;
+}
 /** Zip 23, "Totals refresh" (TOTALS_REFRESH, server/totalsRefresh.ts): the new Money > Totals look. Organizer only, display only. Off: only /admin?totalsrefresh=on. */
 function TotalsRefreshRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="totalsRefreshAll" path="/api/admin/totals-refresh-switch" name="Totals refresh" hint="Money > Totals: two cards with the cost per court, and a Month by month list. Same numbers" flag={!!ctx.d.totalsRefreshForAll} dataAttr="data-totals-refresh-all" />;
@@ -1576,6 +1597,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <BookingHoursRow ctx={ctx} auto={auto} />
       <TotalsRefreshRow ctx={ctx} auto={auto} />
       <ErrorAlertsRow ctx={ctx} auto={auto} />
       <UnpaidNudgeRow ctx={ctx} auto={auto} />

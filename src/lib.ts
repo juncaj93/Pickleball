@@ -4,6 +4,7 @@ import { GAME_DAY_CARD, GAME_DAY_TEST } from '../shared/gameDay';
 import { UNPAID_NUDGE } from '../shared/unpaidNudge';
 import { AFTER_GAME_CARD } from '../shared/afterGame';
 import { TOTALS_REFRESH } from '../shared/totalsRefresh';
+import { BOOKING_HOURS } from '../shared/bookingHours';
 import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
 import { PREVIEW_CALM } from '../shared/previewCalm';
 import { leavingWithHolds } from './undoHold';
@@ -214,6 +215,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(AFTER_GAME_CARD.link)) headers[AFTER_GAME_CARD.header] = 'on';
   // Zip 23 "Totals refresh" private test switch for this phone (/admin?totalsrefresh=on, =off ends it). See server/totalsRefresh.ts.
   if (gameDayTest(TOTALS_REFRESH.link)) headers[TOTALS_REFRESH.header] = 'on';
+  // Zip 24 "Booking hours" private test switch for this phone (/admin?bookinghours=on, =off ends it). See server/bookingHours.ts.
+  if (gameDayTest(BOOKING_HOURS.link)) headers[BOOKING_HOURS.header] = 'on';
   // Zip 15 "Second Chance" private test switch for this phone (/admin?secondchance=on: the Home cards, never a Telegram), and the
   // preview-only "pretend it's noon on game day" (?noontest=on; the server ignores it unless SECOND_CHANCE_TEST is set, only on previews).
   if (gameDayTest(SECOND_CHANCE.link)) headers[SECOND_CHANCE.header] = 'on';
@@ -765,7 +768,7 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, BOOKING_HOURS.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);

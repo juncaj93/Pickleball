@@ -210,6 +210,12 @@ AFTER_GAME_CARD = "on"
 # gets it is Settings > Feature switches > "Totals refresh" (off at ship = nobody), plus a phone opened once with /admin?totalsrefresh=on.
 # "off" = the kill switch: nobody, not even the test link. Needs a deploy.
 TOTALS_REFRESH = "on"
+# Zip 24 "Booking hours" (shared/bookingHours.ts): a game outside the venue hours (8:00 AM to 10:00 PM Monday to Saturday, 8:00 AM to 7:00 PM
+# Sunday) is refused, on the screen and on the server, and Add game / Edit game get tap-to-pick times. Organizer only. Only a NEW game or a
+# CHANGED start or end is looked at; games that already exist are never touched. "on" here only ALLOWS it; who gets it is Settings > Feature
+# switches > "Booking hours" (off at ship = nobody), plus a phone opened once with /admin?bookinghours=on.
+# "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+BOOKING_HOURS = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -264,6 +270,7 @@ AFTER_GAME_CARD = "on"
 SECOND_CHANCE_TEST = "on"
 UNPAID_NUDGE = "on"
 TOTALS_REFRESH = "on"
+BOOKING_HOURS = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"
 

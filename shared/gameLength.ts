@@ -44,6 +44,14 @@ export const GAME_LENGTHS: readonly GameLength[] = [
   { minutes: NORMAL_MINUTES, words: '2 hours', short: '2 hr', courtCents: 48_00, prices: { 4: 14_00, 5: 11_00, 6: 9_00, 7: 8_00, 8: 7_00, 9: 6_00, 10: 5_00 } },
 ];
 
+/**
+ * The lengths the tap-to-pick screen offers on Add game and Edit game (Zip 24, "Booking hours"): only lengths whose money rules are
+ * fully handled today, which means the two that have a price table above (1.5 and 2 hours). 2.5 and 3 hours have NO row, so they are
+ * priced like a normal 2 hour game ($14, court $48): they are left out until Alex OKs their prices. To offer one later, add its row to
+ * GAME_LENGTHS first, then add its minutes here (the picker, the hours rule and the price text under each button follow).
+ */
+export const PICKER_MINUTES: readonly number[] = [SHORT_MINUTES, NORMAL_MINUTES];
+
 /** End minus Start in whole minutes (a bad pair gives 0). */
 export function gameMinutes(startsAtIso: string, endsAtIso: string): number {
   const ms = Date.parse(endsAtIso) - Date.parse(startsAtIso);

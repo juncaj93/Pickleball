@@ -600,6 +600,9 @@ export interface AdminDashboard {
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
   totalsRefresh?: true;
   totalsRefreshForAll?: true;
+  /** Zip 24 "Booking hours" (shared/bookingHours.ts), only while on (off: the answer is exactly as before): the tap-to-pick times on Add game and Edit game, the hours rule, and the Settings row. */
+  bookingHours?: true;
+  bookingHoursForAll?: true;
   /** Zip 15 "Second Chance" (shared/secondChance.ts), only while on (off: the answer is exactly as before): the Home cards, the Request
    *  buttons and the Edit sheet wording; and its Settings row. */
   secondChance?: {
