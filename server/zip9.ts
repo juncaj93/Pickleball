@@ -3,6 +3,7 @@ import type { D1Database } from './db';
 import type { GroupRow } from './repo';
 import { newId } from './crypto';
 import { CARD_TIME_HEADER, SHORT_GAMES_HEADER, zip9Allowed } from '../shared/zip9';
+import { longGamesOn } from './bookingHours';
 
 // Zip 9: SHORT_GAMES and CARD_TIME_BUTTONS (shared/zip9.ts). Each is on for a request when:
 //  - its wrangler.toml var is not "off" (the kill switch, needs a deploy), and
@@ -60,5 +61,7 @@ export const cardTimeFor = (ctx: Ctx, groupId: string) => on(ctx, groupId, ctx.e
  */
 export async function withShortGames<G extends GroupRow>(ctx: Ctx, group: G, organizer = false): Promise<G> {
   if (await shortGamesFor(ctx, group.id, organizer)) group.short_games = true;
+  // Zip 24: the same request-scoped answer for the 2.5 and 3 hour rows (Booking hours on for everyone; the row alone, never a phone's link).
+  if (await longGamesOn(ctx, group.id)) group.long_games = true;
   return group;
 }

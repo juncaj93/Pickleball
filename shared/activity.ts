@@ -200,6 +200,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Unpaid nudge" on`;
     case 'unpaid_nudge_off':
       return `${who} switched "Unpaid nudge" off`;
+    case 'booking_hours_on':
+      return `${who} switched "Booking hours" on`;
+    case 'booking_hours_off':
+      return `${who} switched "Booking hours" off`;
     case 'totals_refresh_on':
       return `${who} switched "Totals refresh" on`;
     case 'totals_refresh_off':

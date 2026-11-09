@@ -559,6 +559,8 @@ export interface AdminDashboard {
   shortGames?: boolean;
   /** Settings > Feature switches > "Short games" is on (for everyone). */
   shortGamesForAll?: boolean;
+  /** Zip 24: the 2.5 and 3 hour length rows are priced (the Booking hours row is on for everyone), only while true. */
+  longGames?: boolean;
   /** "Card time and buttons" is on for this screen / Settings row is on (for everyone). Player cards only. */
   cardTimeButtons?: boolean;
   cardTimeButtonsForAll?: boolean;
@@ -600,6 +602,9 @@ export interface AdminDashboard {
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
   totalsRefresh?: true;
   totalsRefreshForAll?: true;
+  /** Zip 24 "Booking hours" (shared/bookingHours.ts), only while on (off: the answer is exactly as before): the tap-to-pick times on Add game and Edit game, the hours rule, and the Settings row. */
+  bookingHours?: true;
+  bookingHoursForAll?: true;
   /** Zip 15 "Second Chance" (shared/secondChance.ts), only while on (off: the answer is exactly as before): the Home cards, the Request
    *  buttons and the Edit sheet wording; and its Settings row. */
   secondChance?: {

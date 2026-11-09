@@ -78,7 +78,8 @@ import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { flatOf, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
-import { isShortGame } from '../shared/gameLength';
+import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
+import { bookingHoursAllowed } from '../shared/bookingHours';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
@@ -87,6 +88,7 @@ import { setUnpaidNudgeForAll, unpaidNudgeForAll } from './unpaidNudge';
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
+import { bookingHoursFlags, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
@@ -241,6 +243,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
   // Zip 23 "Totals refresh" (server/totalsRefresh.ts): the new Totals look, only while on (off: this answer is exactly main's).
   const totals = await totalsRefreshFlags(ctx, group.id);
+  // Zip 24 "Booking hours" (server/bookingHours.ts): the tap-to-pick times and the hours rule, only while on (off: this answer is exactly main's).
+  const hours = await bookingHoursFlags(ctx, group.id);
   const swap = await zip13Flags(ctx, group.id, 'swapButton');
   const undo = await zip13Flags(ctx, group.id, 'adminUndo');
   // Zip 14 (server/gameDay.ts): the Court row and each game's court, only while on (off: this answer is exactly main's).
@@ -346,6 +350,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     lastCallTextsForAll: await lastCallForAll(ctx.db, group.id),
     // Zip 9. "Short games" for this screen is what requireAdmin put on the group (the same answer every price on it used).
     ...(group.short_games === true ? { shortGames: true } : {}),
+    // Zip 24: the 2.5 and 3 hour rows are priced (Booking hours on for everyone). The picker's price under each length reads it.
+    ...(group.long_games === true ? { longGames: true } : {}),
     shortGamesForAll: await shortGamesForAll(ctx.db, group.id),
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
     cardTimeButtonsForAll: await cardTimeForAll(ctx.db, group.id),
@@ -375,6 +381,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(totals.on ? { totalsRefresh: true as const } : {}),
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
+    ...(hours.on ? { bookingHours: true as const } : {}),
+    ...(hours.forAll ? { bookingHoursForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     // Zip 16 "After-game cards" (server/afterGame.ts): its Settings row, only while on.
@@ -1025,6 +1033,8 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A session can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
+  // Zip 24 "Booking hours": only a CHANGED start or end is looked at (an existing game outside the hours is never blocked for other edits).
+  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
   const deadline = defaultDeadline(startsAt, settingsOf(group));
   const move = ctx.db
     .prepare(
@@ -1658,6 +1668,13 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     wordHash = word === null ? null : await hashGroupWord(word);
   }
   const settings = normalizeSettings({ ...settingsOf(group), ...(body.settings as object) });
+  // Zip 24 "Booking hours": a CHANGED usual game time (Settings > Schedule) must sit inside the venue hours. Any other save is untouched.
+  {
+    const before = settingsOf(group);
+    if (settings.defaultStartMinutes !== before.defaultStartMinutes || settings.defaultEndMinutes !== before.defaultEndMinutes) {
+      await enforceUsualTime(ctx, group.id, settings.defaultStartMinutes, settings.defaultEndMinutes);
+    }
+  }
   // The Apple Pay / Zelle number lives inside settings_json (normalizeSettings only keeps the numbers, so it is put back here).
   let zelleRaw: string | undefined = (() => {
     try {
@@ -1701,7 +1718,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
       .bind(group.id, ctx.nowIso)
       .all<SessionRow>();
     // The saved settings plus this request's "Short games" answer (normalizeSettings drops it), so a move-in pays the game's own price.
-    for (const s of open) await settle(ctx.db, s, ctx.nowIso, group.short_games === true ? { ...settings, shortGames: true } : settings);
+    for (const s of open) await settle(ctx.db, s, ctx.nowIso, { ...settings, ...(group.short_games === true ? { shortGames: true as const } : {}), ...(group.long_games === true ? { longGames: true as const } : {}) });
   }
   return { ok: true };
 }
@@ -1858,6 +1875,8 @@ export async function addGame(ctx: Ctx, body: Record<string, unknown>) {
   if (length <= 0) throw new HttpError(400, 'invalid_time', 'The end time must be after the start time.');
   if (length > 6 * 3600_000) throw new HttpError(400, 'invalid_time', 'A game can be at most 6 hours long.');
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
+  // Zip 24 "Booking hours": a new game must sit inside the venue hours.
+  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
   const note = v.optionalText(body.note, 'note', 80);
   // Zip 14: the court from the Court row (only there while "Game day card" is on). Off: ignored, exactly as main ignores a field it does not know.
   const court = body.court !== undefined && body.court !== null && (await gameDayCardFor(ctx, group.id)) ? courtBody(body.court) : null;
@@ -2307,6 +2326,27 @@ export async function setUnpaidNudgeSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setUnpaidNudgeForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'unpaid_nudge_on' : 'unpaid_nudge_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/booking-hours-switch { on }: Settings > Feature switches > "Booking hours" (Zip 24). Only refuses a game outside the venue hours; moves no money. */
+export async function setBookingHoursSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setBookingHoursForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'booking_hours_on' : 'booking_hours_off', {}, ctx.nowIso);
+  // The 2.5 and 3 hour length rows turn on and off with this row (shared/gameLength.ts): the flat price of every OPEN game of those lengths just
+  // changed ($14 <-> $18 and $21), so reprice their seats now, the way the Short games switch does (credit on a seat follows the new price; cash
+  // is never taken back, it is settled at Finalize). A game of any other length is not touched. With none open, nothing happens.
+  const everyone = bookingHoursAllowed(ctx.env.BOOKING_HOURS) && on;
+  const after: ReturnType<typeof settingsOf> = everyone ? { ...settingsOf({ ...group, long_games: false }), longGames: true } : settingsOf({ ...group, long_games: false });
+  const { results: open } = await ctx.db
+    .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?")
+    .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
+    .all<SessionRow>();
+  for (const s of open) {
+    if ((LONG_MINUTES as readonly number[]).includes(gameMinutes(s.starts_at, s.ends_at))) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+  }
   return { ok: true, on };
 }
 

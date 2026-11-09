@@ -3881,3 +3881,38 @@ value (admin only). Built on main `cc2ccb7` (Zip 18 and Zip 23 live).
 - Off-equals-main: the site built from this branch and from main differ only in that one CSS value (and the build time stamp); no server
   code changed. Fresh reviewer skipped for this version (look only, one value, under 150 lines; the review of the dropped item 1 is moot).
 - Preview: https://preview-zip22.pickleball-club-9h0.pages.dev (refreshed with this code; fake database not re-seeded).
+
+## Zip 24: Booking hours (BOOKING_HOURS, ships OFF) and tap-to-pick game times, Mon Nov 9, 2026
+Admin only. No database change, no new cost, no money logic changed. Branch `claude/new-session-u3aoty` (the brief's name "🎾24.hours" is the session name). Built on main `cc2ccb7`. NOT deployed: 🎾22 (PR #112, Add game / Edit game after-midnight work) had not landed on main when this was built; both change the same two sheets, so rebase, rerun everything, then deploy.
+
+### What it is
+- The venue is open 8:00 AM to 10:00 PM Monday to Saturday, 8:00 AM to 7:00 PM Sunday (Eastern, the game's own date). One table, `VENUE_HOURS` in `shared/bookingHours.ts`; everything reads it.
+- A game outside those hours is BLOCKED: Add game (new game), Edit game (only a CHANGED start or end) and Settings > Schedule > Usual game time (only a changed time, against Tuesday's hours). The server checks all three (`server/bookingHours.ts`, 400 `invalid_time`); seconds count (an end of 10:00:30 PM is refused). An existing game is never blocked or changed because of it.
+- Add game and Edit game: tap-to-pick times from Alex's mock (card with Date/Court, Start/End, Length; Note or Label card; Start opens a grid with AM/PM labels, chips every 30 minutes, 4 across). Out-of-hours times cannot be offered; a start or a length that would pass closing is faded, dashed and cannot be tapped ("past close" on a length). Edit game loses only the "Cancel by ... set automatically" line (the cancel logic is untouched).
+- Settings > Schedule keeps its time boxes: with the switch on, the message "The venue is open 8:00 AM to 10:00 PM (Sundays 8:00 AM to 7:00 PM). Pick times inside those hours." shows under the boxes and Save is off while the times are outside the hours. (Chosen over reusing the picker: it is the smaller and safer change.)
+
+### Pricing check (the code is the truth; what the money code does for each length)
+- Length is `gameMinutes(startsAt, endsAt)` (End minus Start). Cancel-by is start minus 12 hours for every length. The calendar file writes the game's own end time for every length. The texts say the length in words for every length.
+- First finding (before Alex's OK): only 1.5 hr and 2 hr had price rows. 1 hr, 2.5 hr and 3 hr were priced like a 2 hour game ($14 up front, the 2 hour final table and credit, court $48 on Money > Totals instead of $60 / $72). So the picker first shipped with only 1.5 and 2 hr and no money logic changed.
+- Alex then OKed full support (Mon Nov 9, afternoon): two new rows in `GAME_LENGTHS`, same shape as the 1.5 hour row.
+  - 1.5 hr (Short games): $11 up front, final 11/9/7/6/5/4/4 for 4 to 10 in, court $36. Handled.
+  - 2 hr (Settings > Money): $14, floor(4 x 14 / N) = 14/11/9/8/7/6/5, court $48. Handled.
+  - 2.5 hr (Booking hours row ON for everyone): $18 up front (14 x 2.5 / 2 = 17.5, rounded up), final floor(4 x 18 / N) = 18/14/12/10/9/8/7, credit back = the difference (N = 5: $4, 6: $6, 7: $8, 8: $9), court $60. Handled.
+  - 3 hr (same gate): $21 up front, final floor(84 / N) = 21/16/14/12/10/9/8 (credit back N = 5: $5, 6: $7, 7: $9, 8: $11), court $72. Handled.
+  - 1 hr: still no row ($14, court $48); not one of the four buttons; an existing 1 hour game opens in Edit game with its own times and no length picked.
+- Answer to "does the existing rule give different numbers": the 1.5 hour row is a fixed table, not a formula. floor(4 x 11 / N) would give 11/8/7/6/5/4/4; the table has $9 at 5 in (Alex OKed those numbers in Zip 9). The 2 hour table IS the formula. The new rows use the formula (up front rounded up, then floor(4 x up-front / N) in whole dollars), as Alex described.
+- Guards: (a) read-only look at live: only 90 and 120 minute games exist (13), none of 150 or 180; preview: 60, 90, 120; so no existing game can change. (b) no schema change. (c) the rows apply only to 150 and 180 minute games. (d) the rows count only while the Booking hours row is ON for everyone and the kill switch allows it; the private link never prices; OFF = main including money (`e2e/zip24-off.cjs` compares a 2.5 and a 3 hour game against main). (e) tests: `tests/long-games.test.ts` (25) and the four-button browser checks. (f) a fresh reviewer read the money change (see below).
+
+### Choices and things to know
+- Wording under the picker follows the mock (no heads-up box, no "New time:" line, no quick-date chips). The one conditional line kept is "Players who are in will be asked to confirm the new time." (only when a start with players in is changed).
+- A new date with other hours moves the start into that day's hours if it no longer fits (a Tuesday 8:00 PM start moved to a Sunday becomes 5:00 PM for 2 hr); big text turns the 4-across grid into 3 across.
+- Not covered on purpose: the 5-minute game generator (`ensureSessions`) still builds Tuesday and Thursday games from the saved usual time without a check; a usual time that was already out of hours before the switch went on would keep generating such games until it is changed (Settings blocks only a CHANGE).
+- Review (a fresh reviewer, the date and time rule): nothing blocking; one fix made (seconds), notes above.
+
+### Switch
+`BOOKING_HOURS` kill switch in `[vars]` and `[env.preview.vars]`; Settings > Feature switches > "Booking hours" (top row); `/admin?bookinghours=on` per phone (sends `X-Booking-Hours`, honored by the server for that phone's saves); Activity lines; `docs/FEATURE_SWITCHES.md`. The preview database gets the row with one INSERT (no re-seed); `BUILDING_ON` has it for the next seed.
+
+### Tests
+- `tests/booking-hours.test.ts` (44): the hours table, every boundary both sides, Sunday, midnight, DST, seconds, picker slots and length fit (including a 2.5 hr game from 4:30 PM Sunday ending exactly 7:00 PM), prices per length (1.5, 2, and the unsupported 1, 2.5, 3), the switch, server refusals for Add game, Edit time and Settings, old out-of-hours games still cancel / edit / save unchanged.
+- `e2e/zip24.cjs` (20): the mock's structure, fit on 420 x 912, 38 px targets, grid rules, dark green chip, length buttons and prices from the server, saved times, court pick, Edit game (status first, no Cancel-by line, own start and length, odd lengths, old out-of-hours game), Settings message and Save, server refusals, strict clipping at 390/360/320, light and dark, text 100/125/150% (proven to fail on purpose-broken CSS).
+- `e2e/zip24-off.cjs` (needs `MAIN_DIR`): switch OFF equals main for Add game, Edit game, the Usual game time sheet, Settings, Home, Players, Money, History, and the answers.

@@ -1,4 +1,4 @@
-import { shortGameHeadsUpParts, shortGameTag, viewPrice } from '../../../shared/gameLength';
+import { lengthRow, shortGameHeadsUpParts, shortGameTag, viewPrice } from '../../../shared/gameLength';
 import type { AdminSessionView } from '../../../shared/api';
 import type { AdminCtx } from '../Admin';
 
@@ -13,8 +13,11 @@ export { boxMinutes } from '../../../shared/gameLength';
  * they change. Nothing for a normal 2 hour game or any other length.
  */
 export function ShortGameHeadsUp({ ctx, minutes }: { ctx: AdminCtx; minutes: number | null }) {
-  if (ctx.d.shortGames !== true || minutes === null) return null;
-  const parts = shortGameHeadsUpParts(minutes);
+  if (minutes === null) return null;
+  // Each length's own switch: Short games for 1.5 hours, Booking hours (for everyone) for 2.5 and 3 hours.
+  const row = lengthRow(minutes);
+  if (!row || (row.group === 'long' ? ctx.d.longGames !== true : ctx.d.shortGames !== true)) return null;
+  const parts = shortGameHeadsUpParts(minutes, ctx.d.longGames === true);
   if (!parts) return null;
   return (
     <div className="z9-headsup" role="status" data-short-headsup>
@@ -33,7 +36,7 @@ export function ShortGameHeadsUp({ ctx, minutes }: { ctx: AdminCtx; minutes: num
 
 /** The small "1.5 HR" pill under the time on an organizer game tile; its full words ("1.5 hr game · $11 each") are read out. */
 export function ShortGameTilePill({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
-  if (ctx.d.shortGames !== true || !s.shortGame) return null;
+  if ((ctx.d.shortGames !== true && ctx.d.longGames !== true) || !s.shortGame) return null;
   const p = viewPrice(s, ctx.d.group.settings);
   const words = shortGameTag(p);
   if (!words || !p.row) return null;
@@ -47,6 +50,6 @@ export function ShortGameTilePill({ ctx, s }: { ctx: AdminCtx; s: AdminSessionVi
 
 /** "1.5 hr game · $11 each" as a line (the folded Home row), or null for a normal game. */
 export function shortGameLine(ctx: AdminCtx, s: AdminSessionView): string | null {
-  if (ctx.d.shortGames !== true || !s.shortGame) return null;
+  if ((ctx.d.shortGames !== true && ctx.d.longGames !== true) || !s.shortGame) return null;
   return shortGameTag(viewPrice(s, ctx.d.group.settings));
 }

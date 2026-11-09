@@ -204,15 +204,15 @@ export function CourtMap({
 
 /**
  * The organizer's "Court" row on Add game and Edit game (only while "Game day card" is on): "Not set" in blue until a court is picked,
- * then "Court 3". A tap opens the court map; one tap on a court picks it, "Not set yet" clears it. Saved with the sheet's own button.
+ * then "Court 3". (`stacked`, Zip 24: the Booking hours picker puts the word "Court" above the box, so inside it the word is for screen readers only.) A tap opens the court map; one tap on a court picks it, "Not set yet" clears it. Saved with the sheet's own button.
  */
-export function CourtRow({ value, onChange }: { value: number | null; onChange: (court: number | null) => void }) {
+export function CourtRow({ value, onChange, stacked }: { value: number | null; onChange: (court: number | null) => void; stacked?: boolean }) {
   const [open, setOpen] = useState(false);
   const rowRef = useRef<HTMLButtonElement>(null);
   return (
     <>
-      <button ref={rowRef} type="button" className="gd-court-row" data-court-row={value ?? 'unset'} aria-haspopup="dialog" onClick={() => setOpen(true)}>
-        <span className="gd-court-label">Court</span>
+      <button ref={rowRef} type="button" className={stacked ? 'gd-court-row bh-box bh-courtbox' : 'gd-court-row'} data-court-row={value ?? 'unset'} aria-haspopup="dialog" onClick={() => setOpen(true)}>
+        <span className={stacked ? 'sr-only' : 'gd-court-label'}>Court</span>
         <span className={`gd-court-value${value === null ? ' unset' : ''}`}>
           {value === null ? 'Not set' : `Court ${value}`}
           <svg className="gd-chev" viewBox="0 0 9 14" aria-hidden="true">

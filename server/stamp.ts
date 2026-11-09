@@ -14,6 +14,7 @@ import { paySheetForAll } from './paySheet';
 import { lateFeesForAll } from './lateFees';
 import { hiddenGameIds, hiddenGameIdsRead } from './hideGame';
 import { cardTimeForAll, shortGamesForAll } from './zip9';
+import { longGamesOn } from './bookingHours';
 import { cardCleanupForAll } from './zip10';
 import { alertCardsForAll } from './zip11';
 import { seatDotsForAll } from './seatDots';
@@ -109,6 +110,8 @@ export async function changeStamp(ctx: Ctx, group: GroupRow, playerId: string | 
     ...((await playerCardsForAll(ctx.db, group.id)) ? ['pc'] : []),
     // Zip 9 switches: the same rule, a segment only while the switch is on for everyone.
     ...((await shortGamesForAll(ctx.db, group.id)) ? ['sg'] : []),
+    // Zip 24: the 2.5 and 3 hour price rows turn on with the Booking hours row (for everyone, kill switch allowing it): a segment only while on, so off the stamp is exactly what it was.
+    ...((await longGamesOn(ctx, group.id)) ? ['lg'] : []),
     ...((await cardTimeForAll(ctx.db, group.id)) ? ['ct'] : []),
     // Zip 10: the same rule.
     ...((await cardCleanupForAll(ctx.db, group.id)) ? ['cl'] : []),

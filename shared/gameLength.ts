@@ -5,10 +5,14 @@
 //    game from Settings > Money ("Price per player" $14, "Typical court cost" $48) with floor(4 x price / N), exactly as live.
 //    The tests check that this row equals that rule at today's settings (14, 11, 9, 8, 7, 6, 5 and $48).
 //  - 90 minutes, the "short game" (switch SHORT_GAMES). Its prices are a fixed whole-dollar table, not a formula.
-// Any other length (1 hour, 2.5 hours, ...) has no row and is priced like a normal game, with no tag.
+//  - 150 and 180 minutes, the 2.5 and 3 hour games (Zip 24, Booking hours). Same shape as the 1.5 hour row: the up-front price is the 2 hour
+//    price scaled by the length and rounded UP to whole dollars (14 x 2.5 / 2 = 17.5 -> $18, 14 x 3 / 2 = 21 -> $21; 1.5 hours is 10.5 -> $11),
+//    and the final price is floor(4 x up-front / N) (72 / N and 84 / N). Court cost is $24 an hour ($60 and $72). Their rows only count while
+//    the Booking hours row is ON for everyone (`longGames`, server/bookingHours.ts), so with it OFF these lengths are priced exactly as before.
+// Any other length (1 hour, 3.5 hours, ...) has no row and is priced like a normal game, with no tag.
 //
-// To add a length later (Alex: 1, 2.5, 3, 3.5 or 4 hours), add ONE row below. Nothing else changes: every price path reads it
-// through gamePrice(). Court cost today is $24 an hour ($36 for 1.5 hours, $48 for 2 hours).
+// To add a length later, add ONE row below. Nothing else changes: every price path reads it through gamePrice().
+// Court cost today is $24 an hour ($36 for 1.5 hours, $48 for 2 hours, $60 for 2.5, $72 for 3).
 //
 // Everyone pays the 4-in price up front (the `4` entry), and whatever is above the final price comes back as credit when the
 // organizer finalizes, the same way a normal game works. The organizer plays but pays the venue, never the group.
@@ -30,19 +34,33 @@ export interface GameLength {
   courtCents: number;
   /** The price each, in cents, by how many are in (or played, once finalized). */
   prices: PriceByPlayers;
+  /** Which switch turns the row on: 'short' = "Short games", 'long' = "Booking hours" for everyone (Zip 24). */
+  group: 'short' | 'long';
 }
 
 /** The normal game (2 hours). */
 export const NORMAL_MINUTES = 120;
 /** The short game (1.5 hours). */
 export const SHORT_MINUTES = 90;
+/** The 2.5 and 3 hour games (Zip 24). */
+export const LONG_MINUTES = [150, 180] as const;
 
 export const GAME_LENGTHS: readonly GameLength[] = [
   // 9 and 10 in: $4 each (Alex OKed, Fri Nov 6). 9 x $4 = $36 and 10 x $4 = $40, so the $36 court stays
   // covered; $3 at 10 would be $30. With today's Max players (10) a short game never reaches 11 or 12.
-  { minutes: SHORT_MINUTES, words: '1.5 hours', short: '1.5 hr', courtCents: 36_00, prices: { 4: 11_00, 5: 9_00, 6: 7_00, 7: 6_00, 8: 5_00, 9: 4_00, 10: 4_00 } },
-  { minutes: NORMAL_MINUTES, words: '2 hours', short: '2 hr', courtCents: 48_00, prices: { 4: 14_00, 5: 11_00, 6: 9_00, 7: 8_00, 8: 7_00, 9: 6_00, 10: 5_00 } },
+  { minutes: SHORT_MINUTES, words: '1.5 hours', short: '1.5 hr', courtCents: 36_00, prices: { 4: 11_00, 5: 9_00, 6: 7_00, 7: 6_00, 8: 5_00, 9: 4_00, 10: 4_00 }, group: 'short' },
+  { minutes: NORMAL_MINUTES, words: '2 hours', short: '2 hr', courtCents: 48_00, prices: { 4: 14_00, 5: 11_00, 6: 9_00, 7: 8_00, 8: 7_00, 9: 6_00, 10: 5_00 }, group: 'short' },
+  // 2.5 hours: $18 up front (14 x 2.5 / 2 = 17.5, up), final floor(72 / N): 18, 14, 12, 10, 9, 8, 7. 4 to 10 in always cover the $60 court (72, 70, 72, 70, 72, 72, 70).
+  { minutes: 150, words: '2.5 hours', short: '2.5 hr', courtCents: 60_00, prices: { 4: 18_00, 5: 14_00, 6: 12_00, 7: 10_00, 8: 9_00, 9: 8_00, 10: 7_00 }, group: 'long' },
+  // 3 hours: $21 up front, final floor(84 / N): 21, 16, 14, 12, 10, 9, 8. Always covers the $72 court (84, 80, 84, 84, 80, 81, 80).
+  { minutes: 180, words: '3 hours', short: '3 hr', courtCents: 72_00, prices: { 4: 21_00, 5: 16_00, 6: 14_00, 7: 12_00, 8: 10_00, 9: 9_00, 10: 8_00 }, group: 'long' },
 ];
+
+/**
+ * The lengths the tap-to-pick screen offers on Add game and Edit game (Zip 24, "Booking hours"): 1.5, 2, 2.5 and 3 hours, always all four.
+ * Each has a row in GAME_LENGTHS above (price, final table, court cost); the price under each button is read from that row.
+ */
+export const PICKER_MINUTES: readonly number[] = [SHORT_MINUTES, NORMAL_MINUTES, ...LONG_MINUTES];
 
 /** End minus Start in whole minutes (a bad pair gives 0). */
 export function gameMinutes(startsAtIso: string, endsAtIso: string): number {
@@ -93,9 +111,11 @@ export interface GamePrice {
  * A game's price. With SHORT_GAMES off, or a length with no row, or the normal 2 hours: Settings > Money, exactly as before.
  * With it on and a row for the length (other than 2 hours): that row.
  */
-export function gamePrice(game: { startsAt: string; endsAt: string }, settings: PriceSettings, shortGames: boolean): GamePrice {
+export function gamePrice(game: { startsAt: string; endsAt: string }, settings: PriceSettings, shortGames: boolean, longGames = false): GamePrice {
   const minutes = gameMinutes(game.startsAt, game.endsAt);
-  const row = shortGames && minutes !== NORMAL_MINUTES ? lengthRow(minutes) : null;
+  const found = minutes !== NORMAL_MINUTES ? lengthRow(minutes) : null;
+  // A row counts only while ITS switch is on: "Short games" for 1.5 hours, "Booking hours" for everyone (`longGames`) for 2.5 and 3 hours.
+  const row = found && (found.group === 'long' ? longGames : shortGames) ? found : null;
   if (row) return { minutes, special: true, row, flatCents: rowPrice(row, MIN_PLAYERS), courtCents: row.courtCents };
   return { minutes, special: false, row: null, flatCents: settings.pricePerPlayerCents, courtCents: settings.typicalCourtCostCents };
 }
@@ -116,18 +136,18 @@ export function isShortGame(startsAtIso: string, endsAtIso: string): boolean {
   return gameMinutes(startsAtIso, endsAtIso) === SHORT_MINUTES;
 }
 
-/** The heads-up on Add game and Edit game in two parts: "1.5 hour game" / "Court $36. Players pay $11 each (4 in), less if more join." Null for a normal game or a length with no row. */
-export function shortGameHeadsUpParts(minutes: number): { title: string; body: string } | null {
+/** The heads-up on Add game and Edit game in two parts: "1.5 hour game" / "Court $36. Players pay $11 each (4 in), less if more join." Null for a normal game or a length with no row (or whose switch is off). */
+export function shortGameHeadsUpParts(minutes: number, longGames = false): { title: string; body: string } | null {
   if (minutes === NORMAL_MINUTES) return null;
   const row = lengthRow(minutes);
-  if (!row) return null;
+  if (!row || (row.group === 'long' && !longGames)) return null;
   const d = (c: number) => `$${Math.round(c / 100)}`;
   return { title: `${row.words.replace(/s$/, '')} game`, body: `Court ${d(row.courtCents)}. Players pay ${d(rowPrice(row, MIN_PLAYERS))} each (4 in), less if more join.` };
 }
 
 /** The same heads-up as one sentence: "1.5 hour game. Court $36. Players pay $11 each (4 in), less if more join." */
-export function shortGameHeadsUp(minutes: number): string | null {
-  const p = shortGameHeadsUpParts(minutes);
+export function shortGameHeadsUp(minutes: number, longGames = false): string | null {
+  const p = shortGameHeadsUpParts(minutes, longGames);
   return p ? `${p.title}. ${p.body}` : null;
 }
 
@@ -142,7 +162,7 @@ export function shortGameTag(p: GamePrice): string | null {
  * own row ("Short games" on for that screen), so the screen never decides the switch by itself and always agrees with the server.
  */
 export function viewPrice(s: { startsAt: string; endsAt: string; shortGame?: { minutes: number } }, settings: PriceSettings): GamePrice {
-  return gamePrice(s, settings, !!s.shortGame);
+  return gamePrice(s, settings, !!s.shortGame, !!s.shortGame);
 }
 
 /** The flat price on a screen: the short game's own (from the server), else the normal price. */

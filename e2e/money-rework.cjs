@@ -781,8 +781,8 @@ async function main() {
       // Zip 9 (Nov 6) added Short games and Card time and buttons above those.
       // Zip 12 (Nov 7) added Show last screen at once, Load games at once and Fewer database trips above those, Zip 11 had added Alert cards just before, Seat dots, and Zip 12 step C's Instant admin is newest (18 rows above the group now).
       // Zip 13 (Nov 7) added Undo on admin toasts, Swap to Alex and Players redo on top (21 rows above the group now).
-      // Zip 14 (Nov 8) added Game day card on top; Zip 15 (Nov 8) Second Chance above it; Zip 16 (Nov 8) After-game cards on top; Zip 17 (Nov 8) Unpaid nudge above it; Zip 21 (Nov 9) Error alerts on top; Zip 23 (Nov 9) Totals refresh above it (27 rows above the group now).
-      assert(names.slice(0, 27).join('|') === 'Totals refresh|Error alerts|Unpaid nudge|After-game cards|Second Chance|Game day card|Undo on admin toasts|Swap to Alex|Players redo|Instant admin|Seat dots|Show last screen at once|Load games at once|Fewer database trips|Alert cards|Card cleanup|Short games|Card time and buttons|Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 26)}`);
+      // Zip 14 (Nov 8) added Game day card on top; Zip 15 (Nov 8) Second Chance above it; Zip 16 (Nov 8) After-game cards on top; Zip 17 (Nov 8) Unpaid nudge above it; Zip 21 (Nov 9) Error alerts on top; Zip 23 (Nov 9) Totals refresh above it; Zip 24 (Nov 9) Booking hours on top (28 rows above the group now).
+      assert(names.slice(0, 28).join('|') === 'Booking hours|Totals refresh|Error alerts|Unpaid nudge|After-game cards|Second Chance|Game day card|Undo on admin toasts|Swap to Alex|Players redo|Instant admin|Seat dots|Show last screen at once|Load games at once|Fewer database trips|Alert cards|Card cleanup|Short games|Card time and buttons|Last call texts|Tonight glow|Color cleanup|Simpler player cards|Home collapse|Adjust credit|Venmo request|Instant taps|Money page rework', `newest first: ${names.slice(0, 28)}`);
       // Every other switch is on for everyone on live (the fee split since Wed Nov 4), so they are all in the group, newest first.
       const group = page.locator('[data-live-stable]');
       assert((await group.count()) === 1, 'Live and stable group');
@@ -793,7 +793,7 @@ async function main() {
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
       // This test server keeps the two animation switches dark, so those two rows sit above the group as well.
-      assert(names.length === 27 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the eleven newest sit above the group): ${names.length} vs ${live.length}`);
+      assert(names.length === 28 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the eleven newest sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
