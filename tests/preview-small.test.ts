@@ -32,6 +32,6 @@ describe('the small preview world (npm run db:seed:preview)', () => {
   it('switch rows: live rows plus Unpaid nudge; never a row twice', () => {
     const rows = smallSwitchRows(Date.parse(TIMES[0])).trim().split('\n');
     expect(new Set(rows).size).toBe(rows.length);
-    expect(rows.some((r) => r.includes("'unpaid_nudge_on'"))).toBe(true);
+    for (const t of ['unpaid_nudge_on', 'game_day_card_on', 'second_chance_on', 'after_game_card_on']) expect(rows.some((r) => r.includes(`'${t}'`)), t).toBe(true);
   });
 });

@@ -50,7 +50,7 @@ only for the local browser tests now (`scripts/seed-preview-world.ts`); it never
 
 Never give Vic, Wren or Zoe a fee or a game that ends before the next re-seed: their counts must stay 1, 2 and 3. The "Late-fee test" and "Fee split test" games use Quinn, Rowan, Sage and Christopher Vanderberg for that reason.
 
-The preview's switch rows are live's ON rows plus the zip being built (PREVIEW SWITCHES RULE). Rows that shipped OFF and are still off on live (read before each re-seed) are off here too: open the preview with `?gameday=on`, `/admin?secondchance=on` or `?aftergame=on` to see those cards on one phone.
+The preview's switch rows are live's ON rows plus the zip being built (PREVIEW SWITCHES RULE): `LATER_ON_LIVE` and `BUILDING_ON` in `scripts/preview-world-small.ts`. Read on live Sun Nov 8, 7:05 PM: every Settings row is on, including Game day card, Second Chance and After-game cards, so the preview has them all, plus Unpaid nudge. A row that is off on live stays off here; `?gameday=on`, `/admin?secondchance=on` or `?aftergame=on` shows that card on one phone.
 
 Links (calm previews only; never on live): `/?as=Vic`, `/?as=Wren`, `/?as=Zoe`, `/?as=Quinn` and so on pick that name on the phone.
 Not on the small preview: games with 11 or 12 in (there are only 10 names; the local browser tests still have them).

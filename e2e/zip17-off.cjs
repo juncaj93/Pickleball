@@ -93,6 +93,8 @@ async function main() {
       .replace(/\/assets\/[^"']+/g, '/assets/x')
       .replace(/ dots-celebrate/g, '')
       .replace(/(datetime="[^"]+?)\.\d{3}Z"/g, '$1Z"')
+      // A tap a second apart on the two copies (I'm in, above): the History line's time to the minute, as the screen shows it.
+      .replace(/(datetime="\d{4}-\d\d-\d\dT\d\d:\d\d):\d\dZ"/g, '$1Z"')
       .replace(/localhost(:|%3A)538[34]/g, 'localhost$1PORT')
       .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<id>');
   async function screen(base, { who, url = '/', scheme = 'light', tabName, act, width = 390 }) {

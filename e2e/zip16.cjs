@@ -277,9 +277,9 @@ async function main() {
     const row = page.locator('[data-row="afterGameCardAll"]');
     assert((await row.count()) === 1, 'the row is there');
     assert((await row.locator('.set-name').textContent()).includes('After-game cards'), 'its name');
-    // The newest row first.
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').first().getAttribute('data-row');
-    assert(first === 'afterGameCardAll', `newest first: ${first}`);
+    // Newest first: Zip 17's Unpaid nudge sits above it now.
+    const firstTwo = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-row')));
+    assert(firstTwo.join('|') === 'unpaidNudgeAll|afterGameCardAll', `newest first: ${firstTwo}`);
     assert(await row.locator('input').isChecked(), 'on in the seed');
     await row.locator('input').click();
     await page.waitForTimeout(1200);
