@@ -108,6 +108,8 @@ export interface Env {
   GAME_DAY_CARD?: string;
   /** Zip 16 "After-game cards" (shared/afterGame.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?aftergame=on. Display only. */
   AFTER_GAME_CARD?: string;
+  /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?totalsrefresh=on. Display only. */
+  TOTALS_REFRESH?: string;
   /** Zip 14, PREVIEW ONLY: "on" lets a phone with ?gamedaytest=on see the next game as if it were today. Only [env.preview.vars] has it; never production. */
   GAME_DAY_TEST?: string;
   /** Zip 15 "Second Chance" (shared/secondChance.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?secondchance=on. */

@@ -13,6 +13,7 @@ import { ReworkRemind } from './MoneyReworkParts';
 import { unpaidRows, owedCentsOf } from './moneyList';
 import { creditPerPlayerCents, fullyPaid, monthBoxLabel, monthChoices, monthRowLabel, monthRows, type RwGame, splitGames } from './moneyRework';
 import { ReworkOpsProvider, useReworkPatch } from './ReworkOps';
+import { TotalsRefresh } from './TotalsRefresh';
 import '../../money-rework.css';
 import { viewFlat } from '../../../shared/gameLength';
 
@@ -324,6 +325,8 @@ function TotalsRework({ ctx, month }: { ctx: AdminCtx; month: string }) {
   if (load.error) return <ErrorState error={load.error} onRetry={load.reload} />;
   const t = m?.rework;
   if (!m || !t) return null;
+  // Zip 23 "Totals refresh" (TOTALS_REFRESH): the new cards. Off: everything below, exactly as before.
+  if (ctx.d.totalsRefresh === true) return <TotalsRefresh ctx={ctx} t={t} />;
   const p = t.projected;
   const eq = (membership: number, court: number, courts: number) => `${formatPrice(membership)} + ${formatPrice(court)} (${plural(courts, 'court', 'courts')})`;
   return (

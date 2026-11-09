@@ -86,6 +86,7 @@ import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDa
 import { setUnpaidNudgeForAll, unpaidNudgeForAll } from './unpaidNudge';
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
+import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
@@ -238,6 +239,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const played = new Map(playedRows.results.map((r) => [r.id, Number(r.n)]));
   // Zip 13 (server/zip13.ts): each flag only while on, so with all three off this answer is exactly main's.
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
+  // Zip 23 "Totals refresh" (server/totalsRefresh.ts): the new Totals look, only while on (off: this answer is exactly main's).
+  const totals = await totalsRefreshFlags(ctx, group.id);
   const swap = await zip13Flags(ctx, group.id, 'swapButton');
   const undo = await zip13Flags(ctx, group.id, 'adminUndo');
   // Zip 14 (server/gameDay.ts): the Court row and each game's court, only while on (off: this answer is exactly main's).
@@ -370,6 +373,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(swap.forAll ? { swapButtonForAll: true as const } : {}),
     ...(undo.on ? { adminUndo: true as const } : {}),
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
+    ...(totals.on ? { totalsRefresh: true as const } : {}),
+    ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     // Zip 16 "After-game cards" (server/afterGame.ts): its Settings row, only while on.
@@ -2302,6 +2307,15 @@ export async function setUnpaidNudgeSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setUnpaidNudgeForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'unpaid_nudge_on' : 'unpaid_nudge_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/totals-refresh-switch { on }: Settings > Feature switches > "Totals refresh" (Zip 23). Display only; moves no money. */
+export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 
