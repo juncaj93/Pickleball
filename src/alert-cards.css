@@ -266,10 +266,18 @@ html[data-alert-cards] .ac-actions {
 }
 html[data-alert-cards] .ac-actions > .ac-btn {
   flex: 1 1 0;
-  min-width: max-content;
+  /* At least as wide as its words, or the whole row when the words are longer than that ("Text Christopher Vanderberg" on a narrow
+     card): then the words wrap inside the button, which grows taller (38 px at least, as before). */
+  min-width: -webkit-fit-content;
+  min-width: fit-content;
   max-width: 100%;
-  padding: 0 8px;
+  height: auto;
+  min-height: 38px;
+  padding: 5px 8px;
   font-size: 14.5px;
+  line-height: 1.15;
+  white-space: normal;
+  text-align: center;
 }
 html[data-alert-cards] .ac-btn {
   position: relative;

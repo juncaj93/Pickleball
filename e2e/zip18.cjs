@@ -447,10 +447,13 @@ async function main() {
           };
           if (await page.locator('.dn-more').count()) await page.locator('.dn-more').click();
           await look('Home');
-          // Every game listed (Home shows 6 until "Show all N"), then every one folded.
+          // Every game listed (Home shows 6 until "Show all N") and opened (later weeks start folded): every game card, its panels
+          // (the short-on-players card, the moved-game card with a Text button per person) checked open; then every one folded.
           const all = page.locator('button', { hasText: /^Show all \d+$/ });
           if (await all.count()) await all.first().click();
           await page.waitForTimeout(300);
+          await page.evaluate(() => document.querySelectorAll('.hv2-short').forEach((r) => r.click()));
+          await look('Home, every game open');
           await page.evaluate(() => document.querySelectorAll('[data-game-open] .hv2-a11y').forEach((b) => b.click()));
           const folded = await page.evaluate(() => [...document.querySelectorAll('.hv2-short .day-tag')].map((e) => (e.classList.contains('tonight') ? 'TONIGHT' : 'TOM')));
           await look('Home, every game folded');
