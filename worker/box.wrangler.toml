@@ -1,0 +1,17 @@
+# Zip 21 "Error alerts": the error box (worker/box.ts). One SQLite-backed Durable Object (free plan) holding the small record the
+# error alerts remember, so they write nothing to the site's database. No public address, no schedule, no secrets.
+# Deploy: npx wrangler deploy --config worker/box.wrangler.toml
+# The site (wrangler.toml, [[durable_objects.bindings]] ERROR_BOX) reaches it by name; nothing else can.
+name = "pickleball-error-box"
+main = "box.ts"
+compatibility_date = "2025-10-01"
+workers_dev = false
+preview_urls = false
+
+[[durable_objects.bindings]]
+name = "BOX"
+class_name = "ErrorBox"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ErrorBox"]

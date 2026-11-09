@@ -611,6 +611,8 @@ export interface AdminDashboard {
   secondChanceForAll?: true;
   /** Zip 17: Settings > Feature switches > "Unpaid nudge" is on for everyone. */
   unpaidNudgeForAll?: true;
+  /** Zip 21, Settings > Feature switches > "Error alerts" (shared/errorAlerts.ts): only while on. */
+  errorAlertsForAll?: true;
   /** Preview only (shared/previewCalm.ts): admin Home shows only this zip's cards (?alerts=all shows every one). Never on live. */
   previewCalm?: true;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */

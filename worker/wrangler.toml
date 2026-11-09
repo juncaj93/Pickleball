@@ -14,6 +14,9 @@ crons = ["*/5 * * * *"]
 
 [vars]
 SITE_URL = "https://pickleball-club-9h0.pages.dev"
+# Zip 21 "Error alerts": on a failure only this Worker sees (the weekly backup, or no answer from the site) it tells the site at
+# /api/cron/report; the site decides (its Settings switch ships off). "off" stops those reports. The knock is unaffected either way.
+ERROR_REPORTS = "on"
 
 # The weekly backup copy (Zip 8, worker/backup.ts). DB is the LIVE database and is only READ (SELECTs); every write goes
 # to BACKUP, the private copy database. Remove these two blocks (and deploy) to stop the copies; the knock is unaffected.
