@@ -151,7 +151,13 @@
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  flex: none;
+  /* Zip 18 round 3: never wider than the row; with very big text on a narrow phone "Mark paid" goes under "Request" instead of past the
+     card's edge (as one group they already drop below the name first). */
+  flex: 0 1 auto;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 8px;
   margin-left: auto;
 }
 
