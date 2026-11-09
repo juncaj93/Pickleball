@@ -788,7 +788,7 @@ async function main() {
       await openSections(admin);
       assert((await admin.getByLabel(/Booking reminder/).inputValue()) === before, 'the bad value should not have been saved');
       // The network drops: keep what was typed, offer a retry, and the retry saves it.
-      const last = admin.getByLabel(/Last call/);
+      const last = admin.getByRole('textbox', { name: /^Last call/ });
       const lastBefore = await last.inputValue();
       await admin.route('**/api/admin/group', (route) => route.abort());
       await last.fill('11');
@@ -802,27 +802,27 @@ async function main() {
       await admin.reload();
       await tab(admin, 'Settings').click();
       await openSections(admin);
-      assert((await admin.getByLabel(/Last call/).inputValue()) === '11', 'the retry did not save');
-      await autoSet(admin.getByLabel(/Last call/), lastBefore);
+      assert((await admin.getByRole('textbox', { name: /^Last call/ }).inputValue()) === '11', 'the retry did not save');
+      await autoSet(admin.getByRole('textbox', { name: /^Last call/ }), lastBefore);
     });
 
     await check('Settings: every setting still saves (a few changed and put back)', async () => {
       await openSections(admin);
       const before = {
         membership: await admin.getByLabel('Monthly membership').inputValue(),
-        last: await admin.getByLabel(/Last call/).inputValue(),
+        last: await admin.getByRole('textbox', { name: /^Last call/ }).inputValue(),
         venue: await admin.getByLabel('Venue street address').inputValue(),
         reminder: await admin.getByLabel(/Booking reminder/).inputValue(),
       };
       await autoSet(admin.getByLabel('Monthly membership'), '31');
-      await autoSet(admin.getByLabel(/Last call/), '12');
+      await autoSet(admin.getByRole('textbox', { name: /^Last call/ }), '12');
       await autoSet(admin.getByLabel('Venue street address'), '40100 Six Mile Rd, Northville, MI');
       await autoSet(admin.getByLabel(/Booking reminder/), '13');
       await admin.reload();
       await tab(admin, 'Settings').click();
       await openSections(admin);
       assert((await admin.getByLabel('Monthly membership').inputValue()) === '31', 'membership did not save');
-      assert((await admin.getByLabel(/Last call/).inputValue()) === '12', 'last call did not save');
+      assert((await admin.getByRole('textbox', { name: /^Last call/ }).inputValue()) === '12', 'last call did not save');
       assert((await admin.getByLabel('Venue street address').inputValue()) === '40100 Six Mile Rd, Northville, MI', 'address did not save');
       assert((await admin.getByLabel(/Booking reminder/).inputValue()) === '13', 'booking reminder did not save');
       // Toggles save right away.
@@ -835,7 +835,7 @@ async function main() {
       assert((await access.isChecked()) === wasOpen, 'access toggled back');
       // Put everything back.
       await autoSet(admin.getByLabel('Monthly membership'), before.membership);
-      await autoSet(admin.getByLabel(/Last call/), before.last);
+      await autoSet(admin.getByRole('textbox', { name: /^Last call/ }), before.last);
       await autoSet(admin.getByLabel('Venue street address'), before.venue);
       await autoSet(admin.getByLabel(/Booking reminder/), before.reminder);
       await admin.reload();
@@ -3270,7 +3270,7 @@ async function main() {
         await savedIn(price);
         assert((await saved()).pricePerPlayerCents === Number(target) * 100, `Enter should save ${target}`);
         // Leaving the box saves too (hours this time).
-        const hours = p.getByLabel(/Last call/);
+        const hours = p.getByRole('textbox', { name: /^Last call/ });
         const hBefore = await hours.inputValue();
         await hours.fill('');
         await hours.pressSequentially('1');

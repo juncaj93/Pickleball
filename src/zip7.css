@@ -363,9 +363,11 @@
   letter-spacing: 0;
 }
 /* TONIGHT is the longest word on the strip: a hair smaller, and (round 3) the tile is 48 px, so it keeps at least 2 px clear of the tile's
-   rounded inside edge (Alex, Nov 9: at 44 px it touched the curved corners and looked cut off). */
+   rounded inside edge (Alex, Nov 9: at 44 px it touched the curved corners and looked cut off). Zip 22 (Alex, Nov 9: still tight to the
+   eye on iPhone): 6.75 px (was 7.5), so the word has about 7.3 px clear on each side inside the border (was 5.6). Only this word changes:
+   the tile, TOM and the plain tiles stay as they are. */
 :root[data-tonight-glow] .hv2-short .tile .day-tag.tonight {
-  font-size: 7.5px;
+  font-size: 6.75px;
 }
 :root[data-tonight-glow] .hv2-short .tile.day-tonight .day,
 :root[data-tonight-glow] .hv2-short .tile.day-tomorrow .day {
