@@ -10,7 +10,7 @@ import { BACKUP_TABLES, backupObject } from '../server/backupData';
 import type { D1Database } from '../server/db';
 import { viewOnlyDb } from '../server/viewOnly';
 import { backupToSql, TABLES } from '../scripts/restore-backup.mjs';
-import { joinParts, listLine, unfinishedLine } from '../scripts/weekly-backup.mjs';
+import { joinParts, listLine, unfinishedLine, WEEK } from '../scripts/weekly-backup.mjs';
 import {
   BACKUP_LEFT_OUT,
   BACKUP_SCHEMA,
@@ -276,7 +276,7 @@ describe('safety', () => {
     await expect(runStep(ctx.app.db, backups, { id: 'gone', part: 0, prefix: '', suffix: '', slices: [{ table: 'admin_sessions', lo: 1, hi: 2, rows: 1, open: true, close: true, firstTable: false }], columns: { admin_sessions: ['id'] } })).rejects.toThrow('Not a backed-up table');
   });
 
-  it('the main run stays small: 3 statements to the live database, 12 to the backup database, whatever the size (each costs CPU)', async () => {
+  it('the main run stays small: 3 statements to the live database, 15 to the backup database, whatever the size (each costs CPU)', async () => {
     const ctx = await busyGroup();
     bigActivity(ctx);
     const backups = store();
@@ -298,13 +298,52 @@ describe('safety', () => {
     const r = await weeklyBackup(live.db, back.db, SUN, { step: steps });
     expect(r.made).toBe(true);
     expect(live.seen).toEqual({ calls: 3, statements: 3 });
-    expect(back.seen).toEqual({ calls: 3, statements: 12 });
+    expect(back.seen).toEqual({ calls: 3, statements: 15 });
     // D1 refuses one statement over 100,000 characters: the measure stays far under it.
     const sql = ctx.app.db.raw.prepare("SELECT m.name AS t, p.name AS c, p.type AS y FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table' ORDER BY m.name, p.cid").all() as { t: string; c: string; y: string }[];
     const names: Record<string, string[]> = {};
     const numbers: Record<string, string[]> = {};
     for (const x of sql) ((names[x.t] ??= []).push(x.c), /INT/i.test(x.y) && (numbers[x.t] ??= []).push(x.c), (numbers[x.t] ??= []));
     expect(measureSql(names, numbers).length).toBeLessThan(30_000);
+  });
+
+  it('a copy asked for by hand is made at the next hourly look with its own label, and never changes the Sunday schedule', async () => {
+    const ctx = await busyGroup();
+    const backups = store();
+    const sunEvening = at('2026-11-09T01:00:00Z'); // Sun Nov 8, 8:00 PM EST
+    await oldStyleCopy(ctx.app.db, backups, at('2026-11-08T08:00:00Z'), '2026-11-08');
+    const oldCopy = JSON.stringify(readCopy(backups, '2026-11-08'));
+    expect(await weeklyBackup(ctx.app.db, backups, sunEvening)).toEqual({ made: false, reason: 'not due' });
+    // `node scripts/weekly-backup.mjs ask` writes one tiny row.
+    backups.raw.exec("CREATE TABLE IF NOT EXISTS weekly_backup_requests (id TEXT PRIMARY KEY, asked_at TEXT NOT NULL); INSERT INTO weekly_backup_requests VALUES ('ask-1', '2026-11-09T00:30:00.000Z')");
+    // A failed attempt keeps the request (tried again next hour).
+    const broken: StepRunner = async () => {
+      throw new Error('cut off');
+    };
+    expect(((await maybeWeeklyBackup(ctx.app.db, backups, sunEvening, broken)) as { reason: string }).reason).toBe('failed: cut off');
+    expect(backups.raw.prepare('SELECT COUNT(*) AS n FROM weekly_backup_requests').get()).toEqual({ n: 1 });
+    const r = await weeklyBackup(ctx.app.db, backups, sunEvening);
+    expect(r).toMatchObject({ made: true, week: '2026-11-08-asked-2000', kept: 2 });
+    expect(backups.raw.prepare('SELECT COUNT(*) AS n FROM weekly_backup_requests').get()).toEqual({ n: 0 });
+    expect(WEEK.test('2026-11-08-asked-2000')).toBe(true);
+    expect(readCopy(backups, '2026-11-08-asked-2000')).toEqual(JSON.parse(JSON.stringify(await backupObject(ctx.app.db, "Dinks 'n' Drinks 🥒", new Date(sunEvening).toISOString()))));
+    expect(JSON.stringify(readCopy(backups, '2026-11-08'))).toBe(oldCopy); // the 3:00 AM copy untouched
+    // Answered: the next look does nothing; next Sunday's regular copy still comes at 3:00 AM.
+    expect(await weeklyBackup(ctx.app.db, backups, sunEvening + 3600_000)).toEqual({ made: false, reason: 'not due' });
+    expect((await weeklyBackup(ctx.app.db, backups, SUN)).made && true).toBe(true);
+    expect((backups.raw.prepare('SELECT week FROM weekly_backups ORDER BY created_at').all() as { week: string }[]).map((x) => x.week)).toEqual(['2026-11-08', '2026-11-08-asked-2000', '2026-11-15']);
+    // A request while a regular copy is due: one regular copy answers both.
+    backups.raw.exec("INSERT INTO weekly_backup_requests VALUES ('ask-2', '2026-11-22T07:30:00.000Z')");
+    expect(await weeklyBackup(ctx.app.db, backups, SUN + 7 * DAY)).toMatchObject({ made: true, week: '2026-11-22' });
+    expect(backups.raw.prepare('SELECT COUNT(*) AS n FROM weekly_backup_requests').get()).toEqual({ n: 0 });
+    // Asks on later days get their own date (no clash), and only the newest 3 asked copies stay: they never push out a regular one.
+    for (let d = 1; d <= 5; d++) {
+      const t = SUN + 7 * DAY + d * DAY + 12 * 3600_000; // Mon to Fri, 3:00 PM EST
+      backups.raw.exec(`INSERT INTO weekly_backup_requests VALUES ('ask-d${d}', '${new Date(t - 60_000).toISOString()}')`);
+      expect((await weeklyBackup(ctx.app.db, backups, t)).made).toBe(true);
+    }
+    const weeks = (backups.raw.prepare('SELECT week FROM weekly_backups ORDER BY created_at').all() as { week: string }[]).map((x) => x.week);
+    expect(weeks).toEqual(['2026-11-08', '2026-11-15', '2026-11-22', '2026-11-25-asked-1500', '2026-11-26-asked-1500', '2026-11-27-asked-1500']);
   });
 
   it('a copy over 20 steps runs as several chains, each started once, and still joins into exactly the one-shot file', async () => {

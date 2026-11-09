@@ -25,6 +25,9 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 
 ## After
 
+- Save the step 3 export where it is kept (only after a real deploy, never from tests; writes only to `pickleball-backups`):
+  `node scripts/deploy-export.mjs save live-before-<what>-<date>.sql "<what was deployed>"`. It checks the saved copy against
+  the file; then the local file can be deleted. `node scripts/deploy-export.mjs list` shows the saved ones (newest 10 kept).
 - Read-only live check with the read-only PIN (SITE_RULES, "Live check with the read-only PIN").
 - Integrity checks again (step 5).
 - Write the deployment ID, the rollback ID, the bookmark and the test counts in `docs/STAGE_NOTES.md`.

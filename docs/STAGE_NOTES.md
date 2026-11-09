@@ -3521,17 +3521,21 @@ same build stamp). Only the clock Worker (`pickleball-alerts-clock`) is deployed
 - Restore test on live data: PASS 3 of 3 (above). CPU on Cloudflare: above (temporary test Workers on the fake preview data and a scratch
   database, all deleted after).
 
-### Deploy (Sun Nov 8, 2026, 6:48 PM Eastern, a quiet window): NOT DONE, the deploy command was blocked by this session's permissions
-- PR #103 merged as `7937806` (main tree = the tested branch). Main equals live for the site (no site file changed; site not redeployed).
-- Restore points taken first (6:48 PM): SQL export of live `live-before-zip19-2026-11-08.sql` (178,664 bytes, scratch folder only,
-  phone numbers, not in git); Time Travel bookmarks live `00000c19-00000000-0000511d-73dcea1596518a17c4010ce0b4444d11` and
-  pickleball-backups `0000003c-00000000-0000511d-ee9cee549e1613218ebfc5be836d0102`. Integrity checks: all 21 columns 0.
-- `npx wrangler deploy --config worker/wrangler.toml` was refused by the session's permission check, so the clock Worker still runs
-  version `ff418c61-0bb4-48b0-8296-13be55545889` (Zip 8 code) and the Nov 15 copy will use the old one-run code unless deployed first.
-  The Worker has its CRON_SECRET (needed for the self-calls). To deploy (any quiet window, not Mon 6 PM to Tue 11 PM): from main,
-  `npx wrangler deploy --config worker/wrangler.toml`. ROLLBACK: `npx wrangler rollback ff418c61-0bb4-48b0-8296-13be55545889 --config worker/wrangler.toml`.
-- After a deploy, check: the next top-of-the-hour tick shows 3 runs of pickleball-alerts-clock (knock, /backup/run, /backup/plan) with
-  0 errors in Cloudflare analytics; `node scripts/weekly-backup.mjs list` still shows the 2 copies (2026-11-08, 2026-11-01) and no
-  INCOMPLETE line. Next weekly copy: Sun Nov 15 from 3:00 AM Eastern; then `npm run restore-test`.
-- Public pages on live answer 200 (/, /admin, /api/status, /api/group/version). Temporary test Workers, the relay project and the
-  scratch database used for the CPU numbers are deleted (checked: only the real Workers, databases and site remain).
+### Deploy 1 (Sun Nov 8, 2026, 7:01 PM Eastern, quiet window, Alex's OK): LIVE
+- PR #103 merged as `7937806` (main tree = the tested branch). The site is not redeployed (no site file changed).
+- Restore points (6:48 PM): SQL export of live `live-before-zip19-2026-11-08.sql` (178,664 bytes; saved into pickleball-backups with
+  the new saver, below); Time Travel bookmarks live `00000c19-00000000-0000511d-73dcea1596518a17c4010ce0b4444d11` and pickleball-backups
+  `0000003c-00000000-0000511d-ee9cee549e1613218ebfc5be836d0102`. Integrity checks: all 21 columns 0.
+- Clock Worker version `7a73e598-e6bc-4b40-a05c-08810d7cce1b` (bindings DB, BACKUP, SELF; schedule */5 unchanged).
+  ROLLBACK: `npx wrangler rollback ff418c61-0bb4-48b0-8296-13be55545889 --config worker/wrangler.toml`.
+- Checked after: the 7:05, 7:10 and 7:15 PM ticks ran on 7a73e598, 0 errors, 1 outgoing request each (the knock), 1.4 to 2.5 ms CPU.
+
+### Asked copy and deploy-export saver (Alex's OK, Sun Nov 8 evening)
+- `node scripts/weekly-backup.mjs ask`: one tiny row in `weekly_backup_requests` (pickleball-backups only); the next hourly look makes a
+  copy labeled with its own Eastern date and time (`2026-11-08-asked-2000`), removed from the requests in the same transaction as the
+  copy's header. The Sunday schedule only looks at regular labels. Kept: newest 8 regular plus newest 3 asked.
+- `node scripts/deploy-export.mjs save <export.sql> "<note>"`: the pre-deploy SQL export into `deploy_exports` / `deploy_export_parts`
+  (pieces of 25,000 characters, header last, read back and compared with the file, newest 10 kept). Writes only to pickleball-backups,
+  only after a real deploy (tests use a local stand-in). docs/DEPLOY.md "After"; docs/RESTORE.md.
+- Fresh review (independent): no blockers. Fixed from it: labels use the copy's own date (two asks in a week never clash); asked copies
+  pruned on their own (never push out regular ones); smaller export pieces (D1's 100 KB statement limit is bytes); get never overwrites.
