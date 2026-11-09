@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { backupObject } from '../server/backupData';
 import { isReadSql } from '../server/viewOnly';
 import { weeklyBackup } from '../worker/backup';
-import { joinParts } from './weekly-backup.mjs';
+import { joinParts, WEEK } from './weekly-backup.mjs';
 import { type Backup, compare, emptyDb, fileSource, loadExport, printReport, type Report } from './restore-test-lib';
 
 export type Runner = (args: string[]) => string;
@@ -58,7 +58,7 @@ const when = (iso: string) =>
 
 /** A weekly copy from `pickleball-backups` (reads only): the newest, or the given week. */
 export function fetchWeekly(run: Runner, week?: string): { backup: Backup; header: Record<string, number>; label: string } {
-  if (week !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(week)) throw new Error(`Not a week like 2026-11-08: ${week}`);
+  if (week !== undefined && !WEEK.test(week)) throw new Error(`Not a week like 2026-11-08 (or 2026-11-08-asked-2000): ${week}`);
   const [h] = select(run, `SELECT id, week, created_at, bytes, parts, rows_json FROM weekly_backups ${week ? `WHERE week = '${week}' ` : ''}ORDER BY created_at DESC LIMIT 1`);
   if (!h) throw new Error(week ? `No weekly copy for the week of ${week}.` : 'No weekly copies yet.');
   if (!/^[A-Za-z0-9-]+$/.test(h.id)) throw new Error('Unexpected copy id.');

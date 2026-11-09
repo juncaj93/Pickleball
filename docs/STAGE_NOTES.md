@@ -3520,3 +3520,22 @@ same build stamp). Only the clock Worker (`pickleball-alerts-clock`) is deployed
   motion and admin-motion failed one check each under the parallel load and pass alone (186 of 186).
 - Restore test on live data: PASS 3 of 3 (above). CPU on Cloudflare: above (temporary test Workers on the fake preview data and a scratch
   database, all deleted after).
+
+### Deploy 1 (Sun Nov 8, 2026, 7:01 PM Eastern, quiet window, Alex's OK): LIVE
+- PR #103 merged as `7937806` (main tree = the tested branch). The site is not redeployed (no site file changed).
+- Restore points (6:48 PM): SQL export of live `live-before-zip19-2026-11-08.sql` (178,664 bytes; saved into pickleball-backups with
+  the new saver, below); Time Travel bookmarks live `00000c19-00000000-0000511d-73dcea1596518a17c4010ce0b4444d11` and pickleball-backups
+  `0000003c-00000000-0000511d-ee9cee549e1613218ebfc5be836d0102`. Integrity checks: all 21 columns 0.
+- Clock Worker version `7a73e598-e6bc-4b40-a05c-08810d7cce1b` (bindings DB, BACKUP, SELF; schedule */5 unchanged).
+  ROLLBACK: `npx wrangler rollback ff418c61-0bb4-48b0-8296-13be55545889 --config worker/wrangler.toml`.
+- Checked after: the 7:05, 7:10 and 7:15 PM ticks ran on 7a73e598, 0 errors, 1 outgoing request each (the knock), 1.4 to 2.5 ms CPU.
+
+### Asked copy and deploy-export saver (Alex's OK, Sun Nov 8 evening)
+- `node scripts/weekly-backup.mjs ask`: one tiny row in `weekly_backup_requests` (pickleball-backups only); the next hourly look makes a
+  copy labeled with its own Eastern date and time (`2026-11-08-asked-2000`), removed from the requests in the same transaction as the
+  copy's header. The Sunday schedule only looks at regular labels. Kept: newest 8 regular plus newest 3 asked.
+- `node scripts/deploy-export.mjs save <export.sql> "<note>"`: the pre-deploy SQL export into `deploy_exports` / `deploy_export_parts`
+  (pieces of 25,000 characters, header last, read back and compared with the file, newest 10 kept). Writes only to pickleball-backups,
+  only after a real deploy (tests use a local stand-in). docs/DEPLOY.md "After"; docs/RESTORE.md.
+- Fresh review (independent): no blockers. Fixed from it: labels use the copy's own date (two asks in a week never clash); asked copies
+  pruned on their own (never push out regular ones); smaller export pieces (D1's 100 KB statement limit is bytes); get never overwrites.

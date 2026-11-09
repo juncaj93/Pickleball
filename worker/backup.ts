@@ -28,6 +28,8 @@ import { localParts } from '../shared/time';
 export const BACKUP_TZ = 'America/Detroit';
 /** How many weekly copies stay. */
 export const KEEP_COPIES = 8;
+/** How many copies asked for by hand stay (on top of the 8 regular ones). */
+export const KEEP_ASKED = 3;
 /** Each copy is stored in pieces of at most this many characters (well under D1's size limits for one value). */
 export const PART_CHARS = 90_000;
 /** The database hands each table back in pieces of at most this many rows (each piece far under D1's 2 MB limit for one value). */
@@ -67,6 +69,12 @@ export const BACKUP_SCHEMA = [
      data TEXT NOT NULL,
      PRIMARY KEY (backup_id, part)
    )`,
+  // Zip 19: a copy asked for by hand (`node scripts/weekly-backup.mjs ask`): the next hourly look makes one, labeled like
+  // 2026-11-08-asked-1930, then removes the request. It never changes when the regular Sunday copy is due.
+  `CREATE TABLE IF NOT EXISTS weekly_backup_requests (
+     id TEXT PRIMARY KEY,
+     asked_at TEXT NOT NULL
+   )`,
   // Zip 19: a copy being made in steps. A row here = INCOMPLETE (never in weekly_backups until every step is saved).
   `CREATE TABLE IF NOT EXISTS weekly_backup_progress (
      id TEXT PRIMARY KEY,
@@ -94,6 +102,9 @@ export function backupDue(nowMs: number, newest: { week: string; createdAt: stri
   const p = localParts(nowMs, BACKUP_TZ);
   return p.weekday === 0 && p.hour >= BACKUP_HOUR && newest.week !== weekOf(nowMs);
 }
+
+/** A regular weekly copy's label: just the Sunday's date (a hand-asked copy adds "-asked-HHMM"). */
+export const WEEK_GLOB = '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]';
 
 /** Only one tick an hour looks (minute 0 to 4 Eastern), so the other ticks never touch either database. */
 export function checkThisTick(nowMs: number): boolean {
@@ -329,6 +340,8 @@ function clearUnfinished(store: D1Database) {
 export type Finish = {
   id: string;
   week: string;
+  /** Requests asked at or before this time are answered by this copy (removed in the finish's transaction). */
+  answers: string | null;
   nowIso: string;
   names: Record<string, string[]>;
   numbers: Record<string, string[]>;
@@ -347,12 +360,19 @@ export type PlanResult = { result: BackupResult } | { plan: Plan };
 export async function planCopy(live: D1Database, store: D1Database, nowMs: number, force = false): Promise<PlanResult> {
   const ready = await store.batch([
     ...BACKUP_SCHEMA.map((sql) => store.prepare(sql)),
-    store.prepare('SELECT week, created_at AS createdAt FROM weekly_backups ORDER BY created_at DESC LIMIT 1'),
+    // The newest REGULAR copy (a hand-asked one, labeled "...-asked-1930", never changes the Sunday schedule).
+    store.prepare(`SELECT week, created_at AS createdAt FROM weekly_backups WHERE week GLOB '${WEEK_GLOB}' ORDER BY created_at DESC LIMIT 1`),
+    store.prepare('SELECT MAX(asked_at) AS asked FROM weekly_backup_requests'),
   ]);
-  const newest = (ready.at(-1)!.results[0] as { week: string; createdAt: string } | undefined) ?? null;
-  if (!force && !backupDue(nowMs, newest)) return { result: { made: false, reason: 'not due' } };
-  const week = weekOf(nowMs);
-  if (newest?.week === week && force) return { result: { made: false, reason: 'this week already has a copy' } };
+  const newest = (ready.at(-2)!.results[0] as { week: string; createdAt: string } | undefined) ?? null;
+  const asked = (ready.at(-1)!.results[0] as { asked: string | null } | undefined)?.asked ?? null;
+  const regular = force || backupDue(nowMs, newest);
+  if (!regular && !asked) return { result: { made: false, reason: 'not due' } };
+  if (regular && newest?.week === weekOf(nowMs) && force) return { result: { made: false, reason: 'this week already has a copy' } };
+  const p = localParts(nowMs, BACKUP_TZ);
+  const two = (n: number) => String(n).padStart(2, '0');
+  // A hand-asked copy is labeled with its own Eastern date and time (2026-11-10-asked-2000), so two asks in a week never collide.
+  const week = regular ? weekOf(nowMs) : `${p.year}-${two(p.month)}-${two(p.day)}-asked-${two(p.hour)}${two(p.minute)}`;
   const { group, names, numbers } = await columnsOf(live);
   if (!group) return { result: { made: false, reason: 'no group' } };
   const nowIso = new Date(nowMs).toISOString();
@@ -366,7 +386,7 @@ export async function planCopy(live: D1Database, store: D1Database, nowMs: numbe
     ...clearUnfinished(store),
     store.prepare('INSERT INTO weekly_backup_progress (id, week, started_at, steps, done) VALUES (?, ?, ?, ?, 0)').bind(id, week, nowIso, steps.length),
   ]);
-  return { plan: { id, week, nowIso, names, numbers, before, rows, parts: steps.length, steps } };
+  return { plan: { id, week, answers: asked, nowIso, names, numbers, before, rows, parts: steps.length, steps } };
 }
 
 /**
@@ -380,13 +400,16 @@ export async function finishCopy(live: D1Database, store: D1Database, f: Finish)
     await store.batch(clearUnfinished(store));
     return { made: false, reason: 'failed: the data changed while copying; tried again at the next hourly look' };
   }
-  const keep = `SELECT id FROM weekly_backups ORDER BY created_at DESC LIMIT ${KEEP_COPIES}`;
-  const [, done, , , kept] = await store.batch([
+  // The newest 8 regular copies, plus the newest 3 asked by hand (so asks can never push out the weekly history).
+  const keep = `SELECT id FROM (SELECT id FROM weekly_backups WHERE week GLOB '${WEEK_GLOB}' ORDER BY created_at DESC LIMIT ${KEEP_COPIES}) UNION ALL SELECT id FROM (SELECT id FROM weekly_backups WHERE week NOT GLOB '${WEEK_GLOB}' ORDER BY created_at DESC LIMIT ${KEEP_ASKED})`;
+  const [, done, , , , kept] = await store.batch([
     store
       .prepare('INSERT INTO weekly_backups (id, week, created_at, bytes, parts, rows_json) SELECT ?, ?, ?, ?, ?, ? WHERE (SELECT done FROM weekly_backup_progress WHERE id = ?) = ?')
       .bind(f.id, f.week, f.nowIso, f.bytes, f.parts, JSON.stringify(f.rows), f.id, f.parts),
     store.prepare('DELETE FROM weekly_backup_progress WHERE id = ? AND id IN (SELECT id FROM weekly_backups)').bind(f.id),
     store.prepare(`DELETE FROM weekly_backup_parts WHERE backup_id NOT IN (${keep}) AND backup_id NOT IN (SELECT id FROM weekly_backup_progress)`),
+    // A request is answered only by a copy that was really saved.
+    store.prepare('DELETE FROM weekly_backup_requests WHERE asked_at <= ? AND EXISTS (SELECT 1 FROM weekly_backups WHERE id = ?)').bind(f.answers ?? '', f.id),
     store.prepare(`DELETE FROM weekly_backups WHERE id NOT IN (${keep})`),
     store.prepare('SELECT COUNT(*) AS n FROM weekly_backups'),
   ]);

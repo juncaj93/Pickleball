@@ -109,6 +109,20 @@ On a computer with this project (the same setup used to deploy), in a terminal i
 - To stop the copies: remove the two `[[d1_databases]]` blocks at the end of `worker/wrangler.toml` and deploy the
   Worker (`npx wrangler deploy --config worker/wrangler.toml`). The alert clock keeps working either way.
 
+### Asking for a copy now (since Zip 19)
+
+`node scripts/weekly-backup.mjs ask` writes one tiny request row (only in `pickleball-backups`). At the top of the next hour
+the clock makes a copy labeled like `2026-11-10-asked-2000` (its Eastern date and time), and `list` shows it. Get
+it with `node scripts/weekly-backup.mjs get 2026-11-08-asked-2000` and test it with `npm run restore-test -- --weekly 2026-11-08-asked-2000`.
+An asked copy never changes when the regular Sunday copy is made. The newest 3 asked copies are kept on top of the newest 8 regular ones.
+
+### Deploy exports (since Zip 19)
+
+The SQL export of live taken before each deploy is saved in `pickleball-backups` too (the newest 10 kept, free):
+`node scripts/deploy-export.mjs list`, then `node scripts/deploy-export.mjs get <id>` writes the `.sql` file back. It is a whole
+database export (every table, switches included), so it loads into an EMPTY database, not over the live one: within 7 days, Time
+Travel (below) is the quicker way back; after that, ask Claude to load it (it can be checked first in a throwaway copy).
+
 ### Copies made in steps (since Zip 19)
 
 The copy is the same file as before, but it is made in small steps (about 60,000 characters each), each its own run of the clock
