@@ -51,7 +51,8 @@
 }
 /* Never a second line: the gray part ("2 played · Tue Thu") gives way first; only a very long name (over half the row) shortens with "…". */
 .pr-name {
-  flex: 0 0 auto;
+  /* Zip 18 round 2: may shorten further (with "…") so the money chip and "+2" always fit at big text. */
+  flex: 0 1 auto;
   max-width: 52%;
   min-width: 0;
   font-size: 16px;

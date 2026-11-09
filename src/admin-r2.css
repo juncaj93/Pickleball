@@ -161,8 +161,9 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 21px;
-  height: 21px;
+  /* Zip 18 round 2: 21 px at normal text, growing with bigger text so the $ stays inside. */
+  width: 1.3125rem;
+  height: 1.3125rem;
   border-radius: 50%;
   background: var(--primary);
   color: var(--primary-ink);
@@ -390,8 +391,9 @@
   align-items: center;
   justify-content: center;
   box-sizing: border-box;
-  width: 36px;
-  height: 38px;
+  /* Zip 18 round 2: 36 x 38 px at normal text, growing with bigger text so the weekday and the date always stay inside. */
+  width: 2.25rem;
+  height: 2.375rem;
   border: 2px solid var(--tile-line);
   border-radius: 11px;
   background: var(--surface);

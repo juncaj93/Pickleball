@@ -20,6 +20,7 @@ const { readFileSync, mkdirSync, rmSync } = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const path = require('node:path');
 const { chromium } = require('playwright');
+const { findClipping } = require('./clip-check.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const PORT = Number(process.env.E2E_PORT) || 5428;
@@ -400,6 +401,111 @@ async function main() {
     assert(m.goAdmin === 0 && m.swap === null, JSON.stringify(m));
   });
 
+
+  await check('View as ignores this phone\'s private test links (round 2): Seat dots off for everyone, ?seatdots=on on the organizer\'s phone: View as Vic has no seat dots, the organizer\'s own page has them', async () => {
+    const org = await phone({ signedIn: true });
+    const put = (on) => org.ctx.request.put(BASE + '/api/admin/seat-dots-switch', { data: { on }, headers: { Origin: BASE } });
+    assert((await put(false)).ok(), 'switch off');
+    try {
+      await org.page.goto(`${BASE}/admin?seatdots=on`);
+      await org.page.locator('.tabbar').waitFor();
+      await viewAs(org.page, 'Vic');
+      const inViewAs = await org.page.evaluate(() => document.documentElement.hasAttribute('data-seat-dots'));
+      await org.page.locator('.viewas-banner button, .viewas-banner .ac-btn', { hasText: 'Exit' }).click();
+      await org.page.locator('.tabbar').waitFor();
+      await openAs(org.page, 'Alex');
+      const ownPage = await org.page.evaluate(() => document.documentElement.hasAttribute('data-seat-dots'));
+      assert(!inViewAs, 'View as followed the private test link');
+      assert(ownPage, "the organizer's own page lost the private test link");
+    } finally {
+      await put(true);
+      await org.ctx.close();
+    }
+  });
+
+  // ---------------- Round 2: nothing on the organizer screens is cut off, overlapping or sticking out of its box ----------------
+  // e2e/clip-check.cjs on Home (with "+N more" open, then with every game folded: the TONIGHT and TOM rows), Players, Money, History and
+  // Settings (every section open), at 390, 360 and 320, light and dark, at normal text, with Safari's text size at 125% (the whole page zooms,
+  // what the iPhone's aA button does) and with 150% text (the site's big-text setting, what Larger Text amounts to here).
+  const SIZES = [
+    { name: 'normal', css: '' },
+    { name: 'Safari text 125%', css: 'html { zoom: 1.25 }' },
+    { name: 'text 150%', css: 'html { font-size: 150% !important; } body { font-size: 25.5px !important; }' },
+  ];
+  for (const scheme of ['light', 'dark'])
+    for (const width of [390, 360, 320])
+      for (const size of SIZES) {
+        await check(`organizer screens fit, ${width} px, ${scheme}, ${size.name}: no text, tile, circle or button cut off, overlapping or outside its box`, async () => {
+          const { ctx, page } = await phone({ width, scheme, signedIn: true });
+          await page.goto(`${BASE}/admin`);
+          await page.locator('.tabbar').waitFor();
+          if (size.css) await page.addStyleTag({ content: size.css });
+          const found = [];
+          const look = async (where) => {
+            await page.waitForTimeout(350);
+            for (const p of await page.evaluate(findClipping, { root: 'main' })) found.push(`${where}: ${p}`);
+          };
+          if (await page.locator('.dn-more').count()) await page.locator('.dn-more').click();
+          await look('Home');
+          // Every game listed (Home shows 6 until "Show all N"), then every one folded.
+          const all = page.locator('button', { hasText: /^Show all \d+$/ });
+          if (await all.count()) await all.first().click();
+          await page.waitForTimeout(300);
+          await page.evaluate(() => document.querySelectorAll('[data-game-open] .hv2-a11y').forEach((b) => b.click()));
+          const folded = await page.evaluate(() => [...document.querySelectorAll('.hv2-short .day-tag')].map((e) => (e.classList.contains('tonight') ? 'TONIGHT' : 'TOM')));
+          await look('Home, every game folded');
+          if (width === 320 && size.name !== 'normal' && scheme === 'dark') await page.screenshot({ path: path.join(SHOTS, `zip18-fit-home-folded-${size.name.replace(/\W+/g, '')}.png`), fullPage: true });
+          for (const tab of ['Players', 'Money', 'History', 'Settings']) {
+            await page.locator('.tabbar button', { hasText: tab }).evaluate((x) => x.click());
+            if (tab === 'Settings') for (const sm of await page.locator('details > summary').all()) await sm.click().catch(() => {});
+            await look(tab);
+          }
+          await ctx.close();
+          assert(folded.includes('TONIGHT') && folded.includes('TOM'), `the folded rows should include TONIGHT and TOM tiles: ${folded.join(',')}`);
+          assert(found.length === 0, `${found.length} problems: ${found.slice(0, 6).join(' | ')}`);
+        });
+      }
+
+  // ---------------- Round 2: the court map's chosen court glows, no light sweep ----------------
+  for (const scheme of ['light', 'dark'])
+    for (const reduce of [false, true]) {
+      await check(`court map (${scheme}${reduce ? ', Reduce Motion' : ''}): the game's court ${reduce ? 'holds a steady glow' : 'pulses a soft glow (2.4 s)'} and has NO light sweep; the TONIGHT tile keeps its own animation`, async () => {
+        const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: reduce ? 'reduce' : 'no-preference' });
+        await ctx.addInitScript((delta) => {
+          const Real = Date;
+          class Shifted extends Real {
+            constructor(...x) {
+              if (x.length === 0) super(Real.now() + delta);
+              else super(...x);
+            }
+            static now() {
+              return Real.now() + delta;
+            }
+          }
+          window.Date = Shifted;
+        }, NOW_MS - Date.now());
+        const page = await ctx.newPage();
+        await openAs(page, 'Parker');
+        const btn = page.locator('[data-gd-court="3"]').first();
+        await btn.waitFor({ timeout: 10000 });
+        const tile = await page.locator('.schedule .tile.day-tonight').first().evaluate((e) => [getComputedStyle(e).animationName, getComputedStyle(e, '::after').animationName]);
+        await btn.click();
+        const me = page.locator('dialog.cm[open] .cm-cl.me');
+        await me.waitFor();
+        const m = await me.evaluate((e) => {
+          const cs = getComputedStyle(e);
+          return { name: cs.animationName, dur: cs.animationDuration, after: getComputedStyle(e, '::after').content, before: getComputedStyle(e, '::before').content, shadow: cs.boxShadow, text: e.textContent.trim() };
+        });
+        if (!reduce && scheme === 'dark') await page.locator('dialog.cm[open]').screenshot({ path: path.join(SHOTS, 'zip18-courtmap-dark.png') });
+        await ctx.close();
+        assert(m.after === 'none' && m.before === 'none', `something is drawn over the court (a sweep): ${JSON.stringify(m)}`);
+        if (reduce) assert(m.name === 'none' && /rgba?\(60, 200, 130/.test(m.shadow), `Reduce Motion: ${JSON.stringify(m)}`);
+        else assert(m.name === 'cm-glow' && m.dur === '2.4s', `glow: ${JSON.stringify(m)}`);
+        // The TONIGHT tile: its own pulse and sweep with motion, still with Reduce Motion (not changed by this zip).
+        if (reduce) assert(tile.every((x) => x === 'none'), `tile ${tile}`);
+        else assert(tile[0] !== 'none' && tile[1] !== 'none', `tile ${tile}`);
+      });
+    }
 
   // ---------------- Pretend it's... (the same demo copy as View as) ----------------
   // For EVERY button in the Pretend it's... section: the organizer Home and View as a player in the next game, drawn while pretending,

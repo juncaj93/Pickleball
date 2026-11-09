@@ -3718,3 +3718,32 @@ data read or changed.
   62 games). Switch rows on there: all 36 rows (every row on live, plus Unpaid nudge, kept on as in the Zip 17 preview), every
   `[env.preview.vars]` value "on". Checked on the preview itself: View as Vic, Wren and Zoe equal /?as=Vic, /?as=Wren, /?as=Zoe.
 
+
+### Round 2 (Sun Nov 8, 2026, night; Alex walked the preview: View as, Pretend it's and the headers work; "do not deploy yet")
+- Alex's answers: the booking-day game stays folded as on live; the swap only on his own name is fine; View as ignores his private test
+  links; Unpaid nudge is ON on live now (the small preview seed lists it with the live rows; the rows it makes are the same).
+- View as ignores this phone's private test links (`src/lib.ts` api()): a View as player request leaves off every per-phone test signal
+  (?nudge=on, ?seatdots=on and the rest), so the copy answers with the live switches alone. Kept: the preview-only ?alerts= view (never on
+  live). Pretend's organizer screens and the phone's own pages keep the test links as before.
+- Live check: no read-only PIN in this session, so no sign-in to live. Read only instead: production is deployment `854a346f` = main
+  `8a10eba` (the Zip 17 deploy), and this branch had not touched any organizer screen, so every clipping below was on live too. The same
+  checker on main's code finds 22 to 32 problems on Home at the two moments tried; on this branch it finds none.
+- Clipping fixes (look only, live at deploy, no switch):
+  - Folded Home rows (`.hv2-short`, src/styles.css): at least the old 3.4rem and taller when needed instead of cutting off: the TOM /
+    TONIGHT tile's bottom was cut by the row (the strip makes the tile taller than a plain one). The strip in that 44 px tile is a little
+    smaller (8 px, TONIGHT 7.5 px, no letter spacing; src/zip7.css), so TONIGHT and TOM sit inside the tile.
+  - The circles in a folded row (src/zip10.css, HomeV2.tsx `--n`): room for every circle at the tightest tuck; when the line beside the
+    time is too narrow (320 px, big text) they move under the time instead of being cut off or covering the court pill.
+  - Alert card buttons (src/alert-cards.css `.ac-actions`): buttons that do not fit on one line wrap to a second line, each at least as wide
+    as its words, rows filled edge to edge (the 4-button "N going, N more needed" card: Edit game, Cancel session, Cancel court, Keep as is).
+    Two buttons that fit look exactly as before. Remind in the "haven't paid" card keeps its width (the title wraps).
+  - Who owes rows: a name never breaks into single letters ("V / i / c"); the Venmo request button drops under it when both do not fit.
+  - Money: the month tiles (36 x 38 px) and Home's $ circle are in rem, so they grow with big text (identical at normal text); Games |
+    Totals never squeezed below its words. Players: a long name gives way (with "…") so the money chip and "+2" always fit. Settings:
+    "Change" is at least 80 px and as wide as its word.
+- Court map (src/gameday.css): the game's court only pulses its soft glow (2.4 s, unchanged); the light sweep across it is gone. Reduce
+  Motion: a steady glow. The TONIGHT date tile's own pulse and sweep are not changed.
+- The checker: `e2e/clip-check.cjs` (text outside its button, pill, tile or box; a box or circle cut off by its parent or its card's
+  border; text cut off unless it ends in "…" on purpose; a word broken in the middle; buttons, pills and circles overlapping).
+  `e2e/zip18.cjs` runs it on Home ("+N more" open, then every game listed and folded: TONIGHT and TOM rows), Players, Money, History and
+  Settings at 390 / 360 / 320, light and dark, normal text, Safari text size 125% (the page zooms, the iPhone aA button) and 150% text.

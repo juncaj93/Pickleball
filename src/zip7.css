@@ -350,3 +350,24 @@
     display: inline;
   }
 }
+
+/* Zip 18 round 2: the folded Home row's small tile (44 px): the strip a little smaller (8 px, no letter spacing, tighter padding) so TONIGHT
+   and TOM sit fully inside the tile and the whole tile (strip, date, month) fits the row's usual height. */
+:root[data-tonight-glow] .hv2-short .tile.day-tonight,
+:root[data-tonight-glow] .hv2-short .tile.day-tomorrow {
+  padding-bottom: 3px;
+}
+:root[data-tonight-glow] .hv2-short .tile .day-tag {
+  padding: 3px 0 2px;
+  font-size: 8px;
+  letter-spacing: 0;
+}
+/* TONIGHT is the longest word on the strip: a hair smaller so it keeps a little room inside the tile's edges. */
+:root[data-tonight-glow] .hv2-short .tile .day-tag.tonight {
+  font-size: 7.5px;
+}
+:root[data-tonight-glow] .hv2-short .tile.day-tonight .day,
+:root[data-tonight-glow] .hv2-short .tile.day-tomorrow .day {
+  margin: 0;
+  line-height: 1.1;
+}

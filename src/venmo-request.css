@@ -100,6 +100,8 @@
 }
 .vr-rows > li {
   display: flex;
+  /* Zip 18 round 2: a name never breaks into single letters: when the name and its button do not both fit, the button drops under it. */
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -111,7 +113,11 @@
 }
 .vr-name {
   min-width: 0;
-  overflow-wrap: anywhere;
+  /* Zip 18 round 2: break-word (not anywhere): a word is only split when it cannot fit on a line of its own. */
+  overflow-wrap: break-word;
+}
+.vr-rows > li > :last-child {
+  margin-left: auto;
 }
 .vr-none {
   flex: none;

@@ -34,10 +34,11 @@ export const SMALL_NO_NUMBER = 'Reese';
  * PREVIEW SWITCHES RULE: the rows that are ON on live (read with the read-only PIN before each re-seed) plus the zip being built.
  * Zips 14, 15 and 16 shipped with their rows OFF; LATER_ON_LIVE lists the ones Alex has switched on since (read on live, see STAGE_NOTES).
  */
-// Read on live with the read-only PIN, Sun Nov 8, 7:05 PM Eastern: every Settings row is on, these three included.
-export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on'];
-/** Being built: Unpaid nudge (Zip 17). */
-export const BUILDING_ON = ['unpaid_nudge_on'] as const;
+// Read on live with the read-only PIN, Sun Nov 8, 7:05 PM Eastern: every Settings row is on, these three included. Unpaid nudge: on live
+// since Sun Nov 8 evening (Alex, Zip 18 round 2).
+export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on', 'unpaid_nudge_on'];
+/** Being built: nothing with a switch (Zip 18 has none). */
+export const BUILDING_ON: readonly string[] = [];
 
 export function smallSwitchRows(nowMs: number): string {
   const at = new Date(nowMs).toISOString();

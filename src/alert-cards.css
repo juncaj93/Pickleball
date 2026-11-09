@@ -257,12 +257,16 @@ html[data-alert-cards] .ac-action {
 }
 html[data-alert-cards] .ac-actions {
   display: flex;
+  /* Zip 18 round 2: buttons that do not all fit on one line move to a second line (each at least as wide as its words), and every row is
+     filled edge to edge. Two buttons that fit (almost every card) look exactly as before: equal halves. */
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
 }
 html[data-alert-cards] .ac-actions > .ac-btn {
   flex: 1 1 0;
-  min-width: 0;
+  min-width: max-content;
+  max-width: 100%;
   padding: 0 8px;
   font-size: 14.5px;
 }
@@ -636,6 +640,10 @@ html[data-alert-cards] .vr-card-ac .vr-head {
 html[data-alert-cards] .vr-card-ac .vr-title-wrap {
   flex: 1 1 auto;
   min-width: 0;
+}
+/* Zip 18 round 2: Remind keeps its full width; the title beside it wraps instead. */
+html[data-alert-cards] .vr-card-ac .vr-head > .ac-btn {
+  flex: none;
 }
 html[data-alert-cards] .vr-card-ac .vr-title {
   margin: 0;

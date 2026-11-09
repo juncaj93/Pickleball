@@ -223,6 +223,11 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   for (const z of Object.values(ZIP13)) if (zip13Test(z.link)) headers[z.header] = 'on';
   // "Late drops owe $14", private test switch for this phone (?latefees=on or /admin?latefees=on, see server/lateFees.ts).
   if (lateFeesTest()) headers['X-Late-Fees'] = 'on';
+  // Zip 18 round 2 (Alex): View as shows exactly what the player sees, so this phone's own private test links (?nudge=on, ?seatdots=on and
+  // the rest above) are left off a View as request: the copy answers with the live switches alone. The preview-only ?alerts= view stays
+  // (it only exists on previews, never on live). Pretend's organizer screens and this phone's own pages keep them, as before.
+  const asPlayer = viewAsId !== null && path.startsWith('/api/') && !path.startsWith('/api/admin/');
+  if (asPlayer) for (const k of Object.keys(headers)) if (k !== 'Content-Type' && k !== PREVIEW_CALM.header) delete headers[k];
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
   // Demo: the throwaway copy answers. Signing out always goes to the live site.

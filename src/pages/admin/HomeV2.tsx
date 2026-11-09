@@ -1,4 +1,4 @@
-import { type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, type KeyboardEvent, type MouseEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { AdminSessionView } from '../../../shared/api';
 import { type CourtSwitch, courtStatus, courtSwitchOf } from '../../../shared/court';
 import { countText } from '../../../shared/spots';
@@ -174,7 +174,8 @@ function ShortRow({ ctx, s, fx, onToggle }: { ctx: AdminCtx; s: AdminSessionView
             <div className="hv2-count cl-row">
               <strong>{canceled ? 'Canceled' : start}</strong>
               {!canceled && (
-                <span className="cl-balls">
+                // Zip 18 round 2: --n (the circles drawn: at least 4) lets the row keep room for every circle (zip10.css).
+                <span className="cl-balls" style={{ '--n': Math.max(4, names.length) } as CSSProperties}>
                   <SpotDots names={names} oneRow />
                 </span>
               )}

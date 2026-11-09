@@ -51,7 +51,8 @@
 /* ---------- Top row ---------- */
 .mrw-controls {
   display: grid;
-  grid-template-columns: minmax(104px, 34%) minmax(0, 1fr);
+  /* Zip 18 round 2: Games | Totals never squeezed below its words (a 320 px phone with big text): the month box gives way first. */
+  grid-template-columns: minmax(min-content, 34%) minmax(max-content, 1fr);
   gap: 10px;
   align-items: center;
 }
@@ -104,7 +105,8 @@
   position: relative;
   min-height: 36px;
   height: 36px;
-  padding: 0 4px;
+  padding: 0 8px;
+  white-space: nowrap;
   font-size: 15px;
   font-weight: 600;
 }

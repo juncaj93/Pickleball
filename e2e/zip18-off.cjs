@@ -91,7 +91,9 @@ async function main() {
       .replace(/ dots-celebrate/g, '')
       .replace(/(datetime="[^"]+?)\.\d{3}Z"/g, '$1Z"')
       .replace(/localhost(:|%3A)539[34]/g, 'localhost$1PORT')
-      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<id>');
+      .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<id>')
+      // Round 2: the folded row's circle strip carries its count for the layout (style="--n: 4;"); nothing else about it changed.
+      .replace(/<span class="cl-balls" style="--n: \d+;">/g, '<span class="cl-balls">');
   async function screen(base, { who, signedIn = false, url = '/', scheme = 'light', tabName, width = 390 }) {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true, colorScheme: scheme, userAgent: UA, reducedMotion: 'reduce' });
     await ctx.addInitScript((delta) => {
