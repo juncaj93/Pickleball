@@ -157,7 +157,7 @@ function findClipping(opts) {
       out.push(`outside its card: ${label(el)} at ${fmt(r)} in ${label(card)} (inner ${Math.round(c.left)},${Math.round(c.top)} to ${Math.round(c.right)},${Math.round(c.bottom)})`);
   }
   // 4: buttons, pills and tiles drawn on top of each other (siblings in one row).
-  const things = all.filter((el) => el.matches('button, a.ac-btn, .ac-btn, .pill, .pchip, .tile, .ptile, [class*="pill"], .cl-balls .dots') && !el.closest('.hv2-a11y, .sr-only'));
+  const things = all.filter((el) => el.matches('button, a.ac-btn, .ac-btn, .pill, .pchip, [class*="chip"], .tile, .ptile, [class*="pill"], .cl-balls .dots, b, strong') && !el.closest('.hv2-a11y, .sr-only'));
   for (let i = 0; i < things.length; i++)
     for (let j = i + 1; j < things.length; j++) {
       const a = things[i];
@@ -172,6 +172,12 @@ function findClipping(opts) {
       const h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
       if (w > 2 && h > 2) out.push(`overlap: ${label(a)} at ${fmt(x)} and ${label(b)} at ${fmt(y)}`);
     }
+  // 5: the page never scrolls sideways (something wider than the screen).
+  const sw = document.documentElement.scrollWidth;
+  if (sw > window.innerWidth + 1) {
+    const wide = all.filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).slice(-1)[0];
+    out.push(`page wider than the screen: ${sw} > ${window.innerWidth}${wide ? ` (${label(wide)} at ${fmt(wide.getBoundingClientRect())})` : ''}`);
+  }
   return out;
 }
 

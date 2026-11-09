@@ -258,7 +258,8 @@ html[data-alert-cards] .ac-action {
 html[data-alert-cards] .ac-actions {
   display: flex;
   /* Zip 18 round 2: buttons that do not all fit on one line move to a second line (each at least as wide as its words), and every row is
-     filled edge to edge. Two buttons that fit (almost every card) look exactly as before: equal halves. */
+     filled edge to edge. Two buttons whose words each fit in half the row look exactly as before (equal halves); otherwise the longer one
+     gets the room its words need instead of its words spilling out. */
   flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;

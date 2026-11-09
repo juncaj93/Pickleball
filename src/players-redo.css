@@ -62,7 +62,8 @@
   text-overflow: ellipsis;
 }
 .pr-sub {
-  flex: 0 1 auto;
+  /* Zip 18 round 2: shrinks long before the name does (the name only gives way once the gray part is gone). */
+  flex: 0 1000 auto;
   min-width: 0;
   margin-left: 6px;
   font-size: 13px;

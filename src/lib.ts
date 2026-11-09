@@ -227,7 +227,9 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // the rest above) are left off a View as request: the copy answers with the live switches alone. The preview-only ?alerts= view stays
   // (it only exists on previews, never on live). Pretend's organizer screens and this phone's own pages keep them, as before.
   const asPlayer = viewAsId !== null && path.startsWith('/api/') && !path.startsWith('/api/admin/');
-  if (asPlayer) for (const k of Object.keys(headers)) if (k !== 'Content-Type' && k !== PREVIEW_CALM.header) delete headers[k];
+  // (Also kept: the two preview-only test clocks, ?gamedaytest= and ?noontest=: the server ignores them unless the site is a preview.)
+  const keep = new Set(['Content-Type', PREVIEW_CALM.header, GAME_DAY_TEST.header, SECOND_CHANCE_TEST.header]);
+  if (asPlayer) for (const k of Object.keys(headers)) if (!keep.has(k)) delete headers[k];
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
   // Demo: the throwaway copy answers. Signing out always goes to the live site.
