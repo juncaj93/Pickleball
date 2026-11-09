@@ -3791,3 +3791,23 @@ data read or changed.
 - Tests: zip18 103/103 (player screens now checked too: 24 more checks, and Safari 150% added), zip14 22/22, layout-polish 200/200,
   audit-player-look 145/145, money-rework 36/36, zip13 39/39, admin-r2 27/27, circles 18/18, zip18-off 28/28 against main; tsc and build
   clean (no script code changed since the unit run: 2468 passed).
+
+### Deploy (Mon Nov 9, 2026, 10:14 AM Eastern, a quiet window, on Alex's "ship it") - LIVE, no switch (look and fixes)
+- Before: main equaled live (production `c8176a1b-4380-4ad8-b4cf-03e7afc94389` = main `eb17ab3`, Zip 21). This branch merged main first
+  (no conflicts). PR #109 merged as `3868272`. Unit on the merged code: 2519 passed, 0 failed (150 files); tsc and build clean. Full browser
+  suite once, 4 at a time: 53 of 59 clean; the others, alone: run.cjs 219/229 (the same 10 as main), audit-player-look 145/145, circles
+  18/18, round2 25/25; cancel-reason (2) and want-in (1) as on main. zip21 8/8. zip18-off 28/28 against main `eb17ab3`. zip21-off: every
+  difference is one this zip makes on purpose (the header label, the circle strip's count, no Go to Admin pill on another name's page);
+  with those taken out, organizer Home and Settings are identical to main.
+- SQL export of live (10:13 AM, 182,367 bytes) saved as `export-20261109151503` in `pickleball-backups` (checked against the file).
+  Time Travel bookmark `00000cdc-00000000-0000511e-2efe8c5f68363a2272789eefb00add08` (10:13 AM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000cdc-00000000-0000511e-2efe8c5f68363a2272789eefb00add08`.
+  Integrity checks: all 21 read 0 before and after. No migration.
+- Production deployment `06058666-bfe7-4640-97e2-b2c2bf6a9b0a` = main `3868272`. ROLLBACK: Pages deployment
+  `c8176a1b-4380-4ad8-b4cf-03e7afc94389` (Zip 21, `eb17ab3`); no data step needed.
+- A first `npm run deploy` from a detached checkout went to a PREVIEW named "HEAD" (`097965b2`, the fake preview database), not live;
+  redeployed from the `main` branch a minute later. Deploy from a checked-out `main` branch (not a detached HEAD).
+- Live check (read only, no sign-in: no read-only PIN in this session; the custom domain is not reachable from this sandbox, the backup
+  address is): home and /api/status 200; GET /api/admin/demo-extras answers 401 without a sign-in (new server code); the live script has
+  the new title button. Not done: the View as / headers check signed in with the read-only PIN.
+- Known follow-up (Alex): the TONIGHT word in the folded row's small tile still looks a bit tight on his iPhone; a small follow-up will come.
