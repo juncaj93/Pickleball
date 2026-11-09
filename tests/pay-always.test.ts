@@ -202,10 +202,10 @@ describe('S: the PAY_ALWAYS switch', () => {
     expect((await blair.call('GET', '/api/group', undefined, { [PAY_ALWAYS_HEADER]: 'on' })).data.payAlways).toBe(false);
   });
 
-  it("S6 the organizer's View as demo (sandbox) always has it", async () => {
+  it("S6 the organizer's View as demo (sandbox) follows the same rule as the live site (Zip 18: it no longer always has it)", async () => {
     const w = await world();
     (w.app.env as any).SANDBOX = true;
-    expect((await view(w, 'Blair')).payAlways).toBe(true);
+    expect((await view(w, 'Blair')).payAlways).toBe(false);
   });
 
   it('S7 only the organizer can change it', async () => {

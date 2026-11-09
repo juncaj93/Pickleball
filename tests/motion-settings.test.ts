@@ -106,10 +106,12 @@ describe('Motion switches: the Settings rows', () => {
     expect((await w.organizer.call('PUT', '/api/admin/motion-switch', { which: 'everyone', on: true })).status).toBe(400);
     expect((await w.organizer.call('PUT', '/api/admin/motion-switch', { which: 'player' })).status).toBe(400);
   });
-  it('M8 the demo (View as) still always shows motion, whatever the row says', async () => {
+  it('M8 the demo (View as) follows the row like the live site (Zip 18: it no longer always shows motion)', async () => {
     const w = await world({ MOTION: 'on' });
     await flip(w, 'player', false);
     w.app.env.SANDBOX = true;
+    expect((await player(w)).motion).toBe(false);
+    await flip(w, 'player', true);
     expect((await player(w)).motion).toBe(true);
   });
 });

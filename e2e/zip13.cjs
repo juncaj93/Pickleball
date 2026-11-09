@@ -317,29 +317,19 @@ async function main() {
   }
 
   for (const scheme of ['light', 'dark']) {
-    await check(`swap ${scheme}: Admin goes to your own player page, "Go to Admin" (30 px, 13 px gray, 1 px line, the same gap as More sessions) comes back; no new sign-in`, async () => {
+    // Zip 18: the bottom "Go to Admin" pill is gone; your own player page has "Alex" + the swap icon at the top instead (e2e/zip18.cjs).
+    await check(`swap ${scheme}: Admin goes to your own player page, its title (your name + swap icon) comes back; no Go to Admin pill; no new sign-in`, async () => {
       const { ctx, page, sent } = await openAdmin(390, scheme);
       const d = await dash();
       await post(ctx.request, '/api/me', { playerId: d.me.id });
       await page.locator('[data-title-swap]').click();
-      await page.locator('[data-go-admin]').waitFor();
-      assert(/\/g\//.test(page.url()), page.url());
+      await page.waitForURL(/\/g\//);
+      await page.locator('.schedule article').first().waitFor();
       const me = await page.locator('.topbar h1').innerText();
       assert(me === d.players.find((p) => p.id === d.me.id).name, `the player page shows ${me}`);
-      await page.locator('[data-go-admin]').scrollIntoViewIfNeeded();
-      const m = await page.evaluate(() => {
-        const end = document.querySelector('.page-end');
-        const pill = document.querySelector('[data-go-admin]');
-        const above = end.previousElementSibling.getBoundingClientRect();
-        const cs = getComputedStyle(pill);
-        const p = pill.getBoundingClientRect();
-        return { h: p.height, size: cs.fontSize, border: cs.borderTopWidth, bg: cs.backgroundColor, gapBelow: p.top - end.getBoundingClientRect().top, gapAbove: end.getBoundingClientRect().top - above.bottom, centered: Math.abs(p.left + p.width / 2 - window.innerWidth / 2) < 2, text: pill.innerText.trim() };
-      });
-      assert(Math.abs(m.h - 30) < 1 && m.size === '13px' && m.border === '1px' && /rgba\(0, 0, 0, 0\)|transparent/.test(m.bg), JSON.stringify(m));
-      assert(Math.abs(m.gapBelow - m.gapAbove) < 1, `gaps ${m.gapAbove} / ${m.gapBelow}`);
-      assert(m.centered && m.text === 'Go to Admin', JSON.stringify(m));
+      assert((await page.locator('[data-go-admin]').count()) === 0, 'the Go to Admin pill is gone');
       await shot(page, `alex-${scheme}`);
-      await page.locator('[data-go-admin]').click();
+      await page.locator('[data-title-swap]').click();
       await page.locator('.tabbar').waitFor();
       assert(page.url().endsWith('/admin'), page.url());
       assert(!sent.some((x) => /login|logout/.test(x)), `no sign-in or out: ${sent.join(', ')}`);
@@ -347,14 +337,14 @@ async function main() {
     });
   }
 
-  await check('View as: "Go to Admin" at the bottom of the View as page goes back to the organizer screen', async () => {
+  await check('View as: no "Go to Admin" at the bottom any more (Zip 18: a player never has it); Exit in the bar goes back', async () => {
     const { ctx, page } = await openAdmin();
     await page.locator('.topbar-btn', { hasText: 'View as' }).click();
     await page.locator('dialog[open] .name-grid button', { hasText: 'Casey' }).click();
-    await page.locator('[data-go-admin]').waitFor();
-    await page.locator('[data-go-admin]').click();
+    await page.locator('.schedule article').first().waitFor();
+    assert((await page.locator('[data-go-admin], [data-title-swap]').count()) === 0, 'no swap controls in View as');
+    await page.locator('.viewas-banner button, .viewas-banner .ac-btn', { hasText: 'Exit' }).click();
     await page.locator('.tabbar').waitFor();
-    assert((await page.locator('[data-go-admin]').count()) === 0, 'back on the organizer screen');
     await ctx.close();
   });
 

@@ -263,9 +263,6 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   const r2 = d.adminR2 === true;
   // Swap to Alex (SWAP_BUTTON, Zip 13). Off: the header and the View as page exactly as before.
   const swap = d.swapButton === true;
-  // View as answers from the demo copy, which has no switch rows: the pill follows what the organizer screen said when View as began.
-  const swapAtView = useRef(swap);
-  if (!viewing) swapAtView.current = swap;
   // Your own player page, the way a player opens it (the group's link): who it shows is this phone's own pick, as always. Nothing signs in or out.
   const goToMyPage = () => {
     // A save still held for its Undo goes first, as the organizer (its toast does not follow you to the player page).
@@ -318,16 +315,6 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
             window.scrollTo(0, 0);
             void reload();
           }}
-          // Swap to Alex: "Go to Admin" at the bottom of the View as page too (the same as the bar's Exit).
-          onGoAdmin={
-            swapAtView.current
-              ? () => {
-                  setViewing(null);
-                  window.scrollTo(0, 0);
-                  void reload();
-                }
-              : undefined
-          }
         />
       </>
     );

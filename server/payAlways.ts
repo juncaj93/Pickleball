@@ -7,8 +7,8 @@ import { PAY_ALWAYS_HEADER, payAlwaysAllowed } from '../shared/payAlways';
 // On for a request when:
 //  - the PAY_ALWAYS var (wrangler.toml) is not "off" (the kill switch, needs a deploy), and
 //  - the organizer switched it on for everyone (Settings > Money), or this phone opened the site with
-//    ?payalways=on (it then sends the X-Pay-Always: on header: a private test switch for that phone only), or
-//    this is the organizer's in-browser demo (View as), which always shows it.
+//    ?payalways=on (it then sends the X-Pay-Always: on header: a private test switch for that phone only).
+//    (Zip 18: the organizer's demo, View as, follows the same rule from its copy of the switch rows; it no longer always shows it.)
 // Display only: the server already works out what is owed, takes credit at I'm in and returns money on a drop or a
 // cancel the same way on every court status. This only decides whether the player screen shows Pay before a court
 // is booked. "On for everyone" is one row in task_log (kind 'mark', task 'pay_always_on', no game): no schema change.
@@ -34,7 +34,6 @@ export async function setPayAlwaysForAll(db: D1Database, groupId: string, on: bo
 /** Is Pay shown on every game for this request? */
 export async function payAlwaysFor(ctx: Ctx, groupId: string): Promise<boolean> {
   if (!payAlwaysAllowed(ctx.env.PAY_ALWAYS)) return false;
-  if (ctx.env.SANDBOX) return true;
   if ((ctx.req.headers.get(PAY_ALWAYS_HEADER) ?? '').toLowerCase() === 'on') return true;
   return payAlwaysForAll(ctx.db, groupId);
 }

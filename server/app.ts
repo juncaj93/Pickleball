@@ -10,6 +10,7 @@ import { finalizeSession, reopenFinalize } from './finalize';
 import { enterGroupWord, runSetup, setupStatus } from './setup';
 import { actOnToken, lookupToken } from './tokens';
 import { requireAdmin } from './auth';
+import { demoExtras } from './zip18';
 import { PRETEND_HEADER, parsePretend, readOnly } from './pretend';
 import * as alerts from './alerts';
 import * as tasks from './tasks';
@@ -124,6 +125,8 @@ route('POST', '/api/admin/sessions/:id/told', admin.markTold);
 route('POST', '/api/admin/sessions/:id/links', admin.prepareLinks);
 route('GET', '/api/admin/export', (ctx) => admin.exportData(ctx));
 route('GET', '/api/admin/backup', (ctx) => admin.backupFile(ctx));
+// Zip 18: what the View as copy needs besides the backup (the switch rows and the on/off settings), read only. server/zip18.ts.
+route('GET', '/api/admin/demo-extras', demoExtras);
 route('PUT', '/api/admin/alerts', alerts.updateAlerts);
 route('PUT', '/api/admin/time-shift', admin.setTimeShift);
 route('PUT', '/api/admin/pay-always', admin.setPayAlways);

@@ -301,8 +301,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...((await alertCardsFor(ctx, group.id)) ? { alertCards: true } : {}),
     // "Seat dots": every empty seat a dashed ring (display only).
     ...((await seatDotsFor(ctx, group.id)) ? { seatDots: true } : {}),
-    // Zip 13, Swap to Alex: the "Go to Admin" pill, only on a phone signed in as the organizer (players: no trip, never there).
-    ...((await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
+    // Swap to Alex (Zip 13; Zip 18 moved it into the header): "Alex" + the swap icon goes to Admin. Only on a phone signed in as the
+    // organizer (real PIN) showing the organizer's own name; never in View as, never for a player (players: no trip, never there).
+    ...(meIsOrganizer && !viewAsName && (await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
     // Zip 17, Unpaid nudge: only while on (off: this answer is exactly main's). The screen counts from `owed` with shared/unpaidNudge.ts.
     ...(me && !meIsOrganizer && (await unpaidNudgeFor(ctx, group.id)) ? { unpaidNudge: { limit: UNPAID_LIMIT } } : {}),
