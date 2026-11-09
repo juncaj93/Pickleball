@@ -170,7 +170,9 @@ export const PRICE_LOCK_TASK = 'price_lock';
 
 /** The lock as SQL, for a SELECT over `alias` (a sessions row): `SELECT *, ${priceLockCol('sessions')} FROM sessions ...`. */
 export const priceLockCol = (alias: string) =>
-  `(SELECT pl.detail FROM task_log pl WHERE pl.session_id = ${alias}.id AND pl.task = '${PRICE_LOCK_TASK}' AND pl.kind = 'mark') AS price_lock`;
+  // "kind IN ('mark', 'sent')" repeats the partial index's own condition (task_log_once), so SQLite uses that index: one row read per game,
+  // never a scan of the whole task_log.
+  `(SELECT pl.detail FROM task_log pl WHERE pl.session_id = ${alias}.id AND pl.task = '${PRICE_LOCK_TASK}' AND pl.kind IN ('mark', 'sent') AND pl.kind = 'mark') AS price_lock`;
 
 interface PriceLock {
   /** The game's length when it was locked. */
@@ -230,12 +232,22 @@ export async function lockFinalizedGames(db: D1Database, groupId: string, settin
   const { results } = await db
     .prepare(
       `SELECT * FROM sessions s WHERE s.group_id = ? AND (s.finalized_at IS NOT NULL OR s.status = 'canceled')
-         AND NOT EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = '${PRICE_LOCK_TASK}' AND t.kind = 'mark')`,
+         AND NOT EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = '${PRICE_LOCK_TASK}' AND t.kind IN ('mark', 'sent') AND t.kind = 'mark')`,
     )
     .bind(groupId)
     .all<SessionRow>();
   if (results.length === 0) return 0;
-  await db.batch(results.flatMap((s) => priceLockStatements(db, groupId, s.id, priceOf(s, settings), nowIso)));
+  // A few games per batch (a request has a limit on statements), and each lock only while its game is still finalized or canceled
+  // (a Reopen of a canceled game landing in between keeps it unlocked).
+  for (let i = 0; i < results.length; i += 20) {
+    await db.batch(
+      results.slice(i, i + 20).flatMap((s) => {
+        if (!/^[0-9A-Za-z-]+$/.test(s.id)) throw new Error('unsafe sql text');
+        const settled = `EXISTS (SELECT 1 FROM sessions g WHERE g.id = '${s.id}' AND (g.finalized_at IS NOT NULL OR g.status = 'canceled'))`;
+        return priceLockStatements(db, groupId, s.id, priceOf(s, settings), nowIso, settled);
+      }),
+    );
+  }
   return results.length;
 }
 
@@ -300,7 +312,11 @@ export async function organizerIdOf(db: D1Database, group: Pick<GroupRow, 'id' |
 }
 
 export async function getSession(db: D1Database, groupId: string, sessionId: string): Promise<SessionRow | null> {
-  return db.prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE id = ? AND group_id = ?`).bind(sessionId, groupId).first<SessionRow>();
+  return db
+    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE id = ? AND group_id = ?`)
+    .bind(sessionId, groupId)
+    .first<SessionRow>()
+    .catch(() => db.prepare('SELECT * FROM sessions WHERE id = ? AND group_id = ?').bind(sessionId, groupId).first<SessionRow>());
 }
 
 /**
@@ -371,7 +387,9 @@ export async function loadSessions(db: D1Database, groupId: string, endsAfterIso
   const { results } = await db
     .prepare(r.sql)
     .bind(...r.values)
-    .all<SessionRow>();
+    .all<SessionRow>()
+    // No task_log table (a database from before migration 0015): the games without their price locks, exactly as before Zip 27.
+    .catch(() => db.prepare(r.sql.replace(`, ${priceLockCol('sessions')}`, '')).bind(...r.values).all<SessionRow>());
   return results;
 }
 

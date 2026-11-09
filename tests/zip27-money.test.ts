@@ -249,7 +249,11 @@ describe('A-02: a game made pricier after people paid cash, then a late fee: the
     await pay(w, g.id, four);
     await setLength(w, g.id, g.start, 120);
     w.app.now = g.start - 3 * HOUR;
-    expect((await (await phone(w, 'Blair')).call('POST', `/api/sessions/${g.id}/withdraw`, {})).status).toBe(200);
+    // The drop dialog already says the $3 (not "Your $14 stays"), and so does the drop's answer (its toast).
+    expect((await mineOf(w, 'Blair', g.id)).lateDrop).toMatchObject({ owes: true, paid: false, feeCents: 300 });
+    const drop = await (await phone(w, 'Blair')).call('POST', `/api/sessions/${g.id}/withdraw`, {});
+    expect(drop.status).toBe(200);
+    expect(drop.data.lateFee).toEqual({ cents: 300, paid: false });
     const r = await seat(w, g.id, 'Blair');
     expect([r.status, r.paymentStatus, r.owesCents]).toEqual(['withdrawn', 'unpaid', 300]);
     expect((await mineOf(w, 'Blair', g.id)).lateFee).toMatchObject({ kind: 'late_drop', oweCents: 300 });

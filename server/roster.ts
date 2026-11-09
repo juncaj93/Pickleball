@@ -352,7 +352,7 @@ export async function withdraw(
   nowMs: number,
   /** LATE_FEES on for this tap (server/lateFees.ts): a player's own drop inside the 12 hours that leaves the game short owes. */
   opts: { lateFees?: boolean } = {},
-): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean } | null }> {
+): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number } | null }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
   const nothing = { freedSpot: false, changed: false, promoted: [], creditBackCents: 0, creditReturnedCents: 0, lateFee: null };
@@ -432,7 +432,7 @@ export async function withdraw(
   }
   // Did this drop leave an open late-drop debt (its money stayed on the game)?
   const after = changed && feeDrop ? await existingRow(db, session.id, playerId) : null;
-  const lateFee = isOpenLateDrop(after) ? { paid: isOrg ? false : await seatHoldsMoney(db, session.id, playerId) } : null;
+  const lateFee = isOpenLateDrop(after) ? (isOrg ? { paid: false } : await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)))) : null;
   if (!changed && cash === 0 && credit === 0) return nothing;
   if (changed && existing.status === 'confirmed') {
     // A new opening means the organizer should look again.
@@ -444,6 +444,24 @@ export async function withdraw(
   // A court on Waitlist never moves anybody in or out of line by itself: a drop frees a seat for the first real waiter like any game.
   const promoted = changed ? await settle(db, session, nowIso, settingsOf(group)) : [];
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents: cash, creditReturnedCents: credit, lateFee };
+}
+
+/**
+ * What a new late-drop debt says (Zip 27, A-02). A seat whose cash was just held because it was paid below the fee (the game was made longer
+ * after the payment) owes only the rest: { paid: false, oweCents } ("You owe $3 unless someone takes your spot"). Any other seat: exactly as
+ * before (seatHoldsMoney: "Your $14 stays on this game", or "You owe $14").
+ */
+async function lateFeeLeft(db: D1Database, sessionId: string, playerId: string, feeCents: number): Promise<{ paid: boolean; oweCents?: number }> {
+  const row = await db
+    .prepare(
+      `SELECT (SELECT payment_status FROM session_players WHERE session_id = ?1 AND player_id = ?2) AS ps,
+         (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE kind = 'used' AND session_id = ?1 AND player_id = ?2 AND ended_at IS NULL) AS used,
+         (SELECT COUNT(*) FROM credit_ledger WHERE kind = 'used' AND reason = 'cash' AND session_id = ?1 AND player_id = ?2 AND ended_at IS NULL) AS held`,
+    )
+    .bind(sessionId, playerId)
+    .first<{ ps: string | null; used: number; held: number }>();
+  if (row?.ps === 'unpaid' && (row.held ?? 0) > 0) return { paid: false, oweCents: Math.max(0, feeCents - (row.used ?? 0)) };
+  return { paid: await seatHoldsMoney(db, sessionId, playerId) };
 }
 
 /** The seat still carries money (a payment, or credit used on it): "Your $14 stays on this game". */

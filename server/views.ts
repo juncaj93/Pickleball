@@ -118,7 +118,17 @@ export function playerSessionView(
         // Once that credit is all spent the "Your $14 is now credit. Request refund" line would point at nothing, so it goes.
         creditBackCents: pot.hasCredit === false ? 0 : pot.seat.backCents,
         ...(lateWindow
-          ? { lateDrop: { cancelByAt: new Date(lateFeeCutoffMs(session.starts_at)).toISOString(), owes: dropOwes, paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents } }
+          ? {
+              lateDrop: {
+                cancelByAt: new Date(lateFeeCutoffMs(session.starts_at)).toISOString(),
+                owes: dropOwes,
+                // Zip 27 (A-02): a seat paid below the fee (the game was made longer after the payment) would owe only the rest: the dialog says
+                // that ("you still owe $3"). Every other seat: exactly as before.
+                ...(!isOrganizer && mine.payment_status === 'paid' && !mine.refunded_at && !claimed && paidNow > 0 && paidNow < feeCents
+                  ? { paid: false, feeCents: feeCents - paidNow }
+                  : { paid: !isOrganizer && (paidNow > 0 || pot.seat.usedCents + pot.seat.cashCents > 0), feeCents }),
+              },
+            }
           : {}),
         // A late cancel with the fee split owes the split price (shared/lateFees.ts); every other fee the flat price.
         lateFee: openFee
