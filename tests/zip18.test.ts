@@ -252,7 +252,7 @@ describe('Zip 18 addition: Pretend it\'s... is the same copy, at another moment'
     let ok = 0;
     for (const r of saves)
       for (const body of bodies)
-        for (const headers of [{}, { 'X-View-As': w.ids.Vic }, { 'X-View-As': w.ids.Zoe }]) {
+        for (const headers of [{}, { 'X-View-As': w.ids.Vic }, { 'X-View-As': w.ids.Zoe }] as Record<string, string>[]) {
           const res = await sb.request(r.method, fill(r.path), body, headers, at);
           if (res.status === 200) ok++;
         }

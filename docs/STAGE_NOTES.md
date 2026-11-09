@@ -3699,7 +3699,9 @@ data read or changed.
   (sign-ups, paid taps, Mark paid, court switch, cancel, texts marked, Second Chance, switches...) tapped in Pretend as the organizer and
   as players: the real database identical, no Telegram, no network request at all. Updated: three older tests
   that pinned the removed shortcuts (`pay-always` S6, `motion`, `motion-settings` M8) now pin "follows the rows".
-- Full unit suite on the final code: 2466 passed, 1 skipped, 0 failed (149 files); tsc clean; build clean.
+- Full unit suite on the final code: 2467 passed, 1 skipped, 1 failed (149 files): `links-payments` "confirms and withdraws only the
+  link owner" failed once under load and passes alone, on this branch and on main (7/7); it passed in the earlier full run. tsc and
+  build clean.
 - Browser: `e2e/zip18.cjs` 43/43 (player header Vic, Alex header, Admin header at 390/360/320 light and dark; not you? works; the swap
   goes to Admin with no PIN, the PIN screen when signed out; nobody else sees it; the Christmas logo; View as = /?as= for Vic, Wren, Zoe,
   Parker, Quinn in light and dark, calm and ?alerts=all; the old look gone; View as writes nothing (no save request leaves the page and
@@ -3707,3 +3709,12 @@ data read or changed.
   (player pages for Vic, Wren, Zoe, Quinn at 390/360/320 light and dark identical apart from the label, sun button and date tile at the
   same spot, the player answer byte for byte; the organizer's own page identical apart from the label, title button and pill; every
   organizer screen identical, the Admin header included). `e2e/zip13.cjs` swap checks updated for the removed pill.
+- Full `npm run test:e2e` once on the final code, 4 at a time: 54 of 59 scripts clean (zip18 50/50 with the Pretend checks, zip13 with
+  its updated swap checks). The other 5, rerun alone next to main `52803c2`: circles clean on both (load); cancel-reason (2), want-in
+  (1, its View as check finds no card row on main too), admin-r2 F4 (1) fail the same way on main; run.cjs 219/229 on both, the same
+  10 "Last call" checks (the 11th in the parallel run, a browser warning, was load).
+### Preview
+- https://preview-zip18.pickleball-club-9h0.pages.dev (the fake database re-seeded ONCE, Sun Nov 8, 9:06 PM, small cast: 10 players,
+  62 games). Switch rows on there: all 36 rows (every row on live, plus Unpaid nudge, kept on as in the Zip 17 preview), every
+  `[env.preview.vars]` value "on". Checked on the preview itself: View as Vic, Wren and Zoe equal /?as=Vic, /?as=Wren, /?as=Zoe.
+
