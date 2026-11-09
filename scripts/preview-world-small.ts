@@ -37,8 +37,8 @@ export const SMALL_NO_NUMBER = 'Reese';
 // Read on live with the read-only PIN, Sun Nov 8, 7:05 PM Eastern: every Settings row is on, these three included. Unpaid nudge: on live
 // since Sun Nov 8 evening (Alex, Zip 18 round 2).
 export const LATER_ON_LIVE: readonly string[] = ['game_day_card_on', 'second_chance_on', 'after_game_card_on', 'unpaid_nudge_on'];
-/** Being built: nothing with a switch (Zip 18 has none). */
-export const BUILDING_ON: readonly string[] = [];
+/** Being built: Totals refresh (Zip 23). */
+export const BUILDING_ON: readonly string[] = ['totals_refresh_on'];
 
 export function smallSwitchRows(nowMs: number): string {
   const at = new Date(nowMs).toISOString();

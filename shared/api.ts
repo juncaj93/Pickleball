@@ -597,6 +597,9 @@ export interface AdminDashboard {
   gameDayCardForAll?: true;
   /** Zip 16 "After-game cards" (shared/afterGame.ts): its Settings row. */
   afterGameCardForAll?: true;
+  /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
+  totalsRefresh?: true;
+  totalsRefreshForAll?: true;
   /** Zip 15 "Second Chance" (shared/secondChance.ts), only while on (off: the answer is exactly as before): the Home cards, the Request
    *  buttons and the Edit sheet wording; and its Settings row. */
   secondChance?: {

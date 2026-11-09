@@ -3811,3 +3811,38 @@ data read or changed.
   address is): home and /api/status 200; GET /api/admin/demo-extras answers 401 without a sign-in (new server code); the live script has
   the new title button. Not done: the View as / headers check signed in with the read-only PIN.
 - Known follow-up (Alex): the TONIGHT word in the folded row's small tile still looks a bit tight on his iPhone; a small follow-up will come.
+
+## Zip 23: Totals refresh (TOTALS_REFRESH, ships OFF), Mon Nov 9, 2026
+Admin only, display only. No database change, no new cost. Branch `claude/new-session-kytbmu` (the brief's name "🎾23.totals" is the session name).
+
+### What it is
+- Money > Totals redone from Alex's mock (`mockups/totals_mock.html`, copied value by value, px that hold text written as rem so big text scales): a "So far"
+  card (yellow accent) and a "Projected" card (slate blue), each Membership (monthly), Court costs (N games), Owed to venue (amber), Players paid / pay
+  (green, minus), then a tinted bottom row (card name with an 8 px dot, plain gray "$21/court", bold 20 px total); then one collapsed "Month by month" card.
+- Numbers are the server's `rework` answer untouched. The total is owed minus players paid (= "Your cost so far" / "Your estimated cost" whenever that is
+  above $0). New: per court = total / games on that card, whole dollars, nearest with halves up (the same `Math.round(cents/100)` Settings and Short games use
+  for money shown to the organizer; player prices floor, but that is a rule about what players are charged). 0 games: no per-court text at all.
+- Month by month: closed, it loads nothing. Opened, one row per past month (every month from the first game up to last month, newest first, same list as the
+  month box): month, games, net cost, $/court, or "No games".
+- Font fix: every number on the screen is in the site's body font (the Games rows' and date tiles' font) with equal-width digits. The old big totals used the
+  display font (Bricolage); the new screen does not.
+- Switch: `TOTALS_REFRESH` (kill switch in `[vars]` and `[env.preview.vars]`), Settings > Feature switches > "Totals refresh" (top row), `/admin?totalsrefresh=on`
+  per phone, Activity lines. The preview database has the row ON (one INSERT of the row on the fake database, not a re-seed; `BUILDING_ON` also has it for the next seed).
+
+### Choices
+- A total below $0 (players paid more than the venue is owed) is a green credit ("$8 credit", "$4/court credit"), never a minus sign. The server's own "your cost"
+  stops at $0 and the old screen shows $0 there; the new screen works from owed minus paid so it can say credit. Players redo's "Spent" still clamps at $0 per month
+  (so a credit month counts as $0 there): not changed in this zip.
+- A credit that rounds to $0 per court reads plain "$0/court".
+- Month by month starts at the first month with a listed game (like the month box). Months from October 2026 owe the $30 membership even with no game, so a
+  membership-only month BEFORE the first listed game has no row.
+- The Month by month tap row is 42 px tall (the mock). Everything else matches the mock; the real header and bottom bar are the site's, not the mock's.
+
+### Tests
+- `tests/totals-refresh.test.ts` (18): per-court math (0 games, 1 game, rounding, negative net, -0, NaN), the cards against the server, the switch, the preview row.
+- `e2e/zip23.cjs` (40): the mock's own sizes, spacing, borders and colors light and dark; the numbers against the server; 0 games, 1 game, rounding, credit, tiny credit;
+  the font; Month by month collapsed and lazy; fits one iPhone Air screen (420 x 912) without scrolling; strict clipping (text 2 px inside every box, nothing overlapping,
+  title and figures on one line) at 420, 390, 360 and 320 wide, light and dark, text 100, 125 and 150%, plus an extremes case. The check was proven to fail on purpose-broken CSS (`E2E_BREAK`).
+- `e2e/zip23-off.cjs` (17, needs `MAIN_DIR`): with the switch OFF, the old Totals screen (6 sizes, two months), Settings (apart from the row), Home, Games, Players, History and the money answers equal main byte for byte; with it ON the Games tab and Home still equal main.
+- Older newest-row checks (`money-rework.cjs`, `zip16.cjs`) and `speed-queries` know the new top row.
+- Independent math review (a fresh reviewer): no wrong figure; two small fixes made (tiny credit label, a stale-rows race in Month by month); two notes kept above.

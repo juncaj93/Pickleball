@@ -1,0 +1,242 @@
+/* "Totals refresh" (TOTALS_REFRESH, Zip 23): Money > Totals from Alex's mock (mockups/totals_mock.html). Every value below is the mock's, with px that
+   hold text written as rem (the mock's px divided by 16), so at normal text size it is the mock to the pixel and with big phone text the boxes grow
+   with the words. Numbers use the site's body font (the one the Games rows, the balance card and the date tiles use) with equal-width digits.
+   Card, ink, line and muted colors are the site's tokens; the two accents are the mock's. */
+.tr {
+  --tr-sf: #8a6a00;
+  --tr-pj: #4a5f8f;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-family: var(--body);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .tr {
+    --tr-sf: #f0cf55;
+    --tr-pj: #9db3e6;
+  }
+}
+:root[data-theme='dark'] .tr {
+  --tr-sf: #f0cf55;
+  --tr-pj: #9db3e6;
+}
+
+.tr-card {
+  --acc: var(--tr-sf);
+  background: var(--surface);
+  border: 1px solid color-mix(in srgb, var(--acc) 45%, var(--line));
+  border-radius: 18px;
+  overflow: hidden;
+  color: var(--ink);
+}
+.tr-card.pj {
+  --acc: var(--tr-pj);
+}
+
+/* The rows: dashed lines between them, a solid line above "Owed to venue". */
+.tr-rows {
+  margin: 0;
+  padding: 0.375rem 1rem 0.125rem;
+}
+.tr-ln {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  font-size: 0.90625rem;
+  border-top: 1px dashed var(--line);
+}
+.tr-ln:first-child {
+  border-top: 0;
+}
+.tr-ln dt {
+  margin: 0;
+  min-width: 0;
+}
+.tr-ln dd {
+  margin: 0;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tr-ln em {
+  font-style: normal;
+  font-size: 0.71875rem;
+  color: var(--ink-2);
+  margin-left: 4px;
+  white-space: nowrap;
+}
+.tr-ln dd.am {
+  color: var(--tok-owes-fg);
+}
+.tr-ln dd.gr {
+  color: var(--tok-paid-fg);
+}
+.tr-ln.sum {
+  border-top: 1px solid var(--line);
+}
+.tr-ln.sum dt,
+.tr-ln.sum dd {
+  font-weight: 700;
+}
+
+/* The bottom row: the card's accent mixed 8% into the card color, a line above. */
+.tr-you {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--acc) 8%, var(--surface));
+}
+.tr-t {
+  display: flex;
+  align-items: center;
+  flex: none;
+  color: var(--acc);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.tr-dot {
+  box-sizing: border-box;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+}
+.tr-card.sf .tr-dot {
+  background: var(--acc);
+}
+.tr-card.pj .tr-dot {
+  border: 2px solid var(--acc);
+}
+/* Cost per court, then the total. With very big text and a narrow screen the gray per-court words drop under the total; the title never wraps. */
+.tr-yr {
+  display: flex;
+  flex-wrap: wrap-reverse;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0 12px;
+  min-width: 0;
+}
+.tr-yp {
+  color: var(--ink-2);
+  font-size: 0.78125rem;
+  white-space: nowrap;
+}
+.tr-yn {
+  color: var(--acc);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+.tr-yn small {
+  font-size: 0.78125rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+/* A credit (the players paid more than the venue is owed): green, with the word. */
+.tr-yn.credit,
+.tr-yp.credit {
+  color: var(--tok-paid-fg);
+}
+
+/* Month by month: one collapsed card, the label on the left and a chevron on the right. */
+.tr-mm {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  overflow: hidden;
+  color: var(--ink);
+}
+.tr-mm-head {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.625rem;
+  padding: 0 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.tr-t.plain {
+  color: var(--ink-2);
+}
+.tr-chev {
+  flex: none;
+  width: 14px;
+  height: 9px;
+  stroke: var(--ink-2);
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.tr-mm.open .tr-chev {
+  transform: rotate(180deg);
+}
+.tr-mm-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0.125rem 1rem 0.25rem;
+  border-top: 1px solid var(--line);
+}
+.tr-mrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.375rem 0;
+  font-size: 0.90625rem;
+  border-top: 1px dashed var(--line);
+}
+.tr-mrow:first-child {
+  border-top: 0;
+}
+.tr-mrow-l,
+.tr-mrow-r {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.tr-mrow-r {
+  align-items: flex-end;
+  text-align: right;
+}
+.tr-mrow-name,
+.tr-mrow-net {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tr-mrow-net small {
+  font-size: 0.71875rem;
+  font-weight: 600;
+}
+.tr-mrow-net.credit,
+.tr-mrow-sub.credit {
+  color: var(--tok-paid-fg);
+}
+.tr-mrow-sub {
+  color: var(--ink-2);
+  font-size: 0.71875rem;
+  white-space: nowrap;
+}
+.tr-mm-empty {
+  margin: 0;
+  padding: 0.625rem 1rem;
+  border-top: 1px solid var(--line);
+  color: var(--ink-2);
+  font-size: 0.8125rem;
+}

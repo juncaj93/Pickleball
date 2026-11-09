@@ -161,6 +161,7 @@ route('POST', '/api/admin/error-alerts/test', (ctx) => errorAlerts.errorAlertTes
 route('PUT', '/api/admin/after-game-card-switch', admin.setAfterGameCardSwitch);
 // Zip 15 (server/secondChance.ts): Second Chance.
 route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
+route('PUT', '/api/admin/totals-refresh-switch', admin.setTotalsRefreshSwitch);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));

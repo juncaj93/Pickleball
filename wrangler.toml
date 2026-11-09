@@ -204,6 +204,12 @@ ERROR_ALERTS = "on"
 # who gets it is Settings > Feature switches > "After-game cards" (off at ship = nobody), plus a phone opened once with ?aftergame=on.
 # "off" = the kill switch: nobody, not even the test link. Needs a deploy.
 AFTER_GAME_CARD = "on"
+# Zip 23 "Totals refresh" (shared/totalsRefresh.ts): Money > Totals redone from Alex's mock: a "So far" card and a "Projected" card (Membership,
+# Court costs, Owed to venue, Players paid / pay, then the total with the cost per court, like $21/court) and one collapsed "Month by month"
+# card. Same numbers as before; money amounts use the site's own number font. Organizer only, display only. "on" here only ALLOWS it; who
+# gets it is Settings > Feature switches > "Totals refresh" (off at ship = nobody), plus a phone opened once with /admin?totalsrefresh=on.
+# "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+TOTALS_REFRESH = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -257,6 +263,7 @@ AFTER_GAME_CARD = "on"
 # are a visible fake (shown on Home, never sent).
 SECOND_CHANCE_TEST = "on"
 UNPAID_NUDGE = "on"
+TOTALS_REFRESH = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"
 
