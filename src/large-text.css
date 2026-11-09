@@ -236,6 +236,21 @@ section[aria-labelledby='sessions-title'],
     /* Zip 18 round 2: three rows of one height (the tallest, "Not booked" on two lines), so the sliding highlight covers the chosen one. */
     grid-auto-rows: 1fr;
   }
+  /* Zip 18 round 2: with the choices stacked, the motion's sliding highlight (motion.css, built for three side-by-side cells) slides DOWN
+     over the chosen one instead of sitting off to the side as a separate block. */
+  html[data-motion='on'] .card .court-switch .cs-glide {
+    /* Placed from the top (row i of three: each a third of the inside, 2 px apart) rather than moved with a transform: a sliding
+       transform here made the phone's page wider than the screen in Chrome's phone mode (layout-polish caught it). */
+    top: calc(3px + var(--i, 0) * ((100% - 10px) / 3 + 2px));
+    right: 3px;
+    bottom: auto;
+    width: auto;
+    height: calc((100% - 10px) / 3);
+    transform: none;
+    transition:
+      top 150ms var(--ease-out),
+      background-color 150ms var(--ease-out);
+  }
   /* The status words ("Canceled - Thanksgiving week") wrap beside the gear instead of running under it. */
   .scard-top .court-line {
     flex: 1 1 0;
