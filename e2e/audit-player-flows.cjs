@@ -375,6 +375,13 @@ async function main() {
     });
     await check('a name the organizer removed while the page is open: a tap says so clearly, then the page asks "Who are you?" without that name', async () => {
       const { ctx, page } = await open('Quinn');
+      // Zip 27 (Audit A, A-04): Remove refuses someone still in a game that has not ended, so the organizer takes Quinn out of those first.
+      const d = await (await areq.get(`${BASE}/api/admin/dashboard`)).json();
+      for (const s of d.sessions) {
+        const seat = s.roster.find((x) => x.playerId === idOf('Quinn') && (x.status === 'confirmed' || x.status === 'waitlisted'));
+        // (A game that already ended does not block Remove, so a refused take-out there does not matter.)
+        if (seat && s.status !== 'canceled') await areq.post(`${BASE}/api/admin/sessions/${s.id}/roster`, { data: { playerId: idOf('Quinn'), action: 'withdraw' }, headers: { Origin: BASE } });
+      }
       const r = await (await areq.delete(`${BASE}/api/admin/players/${idOf('Quinn')}`, { headers: { Origin: BASE } })).json();
       assert(r.result === 'hidden', `remove result ${JSON.stringify(r)}`);
       await card(page, G[4]).getByRole('button', { name: "I'm in" }).click();
