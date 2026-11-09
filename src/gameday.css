@@ -169,8 +169,9 @@ html[data-game-day] .schedule > .sched.gd .dots.one-row {
   }
   .gd-btn {
     font-size: 13px;
-    gap: 4px;
-    padding: 0 4px;
+    /* Zip 18 round 3: 3 px (was 4) so "Directions" and its arrow fit in half the row with room to spare: the two stay equal halves. */
+    gap: 3px;
+    padding: 0 3px;
   }
   .gd-btn svg {
     width: 12px;

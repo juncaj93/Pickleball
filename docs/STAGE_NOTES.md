@@ -3772,3 +3772,22 @@ data read or changed.
 - Final checks on the round 2 code: zip18 73/73, layout-polish 200/200, admin-motion 28/28, admin-r2 27/27, zip14 22/22, zip13 39/39,
   money-rework 36/36, zip18-off 28/28 against main; unit 2468 passed, 0 failed; tsc and build clean.
 
+
+### Round 3 (Mon Nov 9, 2026, early morning; Alex: taps 1 and 3 good, tap 2 still looked clipped)
+- Alex's screenshot (light, Pretend "Sun Nov 8, 7:30 AM"): the folded row's TONIGHT strip ran edge to edge and its word touched the tile's
+  curved corners. Nothing was outside the tile, so the round 2 checker passed it. Fix: the folded row's small tile is 48 px (was 44) in every
+  folded row, so they still line up; TONIGHT stays at 7.5 px and now keeps about 3.5 px clear on each side. The big TONIGHT tile on full
+  cards is not changed.
+- Stronger checker (`e2e/clip-check.cjs`): text inside a tile or tag must keep at least 2 px from the tile's inside edge, measured along the
+  rounded corners (the font's own space above capitals and below the baseline is not counted as ink). On the preview's round 2 code it
+  fails exactly as Alex saw: "TONIGHT" 1.3 px from the edge at 390/360/320, light and dark. Also: a background that matches what is behind
+  it is not an edge, and a button with no border or fill of its own (the credit chip) has no edge to measure.
+- Run across every tile kind, player and admin (TONIGHT, TOMORROW / TOM, weekday, mine, EXTRA, canceled, compact and full cards, the header
+  date tile, Money tiles), at 390/360/320, light and dark, normal, Safari text 125% and 150%, 150% text. Found and fixed: the header date
+  tile's weekday touched its top edge at 150% text (3 px padding, no change at normal text); "Directions" ran out of its game-day button
+  with Safari text (the two buttons wrap one under the other when needed; at 320 their inner spacing is 3 px so they stay equal halves);
+  "Tue game: 3 haven't paid" broke mid-word at 320 with Safari 150% (Remind drops under the title); Money's Request / Mark paid ran past a
+  card at 320 with Safari 150% (Mark paid wraps under Request).
+- Tests: zip18 103/103 (player screens now checked too: 24 more checks, and Safari 150% added), zip14 22/22, layout-polish 200/200,
+  audit-player-look 145/145, money-rework 36/36, zip13 39/39, admin-r2 27/27, circles 18/18, zip18-off 28/28 against main; tsc and build
+  clean (no script code changed since the unit run: 2468 passed).
