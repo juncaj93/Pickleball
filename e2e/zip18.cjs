@@ -457,7 +457,12 @@ async function main() {
           if (width === 320 && size.name !== 'normal' && scheme === 'dark') await page.screenshot({ path: path.join(SHOTS, `zip18-fit-home-folded-${size.name.replace(/\W+/g, '')}.png`), fullPage: true });
           for (const tab of ['Players', 'Money', 'History', 'Settings']) {
             await page.locator('.tabbar button', { hasText: tab }).evaluate((x) => x.click());
-            if (tab === 'Settings') for (const sm of await page.locator('details:not([open]) > summary').all()) await sm.click().catch(() => {});
+            if (tab === 'Settings') {
+              for (const sm of await page.locator('details:not([open]) > summary').all()) await sm.click().catch(() => {});
+              // Each section slides open: measured once every one has its full height.
+              await page.waitForFunction(() => [...document.querySelectorAll('details[open]')].every((d) => d.scrollHeight <= d.clientHeight + 1 && !d.getAnimations({ subtree: true }).length), null, { timeout: 5000 }).catch(() => {});
+              await page.waitForTimeout(300);
+            }
             await look(tab);
           }
           await ctx.close();
