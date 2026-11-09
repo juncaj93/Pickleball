@@ -114,6 +114,8 @@ export interface Env {
   SECOND_CHANCE?: string;
   /** Zip 15, PREVIEW ONLY: "on" lets a phone with ?noontest=on pretend it is noon on game day (these features only) and makes the two Telegrams a visible fake. Only [env.preview.vars] has it; never production. */
   SECOND_CHANCE_TEST?: string;
+  /** Zip 17 "Unpaid nudge" (shared/unpaidNudge.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?nudge=on. Refuses a player's own sign-up at 3 unpaid games. */
+  UNPAID_NUDGE?: string;
   /** PREVIEW ONLY (shared/previewCalm.ts): "on" shows only the zip's own cards by default (?alerts=all shows everything). Never production. */
   PREVIEW_CALM?: string;
   /**

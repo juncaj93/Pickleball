@@ -202,6 +202,8 @@ export interface GroupView {
   /** Zip 14 "Game day card" is on for this screen (server/gameDay.ts): the game day card, court numbers on the games. Missing: exactly as before. */
   /** Preview only (shared/previewCalm.ts): hide the alert cards (?alerts=all shows them). Never on live. */
   previewCalm?: true;
+  /** Zip 17, Unpaid nudge (shared/unpaidNudge.ts): only while on for this phone. The count comes from `owed`. */
+  unpaidNudge?: { limit: number };
   gameDayCard?: true;
   /** Zip 14, PREVIEW ONLY (GAME_DAY_TEST): this phone asked to see the next game's date as today. Never on live. */
   gameDayTest?: true;
@@ -604,6 +606,8 @@ export interface AdminDashboard {
     pretendNoon?: true;
   };
   secondChanceForAll?: true;
+  /** Zip 17: Settings > Feature switches > "Unpaid nudge" is on for everyone. */
+  unpaidNudgeForAll?: true;
   /** Preview only (shared/previewCalm.ts): admin Home shows only this zip's cards (?alerts=all shows every one). Never on live. */
   previewCalm?: true;
   /** "Venmo request" is on for this screen (server/venmoRequest.ts). Missing: no request links anywhere. */

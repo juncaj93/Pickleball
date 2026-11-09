@@ -1,6 +1,6 @@
 import { actingWhoChanged, InstantContext, markPressed, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { declinePatch, iPaidPatch, leaveWaitlistPatch } from '../playerPatches';
-import { Fragment, type ReactNode, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DEFAULT_ZELLE_NUMBER, SITE_NAME } from '../../shared/settings';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, parseVenmoHandle, venmoNote, venmoPayUrl } from '../../shared/money';
@@ -34,6 +34,7 @@ import { OrganizerLink } from './SiteHome';
 import '../credit-player.css';
 import '../player-cards.css';
 import '../motion.css';
+import { BLOCKED_CODE, blockSheet, NUDGE_TOAST_MS, nudgeState, nudgeToast, oweLine, oweTitle, type NudgeState } from '../../shared/unpaidNudge';
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
@@ -450,6 +451,35 @@ export function PlayerHome({
       setTimeout(() => setCelebrating((cur) => (cur === ids ? new Set() : cur)), CELEBRATE_MS);
     }
   }, [g, switching, viewAs, toast]);
+  // Zip 17, Unpaid nudge (shared/unpaidNudge.ts): null when off (every line below then does exactly what it did). Counted from the
+  // screen's own owed money, the same numbers as the owe card; the server refuses a sign-up at the limit by itself too.
+  const nudge = useMemo(() => (view && view.unpaidNudge && view.me ? nudgeState(view.owed, Date.parse(view.now), view.unpaidNudge.limit) : null), [view]);
+  const nudgeRef = useRef(nudge);
+  nudgeRef.current = nudge;
+  const [nudgePay, setNudgePay] = useState(false);
+  const [blockOpen, setBlockOpen] = useState(false);
+  const blockFallback = useRef<string | null>(null);
+  const nudgeApi = useMemo<NudgeApi | null>(
+    () =>
+      nudge
+        ? {
+            state: nudge,
+            openBlock: (fallback) => {
+              blockFallback.current = fallback ?? null;
+              setBlockOpen(true);
+            },
+          }
+        : null,
+    [nudge],
+  );
+  // A refusal from the server that the screen did not see coming (an older screen): once fresh data says blocked the sheet shows; if
+  // it still does not, the server's own words show as a toast instead.
+  useEffect(() => {
+    if (!blockOpen || nudge?.blocked) return;
+    setBlockOpen(false);
+    if (blockFallback.current) toast(blockFallback.current, 'error');
+    blockFallback.current = null;
+  }, [blockOpen, nudge, toast]);
   // "Use the $10 you asked to cash out for this game?" after I'm in, only when it matters (the server decides).
   const [cashOut, setCashOut] = useState<{ sessionId: string; cents: number; requestCents?: number } | null>(null);
   /** My own tap on I'm in / Yes: "Game on!" when it completed the 4th player, else "You're in". */
@@ -458,16 +488,23 @@ export function PlayerHome({
       const offer = res.cashOutOffer && res.cashOutOffer.cents > 0 ? res.cashOutOffer : null;
       // "$11 due" is said only where the card shows it: a booked court, or "Ask for payment on every game" is on.
       const showDue = !noCourt || !!g?.payAlways;
+      // Zip 17, Unpaid nudge: in, with 1 or 2 unpaid games before this one: the longer "Please pay" toast takes the banner's place.
+      const owes = nudgeRef.current;
+      const nudgeNow = !offer && res.result === 'confirmed' && !!owes && owes.count > 0 && !owes.blocked;
       if (res.result === 'confirmed' && before + 1 >= MIN_PLAYERS) {
         // I was there for it, so the card does not celebrate again later.
         markCelebrated(sessionId);
         if (before + 1 === MIN_PLAYERS && !offer) {
           burst(sessionId);
-          return toast(joinedCreditText('Game on!', res.creditCents ?? 0, flatOfGame(g, sessionId), showDue), 'ok', { ball: true });
+          if (!nudgeNow) return toast(joinedCreditText('Game on!', res.creditCents ?? 0, flatOfGame(g, sessionId), showDue), 'ok', { ball: true });
         }
       }
       // The cash-out question sits where the banner would; the card already says "You're in".
       if (offer) return setCashOut({ sessionId, cents: offer.cents, requestCents: offer.requestCents });
+      if (nudgeNow) {
+        const t = nudgeToast(owes!.count, owes!.cents);
+        return toast(t.title, 'ok', { sub: t.sub, nudge: true, stayMs: NUDGE_TOAST_MS, action: { label: 'Pay', onClick: () => setNudgePay(true) } });
+      }
       toast(joinedText(res, noCourt, flatOfGame(g, sessionId), showDue));
     },
     [toast, markCelebrated, burst, g, g?.payAlways],
@@ -648,6 +685,7 @@ export function PlayerHome({
         }
       />
       <main ref={mainRef} className={`page stack-lg${cascade ? ' m-cascade' : ''}`} data-sw-main={swapFrom ? '' : undefined}>
+        <NudgeContext.Provider value={nudgeApi}>
         {/* Pull to refresh: the ball that shows in the gap the list leaves (motion only). */}
         {motion && (
           <div ref={ptrBall} className="m-ptr" aria-hidden="true">
@@ -740,13 +778,9 @@ export function PlayerHome({
             )}
             </>
             )}
-            {/* Preview only (calm): just this zip's cards, the owe card when it owes more after Finalize and the after-game card. */}
-            {g.previewCalm === true && g.afterGameCard === true && (
-              <>
-                {view!.payDue.length > 0 && view!.payDue.every((o) => !!o.more) && <PayCard g={view!} onChanged={load.reload} enter={live} />}
-                <AfterGameCard g={view!} />
-              </>
-            )}
+            {/* Preview only (calm): just the cards the zips being built change: the owe card (Unpaid nudge on, or it owes more after Finalize) and the after-game card. */}
+            {g.previewCalm === true && view!.payDue.length > 0 && (nudge || (g.afterGameCard === true && view!.payDue.every((o) => !!o.more))) && <PayCard g={view!} onChanged={load.reload} enter={live} />}
+            {g.previewCalm === true && g.afterGameCard === true && <AfterGameCard g={view!} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
               {/* Nothing to list (My games with no games): the switch still has a line of its own. */}
@@ -830,6 +864,7 @@ export function PlayerHome({
         )}
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}
         {plain && !viewAs && pickName && <OrganizerLink />}
+        </NudgeContext.Provider>
       </main>
       {cashOut && (
         <CashOutPrompt
@@ -840,6 +875,21 @@ export function PlayerHome({
           onChanged={load.reload}
           {...(g?.alertCards === true ? { card: { requestCents: cashOut.requestCents ?? cashOut.cents, organizer: firstNameOf(g.group.organizerName) } } : {})}
         />
+      )}
+      {/* Zip 17, Unpaid nudge: the sheet at the limit, and the Pay sheet for the unpaid games (the toast's Pay and "Pay $42"). */}
+      {nudge && nudge.count > 0 && view && (
+        <>
+          <BlockSheet
+            open={blockOpen && nudge.blocked}
+            state={nudge}
+            onClose={() => setBlockOpen(false)}
+            onPay={() => {
+              setBlockOpen(false);
+              setNudgePay(true);
+            }}
+          />
+          <NudgePay key={nudge.games.map((o) => o.sessionId).join('_')} g={view} games={nudge.games} open={nudgePay} onClose={() => setNudgePay(false)} onChanged={load.reload} />
+        </>
       )}
       {g && credit && <CreditSheet open={creditOpen && showChip} credit={credit} tz={tz} organizerName={g.group.organizerName ?? 'Alex'} nowIso={g.now} onClose={() => setCreditOpen(false)} onChanged={load.reload} />}
     </InstantContext.Provider>
@@ -1373,6 +1423,90 @@ function PaySheet({
   );
 }
 
+/** Zip 17, Unpaid nudge: what the game cards and the Want in card read (null: the switch is off, and they do exactly what they did). */
+interface NudgeApi {
+  state: NudgeState<GroupView['owed'][number]>;
+  /** The "You owe $42" sheet. `fallback`: the server's words, shown as a toast if fresh data does not say blocked. */
+  openBlock: (fallback?: string) => void;
+}
+const NudgeContext = createContext<NudgeApi | null>(null);
+const useNudge = () => useContext(NudgeContext);
+
+/**
+ * I'm in. With the Unpaid nudge on and this screen already showing the balance paid (an I paid whose saves are still on their way), a
+ * refusal at the limit is waited out once (1.5 seconds) before it counts. Off (`retry` false): exactly one request, as before.
+ */
+async function nudgeJoin(sessionId: string, retry: boolean): Promise<JoinResponse> {
+  try {
+    return await api<JoinResponse>('POST', `/api/sessions/${sessionId}/join`, {});
+  } catch (err) {
+    if (!retry || !(err instanceof ApiError) || err.code !== BLOCKED_CODE) throw err;
+    await new Promise((r) => setTimeout(r, 1500));
+    return api<JoinResponse>('POST', `/api/sessions/${sessionId}/join`, {});
+  }
+}
+
+/** At the limit: "You owe $42" / "For your last 3 games. Once it's paid, you can sign up again." / Pay $42 / Not now (the site's own sheet). */
+function BlockSheet({ open, state, onClose, onPay }: { open: boolean; state: NudgeState; onClose: () => void; onPay: () => void }) {
+  const t = blockSheet(state.count, state.cents);
+  return (
+    <Sheet open={open} title={t.title} onClose={onClose} className="nudge-block" hideClose>
+      <div className="nudge-sheet" data-nudge-sheet>
+        <p className="nudge-line">{t.line}</p>
+        <button type="button" className="btn big block nudge-pay" data-nudge-pay onClick={onPay}>
+          {t.pay}
+        </button>
+        <button type="button" className="btn block nudge-later" data-nudge-later onClick={onClose}>
+          Not now
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * The Pay sheet (the site's own, PAY_SHEET) for just the unpaid games: the toast's Pay and the block sheet's "Pay $42". The same Venmo
+ * link, note and I paid as the owe card's Pay, with the amounts the owe card shows for those games. I paid marks those games paid
+ * (waiting for the organizer, like every I paid), so a blocked player can sign up again at once.
+ */
+function NudgePay({ g, games, open, onClose, onChanged }: { g: GroupView; games: GroupView['owed']; open: boolean; onClose: () => void; onChanged: () => Promise<void> }) {
+  const tz = g.group.timezone;
+  const total = games.reduce((sum, o) => sum + o.amountCents, 0);
+  const note = venmoNote(
+    games.map((o) => o.startsAt),
+    tz,
+    g.me?.name,
+  );
+  const pay = venmoPayUrl(g.group.venmoUrl, total, note);
+  const paid = usePaid(games.map((o) => ({ sessionId: o.sessionId, cents: o.amountCents })), onChanged, !!g.playerFix1);
+  const payTap = usePayTapped(games.map((o) => o.sessionId).join('_'), g.playerFix1 ? games.map((o) => o.sessionId) : []);
+  // The owe card's own rule: the Pay sheet only while it is on and a Venmo link is saved. Otherwise Pay brings the owe card into view
+  // (its own Pay or I paid), so the Settings Apple Pay / Zelle number and a missing Venmo link are never guessed here.
+  const sheetOn = !!g.paySheet && !!pay.url;
+  useEffect(() => {
+    if (!open || sheetOn) return;
+    onClose();
+    document.querySelector('[data-pay-card]')?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, [open, sheetOn, onClose]);
+  if (!sheetOn) return null;
+  return (
+    <PaySheet
+      g={g}
+      open={open}
+      onClose={onClose}
+      cents={total}
+      pay={pay}
+      onTapPay={payTap.mark}
+      busy={paid.busy || paid.blocked}
+      saving={paid.busy}
+      onPaid={() => {
+        onClose();
+        void paid.set(true);
+      }}
+    />
+  );
+}
+
 function usePayTapped(key: string, alsoKeys: string[] = []) {
   const storeKey = `pb_pay_tapped_${key}`;
   const read = () => {
@@ -1581,8 +1715,12 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
   const tonight = due.length === 1 && todayKey(due[0].startsAt) === todayKey(g.now);
   // A late fee says why: "You owe $14 for Tue, Nov 3 (late drop)" (shared/lateFees.ts rule 7).
   const why = (o: (typeof due)[number]) => (o.lateFee ? ` (${lateFeeLabel(o.lateFee)})` : '');
-  const title =
-    due.length > 1
+  // Zip 17, Unpaid nudge: "You owe $28" / "$14 each: Nov 3 and Nov 5" (one line). Off: the words below, exactly as before.
+  const nudgeWords = !!g.unpaidNudge;
+  const nudgeLine = nudgeWords ? `${oweLine(due, tz)}${due.length === 1 ? why(due[0]) : ''}` : '';
+  const title = nudgeWords
+    ? oweTitle(total)
+    : due.length > 1
       ? `You owe ${formatPrice(total)} total`
       : tonight && !due[0].lateFee
         ? `Tonight: you owe ${formatPrice(total)}`
@@ -1623,6 +1761,10 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
         sub={
           more ? (
             more.sub
+          ) : nudgeWords ? (
+            <span className="nudge-owe-line" data-nudge-line>
+              {nudgeLine}
+            </span>
           ) : several ? (
             <>
               {due.length} games
@@ -1718,7 +1860,11 @@ function PayCard({ g, onChanged, enter: enterNow }: { g: GroupView; onChanged: (
       <h2>
         <RollText text={title} />
       </h2>
-      {due.length > 1 ? (
+      {nudgeWords ? (
+        <p className="small nudge-owe-line" data-nudge-line>
+          {nudgeLine}
+        </p>
+      ) : due.length > 1 ? (
         <ul className="pay-list">
           {due.map((o) => (
             <li key={o.sessionId}>
@@ -1829,6 +1975,9 @@ function SuggestionCard({
   const s = g.suggestion!;
   const tz = g.group.timezone;
   const [busy, setBusy] = useState(false);
+  // Zip 17, Unpaid nudge (null when off): the same block as the game cards' I'm in.
+  const nudge = useNudge();
+  const nudgeBlocked = !!nudge?.state.blocked;
   // At the max they would wait. On the venue's court waitlist everyone goes on standby, so no count.
   // A game really full beyond the max has a real waitlist, court or no court (as its card says), so the prompt
   // warns first. With room, a game with no court booked reads like a normal one.
@@ -1846,6 +1995,7 @@ function SuggestionCard({
       return;
     }
     if (instant && busy) return;
+    if (yes && nudge?.state.blocked) return nudge.openBlock();
     setBusy(true);
     const release = holdLive();
     // Instant taps: "Yes" leaves the seat to the server (a spot, the waitlist), so the button shows it is working until the answer.
@@ -1854,7 +2004,7 @@ function SuggestionCard({
       if (yes) {
         // The same call, the same banner and the same refresh as tapping "I'm in" on that game.
         await sendDropsBeforeJoin(s.sessionId);
-        const res = await api<JoinResponse>('POST', `/api/sessions/${s.sessionId}/join`, {});
+        const res = await nudgeJoin(s.sessionId, !!nudge && !nudge.state.blocked);
         joinToast(s.sessionId, s.confirmedCount, res, !!s.noCourt);
         onJoined({ sessionId: s.sessionId, text: joinedText(res, !!s.noCourt, flatOfGame(g, s.sessionId), !s.noCourt || !!g.payAlways), startsAt: s.startsAt, endsAt: s.endsAt });
         await onChanged();
@@ -1863,7 +2013,11 @@ function SuggestionCard({
         await onChanged();
       }
     } catch (err) {
-      if (isDemo(err)) toast(err.message);
+      // Zip 17: refused at the limit (an older screen): the sheet once the fresh data shows it, else the server's words.
+      if (yes && nudge && err instanceof ApiError && err.code === BLOCKED_CODE) {
+        await onChanged();
+        nudge.openBlock(err.message);
+      } else if (isDemo(err)) toast(err.message);
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
     } finally {
       unmark();
@@ -1895,7 +2049,14 @@ function SuggestionCard({
         sub={sub}
         data={{ 'data-suggest-card': true }}
         action={
-          <button type="button" className="ac-btn" disabled={busy} onClick={() => answer(true)}>
+          <button
+            type="button"
+            className={`ac-btn${nudgeBlocked ? ' nudge-dim' : ''}`}
+            data-nudge-blocked={nudgeBlocked ? '' : undefined}
+            aria-haspopup={nudgeBlocked ? 'dialog' : undefined}
+            disabled={busy}
+            onClick={() => answer(true)}
+          >
             {waitlistForm ? 'Join waitlist' : "I'm in"}
           </button>
         }
@@ -1915,7 +2076,7 @@ function SuggestionCard({
       </div>
       {subline && <p className="muted small suggest-sub">{subline}</p>}
       <div className="btn-row">
-        <button className="btn" disabled={busy} onClick={() => answer(true)}>
+        <button className={`btn${nudgeBlocked ? ' nudge-dim' : ''}`} data-nudge-blocked={nudgeBlocked ? '' : undefined} disabled={busy} onClick={() => answer(true)}>
           Yes
         </button>
         <button className="btn secondary" disabled={busy} onClick={() => answer(false)}>
@@ -2306,6 +2467,9 @@ export function ScheduleRow({
   const tz = g.group.timezone;
   const toast = useToast();
   const instantTaps = useInstant<GroupView>();
+  // Zip 17, Unpaid nudge (null when off): at the limit I'm in looks dimmed and opens the "You owe" sheet instead of signing up.
+  const nudge = useNudge();
+  const nudgeBlocked = !held && !!nudge?.state.blocked;
   const [busy, setBusy] = useState(false);
   // Set at once (state waits for a redraw), so a quick second tap is ignored instead of flashing an error.
   const working = useRef(false);
@@ -2369,6 +2533,7 @@ export function ScheduleRow({
       toast("You're back in");
       return;
     }
+    if (nudge?.state.blocked) return nudge.openBlock();
     const before = s.confirmed.length;
     const instant = canJoinInstantly(s);
     working.current = true;
@@ -2379,10 +2544,16 @@ export function ScheduleRow({
     const unmark = !instant && instantTaps ? markPressed() : () => {};
     try {
       await sendDropsBeforeJoin(s.id);
-      joinToast(s.id, before, await api<JoinResponse>('POST', `/api/sessions/${s.id}/join`, {}), isNoCourt(s));
+      joinToast(s.id, before, await nudgeJoin(s.id, !!nudge && !nudge.state.blocked), isNoCourt(s));
       await onChanged();
     } catch (err) {
       setOverlay(s.id, null);
+      // Zip 17: the server refused at the limit (this screen was older): the sheet once the fresh data shows it, else its words.
+      if (nudge && err instanceof ApiError && err.code === BLOCKED_CODE) {
+        await onChanged();
+        nudge.openBlock(err.message);
+        return;
+      }
       if (isDemo(err)) toast(err.message);
       else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
       await onChanged();
@@ -2585,7 +2756,15 @@ export function ScheduleRow({
     );
 
   const joinBtn = notIn && (
-    <button className={`btn sched-btn${flatLater ? ' outline' : ''}`} data-join disabled={busy} aria-busy={busy} onClick={join}>
+    <button
+      className={`btn sched-btn${flatLater ? ' outline' : ''}${nudgeBlocked ? ' nudge-dim' : ''}`}
+      data-join
+      data-nudge-blocked={nudgeBlocked ? '' : undefined}
+      aria-haspopup={nudgeBlocked ? 'dialog' : undefined}
+      disabled={busy}
+      aria-busy={busy}
+      onClick={join}
+    >
       {busy ? 'Saving…' : cleanup && s.joinAs === 'in' ? "I'm in" : standbyWord ? 'Join standby' : s.joinAs === 'in' || courtWait ? "I'm in" : 'Join waitlist'}
     </button>
   );

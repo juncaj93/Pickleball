@@ -99,13 +99,16 @@ export function useFitTitle(ref: RefObject<HTMLElement | null>) {
   // What the last fit was done for: the words and the room. A redraw with the same words and width does nothing (no layout work).
   const done = useRef<{ text: string | null; width: number }>({ text: null, width: -1 });
   const fit = (el: HTMLElement) => {
+    // offsetHeight is the laid-out size (a card that is still scaling in its entrance animation measures right).
+    const lines = () => el.offsetHeight / (parseFloat(getComputedStyle(el).lineHeight) || 1);
+    // Not laid out yet (no height): nothing to measure, so nothing is remembered; the next redraw or resize fits it.
+    if (!el.offsetHeight) return;
     const room = el.parentElement?.offsetWidth ?? 0;
-    if (done.current.text === el.textContent && Math.abs(done.current.width - room) < 0.5) return;
+    // The same words and room: nothing to do, unless a full-size title wraps (an earlier fit measured before the layout settled).
+    if (done.current.text === el.textContent && Math.abs(done.current.width - room) < 0.5 && (el.style.fontSize !== '' || lines() <= 1.5 || window.innerWidth < FIT_FROM_WIDTH)) return;
     done.current = { text: el.textContent, width: room };
     el.style.fontSize = '';
     if (window.innerWidth < FIT_FROM_WIDTH) return;
-    // offsetHeight is the laid-out size (a card that is still scaling in its entrance animation measures right).
-    const lines = () => el.offsetHeight / (parseFloat(getComputedStyle(el).lineHeight) || 1);
     let size = parseFloat(getComputedStyle(el).fontSize);
     while (lines() > 1.5 && size - 0.5 >= FIT_MIN_PX) {
       size -= 0.5;

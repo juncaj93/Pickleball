@@ -13,6 +13,7 @@ import { capOf } from '../shared/settings';
 import { flatOf, specialFlatOf } from './repo';
 import { withShortGames } from './zip9';
 import { withCardCleanup } from './zip10';
+import { refuseOverLimit } from './unpaidNudge';
 
 export type TokenScope = 'attendance' | 'claim';
 
@@ -149,6 +150,8 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
     if (res.lateFee) await auditLateFeeOwed(ctx.db, r.group.id, r.session.id, r.token.player_id, 'late_drop', ctx.nowIso, 'organizer', specialFlatOf(r.session, settingsOf(r.group)));
     await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? flatOf(r.session, settingsOf(r.group)) : null);
   } else {
+    // Zip 17, Unpaid nudge: a claim link is a sign-up too (off: only its switch row is read).
+    await refuseOverLimit(ctx, r.group, r.session, r.token.player_id);
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
     const res = await joinSession(ctx.db, r.session, r.token.player_id, ctx.nowMs, 'claim_only', settingsOf(r.group));
     await afterTap(ctx, watch);

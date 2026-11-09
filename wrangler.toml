@@ -179,6 +179,12 @@ GAME_DAY_CARD = "on"
 # SECOND_CHANCE_TEST (pretend noon on game day, fake Telegrams) is deliberately NOT here: it exists only for previews, below.
 SECOND_CHANCE = "on"
 
+# Zip 17 "Unpaid nudge" (shared/unpaidNudge.ts): the owe card says "You owe $28" / "$14 each: Nov 3 and Nov 5"; after I'm in with 1 or 2
+# unpaid games an 8 second toast asks them to pay; at 3 or more (UNPAID_LIMIT) the I'm in button is dimmed, a tap opens "You owe $42" with
+# Pay, and the SERVER refuses the player's own sign-up until they pay. The organizer is never blocked; the organizer's own add still works.
+# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Unpaid nudge" (off at ship = nobody), plus a phone opened once
+# with ?nudge=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+UNPAID_NUDGE = "on"
 # Zip 16 "After-game cards" (shared/afterGame.ts): after the organizer finalizes a game, a player whose final price is below what they paid
 # sees one blue card the next time they open the site ("$5 back to your credit", X to close, gone after 7 days); a player who paid a lower
 # price earlier and now owes more sees "You owe $2 more" on the owe card that is already there. Display only. "on" here only ALLOWS it;
@@ -237,6 +243,7 @@ AFTER_GAME_CARD = "on"
 # Preview only (never in [vars] above): ?noontest=on pretends it is noon on game day for the Second Chance cards, and the two Telegrams
 # are a visible fake (shown on Home, never sent).
 SECOND_CHANCE_TEST = "on"
+UNPAID_NUDGE = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"
 

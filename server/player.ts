@@ -15,7 +15,6 @@ import {
   getSession,
   type GroupRow,
   organizerIdOf,
-  pricesFor,
   settingsOf,
   usualDaysOf,
 } from './repo';
@@ -24,7 +23,6 @@ import { newId } from './crypto';
 import { claimSlot, releaseSlot } from './rate';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { lateFeesFor } from './lateFees';
-import { lateFeeKind } from '../shared/lateFees';
 
 /**
  * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." The cleared late fees of THIS player only
@@ -82,7 +80,8 @@ async function lateFeeClearsFor(ctx: Ctx, groupId: string, playerId: string): Pr
   }
   return out;
 }
-import { NO_SEAT_CREDIT, potBalance, seatCredit, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
+import { potBalance, type SeatCredit, usableCredit, visibleEntries } from '../shared/credit';
+import { owedOf, seatOf } from './owed';
 import { cashOutOffer, loadPendingRequests, moneyPicture, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { hiddenGameIdsRead } from './hideGame';
 import { directLoadFor, fewerDb, lastScreenFor } from './speed';
@@ -114,6 +113,8 @@ import { gameDayCardFor, gameDayTestFor } from './gameDay';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
+import { refuseOverLimit, unpaidNudgeFor } from './unpaidNudge';
+import { UNPAID_LIMIT } from '../shared/unpaidNudge';
 
 const SELF_ADDS_PER_HOUR = 3;
 const DAY_MS = 86_400_000;
@@ -194,41 +195,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   let suggestion: GroupView['suggestion'] = null;
   const credit: GroupView['credit'] = { balanceCents: 0, usableCents: 0, pending: null, history: [] };
   // Their own seats' part of the pot: credit used on it, cash paid toward it earlier, and money that came back from it.
-  const mySeat = (sessionId: string): SeatCredit => {
-    if (!me || meIsOrganizer) return NO_SEAT_CREDIT;
-    const r = (rosters.get(sessionId) ?? []).find((x) => x.player_id === me.id);
-    if (!r) return NO_SEAT_CREDIT;
-    return seatCredit(ledger, sessionId, me.id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
-  };
+  const mySeat = (sessionId: string): SeatCredit => seatOf(rosters, ledger, me && !meIsOrganizer ? me.id : null, sessionId);
   if (me) {
-    for (const s of meIsOrganizer ? [] : sessions) {
-      const roster = rosters.get(s.id) ?? [];
-      // An open late fee (shared/lateFees.ts) is owed like a seat that is in: a late drop, a no-show, a game canceled late.
-      const own = roster.find((r) => r.player_id === me.id);
-      const fee = own ? lateFeeKind(own, s) : null;
-      if (s.status === 'canceled' && !fee) continue;
-      const mine = own && (own.status === 'confirmed' || fee) && own.payment_status === 'unpaid' ? own : undefined;
-      const price = mine ? pricesFor(s, roster, settings).get(me.id) : undefined;
-      if (!price) continue;
-      const seat = mySeat(s.id);
-      const used = seat.usedCents + seat.cashCents;
-      if (price.cents - used <= 0) continue;
-      owed.push({
-        sessionId: s.id,
-        startsAt: s.starts_at,
-        endsAt: s.ends_at,
-        amountCents: price.cents - used,
-        creditCents: seat.usedCents,
-        finalized: !!s.finalized_at,
-        reminder: ctx.nowMs >= Date.parse(s.ends_at) + DAY_MS,
-        signupAt: mine!.confirmed_at ?? mine!.claimed_at,
-        ...(fee ? { lateFee: fee } : {}),
-        // Zip 16: paid a lower price before Finalize (that cash is held on the seat) and owes the rest now.
-        ...(afterGame && !fee && s.finalized_at && seat.cashCents > 0 && s.final_price_cents !== null && s.final_price_cents !== undefined
-          ? { more: { finalPriceCents: s.final_price_cents, playedCount: s.final_played_count ?? null } }
-          : {}),
-      });
-    }
+    // What they owe, game by game (server/owed.ts; the Unpaid nudge's sign-up check reads the same function).
+    if (!meIsOrganizer) owed.push(...owedOf(me.id, sessions, rosters, ledger, settings, ctx.nowMs, { afterGame }));
     if (!meIsOrganizer) {
       credit.balanceCents = potBalance(ledger, me.id);
       credit.usableCents = usableCredit(credit.balanceCents, reserved.get(me.id) ?? 0);
@@ -334,6 +304,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // Zip 13, Swap to Alex: the "Go to Admin" pill, only on a phone signed in as the organizer (players: no trip, never there).
     ...((await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
+    // Zip 17, Unpaid nudge: only while on (off: this answer is exactly main's). The screen counts from `owed` with shared/unpaidNudge.ts.
+    ...(me && !meIsOrganizer && (await unpaidNudgeFor(ctx, group.id)) ? { unpaidNudge: { limit: UNPAID_LIMIT } } : {}),
     // Zip 16 "After-game cards": the flag and this player's own credit back from Finalize (last 7 days), only while on.
     ...(afterGame ? { afterGameCard: true as const, afterGame: me && !meIsOrganizer ? afterGameCredits(ledger, sessions, me.id, ctx.nowMs) : [] } : {}),
     // Preview only (PREVIEW_CALM exists only in [env.preview.vars]): lets ?as=Name pick that name on a preview phone. Never on live.
@@ -501,6 +473,8 @@ async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, ac
 
 export async function playerJoin(ctx: Ctx) {
   const who = await actingOn(ctx);
+  // Zip 17, Unpaid nudge (off: only its switch row is read): at 3 unpaid games a new sign-up waits until they pay.
+  await refuseOverLimit(ctx, who.group, who.session, who.playerId);
   const watch = await watchTap(ctx, who.group, who.session, who.playerId);
   const res = await joinSession(ctx.db, who.session, who.playerId, ctx.nowMs, 'auto', settingsOf(who.group));
   await clearLateDrop(ctx.db, who.session.id, who.playerId);

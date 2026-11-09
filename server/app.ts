@@ -151,6 +151,7 @@ route('PUT', '/api/admin/speed-last-screen-switch', admin.setSpeedLastScreenSwit
 route('PUT', '/api/admin/speed-last-screen-admin-switch', admin.setSpeedLastScreenAdminSwitch);
 route('PUT', '/api/admin/seat-dots-switch', admin.setSeatDotsSwitch);
 route('PUT', '/api/admin/game-day-card-switch', admin.setGameDayCardSwitch);
+route('PUT', '/api/admin/unpaid-nudge-switch', admin.setUnpaidNudgeSwitch);
 route('PUT', '/api/admin/after-game-card-switch', admin.setAfterGameCardSwitch);
 // Zip 15 (server/secondChance.ts): Second Chance.
 route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);

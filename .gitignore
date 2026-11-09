@@ -7,3 +7,4 @@ dist
 .data
 e2e/screenshots
 *.tsbuildinfo
+*.orig

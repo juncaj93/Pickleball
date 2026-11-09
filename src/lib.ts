@@ -1,6 +1,7 @@
 import { DIRECT_LOAD_HEADER, LAST_SCREEN_ADMIN_HEADER, LAST_SCREEN_HEADER, SPEED_QUERIES_HEADER } from '../shared/speed';
 import { ZIP13 } from '../shared/zip13';
 import { GAME_DAY_CARD, GAME_DAY_TEST } from '../shared/gameDay';
+import { UNPAID_NUDGE } from '../shared/unpaidNudge';
 import { AFTER_GAME_CARD } from '../shared/afterGame';
 import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
 import { PREVIEW_CALM } from '../shared/previewCalm';
@@ -214,6 +215,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // preview-only "pretend it's noon on game day" (?noontest=on; the server ignores it unless SECOND_CHANCE_TEST is set, only on previews).
   if (gameDayTest(SECOND_CHANCE.link)) headers[SECOND_CHANCE.header] = 'on';
   if (gameDayTest(SECOND_CHANCE_TEST.link)) headers[SECOND_CHANCE_TEST.header] = 'on';
+  // Zip 17 "Unpaid nudge" private test switch for this phone (?nudge=on; ?nudge=off ends it). See server/unpaidNudge.ts.
+  if (gameDayTest(UNPAID_NUDGE.link)) headers[UNPAID_NUDGE.header] = 'on';
   // Preview only (shared/previewCalm.ts): ?alerts=all shows every alert on this phone (?alerts=calm goes back to this zip's cards only).
   if (storageGet('pb_alerts') === 'all') headers[PREVIEW_CALM.header] = 'all';
   // Zip 13 private test switches for this phone (/admin?playersredo=on, ?swapbutton=on, ?adminundo=on; see server/zip13.ts).
@@ -752,7 +755,7 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);

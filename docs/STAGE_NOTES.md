@@ -3539,3 +3539,85 @@ same build stamp). Only the clock Worker (`pickleball-alerts-clock`) is deployed
   only after a real deploy (tests use a local stand-in). docs/DEPLOY.md "After"; docs/RESTORE.md.
 - Fresh review (independent): no blockers. Fixed from it: labels use the copy's own date (two asks in a week never clash); asked copies
   pruned on their own (never push out regular ones); smaller export pieces (D1's 100 KB statement limit is bytes); get never overwrites.
+## Zip 17: Unpaid nudge (UNPAID_NUDGE): the owe card's words, a Please pay toast, no new sign-up at 3 unpaid games - built Sun Nov 8, 2026 (a quiet window); on a preview, waiting for "ship it"
+
+Spec: the "zip 17" brief (`START_HERE.md`, `SITE_RULES.md`, mockups nudge_mock.html / nudge_light_dark.png). NO database schema change, no
+migration. Nothing deployed to production, nothing switched on, no live data read or changed. The switch's full description is its row in
+`docs/FEATURE_SWITCHES.md`. Zip 16 (After-game cards) was NOT on main or live when this was built, so this branch is on main and waits.
+
+### What it does (all behind UNPAID_NUDGE, ships OFF)
+- Rules in one place: `shared/unpaidNudge.ts` (the count, `UNPAID_LIMIT` = 3, `NUDGE_TOAST_MS` = 8 seconds, every line of wording).
+- The count reads the owe card's own numbers: the owed loop moved unchanged from `server/player.ts` into `server/owed.ts` (`owedOf`), used by
+  the player screen and by the sign-up check. An unpaid game = an owed game that is over (ended, finalized, or a canceled-late / no-show fee).
+  Upcoming games do not count; credit used on a seat is already off its amount; an unconfirmed I paid counts as paid (the seat is marked paid
+  at that tap, as the owe card does today); leftover credit in the pot is not counted until they tap Use credit (the owe card's rule).
+- Server (`server/unpaidNudge.ts`): `refuseOverLimit` before a player's own I'm in (`POST /api/sessions/:id/join`: game cards, All games, the
+  Want in card, a reopened Second Chance game all use it) and a claim link (`POST /api/link/act` claim). 409 `unpaid_limit`. Never the
+  organizer, never a seat they already hold; the organizer's own add (`/roster` confirm) and `/me` do not call it.
+- Screen (`src/pages/PlayerHome.tsx`, `src/unpaid-nudge.css`): the owe card's words; the toast (the site's own toast with a second line and
+  the nudge look, `src/ui.tsx`); the dimmed I'm in and the "You owe $42" sheet (the site's own Sheet); the Pay sheet for just the unpaid games
+  (the site's own PaySheet, Venmo note and I paid). A refusal the screen did not expect (an old screen) opens the sheet once fresh data
+  shows it, else shows the server's words.
+
+### Different from the brief or the mock
+- The toast: with Alert cards on (live), the site's other toasts are white cards on a light page. The brief and the mock want this one
+  inverted (dark on light, light on dark), so this toast uses the page's ink color as its background; the others are unchanged.
+- The owe card keeps its "I paid" link under the title (the brief: I paid and Use credit stay); the mock does not draw it.
+- A game that never had a court booked and that nobody marked as played still counts once it ended (the owe card already asks for it today).
+- `?as=<name>` links: Zip 16 built the same kind of link (`?as=Parker`). This branch has its own small one (calm previews only); at the rebase
+  onto Zip 16 it will use Zip 16's and drop this one.
+
+### Preview
+- Made-up players **Vic** (1 unpaid game, $14), **Wren** (2, $28) and **Zoe** (3, $42, blocked); three 7:00 AM games on Tue Nov 3, Wed Nov 4
+  and Thu Nov 5 (seeded Sun Nov 8). Links: `/?as=Vic`, `/?as=Wren`, `/?as=Zoe`.
+- The shared fake database was re-seeded from a throwaway merge of this branch with Zip 16's branch (`claude/new-session-3u9vdw`, not
+  committed anywhere), so the Zip 16 preview kept all its made-up players and cards (checked: Parker's "$5 back", Quinn's "$3 more"). Zip 16
+  already uses Quinn and Rowan, so this zip's players are Vic, Wren and Zoe, and its games start at 7:00 AM (Zip 16's are at 10:00 AM).
+
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing blocking: the moved owed loop matches the old code line for line; every player sign-up path is checked on the server (I'm in and
+  claim links; the organizer's add and `/me` are not); off adds no key, class or markup; `?as=` does nothing on live; no balance leaks.
+- Fixed from it: (1) Pay in the toast and "Pay $42" now follow the owe card's rule (the Pay sheet only while it is on and Venmo is saved,
+  else the owe card scrolls into view); (2) I'm in right after an instant I paid (saves still on their way) waits 1.5 seconds and tries once
+  more instead of showing the refusal; (3) comments now say off still reads the switch row.
+- Left as is (in the report): the owe card can show more than the sheet (the card also lists tonight's game after 8:00 AM and open late-drop
+  fees; the sheet says "for your last 3 games"); with "Ask for payment on every game" off, a no-court game still upcoming that already counts
+  (finalized early or canceled late) is counted by the server but not drawn; a blocked player cannot rejoin a game they dropped late from.
+
+### Tests (Sun Nov 8, 2026)
+- Unit: `tests/unpaid-nudge.test.ts` (24): the count (ended, finalized, fees, upcoming, started, credit), every wording, the server refuses
+  the 3rd and allows 2, signing up right after I paid or Mark paid, credit-paid seat not counted, upcoming never counted, drop out and an
+  existing seat allowed, the organizer's add works for a blocked player, the organizer never blocked, claim links refused, the private link
+  and the kill switch, no other player's balance, the Settings row and History. `tests/speed-queries.test.ts`: the new row is not main's.
+- Full unit suite on the final code: 2412 passed, 1 skipped, 0 failed (143 files); tsc clean; build clean.
+- Browser: `e2e/zip17.cjs` 23/23 (owe card at 390/360/320 light and dark for Vic, Wren and Zoe, one line, no X; Pay; Wren's I'm in, the toast
+  between 7 and 10 seconds, inverse colors, its Pay, tap to close; Vic's "previous game"; Zoe's dimmed I'm in on every card and the Want in
+  card at 390/360/320 light and dark, the sheet's 50 px buttons, no seat taken; the server refusal; Pay $42, I paid, then I'm in works; the
+  ?as= link; the Settings row). `e2e/zip17-off.cjs` 30/30 against main `98a208a` (player homes for Vic, Wren and Zoe at 390/360/320 light
+  and dark, three more homes, I'm in for 2 and 3 unpaid games, Settings apart from the new row, organizer Home light and dark, Players,
+  Money, History, no new key). Organizer Home is compared without the inline size of its shrink-to-fit titles: `useFitTitle`
+  (src/AlertCard.tsx) remembers the width it measured before shrinking, so a later redraw can leave a long title unshrunk, depending on
+  load timing (main against main lands the same; this branch's timing lands the other way on one title). Not changed here.
+- Full `npm run test:e2e` once on the final code, 4 at a time: 48 of 57 clean. Rerun of the 9 others with no edits during the run, next to
+  main: circles, round2, audit-player-flows and admin-motion (alone: 28/28) clean; cancel-reason (2), want-in (1), admin-r2 F4 (1), motion
+  (1, the sheet slide) and run.cjs (10, the "Last call" label found twice) fail the same way on main.
+- Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (re-seeded Sun Nov 8 with the Zip 16 and Zip 17 parts). Switch rows on there:
+  every row the repo records as on live (all of them), plus Game day card, Second Chance, After-game cards (Zip 16) and Unpaid nudge.
+
+### Round 2 (Alex's "ship it", Sun Nov 8, evening): rebase onto Zip 16, the title fit fix, the small preview
+- Alex's answers: the owe card may show more than the sheet (fine); a past game with no court booked counts once over (fine); leftover credit
+  counts only after Use credit (as built).
+- Rebased onto main `6f535d7` (Zip 16 live). `server/owed.ts` takes Zip 16's `afterGame` option (its "owes more" field, same rule as its
+  inline loop). On the owe card Zip 16's "You owe $2 more" words win when present, else the nudge words. Zip 16's `?as=` link is kept; this
+  zip's own was dropped. Settings: Unpaid nudge sits above After-game cards (25 rows above the group).
+- Title shrink-to-fit fix (`src/AlertCard.tsx` `useFitTitle`, live for everyone, no switch, look only): a measurement taken before the title is
+  laid out is never remembered, and a full-size title that wraps is fitted again. Organizer Home now matches main's titles exactly.
+- Owe line: two games on one day read "Nov 8 (2 games)", never the same date twice (fresh review).
+- Small preview (`scripts/preview-world-small.ts`, `npm run db:seed:preview`): only Alex, Vic, Wren, Zoe, Quinn, Rowan, Parker, Reese, Sage
+  and Christopher Vanderberg; what each is for is the table in `docs/PREVIEW_FAKE_DB.md`. The big world stays for the local browser tests.
+  Switch rows like live (read with the read-only PIN, 7:05 PM: every row on) plus Unpaid nudge.
+- Fresh review of the rebase (independent): nothing harmful; fixed: Quinn's "$3 more" card hidden by extra debts in the small world, the
+  repeated date, two `.orig` files from the rebase (removed, `*.orig` ignored), docs; Vic, Wren and Zoe never get a fee in the small world.
+- Tests: unit 2433 passed on the rebased code; 2434 passed, 0 failed on the final code (145 files); tsc and build clean. Full browser suite once, 3 at a time:
+  53 of 58 clean; zip16 (the newest-row check, updated) 28/28 alone; zip17-off 30/30 against main `6f535d7` (History times compared to the
+  minute); run.cjs alone 219/229, the same 10 "Last call" checks as main; cancel-reason (2), want-in (1), admin-r2 F4 (1) as on main.

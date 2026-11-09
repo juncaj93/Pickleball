@@ -20,7 +20,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { buildSeed } from './seed-preview-world';
+import { buildSmallPreview } from './preview-world-small';
 
 // ---- the two databases, spelled out so a typo can never point this at the real one --------------------
 const PREVIEW_DB_NAME = 'pickleball-preview';
@@ -59,7 +59,8 @@ async function main() {
   const outFile = outIdx >= 0 ? args[outIdx + 1] : null;
 
   console.log('Building the fake world on a throwaway in-memory copy...');
-  const { sql, summary } = await buildSeed(Date.now(), { zip13: true, preview: true });
+  // The SMALL world (Alex, Nov 8): the fixed names of docs/PREVIEW_FAKE_DB.md, nothing else (scripts/preview-world-small.ts).
+  const { sql, summary } = await buildSmallPreview(Date.now());
   for (const s of summary) console.log('  - ' + s);
 
   if (outFile) writeFileSync(outFile, sql);
