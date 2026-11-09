@@ -3846,3 +3846,38 @@ Admin only, display only. No database change, no new cost. Branch `claude/new-se
 - `e2e/zip23-off.cjs` (17, needs `MAIN_DIR`): with the switch OFF, the old Totals screen (6 sizes, two months), Settings (apart from the row), Home, Games, Players, History and the money answers equal main byte for byte; with it ON the Games tab and Home still equal main.
 - Older newest-row checks (`money-rework.cjs`, `zip16.cjs`) and `speed-queries` know the new top row.
 - Independent math review (a fresh reviewer): no wrong figure; two small fixes made (tiny credit label, a stale-rows race in Month by month); two notes kept above.
+
+## Zip 22: cleanup (the always-failing browser tests, the folded TONIGHT tile) - built Mon Nov 9, 2026
+
+Spec: the "zip 22" brief (`START_HERE.md`, `SITE_RULES.md`). No database change, no migration, no new switch, no new cost. Site change: one CSS
+value (admin only). Built on main `cc2ccb7` (Zip 18 and Zip 23 live).
+
+### Item 1 (games that end after midnight): built, then DROPPED (Alex, after the preview, Mon Nov 9)
+- Cause found: Edit game and Add game put the End on the start's date, so 11:00 PM to 1:00 AM became 1:00 AM that same morning and the
+  server refused it. A fix was built and reviewed (first PR #112 version), but the venue closes at 10:00 PM (7:00 PM on Sunday), so no game
+  can run past midnight, and a "Next day" End list would invite bookings that cannot happen. Edit game and Add game are exactly main's.
+
+### Item 2: the browser tests that always failed (all outdated tests; no site change)
+- `run.cjs` (10): the checks found the Settings box by the words "Last call", which also name the newer "Last call texts Still in?"
+  switch; they now find the number box.
+- `cancel-reason.cjs` (2) and `want-in.cjs` (1): the server clock was pinned, the browser's was not, so the page (it groups weeks by the
+  phone's clock) and View as's demo copy saw today's date; they only passed before Thu Nov 5, 2026. Both now use `e2e/fixed-clock.cjs`.
+- `admin-r2.cjs` F4 (1): used the real clock, so "only THIS WEEK starts open" failed Friday to Sunday (no games left this week). Pinned to
+  Mon Nov 9, 2026, 12:00 PM.
+- `motion.cjs` (1): passes alone on main and here (22/22); it failed only under parallel load in earlier zips.
+- Before (main `eb17ab3`, alone, Mon Nov 9 morning): run.cjs 219/229, cancel-reason 6/8, want-in 3/4. After: 229/229, 8/8, 4/4; admin-r2 27/27.
+
+### Item 3: the folded TONIGHT tile on admin Home
+- Real screenshots at iPhone width (390, 3x), light and dark: TONIGHT at 7.5 px had about 5.6 px each side inside the 48 px tile's border,
+  and the strip's rounded corners made it look pressed. Compared 7, 6.75, 6.5 px and a 50 / 52 px tile: 6.75 px (`src/zip7.css`, one
+  value) gives about 7.3 px each side and stays readable; the tile, TOM and the plain tiles are unchanged. Alex (Mon Nov 9): still a bit
+  tight on his iPhone, minor, ship as is.
+- `e2e/zip22.cjs` (8): 390/375/360/320, light and dark: at least 7 px clear each side, centered, other folded tiles unchanged, nothing sideways.
+
+### Tests (Mon Nov 9, 2026, final code on main `cc2ccb7`)
+- Unit: 2537 passed, 1 skipped, 0 failed (151 files); tsc and build clean.
+- Full `npm run test:e2e` once, 4 at a time on their own ports (12:35 to 1:12 PM): 61 of 61 scripts clean, 2196 checks passed, 0 failed
+  (run.cjs 229/229, cancel-reason 8/8, want-in 4/4, admin-r2 27/27, motion 22/22, zip22 8/8).
+- Off-equals-main: the site built from this branch and from main differ only in that one CSS value (and the build time stamp); no server
+  code changed. Fresh reviewer skipped for this version (look only, one value, under 150 lines; the review of the dropped item 1 is moot).
+- Preview: https://preview-zip22.pickleball-club-9h0.pages.dev (refreshed with this code; fake database not re-seeded).
