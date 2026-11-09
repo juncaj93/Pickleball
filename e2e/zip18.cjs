@@ -458,10 +458,15 @@ async function main() {
           for (const tab of ['Players', 'Money', 'History', 'Settings']) {
             await page.locator('.tabbar button', { hasText: tab }).evaluate((x) => x.click());
             if (tab === 'Settings') {
-              for (const sm of await page.locator('details:not([open]) > summary').all()) await sm.click().catch(() => {});
-              // Each section slides open: measured once every one has its full height.
-              await page.waitForFunction(() => [...document.querySelectorAll('details[open]')].every((d) => d.scrollHeight <= d.clientHeight + 1 && !d.getAnimations({ subtree: true }).length), null, { timeout: 5000 }).catch(() => {});
-              await page.waitForTimeout(300);
+              // Each section opened in turn and checked open (opening one can close another), once it has finished sliding open.
+              const n = await page.locator('details > summary').count();
+              for (let k = 0; k < n; k++) {
+                const d = page.locator('details').nth(k);
+                if (!(await d.evaluate((x) => x.open))) await d.locator(':scope > summary').click().catch(() => {});
+                await page.waitForFunction((x) => !x.getAnimations({ subtree: true }).length, await d.elementHandle(), { timeout: 3000 }).catch(() => {});
+                await look(`Settings section ${k + 1}`);
+              }
+              continue;
             }
             await look(tab);
           }

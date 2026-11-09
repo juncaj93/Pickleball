@@ -23,6 +23,9 @@ function findClipping(opts) {
   };
   const shown = (el) => {
     if (!el.isConnected) return false;
+    // The inside of a closed section is not drawn (only its summary line is).
+    const closed = el.closest('details:not([open])');
+    if (closed && !el.closest('details:not([open]) > summary')) return false;
     if (el.closest('.sr-only, [aria-hidden="true"] .sr-only')) return false;
     const cs = getComputedStyle(el);
     if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) return false;
