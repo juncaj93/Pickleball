@@ -28,7 +28,8 @@ export function switchEnvOf(env: object): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (k === 'SANDBOX' || !NAME.test(k) || typeof v !== 'string' || !SWITCH_VALUE.test(v.trim())) continue;
-    out[k] = v.trim().toLowerCase();
+    // Exactly as written: a few checks compare case-sensitively (GO_LINKS), so the copy must read what the live site reads.
+    out[k] = v;
   }
   return out;
 }

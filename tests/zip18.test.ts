@@ -161,7 +161,7 @@ describe('Zip 18: GET /api/admin/demo-extras', () => {
     expect(r.data.taskLog.some((t: any) => t.task === 'card_cleanup_on' && t.session_id === null && t.kind === 'mark')).toBe(true);
     expect(r.data.env.CARD_CLEANUP).toBe('on');
     expect(r.text).not.toMatch(/secret-token|55512345|"abc"|SITE_URL|TELEGRAM|SETUP_TOKEN|ORGANIZER_READONLY_PIN/);
-    for (const v of Object.values(r.data.env)) expect(['on', 'off']).toContain(v);
+    for (const v of Object.values(r.data.env)) expect(['on', 'off']).toContain(String(v).trim().toLowerCase());
     expect(w.snapshot()).toEqual(before);
     // A player's phone, a made-up cookie, nobody: refused.
     expect((await (await phoneOf(w, 'Vic')).call('GET', '/api/admin/demo-extras')).status).toBe(401);
@@ -169,7 +169,7 @@ describe('Zip 18: GET /api/admin/demo-extras', () => {
   }, 120_000);
 
   it('switchEnvOf keeps exactly the on/off settings', () => {
-    expect(switchEnvOf({ A_B: 'on', C: ' OFF ', D: 'onn', e_lower: 'on', F: 1, G: { on: true }, SANDBOX: 'on', PIN: '123456' })).toEqual({ A_B: 'on', C: 'off' });
+    expect(switchEnvOf({ A_B: 'on', C: ' OFF ', D: 'onn', e_lower: 'on', F: 1, G: { on: true }, SANDBOX: 'on', PIN: '123456' })).toEqual({ A_B: 'on', C: ' OFF ' });
   });
 
   it('a server from before Zip 18 (no extras): the copy still starts, every switch off there, as before', async () => {

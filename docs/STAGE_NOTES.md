@@ -3640,3 +3640,56 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
 - Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (main `8a10eba`), the fake database re-seeded ONCE at 7:42 PM with the small
   cast: 10 players, 63 games. Checked: Vic $14 / "For Tue, Nov 3", Wren $28, Zoe $42 (every I'm in dimmed), Quinn "You owe $3 more", the
   Who are you? list is the 10 names.
+
+## Zip 18: cleaner headers, Alex swap in the title, "View as" shows the live switches - built Sun Nov 8, 2026 (evening); on a preview, waiting for "ship it"
+
+Spec: the "zip 18" brief (`START_HERE.md`, mockups headers_mock.html / headers_light_and_dark.png). One PR. NO database schema change,
+no migration, no new switch (the header is look only, View as is a fix). Nothing deployed to production, nothing switched on, no live
+data read or changed.
+
+### Item 1: headers (live at deploy, no switch)
+- Player page (`src/pages/PlayerHome.tsx`): the small group-name label over the name ("PICKLEBALL BROS") is gone for everyone (also on
+  "Who are you?" and "Link not working"); `TopBar` already centers a title with no label on the logo tile. The sun button and the date
+  tile do not move (`e2e/zip18-off.cjs` measures them against main).
+- The organizer's own player page: the title "Alex" + the gray swap icon is ONE button (`TopBar` `onTitle`, the same one Admin uses),
+  then "not you?". It goes to /admin: no PIN while this phone's organizer sign-in is good, else the normal PIN screen.
+- Who gets it (`server/player.ts`): `goToAdmin` now needs the phone signed in as the organizer with the real PIN (as before) AND the
+  page showing the organizer's own name AND not View as. Before, it was on every player page of the organizer's phone. So the organizer's
+  phone showing another name ("not you?" picked Vic) has no swap; /admin by hand still works.
+- The bottom "Go to Admin" pill is gone (the player page and the View as page; `src/swap-button.css` lost its rules; Admin's
+  `swapAtView` latch is gone).
+- Christmas skin: the code has none yet (only the staged `public/logo-xmas.png`). `e2e/zip18.cjs` puts that logo in the tile at 320 px,
+  light and dark, Vic and Alex: the header holds. Nothing in the tests or the logo relied on the label.
+
+### Item 2: View as shows what the player really sees
+- Cause: View as answers from a throwaway copy in the organizer's tab (`src/demo`), built from the backup file. The backup leaves out
+  `task_log`, where every switch's "on for everyone" row lives, so every switch read OFF in the copy: the old look (the Want in Yes/No
+  card, "5 in", "Court booked", no seat dots). (Zip 13 already noticed this for the swap pill and latched it by hand.)
+- Fix: `GET /api/admin/demo-extras` (`server/zip18.ts`, organizer only, real or read-only PIN, two reads, writes nothing) returns every
+  `task_log` row of the group and every setting of the deployment whose value is exactly "on" or "off" (never a secret: tokens and PINs
+  are never "on"/"off"). `src/demo/load.ts` fetches it next to the backup; `src/demo/sandbox.ts` puts the rows in the copy and the
+  values in its env. Any future switch stored the same way comes along with no View as edit. A server without the address (a rollback)
+  gives 404: the copy starts as before.
+- Removed three old shortcuts that forced a feature ON in the copy whatever Settings said (`server/payAlways.ts`, `server/motion.ts`,
+  `server/timeShift.ts`: `if (ctx.env.SANDBOX) return true`). They never ran on the live site for players; now the copy follows the rows.
+- Same page component: View as already used the player page itself (`PlayerHome`); only the data was different.
+- This phone's own private test links (?nudge=on and so on) still apply in View as on that phone, as on /?as= on that phone.
+- View as taps (Still in, I'm in, I paid, Drop out...) save only in the copy in that tab, and the live site refuses a View as save with
+  403 "Demo only" anyway. A Still in tapped in View as never reached a player's real answer, before or after this zip. Not changed.
+- Side effect, wanted: "Pretend it's..." uses the same copy, so its organizer screens now also see the real switch rows and card marks.
+
+### Tests (Sun Nov 8, 2026)
+- Unit: `tests/zip18.test.ts` (10): on the small preview cast with every live switch, View as = that player's own phone key for key
+  for all 10 names (Vic, Wren, Zoe included); the switches really on in View as (and all off without the extras, the old bug); a
+  Settings row off and a kill switch "off" follow into View as; the organizer's own name in View as has no swap; every View as tap leaves
+  the real database identical, table by table; the live site refuses a View as save; demo-extras is organizer only, returns no secret,
+  writes nothing; a server before Zip 18 still starts the copy; the swap only on the organizer's own name. Updated: three older tests
+  that pinned the removed shortcuts (`pay-always` S6, `motion`, `motion-settings` M8) now pin "follows the rows".
+- Full unit suite on the final code: 2466 passed, 1 skipped, 0 failed (149 files); tsc clean; build clean.
+- Browser: `e2e/zip18.cjs` 43/43 (player header Vic, Alex header, Admin header at 390/360/320 light and dark; not you? works; the swap
+  goes to Admin with no PIN, the PIN screen when signed out; nobody else sees it; the Christmas logo; View as = /?as= for Vic, Wren, Zoe,
+  Parker, Quinn in light and dark, calm and ?alerts=all; the old look gone; View as writes nothing (no save request leaves the page and
+  the database file is identical after I'm in and Still in); no pill in View as). `e2e/zip18-off.cjs` 28/28 against main `52803c2`
+  (player pages for Vic, Wren, Zoe, Quinn at 390/360/320 light and dark identical apart from the label, sun button and date tile at the
+  same spot, the player answer byte for byte; the organizer's own page identical apart from the label, title button and pill; every
+  organizer screen identical, the Admin header included). `e2e/zip13.cjs` swap checks updated for the removed pill.
