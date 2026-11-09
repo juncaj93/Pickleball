@@ -38,11 +38,22 @@ function findClipping(opts) {
   };
   const transparent = (c) => !c || c === 'transparent' || /rgba\([^)]*,\s*0\)$/.test(c);
   /** A box of its own: something drawn with an edge the text has to stay inside. */
+  // The color drawn behind an element (its nearest ancestor with a background of its own).
+  const behind = (el) => {
+    for (let a = el.parentElement; a; a = a.parentElement) {
+      const c = getComputedStyle(a).backgroundColor;
+      if (!transparent(c)) return c;
+    }
+    return 'rgb(255, 255, 255)';
+  };
+  /** A box of its own: something with an edge the text has to stay inside (a border, or a background unlike what is behind it). */
   const isBox = (el) => {
-    if (el.matches('button, a.btn, a.ac-btn, .ac-btn, .btn, .pill, .chip, .pchip, .tile, .ptile, .today, .date-tile, .gd-btn, .r2-book, [class*="pill"], [class*="tile"]')) return true;
     const cs = getComputedStyle(el);
     const border = ['Top', 'Right', 'Bottom', 'Left'].some((s) => parseFloat(cs[`border${s}Width`]) > 0 && cs[`border${s}Style`] !== 'none');
-    return border || !transparent(cs.backgroundColor);
+    const fill = !transparent(cs.backgroundColor) && cs.backgroundColor !== behind(el);
+    // Tiles and pills always count (their edge may be a shadow or a gradient); buttons and links only when they draw an edge.
+    if (el.matches('.pill, .chip, .pchip, .tile, .ptile, .today, .date-tile, .r2-book, [class*="pill"], [class*="tile"]:not([class*="tilecol"])')) return true;
+    return border || fill || (cs.backgroundImage && cs.backgroundImage !== 'none');
   };
   const hidesOverflow = (cs) => /hidden|clip/.test(cs.overflowX) || /hidden|clip/.test(cs.overflowY);
   const onPurpose = (el) => {
@@ -179,6 +190,46 @@ function findClipping(opts) {
       const h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
       if (w > 2 && h > 2) out.push(`overlap: ${label(a)} at ${fmt(x)} and ${label(b)} at ${fmt(y)}`);
     }
+  // 6 (Zip 18 round 3): text inside a tile or a tag keeps a clear margin (MARGIN px) from the tile's inner edge, the rounded corners
+  // included: the TONIGHT strip's word touching the tile's curved corner looked cut off to Alex although nothing was outside the tile.
+  // The text box is taken a little inside the font's own box (the space above capitals and below the baseline is not ink).
+  const MARGIN = (opts && opts.margin) || 2;
+  const holders = '.tile, .ptile, .r2m-tile, .today, .extra-tag, .extra-flag, .hv2-pill, .pill, .pchip, .z9-len-pill, .holiday-pill';
+  const tw = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = tw.nextNode(); n; n = tw.nextNode()) {
+    if (!n.textContent.trim()) continue;
+    const el = n.parentElement;
+    if (!el || skip(el) || !shown(el)) continue;
+    if (root !== document.body && !root.contains(el)) continue;
+    const holder = el.closest(holders);
+    if (!holder || !shown(holder)) continue;
+    const cs = getComputedStyle(holder);
+    const hr = holder.getBoundingClientRect();
+    const bt = parseFloat(cs.borderTopWidth) || 0;
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const in_ = { left: hr.left + bl, right: hr.right - (parseFloat(cs.borderRightWidth) || 0), top: hr.top + bt, bottom: hr.bottom - (parseFloat(cs.borderBottomWidth) || 0) };
+    const rad = Math.max(0, Math.min(parseFloat(cs.borderTopLeftRadius) || 0, (in_.right - in_.left) / 2, (in_.bottom - in_.top) / 2) - bl);
+    const fs = parseFloat(getComputedStyle(el).fontSize) || 12;
+    const range = document.createRange();
+    range.selectNodeContents(n);
+    for (const r0 of range.getClientRects()) {
+      if (r0.width < 0.5) continue;
+      const r = { left: r0.left, right: r0.right, top: r0.top + fs * 0.2, bottom: r0.bottom - fs * 0.2 };
+      let worst = Infinity;
+      for (const [x, y] of [[r.left, r.top], [r.right, r.top], [r.left, r.bottom], [r.right, r.bottom]]) {
+        // Distance from this corner of the text to the holder's inner edge (negative: outside it).
+        let d = Math.min(x - in_.left, in_.right - x, y - in_.top, in_.bottom - y);
+        const cx = x < in_.left + rad ? in_.left + rad : x > in_.right - rad ? in_.right - rad : null;
+        const cy = y < in_.top + rad ? in_.top + rad : y > in_.bottom - rad ? in_.bottom - rad : null;
+        if (cx !== null && cy !== null) d = Math.min(d, rad - Math.hypot(x - cx, y - cy));
+        worst = Math.min(worst, d);
+      }
+      if (worst < MARGIN - 0.25) {
+        out.push(`text touches its tile edge: "${n.textContent.trim().slice(0, 20)}" only ${worst.toFixed(1)} px from the inside edge of ${label(holder)} (needs ${MARGIN})`);
+        break;
+      }
+    }
+  }
   // 4b: a sliding highlight sits exactly on the chosen choice (the court switch: Not booked | Waitlist | Booked).
   for (const sw of root.querySelectorAll('.court-switch')) {
     const glide = sw.querySelector('.cs-glide');

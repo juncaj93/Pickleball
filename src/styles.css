@@ -383,7 +383,8 @@ a {
   box-sizing: border-box;
   min-width: 42px;
   min-height: 44px;
-  padding: 0 5px;
+  /* Zip 18 round 3: 3 px above and below, so with big text the weekday never touches the tile's top edge (no change at normal text). */
+  padding: 3px 5px;
   border-radius: 10px;
   background: var(--surface);
   border: 1.5px solid var(--tile-line);
@@ -4544,7 +4545,8 @@ dialog.sheet[open]::backdrop {
   --sw-booked-bg: #1e6a48;
   --sw-booked-fg: #ffffff;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  /* Zip 18 round 3: the small tile is 48 px (was 44) so TONIGHT keeps a clear margin inside the tile's rounded border. */
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   /* Zip 18 round 2: at least 3.4rem (the same as before for a plain tile) and taller when something needs it (a TOM / TONIGHT tile,
@@ -4579,7 +4581,7 @@ dialog.sheet[open]::backdrop {
 }
 /* The small date tile, centered. */
 .hv2-short .tile {
-  width: 44px;
+  width: 48px;
   box-sizing: border-box;
   align-self: center;
   padding: 3px 0 4px;

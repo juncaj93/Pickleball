@@ -430,6 +430,7 @@ async function main() {
   const SIZES = [
     { name: 'normal', css: '' },
     { name: 'Safari text 125%', css: 'html { zoom: 1.25 }' },
+    { name: 'Safari text 150%', css: 'html { zoom: 1.5 }' },
     { name: 'text 150%', css: 'html { font-size: 150% !important; } body { font-size: 25.5px !important; }' },
   ];
   for (const scheme of ['light', 'dark'])
@@ -478,6 +479,29 @@ async function main() {
           assert(found.length === 0, `${found.length} problems: ${found.slice(0, 6).join(' | ')}`);
         });
       }
+
+  // Round 3: the player screens too (every tile kind: TONIGHT and TOMORROW strips, plain and "mine" tiles, the EXTRA tag, the header date
+  // tile, the game-day buttons), with the same checker, the 2 px inner margin rule included.
+  for (const scheme of ['light', 'dark'])
+    for (const width of [390, 360, 320])
+      for (const size of SIZES)
+        await check(`player screens fit, ${width} px, ${scheme}, ${size.name}: no text, tile, circle or button cut off, overlapping, outside its box or touching a tile edge`, async () => {
+          const found = [];
+          const kinds = new Set();
+          for (const who of ['Parker', 'Sage']) {
+            const { ctx, page } = await phone({ width, scheme, alerts: 'all' });
+            await openAs(page, who);
+            if (size.css) await page.addStyleTag({ content: size.css });
+            const more = page.locator('[data-later-toggle]');
+            if (await more.count()) await more.first().click();
+            await page.waitForTimeout(400);
+            for (const k of await page.evaluate(() => [...document.querySelectorAll('.ptile')].map((t) => (t.classList.contains('day-tonight') ? 'TONIGHT' : t.classList.contains('day-tomorrow') ? 'TOMORROW' : 'plain')))) kinds.add(k);
+            for (const p of await page.evaluate(findClipping, { root: 'body' })) found.push(`${who}: ${p}`);
+            await ctx.close();
+          }
+          assert(kinds.has('TONIGHT') && kinds.has('TOMORROW') && kinds.has('plain'), `tile kinds seen: ${[...kinds].join(',')}`);
+          assert(found.length === 0, `${found.length} problems: ${found.slice(0, 5).join(' | ')}`);
+        });
 
   // ---------------- Round 2: the court map's chosen court glows, no light sweep ----------------
   for (const scheme of ['light', 'dark'])

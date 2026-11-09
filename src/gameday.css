@@ -102,13 +102,16 @@ html[data-game-day] .schedule > .sched.gd .dots.one-row {
 .gd-btns {
   position: relative;
   display: flex;
+  /* Zip 18 round 3: with Safari's bigger text the two buttons go one under the other rather than "Directions" running out of its button. */
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 1px; /* + the body's 5 px gap = 6 px under "You're in" */
 }
 .gd-btn {
   position: relative;
   flex: 1 1 0;
-  min-width: 0;
+  min-width: -webkit-fit-content;
+  min-width: fit-content;
   height: 30px;
   display: inline-flex;
   align-items: center;

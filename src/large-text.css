@@ -451,7 +451,7 @@ html[data-kb] body:has(.tabbar) dialog.sheet {
    count and names wrap instead of being cut off. */
 @container pbwide (max-width: 17rem) {
   .hv2-short {
-    grid-template-columns: 44px minmax(0, 1fr);
+    grid-template-columns: 48px minmax(0, 1fr);
     grid-template-areas:
       'tile main'
       'side side';

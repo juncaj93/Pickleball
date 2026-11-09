@@ -647,8 +647,19 @@ html[data-alert-cards] .vr-card-ac .vr-head {
   gap: 10px;
 }
 html[data-alert-cards] .vr-card-ac .vr-title-wrap {
-  flex: 1 1 auto;
+  /* Zip 18 round 3: never squeezed below about 7rem (a word or two), so "haven't" never breaks into pieces: at very big text on a
+     narrow phone the Remind button drops under the title instead. */
+  flex: 1 1 7rem;
   min-width: 0;
+}
+html[data-alert-cards] .vr-card-ac .vr-head {
+  flex-wrap: wrap;
+}
+html[data-alert-cards] .vr-card-ac .vr-head > .ac-btn {
+  margin-left: auto;
+}
+html[data-alert-cards] .vr-card-ac .vr-title {
+  overflow-wrap: break-word;
 }
 /* Zip 18 round 2: Remind keeps its full width; the title beside it wraps instead. */
 html[data-alert-cards] .vr-card-ac .vr-head > .ac-btn {
