@@ -3640,3 +3640,53 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
 - Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (main `8a10eba`), the fake database re-seeded ONCE at 7:42 PM with the small
   cast: 10 players, 63 games. Checked: Vic $14 / "For Tue, Nov 3", Wren $28, Zoe $42 (every I'm in dimmed), Quinn "You owe $3 more", the
   Who are you? list is the 10 names.
+
+## Zip 21: Error alerts (ERROR_ALERTS): a short Telegram to Alex when the clock, the backup or the database fails, or the clock stopped - built Sun Nov 8, 2026 (night, a quiet window); LIVE with ERROR_ALERTS OFF
+
+Spec: the "zip 21" brief (`START_HERE.md`, `SITE_RULES.md`). No schema change, no migration, 0 database writes. The switch's full
+description is its row in `docs/FEATURE_SWITCHES.md`. PR #107 merged as `eb17ab3`.
+
+### What it does (all behind ERROR_ALERTS, ships OFF)
+- Rules and words: `shared/errorAlerts.ts` (one pure rule book, `boxStep`). Site side: `server/errorAlerts.ts`. Clock Worker: `worker/cron.ts`
+  `report()`. Memory: `worker/box.ts`, a new Worker `pickleball-error-box` with one free SQLite Durable Object (no public address, no
+  secrets), bound to the site as `ERROR_BOX` (production only; previews have none).
+- 1: the tick fails (`server/tasks.ts` wraps `cronTick`; job "game check" or "smart alerts"); the clock Worker also reports "no answer at all".
+- 2: the weekly backup failed or INCOMPLETE (the clock Worker posts `/api/cron/report`); 1 backup message a day (it retries hourly).
+- 3: the database's free daily limit (at once), 3 database errors in 10 minutes, or 5 server errors in 10 minutes (memory only, per Worker run).
+- 4: no tick reached the site for 20 minutes to 12 hours (said on the next tick; longer = the alerts were paused, start fresh).
+- Limits: 1 an hour per kind, 6 a day (Eastern), the rest said once as "N more errors in the last hour". Failed sends logged once.
+- The switch row always wins: ticks tell the box (on: every tick; off: about once an hour), so a restore can't leave alerts on.
+- While off, the one difference from main: the tick reads the switch row in its same single trip (7 questions, not 6) and tells the box "off"
+  about once an hour after its answer. Nothing a person sees changes.
+
+### Different from the brief
+- "Last sent" is not in KV: the Cloudflare token here has no KV permission. The Durable Object is free, outside the database's limits count
+  as far as Cloudflare's docs say (not confirmed either way), and runs one request at a time (no races in the limiter).
+- The private per-phone test link is the TEST button (an alert goes to Telegram, not a phone screen).
+- Branch name is the session's assigned branch (`claude/new-session-np0md5`); the PR title is "🎾21.erroralert".
+
+### Tests (Sun Nov 8, 2026, final code)
+- Unit: 2507 passed, 1 skipped, 0 failed (149 files); `tsc -b` clean. New `tests/error-alerts.test.ts` (51).
+- Browser: `e2e/zip21.cjs` 8/8 (the row and TEST button at 390/360/320, light and dark); `e2e/zip21-off.cjs` 18/18 against main `52803c2`.
+  Full suite once, 4 at a time: 52 of 59 clean. Fixed for the new top row: money-rework (9), zip16 (row order). Same as main: run.cjs
+  (the same 10 "Last call" checks), cancel-reason (2), want-in (1), admin-r2 F4 (1). circles failed 2 under load, 18/18 alone.
+- Fresh independent review: no blockers; its five fixes are in `ce0d9f1`.
+
+### Deploy (Sun Nov 8, 2026, 11:08 PM Eastern, quiet window, Alex's OK) - LIVE with ERROR_ALERTS OFF
+- Before: main `eb17ab3` (nothing from Zip 18 merged yet); live site `854a346f` = `8a10eba` (main since: Zip 21 only); clock `26aa96ec`.
+  Unit on main: 2507 passed, 1 skipped, 0 failed (149 files).
+- Restore points (10:26 PM): SQL export saved as `export-20261109042447` in pickleball-backups (checked against the file); Time Travel
+  bookmark `00000c49-00000000-0000511e-4d22c28b9678b5ba6f7ffa4c9fb8d3db`. Integrity checks: all 21 read 0 before and after. No migration.
+- Deployed: error box `61e964e5-624a-4aa6-826a-f9b010d65847`; site production `c8176a1b-4380-4ad8-b4cf-03e7afc94389` = main `eb17ab3`
+  (a first try from a detached checkout went to a PREVIEW, `6feb4737`, branch "HEAD": fake database, no Telegram, harmless; deploy from a
+  detached checkout needs `npm run deploy -- --branch main`); clock Worker `6b12b5f8-8d3f-4356-a493-97cd92af03d3` (schedule */5 unchanged).
+- ROLLBACK: Pages deployment `854a346f-66cd-4d69-b3a2-dd3623afd33c`; clock
+  `npx wrangler rollback 26aa96ec-8fb8-41a0-85a7-247db5415e86 --config worker/wrangler.toml`. No data step needed.
+- Read-only live check (backup address; the custom domain is blocked by this sandbox's proxy; sign in and reads only, nothing tapped):
+  site and /api/status 200, View only, Error alerts switch OFF, the TEST button and the switch row in the live code, Money and Activity
+  200, 12 games, 38 switch rows on.
+- Clock after: the 11:10, 11:15 and 11:20 PM ticks ran on `6b12b5f8`, success, 0 errors, 1 outgoing request each (the knock, no report),
+  1.4 to 2.1 ms CPU. Site Functions 0 errors. The box got 1 request per tick (the "off" note; each tick ran on a fresh copy of the
+  site, so it is every tick, not hourly): about 288 a day while off, free, no database writes.
+- D1's exact "daily limit" wording is unconfirmed: if it does not say "limit", it shows as "database errors on the site" (3 in 10 minutes).
+- Alex's answers: error alerts follow only their own switch (not "Telegram alerts to me"). Alex taps the TEST button and switches it on.
