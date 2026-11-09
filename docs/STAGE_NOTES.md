@@ -3892,12 +3892,16 @@ Admin only. No database change, no new cost, no money logic changed. Branch `cla
 - Settings > Schedule keeps its time boxes: with the switch on, the message "The venue is open 8:00 AM to 10:00 PM (Sundays 8:00 AM to 7:00 PM). Pick times inside those hours." shows under the boxes and Save is off while the times are outside the hours. (Chosen over reusing the picker: it is the smaller and safer change.)
 
 ### Pricing check (the code is the truth; what the money code does for each length)
-- Length is `gameMinutes(startsAt, endsAt)` (End minus Start). Cancel-by is start minus 12 hours for every length. The calendar file writes the game's own end time for every length. The texts say the length in words ("2.5 hours") for every length.
-- 1.5 hr: its own row in `GAME_LENGTHS` (`shared/gameLength.ts`, with SHORT_GAMES on, which it is on live): $11 up front, final 11/9/7/6/5/4/4 for 4 to 10 in, court $36. Fully handled.
-- 2 hr: Settings > Money: $14 up front, floor(4 x 14 / N) = 14/11/9/8/7/6/5, court $48 (Typical court cost). Fully handled.
-- 1 hr, 2.5 hr, 3 hr: NO row. They are priced like a normal 2 hour game: $14 up front, the 2 hour final table, and the venue cost on Money > Totals is the $48 typical cost unless a real cost is typed in (a 2.5 hour court is $60, a 3 hour $72). Not fully handled, so per the brief the picker offers ONLY 1.5 hr and 2 hr (`PICKER_MINUTES`); no money logic was changed. To offer 2.5 and 3 hr later: add their rows (Alex to OK the prices; the mock's $18 / $21 were examples), then add the minutes to `PICKER_MINUTES`.
-- The prices under the length buttons come from `gamePrice()` (never typed in). With SHORT_GAMES off a 1.5 hr button honestly says $14.
-- An existing game of any other length (1 hr, 2.5 hr) opens in Edit game with its own times as they are and no length picked; only a changed start or length applies the rules.
+- Length is `gameMinutes(startsAt, endsAt)` (End minus Start). Cancel-by is start minus 12 hours for every length. The calendar file writes the game's own end time for every length. The texts say the length in words for every length.
+- First finding (before Alex's OK): only 1.5 hr and 2 hr had price rows. 1 hr, 2.5 hr and 3 hr were priced like a 2 hour game ($14 up front, the 2 hour final table and credit, court $48 on Money > Totals instead of $60 / $72). So the picker first shipped with only 1.5 and 2 hr and no money logic changed.
+- Alex then OKed full support (Mon Nov 9, afternoon): two new rows in `GAME_LENGTHS`, same shape as the 1.5 hour row.
+  - 1.5 hr (Short games): $11 up front, final 11/9/7/6/5/4/4 for 4 to 10 in, court $36. Handled.
+  - 2 hr (Settings > Money): $14, floor(4 x 14 / N) = 14/11/9/8/7/6/5, court $48. Handled.
+  - 2.5 hr (Booking hours row ON for everyone): $18 up front (14 x 2.5 / 2 = 17.5, rounded up), final floor(4 x 18 / N) = 18/14/12/10/9/8/7, credit back = the difference (N = 5: $4, 6: $6, 7: $8, 8: $9), court $60. Handled.
+  - 3 hr (same gate): $21 up front, final floor(84 / N) = 21/16/14/12/10/9/8 (credit back N = 5: $5, 6: $7, 7: $9, 8: $11), court $72. Handled.
+  - 1 hr: still no row ($14, court $48); not one of the four buttons; an existing 1 hour game opens in Edit game with its own times and no length picked.
+- Answer to "does the existing rule give different numbers": the 1.5 hour row is a fixed table, not a formula. floor(4 x 11 / N) would give 11/8/7/6/5/4/4; the table has $9 at 5 in (Alex OKed those numbers in Zip 9). The 2 hour table IS the formula. The new rows use the formula (up front rounded up, then floor(4 x up-front / N) in whole dollars), as Alex described.
+- Guards: (a) read-only look at live: only 90 and 120 minute games exist (13), none of 150 or 180; preview: 60, 90, 120; so no existing game can change. (b) no schema change. (c) the rows apply only to 150 and 180 minute games. (d) the rows count only while the Booking hours row is ON for everyone and the kill switch allows it; the private link never prices; OFF = main including money (`e2e/zip24-off.cjs` compares a 2.5 and a 3 hour game against main). (e) tests: `tests/long-games.test.ts` (25) and the four-button browser checks. (f) a fresh reviewer read the money change (see below).
 
 ### Choices and things to know
 - Wording under the picker follows the mock (no heads-up box, no "New time:" line, no quick-date chips). The one conditional line kept is "Players who are in will be asked to confirm the new time." (only when a start with players in is changed).

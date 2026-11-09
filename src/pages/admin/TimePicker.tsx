@@ -69,7 +69,7 @@ export function GameTimeCard({
   const weekday = weekdayOfDate(date) ?? 1;
   const startMin = hhmmToMinutes(start);
   const endLabel = startMin === null ? '' : clockLabel(startMin + lengthMin);
-  const choices = lengthChoices(weekday, startMin, ctx.d.group.settings, ctx.d.shortGames === true);
+  const choices = lengthChoices(weekday, startMin, ctx.d.group.settings, ctx.d.shortGames === true, ctx.d.longGames === true);
   const slots = startSlots(weekday);
   const am = slots.filter((m) => m < 12 * 60);
   const pm = slots.filter((m) => m >= 12 * 60);

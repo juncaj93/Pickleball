@@ -16,7 +16,7 @@ import { useInstant } from '../../InstantTaps';
 import '../../money-rework.css';
 
 type MoneyKey = 'pricePerPlayerCents' | 'typicalCourtCostCents' | 'monthlyMembershipCents';
-type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes' | 'shortGames' | 'noCap'>;
+type WholeKey = Exclude<keyof GroupSettings, MoneyKey | 'defaultStartMinutes' | 'defaultEndMinutes' | 'shortGames' | 'longGames' | 'noCap'>;
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 

@@ -78,7 +78,8 @@ import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
 import { flatOf, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
-import { isShortGame } from '../shared/gameLength';
+import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
+import { bookingHoursAllowed } from '../shared/bookingHours';
 import { cardCleanupForAll, cardCleanupLook, setCardCleanupForAll } from './zip10';
 import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
@@ -349,6 +350,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     lastCallTextsForAll: await lastCallForAll(ctx.db, group.id),
     // Zip 9. "Short games" for this screen is what requireAdmin put on the group (the same answer every price on it used).
     ...(group.short_games === true ? { shortGames: true } : {}),
+    // Zip 24: the 2.5 and 3 hour rows are priced (Booking hours on for everyone). The picker's price under each length reads it.
+    ...(group.long_games === true ? { longGames: true } : {}),
     shortGamesForAll: await shortGamesForAll(ctx.db, group.id),
     ...((await cardTimeFor(ctx, group.id)) ? { cardTimeButtons: true } : {}),
     cardTimeButtonsForAll: await cardTimeForAll(ctx.db, group.id),
@@ -1715,7 +1718,7 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
       .bind(group.id, ctx.nowIso)
       .all<SessionRow>();
     // The saved settings plus this request's "Short games" answer (normalizeSettings drops it), so a move-in pays the game's own price.
-    for (const s of open) await settle(ctx.db, s, ctx.nowIso, group.short_games === true ? { ...settings, shortGames: true } : settings);
+    for (const s of open) await settle(ctx.db, s, ctx.nowIso, { ...settings, ...(group.short_games === true ? { shortGames: true as const } : {}), ...(group.long_games === true ? { longGames: true as const } : {}) });
   }
   return { ok: true };
 }
@@ -2332,6 +2335,18 @@ export async function setBookingHoursSwitch(ctx: Ctx, body: Record<string, unkno
   const on = v.bool(body.on, 'on');
   await setBookingHoursForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'booking_hours_on' : 'booking_hours_off', {}, ctx.nowIso);
+  // The 2.5 and 3 hour length rows turn on and off with this row (shared/gameLength.ts): the flat price of every OPEN game of those lengths just
+  // changed ($14 <-> $18 and $21), so reprice their seats now, the way the Short games switch does (credit on a seat follows the new price; cash
+  // is never taken back, it is settled at Finalize). A game of any other length is not touched. With none open, nothing happens.
+  const everyone = bookingHoursAllowed(ctx.env.BOOKING_HOURS) && on;
+  const after: ReturnType<typeof settingsOf> = everyone ? { ...settingsOf({ ...group, long_games: false }), longGames: true } : settingsOf({ ...group, long_games: false });
+  const { results: open } = await ctx.db
+    .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?")
+    .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
+    .all<SessionRow>();
+  for (const s of open) {
+    if ((LONG_MINUTES as readonly number[]).includes(gameMinutes(s.starts_at, s.ends_at))) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+  }
   return { ok: true, on };
 }
 

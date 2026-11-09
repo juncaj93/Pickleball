@@ -221,6 +221,23 @@ async function main() {
       ['PUT', `/api/admin/sessions/${games[0].id}/time`, { startsAt: day(21), endsAt: day(23) }],
       ['PUT', '/api/admin/group', { settings: { defaultStartMinutes: 21 * 60, defaultEndMinutes: 23 * 60 } }],
     ];
+    // MONEY with the row OFF: a 2.5 hour and a 3 hour game are priced exactly as main prices them (a normal $14 game, $48 court, no row).
+    const money = async (base) => {
+      const ctx = await browser.newContext();
+      await ctx.request.post(base + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: base } });
+      const out = [];
+      for (const [d, a, b] of [[24, 17, 19.5], [26, 17, 20], [27, 17, 18], [28, 17, 18.5]]) {
+        const body = { startsAt: new Date(Date.UTC(2026, 10, d, a + 5, 0)).toISOString(), endsAt: new Date(Date.UTC(2026, 10, d, Math.floor(b) + 5, (b % 1) * 60)).toISOString() };
+        const r = await ctx.request.post(base + '/api/admin/sessions', { data: body, headers: { Origin: base } });
+        out.push(r.status());
+      }
+      const dash = await (await ctx.request.get(base + '/api/admin/dashboard')).json();
+      const mine = dash.sessions.filter((s) => /^2026-11-2[4-8]T/.test(s.startsAt)).map((s) => ({ startsAt: s.startsAt, endsAt: s.endsAt, shortGame: s.shortGame ?? null, court: s.court && s.court.costCents }));
+      await ctx.close();
+      return JSON.stringify({ out, mine });
+    };
+    const [mx, my] = await Promise.all([money(A), money(B)]);
+    if (mx !== my) throw new Error('2.5 / 3 hour games with the row OFF differ from main: main ' + mx.slice(0, 300) + ' / branch ' + my.slice(0, 300));
     for (const [m, p, data] of cases) {
       const [x, y] = await Promise.all([call(A, m, p, data), call(B, m, p, data)]);
       if (x.status !== y.status || x.body !== y.body) throw new Error(`${m} ${p}: main ${x.status} ${x.body.slice(0, 120)} / branch ${y.status} ${y.body.slice(0, 120)}`);

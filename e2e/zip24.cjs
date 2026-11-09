@@ -193,7 +193,7 @@ async function main() {
     const acts = await f.locator('[data-bh-actions]').evaluate((e) => [...e.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
     assert(acts.join('|') === 'Change court (opens CourtReserve)|Add game', `bottom row: ${acts}`);
     const text = (await card1.innerText()).replace(/\s+/g, ' ');
-    assert(text === 'Date Court Not set Start 8:00 PM End 10:00 PM Length 1.5 hr $11 each 2 hr $14 each' || /^Date .*Court Not set Start 8:00 PM End 10:00 PM Length 1.5 hr \$11 each 2 hr \$14 each$/.test(text), `card 1 words: ${text}`);
+    assert(/^Date .*Court .*Not set Start 8:00 PM End 10:00 PM Length 1.5 hr \$11 each 2 hr \$14 each 2.5 hr past close 3 hr past close$/.test(text), `card 1 words: ${text}`);
     // The Court box is a half; Date is a half; Start a half; End a half.
     const w = await card1.locator('.bh-box').evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().width)));
     assert(w.length === 4 && Math.abs(w[0] - w[1]) <= 1 && Math.abs(w[2] - w[3]) <= 1 && Math.abs(w[0] - w[2]) <= 1, `four equal halves: ${w}`);
@@ -289,12 +289,13 @@ async function main() {
     assert((await endText(h.page)) === '7:00 PM', 'ends exactly 7:00 PM');
     await h.ctx.close();
   });
-  await check('ADD: length buttons: only 1.5 hr and 2 hr, the price under each is the site\'s own ($11 / $14), a length past close is faded, dashed, says "past close" and cannot be tapped', async () => {
+  await check('ADD: length buttons: the price under each is the site\'s own, a length past close is faded, dashed, says "past close" and cannot be tapped', async () => {
     const h = await openAdmin({ width: 420, height: 912 });
     await openAdd(h.page);
     await h.page.locator('dialog.sheet[open] input[type="date"]').fill('2026-11-11');
     const btns = await h.page.locator('.bh-lenbtn').evaluateAll((els) => els.map((e) => [e.getAttribute('data-len'), e.querySelector('.bh-len-name').textContent, e.querySelector('small').textContent, e.disabled]));
-    assert(JSON.stringify(btns) === JSON.stringify([['90', '1.5 hr', '$11 each', false], ['120', '2 hr', '$14 each', false]]), JSON.stringify(btns));
+    // 8:00 PM start (the usual): 2.5 and 3 hr would end after 10:00 PM, so they are there but faded and say "past close".
+    assert(JSON.stringify(btns) === JSON.stringify([['90', '1.5 hr', '$11 each', false], ['120', '2 hr', '$14 each', false], ['150', '2.5 hr', 'past close', true], ['180', '3 hr', 'past close', true]]), JSON.stringify(btns));
     assert((await pressedLen(h.page)).join() === '120', '2 hr is picked at first (the usual game is 2 hours)');
     // The server's own price for a 1.5 hr and a 2 hr game agrees with the button text.
     const a = await post(real, '/api/admin/sessions', { startsAt: iso(2026, 12, 1, 19), endsAt: iso(2026, 12, 1, 20, 30) });
@@ -306,6 +307,15 @@ async function main() {
     const s120 = sess.find((x) => x.id === idb);
     assert(s90.shortGame && s90.shortGame.flatCents === 1100, `1.5 hr priced $11 by the server: ${JSON.stringify(s90.shortGame)}`);
     assert(!s120.shortGame, 'a 2 hour game is priced as a normal game ($14)');
+    const c = await post(real, '/api/admin/sessions', { startsAt: iso(2026, 12, 3, 17), endsAt: iso(2026, 12, 3, 19, 30) });
+    const d3 = await post(real, '/api/admin/sessions', { startsAt: iso(2026, 12, 4, 17), endsAt: iso(2026, 12, 4, 20) });
+    const sess2 = (await dash()).sessions;
+    const id150 = (await c.json()).id;
+    const id180 = (await d3.json()).id;
+    const s150 = sess2.find((x) => x.id === id150);
+    const s180 = sess2.find((x) => x.id === id180);
+    assert(s150.shortGame && s150.shortGame.flatCents === 1800 && s150.shortGame.courtCents === 6000, `2.5 hr priced $18 / court $60 by the server: ${JSON.stringify(s150.shortGame)}`);
+    assert(s180.shortGame && s180.shortGame.flatCents === 2100 && s180.shortGame.courtCents === 7200, `3 hr priced $21 / court $72 by the server: ${JSON.stringify(s180.shortGame)}`);
     // 8:30 PM is faded while 2 hr is picked, so pick 1.5 hr first, then 8:30 PM.
     await h.page.locator('.bh-lenbtn[data-len="90"]').click();
     await pickStart(h.page, '20:30');
@@ -316,6 +326,56 @@ async function main() {
     assert(st.b === 'dashed' && st.o < 0.6, `faded dashed: ${JSON.stringify(st)}`);
     await h.ctx.close();
   });
+  await check('FOUR BUTTONS: always 1.5, 2, 2.5 and 3 hr with their prices; 2.5 and 3 hr are faded, dashed and say "past close" when they would end after closing (Mon to Sat 10:00 PM, Sunday 7:00 PM), light and dark', async () => {
+    for (const scheme of ['light', 'dark']) {
+      const h = await openAdmin({ width: 420, height: 912, scheme });
+      await openAdd(h.page);
+      const read = () => h.page.locator('.bh-lenbtn').evaluateAll((els) => els.map((e) => ({ len: e.getAttribute('data-len'), name: e.querySelector('.bh-len-name').textContent, sub: e.querySelector('small').textContent, off: e.disabled, dashed: getComputedStyle(e).borderStyle === 'dashed', faded: Number(getComputedStyle(e).opacity) < 0.6 })));
+      const want = (rows, spec) => spec.forEach(([len, name, sub, off], i) => assert(rows[i].len === len && rows[i].name === name && rows[i].sub === sub && rows[i].off === off && rows[i].dashed === off && rows[i].faded === off, `${scheme}: ${JSON.stringify(rows[i])} vs ${[len, name, sub, off]}`));
+      await h.page.locator('dialog.sheet[open] input[type="date"]').fill('2026-11-11'); // a Wednesday
+      await h.page.locator('.bh-lenbtn[data-len="90"]').click();
+      await pickStart(h.page, '17:00');
+      const rows = await read();
+      assert(rows.length === 4, `${scheme}: four buttons, got ${rows.length}`);
+      want(rows, [['90', '1.5 hr', '$11 each', false], ['120', '2 hr', '$14 each', false], ['150', '2.5 hr', '$18 each', false], ['180', '3 hr', '$21 each', false]]);
+      await pickStart(h.page, '19:30');
+      want(await read(), [['90', '1.5 hr', '$11 each', false], ['120', '2 hr', '$14 each', false], ['150', '2.5 hr', '$18 each', false], ['180', '3 hr', 'past close', true]]);
+      await pickStart(h.page, '20:00');
+      want(await read(), [['90', '1.5 hr', '$11 each', false], ['120', '2 hr', '$14 each', false], ['150', '2.5 hr', 'past close', true], ['180', '3 hr', 'past close', true]]);
+      await pickStart(h.page, '20:30');
+      want(await read(), [['90', '1.5 hr', '$11 each', false], ['120', '2 hr', 'past close', true], ['150', '2.5 hr', 'past close', true], ['180', '3 hr', 'past close', true]]);
+      // Sunday closes at 7:00 PM: from 4:30 PM a 2.5 hr game ends exactly 7:00 PM (allowed), a 3 hr game does not fit.
+      await h.page.locator('dialog.sheet[open] input[type="date"]').fill('2026-11-15');
+      await h.page.locator('.bh-lenbtn[data-len="90"]').click();
+      await pickStart(h.page, '16:30');
+      want(await read(), [['90', '1.5 hr', '$11 each', false], ['120', '2 hr', '$14 each', false], ['150', '2.5 hr', '$18 each', false], ['180', '3 hr', 'past close', true]]);
+      await h.page.locator('.bh-lenbtn[data-len="150"]').click();
+      assert((await endText(h.page)) === '7:00 PM', 'a 2.5 hr game from 4:30 PM on a Sunday ends exactly 7:00 PM');
+      await shot(h.page, `four-${scheme}`);
+      await h.ctx.close();
+    }
+  });
+  await check('FOUR BUTTONS: a 3 hour game saves 5:00 to 8:00 PM with its price; Edit game opens a 2.5 hr game with 2.5 hr picked', async () => {
+    const h = await openAdmin({ width: 420, height: 912 });
+    await openAdd(h.page);
+    await h.page.locator('dialog.sheet[open] input[type="date"]').fill('2026-12-10');
+    await h.page.locator('.bh-lenbtn[data-len="90"]').click();
+    await pickStart(h.page, '17:00');
+    await h.page.locator('.bh-lenbtn[data-len="180"]').click();
+    assert((await endText(h.page)) === '8:00 PM', `end 8:00 PM: ${await endText(h.page)}`);
+    await h.page.getByRole('button', { name: 'Add game', exact: true }).click();
+    await h.page.waitForTimeout(900);
+    const g = (await dash()).sessions.find((x) => x.startsAt === iso(2026, 12, 10, 17));
+    assert(g && g.endsAt === iso(2026, 12, 10, 20) && g.shortGame && g.shortGame.flatCents === 2100, `3 hr saved and priced: ${g && JSON.stringify(g.shortGame)}`);
+    await h.ctx.close();
+    const mk = await post(real, '/api/admin/sessions', { startsAt: iso(2026, 11, 20, 17), endsAt: iso(2026, 11, 20, 19, 30) });
+    const id = (await mk.json()).id;
+    const h2 = await openAdmin({ width: 420, height: 912 });
+    await openEdit(h2.page, id);
+    assert((await pressedLen(h2.page)).join() === '150' && (await startText(h2.page)) === '5:00 PM' && (await endText(h2.page)) === '7:30 PM', `Edit 2.5 hr: ${await pressedLen(h2.page)} ${await startText(h2.page)} ${await endText(h2.page)}`);
+    await h2.ctx.close();
+  });
+
   await check('ADD: adding a 1.5 hr game from 7:30 PM on Fri Nov 27 saves exactly 7:30 to 9:00 PM Eastern with its note; a 2 hr Sunday 5:00 PM game ends 7:00 PM', async () => {
     const h = await openAdmin({ width: 420, height: 912 });
     await openAdd(h.page);
@@ -526,13 +586,13 @@ async function main() {
     assert(after.shortGame && after.shortGame.flatCents === 1100, 'now a 1.5 hr game priced $11');
     await h.ctx.close();
   });
-  await check('EDIT: an existing game with an odd length (2.5 hr, 4:30 to 7:00 PM) shows its own times as they are, no length is picked, and saving only the label does not touch the times', async () => {
-    const r = await post(real, '/api/admin/sessions', { startsAt: iso(2026, 12, 5, 16, 30), endsAt: iso(2026, 12, 5, 19) });
-    assert(r.ok(), 'a 2.5 hr game is allowed by the rule (it ends at 7:00 PM)');
+  await check('EDIT: an existing game with an odd length (1 hr, 4:30 to 5:30 PM) shows its own times as they are, no length is picked, and saving only the label does not touch the times', async () => {
+    const r = await post(real, '/api/admin/sessions', { startsAt: iso(2026, 12, 5, 16, 30), endsAt: iso(2026, 12, 5, 17, 30) });
+    assert(r.ok(), 'a 1 hr game is allowed by the rule');
     const id = (await r.json()).id;
     const h = await openAdmin({ width: 420, height: 912 });
     await openEdit(h.page, id);
-    assert((await startText(h.page)) === '4:30 PM' && (await endText(h.page)) === '7:00 PM', `times as they are: ${await startText(h.page)} ${await endText(h.page)}`);
+    assert((await startText(h.page)) === '4:30 PM' && (await endText(h.page)) === '5:30 PM', `times as they are: ${await startText(h.page)} ${await endText(h.page)}`);
     assert((await pressedLen(h.page)).length === 0, 'no length is forced');
     await h.page.locator('[data-label-field] input').fill('Odd one');
     let timeCalls = 0;
@@ -542,7 +602,7 @@ async function main() {
     await h.page.locator('dialog.sheet[open]').getByRole('button', { name: 'Save' }).click();
     await h.page.waitForTimeout(900);
     const after = (await dash()).sessions.find((x) => x.id === id);
-    assert(timeCalls === 0 && after.startsAt === iso(2026, 12, 5, 16, 30) && after.endsAt === iso(2026, 12, 5, 19) && after.note === 'Odd one', `untouched: ${timeCalls} ${after.startsAt} ${after.endsAt}`);
+    assert(timeCalls === 0 && after.startsAt === iso(2026, 12, 5, 16, 30) && after.endsAt === iso(2026, 12, 5, 17, 30) && after.note === 'Odd one', `untouched: ${timeCalls} ${after.startsAt} ${after.endsAt}`);
     await h.ctx.close();
   });
   await check('EDIT: an old 1 hour game and an old game outside the hours show their times as they are, still save other fields, and can be canceled', async () => {

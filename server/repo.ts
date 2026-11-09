@@ -21,6 +21,8 @@ export interface GroupRow {
   created_at: string;
   /** NOT a column: this request's "Short games" answer (server/zip9.ts withShortGames), carried to settingsOf(group).shortGames. */
   short_games?: boolean;
+  /** NOT a column: this request's Booking hours row answer (server/bookingHours.ts longGamesOn, set by withShortGames), carried to settingsOf(group).longGames. */
+  long_games?: boolean;
   /** NOT a column: this request's "Card cleanup" answer (server/zip10.ts withCardCleanup), carried to settingsOf(group).noCap. */
   card_cleanup?: boolean;
   organizer_name: string | null;
@@ -132,6 +134,8 @@ export function settingsOf(group: GroupRow): GroupSettings {
   }
   // "Short games" on for this request (server/zip9.ts): only then is the key there, so with it off the settings are exactly as before.
   if (group.short_games === true) out.shortGames = true;
+  // "Booking hours" row on for everyone (Zip 24): the 2.5 and 3 hour length rows price those games. Only there while on, so off the settings are exactly as before.
+  if (group.long_games === true) out.longGames = true;
   // "Card cleanup" on for this request (server/zip10.ts): no Max players cap and no waitlist (capOf, shared/settings.ts). Off: not there.
   if (group.card_cleanup === true) out.noCap = true;
   return out;
@@ -142,7 +146,7 @@ export function settingsOf(group: GroupRow): GroupSettings {
  * the game-length table row for a 1.5 hour game while it is on. Every server price path goes through this.
  */
 export function priceOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): GamePrice {
-  return gamePrice({ startsAt: session.starts_at, endsAt: session.ends_at }, settings, settings.shortGames === true);
+  return gamePrice({ startsAt: session.starts_at, endsAt: session.ends_at }, settings, settings.shortGames === true, settings.longGames === true);
 }
 
 /** A 1.5 hour game's own flat price ("Short games" on), for the words that would otherwise say $14; null for a normal game (nothing changes). */

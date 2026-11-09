@@ -36,6 +36,16 @@ export async function bookingHoursFlags(ctx: Ctx, groupId: string): Promise<{ on
   return { on: bookingHoursAllowed(ctx.env.BOOKING_HOURS) && (header || row), forAll: row };
 }
 
+/**
+ * The 2.5 and 3 hour length rows (shared/gameLength.ts) price those games only while the Booking hours row is ON FOR EVERYONE (and the kill switch
+ * allows it). It changes money, so, like "Short games" for a player, the private per-phone link NEVER counts here: a price is the same on every
+ * phone. A new game of those lengths and every price path read it through settingsOf(group).longGames.
+ */
+export async function longGamesOn(ctx: Ctx, groupId: string): Promise<boolean> {
+  if (!bookingHoursAllowed(ctx.env.BOOKING_HOURS)) return false;
+  return forAll(ctx.db, groupId);
+}
+
 /** Refuses (400 invalid_time) a game's NEW start and end when they are outside the venue hours. Only called when a game is created or its times change. */
 export async function enforceBookingHours(ctx: Ctx, groupId: string, tz: string, startsAt: string, endsAt: string): Promise<void> {
   if (!(await bookingHoursFlags(ctx, groupId)).on) return;

@@ -559,6 +559,8 @@ export interface AdminDashboard {
   shortGames?: boolean;
   /** Settings > Feature switches > "Short games" is on (for everyone). */
   shortGamesForAll?: boolean;
+  /** Zip 24: the 2.5 and 3 hour length rows are priced (the Booking hours row is on for everyone), only while true. */
+  longGames?: boolean;
   /** "Card time and buttons" is on for this screen / Settings row is on (for everyone). Player cards only. */
   cardTimeButtons?: boolean;
   cardTimeButtonsForAll?: boolean;

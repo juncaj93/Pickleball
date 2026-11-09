@@ -14,6 +14,8 @@ export interface GroupSettings {
   defaultEndMinutes: number; // the usual end for new regular games (1320 = 10:00 PM)
   /** NOT saved: set by the server only while "Short games" (SHORT_GAMES, Zip 9) is on for this request; missing = off. */
   shortGames?: true;
+  /** Request-only (never saved): the Booking hours row is ON for everyone, so the 2.5 and 3 hour length rows price those games (shared/gameLength.ts, server/bookingHours.ts). */
+  longGames?: true;
   /** NOT saved: set by the server only while "Card cleanup" (CARD_CLEANUP, Zip 10) is on for this request: no Max players cap, no waitlist. Missing = off. */
   noCap?: true;
 }
@@ -41,7 +43,7 @@ export const DEFAULT_SETTINGS: GroupSettings = {
 };
 
 /** The saved settings (every key but the request-only `shortGames` and `noCap`). */
-export type SettingKey = Exclude<keyof GroupSettings, 'shortGames' | 'noCap'>;
+export type SettingKey = Exclude<keyof GroupSettings, 'shortGames' | 'longGames' | 'noCap'>;
 
 const LIMITS: Record<SettingKey, [number, number]> = {
   horizonWeeks: [1, 12],

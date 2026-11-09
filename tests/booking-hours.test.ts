@@ -25,7 +25,7 @@ import {
 } from '../shared/bookingHours';
 import { BUILDING_ON, smallSwitchRows } from '../scripts/preview-world-small';
 import { DEFAULT_SETTINGS } from '../shared/settings';
-import { GAME_LENGTHS, gameCreditBack, gameFinalPrice, gameMinutes, gamePrice, lengthRow, NORMAL_MINUTES, PICKER_MINUTES, SHORT_MINUTES } from '../shared/gameLength';
+import { gameCreditBack, gameFinalPrice, gameMinutes, gamePrice, lengthRow, NORMAL_MINUTES, PICKER_MINUTES, SHORT_MINUTES } from '../shared/gameLength';
 import { toLocalInputValue, zonedTimeToUtc } from '../shared/time';
 import { setupGroup, TestApp } from './harness';
 
@@ -175,43 +175,40 @@ describe('moving the date nudges the start into the new day\'s hours', () => {
   });
 });
 
-describe('length buttons: only lengths whose money rules are fully handled; prices come from the site\'s own code', () => {
+describe('length buttons: all four lengths, prices from the site\'s own code', () => {
   const settings = { pricePerPlayerCents: DEFAULT_SETTINGS.pricePerPlayerCents, typicalCourtCostCents: DEFAULT_SETTINGS.typicalCourtCostCents };
-  it('1.5 hr and 2 hr only (2.5 and 3 hr have no price row yet)', () => {
-    expect([...PICKER_MINUTES]).toEqual([90, 120]);
+  it('1.5, 2, 2.5 and 3 hr (each has a price row in the one length table)', () => {
+    expect([...PICKER_MINUTES]).toEqual([90, 120, 150, 180]);
     expect(isPickerLength(90)).toBe(true);
     expect(isPickerLength(120)).toBe(true);
+    expect(isPickerLength(150)).toBe(true);
+    expect(isPickerLength(180)).toBe(true);
     expect(isPickerLength(60)).toBe(false);
-    expect(isPickerLength(150)).toBe(false);
-    expect(isPickerLength(180)).toBe(false);
     for (const m of PICKER_MINUTES) expect(lengthRow(m)).not.toBeNull();
-    expect(GAME_LENGTHS.map((r) => r.minutes)).toEqual([90, 120]);
   });
-  it('the price under each button is what gamePrice() says (with Short games on: 1.5 hr $11, 2 hr $14)', () => {
-    const c = lengthChoices(TUE, min(19), settings, true);
-    expect(c.map((x) => [x.label, x.price, x.fits])).toEqual([['1.5 hr', '$11 each', true], ['2 hr', '$14 each', true]]);
+  it('the price under each button is what gamePrice() says (switches on: $11, $14, $18, $21)', () => {
+    const c = lengthChoices(TUE, min(17), settings, true, true);
+    expect(c.map((x) => [x.label, x.price, x.fits])).toEqual([['1.5 hr', '$11 each', true], ['2 hr', '$14 each', true], ['2.5 hr', '$18 each', true], ['3 hr', '$21 each', true]]);
   });
-  it('with Short games OFF a 1.5 hour game is priced like a normal one, and the button says so', () => {
-    const c = lengthChoices(TUE, min(19), settings, false);
-    expect(c.map((x) => x.price)).toEqual(['$14 each', '$14 each']);
+  it('with the switches OFF the buttons still say what the site would charge ($14 each)', () => {
+    expect(lengthChoices(TUE, min(17), settings, false, false).map((x) => x.price)).toEqual(['$14 each', '$14 each', '$14 each', '$14 each']);
   });
-  it('the price follows Settings > Money (a $15 price shows $15 on 2 hr)', () => {
-    const c = lengthChoices(TUE, min(19), { ...settings, pricePerPlayerCents: 15_00 }, true);
-    expect(c[1].price).toBe('$15 each');
+  it('the price follows Settings > Money for 2 hr only (a $15 price shows $15 on 2 hr; the long rows keep their own)', () => {
+    const c = lengthChoices(TUE, min(17), { ...settings, pricePerPlayerCents: 15_00 }, true, true);
+    expect(c.map((x) => x.price)).toEqual(['$11 each', '$15 each', '$18 each', '$21 each']);
   });
   it('a length that would pass close is flagged (fits false), the rest stay on', () => {
-    const c = lengthChoices(TUE, min(20, 30), settings, true);
-    expect(c.map((x) => x.fits)).toEqual([true, false]);
-    expect(lengthChoices(SUN, min(17, 30), settings, true).map((x) => x.fits)).toEqual([true, false]);
-    expect(lengthChoices(SUN, null, settings, true).every((x) => x.fits)).toBe(true);
+    expect(lengthChoices(TUE, min(20, 30), settings, true, true).map((x) => x.fits)).toEqual([true, false, false, false]);
+    expect(lengthChoices(SUN, min(17, 30), settings, true, true).map((x) => x.fits)).toEqual([true, false, false, false]);
+    expect(lengthChoices(SUN, null, settings, true, true).every((x) => x.fits)).toBe(true);
   });
 });
 
 describe('PRICING CHECK: each game length against the money code (this is the evidence for the report)', () => {
   const settings = { pricePerPlayerCents: 14_00, typicalCourtCostCents: 48_00 };
   const at2 = (minutes: number) => ({ startsAt: '2026-11-11T23:00:00.000Z', endsAt: new Date(Date.parse('2026-11-11T23:00:00.000Z') + minutes * 60_000).toISOString() });
-  const finals = (minutes: number, shortGames = true) => {
-    const p = gamePrice(at2(minutes), settings, shortGames);
+  const finals = (minutes: number, shortGames = true, longGames = false) => {
+    const p = gamePrice(at2(minutes), settings, shortGames, longGames);
     return [4, 5, 6, 7, 8, 9, 10].map((n) => gameFinalPrice(p, n) / 100);
   };
   it('length is End minus Start in minutes', () => {
@@ -233,16 +230,19 @@ describe('PRICING CHECK: each game length against the money code (this is the ev
     expect(finals(120)).toEqual([14, 11, 9, 8, 7, 6, 5]);
     expect(gameCreditBack(p, 8)).toBe(7_00);
   });
-  it('1 hr, 2.5 hr, 3 hr: NO row. They are priced like a normal 2 hour game ($14, court $48), so they are NOT offered by the picker', () => {
-    for (const m of [60, 150, 180]) {
-      const p = gamePrice(at2(m), settings, true);
-      expect(p.special).toBe(false);
-      expect(p.row).toBeNull();
-      expect(p.flatCents).toBe(14_00); // not $18 or $21
-      expect(p.courtCents).toBe(48_00); // not $60 or $72
-      expect(finals(m)).toEqual([14, 11, 9, 8, 7, 6, 5]);
-      expect(isPickerLength(m)).toBe(false);
-    }
+  it('2.5 hr and 3 hr: their own rows (with the Booking hours row on): $18 / court $60 and $21 / court $72; final tables floor(72 / N) and floor(84 / N)', () => {
+    const p150 = gamePrice(at2(150), settings, true, true);
+    const p180 = gamePrice(at2(180), settings, true, true);
+    expect([p150.special, p150.flatCents, p150.courtCents]).toEqual([true, 18_00, 60_00]);
+    expect([p180.special, p180.flatCents, p180.courtCents]).toEqual([true, 21_00, 72_00]);
+    expect(finals(150, true, true)).toEqual([18, 14, 12, 10, 9, 8, 7]);
+    expect(finals(180, true, true)).toEqual([21, 16, 14, 12, 10, 9, 8]);
+  });
+  it('1 hr: NO row, priced like a normal 2 hour game ($14, court $48), and not one of the four buttons', () => {
+    const p = gamePrice(at2(60), settings, true, true);
+    expect([p.special, p.row, p.flatCents, p.courtCents]).toEqual([false, null, 14_00, 48_00]);
+    expect(finals(60)).toEqual([14, 11, 9, 8, 7, 6, 5]);
+    expect(isPickerLength(60)).toBe(false);
     expect(NORMAL_MINUTES).toBe(120);
     expect(SHORT_MINUTES).toBe(90);
   });

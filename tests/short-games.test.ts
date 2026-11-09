@@ -30,11 +30,13 @@ const at = (start: string, minutes: number) => ({ startsAt: start, endsAt: new D
 const NS = [4, 5, 6, 7, 8, 9, 10] as const;
 
 describe('the one game-length table (shared/gameLength.ts)', () => {
-  it('has exactly two rows today, 90 and 120 minutes, keyed by minutes', () => {
-    expect(GAME_LENGTHS.map((r) => r.minutes).sort((a, b) => a - b)).toEqual([90, 120]);
+  it('has four rows, 90 and 120 minutes (Short games) and 150 and 180 (Zip 24, Booking hours), keyed by minutes', () => {
+    expect(GAME_LENGTHS.map((r) => r.minutes).sort((a, b) => a - b)).toEqual([90, 120, 150, 180]);
     expect(lengthRow(90)?.courtCents).toBe(3600);
     expect(lengthRow(120)?.courtCents).toBe(4800);
-    for (const m of [60, 150, 180, 210, 240]) expect(lengthRow(m)).toBeNull();
+    expect(lengthRow(150)?.courtCents).toBe(6000);
+    expect(lengthRow(180)?.courtCents).toBe(7200);
+    for (const m of [60, 210, 240]) expect(lengthRow(m)).toBeNull();
   });
 
   it('the normal row is exactly the live rule: floor(4 x $14 / N) = 14, 11, 9, 8, 7, 6, 5 and a $48 court', () => {

@@ -160,12 +160,12 @@ export function lengthLabel(minutes: number): string {
 
 /**
  * The length buttons for a day and start (minutes). The price under each is the site's real one, read through gamePrice() with the
- * same switch the server uses: nothing is written down here. `shortGames` is the dashboard's own flag.
+ * same switches the server uses: nothing is written down here. `shortGames` and `longGames` are the dashboard's own flags.
  */
-export function lengthChoices(weekday: number, startMin: number | null, settings: PriceSettings, shortGames: boolean): LengthChoice[] {
+export function lengthChoices(weekday: number, startMin: number | null, settings: PriceSettings, shortGames: boolean, longGames = false): LengthChoice[] {
   const t0 = Date.UTC(2026, 0, 1);
   return PICKER_MINUTES.map((minutes) => {
-    const gp = gamePrice({ startsAt: new Date(t0).toISOString(), endsAt: new Date(t0 + minutes * 60_000).toISOString() }, settings, shortGames);
+    const gp = gamePrice({ startsAt: new Date(t0).toISOString(), endsAt: new Date(t0 + minutes * 60_000).toISOString() }, settings, shortGames, longGames);
     return {
       minutes,
       label: lengthLabel(minutes),
