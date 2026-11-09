@@ -3747,3 +3747,15 @@ data read or changed.
   border; text cut off unless it ends in "…" on purpose; a word broken in the middle; buttons, pills and circles overlapping).
   `e2e/zip18.cjs` runs it on Home ("+N more" open, then every game listed and folded: TONIGHT and TOM rows), Players, Money, History and
   Settings at 390 / 360 / 320, light and dark, normal text, Safari text size 125% (the page zooms, the iPhone aA button) and 150% text.
+- Fresh review of round 2 (independent): nothing blocking. Fixed from it: the Players gray part ("2 played · Tue Thu") gives way before
+  the name again (the name only shortens once it is gone); the two preview-only test clocks (?gamedaytest=, ?noontest=) are kept in
+  View as like ?alerts= (the server ignores them off previews); MIN_PLAYERS instead of a bare 4; the checker also fails on a page wider
+  than the screen and on the Players name over its money chip, and opens each Settings section on its own (opening one closes another;
+  the inside of a closed section is not drawn, so it is not measured). Left as is: the TONIGHT tile's soft glow now shows fully around
+  a folded row (before it was cut at the row's edge); two alert buttons whose words do not each fit in half the row (a narrow phone,
+  "Use it" / "No, keep cash out") take the room their words need instead of spilling out.
+- Tests (round 2, final code): unit 2468 passed, 1 skipped, 0 failed (149 files); tsc and build clean. Full `npm run test:e2e` once, 4
+  at a time: 54 of 59 clean; cancel-reason (2), want-in (1), admin-r2 F4 (1) as on main; run.cjs 219/229 alone (the same 10 as main;
+  the 4-at-a-time run lost a save to load and cascaded); round2.cjs 25/25 alone (its banner timing check is load-sensitive). After the
+  review fixes: zip18 73 checks (72 + the one Parker comparison that failed once under load and passes alone), zip14 22/22, zip13 39/39,
+  zip18-off 28/28 against main.
