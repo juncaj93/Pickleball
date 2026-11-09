@@ -189,7 +189,9 @@ async function main() {
     assert((await f.locator('.bh-card').nth(1).locator('.bh-lab').innerText()) === 'Note (optional)', 'card 2 is the Note');
     // Nothing above the cards, nothing between them and the button except the cards themselves.
     const kids = await f.evaluate((el) => [...el.children].map((c) => c.className.split(' ')[0] + (c.tagName === 'BUTTON' ? ':' + c.textContent : '')));
-    assert(kids.join('|') === 'bh-card|bh-card|btn:Add game', `form children: ${kids}`);
+    assert(kids.join('|') === 'bh-card|bh-card|bh-actions', `form children: ${kids}`);
+    const acts = await f.locator('[data-bh-actions]').evaluate((e) => [...e.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
+    assert(acts.join('|') === 'Change court (opens CourtReserve)|Add game', `bottom row: ${acts}`);
     const text = (await card1.innerText()).replace(/\s+/g, ' ');
     assert(text === 'Date Court Not set Start 8:00 PM End 10:00 PM Length 1.5 hr $11 each 2 hr $14 each' || /^Date .*Court Not set Start 8:00 PM End 10:00 PM Length 1.5 hr \$11 each 2 hr \$14 each$/.test(text), `card 1 words: ${text}`);
     // The Court box is a half; Date is a half; Start a half; End a half.
@@ -356,6 +358,125 @@ async function main() {
     await h.ctx.close();
   });
 
+  const rectOf = (page, sel) => page.locator(sel).first().evaluate((e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, w: r.width, h: r.height }; });
+  await check('FIT: Add game AND Edit game fit one iPhone Air screen (420 x 912) with no scrolling at normal text, light and dark; the bottom row is on screen; two equal halves with a small gap; every tap target at least 38 px', async () => {
+    for (const scheme of ['light', 'dark'])
+      for (const which of ['add', 'edit']) {
+        const h = await openAdmin({ width: 420, height: 912, scheme });
+        if (which === 'add') await openAdd(h.page);
+        else await openEdit(h.page, target.id);
+        const sheet = h.page.locator('dialog.sheet[open]');
+        const m = await sheet.evaluate((e) => ({ sh: e.scrollHeight, ch: e.clientHeight, top: e.getBoundingClientRect().top, bottom: e.getBoundingClientRect().bottom }));
+        assert(m.sh <= m.ch + 1, `${which} ${scheme}: the sheet scrolls ${m.sh} > ${m.ch}`);
+        const acts = await sheet.locator('[data-bh-actions] > *').evaluateAll((els) => els.map((e) => { const r = e.getBoundingClientRect(); return { l: r.left, r: r.right, t: r.top, b: r.bottom, h: r.height }; }));
+        assert(acts.length === 2, 'two buttons in the row');
+        assert(Math.abs((acts[0].r - acts[0].l) - (acts[1].r - acts[1].l)) <= 1, `${which} ${scheme}: equal halves ${JSON.stringify(acts)}`);
+        const gap = acts[1].l - acts[0].r;
+        assert(gap >= 6 && gap <= 14, `${which} ${scheme}: small gap ${gap}`);
+        assert(acts[0].b <= 912 && acts[1].b <= 912 && acts[1].b <= m.bottom + 1, `${which} ${scheme}: row on screen ${acts[1].b}`);
+        assert(acts[0].h >= 38 && acts[1].h >= 38, 'row buttons at least 38 px');
+        const small = await sheet.locator('button, a.btn, input').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().height > 0 && e.getBoundingClientRect().height < 38 && !e.matches('.icon-btn')).map((e) => `${e.tagName}.${e.className} ${Math.round(e.getBoundingClientRect().height)}`));
+        assert(small.length === 0, `${which} ${scheme}: small targets: ${small}`);
+        await shot(h.page, `fit-${which}-${scheme}`);
+        await h.ctx.close();
+      }
+  });
+  await check('DATE BOX: the date text is vertically centered in its box, at the same height as Start and End, light and dark, and still after picking a new date', async () => {
+    for (const scheme of ['light', 'dark']) {
+      const h = await openAdmin({ width: 420, height: 912, scheme });
+      await openAdd(h.page);
+      const centered = async (when) => {
+        const box = await rectOf(h.page, '.bh-date');
+        const txt = await rectOf(h.page, '[data-bh-date-text]');
+        const startBox = await rectOf(h.page, '[data-bh-start]');
+        const startTxt = await rectOf(h.page, '#bh-start-value');
+        const endBox = await rectOf(h.page, '[data-bh-end]');
+        assert(Math.abs(box.h - startBox.h) <= 1 && Math.abs(box.h - endBox.h) <= 1, `${scheme} ${when}: same box height ${box.h} ${startBox.h} ${endBox.h}`);
+        const dOff = (txt.t + txt.b) / 2 - (box.t + box.b) / 2;
+        const sOff = (startTxt.t + startTxt.b) / 2 - (startBox.t + startBox.b) / 2;
+        assert(Math.abs(dOff) <= 1.5, `${scheme} ${when}: date text is ${dOff.toFixed(1)} px off the box middle`);
+        assert(Math.abs(dOff - sOff) <= 1.5, `${scheme} ${when}: date ${dOff.toFixed(1)} vs start ${sOff.toFixed(1)} off the middle`);
+        const dTop = txt.t - box.t;
+        const sTop = startTxt.t - startBox.t;
+        assert(Math.abs(dTop - sTop) <= 1.5, `${scheme} ${when}: text sits ${dTop.toFixed(1)} px from the top, Start ${sTop.toFixed(1)}`);
+        const same = await h.page.evaluate(() => { const a = getComputedStyle(document.querySelector('[data-bh-date-text]')); const b = getComputedStyle(document.querySelector('#bh-start-value')); return a.fontSize === b.fontSize && a.fontWeight === b.fontWeight && a.color === b.color; });
+        assert(same, `${scheme} ${when}: same font size, weight and color as Start`);
+      };
+      await centered('at first');
+      assert((await h.page.locator('[data-bh-date-text]').innerText()) === 'Nov 11, 2026', `text: ${await h.page.locator('[data-bh-date-text]').innerText()}`);
+      await h.page.locator('dialog.sheet[open] input[type="date"]').fill('2026-12-03');
+      await h.page.waitForTimeout(150);
+      assert((await h.page.locator('[data-bh-date-text]').innerText()) === 'Dec 3, 2026', 'the box shows the new date');
+      await centered('after a new date');
+      // The invisible date input really covers the box (a tap anywhere on it is a tap on the date input).
+      const hit = await h.page.evaluate(() => { const b = document.querySelector('.bh-date').getBoundingClientRect(); const e = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2); return e && e.matches('input[type="date"]'); });
+      assert(hit, 'a tap in the middle of the box lands on the date input');
+      await h.ctx.close();
+    }
+  });
+  await check('COURT TEXT: "Not set" is blue and normal weight; a picked court ("Court 11") is normal weight in the ink color, like the date and times', async () => {
+    const h = await openAdmin({ width: 420, height: 912 });
+    await openAdd(h.page);
+    const css = () => h.page.evaluate(() => { const v = document.querySelector('[data-bh-court] .gd-court-value'); const d = document.querySelector('[data-bh-date-text]'); const c = getComputedStyle(v); return { w: c.fontWeight, color: c.color, dateW: getComputedStyle(d).fontWeight, dateColor: getComputedStyle(d).color, unset: v.classList.contains('unset') }; });
+    const a = await css();
+    assert(a.unset && Number(a.w) === 400 && a.color !== a.dateColor, `Not set: ${JSON.stringify(a)}`);
+    await h.page.locator('[data-bh-court] button').click();
+    await h.page.locator('dialog.cm[open]').waitFor();
+    await h.page.locator('dialog.cm[open] [data-court]').first().click().catch(async () => { await h.page.locator('dialog.cm[open] button').nth(1).click(); });
+    await h.page.waitForTimeout(400);
+    const b = await css();
+    assert(!b.unset && Number(b.w) === 400 && b.w === b.dateW && b.color === b.dateColor, `picked court: ${JSON.stringify(b)}`);
+    await h.ctx.close();
+  });
+  await check('SCROLL: the title bar is solid and above the content; scrolling at 125% and 150% text slides the content under it, never over it; the bottom row stays on screen (Add game and Edit game, light and dark)', async () => {
+    const problems = [];
+    for (const scheme of ['light', 'dark'])
+      for (const pct of [125, 150])
+        for (const which of ['add', 'edit']) {
+          const h = await openAdmin({ width: 390, height: 640, scheme, pct });
+          if (which === 'add') await openAdd(h.page);
+          else await openEdit(h.page, target.id);
+          const tag = `${which} ${scheme} ${pct}%`;
+          const sheet = h.page.locator('dialog.sheet[open]');
+          const info = await sheet.evaluate((e) => ({ scrolls: e.scrollHeight > e.clientHeight + 1, sh: e.scrollHeight, ch: e.clientHeight }));
+          if (!info.scrolls && pct === 150) problems.push(`${tag}: expected the sheet to scroll at 150% text`);
+          const bg = await sheet.locator('.sheet-head').evaluate((e) => ({ bg: getComputedStyle(e).backgroundColor, z: getComputedStyle(e).zIndex, bf: getComputedStyle(e).backdropFilter }));
+          if (/rgba\(.*,\s*0?\.\d+\)$/.test(bg.bg) || /transparent/.test(bg.bg)) problems.push(`${tag}: title bar background is see-through ${bg.bg}`);
+          if (!(Number(bg.z) >= 10)) problems.push(`${tag}: title bar layer ${bg.z}`);
+          for (const frac of [0, 0.25, 0.5, 1]) {
+            await sheet.evaluate((e, f) => { e.scrollTop = (e.scrollHeight - e.clientHeight) * f; }, frac);
+            await h.page.waitForTimeout(120);
+            const r = await sheet.evaluate((e) => {
+              const head = e.querySelector('.sheet-head').getBoundingClientRect();
+              const acts = e.querySelector('[data-bh-actions]').getBoundingClientRect();
+              const dlg = e.getBoundingClientRect();
+              // Every point along the title bar's own box must land on the title bar (never on a field or the status control).
+              const bad = [];
+              for (let x = head.left + 30; x < head.right - 30; x += 24)
+                for (const y of [head.top + 26, (head.top + head.bottom) / 2, head.bottom - 3]) {
+                  const hit = document.elementFromPoint(x, y);
+                  if (hit && !hit.closest('.sheet-head')) bad.push(`${hit.tagName}.${hit.className}@${Math.round(x)},${Math.round(y)} head ${Math.round(head.left)},${Math.round(head.top)}-${Math.round(head.right)},${Math.round(head.bottom)}`.slice(0, 120));
+                }
+              // The row of buttons: fully on screen at every scroll position.
+              const rowOk = acts.bottom <= dlg.bottom + 1 && acts.top >= dlg.top;
+              const actHits = [];
+              for (const x of [acts.left + 20, acts.right - 20]) {
+                const hit = document.elementFromPoint(x, (acts.top + acts.bottom) / 2);
+                if (!hit || !hit.closest('[data-bh-actions]')) actHits.push(hit ? `${hit.tagName}.${hit.className}`.slice(0, 40) : 'null');
+              }
+              return { bad: [...new Set(bad)], rowOk, actHits };
+            });
+            if (r.bad.length) problems.push(`${tag} scroll ${frac}: something draws over the title bar: ${r.bad.join(', ')}`);
+            if (!r.rowOk) problems.push(`${tag} scroll ${frac}: the button row is not on screen`);
+            if (r.actHits.length) problems.push(`${tag} scroll ${frac}: something covers the button row: ${r.actHits.join(', ')}`);
+          }
+          const clip = await h.page.evaluate(findClipping, { root: 'dialog.sheet[open]' });
+          for (const c of clip) problems.push(`${tag}: ${c}`);
+          await h.ctx.close();
+        }
+    assert(problems.length === 0, problems.slice(0, 10).join(' ⏎ '));
+  });
+
   // ---------------------------------------------------------------- Edit game
   await check('EDIT: status control first in card 1, then Date/Court, Start/End, Length; card 2 is Label; then the CourtReserve button and Save; the "Cancel by" line is gone', async () => {
     const h = await openAdmin({ width: 420, height: 912 });
@@ -366,8 +487,11 @@ async function main() {
     assert(first.startsWith('bh-top') && first.endsWith('true'), `the status control is first: ${first}`);
     assert((await f.locator('.bh-card').first().locator('.bh-lab').allInnerTexts()).join('|') === 'Date|Court|Start|End|Length', 'card 1 labels');
     assert((await f.locator('.bh-card').nth(1).locator('.bh-lab').innerText()) === 'Label', 'card 2 is the Label');
-    const kids = await f.evaluate((el) => [...el.children].map((c) => c.className.split(' ')[0] + (c.tagName === 'BUTTON' ? ':' + c.textContent : '') + (c.tagName === 'A' ? ':' + c.textContent.trim() : '')));
-    assert(kids.join('|') === 'bh-card|bh-card|ext-link:Change court on CourtReserve|btn:Save' || kids.length === 4, `form children: ${kids}`);
+    const kids = await f.evaluate((el) => [...el.children].map((c) => c.className.split(' ')[0]));
+    assert(kids.join('|') === 'bh-card|bh-card|bh-actions', `form children: ${kids}`);
+    const acts = await f.locator('[data-bh-actions]').evaluate((e) => [...e.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
+    assert(acts.join('|') === 'Change court (opens CourtReserve)|Save', `bottom row: ${acts}`);
+    assert((await f.locator('[data-bh-actions] a').getAttribute('href')).includes('courtreserve.com'), 'the blue button still opens CourtReserve');
     assert(!/Cancel by/.test(await f.innerText()), 'no "Cancel by" line');
     assert((await f.locator('[data-cancel-by]').count()) === 0, 'no cancel-by line element');
     // The cancel time itself is still the game's (start minus 12 hours); nothing about it changed.

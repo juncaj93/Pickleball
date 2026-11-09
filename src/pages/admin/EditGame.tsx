@@ -175,9 +175,12 @@ export function EditGameForm({ ctx, s, onDone }: { ctx: AdminCtx; s: AdminSessio
           </label>
         )}
         {error && <p className="field-error">{error}</p>}
-        <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Change court on CourtReserve</CourtReserveLink>
         {s.shownEarly && <HideAgain ctx={ctx} s={s} />}
-        {saveButton}
+        {/* One row, pinned at the bottom of the sheet: the blue CourtReserve button (as before, a shorter name) and Save, equal halves. */}
+        <div className="bh-actions" data-bh-actions>
+          <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Change court</CourtReserveLink>
+          {saveButton}
+        </div>
       </form>
     );
   }

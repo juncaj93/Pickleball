@@ -19,7 +19,7 @@ import { useZip7Root } from '../zip7';
 import { AcIcon, AcTitle } from '../AlertCard';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
-import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, minutesToHHMM } from '../../shared/settings';
 import { checkBookingTimes, isPickerLength } from '../../shared/bookingHours';
 import { PICKER_MINUTES } from '../../shared/gameLength';
 import { GameTimeCard, startForDate } from './admin/TimePicker';
@@ -884,9 +884,13 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
           <input className="bh-box" type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder={courtOn ? 'Bring water' : 'Court 3, bring water'} />
         </label>
         {error && <Notice tone="danger">{error}</Notice>}
-        <button className="btn block big" type="submit" disabled={busy}>
-          {busy ? 'Adding…' : 'Add game'}
-        </button>
+        {/* One row, pinned at the bottom of the sheet: the same blue CourtReserve button as Edit game, and Add game, equal halves. */}
+        <div className="bh-actions" data-bh-actions>
+          <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Change court</CourtReserveLink>
+          <button className="btn big" type="submit" disabled={busy}>
+            {busy ? 'Adding…' : 'Add game'}
+          </button>
+        </div>
       </form>
     );
   }

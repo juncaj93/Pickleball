@@ -20,6 +20,13 @@ export function weekdayDate(date: string): string {
   return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }).replace(',', '');
 }
 
+/** "Nov 11, 2026" for a plain "YYYY-MM-DD" date (what the Date box shows; the native date input sits invisibly on top of it and takes the tap). */
+export function dateText(date: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!m) return 'Pick a date';
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
 /** "7:30" for a chip (no AM or PM on the chip; the AM and PM labels above the rows say which). */
 const chipLabel = (m: number) => clockLabel(m).replace(/ [AP]M$/, '');
 
@@ -93,7 +100,12 @@ export function GameTimeCard({
       <div className="bh-row">
         <label className="bh-cell">
           <span className="bh-lab">Date</span>
-          <input type="date" className="bh-box" {...(dateAttr ? { [dateAttr]: '' } : {})} value={date} onChange={(e) => onDate(e.target.value)} required />
+          <span className="bh-box bh-date">
+            <span className="bh-date-text" data-bh-date-text>
+              {dateText(date)}
+            </span>
+            <input type="date" className="bh-date-input" {...(dateAttr ? { [dateAttr]: '' } : {})} value={date} onChange={(e) => onDate(e.target.value)} required />
+          </span>
         </label>
         {court && (
           <div className="bh-cell" data-bh-court>
