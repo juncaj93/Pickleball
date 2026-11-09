@@ -1,4 +1,4 @@
-import { shortGameHeadsUpParts, shortGameTag, viewPrice } from '../../../shared/gameLength';
+import { lengthRow, shortGameHeadsUpParts, shortGameTag, viewPrice } from '../../../shared/gameLength';
 import type { AdminSessionView } from '../../../shared/api';
 import type { AdminCtx } from '../Admin';
 
@@ -13,7 +13,10 @@ export { boxMinutes } from '../../../shared/gameLength';
  * they change. Nothing for a normal 2 hour game or any other length.
  */
 export function ShortGameHeadsUp({ ctx, minutes }: { ctx: AdminCtx; minutes: number | null }) {
-  if (ctx.d.shortGames !== true || minutes === null) return null;
+  if (minutes === null) return null;
+  // Each length's own switch: Short games for 1.5 hours, Booking hours (for everyone) for 2.5 and 3 hours.
+  const row = lengthRow(minutes);
+  if (!row || (row.group === 'long' ? ctx.d.longGames !== true : ctx.d.shortGames !== true)) return null;
   const parts = shortGameHeadsUpParts(minutes, ctx.d.longGames === true);
   if (!parts) return null;
   return (

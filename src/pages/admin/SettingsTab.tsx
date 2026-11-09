@@ -1369,7 +1369,7 @@ function InstantAdminRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 /** Zip 24, "Booking hours" (BOOKING_HOURS, server/bookingHours.ts): tap-to-pick game times, and a game outside the venue hours is refused. Organizer only. Off: only /admin?bookinghours=on. */
 function BookingHoursRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="bookingHoursAll" path="/api/admin/booking-hours-switch" name="Booking hours" hint="Tap-to-pick times on Add game and Edit game. A game outside the venue hours is blocked" flag={!!ctx.d.bookingHoursForAll} dataAttr="data-booking-hours-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="bookingHoursAll" path="/api/admin/booking-hours-switch" name="Booking hours" hint="Changes money for 2.5 and 3 hour games ($18 and $21 each). Tap-to-pick times on Add game and Edit game; a game outside the venue hours is blocked" flag={!!ctx.d.bookingHoursForAll} dataAttr="data-booking-hours-all" />;
 }
 /** Zip 23, "Totals refresh" (TOTALS_REFRESH, server/totalsRefresh.ts): the new Money > Totals look. Organizer only, display only. Off: only /admin?totalsrefresh=on. */
 function TotalsRefreshRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {

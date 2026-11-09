@@ -323,6 +323,24 @@ describe('2.5 and 3 hour games through the API: switch ON for everyone', () => {
   });
 });
 
+describe('a player\'s screen notices the flip', () => {
+  it('the "did anything change?" stamp moves when the row goes on (and back when it goes off); with the row off it is what it was', async () => {
+    const ctx = await group();
+    const blair = await playerPhone(ctx, 'Blair');
+    const v = async () => (await blair.call('GET', '/api/group/version')).data.v as string;
+    const off = await v();
+    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: true });
+    const on = await v();
+    expect(on).not.toBe(off);
+    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: false });
+    expect(await v()).toBe(off);
+    // The kill switch hides it again.
+    await ctx.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: true });
+    (ctx.app.env as unknown as Record<string, unknown>).BOOKING_HOURS = 'off';
+    expect(await v()).toBe(off);
+  });
+});
+
 describe('flipping the Booking hours row reprices open 2.5 and 3 hour games, and only those', () => {
   it('a 2.5 hour game made while OFF owes $14; ON makes it $18 and a 3 hour $21 for everyone; OFF again back to $14; other games never move', async () => {
     const ctx = await group();
