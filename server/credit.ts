@@ -381,6 +381,49 @@ export function repriceStatements(db: D1Database, sessionId: string, flatCents: 
   ];
 }
 
+/**
+ * Zip 27 (A-02): seats that now owe a fee (a late cancel with the fee kept, a late drop that left the game short) but hold a payment
+ * made at a LOWER price than that fee (the game was made longer, or a switch raised its price, after they paid). Without this the seat
+ * keeps reading "paid" and the difference is never asked for. Exactly what Finalize does for a played seat paid below the final price:
+ * the cash in the payment (beyond credit on the seat) is held against the seat as a 'cash' pair (+kept, -used: the pot does not change),
+ * and the seat goes back to unpaid, so it owes only the rest. Nothing is ever taken away, and a later Clear, sub, cancel or drop gives
+ * the whole amount back the usual way.
+ * `seatWhere(sp)` (SQL over the session_players alias) says which seats; ?1 is the time, ?2 the game, ?3 the fee, ?4 the one player (or ''
+ * for every seat), ?5 the organizer (never touched: their seat's payment is the court payment). An unconfirmed I paid is never touched.
+ * Statements only, for the caller's batch, after the change that makes the fee (they read the seats as that change left them).
+ */
+export function holdShortCashStatements(
+  db: D1Database,
+  args: { sessionId: string; feeCents: number; nowIso: string; playerId?: string | null; organizerId: string | null; seatWhere: (sp: string) => string },
+): D1PreparedStatement[] {
+  const { sessionId, feeCents, nowIso, playerId, organizerId, seatWhere } = args;
+  const cond = (sp: string) =>
+    `${sp}.session_id = ?2 AND (?4 = '' OR ${sp}.player_id = ?4) AND ${sp}.player_id <> ?5
+     AND ${sp}.payment_status = 'paid' AND ${sp}.refunded_at IS NULL AND ${sp}.self_paid_at IS NULL AND COALESCE(${sp}.payment_amount_cents, 0) < ?3
+     AND (${seatWhere(sp)})`;
+  const cash = (sp: string) => `(COALESCE(${sp}.payment_amount_cents, 0) - ${SEAT_USED(sp)} - ${SEAT_CASH(sp)})`;
+  const binds = [nowIso, sessionId, feeCents, playerId ?? '', organizerId ?? ''];
+  const hold = (kind: 'kept' | 'used') =>
+    db
+      .prepare(
+        `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
+         SELECT ${SQL_ID}, s.group_id, sp.player_id, '${kind}', ${cash('sp')}, sp.session_id, ?1, 'cash'
+         FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+         WHERE ${cond('sp')} AND ${cash('sp')} > 0`,
+      )
+      .bind(...binds);
+  return [
+    hold('kept'),
+    hold('used'),
+    db
+      .prepare(
+        `UPDATE session_players SET payment_status = 'unpaid', paid_at = NULL, payment_amount_cents = NULL, self_paid_at = NULL, payment_updated_at = ?1, updated_at = ?1
+         WHERE ${cond('session_players')}`,
+      )
+      .bind(...binds),
+  ];
+}
+
 /** One seat's money as read for the late-cancel split (shared/lateFees.ts feeSplitPrice). */
 export interface SplitSeat {
   playerId: string;

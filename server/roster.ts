@@ -2,13 +2,13 @@ import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { capOf, type GroupSettings } from '../shared/settings';
 import { DB_LIMIT_MESSAGE } from '../shared/zip10';
-import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, moneyBackAt, seatMoneyBackStatements } from './credit';
+import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, holdShortCashStatements, moneyBackAt, seatMoneyBackStatements } from './credit';
 import { finishLateDropClear, LEAVES_SHORT, OPEN_FEE, OPEN_LATE_DROP, tagOldestLateDrop } from './lateFees';
 import { lateFeeCutoffMs } from '../shared/lateFees';
 import { newId } from './crypto';
 import { type D1Database, isTriggerError } from './db';
 import { HttpError } from './http';
-import { audit, type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf } from './repo';
+import { audit, flatOf, type GroupRow, type SessionRow, waitlistOf, loadRoster, confirmedOf, organizerIdOf, settingsOf } from './repo';
 
 // One court, any number from 4 up to the organizer's max (see shared/spots.ts).
 //
@@ -403,6 +403,19 @@ export async function withdraw(
         ]
       : []),
     ...money,
+    // Zip 27 (A-02): a late drop that owes, on a seat paid at a LOWER price than the game's price now (the game was made longer after
+    // they paid): the cash is held against the seat so it owes the rest of the $14, instead of reading "paid". Only this drop's debt
+    // (late_drop_at is this moment); never the organizer (their payment is the court payment). Last, so the reads below are unchanged.
+    ...(leaving && feeDrop && !isOrg
+      ? holdShortCashStatements(db, {
+          sessionId: session.id,
+          feeCents: flatOf(session, settingsOf(group)),
+          nowIso,
+          playerId,
+          organizerId,
+          seatWhere: (sp) => `${sp}.status = 'withdrawn' AND ${sp}.played = 0 AND ${sp}.late_drop_at = ?1 AND ${sp}.late_drop_done_at IS NULL`,
+        })
+      : []),
   ]);
   const changed = leaving && out[0].meta.changes === 1;
   const [kept, , ended] = out.slice(leaving ? 1 : 0);

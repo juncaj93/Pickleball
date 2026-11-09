@@ -3,6 +3,7 @@ import type { D1Database } from './db';
 import { requireAdmin } from './auth';
 import { HttpError } from './http';
 import { spentByPlayer } from './adminR3';
+import { spentTotalsFlags } from './spentTotals';
 import { MEMBERSHIP_FROM } from '../shared/moneyRework';
 import { zip13For } from './zip13';
 import { monthMoneyOf } from './money';
@@ -52,8 +53,11 @@ export async function monthPlayedCounts(ctx: Ctx, group: GroupRow): Promise<{ co
 }
 
 /** The organizer's "Spent" = Money Totals "Your cost so far", month by month. */
-async function organizerSpent(ctx: Ctx, group: GroupRow, year: number, month: number): Promise<number> {
+async function organizerSpent(ctx: Ctx, group: GroupRow, year: number, month: number, matchTotals = false): Promise<number> {
   const m = await monthMoneyOf(ctx, group, year, month, true);
+  // "Spent matches Totals" (Zip 27, A-05): the "So far" total itself, owed to the venue minus what the players paid. Below $0 is a credit
+  // month (the players paid more than the venue was owed), the way Totals shows it; before, it stopped at $0.
+  if (matchTotals) return m.rework ? m.rework.owedToVenueCents - m.rework.collectedCents : 0;
   return m.rework?.yourCostCents ?? 0;
 }
 
@@ -95,13 +99,14 @@ export async function playerSummary(ctx: Ctx): Promise<PlayerSummary> {
   const allPlayed = (await playedCounts(ctx.db, group.id, ctx.nowIso)).get(id) ?? 0;
   let monthSpent: number;
   let allSpent: number;
+  const matchTotals = (await spentTotalsFlags(ctx, group.id)).on;
   if (id === organizerId) {
-    monthSpent = await organizerSpent(ctx, group, now.year, now.month);
+    monthSpent = await organizerSpent(ctx, group, now.year, now.month, matchTotals);
     allSpent = monthSpent;
-    for (const m of await pastMonthsWithGames(ctx, group)) allSpent += await organizerSpent(ctx, group, m.year, m.month);
+    for (const m of await pastMonthsWithGames(ctx, group)) allSpent += await organizerSpent(ctx, group, m.year, m.month, matchTotals);
   } else {
-    monthSpent = (await spentByPlayer(ctx.db, group.id, organizerId, range)).get(id) ?? 0;
-    allSpent = (await spentByPlayer(ctx.db, group.id, organizerId)).get(id) ?? 0;
+    monthSpent = (await spentByPlayer(ctx.db, group.id, organizerId, range, matchTotals)).get(id) ?? 0;
+    allSpent = (await spentByPlayer(ctx.db, group.id, organizerId, undefined, matchTotals)).get(id) ?? 0;
   }
   return {
     month: { label: `${MONTHS[now.month - 1]} ${now.year}`, played: monthPlayed, spentCents: monthSpent },

@@ -1,5 +1,5 @@
 import { type SeatPrice, seatPrices } from '../shared/pricing';
-import { type GamePrice, gamePrice } from '../shared/gameLength';
+import { type GamePrice, gameMinutes, gamePrice, lengthRow } from '../shared/gameLength';
 import { planSessions } from '../shared/schedule';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { type GroupSettings, normalizeSettings } from '../shared/settings';
@@ -8,7 +8,7 @@ import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
 import { lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 import { OPEN_FEE } from './lateFees';
-import type { D1Database } from './db';
+import type { D1Database, D1PreparedStatement } from './db';
 
 export interface GroupRow {
   id: string;
@@ -94,6 +94,8 @@ export interface SessionRow {
   updated_at: string;
   /** When the game was made (Zip 15 reads it: a game added on its own day). Every SELECT * has it. */
   created_at?: string;
+  /** Zip 27 (A-01): the price rules this game was finalized under, as written down in task_log (priceLockCol). Only loaders that ask for it have it. */
+  price_lock?: string | null;
 }
 
 export interface RosterRow {
@@ -145,18 +147,106 @@ export function settingsOf(group: GroupRow): GroupSettings {
  * One game's price (shared/gameLength.ts): Settings > Money for a normal game and for every game while "Short games" is off;
  * the game-length table row for a 1.5 hour game while it is on. Every server price path goes through this.
  */
-export function priceOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): GamePrice {
-  return gamePrice({ startsAt: session.starts_at, endsAt: session.ends_at }, settings, settings.shortGames === true, settings.longGames === true);
+export function priceOf(session: PricedGame, settings: GroupSettings): GamePrice {
+  // Zip 27 (A-01): a game that was finalized keeps the price rules it was finalized under, whatever a switch or Settings > Money says later.
+  return lockedPrice(session) ?? gamePrice({ startsAt: session.starts_at, endsAt: session.ends_at }, settings, settings.shortGames === true, settings.longGames === true);
+}
+
+/** What priceOf needs from a game: its times, and the lock when the loader read it. */
+export type PricedGame = Pick<SessionRow, 'starts_at' | 'ends_at'> & { price_lock?: string | null };
+
+// ---------- Zip 27 (A-01): a finalized game keeps its price rules ----------
+// When the organizer finalizes a game, the price rules it was finalized under are written down: the up-front price, the court cost and which
+// length row (1.5, 2.5 or 3 hours) priced it, or none (Settings > Money). They go in task_log (kind 'mark', task 'price_lock', the game's
+// own row, the numbers in `detail`), so there is no schema change. Every price path reads a game through priceOf, which uses the lock first,
+// so turning Short games or Booking hours off, or changing "Typical court cost" or "Price per player", never re-prices a finalized game:
+// Money > Totals, a Reopen and redo, and a no-show debt keep the numbers the game had when it was finalized.
+// Games finalized before Zip 27, and canceled games (their fee and their charged court), get their lock written right before any of those
+// switches or settings change (lockFinalizedGames), from the rules they show at that moment, so nothing they show changes either.
+// A lock only counts while the game is still the same length (a game cannot be moved once it started, so in practice it always is).
+// Not in backup files (task_log is not, docs/RESTORE.md): after a restore from a file the games follow the switches again, as before Zip 27.
+
+export const PRICE_LOCK_TASK = 'price_lock';
+
+/** The lock as SQL, for a SELECT over `alias` (a sessions row): `SELECT *, ${priceLockCol('sessions')} FROM sessions ...`. */
+export const priceLockCol = (alias: string) =>
+  `(SELECT pl.detail FROM task_log pl WHERE pl.session_id = ${alias}.id AND pl.task = '${PRICE_LOCK_TASK}' AND pl.kind = 'mark') AS price_lock`;
+
+interface PriceLock {
+  /** The game's length when it was locked. */
+  m: number;
+  /** The up-front price, in cents. */
+  flat: number;
+  /** The court cost when the booking has none typed in, in cents. */
+  court: number;
+  /** The length row that priced it (90, 150, 180), or null: Settings > Money (floor(4 x flat / N)). */
+  row: number | null;
+}
+
+/** The lock's words in task_log.detail. */
+export function priceLockDetail(p: GamePrice): string {
+  const lock: PriceLock = { m: p.minutes, flat: p.flatCents, court: p.courtCents, row: p.special && p.row ? p.row.minutes : null };
+  return JSON.stringify(lock);
+}
+
+/** The price a lock gives, or null: no lock, an unreadable one, or the game is no longer that length. */
+export function lockedPrice(session: PricedGame): GamePrice | null {
+  if (!session.price_lock) return null;
+  let lock: PriceLock;
+  try {
+    lock = JSON.parse(session.price_lock) as PriceLock;
+  } catch {
+    return null;
+  }
+  const minutes = gameMinutes(session.starts_at, session.ends_at);
+  const whole = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 0;
+  if (!lock || lock.m !== minutes || !whole(lock.flat) || !whole(lock.court)) return null;
+  if (lock.row === null || lock.row === undefined) return { minutes, special: false, row: null, flatCents: lock.flat, courtCents: lock.court };
+  const row = lengthRow(lock.row);
+  if (!row || row.minutes !== minutes) return null;
+  return { minutes, special: true, row, flatCents: lock.flat, courtCents: lock.court };
+}
+
+/**
+ * The statements that write a game's lock (delete the old one, insert this one), for the caller's batch. `guard` (SQL) limits them to the
+ * batch's own change (the finalize it made). The lock goes on the game's own task_log row, so it is removed with the game.
+ */
+export function priceLockStatements(db: D1Database, groupId: string, sessionId: string, price: GamePrice, nowIso: string, guard = '1 = 1'): D1PreparedStatement[] {
+  return [
+    db.prepare(`DELETE FROM task_log WHERE session_id = ?1 AND task = '${PRICE_LOCK_TASK}' AND kind = 'mark' AND ${guard}`).bind(sessionId),
+    db
+      .prepare(`INSERT INTO task_log (id, group_id, session_id, task, kind, detail, at) SELECT ?1, ?2, ?3, '${PRICE_LOCK_TASK}', 'mark', ?4, ?5 WHERE ${guard}`)
+      .bind(newId(), groupId, sessionId, priceLockDetail(price), nowIso),
+  ];
+}
+
+/**
+ * Writes the lock of every finalized or canceled game that has none yet (a canceled game can still hold a fee, and Totals counts its
+ * court the venue charged; a Reopen of a canceled game takes its lock away again), from the price rules it shows right now (`settings`: the rules for EVERYONE,
+ * never one phone's private test link). Called right before a switch or a Settings > Money value that changes prices is changed, so a game
+ * finalized before Zip 27 keeps exactly what it showed. Returns how many it locked.
+ */
+export async function lockFinalizedGames(db: D1Database, groupId: string, settings: GroupSettings, nowIso: string): Promise<number> {
+  const { results } = await db
+    .prepare(
+      `SELECT * FROM sessions s WHERE s.group_id = ? AND (s.finalized_at IS NOT NULL OR s.status = 'canceled')
+         AND NOT EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = '${PRICE_LOCK_TASK}' AND t.kind = 'mark')`,
+    )
+    .bind(groupId)
+    .all<SessionRow>();
+  if (results.length === 0) return 0;
+  await db.batch(results.flatMap((s) => priceLockStatements(db, groupId, s.id, priceOf(s, settings), nowIso)));
+  return results.length;
 }
 
 /** A 1.5 hour game's own flat price ("Short games" on), for the words that would otherwise say $14; null for a normal game (nothing changes). */
-export function specialFlatOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): number | null {
+export function specialFlatOf(session: PricedGame, settings: GroupSettings): number | null {
   const p = priceOf(session, settings);
   return p.special ? p.flatCents : null;
 }
 
 /** The flat price everyone in this game pays up front ($14 for a normal game, $11 for a 1.5 hour game with "Short games" on). */
-export function flatOf(session: Pick<SessionRow, 'starts_at' | 'ends_at'>, settings: GroupSettings): number {
+export function flatOf(session: PricedGame, settings: GroupSettings): number {
   return priceOf(session, settings).flatCents;
 }
 
@@ -210,7 +300,7 @@ export async function organizerIdOf(db: D1Database, group: Pick<GroupRow, 'id' |
 }
 
 export async function getSession(db: D1Database, groupId: string, sessionId: string): Promise<SessionRow | null> {
-  return db.prepare('SELECT * FROM sessions WHERE id = ? AND group_id = ?').bind(sessionId, groupId).first<SessionRow>();
+  return db.prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE id = ? AND group_id = ?`).bind(sessionId, groupId).first<SessionRow>();
 }
 
 /**
@@ -272,7 +362,7 @@ export function visibleFrom(group: Pick<GroupRow, 'first_session_date' | 'timezo
 }
 
 export const sessionsRead = (groupId: string, endsAfterIso: string, startsFromIso = '0000'): ReadSpec => ({
-  sql: 'SELECT * FROM sessions WHERE group_id = ? AND ends_at > ? AND (starts_at >= ? OR shown_early = 1) ORDER BY starts_at',
+  sql: `SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND ends_at > ? AND (starts_at >= ? OR shown_early = 1) ORDER BY starts_at`,
   values: [groupId, endsAfterIso, startsFromIso],
 });
 
@@ -368,7 +458,7 @@ export function pricesFor(session: SessionRow, roster: RosterRow[], settings: Gr
 }
 
 /** What the venue charges for a session: the cost on the booking, else the typical court cost (a 1.5 hour game's row with "Short games" on). */
-export function courtCostOf(session: Pick<SessionRow, 'court_cost_cents' | 'starts_at' | 'ends_at'>, settings: GroupSettings): number {
+export function courtCostOf(session: PricedGame & Pick<SessionRow, 'court_cost_cents'>, settings: GroupSettings): number {
   return session.court_cost_cents ?? priceOf(session, settings).courtCents;
 }
 

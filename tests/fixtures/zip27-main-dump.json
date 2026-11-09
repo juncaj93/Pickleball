@@ -1,0 +1,3854 @@
+{
+ "booking hours on": {
+  "game 2026-10-07T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-07T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 3600,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 3500,
+    "typicalCost": true,
+    "yourShareCents": 100
+   },
+   "finalized": {
+    "at": "2026-10-08T00:00:00.000Z",
+    "creditBackCents": 2000,
+    "flatCents": 1100,
+    "playedCount": 6,
+    "priceCents": 700
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 3600,
+    "flatCents": 1100,
+    "minutes": 90
+   }
+  },
+  "game 2026-10-08T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5500,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-09T00:30:00.000Z",
+    "creditBackCents": 900,
+    "flatCents": 1400,
+    "playedCount": 5,
+    "priceCents": 1100
+   },
+   "roster": {
+    "Blair": {
+     "amount": null,
+     "back": 0,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 700,
+     "pay": "unpaid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": null,
+     "back": 0,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 700,
+     "pay": "unpaid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-09T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-09T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 6000,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 6000,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-10T01:00:00.000Z",
+    "creditBackCents": 4000,
+    "flatCents": 1800,
+    "playedCount": 7,
+    "priceCents": 1000
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1000,
+     "pay": "unpaid",
+     "share": 1000,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1800,
+     "back": 800,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1000,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1800,
+     "back": 800,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1000,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": 1800,
+     "back": 800,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1000,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1800,
+     "back": 800,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1000,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": 1800,
+     "back": 800,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1000,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 6000,
+    "flatCents": 1800,
+    "minutes": 150
+   }
+  },
+  "game 2026-10-10T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 7200,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 8400,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-11T01:30:00.000Z",
+    "creditBackCents": 0,
+    "flatCents": 2100,
+    "playedCount": 3,
+    "priceCents": 2100
+   },
+   "roster": {
+    "Casey": {
+     "amount": 2100,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 2100,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 2100,
+     "back": 0,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 2100,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 2100,
+     "back": 0,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 2100,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 2100,
+     "back": 0,
+     "credit": 300,
+     "earlier": 0,
+     "fee": {
+      "kind": "no_show",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 2100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 7200,
+    "flatCents": 2100,
+    "minutes": 180
+   }
+  },
+  "game 2026-10-12T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4900,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-13T00:30:00.000Z",
+    "creditBackCents": 4900,
+    "flatCents": 1400,
+    "playedCount": 8,
+    "priceCents": 700
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 800,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 800,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-14T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-14T22:00:00.000Z": {
+   "canceled": true,
+   "court": {
+    "costCents": 3600,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4200,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": null,
+   "roster": {
+    "Blair": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 3600,
+    "flatCents": 1100,
+    "minutes": 90
+   }
+  },
+  "game 2026-10-15T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5600,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-16T00:30:00.000Z",
+    "creditBackCents": 0,
+    "flatCents": 1400,
+    "playedCount": 3,
+    "priceCents": 1400
+   },
+   "roster": {
+    "Gale": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1400,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": null,
+     "back": 0,
+     "credit": 100,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1300,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 800,
+     "earlier": 0,
+     "fee": {
+      "kind": "late_drop",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "withdrawn"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-16T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-17T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 6000,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5600,
+    "typicalCost": true,
+    "yourShareCents": 400
+   },
+   "finalized": {
+    "at": "2026-10-18T01:00:00.000Z",
+    "creditBackCents": 1600,
+    "flatCents": 1800,
+    "playedCount": 5,
+    "priceCents": 1400
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1800,
+     "back": 400,
+     "credit": 700,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1800,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1800,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": 1800,
+     "back": 400,
+     "credit": 800,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 6000,
+    "flatCents": 1800,
+    "minutes": 150
+   }
+  },
+  "game 2026-10-21T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-23T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-28T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-30T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-02T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4400,
+    "typicalCost": true,
+    "yourShareCents": 400
+   },
+   "finalized": {
+    "at": "2026-11-03T01:30:00.000Z",
+    "creditBackCents": 1200,
+    "flatCents": 1400,
+    "playedCount": 5,
+    "priceCents": 1100
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-11-04T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-04T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 3600,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4200,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-11-05T01:00:00.000Z",
+    "creditBackCents": 3500,
+    "flatCents": 1100,
+    "playedCount": 7,
+    "priceCents": 600
+   },
+   "roster": {
+    "Blair": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 3600,
+    "flatCents": 1100,
+    "minutes": 90
+   }
+  },
+  "game 2026-11-06T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-06T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 7200,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 6400,
+    "typicalCost": true,
+    "yourShareCents": 800
+   },
+   "finalized": {
+    "at": "2026-11-07T02:30:00.000Z",
+    "creditBackCents": 2000,
+    "flatCents": 2100,
+    "playedCount": 5,
+    "priceCents": 1600
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 2100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1600,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 2100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1600,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 2100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1600,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": 2100,
+     "back": 500,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1600,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 7200,
+    "flatCents": 2100,
+    "minutes": 180
+   }
+  },
+  "game 2026-11-11T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-11T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5600,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": null,
+   "roster": {
+    "Blair": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 500,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": null,
+     "back": 0,
+     "credit": 500,
+     "earlier": 0,
+     "fee": null,
+     "owes": 900,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 500,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": null,
+     "back": 0,
+     "credit": 500,
+     "earlier": 0,
+     "fee": null,
+     "owes": 900,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-11-13T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-18T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-20T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-25T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-27T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-02T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-04T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-09T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-11T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-16T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-18T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "money 2026-10": {
+   "bottomLine": "You covered $31 of the court costs",
+   "collectedCents": 37700,
+   "courtCostCents": 40800,
+   "coveredCents": 3100,
+   "creditsOwedCents": 0,
+   "heldCents": 900,
+   "label": "October 2026",
+   "membershipCents": 3000,
+   "month": "2026-10",
+   "netCents": -3100,
+   "rework": {
+    "collectedCents": 37700,
+    "courtCostCents": 40800,
+    "courtSessions": 8,
+    "membershipCents": 3000,
+    "owedToVenueCents": 43800,
+    "projected": {
+     "addedCourts": 0,
+     "courtCostCents": 40800,
+     "courtCount": 8,
+     "membershipCents": 3000,
+     "playersPayCents": 36300,
+     "totalCents": 43800,
+     "yourCostCents": 7500,
+     "yourCostCourtCents": 4500,
+     "yourCostMembershipCents": 3000
+    },
+    "yourCostCents": 6100,
+    "yourCostCourtCents": 3100,
+    "yourCostMembershipCents": 3000
+   },
+   "sessions": [
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-07T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-07T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 3500,
+     "courtCostCents": 3600,
+     "endsAt": "2026-10-07T23:30:00.000Z",
+     "playedCount": 6,
+     "priceCents": 700,
+     "startsAt": "2026-10-07T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 3300,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-09T00:00:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1100,
+     "startsAt": "2026-10-08T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-09T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-09T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 5000,
+     "courtCostCents": 6000,
+     "endsAt": "2026-10-10T00:30:00.000Z",
+     "playedCount": 7,
+     "priceCents": 1000,
+     "startsAt": "2026-10-09T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 8400,
+     "courtCostCents": 7200,
+     "endsAt": "2026-10-11T01:00:00.000Z",
+     "playedCount": 3,
+     "priceCents": 2100,
+     "startsAt": "2026-10-10T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4900,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-13T00:00:00.000Z",
+     "playedCount": 8,
+     "priceCents": 700,
+     "startsAt": "2026-10-12T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-14T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-14T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": true,
+     "collectedCents": 4200,
+     "courtCostCents": 3600,
+     "endsAt": "2026-10-14T23:30:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-14T22:00:00.000Z",
+     "state": "canceled",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 2800,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-16T00:00:00.000Z",
+     "playedCount": 3,
+     "priceCents": 1400,
+     "startsAt": "2026-10-15T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-16T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-16T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 5600,
+     "courtCostCents": 6000,
+     "endsAt": "2026-10-18T00:30:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1400,
+     "startsAt": "2026-10-17T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-21T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-21T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-23T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-23T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-28T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-28T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-30T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-30T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    }
+   ],
+   "surplusCents": 0
+  },
+  "money 2026-11": {
+   "bottomLine": "You covered $6 of the court costs",
+   "collectedCents": 15000,
+   "courtCostCents": 15600,
+   "coveredCents": 600,
+   "creditsOwedCents": 3500,
+   "heldCents": 3800,
+   "label": "November 2026",
+   "membershipCents": 3000,
+   "month": "2026-11",
+   "netCents": -600,
+   "rework": {
+    "collectedCents": 15000,
+    "courtCostCents": 15600,
+    "courtSessions": 3,
+    "membershipCents": 3000,
+    "owedToVenueCents": 18600,
+    "projected": {
+     "addedCourts": 7,
+     "courtCostCents": 49200,
+     "courtCount": 10,
+     "membershipCents": 3000,
+     "playersPayCents": 43200,
+     "totalCents": 52200,
+     "yourCostCents": 9000,
+     "yourCostCourtCents": 6000,
+     "yourCostMembershipCents": 3000
+    },
+    "yourCostCents": 3600,
+    "yourCostCourtCents": 600,
+    "yourCostMembershipCents": 3000
+   },
+   "sessions": [
+    {
+     "charged": false,
+     "collectedCents": 4400,
+     "courtCostCents": 4800,
+     "endsAt": "2026-11-03T01:00:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1100,
+     "startsAt": "2026-11-02T23:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-04T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-04T01:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4200,
+     "courtCostCents": 3600,
+     "endsAt": "2026-11-05T00:30:00.000Z",
+     "playedCount": 7,
+     "priceCents": 600,
+     "startsAt": "2026-11-04T23:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-06T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-06T01:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 6400,
+     "courtCostCents": 7200,
+     "endsAt": "2026-11-07T02:00:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1600,
+     "startsAt": "2026-11-06T23:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-11T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-11T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-12T01:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-11T23:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-13T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-13T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-18T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-18T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-20T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-20T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-25T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-25T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-27T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-27T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    }
+   ],
+   "surplusCents": 0
+  },
+  "money 2026-12": {
+   "bottomLine": "Nothing played yet",
+   "collectedCents": 0,
+   "courtCostCents": 0,
+   "coveredCents": 0,
+   "creditsOwedCents": 0,
+   "heldCents": 0,
+   "label": "December 2026",
+   "membershipCents": 3000,
+   "month": "2026-12",
+   "netCents": 0,
+   "rework": {
+    "collectedCents": 0,
+    "courtCostCents": 0,
+    "courtSessions": 0,
+    "membershipCents": 0,
+    "owedToVenueCents": 0,
+    "projected": {
+     "addedCourts": 6,
+     "courtCostCents": 28800,
+     "courtCount": 6,
+     "membershipCents": 3000,
+     "playersPayCents": 25200,
+     "totalCents": 31800,
+     "yourCostCents": 6600,
+     "yourCostCourtCents": 3600,
+     "yourCostMembershipCents": 3000
+    },
+    "yourCostCents": 0,
+    "yourCostCourtCents": 0,
+    "yourCostMembershipCents": 0
+   },
+   "sessions": [
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-02T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-02T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-04T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-04T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-09T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-09T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-11T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-11T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-16T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-16T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-18T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-18T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    }
+   ],
+   "surplusCents": 0
+  },
+  "player Blair": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 0,
+    "fee": null,
+    "finalized": null,
+    "owe": 0,
+    "pay": "paid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "player Casey": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 500,
+    "fee": null,
+    "finalized": null,
+    "owe": 900,
+    "pay": "unpaid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "player Devon": {},
+  "player Emery": {},
+  "player Frankie": {},
+  "player Gale": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 0,
+    "fee": null,
+    "finalized": null,
+    "owe": 0,
+    "pay": "paid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "player Harper": {},
+  "player Indy": {},
+  "player Jules": {},
+  "player Kit": {},
+  "player Lee": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 500,
+    "fee": null,
+    "finalized": null,
+    "owe": 900,
+    "pay": "unpaid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "players": {
+   "Alex": {
+    "played": 6,
+    "spent": 0
+   },
+   "Blair": {
+    "played": 6,
+    "spent": 3100
+   },
+   "Casey": {
+    "played": 6,
+    "spent": 6200
+   },
+   "Devon": {
+    "played": 5,
+    "spent": 5100
+   },
+   "Emery": {
+    "played": 5,
+    "spent": 6200
+   },
+   "Frankie": {
+    "played": 3,
+    "spent": 2000
+   },
+   "Gale": {
+    "played": 5,
+    "spent": 4800
+   },
+   "Harper": {
+    "played": 5,
+    "spent": 5900
+   },
+   "Indy": {
+    "played": 4,
+    "spent": 3100
+   },
+   "Jules": {
+    "played": 3,
+    "spent": 1600
+   },
+   "Kit": {
+    "played": 3,
+    "spent": 3000
+   },
+   "Lee": {
+    "played": 3,
+    "spent": 4000
+   }
+  },
+  "pots": {
+   "Blair": 0,
+   "Casey": 0,
+   "Devon": 500,
+   "Emery": 500,
+   "Frankie": 500,
+   "Gale": 0,
+   "Harper": 500,
+   "Indy": 500,
+   "Jules": 500,
+   "Kit": 500,
+   "Lee": 0
+  },
+  "summary Alex": {
+   "allTime": {
+    "played": 6,
+    "spentCents": 9700
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 3600
+   },
+   "organizer": true
+  },
+  "summary Blair": {
+   "allTime": {
+    "played": 6,
+    "spentCents": 3100
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 1700
+   },
+   "organizer": false
+  },
+  "summary Casey": {
+   "allTime": {
+    "played": 6,
+    "spentCents": 6200
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 2700
+   },
+   "organizer": false
+  },
+  "summary Devon": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 5100
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 2700
+   },
+   "organizer": false
+  },
+  "summary Emery": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 6200
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 2700
+   },
+   "organizer": false
+  },
+  "summary Frankie": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 2000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Gale": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 4800
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Harper": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 5900
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Indy": {
+   "allTime": {
+    "played": 4,
+    "spentCents": 3100
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Jules": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 1600
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Kit": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 3000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Lee": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 4000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 1600
+   },
+   "organizer": false
+  }
+ },
+ "live switches": {
+  "game 2026-10-07T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-07T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 3600,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 3500,
+    "typicalCost": true,
+    "yourShareCents": 100
+   },
+   "finalized": {
+    "at": "2026-10-08T00:00:00.000Z",
+    "creditBackCents": 2000,
+    "flatCents": 1100,
+    "playedCount": 6,
+    "priceCents": 700
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 1100,
+     "back": 400,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 3600,
+    "flatCents": 1100,
+    "minutes": 90
+   }
+  },
+  "game 2026-10-08T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5500,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-09T00:30:00.000Z",
+    "creditBackCents": 900,
+    "flatCents": 1400,
+    "playedCount": 5,
+    "priceCents": 1100
+   },
+   "roster": {
+    "Blair": {
+     "amount": null,
+     "back": 0,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 700,
+     "pay": "unpaid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": null,
+     "back": 0,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 700,
+     "pay": "unpaid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-09T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-09T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4800,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-10T01:00:00.000Z",
+    "creditBackCents": 3000,
+    "flatCents": 1400,
+    "playedCount": 7,
+    "priceCents": 800
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 800,
+     "pay": "unpaid",
+     "share": 800,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1400,
+     "back": 600,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 800,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 600,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 800,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": 1400,
+     "back": 600,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 800,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1400,
+     "back": 600,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 800,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": 1400,
+     "back": 600,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 800,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-10T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5600,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-11T01:30:00.000Z",
+    "creditBackCents": 0,
+    "flatCents": 1400,
+    "playedCount": 3,
+    "priceCents": 1400
+   },
+   "roster": {
+    "Casey": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 300,
+     "earlier": 0,
+     "fee": {
+      "kind": "no_show",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-12T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4900,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-13T00:30:00.000Z",
+    "creditBackCents": 4900,
+    "flatCents": 1400,
+    "playedCount": 8,
+    "priceCents": 700
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 600,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 600,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1400,
+     "back": 700,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-14T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-14T22:00:00.000Z": {
+   "canceled": true,
+   "court": {
+    "costCents": 3600,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4200,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": null,
+   "roster": {
+    "Blair": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 700,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 700,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": null,
+     "back": 0,
+     "credit": 600,
+     "earlier": 0,
+     "fee": {
+      "kind": "canceled_late",
+      "oweCents": 100,
+      "paid": false
+     },
+     "owes": 100,
+     "pay": "unpaid",
+     "share": 700,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 3600,
+    "flatCents": 1100,
+    "minutes": 90
+   }
+  },
+  "game 2026-10-15T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5600,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-10-16T00:30:00.000Z",
+    "creditBackCents": 0,
+    "flatCents": 1400,
+    "playedCount": 3,
+    "priceCents": 1400
+   },
+   "roster": {
+    "Gale": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 700,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1400,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1400,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 600,
+     "earlier": 0,
+     "fee": {
+      "kind": "late_drop",
+      "oweCents": 0,
+      "paid": true
+     },
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "withdrawn"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-16T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-17T22:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4400,
+    "typicalCost": true,
+    "yourShareCents": 400
+   },
+   "finalized": {
+    "at": "2026-10-18T01:00:00.000Z",
+    "creditBackCents": 1200,
+    "flatCents": 1400,
+    "playedCount": 5,
+    "priceCents": 1100
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 700,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 600,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-10-21T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-23T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-28T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-10-30T00:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-02T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4400,
+    "typicalCost": true,
+    "yourShareCents": 400
+   },
+   "finalized": {
+    "at": "2026-11-03T01:30:00.000Z",
+    "creditBackCents": 1200,
+    "flatCents": 1400,
+    "playedCount": 5,
+    "priceCents": 1100
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Blair": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 400,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-11-04T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-04T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 3600,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4200,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": {
+    "at": "2026-11-05T01:00:00.000Z",
+    "creditBackCents": 3500,
+    "flatCents": 1100,
+    "playedCount": 7,
+    "priceCents": 600
+   },
+   "roster": {
+    "Blair": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Frankie": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Harper": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Indy": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Jules": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    },
+    "Kit": {
+     "amount": 1100,
+     "back": 500,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 600,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": {
+    "courtCents": 3600,
+    "flatCents": 1100,
+    "minutes": 90
+   }
+  },
+  "game 2026-11-06T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-06T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": false,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 4400,
+    "typicalCost": true,
+    "yourShareCents": 400
+   },
+   "finalized": {
+    "at": "2026-11-07T02:30:00.000Z",
+    "creditBackCents": 1200,
+    "flatCents": 1400,
+    "playedCount": 5,
+    "priceCents": 1100
+   },
+   "roster": {
+    "Alex": {
+     "amount": null,
+     "back": 0,
+     "credit": 0,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "unpaid",
+     "share": null,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Devon": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Emery": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": 1400,
+     "back": 300,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1100,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-11-11T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-11T23:00:00.000Z": {
+   "canceled": false,
+   "court": {
+    "costCents": 4800,
+    "covered": true,
+    "paid": false,
+    "paidAt": null,
+    "playersCoverCents": 5600,
+    "typicalCost": true,
+    "yourShareCents": 0
+   },
+   "finalized": null,
+   "roster": {
+    "Blair": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 500,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Casey": {
+     "amount": null,
+     "back": 0,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1100,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Gale": {
+     "amount": 1400,
+     "back": 0,
+     "credit": 500,
+     "earlier": 0,
+     "fee": null,
+     "owes": 0,
+     "pay": "paid",
+     "share": 1400,
+     "status": "confirmed"
+    },
+    "Lee": {
+     "amount": null,
+     "back": 0,
+     "credit": 300,
+     "earlier": 0,
+     "fee": null,
+     "owes": 1100,
+     "pay": "unpaid",
+     "share": 1400,
+     "status": "confirmed"
+    }
+   },
+   "shortGame": null
+  },
+  "game 2026-11-13T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-18T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-20T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-25T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-11-27T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-02T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-04T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-09T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-11T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-16T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "game 2026-12-18T01:00:00.000Z": {
+   "canceled": false,
+   "court": null,
+   "finalized": null,
+   "roster": {},
+   "shortGame": null
+  },
+  "money 2026-10": {
+   "bottomLine": "You covered $40 of the court costs",
+   "collectedCents": 32000,
+   "courtCostCents": 36000,
+   "coveredCents": 4000,
+   "creditsOwedCents": 0,
+   "heldCents": 1400,
+   "label": "October 2026",
+   "membershipCents": 3000,
+   "month": "2026-10",
+   "netCents": -4000,
+   "rework": {
+    "collectedCents": 32000,
+    "courtCostCents": 36000,
+    "courtSessions": 8,
+    "membershipCents": 3000,
+    "owedToVenueCents": 39000,
+    "projected": {
+     "addedCourts": 0,
+     "courtCostCents": 36000,
+     "courtCount": 8,
+     "membershipCents": 3000,
+     "playersPayCents": 31800,
+     "totalCents": 39000,
+     "yourCostCents": 7200,
+     "yourCostCourtCents": 4200,
+     "yourCostMembershipCents": 3000
+    },
+    "yourCostCents": 7000,
+    "yourCostCourtCents": 4000,
+    "yourCostMembershipCents": 3000
+   },
+   "sessions": [
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-07T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-07T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 3500,
+     "courtCostCents": 3600,
+     "endsAt": "2026-10-07T23:30:00.000Z",
+     "playedCount": 6,
+     "priceCents": 700,
+     "startsAt": "2026-10-07T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 3300,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-09T00:00:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1100,
+     "startsAt": "2026-10-08T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-09T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-09T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4000,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-10T00:30:00.000Z",
+     "playedCount": 7,
+     "priceCents": 800,
+     "startsAt": "2026-10-09T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 5600,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-11T01:00:00.000Z",
+     "playedCount": 3,
+     "priceCents": 1400,
+     "startsAt": "2026-10-10T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4900,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-13T00:00:00.000Z",
+     "playedCount": 8,
+     "priceCents": 700,
+     "startsAt": "2026-10-12T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-14T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-14T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": true,
+     "collectedCents": 3500,
+     "courtCostCents": 3600,
+     "endsAt": "2026-10-14T23:30:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-14T22:00:00.000Z",
+     "state": "canceled",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 2800,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-16T00:00:00.000Z",
+     "playedCount": 3,
+     "priceCents": 1400,
+     "startsAt": "2026-10-15T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-16T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-16T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4400,
+     "courtCostCents": 4800,
+     "endsAt": "2026-10-18T00:30:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1100,
+     "startsAt": "2026-10-17T22:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-21T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-21T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-23T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-23T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-28T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-28T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-10-30T02:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-10-30T00:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    }
+   ],
+   "surplusCents": 0
+  },
+  "money 2026-11": {
+   "bottomLine": "You covered $2 of the court costs",
+   "collectedCents": 13000,
+   "courtCostCents": 13200,
+   "coveredCents": 200,
+   "creditsOwedCents": 3100,
+   "heldCents": 3400,
+   "label": "November 2026",
+   "membershipCents": 3000,
+   "month": "2026-11",
+   "netCents": -200,
+   "rework": {
+    "collectedCents": 13000,
+    "courtCostCents": 13200,
+    "courtSessions": 3,
+    "membershipCents": 3000,
+    "owedToVenueCents": 16200,
+    "projected": {
+     "addedCourts": 7,
+     "courtCostCents": 46800,
+     "courtCount": 10,
+     "membershipCents": 3000,
+     "playersPayCents": 41100,
+     "totalCents": 49800,
+     "yourCostCents": 8700,
+     "yourCostCourtCents": 5700,
+     "yourCostMembershipCents": 3000
+    },
+    "yourCostCents": 3200,
+    "yourCostCourtCents": 200,
+    "yourCostMembershipCents": 3000
+   },
+   "sessions": [
+    {
+     "charged": false,
+     "collectedCents": 4400,
+     "courtCostCents": 4800,
+     "endsAt": "2026-11-03T01:00:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1100,
+     "startsAt": "2026-11-02T23:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-04T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-04T01:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4200,
+     "courtCostCents": 3600,
+     "endsAt": "2026-11-05T00:30:00.000Z",
+     "playedCount": 7,
+     "priceCents": 600,
+     "startsAt": "2026-11-04T23:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-06T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-06T01:00:00.000Z",
+     "state": "not_played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 4400,
+     "courtCostCents": 4800,
+     "endsAt": "2026-11-07T02:00:00.000Z",
+     "playedCount": 5,
+     "priceCents": 1100,
+     "startsAt": "2026-11-06T23:00:00.000Z",
+     "state": "played",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-11T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-11T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-12T01:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-11T23:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-13T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-13T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-18T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-18T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-20T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-20T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-25T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-25T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-11-27T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-11-27T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    }
+   ],
+   "surplusCents": 0
+  },
+  "money 2026-12": {
+   "bottomLine": "Nothing played yet",
+   "collectedCents": 0,
+   "courtCostCents": 0,
+   "coveredCents": 0,
+   "creditsOwedCents": 0,
+   "heldCents": 0,
+   "label": "December 2026",
+   "membershipCents": 3000,
+   "month": "2026-12",
+   "netCents": 0,
+   "rework": {
+    "collectedCents": 0,
+    "courtCostCents": 0,
+    "courtSessions": 0,
+    "membershipCents": 0,
+    "owedToVenueCents": 0,
+    "projected": {
+     "addedCourts": 6,
+     "courtCostCents": 28800,
+     "courtCount": 6,
+     "membershipCents": 3000,
+     "playersPayCents": 25200,
+     "totalCents": 31800,
+     "yourCostCents": 6600,
+     "yourCostCourtCents": 3600,
+     "yourCostMembershipCents": 3000
+    },
+    "yourCostCents": 0,
+    "yourCostCourtCents": 0,
+    "yourCostMembershipCents": 0
+   },
+   "sessions": [
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-02T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-02T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-04T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-04T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-09T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-09T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-11T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-11T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-16T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-16T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    },
+    {
+     "charged": false,
+     "collectedCents": 0,
+     "courtCostCents": 0,
+     "endsAt": "2026-12-18T03:00:00.000Z",
+     "playedCount": null,
+     "priceCents": null,
+     "startsAt": "2026-12-18T01:00:00.000Z",
+     "state": "upcoming",
+     "typicalCost": true
+    }
+   ],
+   "surplusCents": 0
+  },
+  "player Blair": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 0,
+    "fee": null,
+    "finalized": null,
+    "owe": 0,
+    "pay": "paid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "player Casey": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 300,
+    "fee": null,
+    "finalized": null,
+    "owe": 1100,
+    "pay": "unpaid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "player Devon": {},
+  "player Emery": {},
+  "player Frankie": {},
+  "player Gale": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 0,
+    "fee": null,
+    "finalized": null,
+    "owe": 0,
+    "pay": "paid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "player Harper": {},
+  "player Indy": {},
+  "player Jules": {},
+  "player Kit": {},
+  "player Lee": {
+   "2026-11-11T23:00:00.000Z": {
+    "credit": 300,
+    "fee": null,
+    "finalized": null,
+    "owe": 1100,
+    "pay": "unpaid",
+    "share": 1400,
+    "shortGame": null
+   }
+  },
+  "players": {
+   "Alex": {
+    "played": 6,
+    "spent": 0
+   },
+   "Blair": {
+    "played": 6,
+    "spent": 3100
+   },
+   "Casey": {
+    "played": 6,
+    "spent": 5000
+   },
+   "Devon": {
+    "played": 5,
+    "spent": 4400
+   },
+   "Emery": {
+    "played": 5,
+    "spent": 5000
+   },
+   "Frankie": {
+    "played": 3,
+    "spent": 2000
+   },
+   "Gale": {
+    "played": 5,
+    "spent": 4600
+   },
+   "Harper": {
+    "played": 5,
+    "spent": 4900
+   },
+   "Indy": {
+    "played": 4,
+    "spent": 2800
+   },
+   "Jules": {
+    "played": 3,
+    "spent": 1400
+   },
+   "Kit": {
+    "played": 3,
+    "spent": 2500
+   },
+   "Lee": {
+    "played": 3,
+    "spent": 3000
+   }
+  },
+  "pots": {
+   "Blair": 0,
+   "Casey": 0,
+   "Devon": 300,
+   "Emery": 300,
+   "Frankie": 500,
+   "Gale": 0,
+   "Harper": 500,
+   "Indy": 500,
+   "Jules": 500,
+   "Kit": 500,
+   "Lee": 0
+  },
+  "summary Alex": {
+   "allTime": {
+    "played": 6,
+    "spentCents": 10200
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 3200
+   },
+   "organizer": true
+  },
+  "summary Blair": {
+   "allTime": {
+    "played": 6,
+    "spentCents": 3100
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 1700
+   },
+   "organizer": false
+  },
+  "summary Casey": {
+   "allTime": {
+    "played": 6,
+    "spentCents": 5000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 2200
+   },
+   "organizer": false
+  },
+  "summary Devon": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 4400
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 2200
+   },
+   "organizer": false
+  },
+  "summary Emery": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 5000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 2,
+    "spentCents": 2200
+   },
+   "organizer": false
+  },
+  "summary Frankie": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 2000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Gale": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 4600
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Harper": {
+   "allTime": {
+    "played": 5,
+    "spentCents": 4900
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Indy": {
+   "allTime": {
+    "played": 4,
+    "spentCents": 2800
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Jules": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 1400
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Kit": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 2500
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 600
+   },
+   "organizer": false
+  },
+  "summary Lee": {
+   "allTime": {
+    "played": 3,
+    "spentCents": 3000
+   },
+   "month": {
+    "label": "NOV 2026",
+    "played": 1,
+    "spentCents": 1100
+   },
+   "organizer": false
+  }
+ }
+}

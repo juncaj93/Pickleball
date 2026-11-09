@@ -67,7 +67,7 @@ import {
 } from './repo';
 import { type CreditEntryView } from '../shared/api';
 import { balanceAfterEntry, CHARGE_ASK_HOURS, isPaymentClaim, moneySeen, potBalance, seatCredit, usableCredit, visibleEntries } from '../shared/credit';
-import { adjustCreditEntry, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads, pendingRequestsRead } from './credit';
+import { adjustCreditEntry, holdShortCashStatements, creditBackLeft, loadLedger, creditBackStatements, repriceStatements, splitSeatStatements, type SplitSeat, unsplitStatements, creditReturnedAt, hasPendingRequest, moneyBackAt, moneyPicture, returnSeatCredit, returnSeatCreditStatements, seatMoneyBackStatements, undoFinalizedBackStatements, moneyPictureFirstReads, pendingRequestsRead } from './credit';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, moveToWaitlist, recordLateDrop, setCourtPaid, settle, withdraw } from './roster';
 import { invalidateSessionTokens, issueToken } from './tokens';
 import { adminPlayerView, adminSessionView, eligibleSubstitutes } from './views';
@@ -75,7 +75,7 @@ import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
 import { adminChangeStamp } from './stamp';
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
-import { flatOf, priceOf, specialFlatOf } from './repo';
+import { flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
@@ -88,7 +88,8 @@ import { setUnpaidNudgeForAll, unpaidNudgeForAll } from './unpaidNudge';
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
-import { bookingHoursFlags, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
+import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
+import { bookingHoursFlags, enforceBookingHours, enforceUsualTime, longGamesOn, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
@@ -160,7 +161,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const hiddenByOrganizer = adminR2 ? await adminHiddenPlayerIds(ctx.db, group.id) : new Set<string>();
   // "Admin screens, round 3": on for this screen. Only then is each player's "spent" worked out (read only, for the Players page).
   const adminR3 = await adminR3For(ctx, group.id);
-  const spent = adminR3 ? await spentByPlayer(ctx.db, group.id, organizerId).catch(() => new Map<string, number>()) : new Map<string, number>();
+  // Zip 27 "Spent matches Totals" (server/spentTotals.ts): Players "Spent" counted the way Totals counts, only while on (off: this answer is exactly main's).
+  const spentMatch = await spentTotalsFlags(ctx, group.id);
+  const spent = adminR3 ? await spentByPlayer(ctx.db, group.id, organizerId, undefined, spentMatch.on).catch(() => new Map<string, number>()) : new Map<string, number>();
   // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
   const potFor = (sessionId: string) => (r: RosterRow) =>
     seatCredit(ledger, sessionId, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
@@ -381,6 +384,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(undo.forAll ? { adminUndoForAll: true as const } : {}),
     ...(totals.on ? { totalsRefresh: true as const } : {}),
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
+    ...(spentMatch.on ? { spentTotals: true as const } : {}),
+    ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
     ...(hours.on ? { bookingHours: true as const } : {}),
     ...(hours.forAll ? { bookingHoursForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
@@ -524,7 +529,10 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
     const wasSplit = !!feeSplitOf(session);
     // An I paid nobody confirmed, at the split price (below $14): Reopen would leave it as a $9 claim on a $14 game, so the
     // organizer confirms it (Mark paid) or clears it (Unmark) first, the same rule as Reopen after Finalize.
-    const flatCents = flatOf(session, settingsOf(group));
+    // A reopened game is a live game again: it follows today's price rules, not the lock its cancel may have got (Zip 27, A-01; the lock
+    // goes in the batch below).
+    const live = { ...session, price_lock: null };
+    const flatCents = flatOf(live, settingsOf(group));
     const unconfirmedShort = `SELECT 1 FROM session_players u WHERE u.session_id = ${sqlText(session.id)} AND u.status = 'confirmed' AND u.payment_status = 'paid'
       AND u.refunded_at IS NULL AND u.self_paid_at IS NOT NULL AND COALESCE(u.payment_amount_cents, 0) < ${Math.trunc(flatCents)}`;
     if (wasSplit) {
@@ -552,7 +560,10 @@ export async function decide(ctx: Ctx, body: Record<string, unknown>) {
              AND ${reopened}` : ''}`,
         )
         .bind(ctx.nowIso, session.id),
-      ...(wasSplit ? unsplitStatements(ctx.db, session.id, flatOf(session, settingsOf(group)), ctx.nowIso, reopened) : []),
+      ...(wasSplit ? unsplitStatements(ctx.db, session.id, flatOf(live, settingsOf(group)), ctx.nowIso, reopened) : []),
+      ctx.db
+        .prepare(`DELETE FROM task_log WHERE session_id = ?1 AND task = '${PRICE_LOCK_TASK}' AND kind = 'mark' AND (SELECT canceled_at FROM sessions WHERE id = ?1) IS NULL`)
+        .bind(session.id),
     ]);
     // A split game whose reopen was stopped by an I paid landing at that moment: nothing moved (every statement above checks it).
     if (wasSplit && opened.meta.changes !== 1) {
@@ -655,6 +666,18 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
           )
           .bind(ctx.nowIso, reason, session.id),
     ...seatMoves.flatMap((m) => m.statements),
+    // Zip 27 (A-02): a seat that paid less than the fee it now owes (the game was made longer after they paid) owes the rest: its cash is
+    // held against it, the way Finalize does it. Only seats this cancel made owe; the split's own moves above already ran.
+    ...holdShortCashStatements(ctx.db, {
+      sessionId: session.id,
+      feeCents: plan ? plan.priceCents : flatOf(session, settingsOf(group)),
+      nowIso: ctx.nowIso,
+      organizerId,
+      seatWhere: (sp) =>
+        `${sp}.status = 'confirmed' AND ${
+          plan ? claimed : `(SELECT canceled_at FROM sessions WHERE id = ?2) = ?1 AND (SELECT canceled_by FROM sessions WHERE id = ?2) = '${FEE_KEPT}' AND (SELECT finalized_at FROM sessions WHERE id = ?2) IS NULL`
+        }`,
+    }),
     // A fresh debt on every seat that is in (an old cleared mark from an earlier cancel and reopen does not carry over).
     ctx.db
       .prepare(
@@ -1512,6 +1535,27 @@ export async function removePlayer(ctx: Ctx) {
   const id = v.id(ctx.params.id, 'player');
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ? AND group_id = ?').bind(id, group.id).first<{ display_name: string }>();
   if (!p) throw new HttpError(404, 'player_not_found', 'Player not found.');
+  // Zip 27 (A-04): someone still in (or waiting for) a game that has not ended is not removed: hidden, they would stay in "N in" and owe
+  // their share, and their phone could no longer drop them out. The organizer takes them out of those games first (gear > Players), then
+  // removes the name. Nothing is changed by the refusal.
+  const { results: upcoming } = await ctx.db
+    .prepare(
+      `SELECT s.starts_at FROM session_players sp JOIN sessions s ON s.id = sp.session_id
+       WHERE sp.player_id = ? AND s.group_id = ? AND sp.status IN ('confirmed', 'waitlisted') AND s.status <> 'canceled' AND s.ends_at > ?
+       ORDER BY s.starts_at`,
+    )
+    .bind(id, group.id, ctx.nowIso)
+    .all<{ starts_at: string }>();
+  if (upcoming.length > 0) {
+    const days = upcoming.map((u) => formatShortDate(u.starts_at, group.timezone));
+    const and = (xs: string[]) => (xs.length < 2 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+    const list = days.length <= 3 ? and(days) : `${days.slice(0, 3).join(', ')} and ${days.length - 3} more`;
+    throw new HttpError(
+      409,
+      'player_in_games',
+      `${p.display_name} is still in ${upcoming.length === 1 ? 'a game' : `${upcoming.length} games`} (${list}). Take ${p.display_name} out of ${upcoming.length === 1 ? 'it' : 'them'} first (gear > Players), then remove the name.`,
+    );
+  }
   const history = await ctx.db
     .prepare(
       `SELECT
@@ -1690,6 +1734,14 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     zelleRaw = z ?? '';
   }
   const storedSettings = zelleRaw === undefined ? settings : { ...settings, zelleNumber: zelleRaw };
+  // Zip 27 (A-01): a new "Price per player" or "Typical court cost" never re-prices a finalized game. Its rules are written down first,
+  // from what it shows right now (a failure here changes nothing). Any other save is untouched.
+  {
+    const before = settingsOf(group);
+    if (settings.pricePerPlayerCents !== before.pricePerPlayerCents || settings.typicalCourtCostCents !== before.typicalCourtCostCents) {
+      await lockFinalizedGames(ctx.db, group.id, await everyoneSettings(ctx, group), ctx.nowIso);
+    }
+  }
   // The room before this save, from the saved setting (a "Card cleanup" test link on this phone must not change that). With the switch on
   // for everyone nobody is waiting, so a move-in below finds nobody.
   const oldMax = settingsOf(group).maxPlayers;
@@ -2090,7 +2142,7 @@ export async function monthGames(ctx: Ctx): Promise<{ month: string; sessions: A
   const settings = settingsOf(group);
   const shownFrom = visibleFrom(group);
   const { results } = await ctx.db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at')
+    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`)
     .bind(group.id, from, to)
     .all<SessionRow>();
   const rows = results.filter((s) => s.starts_at >= shownFrom || Number(s.shown_early) === 1);
@@ -2333,6 +2385,8 @@ export async function setUnpaidNudgeSwitch(ctx: Ctx, body: Record<string, unknow
 export async function setBookingHoursSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const on = v.bool(body.on, 'on');
+  // Zip 27 (A-01): every finalized game keeps the rules it shows right now (written down first, so a failure changes nothing).
+  await lockFinalizedGames(ctx.db, group.id, await everyoneSettings(ctx, group), ctx.nowIso);
   await setBookingHoursForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'booking_hours_on' : 'booking_hours_off', {}, ctx.nowIso);
   // The 2.5 and 3 hour length rows turn on and off with this row (shared/gameLength.ts): the flat price of every OPEN game of those lengths just
@@ -2341,7 +2395,7 @@ export async function setBookingHoursSwitch(ctx: Ctx, body: Record<string, unkno
   const everyone = bookingHoursAllowed(ctx.env.BOOKING_HOURS) && on;
   const after: ReturnType<typeof settingsOf> = everyone ? { ...settingsOf({ ...group, long_games: false }), longGames: true } : settingsOf({ ...group, long_games: false });
   const { results: open } = await ctx.db
-    .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?")
+    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?`)
     .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
     .all<SessionRow>();
   for (const s of open) {
@@ -2356,6 +2410,15 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   const on = v.bool(body.on, 'on');
   await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/spent-totals-switch { on }: Settings > Feature switches > "Spent matches Totals" (Zip 27, A-05). Display only; moves no money. */
+export async function setSpentTotalsSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setSpentTotalsForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'spent_totals_on' : 'spent_totals_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 
@@ -2460,6 +2523,8 @@ export async function setLastCallSwitch(ctx: Ctx, body: Record<string, unknown>)
 export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const on = v.bool(body.on, 'on');
+  // Zip 27 (A-01): every finalized game keeps the rules it shows right now (written down first, so a failure changes nothing).
+  await lockFinalizedGames(ctx.db, group.id, await everyoneSettings(ctx, group), ctx.nowIso);
   await setShortGamesForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'short_games_on' : 'short_games_off', {}, ctx.nowIso);
   // The flat price of every open 1.5 hour game just changed for everyone ($14 <-> $11): reprice their seats now, the way a move does
@@ -2467,11 +2532,22 @@ export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown
   const everyone = zip9Allowed(ctx.env.SHORT_GAMES) && on;
   const after: ReturnType<typeof settingsOf> = everyone ? { ...settingsOf({ ...group, short_games: false }), shortGames: true } : settingsOf({ ...group, short_games: false });
   const { results: open } = await ctx.db
-    .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?")
+    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?`)
     .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
     .all<SessionRow>();
   for (const s of open) if (isShortGame(s.starts_at, s.ends_at)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
   return { ok: true, on };
+}
+
+/**
+ * Zip 27 (A-01): the price rules for EVERYONE right now: Settings > Money, the "Short games" row and the "Booking hours" row with their kill
+ * switches. Never this phone's private test link (?shortgames=on), so a lock is what every screen shows, not what one test phone shows.
+ */
+async function everyoneSettings(ctx: Ctx, group: GroupRow): Promise<ReturnType<typeof settingsOf>> {
+  const base = settingsOf({ ...group, short_games: false, long_games: false });
+  const short = zip9Allowed(ctx.env.SHORT_GAMES) && (await shortGamesForAll(ctx.db, group.id));
+  const long = await longGamesOn(ctx, group.id);
+  return { ...base, ...(short ? { shortGames: true as const } : {}), ...(long ? { longGames: true as const } : {}) };
 }
 
 /** PUT /api/admin/speed-fewer-queries-switch { on }: Settings > Feature switches > "Fewer database trips" (Zip 12). How the server reads, never what it answers. */

@@ -14,9 +14,10 @@ import { localParts, zonedTimeToUtc } from '../shared/time';
 import { requireAdmin } from './auth';
 import type { Ctx } from './context';
 import { HttpError } from './http';
-import { isPaymentClaim, keptRemaining, seatCredit } from '../shared/credit';
+import { keptRemaining, seatCredit } from '../shared/credit';
+import { seatIsClaim, seatKeptCents } from './seatMoney';
 import { loadLedger } from './credit';
-import { courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, rosterRead, type SessionRow, settingsOf } from './repo';
+import { courtCostOf, flatOf, type GroupRow, loadCancelCharges, loadRoster, organizerIdOf, priceLockCol, rosterRead, type SessionRow, settingsOf } from './repo';
 import { fewerDb } from './speed';
 import { FEE_KEPT, feeSplitOf, lateFeeKind } from '../shared/lateFees';
 import { membershipMonth, PROJECTED_PLAYERS_PER_COURT } from '../shared/moneyRework';
@@ -67,7 +68,7 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
   const to = new Date(zonedTimeToUtc(month === 12 ? year + 1 : year, month === 12 ? 1 : month + 1, 1, 0, 0, tz)).toISOString();
 
   const { results: allResults } = await ctx.db
-    .prepare('SELECT * FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at')
+    .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND starts_at >= ? AND starts_at < ? ORDER BY starts_at`)
     .bind(group.id, from, to)
     .all<SessionRow>();
   // "Money page rework": a game the organizer hid from their lists is out of Totals too (nothing about it is deleted).
@@ -127,18 +128,10 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
     // paid toward it stays with the group, so it counts like a game that was played.
     const feeKept = s.status === 'canceled' && s.canceled_by === FEE_KEPT;
     if (feeKept && feeSplitOf(s)) splitGames++;
-    const claim = (r: (typeof roster)[number]) =>
-      !lateFeeKind(r, s) &&
-      isPaymentClaim({ status: r.status, paymentStatus: r.payment_status, selfPaid: !!r.self_paid_at, refundedAt: r.refunded_at, played: s.finalized_at && r.played === 0 ? false : null }, s.status === 'canceled');
+    // (server/seatMoney.ts: the same two rules the Players "Spent" uses with "Spent matches Totals" on, Zip 27.)
+    const claim = (r: (typeof roster)[number]) => seatIsClaim(r, s);
     const claims = roster.filter((r) => r.player_id !== organizerId && claim(r)).reduce((sum, r) => sum + (r.payment_amount_cents ?? 0), 0);
-    const kept = roster
-      .filter((r) => r.player_id !== organizerId && !claim(r))
-      .reduce((sum, r) => {
-        const seat = seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
-        if (r.payment_status === 'paid' && !r.refunded_at) return sum + Math.max(0, (r.payment_amount_cents ?? 0) - seat.backCents);
-        // Cash held against a seat counts while the seat holds it; a settled seat gave it back as credit already.
-        return sum + (r.refunded_at ? 0 : seat.cashCents);
-      }, 0);
+    const kept = roster.filter((r) => r.player_id !== organizerId && !claim(r)).reduce((sum, r) => sum + seatKeptCents(r, s, ledger), 0);
     held += claims;
     const cost = courtCostOf(s, settings);
     const charged = state === 'canceled' ? (charges.get(s.id) ?? 0) : 0;

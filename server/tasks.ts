@@ -16,7 +16,7 @@ import type { D1Database } from './db';
 import { makeGoToken } from './go';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
-import { getSession, type GroupRow, loadCancelCharges, loadRoster, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { getSession, type GroupRow, loadCancelCharges, loadRoster, PRICE_LOCK_TASK, type SessionRow, settingsOf, visibleFrom } from './repo';
 import { loadLedger } from './credit';
 import { TEXTS_R2_TASK, textsR2ForAlerts } from './textsR2';
 import { HIDDEN_GAME_TASK, MONEY_REWORK_TASK, sessionHasMoney } from './moneyRework';
@@ -100,7 +100,8 @@ export async function loadMarks(db: D1Database, groupId: string, nowMs: number):
       .all<{ session_id: string; task: string; at: string }>();
     const courtBookedAt: Record<string, string> = {};
     for (const r of results) if (r.task === COURT_BOOKED_MARK) courtBookedAt[r.session_id] = r.at;
-    return { marks: results.filter((r) => r.task !== COURT_BOOKED_MARK).map((r) => `${r.session_id}:${r.task}`), courtBookedAt };
+    // A game's price lock (Zip 27, server/repo.ts) is money bookkeeping, not a card tap: it never goes to the screen.
+    return { marks: results.filter((r) => r.task !== COURT_BOOKED_MARK && r.task !== PRICE_LOCK_TASK).map((r) => `${r.session_id}:${r.task}`), courtBookedAt };
   } catch {
     return { marks: [], courtBookedAt: {} };
   }

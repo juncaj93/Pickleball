@@ -157,9 +157,9 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-row')));
-    // (Zip 24's Booking hours row is newer and sits above it.)
-    assert(first[0] === 'bookingHoursAll' && first[1] === 'totalsRefreshAll', `newest first: ${first}`);
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 3).map((e) => e.getAttribute('data-row')));
+    // (Zip 24's Booking hours row and Zip 27's Spent matches Totals row are newer and sit above it.)
+    assert(first[0] === 'spentTotalsAll' && first[1] === 'bookingHoursAll' && first[2] === 'totalsRefreshAll', `newest first: ${first}`);
     const row = page.locator('[data-row="totalsRefreshAll"]');
     assert(/Totals refresh/.test(await row.innerText()), 'row label');
     await row.locator('label').click();
