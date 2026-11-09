@@ -267,9 +267,12 @@
   .r2-top .scard-tilecol {
     grid-column: 1;
     width: auto;
+    min-width: 0;
     flex-direction: row;
+    /* Zip 18 round 2: the tile, the time and the "1.5 HR" pill wrap onto a second line instead of running under the gear. */
+    flex-wrap: wrap;
     align-items: center;
-    gap: 12px;
+    gap: 6px 12px;
   }
   .card.scard .r2-top .scard-tilecol .tile {
     width: 56px;

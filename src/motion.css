@@ -806,6 +806,17 @@ html[data-motion='on'] .court-switch .cs-glide {
 html[data-motion='on'] .court-switch[data-value='waitlist'] .cs-glide {
   background: var(--sw-wait-bg);
 }
+/* Zip 18 round 2: with very big text the three choices stack one under the other (large-text.css, the same 17rem rule): the highlight
+   then slides DOWN over the chosen one (three equal rows with 2 px gaps inside 3 px of padding), never off to the side as a separate block. */
+@container pbwide (max-width: 17rem) {
+  html[data-motion='on'] .court-switch .cs-glide {
+    right: 3px;
+    bottom: auto;
+    width: auto;
+    height: calc((100% - 10px) / 3);
+    transform: translateY(calc(var(--i, 0) * (100% + 2px)));
+  }
+}
 html[data-motion='on'] .court-switch[data-value='booked'] .cs-glide {
   background: var(--sw-booked-bg);
 }

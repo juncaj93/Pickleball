@@ -233,6 +233,8 @@ section[aria-labelledby='sessions-title'],
   /* Not booked | Waitlist | Booked: one under the other, each as wide as the card. */
   .court-switch {
     grid-template-columns: minmax(0, 1fr);
+    /* Zip 18 round 2: three rows of one height (the tallest, "Not booked" on two lines), so the sliding highlight covers the chosen one. */
+    grid-auto-rows: 1fr;
   }
   /* The status words ("Canceled - Thanksgiving week") wrap beside the gear instead of running under it. */
   .scard-top .court-line {

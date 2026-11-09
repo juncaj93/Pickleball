@@ -179,6 +179,16 @@ function findClipping(opts) {
       const h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
       if (w > 2 && h > 2) out.push(`overlap: ${label(a)} at ${fmt(x)} and ${label(b)} at ${fmt(y)}`);
     }
+  // 4b: a sliding highlight sits exactly on the chosen choice (the court switch: Not booked | Waitlist | Booked).
+  for (const sw of root.querySelectorAll('.court-switch')) {
+    const glide = sw.querySelector('.cs-glide');
+    const on = sw.querySelector('button[aria-pressed="true"]');
+    if (!glide || !on || !shown(sw) || getComputedStyle(glide).display === 'none') continue;
+    const g = glide.getBoundingClientRect();
+    const b = on.getBoundingClientRect();
+    if ([g.left - b.left, g.right - b.right, g.top - b.top, g.bottom - b.bottom].some((d) => Math.abs(d) > 2.5))
+      out.push(`highlight off its choice: ${label(sw)} highlight at ${fmt(g)}, "${on.textContent.trim()}" at ${fmt(b)}`);
+  }
   // 5: the page never scrolls sideways (something wider than the screen).
   const sw = document.documentElement.scrollWidth;
   if (sw > window.innerWidth + 1) {

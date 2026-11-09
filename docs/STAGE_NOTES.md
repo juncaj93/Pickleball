@@ -3759,3 +3759,12 @@ data read or changed.
   the 4-at-a-time run lost a save to load and cascaded); round2.cjs 25/25 alone (its banner timing check is load-sensitive). After the
   review fixes: zip18 73 checks (72 + the one Parker comparison that failed once under load and passes alone), zip14 22/22, zip13 39/39,
   zip18-off 28/28 against main.
+- Found on the preview with the checker (round 2, after the review): the moved-game card's "Text Christopher Vanderberg" button was
+  wider than the card at 390. Alert card buttons now take their words' width or the whole row, whichever is less, and a label longer
+  than the row wraps inside its button (38 px tall at least, as before). The fit check now also opens every game on Home ("Show all",
+  every folded game opened) and found two more with very big text, both on live too: the "1.5 HR" pill ran under the gear (the card's
+  top row now wraps), and the court switch, stacked one choice under the other, had its sliding green highlight off to the side as a
+  separate block with "Booked" left as dark text on dark (motion.css: in the stacked layout the highlight slides down; large-text.css:
+  three rows of one height). The checker has a rule for it (the highlight must sit on the chosen choice); on main's code it fires at
+  320 px with big text, on this branch it does not.
+
