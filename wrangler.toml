@@ -10,6 +10,14 @@ database_name = "pickleball"
 database_id = "5c939453-ebef-4a1d-869e-9a952339d275"
 migrations_dir = "migrations"
 
+# Zip 21 "Error alerts" (shared/errorAlerts.ts): the error box, a free Durable Object in the Worker pickleball-error-box
+# (worker/box.ts, deploy it first). It holds what the error alerts remember, so they write nothing to the database. Production only:
+# previews have no box (and no Telegram), so they never send an error alert. Remove this block (and deploy) = no error alerts at all.
+[[durable_objects.bindings]]
+name = "ERROR_BOX"
+class_name = "ErrorBox"
+script_name = "pickleball-error-box"
+
 # The address players use. Shown as the player link in Settings and used in texts.
 [vars]
 SITE_URL = "https://pickleball.juncaj.net"
@@ -185,6 +193,11 @@ SECOND_CHANCE = "on"
 # "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Unpaid nudge" (off at ship = nobody), plus a phone opened once
 # with ?nudge=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
 UNPAID_NUDGE = "on"
+# Zip 21 "Error alerts" (shared/errorAlerts.ts): a short Telegram to Alex when the clock's tick fails, the weekly backup fails or ends
+# INCOMPLETE, the database fails (its free daily limit, or repeated errors) or the site answers a burst of server errors, and when the
+# clock stopped for 20 minutes or more. At most 1 an hour per kind and 6 a day. "on" here only ALLOWS it; who gets it is Settings >
+# Feature switches > "Error alerts" (off at ship = nothing sent). "off" = the kill switch: nothing, not even the test button. Needs a deploy.
+ERROR_ALERTS = "on"
 # Zip 16 "After-game cards" (shared/afterGame.ts): after the organizer finalizes a game, a player whose final price is below what they paid
 # sees one blue card the next time they open the site ("$5 back to your credit", X to close, gone after 7 days); a player who paid a lower
 # price earlier and now owes more sees "You owe $2 more" on the owe card that is already there. Display only. "on" here only ALLOWS it;

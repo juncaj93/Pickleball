@@ -192,6 +192,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Second Chance" on`;
     case 'second_chance_off':
       return `${who} switched "Second Chance" off`;
+    case 'error_alerts_on':
+      return `${who} switched "Error alerts" on`;
+    case 'error_alerts_off':
+      return `${who} switched "Error alerts" off`;
     case 'unpaid_nudge_on':
       return `${who} switched "Unpaid nudge" on`;
     case 'unpaid_nudge_off':

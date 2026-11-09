@@ -19,6 +19,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 
 - Site (Pages): `npm run deploy` (from main). Rollback: the previous production deployment in Cloudflare (Workers & Pages >
   pickleball-club > Deployments > ... > Rollback).
+- Error box (`pickleball-error-box`, Zip 21, only when `worker/box.ts` or `shared/errorAlerts.ts` changed; BEFORE the site, which binds to it):
+  `npx wrangler deploy --config worker/box.wrangler.toml`. Rollback: `npx wrangler rollback <version id> --config worker/box.wrangler.toml`.
 - Clock Worker (`pickleball-alerts-clock`, only when `worker/` changed): `npx wrangler deploy --config worker/wrangler.toml`.
   Rollback: `npx wrangler rollback <version id> --config worker/wrangler.toml` (the version before, from
   `npx wrangler deployments list --config worker/wrangler.toml`).

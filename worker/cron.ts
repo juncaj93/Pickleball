@@ -28,6 +28,32 @@ interface Env {
   BACKUP?: D1Database;
   /** This Worker itself (Zip 19): each backup run and step gets its own run and CPU allowance. Missing: done in the knock's run, as before. */
   SELF?: SelfBinding;
+  /** Zip 21: "off" stops the two reports below (the site decides whether anything is sent; its Settings switch ships off). */
+  ERROR_REPORTS?: string;
+}
+
+/**
+ * Zip 21 "Error alerts": tell the site about a failure only this Worker sees, so the site can send Alex one short Telegram (the site
+ * holds the Telegram secrets and the anti-spam memory, and its Settings switch decides; off, the site just answers "off"). Only ever
+ * called on a failure, never on a normal tick. Never throws, never retried, never reported itself.
+ */
+export async function report(env: Env, what: 'backup_failed' | 'backup_incomplete' | 'tick_no_answer', doFetch: typeof fetch = fetch): Promise<void> {
+  if ((env.ERROR_REPORTS ?? 'on').trim().toLowerCase() === 'off' || !env.SITE_URL) return;
+  try {
+    await doFetch(`${env.SITE_URL.replace(/\/$/, '')}/api/cron/report`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Cron-Secret': env.CRON_SECRET ?? '' },
+      body: JSON.stringify({ what }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    // Nothing more to do: the site's own clock watch says "the clock stopped" once ticks get through again.
+  }
+}
+
+/** A knock the site never answered itself: no answer at all, or an error page from Cloudflare rather than the site's own JSON. */
+export function siteDidNotAnswer(status: number, contentType: string | null): boolean {
+  return status === 0 || (status >= 500 && !(contentType ?? '').includes('application/json'));
 }
 
 const SECRET_HEADER = 'X-Backup-Secret';
@@ -64,6 +90,13 @@ interface ScheduledCtx {
 }
 
 export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<number> {
+  const status = await knockOnce(env, doFetch);
+  // Zip 21: a 500 from the site is the site's own error (it reports those itself); only "no answer" is told, once.
+  if (siteDidNotAnswer(status.code, status.type)) await report(env, 'tick_no_answer', doFetch);
+  return status.code;
+}
+
+async function knockOnce(env: Env, doFetch: typeof fetch): Promise<{ code: number; type: string | null }> {
   try {
     const res = await doFetch(`${env.SITE_URL.replace(/\/$/, '')}/api/cron/tick`, {
       method: 'POST',
@@ -73,11 +106,17 @@ export async function knock(env: Env, doFetch: typeof fetch = fetch): Promise<nu
     });
     // Shows in the Worker's logs on Cloudflare (a wrong secret reads 404).
     if (!res.ok) console.log(`tick answered ${res.status}`);
-    return res.status;
+    return { code: res.status, type: res.headers.get('Content-Type') };
   } catch (err) {
     console.log(`tick failed: ${err instanceof Error ? err.message : 'unknown'}`);
-    return 0;
+    return { code: 0, type: null };
   }
+}
+
+/** A failed weekly copy: "ended INCOMPLETE" once its steps had started (the copy is marked INCOMPLETE until redone), else "failed". */
+export function backupFailure(reason: string): 'backup_failed' | 'backup_incomplete' {
+  if (/would need/i.test(reason)) return 'backup_failed';
+  return /step|changed while copying|cleared before/i.test(reason) ? 'backup_incomplete' : 'backup_failed';
 }
 
 /** The hourly look and, when due, the whole copy (its steps each in their own run). The live database is only ever read. */
@@ -88,7 +127,7 @@ async function backupRun(env: Env, nowMs: number): Promise<BackupResult> {
 }
 
 /** The weekly copy, on its own: it never delays or stops the knock, and a failure is only a log line (retried within the hour). */
-export async function backupTick(env: Env, nowMs = Date.now()): Promise<void> {
+export async function backupTick(env: Env, nowMs = Date.now(), doFetch: typeof fetch = fetch): Promise<void> {
   let r: BackupResult;
   try {
     // Only the ticks at minute 0 to 4 look at all (checked again inside), so the other 11 ticks an hour make no extra run.
@@ -99,7 +138,11 @@ export async function backupTick(env: Env, nowMs = Date.now()): Promise<void> {
     r = { made: false, reason: `failed: ${err instanceof Error ? err.message : 'unknown'}` };
   }
   if (r.made) console.log(`weekly backup ${r.week}: ${r.bytes} bytes in ${r.parts} parts, ${r.kept} kept`);
-  else if (r.reason.startsWith('failed')) console.log(`weekly backup ${r.reason}`);
+  else if (r.reason.startsWith('failed')) {
+    console.log(`weekly backup ${r.reason}`);
+    // Zip 21: tell the site (it sends Alex one short message, if Error alerts are on). Never the reason's words: they stay in the log.
+    await report(env, backupFailure(r.reason), doFetch);
+  }
 }
 
 /**
