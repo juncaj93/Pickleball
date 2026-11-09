@@ -383,7 +383,8 @@ a {
   box-sizing: border-box;
   min-width: 42px;
   min-height: 44px;
-  padding: 0 5px;
+  /* Zip 18 round 3: 3 px above and below, so with big text the weekday never touches the tile's top edge (no change at normal text). */
+  padding: 3px 5px;
   border-radius: 10px;
   background: var(--surface);
   border: 1.5px solid var(--tile-line);
@@ -3731,6 +3732,14 @@ section[aria-labelledby='sessions-title'] > .week-break:first-of-type {
   padding: 10px 12px;
   text-align: right;
 }
+/* Zip 18 round 2: a button in the input's place ("Change") is at least the input's 80 px and as wide as its word with big text. */
+.set-row button.set-input {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 80px;
+  max-width: none;
+  white-space: nowrap;
+}
 .set-row input.set-input.wide {
   flex: 0 0 auto;
   width: 10.5rem;
@@ -4536,13 +4545,15 @@ dialog.sheet[open]::backdrop {
   --sw-booked-bg: #1e6a48;
   --sw-booked-fg: #ffffff;
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  /* Zip 18 round 3: the small tile is 48 px (was 44) so TONIGHT keeps a clear margin inside the tile's rounded border. */
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  height: 3.4rem;
-  padding: 0 12px;
+  /* Zip 18 round 2: at least 3.4rem (the same as before for a plain tile) and taller when something needs it (a TOM / TONIGHT tile,
+     the circles under the time on a narrow phone, big text), instead of cutting it off at the bottom. */
+  min-height: 3.4rem;
+  padding: 3px 12px;
   box-sizing: border-box;
-  overflow: hidden;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
@@ -4570,7 +4581,7 @@ dialog.sheet[open]::backdrop {
 }
 /* The small date tile, centered. */
 .hv2-short .tile {
-  width: 44px;
+  width: 48px;
   box-sizing: border-box;
   align-self: center;
   padding: 3px 0 4px;

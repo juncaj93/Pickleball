@@ -1,5 +1,6 @@
 /* Swap to Alex (SWAP_BUTTON, Zip 13), from the approved mock (mock9.html, p10_headers.png section A, p10_alex_c.png). These classes only exist
-   while the switch is on for a phone signed in as the organizer, so with it off nothing here applies. */
+   while the switch is on for a phone signed in as the organizer, so with it off nothing here applies. Zip 18: the same title button sits on
+   the organizer's own player page too ("Alex" + swap icon, then "not you?"), headers_light_and_dark.png. */
 
 /* The organizer header: "Admin" (the same size and weight as a player's name there) and a small gray swap icon, ONE tap target. No pill, no
    border. */
@@ -37,43 +38,4 @@
   border-radius: 8px;
 }
 
-/* The player page: under the thin end line, one small centered outlined pill, about 30 px tall, 13 px gray words, no fill. The gap from the
-   line to it equals the gap from More sessions to the line: .page-end is 20 px tall with the line on top, so -16 px puts the pill one page
-   gap + 4 px under the line, the same as the button above it. */
-.go-admin-wrap {
-  display: flex;
-  justify-content: center;
-  margin-top: -16px;
-}
-.go-admin {
-  appearance: none;
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  height: 30px;
-  padding: 0 13px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-2);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-/* 44 px to tap, 30 px to look at. */
-.go-admin::before {
-  content: '';
-  position: absolute;
-  inset: -7px 0;
-}
-.go-admin:active {
-  background: var(--fill);
-}
-.go-admin:focus-visible {
-  outline: 2px solid var(--focus);
-  outline-offset: 2px;
-}
+/* Zip 18: the player page's "Go to Admin" pill (.go-admin) is gone; the organizer's own player page uses the title button above. */

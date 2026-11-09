@@ -3640,3 +3640,154 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
 - Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (main `8a10eba`), the fake database re-seeded ONCE at 7:42 PM with the small
   cast: 10 players, 63 games. Checked: Vic $14 / "For Tue, Nov 3", Wren $28, Zoe $42 (every I'm in dimmed), Quinn "You owe $3 more", the
   Who are you? list is the 10 names.
+
+## Zip 18: cleaner headers, Alex swap in the title, "View as" shows the live switches - built Sun Nov 8, 2026 (evening); on a preview, waiting for "ship it"
+
+Spec: the "zip 18" brief (`START_HERE.md`, mockups headers_mock.html / headers_light_and_dark.png). One PR. NO database schema change,
+no migration, no new switch (the header is look only, View as is a fix). Nothing deployed to production, nothing switched on, no live
+data read or changed.
+
+### Item 1: headers (live at deploy, no switch)
+- Player page (`src/pages/PlayerHome.tsx`): the small group-name label over the name ("PICKLEBALL BROS") is gone for everyone (also on
+  "Who are you?" and "Link not working"); `TopBar` already centers a title with no label on the logo tile. The sun button and the date
+  tile do not move (`e2e/zip18-off.cjs` measures them against main).
+- The organizer's own player page: the title "Alex" + the gray swap icon is ONE button (`TopBar` `onTitle`, the same one Admin uses),
+  then "not you?". It goes to /admin: no PIN while this phone's organizer sign-in is good, else the normal PIN screen.
+- Who gets it (`server/player.ts`): `goToAdmin` now needs the phone signed in as the organizer with the real PIN (as before) AND the
+  page showing the organizer's own name AND not View as. Before, it was on every player page of the organizer's phone. So the organizer's
+  phone showing another name ("not you?" picked Vic) has no swap; /admin by hand still works.
+- The bottom "Go to Admin" pill is gone (the player page and the View as page; `src/swap-button.css` lost its rules; Admin's
+  `swapAtView` latch is gone).
+- Christmas skin: the code has none yet (only the staged `public/logo-xmas.png`). `e2e/zip18.cjs` puts that logo in the tile at 320 px,
+  light and dark, Vic and Alex: the header holds. Nothing in the tests or the logo relied on the label.
+
+### Item 2: View as shows what the player really sees
+- Cause: View as answers from a throwaway copy in the organizer's tab (`src/demo`), built from the backup file. The backup leaves out
+  `task_log`, where every switch's "on for everyone" row lives, so every switch read OFF in the copy: the old look (the Want in Yes/No
+  card, "5 in", "Court booked", no seat dots). (Zip 13 already noticed this for the swap pill and latched it by hand.)
+- Fix: `GET /api/admin/demo-extras` (`server/zip18.ts`, organizer only, real or read-only PIN, two reads, writes nothing) returns every
+  `task_log` row of the group and every setting of the deployment whose value is exactly "on" or "off" (never a secret: tokens and PINs
+  are never "on"/"off"). `src/demo/load.ts` fetches it next to the backup; `src/demo/sandbox.ts` puts the rows in the copy and the
+  values in its env. Any future switch stored the same way comes along with no View as edit. A server without the address (a rollback)
+  gives 404: the copy starts as before.
+- Removed three old shortcuts that forced a feature ON in the copy whatever Settings said (`server/payAlways.ts`, `server/motion.ts`,
+  `server/timeShift.ts`: `if (ctx.env.SANDBOX) return true`). They never ran on the live site for players; now the copy follows the rows.
+- Same page component: View as already used the player page itself (`PlayerHome`); only the data was different.
+- This phone's own private test links (?nudge=on and so on) still apply in View as on that phone, as on /?as= on that phone.
+- View as taps (Still in, I'm in, I paid, Drop out...) save only in the copy in that tab, and the live site refuses a View as save with
+  403 "Demo only" anyway. A Still in tapped in View as never reached a player's real answer, before or after this zip. Not changed.
+- "Pretend it's..." (Alex's addition, same evening): SAME cause. Its buttons put the organizer's tab in the same demo copy (`src/lib.ts`
+  `demoOn()` covers both, every request goes to `src/demo` at the pretend time; the old server-side `X-Pretend-Now` path in
+  `server/app.ts` is not used by any screen). So the one fix above covers both: one shared path, nothing per mode, any future switch
+  included. The 30-minute timer and the buttons are unchanged.
+- Pretend times checked (e2e/zip18.cjs, small cast at Mon Nov 9 noon; the next game is a Mon Nov 9 extra game, the next booking is
+  Thu Nov 26, booking day Thu Nov 12): every button, Game day 7:00 AM, Game day 8:30 AM, Day before 4:00 PM, Last call, Booking opens
+  12:00 AM, After the game, plus 7:00 AM on booking day typed in the date box. At each one the organizer Home and View as Parker (in that
+  game) and Vic equal the real site with its clock really at that moment. Parker has the Game day card on game day; the night-before,
+  cancel and finalize cards come and go by the moment; the booking prompt is not there yet at 12:00 AM (it starts at the 6:55 AM heads-up)
+  and is there at 7:00 AM.
+- Found (not changed, a question for Alex): on booking day the game 14 days out sits in a later week, which Home shows folded (round 2),
+  so its "Book" button shows only after tapping the game open. Same on the real site; the Telegram heads-up still goes.
+
+### Tests (Sun Nov 8, 2026)
+- Unit: `tests/zip18.test.ts` (12): on the small preview cast with every live switch, View as = that player's own phone key for key
+  for all 10 names (Vic, Wren, Zoe included); the switches really on in View as (and all off without the extras, the old bug); a
+  Settings row off and a kill switch "off" follow into View as; the organizer's own name in View as has no swap; every View as tap leaves
+  the real database identical, table by table; the live site refuses a View as save; demo-extras is organizer only, returns no secret,
+  writes nothing; a server before Zip 18 still starts the copy; the swap only on the organizer's own name; Pretend at game day 7:00 AM +
+  View as = each of the 10 players' own phone at that moment, and the organizer dashboard's games too; EVERY save address of the site
+  (sign-ups, paid taps, Mark paid, court switch, cancel, texts marked, Second Chance, switches...) tapped in Pretend as the organizer and
+  as players: the real database identical, no Telegram, no network request at all. Updated: three older tests
+  that pinned the removed shortcuts (`pay-always` S6, `motion`, `motion-settings` M8) now pin "follows the rows".
+- Full unit suite on the final code: 2467 passed, 1 skipped, 1 failed (149 files): `links-payments` "confirms and withdraws only the
+  link owner" failed once under load and passes alone, on this branch and on main (7/7); it passed in the earlier full run. tsc and
+  build clean.
+- Browser: `e2e/zip18.cjs` 43/43 (player header Vic, Alex header, Admin header at 390/360/320 light and dark; not you? works; the swap
+  goes to Admin with no PIN, the PIN screen when signed out; nobody else sees it; the Christmas logo; View as = /?as= for Vic, Wren, Zoe,
+  Parker, Quinn in light and dark, calm and ?alerts=all; the old look gone; View as writes nothing (no save request leaves the page and
+  the database file is identical after I'm in and Still in); no pill in View as). `e2e/zip18-off.cjs` 28/28 against main `52803c2`
+  (player pages for Vic, Wren, Zoe, Quinn at 390/360/320 light and dark identical apart from the label, sun button and date tile at the
+  same spot, the player answer byte for byte; the organizer's own page identical apart from the label, title button and pill; every
+  organizer screen identical, the Admin header included). `e2e/zip13.cjs` swap checks updated for the removed pill.
+- Full `npm run test:e2e` once on the final code, 4 at a time: 54 of 59 scripts clean (zip18 50/50 with the Pretend checks, zip13 with
+  its updated swap checks). The other 5, rerun alone next to main `52803c2`: circles clean on both (load); cancel-reason (2), want-in
+  (1, its View as check finds no card row on main too), admin-r2 F4 (1) fail the same way on main; run.cjs 219/229 on both, the same
+  10 "Last call" checks (the 11th in the parallel run, a browser warning, was load).
+### Preview
+- https://preview-zip18.pickleball-club-9h0.pages.dev (the fake database re-seeded ONCE, Sun Nov 8, 9:06 PM, small cast: 10 players,
+  62 games). Switch rows on there: all 36 rows (every row on live, plus Unpaid nudge, kept on as in the Zip 17 preview), every
+  `[env.preview.vars]` value "on". Checked on the preview itself: View as Vic, Wren and Zoe equal /?as=Vic, /?as=Wren, /?as=Zoe.
+
+
+### Round 2 (Sun Nov 8, 2026, night; Alex walked the preview: View as, Pretend it's and the headers work; "do not deploy yet")
+- Alex's answers: the booking-day game stays folded as on live; the swap only on his own name is fine; View as ignores his private test
+  links; Unpaid nudge is ON on live now (the small preview seed lists it with the live rows; the rows it makes are the same).
+- View as ignores this phone's private test links (`src/lib.ts` api()): a View as player request leaves off every per-phone test signal
+  (?nudge=on, ?seatdots=on and the rest), so the copy answers with the live switches alone. Kept: the preview-only ?alerts= view (never on
+  live). Pretend's organizer screens and the phone's own pages keep the test links as before.
+- Live check: no read-only PIN in this session, so no sign-in to live. Read only instead: production is deployment `854a346f` = main
+  `8a10eba` (the Zip 17 deploy), and this branch had not touched any organizer screen, so every clipping below was on live too. The same
+  checker on main's code finds 22 to 32 problems on Home at the two moments tried; on this branch it finds none.
+- Clipping fixes (look only, live at deploy, no switch):
+  - Folded Home rows (`.hv2-short`, src/styles.css): at least the old 3.4rem and taller when needed instead of cutting off: the TOM /
+    TONIGHT tile's bottom was cut by the row (the strip makes the tile taller than a plain one). The strip in that 44 px tile is a little
+    smaller (8 px, TONIGHT 7.5 px, no letter spacing; src/zip7.css), so TONIGHT and TOM sit inside the tile.
+  - The circles in a folded row (src/zip10.css, HomeV2.tsx `--n`): room for every circle at the tightest tuck; when the line beside the
+    time is too narrow (320 px, big text) they move under the time instead of being cut off or covering the court pill.
+  - Alert card buttons (src/alert-cards.css `.ac-actions`): buttons that do not fit on one line wrap to a second line, each at least as wide
+    as its words, rows filled edge to edge (the 4-button "N going, N more needed" card: Edit game, Cancel session, Cancel court, Keep as is).
+    Two buttons that fit look exactly as before. Remind in the "haven't paid" card keeps its width (the title wraps).
+  - Who owes rows: a name never breaks into single letters ("V / i / c"); the Venmo request button drops under it when both do not fit.
+  - Money: the month tiles (36 x 38 px) and Home's $ circle are in rem, so they grow with big text (identical at normal text); Games |
+    Totals never squeezed below its words. Players: a long name gives way (with "…") so the money chip and "+2" always fit. Settings:
+    "Change" is at least 80 px and as wide as its word.
+- Court map (src/gameday.css): the game's court only pulses its soft glow (2.4 s, unchanged); the light sweep across it is gone. Reduce
+  Motion: a steady glow. The TONIGHT date tile's own pulse and sweep are not changed.
+- The checker: `e2e/clip-check.cjs` (text outside its button, pill, tile or box; a box or circle cut off by its parent or its card's
+  border; text cut off unless it ends in "…" on purpose; a word broken in the middle; buttons, pills and circles overlapping).
+  `e2e/zip18.cjs` runs it on Home ("+N more" open, then every game listed and folded: TONIGHT and TOM rows), Players, Money, History and
+  Settings at 390 / 360 / 320, light and dark, normal text, Safari text size 125% (the page zooms, the iPhone aA button) and 150% text.
+- Fresh review of round 2 (independent): nothing blocking. Fixed from it: the Players gray part ("2 played · Tue Thu") gives way before
+  the name again (the name only shortens once it is gone); the two preview-only test clocks (?gamedaytest=, ?noontest=) are kept in
+  View as like ?alerts= (the server ignores them off previews); MIN_PLAYERS instead of a bare 4; the checker also fails on a page wider
+  than the screen and on the Players name over its money chip, and opens each Settings section on its own (opening one closes another;
+  the inside of a closed section is not drawn, so it is not measured). Left as is: the TONIGHT tile's soft glow now shows fully around
+  a folded row (before it was cut at the row's edge); two alert buttons whose words do not each fit in half the row (a narrow phone,
+  "Use it" / "No, keep cash out") take the room their words need instead of spilling out.
+- Tests (round 2, final code): unit 2468 passed, 1 skipped, 0 failed (149 files); tsc and build clean. Full `npm run test:e2e` once, 4
+  at a time: 54 of 59 clean; cancel-reason (2), want-in (1), admin-r2 F4 (1) as on main; run.cjs 219/229 alone (the same 10 as main;
+  the 4-at-a-time run lost a save to load and cascaded); round2.cjs 25/25 alone (its banner timing check is load-sensitive). After the
+  review fixes: zip18 73 checks (72 + the one Parker comparison that failed once under load and passes alone), zip14 22/22, zip13 39/39,
+  zip18-off 28/28 against main.
+- Found on the preview with the checker (round 2, after the review): the moved-game card's "Text Christopher Vanderberg" button was
+  wider than the card at 390. Alert card buttons now take their words' width or the whole row, whichever is less, and a label longer
+  than the row wraps inside its button (38 px tall at least, as before). The fit check now also opens every game on Home ("Show all",
+  every folded game opened) and found two more with very big text, both on live too: the "1.5 HR" pill ran under the gear (the card's
+  top row now wraps), and the court switch, stacked one choice under the other, had its sliding green highlight off to the side as a
+  separate block with "Booked" left as dark text on dark (motion.css: in the stacked layout the highlight slides down; large-text.css:
+  three rows of one height). The checker has a rule for it (the highlight must sit on the chosen choice); on main's code it fires at
+  320 px with big text, on this branch it does not.
+  (The stacked highlight is placed by its top offset, not a sliding transform: the transform made Chrome's phone mode widen the page to
+  876 px at 150% text; layout-polish caught it, 200/200 after.)
+- Final checks on the round 2 code: zip18 73/73, layout-polish 200/200, admin-motion 28/28, admin-r2 27/27, zip14 22/22, zip13 39/39,
+  money-rework 36/36, zip18-off 28/28 against main; unit 2468 passed, 0 failed; tsc and build clean.
+
+
+### Round 3 (Mon Nov 9, 2026, early morning; Alex: taps 1 and 3 good, tap 2 still looked clipped)
+- Alex's screenshot (light, Pretend "Sun Nov 8, 7:30 AM"): the folded row's TONIGHT strip ran edge to edge and its word touched the tile's
+  curved corners. Nothing was outside the tile, so the round 2 checker passed it. Fix: the folded row's small tile is 48 px (was 44) in every
+  folded row, so they still line up; TONIGHT stays at 7.5 px and now keeps about 3.5 px clear on each side. The big TONIGHT tile on full
+  cards is not changed.
+- Stronger checker (`e2e/clip-check.cjs`): text inside a tile or tag must keep at least 2 px from the tile's inside edge, measured along the
+  rounded corners (the font's own space above capitals and below the baseline is not counted as ink). On the preview's round 2 code it
+  fails exactly as Alex saw: "TONIGHT" 1.3 px from the edge at 390/360/320, light and dark. Also: a background that matches what is behind
+  it is not an edge, and a button with no border or fill of its own (the credit chip) has no edge to measure.
+- Run across every tile kind, player and admin (TONIGHT, TOMORROW / TOM, weekday, mine, EXTRA, canceled, compact and full cards, the header
+  date tile, Money tiles), at 390/360/320, light and dark, normal, Safari text 125% and 150%, 150% text. Found and fixed: the header date
+  tile's weekday touched its top edge at 150% text (3 px padding, no change at normal text); "Directions" ran out of its game-day button
+  with Safari text (the two buttons wrap one under the other when needed; at 320 their inner spacing is 3 px so they stay equal halves);
+  "Tue game: 3 haven't paid" broke mid-word at 320 with Safari 150% (Remind drops under the title); Money's Request / Mark paid ran past a
+  card at 320 with Safari 150% (Mark paid wraps under Request).
+- Tests: zip18 103/103 (player screens now checked too: 24 more checks, and Safari 150% added), zip14 22/22, layout-polish 200/200,
+  audit-player-look 145/145, money-rework 36/36, zip13 39/39, admin-r2 27/27, circles 18/18, zip18-off 28/28 against main; tsc and build
+  clean (no script code changed since the unit run: 2468 passed).

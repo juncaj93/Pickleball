@@ -179,3 +179,17 @@ html[data-card-cleanup] .cl-names .cl-names-text {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Zip 18 round 2: the folded Home row never cuts its circles off. The strip keeps room for every circle at its tightest tuck (13 px balls,
+   6 px apart at -7 px), and when the line next to the time is too narrow for that (a 320 px phone, big text) the circles move under the time
+   instead of being cut. The row grows for it (styles.css .hv2-short). */
+html[data-card-cleanup] .hv2-count.cl-row {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  overflow: visible;
+}
+html[data-card-cleanup] .hv2-count.cl-row > .cl-balls {
+  /* The strip measures its own width for the tuck (container), so it cannot size itself from the circles: this is every circle at the
+     tightest tuck (13 px balls at -7 px: 6 px each after the first). --n comes from HomeV2.tsx. */
+  min-width: calc(13px + (var(--n, 4) - 1) * 6px);
+}

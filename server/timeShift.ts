@@ -6,8 +6,8 @@ import { TIME_SHIFT_HEADER, timeShiftOn } from '../shared/timeShift';
 // The moved-game notice (Still in / Can't make it), "Confirmed x of y" and the Edit game note are on when:
 //  - the TIME_SHIFT var (wrangler.toml) is not "off" (the kill switch), and
 //  - the organizer switched it on for everyone (Settings), or this phone opened the site with ?timeshift=on
-//    (it then sends the X-Time-Shift: on header: a private test switch for that phone only), or this is the
-//    organizer's in-browser demo (View as), which always shows it.
+//    (it then sends the X-Time-Shift: on header: a private test switch for that phone only).
+//    (Zip 18: the organizer's demo, View as, follows the same rule from its copy of the switch rows; it no longer always shows it.)
 // The court look (tile borders, "~7 PM") does not depend on any of this. Either way Edit game keeps recording
 // which time each player agreed to, so turning it on later asks exactly the right people.
 // "On for everyone" is one row in task_log (kind 'mark', task 'time_shift_on', no game): no schema change.
@@ -33,7 +33,6 @@ export async function setTimeShiftForAll(db: D1Database, groupId: string, on: bo
 /** Is the notice on for this request? */
 export async function timeShiftFor(ctx: Ctx, groupId: string): Promise<boolean> {
   if (!timeShiftOn(ctx.env.TIME_SHIFT)) return false;
-  if (ctx.env.SANDBOX) return true;
   if ((ctx.req.headers.get(TIME_SHIFT_HEADER) ?? '').toLowerCase() === 'on') return true;
   return timeShiftForAll(ctx.db, groupId);
 }

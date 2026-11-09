@@ -197,7 +197,10 @@ export interface GroupView {
   lastScreen?: boolean;
   /** "Seat dots" is on for this screen (server/seatDots.ts): every empty seat a dashed ring. Missing: exactly as before. */
   seatDots?: boolean;
-  /** Swap to Alex (Zip 13): this phone is signed in as the organizer (real PIN) and the switch is on: the "Go to Admin" pill. Missing for everyone else. */
+  /**
+   * Swap to Alex (Zip 13): this phone is signed in as the organizer (real PIN), the switch is on, and the page shows the organizer's own
+   * name (Zip 18): the title "Alex" + swap icon goes to Admin. Missing for everyone else, and always in View as.
+   */
   goToAdmin?: true;
   /** Zip 14 "Game day card" is on for this screen (server/gameDay.ts): the game day card, court numbers on the games. Missing: exactly as before. */
   /** Preview only (shared/previewCalm.ts): hide the alert cards (?alerts=all shows them). Never on live. */

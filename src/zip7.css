@@ -325,7 +325,7 @@
 }
 
 /* TOMORROW stays at 9 px (the word is about 58 px wide); a tile narrower than that says TOM instead (TONIGHT always fits): every organizer tile
-   and the LATER row tile on the player screen. The tile's own column is the container (it is as wide as the tile). The folded Home row's tile is a fixed 44 px, so it always says TOM. */
+   and the LATER row tile on the player screen. The tile's own column is the container (it is as wide as the tile). The folded Home row's tile is a fixed 48 px (round 3), so it always says TOM. */
 :root[data-tonight-glow] .hv2-short .tile .day-tag .dt-full {
   display: none;
 }
@@ -349,4 +349,26 @@
   :root[data-tonight-glow] .tile.mine .day-tag .dt-short {
     display: inline;
   }
+}
+
+/* Zip 18 round 2: the folded Home row's small tile (48 px since round 3): the strip a little smaller (8 px, no letter spacing, tighter padding)
+   so TONIGHT and TOM sit fully inside the tile, with a clear margin, and the whole tile (strip, date, month) fits the row's usual height. */
+:root[data-tonight-glow] .hv2-short .tile.day-tonight,
+:root[data-tonight-glow] .hv2-short .tile.day-tomorrow {
+  padding-bottom: 3px;
+}
+:root[data-tonight-glow] .hv2-short .tile .day-tag {
+  padding: 3px 0 2px;
+  font-size: 8px;
+  letter-spacing: 0;
+}
+/* TONIGHT is the longest word on the strip: a hair smaller, and (round 3) the tile is 48 px, so it keeps at least 2 px clear of the tile's
+   rounded inside edge (Alex, Nov 9: at 44 px it touched the curved corners and looked cut off). */
+:root[data-tonight-glow] .hv2-short .tile .day-tag.tonight {
+  font-size: 7.5px;
+}
+:root[data-tonight-glow] .hv2-short .tile.day-tonight .day,
+:root[data-tonight-glow] .hv2-short .tile.day-tomorrow .day {
+  margin: 0;
+  line-height: 1.1;
 }

@@ -56,11 +56,10 @@ export async function setMotionForAll(ctx: Pick<Ctx, 'env' | 'db'>, groupId: str
 // Is the motion on for this request? Yes when:
 //  - it is on for everyone (the MOTION var in wrangler.toml, unless the Settings row turned it off, or the Settings row turned it on), or
 //  - this phone opened the site once with ?motion=on (it then sends the X-Motion: on header: Alex's private test
-//    switch, that phone only), or
-//  - this is the organizer's in-browser demo (View as), which always shows it.
+//    switch, that phone only).
+// (Zip 18: the organizer's demo, View as, follows the same rule from its copy of the switch rows and settings; it no longer always shows it.)
 // Visual only. It changes nothing that is saved, charged or sent.
 export async function motionFor(ctx: Ctx, groupId: string): Promise<boolean> {
-  if (ctx.env.SANDBOX) return true;
   if ((ctx.req.headers.get(MOTION_HEADER) ?? '').toLowerCase() === 'on') return true;
   return motionForAll(ctx, groupId, 'player');
 }

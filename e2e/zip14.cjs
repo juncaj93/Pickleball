@@ -250,7 +250,8 @@ async function main() {
     await card(page, courtGame.id).getByRole('button', { name: /Court 3/ }).click();
     const me = page.locator('dialog.cm[open] .cm-cl.me');
     await me.waitFor();
-    const a = await me.evaluate((e) => [getComputedStyle(e).animationName, getComputedStyle(e, '::after').display]);
+    // (Zip 18 round 2: the court has no light sweep at all any more, only its glow: nothing drawn after it.)
+    const a = await me.evaluate((e) => [getComputedStyle(e).animationName, getComputedStyle(e, '::after').content]);
     assert(a[0] === 'none' && a[1] === 'none', `court ${a}`);
     await ctx.close();
   });

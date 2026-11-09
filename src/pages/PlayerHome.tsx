@@ -22,7 +22,7 @@ import { addNote, forgetGame, readNotes, removeNote, sameNote } from '../dropNot
 import { goodNewsKey, seeGoodNews } from '../goodNews';
 import { courtDisplay, isNoCourt } from '../courtDisplay';
 import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
-import { ModeButton, SwapIcon, TopBar } from '../Shell';
+import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
 import { AcBalls, AlertCard } from '../AlertCard';
@@ -215,10 +215,7 @@ export function PlayerHome({
   onLinkOnly,
   onWordNeeded,
   topBar,
-  onGoAdmin,
 }: {
-  /** Swap to Alex (Zip 13), View as only: "Go to Admin" at the bottom goes back to the organizer screen. */
-  onGoAdmin?: () => void;
   groupKey: string | null;
   /** "View as...": the organizer's "Pretending it's..." bar, kept with the View as bar at the top. */
   topBar?: ReactNode;
@@ -604,7 +601,7 @@ export function PlayerHome({
   if (load.error?.status === 404 && !viewAs) {
     return (
       <>
-        <TopBar eyebrow={SITE_NAME} title="Link not working" />
+        <TopBar eyebrow="" title="Link not working" />
         <main className="page">
           <Notice tone="danger" title="This group link isn't valid">
             It may have been replaced with a new one. Ask the organizer for the current link.
@@ -666,7 +663,11 @@ export function PlayerHome({
         </div>
       )}
       <TopBar
-        eyebrow={g?.group.name ?? (showSaved ? saved!.view.group.name : SITE_NAME)}
+        // Zip 18: no small group-name label over the name (for everyone); the name sits centered against the logo tile.
+        eyebrow=""
+        // Swap to Alex (Zip 18): on the organizer's own player page (the server says so only for a phone signed in as the organizer
+        // showing the organizer's own name), "Alex" + the gray swap icon is one button to Admin. Never in View as, never for a player.
+        onTitle={g?.goToAdmin === true && !viewAs && !pickName ? { onClick: () => navigate('/admin'), label: `${g.me?.name ?? 'You'}. Go to Admin` } : undefined}
         title={!g ? (showSaved ? saved!.view.me!.name : SITE_NAME) : pickName ? 'Who are you?' : (g.me?.name ?? viewAs?.name ?? SITE_NAME)}
         titleExtra={
           g?.me && !pickName ? (
@@ -851,15 +852,7 @@ export function PlayerHome({
                 )}
             {/* The end of the page: just a thin line and a little space. */}
             <div className="page-end" aria-hidden="true" />
-            {/* Swap to Alex (SWAP_BUTTON, Zip 13): only on a phone signed in as the organizer (the server says so), or in View as. */}
-            {(onGoAdmin || (!viewAs && g?.goToAdmin === true)) && (
-              <div className="go-admin-wrap">
-                <button type="button" className="go-admin" data-go-admin onClick={() => (onGoAdmin ? onGoAdmin() : navigate('/admin'))}>
-                  <SwapIcon size={11} />
-                  Go to Admin
-                </button>
-              </div>
-            )}
+            {/* Zip 18: the "Go to Admin" pill that was here is gone; the title (Alex + swap icon) at the top replaces it. */}
           </>
         )}
         {/* Organizer sign-in only on "Who are you?", never under the schedule. */}

@@ -47,9 +47,11 @@ describe('MOTION switch', () => {
     expect((await phone.call('GET', '/api/group')).data.motion).toBe(true);
   });
 
-  it('the sandbox (the organizer\'s View as demo) always has it', async () => {
+  it('the sandbox (the organizer\'s View as demo) follows the same rule as the live site (Zip 18: it no longer always has it)', async () => {
     const { phone, ctx } = await world();
     (ctx.app.env as any).SANDBOX = true;
+    expect((await phone.call('GET', '/api/group')).data.motion).toBe(false);
+    (ctx.app.env as any).MOTION = 'on';
     expect((await phone.call('GET', '/api/group')).data.motion).toBe(true);
   });
 

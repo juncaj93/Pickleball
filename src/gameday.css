@@ -102,13 +102,16 @@ html[data-game-day] .schedule > .sched.gd .dots.one-row {
 .gd-btns {
   position: relative;
   display: flex;
+  /* Zip 18 round 3: with Safari's bigger text the two buttons go one under the other rather than "Directions" running out of its button. */
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 1px; /* + the body's 5 px gap = 6 px under "You're in" */
 }
 .gd-btn {
   position: relative;
   flex: 1 1 0;
-  min-width: 0;
+  min-width: -webkit-fit-content;
+  min-width: fit-content;
   height: 30px;
   display: inline-flex;
   align-items: center;
@@ -166,8 +169,9 @@ html[data-game-day] .schedule > .sched.gd .dots.one-row {
   }
   .gd-btn {
     font-size: 13px;
-    gap: 4px;
-    padding: 0 4px;
+    /* Zip 18 round 3: 3 px (was 4) so "Directions" and its arrow fit in half the row with room to spare: the two stay equal halves. */
+    gap: 3px;
+    padding: 0 3px;
   }
   .gd-btn svg {
     width: 12px;
@@ -355,7 +359,8 @@ button.cm-cl:focus-visible {
   outline: 2.5px solid #2f8f5b;
   outline-offset: 2px;
 }
-/* The game's court: green, lifted, with the Tonight card's glow (2.4 s) and light sweep (3.6 s). */
+/* The game's court: green, lifted, with a soft glow that pulses (2.4 s). Zip 18 round 2 (Alex): the glow only; the light sweep that used to
+   run across it is gone (the Tonight date tile keeps its own animation, src/zip7.css). */
 .cm-cl.me {
   z-index: 6;
   overflow: hidden;
@@ -363,17 +368,6 @@ button.cm-cl:focus-visible {
   background: linear-gradient(160deg, #4fc487, #2a8a56);
   color: #fff;
   animation: cm-glow 2.4s ease-in-out infinite;
-}
-.cm-cl.me::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(110deg, transparent 35%, rgb(255 255 255 / 40%) 50%, transparent 65%);
-  background-size: 300% 100%;
-  background-position: 130% 0;
-  animation: cm-sweep 3.6s ease-in-out infinite;
 }
 @keyframes cm-glow {
   0%,
@@ -386,16 +380,6 @@ button.cm-cl:focus-visible {
     box-shadow:
       0 9px 0 #1c5a39,
       0 0 15px 2px rgb(60 200 130 / 80%);
-  }
-}
-/* The same sweep as the Tonight tile (src/zip7.css z7-sweep), under its own name so the map never depends on that switch. */
-@keyframes cm-sweep {
-  0%,
-  55% {
-    background-position: 130% 0;
-  }
-  100% {
-    background-position: -30% 0;
   }
 }
 .cm-pick .cm-cl.me {
@@ -515,7 +499,7 @@ button.cm-cl:focus-visible {
   }
 }
 
-/* Reduce Motion: the court holds still with a steady glow, no sweep, the panel just appears. */
+/* Reduce Motion: the court holds still with a steady glow, the panel just appears. */
 @media (prefers-reduced-motion: reduce) {
   dialog.cm[open] {
     animation: none;
@@ -525,9 +509,6 @@ button.cm-cl:focus-visible {
     box-shadow:
       0 9px 0 #1c5a39,
       0 0 12px 2px rgb(60 200 130 / 60%);
-  }
-  .cm-cl.me::after {
-    display: none;
   }
 }
 

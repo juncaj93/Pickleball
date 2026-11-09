@@ -257,14 +257,27 @@ html[data-alert-cards] .ac-action {
 }
 html[data-alert-cards] .ac-actions {
   display: flex;
+  /* Zip 18 round 2: buttons that do not all fit on one line move to a second line (each at least as wide as its words), and every row is
+     filled edge to edge. Two buttons whose words each fit in half the row look exactly as before (equal halves); otherwise the longer one
+     gets the room its words need instead of its words spilling out. */
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: 10px;
 }
 html[data-alert-cards] .ac-actions > .ac-btn {
   flex: 1 1 0;
-  min-width: 0;
-  padding: 0 8px;
+  /* At least as wide as its words, or the whole row when the words are longer than that ("Text Christopher Vanderberg" on a narrow
+     card): then the words wrap inside the button, which grows taller (38 px at least, as before). */
+  min-width: -webkit-fit-content;
+  min-width: fit-content;
+  max-width: 100%;
+  height: auto;
+  min-height: 38px;
+  padding: 5px 8px;
   font-size: 14.5px;
+  line-height: 1.15;
+  white-space: normal;
+  text-align: center;
 }
 html[data-alert-cards] .ac-btn {
   position: relative;
@@ -634,8 +647,23 @@ html[data-alert-cards] .vr-card-ac .vr-head {
   gap: 10px;
 }
 html[data-alert-cards] .vr-card-ac .vr-title-wrap {
-  flex: 1 1 auto;
+  /* Zip 18 round 3: never squeezed below about 7rem (a word or two), so "haven't" never breaks into pieces: at very big text on a
+     narrow phone the Remind button drops under the title instead. */
+  flex: 1 1 7rem;
   min-width: 0;
+}
+html[data-alert-cards] .vr-card-ac .vr-head {
+  flex-wrap: wrap;
+}
+html[data-alert-cards] .vr-card-ac .vr-head > .ac-btn {
+  margin-left: auto;
+}
+html[data-alert-cards] .vr-card-ac .vr-title {
+  overflow-wrap: break-word;
+}
+/* Zip 18 round 2: Remind keeps its full width; the title beside it wraps instead. */
+html[data-alert-cards] .vr-card-ac .vr-head > .ac-btn {
+  flex: none;
 }
 html[data-alert-cards] .vr-card-ac .vr-title {
   margin: 0;
