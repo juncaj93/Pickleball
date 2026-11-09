@@ -3621,3 +3621,22 @@ migration. Nothing deployed to production, nothing switched on, no live data rea
 - Tests: unit 2433 passed on the rebased code; 2434 passed, 0 failed on the final code (145 files); tsc and build clean. Full browser suite once, 3 at a time:
   53 of 58 clean; zip16 (the newest-row check, updated) 28/28 alone; zip17-off 30/30 against main `6f535d7` (History times compared to the
   minute); run.cjs alone 219/229, the same 10 "Last call" checks as main; cancel-reason (2), want-in (1), admin-r2 F4 (1) as on main.
+
+### Deploy (Sun Nov 8, 2026, about 7:41 PM Eastern, after the 7:00 PM D1 reset, on Alex's "ship it") - LIVE with UNPAID_NUDGE OFF
+- Before: main equaled live for the site (production `e1d94f71-c6dd-492e-8f4e-d52370d32348` = `a120464`; main since then: Zip 19, the
+  clock Worker, backups and docs only). PR #104 merged as `8a10eba` (rebased onto Zip 16 and Zip 19 first). Unit on the final code: 2456
+  passed, 0 failed (148 files); tsc and build clean. Browser suite as in round 2 above.
+- SQL export of live (`npx wrangler d1 export pickleball --remote`, 7:05 PM, 178,786 bytes) saved with `node scripts/deploy-export.mjs save`
+  as `export-20261109004122` in `pickleball-backups` (checked against the file). Time Travel bookmark
+  `00000c1d-00000008-0000511e-d9251b536f84063bf5a71f1eb380eb25` (7:05 PM). Whole database only if ever needed:
+  `npx wrangler d1 time-travel restore pickleball --bookmark=00000c1d-00000008-0000511e-d9251b536f84063bf5a71f1eb380eb25`.
+  Integrity checks: all 21 read 0 before and after. No migration (no database change in this zip).
+- Production deployment `854a346f-66cd-4d69-b3a2-dd3623afd33c` = main `8a10eba`. ROLLBACK: Pages deployment
+  `e1d94f71-c6dd-492e-8f4e-d52370d32348` (Zip 16, `a120464`); no data step needed. Quickest off for the nudge: it is already off (Settings >
+  Feature switches > "Unpaid nudge"). The title fit fix is live for everyone (look only, no switch).
+- Read-only live check (backup address, sign-in and reads only, nothing tapped): View only works; no Unpaid nudge row on, the 37 other rows
+  on, 12 games; a player's answer (View as) has no Zip 17 key and no preview flag; the live script has the new code; Activity and Money 200.
+  (A check that the switch flip is refused was not run: it would have been a write attempt on live.)
+- Preview: https://preview-zip17.pickleball-club-9h0.pages.dev (main `8a10eba`), the fake database re-seeded ONCE at 7:42 PM with the small
+  cast: 10 players, 63 games. Checked: Vic $14 / "For Tue, Nov 3", Wren $28, Zoe $42 (every I'm in dimmed), Quinn "You owe $3 more", the
+  Who are you? list is the 10 names.
