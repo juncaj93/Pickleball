@@ -143,10 +143,24 @@ export function tickWatch(env: Env): TickWatch {
   return { ready: errorAlertsReady(env), on: null, job: 'game check' };
 }
 
-/** A tick reached the site with the switch on: note it with the box, then say "the clock stopped" or the held-back count if due. */
+/** When this Worker run last told the box "off" (a tick that read the switch as off). */
+let offToldAt = 0;
+const OFF_TELL_EVERY_MS = 60 * 60_000;
+
+/**
+ * A tick reached the site. On: note it with the box, then say "the clock stopped" or the held-back count if due. Off: about once an
+ * hour per Worker run, tell the box "off" too (after the answer), so a box left on (a backup restore empties the switch row) can never
+ * send while Settings shows off.
+ */
 export function afterTick(ctx: Ctx, watch: TickWatch): void {
-  if (!watch.ready || watch.on !== true) return;
-  ctx.waitUntil(tickWork(ctx.env, ctx.url, ctx.nowMs).catch(() => null));
+  if (!watch.ready || watch.on === null) return;
+  if (watch.on) {
+    ctx.waitUntil(tickWork(ctx.env, ctx.url, ctx.nowMs).catch(() => null));
+    return;
+  }
+  if (offToldAt && ctx.nowMs - offToldAt < OFF_TELL_EVERY_MS && ctx.nowMs >= offToldAt) return;
+  offToldAt = ctx.nowMs;
+  ctx.waitUntil(boxCall(ctx.env, { op: 'sync', on: false }, ctx.nowMs).catch(() => null));
 }
 
 export async function tickWork(env: Env, url: URL, nowMs: number, seen = true): Promise<string[]> {
@@ -203,6 +217,7 @@ const reportedAt = new Map<string, number>();
 /** Test only: forget what this Worker run remembers. */
 export function resetErrorMemory(): void {
   offUntil = 0;
+  offToldAt = 0;
   recent.all = [];
   recent.db = [];
   reportedAt.clear();
@@ -216,7 +231,8 @@ export function resetErrorMemory(): void {
  */
 export function noteServerError(ctx: Ctx, err: unknown): void {
   try {
-    if (!errorAlertsReady(ctx.env) || ctx.url.pathname.startsWith('/api/cron/')) return;
+    // "Pretend it's..." runs on a made-up time: never counted (a far-off time would fill the box's slots).
+    if (!errorAlertsReady(ctx.env) || ctx.url.pathname.startsWith('/api/cron/') || isPretend(ctx.db)) return;
     const now = ctx.nowMs;
     if (now < offUntil) return;
     const keep = (list: number[]) => list.filter((t) => now - t < BURST.windowMs).slice(-50);
@@ -247,17 +263,14 @@ export async function setErrorAlertsForAll(db: D1Database, groupId: string, on: 
 }
 
 /**
- * The switch, both places. Off: the box first (so it can never stay on by itself), then the row. On: the row first, then the box
- * (if the box misses it, the next tick tells it). Without the box (not set up) only the row is saved.
+ * The switch, both places: the row (the truth, what Settings shows), then the box's copy. If the box misses it, the clock's ticks
+ * tell it (on: every tick; off: about once an hour), so the row always wins. Without the box (not set up) only the row is saved.
  */
 export async function switchErrorAlerts(ctx: Ctx, groupId: string, on: boolean): Promise<void> {
-  const box = !!ctx.env.ERROR_BOX;
-  if (!on && box && !(await boxCall(ctx.env, { op: 'sync', on: false }, ctx.nowMs))) {
-    throw new HttpError(503, 'box_unreachable', "Couldn't reach the error alerts store. Try again in a minute.");
-  }
   await setErrorAlertsForAll(ctx.db, groupId, on, ctx.nowIso);
-  if (on) offUntil = 0;
-  if (on && box) await boxCall(ctx.env, { op: 'sync', on: true }, ctx.nowMs);
+  offUntil = 0;
+  offToldAt = 0;
+  if (ctx.env.ERROR_BOX) await boxCall(ctx.env, { op: 'sync', on }, ctx.nowMs);
 }
 
 let lastTestAt = 0;

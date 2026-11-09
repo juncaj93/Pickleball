@@ -179,3 +179,5 @@ same `task_log` table, so after a restore **every feature switch is off** until 
 Nov 8). The Telegram alert switches (Settings > Alerts, the `organizer_alerts` table) also come back all On. Before a real
 restore, write down which switches are on (or run `npm run restore-test -- --live`, whose NOTE line lists them), and set
 them again afterwards. Hidden games and players (Hide from list) are in `task_log` too and show again.
+"Error alerts" (Zip 21) is one of those rows. Its error box (worker/box.ts) keeps a copy, and the clock tells the box "off" within
+the hour after a restore, so nothing is sent while Settings shows it off. Switch it on again in Settings if wanted.

@@ -29,6 +29,13 @@ export const LIMITS = {
   perDay: 6,
   /** No tick reached the site for this long: "the clock stopped". */
   gapMs: 20 * MIN,
+  /**
+   * A longer gap is not reported: it almost always means the alerts themselves were paused (the kill switch, a missing secret), not
+   * the clock. The watch starts fresh instead.
+   */
+  maxGapMs: 12 * HOUR,
+  /** The weekly backup is retried every hour on Sunday: one message about it a day is enough (it would use up the day's 6). */
+  backupEveryMs: 24 * HOUR,
 } as const;
 
 /** A wrangler.toml kill switch: allowed unless it says "off". Who gets it is Settings' call. */
@@ -102,7 +109,7 @@ function canSend(s: BoxState, kind: SlotKind, nowMs: number): boolean {
   rollDay(s, nowMs);
   if (s.count >= LIMITS.perDay) return false;
   const last = s.sent[kind];
-  return last === undefined || nowMs - last >= LIMITS.perKindMs;
+  return last === undefined || nowMs - last >= (kind === 'backup' ? LIMITS.backupEveryMs : LIMITS.perKindMs);
 }
 
 /** Take a slot and hand over whatever was held back (it rides along on this message). */
@@ -125,8 +132,8 @@ function holdBack(s: BoxState, nowMs: number): void {
 export function boxStep(state: BoxState, op: BoxOp, nowMs: number): { state: BoxState; out: BoxOut } {
   const s: BoxState = { ...emptyBox(), ...state, sent: { ...(state.sent ?? {}) } };
   if (op.op === 'sync') {
-    if (op.on && !s.on) {
-      // A fresh start: nothing from before the switch went on is reported (no old gap, no old held-back count).
+    if (op.on) {
+      // A fresh start every time the switch is set on: nothing from before is reported (no old gap, no old held-back count).
       s.hb = nowMs;
       s.pending = 0;
       s.pendingSince = null;
@@ -147,7 +154,7 @@ export function boxStep(state: BoxState, op: BoxOp, nowMs: number): { state: Box
     const prev = s.hb;
     s.hb = nowMs;
     let gap: { from: number; to: number; extra: Extra | null } | null = null;
-    if (prev !== null && nowMs - prev >= LIMITS.gapMs) {
+    if (prev !== null && nowMs - prev >= LIMITS.gapMs && nowMs - prev <= LIMITS.maxGapMs) {
       if (canSend(s, 'clock_stopped', nowMs)) gap = { from: prev, to: nowMs, extra: take(s, 'clock_stopped', nowMs) };
       else holdBack(s, nowMs);
     }
@@ -242,7 +249,8 @@ export const errorText = {
   /** Trigger 4. */
   clockStopped: (fromMs: number, toMs: number, extra: Extra | null, adminUrl: string) => {
     const mins = Math.round((toMs - fromMs) / MIN);
-    const long = mins >= 120 ? `${Math.floor(mins / 60)} hours ${mins % 60} minutes` : `${mins} minutes`;
+    const h = Math.floor(mins / 60);
+    const long = mins < 120 ? `${mins} minutes` : mins % 60 === 0 ? `${h} hours` : `${h} hours ${mins % 60} minutes`;
     return finish(`Site error: the clock stopped for ${long} (${alertWhen(fromMs, toMs)} to ${alertTime(toMs)}). It is running again.`, extra, toMs, adminUrl);
   },
   /** The held-back count on its own. */

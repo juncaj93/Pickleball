@@ -160,6 +160,37 @@ describe("the error box's rules (shared/errorAlerts.ts boxStep)", () => {
     expect(r.out).toMatchObject({ gap: { from: SUN_3AM + 15 * MIN, to: SUN_3AM + 50 * MIN } });
     expect(boxStep(r.state, { op: 'tick', seen: true }, SUN_3AM + 55 * MIN).out).toMatchObject({ gap: null });
   });
+  it('a gap over 12 hours is not reported (the alerts were paused, not the clock): the watch starts fresh', () => {
+    let s = on();
+    s = boxStep(s, { op: 'tick', seen: true }, SUN_3AM + 5 * MIN).state;
+    const r = boxStep(s, { op: 'tick', seen: true }, SUN_3AM + 26 * HOUR);
+    expect(r.out).toMatchObject({ gap: null });
+    expect(boxStep(r.state, { op: 'tick', seen: true }, SUN_3AM + 26 * HOUR + 5 * MIN).out).toMatchObject({ gap: null });
+    // 12 hours exactly is still said.
+    const r2 = boxStep(s, { op: 'tick', seen: true }, SUN_3AM + 5 * MIN + 12 * HOUR);
+    expect(r2.out).toMatchObject({ gap: { from: SUN_3AM + 5 * MIN } });
+  });
+  it('the weekly backup: one message a day at most (it is retried every hour on Sunday)', () => {
+    let s = on();
+    let n = 0;
+    for (let h = 0; h < 20; h++) {
+      const r = ask(s, SUN_3AM + h * HOUR, 'backup');
+      if ((r.out as any).send) n++;
+      s = r.state;
+    }
+    expect(n).toBe(1);
+    // The day's other kinds are not used up by it.
+    expect(ask(s, SUN_3AM + 20 * HOUR, 'clock').out).toMatchObject({ send: true });
+  });
+  it('setting the switch on again, even when the box already had it on, starts fresh', () => {
+    let s = on();
+    s = boxStep(s, { op: 'tick', seen: true }, SUN_3AM + 5 * MIN).state;
+    s = ask(s, SUN_3AM + 6 * MIN).state;
+    s = ask(s, SUN_3AM + 7 * MIN).state; // held back
+    s = boxStep(s, { op: 'sync', on: true }, SUN_3AM + 3 * HOUR).state;
+    expect(s.pending).toBe(0);
+    expect(boxStep(s, { op: 'tick', seen: true }, SUN_3AM + 3 * HOUR + 5 * MIN).out).toMatchObject({ gap: null, summary: null });
+  });
   it('turning the switch on starts fresh: no gap from before, nothing held back from before', () => {
     let s = on();
     s = ask(s, SUN_3AM).state;
@@ -213,6 +244,8 @@ describe('the messages (short, Eastern 12-hour, no em dashes, the admin link)', 
     expect(errorText.database(false, at, null, ADMIN)).toBe(`Site error: database errors on the site at 3:05 AM. Tap to open Admin: ${ADMIN}`);
     expect(errorText.serverErrors(5, at, null, ADMIN)).toBe(`Site error: 5 server errors in 10 minutes at 3:05 AM. Tap to open Admin: ${ADMIN}`);
     expect(errorText.clockStopped(SUN_3AM + 5 * MIN, SUN_3AM + 40 * MIN, null, ADMIN)).toBe(`Site error: the clock stopped for 35 minutes (3:05 AM to 3:40 AM). It is running again. Tap to open Admin: ${ADMIN}`);
+    expect(errorText.clockStopped(SUN_3AM, SUN_3AM + 2 * HOUR, null, ADMIN)).toContain('stopped for 2 hours (3:00 AM to 5:00 AM)');
+    expect(errorText.clockStopped(SUN_3AM, SUN_3AM + 3 * HOUR + 10 * MIN, null, ADMIN)).toContain('stopped for 3 hours 10 minutes');
     expect(errorText.summary({ n: 4, since: at }, at + 30 * MIN, ADMIN)).toBe(`4 more errors in the last hour. Tap to open Admin: ${ADMIN}`);
     expect(errorText.test(ADMIN)).toMatch(/^TEST error alert from Pickleball Bros\. Nothing is wrong\./);
   });
@@ -288,9 +321,13 @@ describe('trigger 2: the weekly backup fails or ends INCOMPLETE', () => {
     await w.cronReport('backup_failed');
     expect(w.sent).toEqual([`Site error: the weekly backup failed at 3:00 AM. It tries again in an hour. Tap to open Admin: ${ADMIN}`]);
     w.sent.length = 0;
+    // One backup message a day (it is retried every hour): the next one only a day later.
     w.app.now += HOUR;
     await w.cronReport('backup_incomplete');
-    expect(w.sent).toEqual([`Site error: the weekly backup ended INCOMPLETE at 4:00 AM. It tries again in an hour. Tap to open Admin: ${ADMIN}`]);
+    expect(w.sent).toEqual([]);
+    w.app.now += 23 * HOUR;
+    await w.cronReport('backup_incomplete');
+    expect(w.sent).toEqual([`Site error: the weekly backup ended INCOMPLETE at 3:00 AM. It tries again in an hour. 1 more error since Sun 4:00 AM. Tap to open Admin: ${ADMIN}`]);
   });
   it('failed or INCOMPLETE, from the backup code\'s own reasons', () => {
     expect(backupFailure('failed: the data changed while copying; tried again at the next hourly look')).toBe('backup_incomplete');
@@ -484,7 +521,7 @@ describe('a Telegram or box failure never breaks a tick, and is never itself an 
 // ---------- OFF equals main ----------
 
 describe('OFF equals main', () => {
-  it('off: ticks, failing ticks, reports and server errors send nothing and never touch the box', async () => {
+  it('off: ticks, failing ticks, reports and server errors send nothing; the box is only asked or told "off"', async () => {
     const w = await world({ on: false });
     await w.tick();
     w.app.now += HOUR;
@@ -496,12 +533,18 @@ describe('OFF equals main', () => {
     expect(w.sent).toEqual([]);
     // The failing tick could not read the switch (the database was down), so it asked the box once, and the box said off. The
     // report route asked once more; the burst asked at most once, then this run remembers "off" for 10 minutes.
-    expect(w.box.calls).toBeLessThanOrEqual(3);
+    // Tick 1 tells the box "off" (once an hour per Worker run), tick 2 an hour later again; the failing tick asks once; the report
+    // once; the burst once, then this run remembers "off" for 10 minutes.
+    expect(w.box.calls).toBeLessThanOrEqual(5);
+    expect((w.box.store.get('state') as BoxState).on).toBe(false);
   });
-  it('off: a working tick answers exactly as with no error alerts at all, and never calls the box', async () => {
+  it('off (the shipped setup: box bound, Telegram connected): a tick answers exactly as with no error alerts; the box hears "off" at most once an hour', async () => {
     const a = await world({ on: false });
     const b = await world({ box: false });
     const calls = a.box.calls;
+    const batches: number[] = [];
+    const inner = a.app.env.DB as any;
+    a.app.env.DB = new Proxy(inner, { get: (t, k) => (k === 'batch' ? (list: any[]) => (batches.push(list.length), t.batch(list)) : Reflect.get(t, k)) });
     for (let i = 0; i < 3; i++) {
       const [ra, rb] = [await a.tick(), await b.tick()];
       expect(ra.status).toBe(rb.status);
@@ -509,8 +552,32 @@ describe('OFF equals main', () => {
       a.app.now += 5 * MIN;
       b.app.now += 5 * MIN;
     }
-    expect(a.box.calls).toBe(calls);
+    expect(a.box.calls).toBe(calls + 1);
     expect(a.sent).toEqual([]);
+    // The one difference from main while off, accepted: the switch row is read in the tick's same single trip (7 questions, not 6).
+    expect(batches).toEqual([7, 7, 7]);
+  });
+  it('a restore empties the switch row while the box still says on: the next tick tells the box, and nothing is sent', async () => {
+    const w = await world({ on: true });
+    await w.tick();
+    (w.realDb as any).prepare("DELETE FROM task_log WHERE task = 'error_alerts_on'").run();
+    resetErrorMemory();
+    await w.tick();
+    expect((w.box.store.get('state') as BoxState).on).toBe(false);
+    await w.cronReport('backup_failed');
+    const ctx = () => makeCtx(new Request(`${SITE}/api/x`), w.app.env, w.app.now, (p) => w.app.background.push(p));
+    for (let i = 0; i < 6; i++) noteServerError(ctx(), new Error('D1_ERROR: Exceeded daily limit for rows read'));
+    await w.app.settle();
+    expect(w.sent).toEqual([]);
+  });
+  it('"Pretend it\'s..." errors are never counted (a made-up time would fill the slots)', async () => {
+    const w = await world({ on: true });
+    const { readOnly } = await import('../server/pretend');
+    const ctx = makeCtx(new Request(`${SITE}/api/x`), { ...w.app.env, DB: readOnly(w.realDb) as any }, Date.parse('2099-01-01T00:00:00Z'), (p) => w.app.background.push(p));
+    for (let i = 0; i < 6; i++) noteServerError(ctx, new Error('D1_ERROR: Exceeded daily limit for rows read'));
+    await w.app.settle();
+    expect(w.sent).toEqual([]);
+    expect((w.box.store.get('state') as BoxState).lastAny).toBeNull();
   });
   it('not set up (no box, or the kill switch "off"): the tick asks the database exactly what main asks', async () => {
     for (const env of [{ box: false }, { kill: true }]) {
@@ -593,11 +660,15 @@ describe('Settings > Feature switches > "Error alerts", and the TEST button', ()
     const entries = (await w.g.organizer.call('GET', '/api/admin/activity')).data.entries.filter((e: any) => String(e.action).startsWith('error_alerts'));
     expect(entries.map((e: any) => activityText(e, 'America/Detroit', 'Alex')).sort()).toEqual(['Alex switched "Error alerts" off', 'Alex switched "Error alerts" on']);
   });
-  it('switching off when the box cannot be reached is refused (it could stay on by itself); on still saves', async () => {
+  it('switching off while the box cannot be reached still saves; the next tick tells the box, so nothing is sent', async () => {
     const w = await world({ on: true });
     w.box.broken = true;
-    expect((await w.g.organizer.call('PUT', '/api/admin/error-alerts-switch', { on: false })).status).toBe(503);
-    expect((await w.g.organizer.call('GET', '/api/admin/dashboard')).data.errorAlertsForAll).toBe(true);
+    expect((await w.g.organizer.call('PUT', '/api/admin/error-alerts-switch', { on: false })).status).toBe(200);
+    expect((await w.g.organizer.call('GET', '/api/admin/dashboard')).data.errorAlertsForAll).toBeUndefined();
+    w.box.broken = false;
+    await w.tick();
+    await w.cronReport('backup_failed');
+    expect(w.sent).toEqual([]);
   });
   it('the box missed the switch going on: the next tick tells it', async () => {
     const w = await world({ on: false });
