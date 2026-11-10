@@ -6,6 +6,8 @@ import { type GroupSettings, normalizeSettings } from '../shared/settings';
 import type { AdminDecision, BookingStatus, SessionRecordStatus, StatusInput } from '../shared/status';
 import type { PaymentStatus, RosterStatus } from '../shared/api';
 import { newId } from './crypto';
+import { zip9Allowed } from '../shared/zip9';
+import { bookingHoursAllowed } from '../shared/bookingHours';
 import { lateFeeKind, lateFeePriceCents } from '../shared/lateFees';
 import { OPEN_FEE } from './lateFees';
 import type { D1Database, D1PreparedStatement } from './db';
@@ -229,26 +231,36 @@ export function priceLockStatements(db: D1Database, groupId: string, sessionId: 
  * finalized before Zip 27 keeps exactly what it showed. Returns how many it locked.
  */
 export async function lockFinalizedGames(db: D1Database, groupId: string, settings: GroupSettings, nowIso: string): Promise<number> {
-  const { results } = await db
-    .prepare(
-      `SELECT * FROM sessions s WHERE s.group_id = ? AND (s.finalized_at IS NOT NULL OR s.status = 'canceled')
-         AND NOT EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = '${PRICE_LOCK_TASK}' AND t.kind IN ('mark', 'sent') AND t.kind = 'mark')`,
-    )
-    .bind(groupId)
-    .all<SessionRow>();
+  const { results } = await db.prepare(UNLOCKED_GAMES_SQL).bind(groupId).all<SessionRow>();
   if (results.length === 0) return 0;
   // A few games per batch (a request has a limit on statements), and each lock only while its game is still finalized or canceled
   // (a Reopen of a canceled game landing in between keeps it unlocked).
   for (let i = 0; i < results.length; i += 20) {
-    await db.batch(
-      results.slice(i, i + 20).flatMap((s) => {
-        if (!/^[0-9A-Za-z-]+$/.test(s.id)) throw new Error('unsafe sql text');
-        const settled = `EXISTS (SELECT 1 FROM sessions g WHERE g.id = '${s.id}' AND (g.finalized_at IS NOT NULL OR g.status = 'canceled'))`;
-        return priceLockStatements(db, groupId, s.id, priceOf(s, settings), nowIso, settled);
-      }),
-    );
+    await db.batch(results.slice(i, i + 20).flatMap((s) => priceLockStatements(db, groupId, s.id, priceOf(s, settings), nowIso, stillSettled(s.id))));
   }
   return results.length;
+}
+
+/** The finalized or canceled games of a group (?1) that have no price lock yet. The deploy-time script (scripts/lock-finalized.ts) reads the same rows. */
+export const UNLOCKED_GAMES_SQL = `SELECT * FROM sessions s WHERE s.group_id = ?1 AND (s.finalized_at IS NOT NULL OR s.status = 'canceled')
+         AND NOT EXISTS (SELECT 1 FROM task_log t WHERE t.session_id = s.id AND t.task = '${PRICE_LOCK_TASK}' AND t.kind IN ('mark', 'sent') AND t.kind = 'mark')`;
+
+/** SQL: the game is still finalized or canceled (a lock is written only then). */
+export function stillSettled(sessionId: string): string {
+  if (!/^[0-9A-Za-z-]+$/.test(sessionId)) throw new Error('unsafe sql text');
+  return `EXISTS (SELECT 1 FROM sessions g WHERE g.id = '${sessionId}' AND (g.finalized_at IS NOT NULL OR g.status = 'canceled'))`;
+}
+
+/**
+ * The price rules for EVERYONE (Zip 27): Settings > Money, plus the "Short games" and "Booking hours" rows when their Settings row is on
+ * and their wrangler.toml kill switch allows it. Never a phone's private test link. One place, for the site (server/admin.ts, right
+ * before a price switch or money setting changes) and for the deploy-time lock (scripts/lock-finalized.ts).
+ */
+export function everyoneSettingsOf(group: GroupRow, rows: { shortGames: boolean; bookingHours: boolean }, env: { SHORT_GAMES?: string; BOOKING_HOURS?: string }): GroupSettings {
+  const base = settingsOf({ ...group, short_games: false, long_games: false });
+  const short = zip9Allowed(env.SHORT_GAMES) && rows.shortGames;
+  const long = bookingHoursAllowed(env.BOOKING_HOURS) && rows.bookingHours;
+  return { ...base, ...(short ? { shortGames: true as const } : {}), ...(long ? { longGames: true as const } : {}) };
 }
 
 /** A 1.5 hour game's own flat price ("Short games" on), for the words that would otherwise say $14; null for a normal game (nothing changes). */

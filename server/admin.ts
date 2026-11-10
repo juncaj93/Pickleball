@@ -75,7 +75,7 @@ import * as v from './validate';
 import { loadMarks, recordCourtBooked, resetTasksForNewDay } from './tasks';
 import { adminChangeStamp } from './stamp';
 import { courtSwitchOf, isCourtWaitlist } from '../shared/court';
-import { flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
+import { everyoneSettingsOf, flatOf, lockFinalizedGames, PRICE_LOCK_TASK, priceLockCol, priceOf, specialFlatOf } from './repo';
 import { cardTimeFor, cardTimeForAll, setCardTimeForAll, setShortGamesForAll, shortGamesForAll } from './zip9';
 import { zip9Allowed } from '../shared/zip9';
 import { gameMinutes, isShortGame, LONG_MINUTES } from '../shared/gameLength';
@@ -89,7 +89,7 @@ import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
-import { bookingHoursFlags, enforceBookingHours, enforceUsualTime, longGamesOn, setBookingHoursForAll } from './bookingHours';
+import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
 import { setZip13ForAll, zip13Flags } from './zip13';
@@ -2544,10 +2544,7 @@ export async function setShortGamesSwitch(ctx: Ctx, body: Record<string, unknown
  * switches. Never this phone's private test link (?shortgames=on), so a lock is what every screen shows, not what one test phone shows.
  */
 async function everyoneSettings(ctx: Ctx, group: GroupRow): Promise<ReturnType<typeof settingsOf>> {
-  const base = settingsOf({ ...group, short_games: false, long_games: false });
-  const short = zip9Allowed(ctx.env.SHORT_GAMES) && (await shortGamesForAll(ctx.db, group.id));
-  const long = await longGamesOn(ctx, group.id);
-  return { ...base, ...(short ? { shortGames: true as const } : {}), ...(long ? { longGames: true as const } : {}) };
+  return everyoneSettingsOf(group, { shortGames: await shortGamesForAll(ctx.db, group.id), bookingHours: await bookingHoursForAll(ctx.db, group.id) }, ctx.env);
 }
 
 /** PUT /api/admin/speed-fewer-queries-switch { on }: Settings > Feature switches > "Fewer database trips" (Zip 12). How the server reads, never what it answers. */
