@@ -611,6 +611,9 @@ async function main() {
     const row = page.locator(`[data-fold="previous"] .mrw-prow[data-session="${testGame.id}"]`);
     await row.locator('.mrw-prow-head').click();
     await row.locator('[data-closed-body] [data-hide-from-list]').click();
+    // Wait for the confirm sheet to finish sliding up before tapping (Zip 27): a tap that starts while "Hide it" is still moving lands its
+    // press on the button and its release elsewhere, so the browser counts no tap. That made this check fail about 1 run in 4, on main too.
+    await page.locator('dialog[open]').evaluate((d) => Promise.all(d.getAnimations({ subtree: true }).map((a) => a.finished)));
     await page.locator('dialog[open]').getByText('Hide it').click();
     await page.waitForTimeout(900);
     assert((await page.locator(`[data-session="${testGame.id}"]`).count()) === 0, 'the game is gone from Money');
