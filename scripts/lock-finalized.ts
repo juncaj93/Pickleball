@@ -98,7 +98,8 @@ async function main() {
   if (left !== 0) process.exit(1);
 }
 
-if (process.argv[1]?.includes('lock-finalized')) {
+// Runs only when called with --db (the tests import the functions above and never pass it).
+if (process.argv.includes('--db')) {
   main().catch((err) => {
     console.error(String(err instanceof Error ? err.message : err));
     process.exit(1);
