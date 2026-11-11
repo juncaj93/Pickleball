@@ -276,6 +276,37 @@ describe('the switch', () => {
     expect(telegram.body).toBe(g.body);
   });
 
+  it('2.5 and 3 hour games (Booking hours on) say $18 and $21 in the gear menu and in the Telegram link; with Booking hours off they say $14', async () => {
+    const w = await world();
+    await w.organizer.call('PUT', '/api/admin/checkin-pay-switch', { on: true });
+    w.app.now = Date.parse('2026-11-06T15:00:00Z');
+    // 5:00 PM Eastern (22:00 UTC) on a Monday to Saturday, ending by 8:00 PM: inside the venue hours.
+    const make = async (daysAhead: number, minutes: number) => {
+      const day = new Date(w.app.now + daysAhead * DAY).toISOString().slice(0, 10);
+      const startsAt = `${day}T22:00:00.000Z`;
+      const endsAt = new Date(Date.parse(startsAt) + minutes * 60_000).toISOString();
+      const res = await w.organizer.call('POST', '/api/admin/sessions', { startsAt, endsAt, note: null });
+      expect(res.status, res.text).toBe(200);
+      return { id: res.data.id as string, startsAt };
+    };
+    const g150 = await make(3, 150);
+    const g180 = await make(4, 180);
+    for (const g of [g150, g180]) await join(w, g.id, ['Blair', 'Casey', 'Devon', 'Emery']);
+    // Booking hours off: the longer lengths are priced like a normal game.
+    expect((await gear(w, g150.id)).body!.split('\n')[1]).toBe('4 in. Still in? Pay $14 to confirm.');
+    expect((await go(w, g150.id, g150.startsAt)).body.split('\n')[1]).toBe('4 in. Still in? Pay $14 to confirm.');
+    expect((await w.organizer.call('PUT', '/api/admin/booking-hours-switch', { on: true })).status).toBe(200);
+    for (const [g, price] of [[g150, 18], [g180, 21]] as const) {
+      const line = `4 in. Still in? Pay $${price} to confirm.`;
+      const menu = await gear(w, g.id);
+      expect(menu.s.roster.find((r: any) => r.name === 'Blair').owesCents).toBe(price * 100);
+      expect(menu.body!.split('\n')[1]).toBe(line);
+      const telegram = await go(w, g.id, g.startsAt);
+      expect(telegram.body.split('\n')[1]).toBe(line);
+      expect(telegram.body).toBe(menu.body); // same bytes from both builders
+    }
+  });
+
   it('Texts round 2 off: the oldest words stay, with or without the switch', async () => {
     const w = await world();
     await w.organizer.call('PUT', '/api/admin/checkin-pay-switch', { on: true });
