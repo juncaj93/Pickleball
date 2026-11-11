@@ -14,6 +14,7 @@ import { lateFeeKind } from '../shared/lateFees';
 import { audit, type GroupRow, loadRoster, organizerIdOf, pricesFor, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
 import { flatOf } from './repo';
+import { phoneTagOf } from './phoneTag';
 
 /** What a player can spend or ask back right now: the pot minus any pending request. */
 export async function usableFor(ctx: Ctx, group: GroupRow, playerId: string) {
@@ -59,7 +60,7 @@ export async function useCreditOn(ctx: Ctx, group: GroupRow, session: SessionRow
     nowIso: ctx.nowIso,
   });
   if (!done) throw new HttpError(409, 'credit_changed', 'Your credit changed. Look again and tap Use credit.');
-  await audit(ctx.db, group.id, session.id, 'credit_used', { player: name, amountCents: cents, paidInFull: full }, ctx.nowIso, name);
+  await audit(ctx.db, group.id, session.id, 'credit_used', { player: name, amountCents: cents, paidInFull: full }, ctx.nowIso, name, phoneTagOf(ctx));
   // What the player reads next: how much of their credit this took, what is left of it, what is left to pay.
   return { ok: true, usedCents: cents, paid: full, potBeforeCents: usableCents, owedBeforeCents: owed };
 }
@@ -82,7 +83,7 @@ export async function undoCreditUse(ctx: Ctx, group: GroupRow, session: SessionR
   const cents = used?.c ?? 0;
   if (cents <= 0 || cents < (row.payment_amount_cents ?? 0)) throw new HttpError(409, 'nothing_to_undo', 'There is no credit payment to undo.');
   const back = await returnSeatCredit(ctx.db, session.id, playerId, ctx.nowIso, 'undone', { notFinalized: true });
-  await audit(ctx.db, group.id, session.id, 'credit_undone', { player: name, amountCents: back }, ctx.nowIso, name);
+  await audit(ctx.db, group.id, session.id, 'credit_undone', { player: name, amountCents: back }, ctx.nowIso, name, phoneTagOf(ctx));
   return { ok: true, returnedCents: back };
 }
 
@@ -122,6 +123,7 @@ export async function useCashOutOn(ctx: Ctx, group: GroupRow, session: SessionRo
     { player: name, playerId, amountCents: usedCents, fromRequestCents: offer.cents, requestCents: offer.requestCents, paidInFull: paid },
     ctx.nowIso,
     name,
+    phoneTagOf(ctx),
   );
   await notifyCashOutUsed(ctx, group, name, offer.cents, offer.requestCents, session.starts_at);
   return { ok: true, usedCents, paid, requestLeftCents: offer.requestCents - offer.cents };
@@ -156,7 +158,7 @@ export async function requestRefund(ctx: Ctx, group: GroupRow, playerId: string,
     if (err instanceof Error && /UNIQUE/i.test(err.message)) throw new HttpError(409, 'request_open', 'You already asked for a cash out. Cancel it to make a new one.');
     throw err;
   }
-  await audit(ctx.db, group.id, null, 'refund_requested', { player: name, playerId, amountCents: cents }, ctx.nowIso, name);
+  await audit(ctx.db, group.id, null, 'refund_requested', { player: name, playerId, amountCents: cents }, ctx.nowIso, name, phoneTagOf(ctx));
   await notifyRefundRequest(ctx, group, playerId, name, cents);
   return { ok: true, request: { id, cents, at: ctx.nowIso } };
 }
@@ -167,7 +169,7 @@ export async function cancelRefundRequest(ctx: Ctx, group: GroupRow, playerId: s
     .prepare("UPDATE refund_requests SET status = 'canceled', resolved_at = ? WHERE player_id = ? AND group_id = ? AND status = 'pending'")
     .bind(ctx.nowIso, playerId, group.id)
     .run();
-  if (res.meta.changes > 0) await audit(ctx.db, group.id, null, 'refund_request_canceled', { player: name, playerId }, ctx.nowIso, name);
+  if (res.meta.changes > 0) await audit(ctx.db, group.id, null, 'refund_request_canceled', { player: name, playerId }, ctx.nowIso, name, phoneTagOf(ctx));
   return { ok: true, changed: res.meta.changes > 0 };
 }
 

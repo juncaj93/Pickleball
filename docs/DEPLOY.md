@@ -20,7 +20,7 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 - Database change first (only when this deploy adds a file under `migrations/`; Audit A, A-07). Check what is pending, then apply it BEFORE the
   site, so the new code never runs against a column that is not there yet:
   `npx wrangler d1 migrations list pickleball --remote` (must show only the new file; if anything else is listed, stop: it would be applied too),
-  then `npm run db:migrate:remote`. The newest migration today is `0017_court`. A deploy with no new migration file skips this step.
+  then `npm run db:migrate:remote`. The newest migration today is `0018_phone_tag` (Zip 30: one nullable column and one small index on the History table; rollback note inside the file). A deploy with no new migration file skips this step.
 - Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06): `scripts/deploy.mjs` refuses unless you are on the `main`
   branch AND the folder has no unsaved changes, then builds and ships with `--branch main` spelled out. From a detached checkout, from any
   other branch or from a messy folder it stops and says why; nothing is built or sent. (A first deploy from a detached checkout once went to a

@@ -89,6 +89,7 @@ import { agreedValue, isWaitingOnTime } from '../shared/timeShift';
 import { timeShiftFor } from './timeShift';
 import { motionFor, motionSettingRead } from './motion';
 import { payAlwaysFor } from './payAlways';
+import { phoneTagOf } from './phoneTag';
 import { flatOf, organizerIdRead, playersRead, priceOf, type ReadSpec, sessionStartsRead, specialFlatOf } from './repo';
 import { capOf, type GroupSettings } from '../shared/settings';
 import { payNoteFor } from './payNote';
@@ -469,7 +470,7 @@ async function actingOn(ctx: Ctx) {
 async function logAction(ctx: Ctx, who: Awaited<ReturnType<typeof actingOn>>, action: string, result: unknown, extra: Record<string, unknown> = {}) {
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
-  await audit(ctx.db, who.group.id, who.session.id, `player_${action}`, { player: name, result, ...extra }, ctx.nowIso, name);
+  await audit(ctx.db, who.group.id, who.session.id, `player_${action}`, { player: name, result, ...extra }, ctx.nowIso, name, phoneTagOf(ctx));
 }
 
 export async function playerJoin(ctx: Ctx) {

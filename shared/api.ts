@@ -1,4 +1,5 @@
 import type { LateFeeKind } from './lateFees';
+import type { ActingRow } from './actingForOthers';
 // Shapes of the JSON the API returns. Shared by server and browser.
 import type { CreditReason } from './credit';
 import type { GroupSettings } from './settings';
@@ -463,6 +464,8 @@ export interface ActivityEntry {
   createdAt: string;
   /** The session it was about, if any. */
   sessionStartsAt: string | null;
+  /** Zip 30 "Acting for others" (only while on): where a tap made for someone else came from, "from Mitchel's phone" or "from a new phone". */
+  from?: string;
 }
 
 export interface ActivityPage {
@@ -605,6 +608,9 @@ export interface AdminDashboard {
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts), only while on (off: the answer is exactly as before): Players "Spent" counted the way Totals counts; and its Settings row. */
   spentTotals?: true;
   spentTotalsForAll?: true;
+  /** Zip 30 "Acting for others" (shared/actingForOthers.ts), only while on (off: the answer is exactly as before): the Home card's rows (taps made for someone else, last 7 days, newest first); and its Settings row. */
+  actingOthers?: ActingRow[];
+  actingOthersForAll?: true;
   /** Zip 24 "Booking hours" (shared/bookingHours.ts), only while on (off: the answer is exactly as before): the tap-to-pick times on Add game and Edit game, the hours rule, and the Settings row. */
   bookingHours?: true;
   bookingHoursForAll?: true;

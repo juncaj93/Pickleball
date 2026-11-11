@@ -528,13 +528,32 @@ export async function audit(
   details: Record<string, unknown>,
   nowIso: string,
   actor = 'organizer',
+  /** Zip 30 (server/phoneTag.ts): the phone code of a player's own tap, written into this same line. null: the line is exactly main's. */
+  phoneTag: string | null = null,
 ): Promise<void> {
+  const id = newId();
+  const json = JSON.stringify(details);
+  if (phoneTag) {
+    try {
+      await db
+        .prepare(
+          `INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at, device_tag)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(id, groupId, sessionId, actor, action, json, nowIso, phoneTag)
+        .run();
+      return;
+    } catch (err) {
+      // A database without migration 0018 (no device_tag column): the line is written without the code, as main writes it.
+      if (!(err instanceof Error && /device_tag/.test(err.message))) throw err;
+    }
+  }
   await db
     .prepare(
       `INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-    .bind(newId(), groupId, sessionId, actor, action, JSON.stringify(details), nowIso)
+    .bind(id, groupId, sessionId, actor, action, json, nowIso)
     .run();
 }
 

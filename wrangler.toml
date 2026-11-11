@@ -215,6 +215,11 @@ TOTALS_REFRESH = "on"
 # credit month shown as "$8 credit". Organizer only, display only. "on" here only ALLOWS it; who gets it is Settings > Feature switches >
 # "Spent matches Totals" (off at ship = nobody), plus a phone opened once with /admin?spenttotals=on. "off" = the kill switch. Needs a deploy.
 SPENT_TOTALS = "on"
+# Zip 30 "Acting for others" (shared/actingForOthers.ts): each phone keeps a random code and a player's own tap writes it into its History
+# line (migration 0018); organizer screens point out a tap made for someone else (a History note and a Home card). Organizer only, look
+# only. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Acting for others" (off at ship = nobody), plus a phone
+# opened once with /admin?actingothers=on. "off" = the kill switch, and it also stops recording the codes. Needs a deploy.
+ACTING_FOR_OTHERS = "on"
 # Zip 24 "Booking hours" (shared/bookingHours.ts): a game outside the venue hours (8:00 AM to 10:00 PM Monday to Saturday, 8:00 AM to 7:00 PM
 # Sunday) is refused, on the screen and on the server, and Add game / Edit game get tap-to-pick times. Organizer only. Only a NEW game or a
 # CHANGED start or end is looked at; games that already exist are never touched. "on" here only ALLOWS it; who gets it is Settings > Feature
@@ -276,6 +281,7 @@ SECOND_CHANCE_TEST = "on"
 UNPAID_NUDGE = "on"
 TOTALS_REFRESH = "on"
 SPENT_TOTALS = "on"
+ACTING_FOR_OTHERS = "on"
 BOOKING_HOURS = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"

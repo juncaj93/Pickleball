@@ -19,6 +19,12 @@ export function doneByOthers(e: Pick<ActivityEntry, 'actorLabel'> & { details?: 
  * it was about instead of "someone"; it also words the few actions that used to read as a bare action name.
  */
 export function activityText(e: ActivityEntry, tz: string, organizer: string, opts: { names?: (playerId: string) => string | null } = {}): string {
+  const text = lineText(e, tz, organizer, opts);
+  // Zip 30 "Acting for others": the server adds `from` only while the switch is on, and only to a tap made for someone else.
+  return typeof e.from === 'string' && e.from ? `${text} (${e.from})` : text;
+}
+
+function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names?: (playerId: string) => string | null }): string {
   const d = e.details;
   const known = opts.names && typeof d.playerId === 'string' ? opts.names(d.playerId) : null;
   const player = typeof d.player === 'string' ? d.player : typeof d.name === 'string' ? d.name : (known ?? 'someone');
@@ -204,6 +210,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Booking hours" on`;
     case 'booking_hours_off':
       return `${who} switched "Booking hours" off`;
+    case 'acting_others_on':
+      return `${who} switched "Acting for others" on`;
+    case 'acting_others_off':
+      return `${who} switched "Acting for others" off`;
     case 'spent_totals_on':
       return `${who} switched "Spent matches Totals" on`;
     case 'spent_totals_off':

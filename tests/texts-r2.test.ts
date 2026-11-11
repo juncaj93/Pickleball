@@ -283,7 +283,7 @@ describe('TEXTS_R2: the switch', () => {
   });
   it('N8 no database change: the newest migration is still 0016 and none mentions this switch', () => {
     const files = readdirSync('migrations').sort();
-    expect(files[files.length - 1]).toBe('0017_court.sql'); // Zip 14 added 0017 (the court column); this feature itself still adds none
+    expect(files[files.length - 1]).toBe('0018_phone_tag.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
     for (const f of files) expect(readFileSync(`migrations/${f}`, 'utf8')).not.toMatch(/texts_r2/i);
   });
 });
