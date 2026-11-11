@@ -204,7 +204,8 @@ async function main() {
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
     const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-row')));
-    assert(first[0] === 'actingOthersAll', `newest first: ${first}`);
+    // (Zip 32's Players sheet redo row is newer and sits on top of it.)
+    assert(first[0] === 'playersSheetRedoAll' && first[1] === 'actingOthersAll', `newest first: ${first}`);
     const row = page.locator('[data-row="actingOthersAll"]');
     assert(/Acting for others/.test(await row.innerText()), 'row label');
     await row.locator('label').click();

@@ -133,13 +133,15 @@ async function main() {
 
   await check('the switch flips on and off with the usual toast, saved for every phone, and History says so', async () => {
     const { ctx, page } = await settings(390, 'dark');
-    await page.locator('[data-error-alerts-all]').click({ force: true });
+    // (Zip 32 added a row above this one, so it can sit under the floating tab bar: the tap goes to the switch itself.)
+    await page.locator('[data-error-alerts-all]').evaluate((e) => e.click());
     await page.locator('.toast', { hasText: 'Error alerts on' }).waitFor({ timeout: 5000 });
     let d = await (await ctx.request.get(base + '/api/admin/dashboard')).json();
     expect(d.errorAlertsForAll === true, 'saved on');
     if (SHOTS) await page.locator('[data-row="errorAlertsAll"]').screenshot({ path: path.join(SHOTS, 'zip21-row-on-390-dark.png') });
     await page.waitForTimeout(1500);
-    await page.locator('[data-error-alerts-all]').click({ force: true });
+    // (Zip 32 added a row above this one, so it can sit under the floating tab bar: the tap goes to the switch itself.)
+    await page.locator('[data-error-alerts-all]').evaluate((e) => e.click());
     await page.locator('.toast', { hasText: 'Error alerts off' }).waitFor({ timeout: 5000 });
     d = await (await ctx.request.get(base + '/api/admin/dashboard')).json();
     expect(d.errorAlertsForAll === undefined, 'saved off');
