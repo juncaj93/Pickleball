@@ -407,7 +407,8 @@ async function main() {
   });
   // Alex, Nov 7: Mark paid on Home (the "Who owes you" / "Mark paid tonight" card) showed no Undo; it has one now.
   await undoCase('Mark paid (Home, Who owes you / Mark paid tonight)', async (page) => {
-    await page.locator('article[aria-label="Who owes you"] button, article[aria-label="Mark paid tonight"] button', { hasText: 'Mark paid' }).first().click();
+    // Zip 29: the one money card is "Who hasn't paid" (Mark paid on its rows); the old second card is drawn only with Venmo request off.
+    await page.locator('[data-vr-card] button[data-vr-markpaid], article[aria-label="Who owes you"] button, article[aria-label="Mark paid tonight"] button', { hasText: 'Mark paid' }).first().click();
   });
   await undoCase('Mark paid (Players sheet)', async (page) => {
     await tab(page, 'Players');

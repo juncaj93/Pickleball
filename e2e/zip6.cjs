@@ -389,7 +389,7 @@ async function main() {
     const cards = page.locator('[data-vr-card]');
     await cards.first().waitFor();
     const all = await cards.evaluateAll((els) =>
-      els.map((c) => ({ title: c.querySelector('.vr-title').textContent.replace(/\s+/g, ' ').trim(), sub: c.querySelector('.vr-sub').textContent, rows: [...c.querySelectorAll('[data-vr-row]')].map((r) => ({ who: r.getAttribute('data-vr-row'), href: r.querySelector('[data-venmo-request]')?.getAttribute('href') ?? null, none: /no Venmo saved/.test(r.textContent) })) })),
+      els.map((c) => ({ title: c.querySelector('.vr-title').textContent.replace(/\s+/g, ' ').trim(), sub: c.querySelector('.vr-sub').textContent, rows: [...c.querySelectorAll('[data-vr-row]')].map((r) => ({ who: r.getAttribute('data-vr-row'), href: r.querySelector('[data-venmo-request]')?.getAttribute('href') ?? null, none: /no Venmo saved/.test(r.textContent), text: !!r.querySelector('[data-sc-textone]'), mark: r.querySelectorAll('[data-vr-markpaid]').length })) })),
     );
     const split = all.find((c) => /\$11 each/.test(c.sub));
     assert(split, `a fee-split card at $11: ${JSON.stringify(all.map((c) => c.sub))}`);
@@ -397,7 +397,9 @@ async function main() {
     const by = Object.fromEntries(split.rows.map((r) => [r.who, r]));
     assert(by.Kai.href && new URL(by.Kai.href).searchParams.get('amount') === '11', `Kai asked for $11: ${by.Kai.href}`);
     assert(by[LONG].href && new URL(by[LONG].href).searchParams.get('amount') === '11', 'the long name asked for $11');
-    assert(by.Jordan.none && !by.Jordan.href, 'Jordan: no Venmo saved');
+    // Zip 29: a player with no Venmo but a number gets "Text" (the old second card's button); "no Venmo saved" is for neither. Mark paid is on every row.
+    assert(!by.Jordan.href && (by.Jordan.none || by.Jordan.text), 'Jordan: no Venmo request (Text, or the words no Venmo saved)');
+    assert(split.rows.every((r) => r.mark === 1), 'Mark paid on every row');
     // The other Thursday game owes $14 each.
     const flat = all.find((c) => /\$14 each/.test(c.sub));
     assert(flat && flat.rows.every((r) => !r.href || new URL(r.href).searchParams.get('amount') === '14'), 'the $14 game asks $14');

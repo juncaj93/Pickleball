@@ -136,10 +136,11 @@ async function main() {
     const { ctx, page } = await admin();
     await page.locator('[data-sc-cards]').waitFor();
     const kinds = await page.evaluate(() => [...document.querySelectorAll('main article.ac, main section.do-now, main [data-refund-request], main [data-payment-claim], main [data-finalize], main [data-vr-cards]')].map((e) => e.getAttribute('aria-label') || e.className));
-    const extra = kinds.filter((k) => !/Mark paid tonight|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
+    const extra = kinds.filter((k) => !/Mark paid tonight|who hasn't paid|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
     // No note on screen (Alex, Nov 8: the links work, nothing says so).
     assert((await page.locator('[data-preview-calm], [data-sc-pretend]').count()) === 0, 'a preview note on screen');
-    assert((await page.locator('[data-mp-card]').count()) === 1, 'the Mark paid card');
+    // Zip 29: the one money card is "Who hasn't paid" (Mark paid on every row); the second card (Mark paid tonight / Who owes you) is gone.
+    assert((await page.locator('[data-vr-cards]').count()) === 1 && (await page.locator('[data-mp-card]').count()) === 0, 'the one money card');
     assert(extra.length === 0, `other alert cards on the calm Home: ${extra.join(' | ')}`);
     const calmCount = await page.locator('main article.ac').count();
     await page.goto(BASE + '/admin?alerts=all');
@@ -171,9 +172,9 @@ async function main() {
 
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
-      await check(`compact Mark paid card, ${width} px, ${scheme}: 50 px rows, name and price on one line, 34 px buttons with 14 px words, the date once in the header, 5 then "N more"`, async () => {
+      await check(`merged money card (Zip 29), ${width} px, ${scheme}: 50 px rows, name on one line, 34 px buttons with 14 px words, Mark paid and Request or Text on every row`, async () => {
         const { ctx, page } = await admin(width, scheme);
-        const card = page.locator('[data-mp-card]').first();
+        const card = page.locator('[data-vr-card]').first();
         await card.waitFor();
         const m = await card.evaluate((c) => {
           const rows = [...c.querySelectorAll('.mp-row')];
@@ -183,27 +184,20 @@ async function main() {
             heights: rows.map((x) => Math.round(x.getBoundingClientRect().height)),
             btn: [...c.querySelectorAll('.mp-btn, .mp-row .sc-req')].map((b) => ({ h: Math.round(b.getBoundingClientRect().height), fs: getComputedStyle(b).fontSize, r: getComputedStyle(b).borderTopLeftRadius, cut: b.scrollWidth > b.clientWidth + 1, out: b.getBoundingClientRect().right > r.right + 0.5 })),
             nameFs: getComputedStyle(c.querySelector('.mp-name strong')).fontSize,
-            priceFs: getComputedStyle(c.querySelector('.mp-price')).fontSize,
-            date: c.querySelector('.mp-date')?.textContent ?? null,
-            rowDates: c.querySelectorAll('.mp-when').length,
-            more: c.querySelector('[data-mp-more]')?.textContent ?? null,
+            mark: rows.every((x) => x.querySelectorAll('button.mp-btn').length === 1),
+            second: rows.every((x) => x.querySelectorAll('.sc-req, .mp-none').length === 1),
             leftGap: Math.round(rows[0].querySelector('.mp-name').getBoundingClientRect().left - r.left),
             one: rows.every((x) => Math.round(x.querySelector('.mp-name').getBoundingClientRect().height) <= 24),
           };
         });
-        assert(m.rows === 5 && m.heights.every((h) => h === 50), `rows ${m.rows}, heights ${m.heights}`);
+        assert(m.rows >= 1 && m.heights.every((h) => h === 50), `rows ${m.rows}, heights ${m.heights}`);
         assert(m.btn.every((b) => b.h === 34 && b.fs === '14px' && b.r === '10px' && !b.cut && !b.out), `buttons ${JSON.stringify(m.btn.slice(0, 3))}`);
-        assert(m.nameFs === '16px' && m.priceFs === '14px', `name ${m.nameFs} price ${m.priceFs}`);
-        assert(m.date === 'Sun, Nov 8' && m.rowDates === 0, `date ${m.date}, ${m.rowDates} row dates`);
-        assert(/^\d+ more$/.test(m.more), `more: ${m.more}`);
-        assert(m.leftGap <= 16, `empty left column ${m.leftGap} px`);
-        assert(m.one, 'a name or price wrapped');
-        await layout(page, `Mark paid card ${width} ${scheme}`);
+        assert(m.nameFs === '16px', `name ${m.nameFs}`);
+        assert(m.mark && m.second, `Mark paid and Request/Text on every row: ${m.mark} ${m.second}`);
+        assert(m.leftGap <= 20, `empty left column ${m.leftGap} px`);
+        assert(m.one, 'a name wrapped');
+        await layout(page, `money card ${width} ${scheme}`);
         if (width === 390) await card.screenshot({ path: path.join(SHOTS, `zip15-markpaid-${scheme}.png`) });
-        // "N more" opens the rest; Mark paid still works from a row (instant taps, Undo as before).
-        const total = Number(m.more.split(' ')[0]) + 5;
-        await card.locator('[data-mp-more]').click();
-        assert((await card.locator('.mp-row').count()) === total, 'not every row after N more');
         await ctx.close();
       });
     }
