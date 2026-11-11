@@ -4035,3 +4035,19 @@ exists where the "Game day card" row is already ON, because that is what sends t
   (and a little less tracking on phones 380 px wide or narrower); a comment fixed. Not taken: the Court | arrow also shows on a past game (harmless, the brief says "when the game has a court number").
 - Preview: https://claude-new-session-np4za1.pickleball-club-9h0.pages.dev (deployment `0e6cd2eb`). The fake database was re-seeded once (new fake group name "Pickleball (PREVIEW, fake data)"). No new switch.
   Preview-only link to see game day on any day: `/?as=Alex&gamedaytest=on`.
+
+### Round 2 (after Alex walked the preview, Wed Nov 11, 2026)
+- Money cards MERGED (Alex's choice): "Who hasn't paid" (`src/pages/admin/VenmoRequest.tsx`) now has **Mark paid** on every row next to **Request** (Venmo saved), **Text** (no Venmo, a number
+  saved; the old second card's button) or the words "no Venmo saved"; Remind stays on each game. "Mark paid tonight" / "Who owes you" is no longer drawn while Venmo request is on.
+  Mark paid sends exactly what the old card sent (`POST .../payment { playerId, paid: true, seen, cents }`, same Undo and instant taps). The games on the card are the old first
+  card's (on or before today, also games canceled late with the fee kept) PLUS the old second card's (not canceled, from the check-in time on, so coming games too):
+  `owedHomeGames` in `src/pages/admin/moneyList.ts`. Every row the old second card had is a row `unpaidRows` gives, so per game nothing is lost. Proof:
+  `tests/zip29-money-merge.test.ts` rebuilds both old rules and checks the preview world at five moments: nobody lost from either card, nobody extra, and at least one player who
+  ONLY the old second card showed (a coming game), so the coming games had to join. When two games share a weekday (last Tuesday and the coming one) the card says the date.
+  With Venmo request OFF the merged card does not exist and the old second card is drawn exactly as before (`e2e/zip29-off.cjs`: same HTML as main, needs `MAIN_DIR`).
+  Not changed: the red number on the Home tab (`homeBadgeCount`) still counts the money items it always counted.
+- Court | arrow: only on today's and coming games (date in the group's time zone); a game from an earlier day (History) keeps what it showed. Outline is now the soft periwinkle of the player card's
+  Court and Directions buttons (1 px, the blue at 45 %, a 2 % fill), the words and the arrow keep the deep blue, still 32 px tall. The test compares the colors with the player's own buttons, light and dark.
+- Not booked Tonight tiles keep the gray court ring (as is).
+- Big text fixed: at 150% on a phone the THIS WEEK cards stack (tile above the words); the tile column had `width: auto` inside a size container and came out 0 px wide, so the time and the length line
+  beside the tile had no size (also on main). `src/large-text.css`: that column is now full width in the stacked layout. `e2e/zip29.cjs` now fails if the time or the length line has no size at any text size.
