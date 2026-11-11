@@ -1079,10 +1079,14 @@ export async function cardDone(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true };
 }
 
-/** Move a session to a new date or time. Its deadline resets to the default for the new time. */
-export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
+/**
+ * Move a session to a new date or time. Its deadline resets to the default for the new time.
+ * `whileCanceled` is only for Second Chance (Zip 35, server/secondChance.ts): it moves a canceled game BEFORE reopening it, so a refused
+ * time leaves the game canceled and untouched. The route (PUT .../time) never passes it.
+ */
+export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileCanceled = false) {
   const { group, session } = await adminSession(ctx);
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled' && !whileCanceled) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
   const startsAt = v.isoTime(body.startsAt, 'startsAt');
   const endsAt = v.isoTime(body.endsAt, 'endsAt');
