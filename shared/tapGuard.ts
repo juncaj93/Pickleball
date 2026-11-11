@@ -31,8 +31,10 @@ export interface TapFacts {
   fix: boolean;
   /** There was a click before this one. */
   hasPrev: boolean;
-  /** Both clicks are on the same control (the same element, one inside the other, or a label and its switch). */
+  /** Both clicks are on the same control. Switch OFF: the same element, one inside the other, or a label and its switch (today's meaning). Switch ON: exactly the same element. */
   same: boolean;
+  /** One click is on a label and the other on the switch inside it: the browser sends the second one itself for the first, so it is ONE tap, never a repeat. */
+  pair?: boolean;
   /** The second click came within DOUBLE_TAP_MS and DOUBLE_TAP_PX of the first. */
   close: boolean;
   /** The button tapped before is no longer on the page, or sits MOVED_PX or more from where it was. */
@@ -45,7 +47,7 @@ export interface TapFacts {
 export function dropThisTap(f: TapFacts): boolean {
   if (!f.hasPrev || !f.close) return false;
   if (!f.fix) return !f.same; // today's rule: only a tap on another button
-  if (f.textField) return false;
+  if (f.textField || f.pair) return false;
   if (f.same) return true; // the same button again, that fast
   return f.prevGoneOrMoved; // another button: only when the screen changed under the finger
 }

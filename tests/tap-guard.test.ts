@@ -39,6 +39,10 @@ describe('switch ON', () => {
   it('a text box is never a tap to drop (double-clicking a word)', () => {
     expect(on({ same: true, textField: true })).toBe(false);
   });
+  it('a label and the switch the browser clicks for it are ONE tap: never dropped as a repeat', () => {
+    expect(on({ same: false, pair: true, prevGoneOrMoved: true })).toBe(false);
+    expect(on({ same: true, pair: true })).toBe(false);
+  });
 });
 
 describe('the switch', () => {

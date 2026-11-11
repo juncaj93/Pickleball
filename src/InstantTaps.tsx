@@ -94,10 +94,15 @@ if (typeof document !== 'undefined') {
       const prev = lastClick;
       const now = performance.now();
       // A label and the switch inside it are one control (the browser clicks the switch for the label).
-      const same = prev && (prev.el === el || prev.el.contains(el) || el.contains(prev.el) || (prev.el instanceof HTMLLabelElement && prev.el.control === el));
-      const close = !!prev && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX;
+      const oldSame = prev && (prev.el === el || prev.el.contains(el) || el.contains(prev.el) || (prev.el instanceof HTMLLabelElement && prev.el.control === el));
       const fix = fixGuards > 0;
-      if (prev && close && dropThisTap({ fix, hasPrev: true, same: !!same, close, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
+      const pair = fix && !!prev && ((prev.el instanceof HTMLLabelElement && prev.el.control === el) || (el instanceof HTMLLabelElement && el.control === prev.el));
+      // Switch off: `oldSame`, word for word as before. Tap guard fix on: only the very same element is a repeat.
+      const same = fix ? !!prev && prev.el === el : oldSame;
+      const close = !!prev && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX;
+      // Tap guard fix: the switch's own click, sent by the browser for the label that was just tapped, is the same tap (and the label stays "the last tap").
+      if (pair && close) return;
+      if (prev && close && dropThisTap({ fix, hasPrev: true, same: !!same, pair, close, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
