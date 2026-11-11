@@ -114,6 +114,8 @@ export interface Env {
   SPENT_TOTALS?: string;
   /** Zip 30 "Acting for others" (shared/actingForOthers.ts): the kill switch, allowed unless "off" ("off" also stops recording phone codes). Who sees it: Settings > Feature switches, /admin?actingothers=on. Organizer only, look only. */
   ACTING_FOR_OTHERS?: string;
+  /** Zip 30, preview only ([env.preview.vars], never production): "on" shows Acting for others on that preview even if a re-seed dropped its Settings row. */
+  ACTING_FOR_OTHERS_PREVIEW?: string;
   /** Zip 24 "Booking hours" (shared/bookingHours.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?bookinghours=on. Refuses a game outside the venue hours; no other effect. */
   BOOKING_HOURS?: string;
   /** Zip 14, PREVIEW ONLY: "on" lets a phone with ?gamedaytest=on see the next game as if it were today. Only [env.preview.vars] has it; never production. */

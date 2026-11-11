@@ -4062,7 +4062,7 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
 1. Phone tag. Each phone makes a random code once (16 random bytes from the browser, not a fingerprint), keeps it in browser storage with a cookie copy (`pb_phone`, about 400 days; each copy restores the other), and sends it as `X-Phone-Tag` on player requests (never on organizer requests, never in View as or the demo copy). `server/phoneTag.ts` reads it from the request only (no database read) and `audit()` writes it into the History line the tap already makes: I'm in, Drop out, Still in, check-in, Can't make it, I paid, Didn't pay, Use credit, Undo credit, cash-out credit, refund request and its cancel, and the texted-link taps. No code when the request comes from a phone signed in as the organizer (that cookie is sent on every /api request from Alex's phone), in the demo copy, with a bad code, or with the kill switch "off". Codes are recorded whether the Settings row is on or off (the row only decides what the organizer screens show), so a phone already has its usual name the day the switch goes on.
 2. History (Activity): a tap made for someone else gets a note, "Brandon said I'm in for Tue, Nov 10 (from Mitchel's phone)" or "(from a new phone)". Normal taps get nothing.
 3. Home card "Acting for others" at the very top (mocks `acting_for_others_light.png` / `_dark.png`): gray circle with the swap arrows, bold title, X; rows "Mitchel signed up for Brandon" with the time on the right ("Mon 7:12 PM" for an earlier day); the last 7 days; up to 3 rows, then "+N more in History" (opens History); the X hides it on that phone (like the other Home card X's), History keeps every line, a newer tap brings the card back. Same surface, border, corners and shadow as the "Tue game" card. Gone when empty.
-4. The rule (`shared/actingForOthers.ts` judgeTaps; each tap judged only on the taps before it): a phone's usual name is the name it acted as most once it has made at least 3 taps and more than half were as that name. A tap counts as "for someone else" when the phone has a usual name and acts as a different name ("from Mitchel's phone"), or when the phone is still too new (1 or 2 taps) and acts as a name it has never used ("from a new phone"). Never: a phone's first tap; a phone with a tie (two people sharing it equally); a phone Alex's own player name has acted from; the organizer's signed-in phone; View as; taps with no code. Two people sharing one phone are flagged both ways while one of them has more than half the taps, and it goes quiet at a tie.
+4. The rule (`shared/actingForOthers.ts` judgeTaps; each tap judged only on the taps before it): a phone's usual name is the only name it has acted as, from its first tap (changed Wed Nov 11, see below); once two or more names have used it, the name it acted as most once it has made at least 3 taps and more than half were as that name. A tap counts as "for someone else" when the phone has a usual name and acts as a different name ("from Mitchel's phone"), or when the phone is still too new (1 or 2 taps) and acts as a name it has never used ("from a new phone"). Never: a phone's first tap; a phone with a tie (two people sharing it equally); a phone Alex's own player name has acted from; the organizer's signed-in phone; View as; taps with no code. Two people sharing one phone are flagged both ways while one of them has more than half the taps, and it goes quiet at a tie.
 5. Limits: a private window, cleared browser data (both copies), another browser or another device looks like a new phone. It cannot tell when someone uses the real owner's phone.
 
 ### Database
@@ -4115,4 +4115,24 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
 - `e2e/zip30-off.cjs` (19, needs `MAIN_DIR`, final code): main and the branch side by side on the migrated database after the same four
   tagged taps: organizer Home at 390/360/320 light and dark, History light and dark, Players, Money, Settings apart from the row, the player
   screen light and dark, and the dashboard, History and player answers byte for byte; main's View as on the migrated database opens.
+
+### Preview test that did not work (Alex, Wed Nov 11, about 12:30 AM) and the fix
+- What Alex saw: History "Sage said I'm in" and "Parker said I'm in" with no "(from ...)", no card, only one Parker I'm in.
+- Checked on the preview database (read only): every tap WAS written with its phone code (the private window's code was saved and sent,
+  so storage, the cookie and the "never Alex's phone" rule were fine). Two causes:
+  1. The Settings row was OFF: another channel re-seeded the shared preview database at 12:27 AM Wed Nov 11 (every seed row has that time)
+     from a branch that does not know this zip's row, which dropped it. With the row off nothing shows. Fix: preview-only
+     `ACTING_FOR_OTHERS_PREVIEW = "on"` in `[env.preview.vars]` (never `[vars]`, a test checks), so this zip's preview shows it whatever
+     the shared database's row says; the row was also put back with one INSERT (no re-seed).
+  2. Only one Parker tap reached the site: Drop out waits 5 seconds for Undo, and the I'm in right after it cancels the drop, so nothing is
+     sent (by design, older code). With one tap the phone had no usual name under the 3-tap rule, so even with the row on it would have read
+     "a new phone", not "Parker's phone". Every phone is new on the first day, so the rule changed: a phone that has only ever acted as one
+     name has that name from its first tap ("from Parker's phone"); the 3-tap, more-than-half rule now applies only to phones two or more
+     names have used. A phone's first tap is still never flagged.
+  Also seen: the private window's code changed two minutes in (a new private tab or window is a new phone, as designed).
+- New tests: `e2e/zip30.cjs` "Alex's exact taps" (every tap through the screen: I'm in, Drop out, I'm in, Not you? > another name, I'm in;
+  History note and Home card), and "a browser that blocks storage" (the cookie alone keeps one code). `tests/acting-others.test.ts`: Alex's
+  case, the third-name case, the preview-only switch. The browser check and 3 unit tests fail on the old rule and pass on the new one.
+- Rerun: zip30 32/32, zip30-off 19/19 (switch off = main), unit acting-others, speed-queries, activity, preview-seed, backup-zip19,
+  readonly-pin 94/94, tsc clean.
 

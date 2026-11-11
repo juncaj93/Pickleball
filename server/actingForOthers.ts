@@ -33,7 +33,10 @@ export async function setActingOthersForAll(db: D1Database, groupId: string, on:
 export async function actingOthersFlags(ctx: Ctx, groupId: string): Promise<{ on: boolean; forAll: boolean }> {
   const row = await forAll(ctx.db, groupId);
   const header = (ctx.req.headers.get(ACTING_OTHERS.header) ?? '').toLowerCase() === 'on';
-  return { on: actingOthersAllowed(ctx.env.ACTING_FOR_OTHERS) && (header || row), forAll: row };
+  // Preview only (ACTING_FOR_OTHERS_PREVIEW, never in production [vars]): the preview database is shared by every channel's preview and
+  // another channel's re-seed drops this row, so this zip's own preview shows the feature whatever the row says. The Settings row is unchanged.
+  const preview = (ctx.env.ACTING_FOR_OTHERS_PREVIEW ?? '').trim().toLowerCase() === 'on';
+  return { on: actingOthersAllowed(ctx.env.ACTING_FOR_OTHERS) && (header || row || preview), forAll: row };
 }
 
 /**

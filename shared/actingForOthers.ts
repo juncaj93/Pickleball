@@ -62,9 +62,11 @@ const key = (name: string) => name.trim().toLowerCase();
 /**
  * THE RULE, applied to every phone's taps in time order (each tap is judged on the taps before it, so a later tap never changes an
  * earlier verdict):
- *  - A phone's usual name is the name it acted as most, once it has made at least 3 taps and more than half of them were as that name.
+ *  - A phone's usual name: the one name it has acted as, from its very first tap (every phone is new on the first day, and Drop out's
+ *    5-second Undo means a quick I'm in / Drop out / I'm in reaches the site as one tap). Once a phone has acted as two or more names, its
+ *    usual name is the one it used most, and only when it has made at least 3 taps and more than half of them were as that name.
  *  - A tap is "for someone else" when (a) the phone has a usual name and acts as a different name ("from Mitchel's phone"), or (b) the
- *    phone is still too new to have one (1 or 2 taps so far) and acts as a name it has never acted as ("from a new phone").
+ *    phone has acted as more than one name in only 1 or 2 taps (no usual name yet) and acts as a name it has never used ("from a new phone").
  *  - Never flagged: a phone's very first tap; a tap from a phone that has a tie between names (two people sharing it equally); any tap,
  *    before or after, from a phone that Alex's own player name has ever used (`exempt`).
  * Taps without a code (the organizer's phone, View as, old app versions) are not in `lines` at all.
@@ -97,6 +99,8 @@ export function judgeTaps(lines: TaggedLine[], exempt: (name: string) => boolean
 }
 
 function usualName(counts: Map<string, { name: string; n: number }>, total: number): string | null {
+  // Only ever one name: that is the phone's name, from its first tap.
+  if (counts.size === 1) return [...counts.values()][0].name;
   if (total < LEARN_AFTER) return null;
   let top: { name: string; n: number } | null = null;
   for (const c of counts.values()) if (!top || c.n > top.n) top = c;

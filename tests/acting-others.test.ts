@@ -41,10 +41,14 @@ describe('the rule: when is a tap "for someone else"?', () => {
     expect(verdicts([line('N', 'Nathan'), line('N', 'Nathan'), line('N', 'Nathan'), line('N', 'Nathan', 'player_withdraw')])).toEqual([null, null, null, null]);
   });
 
-  it('a phone too new to have a usual name (1 or 2 taps) that acts as a NEW name: "from a new phone"', () => {
-    expect(verdicts([line('P', 'Mitchel'), line('P', 'Nathan', 'player_self_paid')])).toEqual([null, 'from a new phone']);
-    // ...but going back to a name it already used is not flagged.
-    expect(verdicts([line('Q', 'Mitchel'), line('Q', 'Nathan'), line('Q', 'Mitchel')])).toEqual([null, 'from a new phone', null]);
+  it("Alex's preview case (Nov 11): a phone that has only ever been Parker (one tap: Drop out's Undo swallowed the rest), then Sage: \"from Parker's phone\"", () => {
+    expect(verdicts([line('P', 'Parker'), line('P', 'Sage')])).toEqual([null, "from Parker's phone"]);
+    expect(verdicts([line('P2', 'Mitchel'), line('P2', 'Nathan', 'player_self_paid')])).toEqual([null, "from Mitchel's phone"]);
+  });
+
+  it('a phone used by two names in only 2 taps (no usual name yet) that acts as a THIRD name: "from a new phone"; going back to a used name is not flagged', () => {
+    expect(verdicts([line('Q', 'Mitchel'), line('Q', 'Nathan'), line('Q', 'Brandon')])).toEqual([null, "from Mitchel's phone", 'from a new phone']);
+    expect(verdicts([line('R', 'Mitchel'), line('R', 'Nathan'), line('R', 'Mitchel')])).toEqual([null, "from Mitchel's phone", null]);
   });
 
   it('two people sharing one phone: flagged both ways while one of them is the clear majority, quiet while it is a tie', () => {
@@ -341,7 +345,7 @@ describe('the switch (ships OFF)', () => {
     expect(d2.actingOthers.map((r: { verb: string }) => r.verb)).toEqual(['backed out', 'signed up']);
   });
 
-  it('a brand-new phone that acts as one name, then another: "A new phone ... for"; its very first tap is never on the card', async () => {
+  it('a brand-new phone that acts as one name once, then another: "Devon signed up for Emery"; its very first tap is never on the card', async () => {
     const w = await world();
     const s = await firstSession(w);
     const phone = await playerPhone(w, 'Devon');
@@ -352,7 +356,8 @@ describe('the switch (ships OFF)', () => {
     await phone.call('POST', '/api/me', { playerId: w.byName.Emery });
     await phone.call('POST', `/api/sessions/${s.id}/join`, {}, h);
     const rows = (await dash(w, ON)).actingOthers;
-    expect(rows.map((r: { by: string | null; verb: string; name: string }) => `${r.by ?? 'A new phone'} ${r.verb} for ${r.name}`)).toEqual(['A new phone signed up for Emery']);
+    expect(rows.map((r: { by: string | null; verb: string; name: string }) => `${r.by ?? 'A new phone'} ${r.verb} for ${r.name}`)).toEqual(['Devon signed up for Emery']);
+    expect((await history(w, ON)).find((e) => e.actorLabel === 'Emery')?.from).toBe("from Devon's phone");
   });
 
   it("Alex's own player name acting from a phone (not signed in) makes that phone Alex's: never on the card", async () => {
@@ -445,5 +450,22 @@ describe('preview (PREVIEW SWITCHES RULE)', () => {
     expect([...BUILDING_ON]).toContain(ACTING_OTHERS.task);
     const toml = readFileSync('wrangler.toml', 'utf8');
     expect(toml.match(/^ACTING_FOR_OTHERS = "on"$/gm)?.length).toBe(2);
+  });
+});
+
+describe('preview only: the switch survives another channel re-seeding the shared preview database', () => {
+  it('ACTING_FOR_OTHERS_PREVIEW = "on" shows it with the Settings row off; it is only in [env.preview.vars], never production', async () => {
+    const w = await world({ ACTING_FOR_OTHERS_PREVIEW: 'on' });
+    const { s, phone, h } = await blairThreeTimes(w);
+    await asCasey(w, phone, s, h);
+    const d = await dash(w);
+    expect(d.actingOthersForAll).toBeUndefined();
+    expect(d.actingOthers.map((r: { by: string; name: string }) => `${r.by}>${r.name}`)).toEqual(['Blair>Casey']);
+    w.app.env.ACTING_FOR_OTHERS = 'off';
+    expect((await dash(w)).actingOthers).toBeUndefined();
+    const toml = readFileSync('wrangler.toml', 'utf8');
+    const prod = toml.slice(toml.indexOf('[vars]'), toml.indexOf('[env.preview]'));
+    expect(prod).not.toMatch(/ACTING_FOR_OTHERS_PREVIEW/);
+    expect(toml.slice(toml.indexOf('[env.preview.vars]'))).toMatch(/^ACTING_FOR_OTHERS_PREVIEW = "on"$/m);
   });
 });

@@ -282,6 +282,9 @@ UNPAID_NUDGE = "on"
 TOTALS_REFRESH = "on"
 SPENT_TOTALS = "on"
 ACTING_FOR_OTHERS = "on"
+# Zip 30, PREVIEW ONLY (never in [vars]): the shared preview database loses the Acting for others row whenever another channel re-seeds
+# it, so the preview shows the feature regardless. Live only ever follows the Settings row.
+ACTING_FOR_OTHERS_PREVIEW = "on"
 BOOKING_HOURS = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"

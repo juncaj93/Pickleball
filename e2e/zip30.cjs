@@ -334,6 +334,63 @@ async function main() {
     await ctx.close();
   });
 
+  // ---------------------------------------------------------------- Alex's preview case (Wed Nov 11), every tap through the real screen
+  await check("Alex's exact taps on one phone: I'm in, Drop out, I'm in (Drop out's Undo swallows the drop), then Not you? > Drew > I'm in: History says \"(from Blake's phone)\" and the card says \"Blake signed up for Drew\"", async () => {
+    const P = await openPlayer('Blake');
+    const gs = openGames(await groupOf(P.ctx.request));
+    const g1 = gs[0];
+    const g2 = gs.find((x) => x.id !== g1.id && !x.confirmed?.some?.((c) => c.name === 'Drew'));
+    // I'm in, Drop out (confirm), I'm in again inside the 5-second Undo.
+    await P.page.locator(`#row-${g1.id} [data-join]`).first().click();
+    await P.page.waitForTimeout(1200);
+    await P.page.locator(`#row-${g1.id} .drop-link`).first().click();
+    await P.page.locator('dialog[open] button', { hasText: /^Drop out$/ }).first().click();
+    await P.page.waitForTimeout(800);
+    const again = P.page.locator(`#row-${g1.id} [data-join]`).first();
+    if (await again.count()) await again.click();
+    else await P.page.locator('.toast-action', { hasText: 'Undo' }).first().click();
+    await P.page.waitForTimeout(6500);
+    // Not you? > Drew, through the screen.
+    await P.page.locator('button.not-you').click();
+    await P.page.getByRole('button', { name: 'Drew', exact: true }).first().click();
+    await P.page.locator('.schedule article').first().waitFor();
+    await P.page.waitForTimeout(800);
+    await P.page.locator(`#row-${g2.id} [data-join]`).first().click();
+    await P.page.waitForTimeout(1500);
+    const tag = await storedTag(P.page);
+    assert(P.sent.filter((x) => x.method === 'POST' && x.path.startsWith('/api/sessions/')).every((x) => x.tag === tag), `a tap went without the code: ${JSON.stringify(P.sent.filter((x) => x.method === 'POST'))}`);
+    const rows = (await dash()).actingOthers.map((r) => `${r.by ?? 'A new phone'} ${r.verb} for ${r.name}`);
+    assert(rows.includes('Blake signed up for Drew'), `card rows: ${JSON.stringify(rows)}`);
+    const hist = (await (await org.get(`${BASE}/api/admin/activity`)).json()).entries;
+    const drew = hist.find((e) => e.actorLabel === 'Drew' && e.action === 'player_join');
+    assert(drew?.from === "from Blake's phone", `Drew's line: ${JSON.stringify(drew)}`);
+    // And on the admin screen itself.
+    const A2 = await openAdmin();
+    const c = await cardOf(A2.page);
+    assert(c && c.rows.some((r) => r.text === 'Blake signed up for Drew'), `Home card: ${JSON.stringify(c)}`);
+    await A2.ctx.close();
+    await P.ctx.close();
+  });
+
+  await check('a browser that blocks storage (private window settings): the cookie alone keeps one code, and every tap carries it', async () => {
+    const ctx = await browser.newContext(phoneOpts());
+    await ctx.addInitScript(() => {
+      Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage blocked'); } });
+    });
+    const P = await openPlayer('Finley', 390, 'light', ctx);
+    const first = await cookieTag(P.ctx);
+    assert(/^[A-Za-z0-9_-]{22}$/.test(first ?? ''), `cookie code «${first}»`);
+    await P.page.reload();
+    await P.page.locator('.schedule article').first().waitFor();
+    assert((await cookieTag(P.ctx)) === first, 'a reload made a new code');
+    const g = openGames(await groupOf(P.ctx.request))[0];
+    await P.page.locator(`#row-${g.id} [data-join]`).first().click();
+    await P.page.waitForTimeout(1200);
+    const joins = P.sent.filter((x) => x.method === 'POST' && x.path.endsWith('/join'));
+    assert(joins.length === 1 && joins[0].tag === first, `the tap's code: ${JSON.stringify(joins)}`);
+    await ctx.close();
+  });
+
   // ---------------------------------------------------------------- the look
   await check('the look (mock): gray 32 px circle with the swap arrows, bold title, an X with a 44 px tap area, thin lines between rows, light and dark', async () => {
     for (const scheme of ['light', 'dark']) {
