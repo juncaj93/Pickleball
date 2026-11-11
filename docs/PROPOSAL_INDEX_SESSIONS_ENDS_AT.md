@@ -1,6 +1,6 @@
 # Proposal: one database index so the 5-second check skips old games
 
-Status: **waiting for Alex's OK, not before Wed Nov 4, 2026** (it is a database change).
+Status: **superseded by Zip 33** (`migrations/0020_games_index.sql`, docs/STAGE_NOTES.md). The index below is its first of three; measuring showed the switch lookups on `task_log` grow faster than the games table, so Zip 33 adds indexes for those too.
 Written Sun Nov 1, 2026. Times are Eastern. (Zip 28, Mon Nov 9: the file is now named `0018_...` because `0017_court` was taken by Zip 14; nothing else changed. Zip 30, Tue Nov 10: `0018_phone_tag` now takes 0018, so this file would become `0019_...` if Alex OKs it.)
 
 ## Why
