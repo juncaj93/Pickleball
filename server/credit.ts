@@ -7,6 +7,7 @@
 
 import { type CreditKind, type CreditReason, type CreditRow, usedBySeat } from '../shared/credit';
 import { adjustNoteOf } from '../shared/adjustCredit';
+import { extSessionOf } from '../shared/extension';
 import { newId } from './crypto';
 import type { D1Database, D1PreparedStatement } from './db';
 import { HttpError } from './http';
@@ -79,9 +80,11 @@ export async function loadLedger(db: D1Database, groupId: string): Promise<Ledge
     endedAt: r.ended_at,
     endedReason: r.ended_reason,
     // An adjustment keeps its why in the same column ("adjusted:<why>"); everywhere else it is plain reason 'adjusted' plus a note.
-    reason: adjustNoteOf(r.reason) !== null ? 'adjusted' : ((r.reason as CreditReason | null) ?? null),
+    reason: adjustNoteOf(r.reason) !== null ? 'adjusted' : extSessionOf(r.reason) !== null ? 'extension' : ((r.reason as CreditReason | null) ?? null),
     playedCount: r.played_count,
     ...(adjustNoteOf(r.reason) !== null ? { note: adjustNoteOf(r.reason) as string } : {}),
+    // Zip 31: extra court time; the game is only named here, never as session_id (no seat counts it).
+    ...(extSessionOf(r.reason) !== null ? { extSessionId: extSessionOf(r.reason) as string } : {}),
   }));
 }
 

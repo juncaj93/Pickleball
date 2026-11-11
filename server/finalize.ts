@@ -19,6 +19,8 @@ import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdO
 import * as v from './validate';
 import { flatOf, priceLockStatements, priceOf, specialFlatOf } from './repo';
 import { gameFinalPrice } from '../shared/gameLength';
+import { auditPlan, extendedTimeFor, extensionPlan, hasExtension, restoreAfterFailedReopen, unwindForReopen } from './extension';
+import { type ExtraMinutes, isExtraMinutes } from '../shared/extension';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
 export function needsFinalize(session: SessionRow, roster: { status: string; payment_status: string }[], nowMs: number): boolean {
@@ -48,7 +50,11 @@ export async function finalizeSession(ctx: Ctx, body: Record<string, unknown>) {
     playedIds = new Set(body.played.map((x) => v.id(x, 'played')));
     for (const id of playedIds) if (!confirmed.some((r) => r.player_id === id)) throw new HttpError(400, 'invalid_played', 'Only people who were in can be marked as played.');
   }
-  return applyFinalize(ctx, group, session, playedIds, await lateFeesFor(ctx, group.id));
+  // Zip 31 "Extended time": only while the switch is on for this phone (off: exactly main's finalize, the extra time is never read).
+  // "Everyone played" sends none: no extension.
+  const extra: ExtraMinutes | null = (await extendedTimeFor(ctx, group.id)) ? (isExtraMinutes(body.extraMinutes) ? body.extraMinutes : 0) : null;
+  if (body.extraMinutes !== undefined && body.extraMinutes !== null && !isExtraMinutes(body.extraMinutes)) throw new HttpError(400, 'invalid_extra', 'Pick None, +30 min or +1 hr.');
+  return applyFinalize(ctx, group, session, playedIds, await lateFeesFor(ctx, group.id), extra);
 }
 
 /** A value put straight into SQL text (an id or a time this server made), refused if it could break out of quotes. */
@@ -74,7 +80,7 @@ export async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
  * paying at the same moment, or a request cut off halfway can never leave a
  * game half-finalized.
  */
-export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false) {
+export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false, extra: ExtraMinutes | null = null) {
   const settings = settingsOf(group);
   const state = await moneyState(ctx, session.id);
   const roster = await loadRoster(ctx.db, session.id);
@@ -177,7 +183,13 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   }
   // Unpaid seats whose used credit now covers the final price are paid.
   statements.push(...repriceStatements(ctx.db, session.id, flatOf(session, settings), now));
-  const [claim] = await ctx.db.batch(statements);
+  // Zip 31 "Extended time" (server/extension.ts): the shares go in the SAME batch, after the credit back above (so credit that came back
+  // from this very game can pay a share), and only if this finalize went in. Null: the switch is off, nothing about it is written.
+  const plan = extra === null ? null : extensionPlan(ctx.db, { groupId: group.id, session, roster, organizerId, playedIds, minutes: extra, nowIso: now, guard: claimed });
+  const planAt = statements.length;
+  if (plan) statements.push(...plan.statements);
+  const results = await ctx.db.batch(statements);
+  const [claim] = results;
   if (claim.meta.changes !== 1) {
     const fresh = await getSession(ctx.db, group.id, session.id);
     if (fresh?.finalized_at) throw new HttpError(409, 'already_finalized', 'This game is already finalized.');
@@ -185,11 +197,21 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
     throw new HttpError(409, 'changed', 'Someone just changed this game. Look again and finalize.');
   }
   await audit(ctx.db, group.id, session.id, 'session_finalized', { played: n, priceCents: price, creditBackCents: backs.reduce((s, b) => s + b.cents, 0) }, now);
+  // A share whose seat changed under the tap (a second phone paying it at that moment) was left as it was: say so (Reopen and redo fixes it).
+  const extSkipped = plan ? plan.changes.filter((_, i) => results[planAt + plan.seatStatement[i]]?.meta.changes !== 1).map((c) => c.name) : [];
+  if (plan && (plan.minutes > 0 || plan.changes.length > 0)) await auditPlan(ctx.db, group.id, session.id, plan, now, 'finalize');
   for (const b of backs) await audit(ctx.db, group.id, session.id, 'credit_back', { player: b.player, playerId: b.playerId, amountCents: b.cents, reason: b.reason }, now);
   for (const pid of owing) await auditLateFeeOwed(ctx.db, group.id, session.id, pid, 'no_show', now, 'organizer', specialFlatOf(session, settings));
   // Finalized means it was played: a later Reopen never asks "Did you guys play?" (a display mark, no money; never fails the tap).
   await writeMark(ctx.db, group.id, session.id, 'played', now).catch(() => {});
-  return { ok: true, played: n, priceCents: price, creditBack: backs.map((b) => ({ playerId: b.playerId, cents: b.cents })) };
+  return {
+    ok: true,
+    played: n,
+    priceCents: price,
+    creditBack: backs.map((b) => ({ playerId: b.playerId, cents: b.cents })),
+    ...(plan && plan.minutes > 0 ? { extension: { minutes: plan.minutes, costCents: plan.costCents, shareCents: plan.shareCents, payers: plan.payers, organizerCents: plan.organizerCents } } : {}),
+    ...(extSkipped.length ? { extensionSkipped: extSkipped } : {}),
+  };
 }
 
 async function usedOn(ctx: Ctx, sessionId: string, playerId: string): Promise<number> {
@@ -239,6 +261,44 @@ export async function reopenFinalize(ctx: Ctx) {
   const session = await getSession(ctx.db, group.id, v.id(ctx.params.id, 'session'));
   if (!session) throw new HttpError(404, 'session_not_found', 'Session not found.');
   if (!session.finalized_at) throw new HttpError(409, 'not_finalized', 'This game is not finalized.');
+  // Zip 31 "Extended time": a game with extra time has its shares moved to $0 first (credit back for whatever was put toward them), so
+  // credit this game gave back and a share then used counts as there again. If the Reopen then stops, the shares are put back as they were.
+  // A game without extra time: nothing is written here and the Reopen is exactly main's.
+  // Every reason Reopen would stop is checked BEFORE any extra time money moves (a refused Reopen moves nothing): an unconfirmed I paid on a
+  // seat, an I paid on a share (the unwind refuses it before writing), and the credit checks with the shares' give-back counted in.
+  await reopenPrecheck(ctx, group, session);
+  const was = await unwindForReopen(ctx, group, session);
+  try {
+    return await reopenChecked(ctx, group, session);
+  } catch (err) {
+    if (was) await restoreAfterFailedReopen(ctx, group, session, was).catch(() => {});
+    throw err;
+  }
+}
+
+/** Zip 31: Reopen's own checks, as they will read once the game's shares have been moved to $0 (only for a game with extra time). */
+async function reopenPrecheck(ctx: Ctx, group: GroupRow, session: SessionRow) {
+  const roster = await loadRoster(ctx.db, session.id);
+  if (!hasExtension(session, roster)) return;
+  const back = new Map(roster.map((r) => [r.player_id, Math.max(0, (r.ext_credit_cents ?? 0) + (r.ext_paid_cents ?? 0))]));
+  const r = reopenBlockersRead(session.id);
+  const { results } = await ctx.db
+    .prepare(r.sql.replace('SELECT p.display_name AS name,', 'SELECT l.player_id AS pid, p.display_name AS name,'))
+    .bind(...r.values)
+    .all<{ pid: string; name: string; back: number; pot: number; reserved: number }>();
+  const pot = (x: (typeof results)[number]) => x.pot + (back.get(x.pid) ?? 0);
+  const spent = results.filter((x) => pot(x) < x.back).map((x) => x.name);
+  if (spent.length) throw new HttpError(409, 'credit_spent', `Can't reopen: ${spent.join(' and ')} already used or got back credit from this game.`);
+  const requested = results.filter((x) => pot(x) >= x.back && pot(x) - x.reserved < x.back).map((x) => x.name);
+  if (requested.length) throw new HttpError(409, 'refund_requested', reopenRequestedReason(requested));
+  const flat = flatOf(session, settingsOf(group));
+  const unconfirmed = roster.filter((x) => x.status === 'confirmed' && x.payment_status === 'paid' && !x.refunded_at && x.self_paid_at && (x.payment_amount_cents ?? 0) < flat).map((x) => x.display_name).sort();
+  if (unconfirmed.length) throw new HttpError(409, 'unconfirmed_paid', `Can't reopen: ${unconfirmed.join(' and ')} tapped I paid, not confirmed yet. Confirm it (Mark paid) or clear it (Unmark) first.`);
+  const extClaims = roster.filter((x) => (x.ext_claim_cents ?? 0) > 0).map((x) => x.display_name);
+  if (extClaims.length) throw new HttpError(409, 'unconfirmed_ext', `${extClaims.join(' and ')} tapped I paid for the extra time, not confirmed yet. Confirm it (Mark paid) or clear it first.`);
+}
+
+async function reopenChecked(ctx: Ctx, group: GroupRow, session: SessionRow) {
   const blockers = await reopenBlockers(ctx, session.id);
   if (blockers.spent.length) {
     throw new HttpError(409, 'credit_spent', `Can't reopen: ${blockers.spent.join(' and ')} already used or got back credit from this game.`);

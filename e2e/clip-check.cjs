@@ -174,6 +174,19 @@ function findClipping(opts) {
     if (r.left < c.left - 0.5 || r.right > c.right + 0.5 || r.top < c.top - 0.5 || r.bottom > c.bottom + 0.5)
       out.push(`outside its card: ${label(el)} at ${fmt(r)} in ${label(card)} (inner ${Math.round(c.left)},${Math.round(c.top)} to ${Math.round(c.right)},${Math.round(c.bottom)})`);
   }
+  // Zip 31: the part of a box that is drawn: a box inside a scroll area (a list that scrolls inside a sheet, `[class*="scroll"]`) is only drawn
+  // where that area shows it, so a tile scrolled out of view is not "on top of" the buttons under the area.
+  const drawn = (el) => {
+    const r = el.getBoundingClientRect();
+    let box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+    for (let a = el.parentElement; a && a !== document.documentElement; a = a.parentElement) {
+      const acs = getComputedStyle(a);
+      if (!a.matches('[class*="scroll"]') || (acs.overflowX === 'visible' && acs.overflowY === 'visible')) continue;
+      const ar = a.getBoundingClientRect();
+      box = { left: Math.max(box.left, ar.left), right: Math.min(box.right, ar.right), top: Math.max(box.top, ar.top), bottom: Math.min(box.bottom, ar.bottom) };
+    }
+    return { ...box, width: Math.max(0, box.right - box.left), height: Math.max(0, box.bottom - box.top) };
+  };
   // 4: buttons, pills and tiles drawn on top of each other (siblings in one row).
   const things = all.filter((el) => el.matches('button, a.ac-btn, .ac-btn, .pill, .pchip, [class*="chip"], .tile, .ptile, [class*="pill"], .cl-balls .dots, .pr-name') && !el.closest('.hv2-a11y, .sr-only'));
   for (let i = 0; i < things.length; i++)
@@ -184,8 +197,8 @@ function findClipping(opts) {
       // Same row of controls, or the same card (the circles next to the time and the court pill sit in different columns of one row).
       const cardA = a.closest('.card, .ac, .hv2-short, .scard');
       if (a.parentElement !== b.parentElement && !(cardA && cardA === b.closest('.card, .ac, .hv2-short, .scard'))) continue;
-      const x = a.getBoundingClientRect();
-      const y = b.getBoundingClientRect();
+      const x = drawn(a);
+      const y = drawn(b);
       const w = Math.min(x.right, y.right) - Math.max(x.left, y.left);
       const h = Math.min(x.bottom, y.bottom) - Math.max(x.top, y.top);
       if (w > 2 && h > 2) out.push(`overlap: ${label(a)} at ${fmt(x)} and ${label(b)} at ${fmt(y)}`);

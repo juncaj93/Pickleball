@@ -283,7 +283,17 @@ describe('the server (server/unpaidNudge.ts)', () => {
     const v = await view(w, 'Casey');
     expect(v.owed.map((o: any) => o.sessionId)).toEqual([games[4].id]);
     expect(v.unpaidNudge).toEqual({ limit: 3 });
-    expect(JSON.stringify(v)).not.toMatch(/4200|\$42/);
+    // No $42 anywhere in her answer: no amount of 4200 cents, no words with "$42". (Ids and stamps are left out: a random id or a change
+    // stamp can contain the digits 4200 by chance, which made this check fail now and then.)
+    const amounts: number[] = [];
+    const words: string[] = [];
+    JSON.stringify(v, (_k, x) => {
+      if (typeof x === 'number') amounts.push(x);
+      if (typeof x === 'string') words.push(x);
+      return x;
+    });
+    expect(amounts).not.toContain(4200);
+    expect(words.filter((x) => /\$42\b/.test(x))).toEqual([]);
   });
 
   it('Settings > Feature switches > "Unpaid nudge": on and off, one History line each, the dashboard flag', async () => {

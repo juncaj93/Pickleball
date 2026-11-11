@@ -30,6 +30,7 @@ import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/tod
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
 import { DoNowCard, useServerNow } from './admin/DoNowCard';
 import { OwedVenmoCards } from './admin/VenmoRequest';
+import { ExtensionOwedCard } from './admin/ExtendedTime';
 import { RequestButton, SecondChanceHome, UnpaidTextSheet } from './admin/SecondChance';
 import { MarkPaidRows, type MpRow, sharedDate } from './admin/MarkPaidRows';
 import { PlayersTab } from './admin/PlayersTab';
@@ -460,6 +461,15 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
         <SecondChanceHome ctx={ctx} />
         <UnpaidTextSheet ctx={ctx} />
         {oneMoneyCard ? <OwedVenmoCards ctx={ctx} /> : markPaid.map((item) => <TodoCard key={key(item)} ctx={ctx} item={item} />)}
+        {/* Zip 31 (Extended time): its own cards on the calm preview, the Finalize card and the extra time rows. */}
+        <ExtensionOwedCard ctx={ctx} />
+        {ctx.d.extendedTime === true && first.length > 0 && (
+          <section className="stack" aria-label="After the game">
+            {first.map((item) => (
+              <TodoCard key={key(item)} ctx={ctx} item={item} />
+            ))}
+          </section>
+        )}
         <SessionsSection ctx={ctx} />
       </>
     );
@@ -480,6 +490,8 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
       )}
       <DoNowCard ctx={ctx} hideBook={ctx.d.adminV2 === true || ctx.d.adminR2 === true} />
       <OwedVenmoCards ctx={ctx} />
+      {/* Zip 31 "Extended time" (only while on): shares of extra court time still owed, with the same buttons as the card above. */}
+      <ExtensionOwedCard ctx={ctx} />
       {first.length > 0 && (
         <section className="stack" aria-label="After the game">
           {first.map((item) => (

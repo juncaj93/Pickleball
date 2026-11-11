@@ -1,3 +1,4 @@
+import { ExtensionRowsFor } from './ExtendedTime';
 import { useInstant } from '../../InstantTaps';
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { AdminSessionView, MonthlyMoney } from '../../../shared/api';
@@ -253,6 +254,8 @@ function GameCard({ ctx, g, open, onToggle, onRemind, sameDay }: { ctx: AdminCtx
         {right && <span className="mrw-right">{right}</span>}
       </div>
       {open && <GameBody ctx={ctx} s={s} rework />}
+      {/* Zip 31 "Extended time" (only while on): this game's shares of extra court time still owed. */}
+      {open && <ExtensionRowsFor ctx={ctx} sessionId={s.id} />}
       {open && !closed && s.court && (
         <div className="mrw-foot" data-card-foot>
           <span>{formatPrice(price)}/person</span>

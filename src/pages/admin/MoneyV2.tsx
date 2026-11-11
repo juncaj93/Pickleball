@@ -244,7 +244,7 @@ export function GameBody({ ctx, s, r2, rework }: { ctx: AdminCtx; s: AdminSessio
   const [tapped, setTapped] = useState<string | null>(null);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, { kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId });
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents, ...(r.extCents ? { extCents: r.extCents } : {}) } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, { kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId });
   const setCourtPaid = (paid: boolean) => run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: myId, paid }), paid ? 'Court marked paid' : 'Court marked due');
   const reopen = () => run(() => api('POST', `/api/admin/sessions/${s.id}/reopen`, {}), 'Reopened. Finalize it again from Home.', { kind: 'reopen', sessionId: s.id });
 

@@ -210,6 +210,40 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched "Booking hours" on`;
     case 'booking_hours_off':
       return `${who} switched "Booking hours" off`;
+    // Zip 31 "Extended time" (server/extension.ts): one plain line for the game and one per share that moved.
+    case 'extended_time_on':
+      return `${who} switched "Extended time" on`;
+    case 'extended_time_off':
+      return `${who} switched "Extended time" off`;
+    case 'extension_set': {
+      const m = typeof d.minutes === 'number' ? d.minutes : 0;
+      if (m <= 0) return `${who} finalized with no extra time${forDay}`;
+      return `${who} added ${m >= 60 ? '1 hr' : `${m} min`} of extra time${forDay}: ${formatPrice(Number(d.costCents) || 0)} court, ${Number(d.payers) || 0} pay ${formatPrice(Number(d.shareCents) || 0)} each, you cover ${formatPrice(Number(d.organizerCents) || 0)}`;
+    }
+    case 'extension_share': {
+      const from = Number(d.fromCents) || 0;
+      const to = Number(d.toCents) || 0;
+      const back = Number(d.backCents) || 0;
+      const used = Number(d.creditUsedCents) || 0;
+      const parts = [`${player}'s extra time share ${from === 0 ? `set to ${formatPrice(to)}` : `went from ${formatPrice(from)} to ${formatPrice(to)}`}${forDay}${d.why === 'reopen' ? ' (reopened)' : ''}`];
+      if (back > 0) parts.push(`${formatPrice(back)} back as credit`);
+      if (used > 0) parts.push(`${formatPrice(used)} of their credit used`);
+      return parts.join(', ');
+    }
+    case 'extension_i_paid':
+      return `${player} marked their extra time paid (${formatPrice(Number(d.amountCents) || 0)})${d.withGame ? forDay : ''}`;
+    case 'extension_confirmed':
+      return `${who} confirmed ${player}'s extra time payment (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
+    case 'extension_marked_paid':
+      return `${who} marked ${player}'s extra time paid (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
+    case 'extension_claim_cleared':
+      return `${who} cleared ${player}'s extra time I paid${forDay}`;
+    case 'extension_unmarked':
+      return `${who} unmarked ${player}'s extra time payment (${formatPrice(Number(d.amountCents) || 0)})${forDay}`;
+    case 'extension_confirmed_with_seat':
+      return `${who} confirmed extra time paid with the next game`;
+    case 'extension_unmarked_with_seat':
+      return `${who} unmarked extra time paid with the next game`;
     case 'checkin_pay_line_on':
       return `${who} switched "Check-in pay line" on`;
     case 'checkin_pay_line_off':

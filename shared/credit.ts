@@ -17,7 +17,9 @@ export type CreditKind = 'kept' | 'used' | 'refunded';
  * toward a seat whose price then went up (a reopen and a redo with fewer
  * players): the pot is unchanged, the seat owes the rest. Never shown.
  */
-export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash' | 'adjusted';
+export type CreditReason = 'finalized' | 'not_played' | 'dropped' | 'canceled' | 'migrated' | 'request' | 'cash' | 'adjusted' | 'extension';
+// 'extension' (Zip 31, shared/extension.ts): credit used for a share of extra court time ('used'), or put back when the share went
+// down ('kept'). The ledger column holds "ext:<game id>" and session_id is empty; loadLedger turns it into reason 'extension' plus `extSessionId`.
 // 'adjusted': the organizer added ('kept') or removed ('used') credit by hand, no game attached (shared/adjustCredit.ts). The ledger
 // column holds "adjusted:<why>"; loadLedger turns that into reason 'adjusted' plus `note`.
 
@@ -45,6 +47,8 @@ export interface CreditRow {
   playedCount?: number | null;
   /** The organizer's reason for an adjustment (reason 'adjusted'). */
   note?: string;
+  /** Zip 31: the game whose extra time this credit paid for or came back from (reason 'extension'). Never a seat's own credit. */
+  extSessionId?: string;
 }
 
 // Rows arrive in the order they were made (created_at, then insertion order), and sorts keep that order for ties.
@@ -233,6 +237,8 @@ export function creditEntryText(e: Pick<CreditEntryView, 'kind' | 'cents' | 'ses
   const money = formatPrice(e.cents);
   if (e.reason === 'adjusted') return `${signedPrice(e.kind === 'kept' ? e.cents : -e.cents)} adjusted by organizer`;
   const day = e.sessionStartsAt ? formatShortDate(e.sessionStartsAt, tz) : null;
+  // Zip 31: extra court time ("-$3 used for extra time Thu, Nov 12", "+$1 extra time changed Thu, Nov 12").
+  if (e.reason === 'extension') return e.kind === 'used' ? `-${money} used for extra time${day ? ` ${day}` : ''}` : `+${money} extra time changed${day ? ` ${day}` : ''}`;
   if (e.kind === 'used') return `-${money} used${day ? ` for ${day}` : ''}`;
   // The organizer's screens say refunded; the player's own sheet says cashed out.
   if (e.kind === 'refunded') return `-${money} ${forPlayer ? 'cashed out' : 'refunded'}`;
@@ -321,6 +327,8 @@ export function creditChanges(history: CreditEntryView[], tz: string, organizerN
     const from = game ? ` from ${game}` : '';
     let text: string;
     if (e.reason === 'adjusted') text = `${adjustedPlayerLine(e.kind === 'kept' ? e.cents : -e.cents).replace(/^Credit/, 'credit')}${e.note ? `. ${e.note}` : ''}`;
+    // Zip 31: "Nov 12: $3 used for extra time on Nov 12", "Nov 13: $1 back from Nov 12 (extra time changed)".
+    else if (e.reason === 'extension') text = e.kind === 'used' ? `${money} used for extra time${game ? ` on ${game}` : ''}` : `${money} back${from} (extra time changed)`;
     else if (e.kind === 'used') text = `${money} used${game ? ` for ${game}` : ''}`;
     else if (e.kind === 'refunded') text = `${money} cashed out`;
     else if (e.reason === 'finalized') text = `${money} back${from}${e.playedCount ? ` (${e.playedCount} played)` : ''}`;

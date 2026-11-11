@@ -12,6 +12,8 @@ import '../../finalize.css';
 import { AcIcon, AcTitle, AlertCard } from '../../AlertCard';
 import { splitFirst } from '../../../shared/zip11';
 import { type GamePrice, gameFinalPreview, viewPrice } from '../../../shared/gameLength';
+import type { ExtraMinutes } from '../../../shared/extension';
+import { WhoPlayedTiles } from './ExtendedTime';
 
 const CREDIT_NOTE = 'Pickleball credit refund';
 
@@ -40,10 +42,13 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const unconfirmed = unconfirmedPaidWarning(selfPaidNames(s));
   const day = formatShortDate(s.startsAt, tz);
   // Right after "Yes, we played" this card scrolls in under the finger: taps wait until the screen settles.
-  const finalize = (played: string[]) =>
+  // Zip 31 "Extended time": only while on for this phone. Off: the old label and the old sheet, and finalize sends exactly what it sent.
+  const ext = ctx.d.extendedTime === true;
+  const changeLabel = ext ? 'Edit players / time' : 'Change who played';
+  const finalize = (played: string[], extraMinutes?: ExtraMinutes) =>
     tapsHeld()
       ? Promise.resolve(false)
-      : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, { played }), `${day} is final`, {
+      : run(() => api('POST', `/api/admin/sessions/${s.id}/finalize`, extraMinutes === undefined ? { played } : { played, extraMinutes }), `${day} is final`, {
           // Instant taps (INSTANT_TAPS): the price and the credit are the server's, so the button shows it is working; only where Money
           // files the game moves at once (finalized games that are fully paid go to Previous games). A failed save moves it back.
           key: `finalize:${s.id}`,
@@ -91,13 +96,18 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                 {saving ? 'Saving…' : 'Everyone played'}
               </button>
               <button className="ac-btn ac-out" disabled={busy} data-change-played onClick={() => !tapsHeld() && setChanging(true)}>
-                Change who played
+                {changeLabel}
               </button>
             </>
           )}
         </div>
         <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
-          {changing && <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />}
+          {changing &&
+            (ext ? (
+              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra) => (await finalize(ids, extra)) && setChanging(false)} />
+            ) : (
+              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />
+            ))}
         </Sheet>
       </article>
     );
@@ -129,13 +139,18 @@ export function FinalizeCard({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
               {saving ? 'Saving…' : 'Everyone played'}
             </button>
             <button className="btn secondary" disabled={busy} data-change-played onClick={() => !tapsHeld() && setChanging(true)}>
-              Change who played
+              {changeLabel}
             </button>
           </>
         )}
       </div>
       <Sheet open={changing} title={`Who played · ${day}`} onClose={() => setChanging(false)}>
-        {changing && <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />}
+        {changing &&
+            (ext ? (
+              <WhoPlayedTiles s={s} gp={gp} busy={busy} unconfirmedNames={selfPaidNames(s)} onConfirm={async (ids, extra) => (await finalize(ids, extra)) && setChanging(false)} />
+            ) : (
+              <WhoPlayed s={s} gp={gp} busy={busy} onConfirm={async (ids) => (await finalize(ids)) && setChanging(false)} />
+            ))}
       </Sheet>
     </article>
   );
