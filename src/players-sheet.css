@@ -305,19 +305,19 @@ html[data-theme='dark'] .ps {
   outline-offset: 2px;
 }
 
-/* The three-dot menu: 32 px to see, 44 px to tap. */
+/* The three-dot menu: 36 px to see, 44 px to tap. */
 .ps-menu,
 .ps-dots-gap {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
 }
 .ps-dots {
   position: relative;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 0;
   border-radius: 50%;
@@ -328,7 +328,7 @@ html[data-theme='dark'] .ps {
 .ps-dots::after {
   content: '';
   position: absolute;
-  inset: -6px -4px;
+  inset: -4px;
 }
 .ps-pop {
   position: absolute;
@@ -360,6 +360,12 @@ html[data-theme='dark'] .ps {
   font-weight: 800;
   text-align: left;
   cursor: pointer;
+}
+.ps-pop-item.ps-pop-plain {
+  color: var(--ps-ink);
+}
+.ps-fee {
+  font-weight: 600;
 }
 .ps-pop-item:active {
   background: var(--ps-notice);

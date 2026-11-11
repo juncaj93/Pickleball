@@ -437,6 +437,31 @@ async function main() {
       assert(/The game is full \(4 in\)\./.test(await toast.innerText()), await toast.innerText());
       assert((await sessionOf(g1.id)).roster.find((r) => r.name === 'Zoe')?.status !== 'confirmed', 'Zoe must not be in');
       await ctx.close();
+      // The old sheet's other two buttons are still here: a waitlisted player has Give spot (same full rule), a confirmed one has To waitlist in the menu.
+      assert((await call('POST', `/api/admin/sessions/${g1.id}/roster`, { playerId: idOf('Zoe'), action: 'waitlist' })).ok, 'Zoe to the waitlist');
+      const w = await openAdmin();
+      await openByMoneyCell(w.page, g1.id);
+      const wd = sheet(w.page);
+      assert((await row(w.page, 'Zoe').locator('.ps-sub').innerText()).startsWith('#1 on waitlist'), 'waitlist line');
+      assert((await wd.locator('[data-ps-chip="Zoe"]').count()) === 0, 'a waitlisted name is not a chip');
+      await row(w.page, 'Zoe').locator('[data-ps-givespot]').click();
+      await w.page.locator('.pop.toast').first().waitFor({ timeout: 4000 });
+      assert(/The game is full \(4 in\)\./.test(await w.page.locator('.pop.toast').first().innerText()), 'Give spot on a full game says so');
+      await row(w.page, 'Vic').locator('.ps-dots').click();
+      assert((await wd.getByRole('menuitem', { name: 'Move Vic to the waitlist' }).count()) === 1, 'To waitlist in the menu');
+      await w.ctx.close();
+      // More names than free seats: nothing is added, the picks stay, it says how many fit.
+      assert((await call('PUT', '/api/admin/group', { settings: { maxPlayers: (await sessionOf(g1.id)).confirmedCount + 1 } })).ok, 'one spot left');
+      const o = await openAdmin();
+      await openByMoneyCell(o.page, g1.id);
+      const od = sheet(o.page);
+      await od.locator('[data-ps-chip="Quinn"]').click();
+      await od.locator('[data-ps-chip="Rowan"]').click();
+      await od.locator('[data-ps-add-btn]').click();
+      await o.page.locator('.pop.toast').first().waitFor({ timeout: 4000 });
+      assert(/Only 1 spot left/.test(await o.page.locator('.pop.toast').first().innerText()), await o.page.locator('.pop.toast').first().innerText());
+      assert((await od.locator('[data-ps-chip="Quinn"]').getAttribute('aria-pressed')) === 'true', 'the picks stay');
+      await o.ctx.close();
     } finally {
       await call('PUT', '/api/admin/group', { settings: { maxPlayers: before.maxPlayers } });
       await call('PUT', '/api/admin/card-cleanup-switch', { on: true });

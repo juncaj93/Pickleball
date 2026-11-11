@@ -12,6 +12,8 @@ import { RemindList } from './MoneyV2';
 import { ReworkRemind } from './MoneyReworkParts';
 import { RowRequest } from './VenmoRequest';
 import { payChip, payMoneyLine, useRosterOps } from './Sessions';
+import { lateFeeLine } from './LateFees';
+import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import '../../players-sheet.css';
 
 /**
@@ -35,10 +37,12 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
   const meId = ctx.d.me?.id ?? null;
 
   // The host (the organizer) is never a row here: they pay the venue, and their own In / Out is on the game card.
-  const listed = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.status === 'waitlisted'));
+  // A seat that left but still owes (or paid) a late fee is counted in "x of y paid" by the server, so it is a row here too (the old Money list has it).
+  const isFee = (r: AdminRosterEntry) => !!r.lateFee && r.status !== 'confirmed' && r.status !== 'waitlisted';
+  const listed = s.roster.filter((r) => !r.isOrganizer && (r.status === 'confirmed' || r.status === 'waitlisted' || isFee(r)));
   const declined = s.roster.filter((r) => !r.isOrganizer && r.status === 'declined');
-  const owing = (r: AdminRosterEntry) => !canceled && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.owesCents > 0;
-  const anyOwes = s.roster.some((r) => !r.isOrganizer && owing(r));
+  const owing = (r: AdminRosterEntry) => (r.lateFee ? !r.lateFee.paid && r.owesCents > 0 : !canceled && r.status === 'confirmed' && r.paymentStatus === 'unpaid' && r.owesCents > 0);
+  const anyOwes = listed.some((r) => owing(r));
   const price = fin ? fin.priceCents : viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
 
   // The names to tap: everyone eligible and not in the game, never-signed-up first, then the ones who declined or dropped.
@@ -53,11 +57,19 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     });
   const chosen = chips.filter((p) => picked.has(p.id));
 
+  const fullWords = cleanup ? DB_LIMIT_MESSAGE : `The game is full (${ctx.d.group.settings.maxPlayers} in).`;
+  const spotsLeft = Math.max(0, (cleanup ? MAX_PLAYERS_LIMIT : ctx.d.group.settings.maxPlayers) - s.confirmedCount);
   async function add() {
     if (chosen.length === 0) return;
     // A full game says so, with the server's own words (the old Give spot was a grayed button with no word).
     if (full) {
-      toast(cleanup ? DB_LIMIT_MESSAGE : `The game is full (${ctx.d.group.settings.maxPlayers} in).`, 'error');
+      toast(fullWords, 'error');
+      return;
+    }
+    // More names than free seats: nothing is added, the picks stay, and it says how many fit (the saves are held 5 seconds for Undo, so the server's
+    // "full" for the extra names would only come after the others already showed "got a spot").
+    if (chosen.length > spotsLeft) {
+      toast(`Only ${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left. Pick ${spotsLeft === 1 ? 'one name' : `${spotsLeft} names`} or fewer.`, 'error');
       return;
     }
     setPicked(new Set());
@@ -78,10 +90,19 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
     <div className="ps" data-players-sheet>
       <div className="ps-summary" data-ps-summary>
         <p className="ps-count">
-          <b>
-            {s.paidCount} of {s.payableCount} paid
-          </b>
-          <span className="ps-each"> · {formatPrice(price)} each</span>
+          {s.payableCount > 0 ? (
+            <>
+              <b>
+                {s.paidCount} of {s.payableCount} paid
+              </b>
+              <span className="ps-each"> · {formatPrice(price)} each</span>
+            </>
+          ) : (
+            <>
+              <b>{canceled ? 'Canceled' : 'Nobody to pay yet'}</b>
+              {!canceled && <span className="ps-each"> · {formatPrice(price)} each</span>}
+            </>
+          )}
         </p>
         {anyOwes && !canceled && (
           <button type="button" className="ps-remind" data-ps-remind onClick={() => setRemind(true)}>
@@ -117,8 +138,9 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
         <ul className="ps-card" aria-label="Players in this game" data-ps-list>
           {listed.map((r) => {
             const isHeld = held.has(r.playerId);
-            const paid = r.status === 'confirmed' && r.paymentStatus === 'paid' && !r.refundedAt && !isHeld;
+            const paid = !isHeld && (r.lateFee ? r.lateFee.paid : r.status === 'confirmed' && r.paymentStatus === 'paid' && !r.refundedAt);
             const owes = !isHeld && owing(r);
+            const canEdit = live && !isHeld && (r.status === 'confirmed' || r.status === 'waitlisted');
             const chip = r.status === 'confirmed' ? payChip(r, s) : null;
             // Wide actions (two buttons, or a long chip such as "Paid with credit") drop under the name on a narrow screen; a plain "Paid" stays beside it.
             const wide = !isHeld && (owes || (!paid && !!chip) || (paid && chip?.label === 'Paid with credit'));
@@ -133,11 +155,12 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     <span className="ps-sub">Removed</span>
                   ) : paid ? (
                     <span className="ps-sub" data-ps-paid-line>
-                      {paidLine(r, tz)}
+                      {r.lateFee ? lateFeeLine(r) : paidLine(r, tz)}
                     </span>
                   ) : owes ? (
                     <span className="ps-sub ps-owes" data-ps-owes-line>
                       Owes {formatPrice(r.owesCents)}
+                      {r.lateFee ? <span className="ps-fee"> · {lateFeeLine(r)?.split(' · ')[0]}</span> : null}
                     </span>
                   ) : (
                     <span className="ps-sub">{r.status === 'waitlisted' ? `#${r.waitlistPosition} on waitlist` : payMoneyLine(r, s, tz) || 'Confirmed'}</span>
@@ -160,11 +183,24 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                       {ctx.d.venmoRequest === true && <RowRequest ctx={ctx} s={s} r={r} />}
                     </>
                   )}
+                  {canEdit && r.status === 'waitlisted' && (
+                    <button type="button" className="ps-btn ps-amber" disabled={busy} data-ps-givespot={r.name} aria-label={`Give ${r.name} a spot`} onClick={() => (full ? toast(fullWords, 'error') : void act(r.playerId, 'confirm', `${r.name} got a spot`))}>
+                      Give spot
+                    </button>
+                  )}
                   {!isHeld && !paid && !owes && chip && (
                     <span className={`ps-chip ps-${chip.tone}`}>{chip.label}</span>
                   )}
                 </div>
-                {live && !isHeld ? <RowMenu name={r.name} onRemove={() => setRemoving(r)} /> : <span className="ps-dots-gap" aria-hidden="true" />}
+                {canEdit ? (
+                  <RowMenu
+                    name={r.name}
+                    onRemove={() => setRemoving(r)}
+                    onWaitlist={r.status === 'confirmed' && !cleanup ? () => void act(r.playerId, 'waitlist', `${r.name} moved to waitlist`) : undefined}
+                  />
+                ) : (
+                  <span className="ps-dots-gap" aria-hidden="true" />
+                )}
               </li>
             );
           })}
@@ -249,8 +285,8 @@ function paidLine(r: AdminRosterEntry, tz: string): ReactNode {
   );
 }
 
-/** The small three-dot menu at the end of a row. It holds Remove only. Opens under the dots, or above them when there is no room below. */
-function RowMenu({ name, onRemove }: { name: string; onRemove: () => void }) {
+/** The small three-dot menu at the end of a row. It holds Remove (and To waitlist, the old sheet's other button, when the game has a waitlist). Opens under the dots, or above them when there is no room below. */
+function RowMenu({ name, onRemove, onWaitlist }: { name: string; onRemove: () => void; onWaitlist?: () => void }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
@@ -299,6 +335,21 @@ function RowMenu({ name, onRemove }: { name: string; onRemove: () => void }) {
       </button>
       {open && (
         <div className={`ps-pop${up ? ' ps-up' : ''}`} ref={pop} role="menu" aria-label={`Actions for ${name}`}>
+          {onWaitlist && (
+            <button
+              type="button"
+              role="menuitem"
+              className="ps-pop-item ps-pop-plain"
+              data-ps-waitlist={name}
+              aria-label={`Move ${name} to the waitlist`}
+              onClick={() => {
+                setOpen(false);
+                onWaitlist();
+              }}
+            >
+              To waitlist
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
