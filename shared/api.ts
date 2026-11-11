@@ -549,6 +549,10 @@ export interface AdminDashboard {
   lastCallTexts?: boolean;
   /** Settings > Feature switches > "Last call texts" is on (for everyone). */
   lastCallTextsForAll?: boolean;
+  /** Zip 34 "Check-in pay line" is on for this screen (server/checkInPay.ts): the Check-in text carries a soft pay line while somebody signed up still owes. Missing: the words are exactly as before. */
+  checkInPay?: boolean;
+  /** The Settings > Feature switches row for the Check-in pay line: on for every organizer phone and the texted Telegram link. */
+  checkInPayForAll?: boolean;
   /** "Tonight glow" is on for this screen / Settings > Feature switches > "Tonight glow" is on (for everyone). */
   tonightGlow?: boolean;
   tonightGlowForAll?: boolean;

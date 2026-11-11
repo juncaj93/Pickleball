@@ -91,6 +91,7 @@ import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
+import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
 import { phoneTagOf } from './phoneTag';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
@@ -252,6 +253,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const totals = await totalsRefreshFlags(ctx, group.id);
   // Zip 32 "Players sheet redo" (server/playersSheetRedo.ts): the new Players sheet look, only while on (off: this answer is exactly main's).
   const playersSheet = await playersSheetRedoFlags(ctx, group.id);
+  // Zip 34 "Check-in pay line" (server/checkInPay.ts): a pay line in the Check-in text, only while on (off: this answer is exactly main's).
+  const checkInPay = await checkInPayFlags(ctx, group.id);
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -398,6 +401,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
     ...(spentMatch.on ? { spentTotals: true as const } : {}),
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
+    ...(checkInPay.on ? { checkInPay: true as const } : {}),
+    ...(checkInPay.forAll ? { checkInPayForAll: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
     ...(playersSheet.forAll ? { playersSheetRedoForAll: true as const } : {}),
     ...(actingRows ? { actingOthers: actingRows } : {}),
@@ -2457,6 +2462,15 @@ export async function setPlayersSheetRedoSwitch(ctx: Ctx, body: Record<string, u
   const on = v.bool(body.on, 'on');
   await setPlayersSheetRedoForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'players_sheet_redo_on' : 'players_sheet_redo_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/checkin-pay-switch { on }: Zip 34 "Check-in pay line" for every organizer phone and the texted Telegram link. Words only; no data changes. */
+export async function setCheckInPaySwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setCheckInPayForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'checkin_pay_line_on' : 'checkin_pay_line_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

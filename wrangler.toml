@@ -220,6 +220,11 @@ SPENT_TOTALS = "on"
 # only. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Acting for others" (off at ship = nobody), plus a phone
 # opened once with /admin?actingothers=on. "off" = the kill switch, and it also stops recording the codes. Needs a deploy.
 ACTING_FOR_OTHERS = "on"
+# Zip 34 "Check-in pay line" (shared/checkInPay.ts): the night-before Check-in text (4 or more in) adds "Still in? Pay $14 to confirm." and "Need out? Tell me
+# tonight." while somebody signed up (not the organizer) still owes, and is exactly as before once everyone has paid. Needs Texts round 2 on. Words only: no
+# price, money rule or recipient changes. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Check-in pay line" (off at ship = nobody),
+# plus a phone opened once with /admin?checkinpay=on. "off" = the kill switch. Needs a deploy.
+CHECKIN_PAY_LINE = "on"
 # Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts): the "Players" sheet that opens from a game card's money cell (and the gear menu's
 # Players) redone from Alex's mock: "1 of 3 paid" with Remind, one list with Paid / Owes, Mark paid, Request and a three-dot menu for Remove, and
 # name chips to tap to add. Same actions as the old sheet. Organizer only, look only. "on" here only ALLOWS it; who sees it is Settings >
@@ -288,6 +293,7 @@ UNPAID_NUDGE = "on"
 TOTALS_REFRESH = "on"
 SPENT_TOTALS = "on"
 ACTING_FOR_OTHERS = "on"
+CHECKIN_PAY_LINE = "on"
 PLAYERS_SHEET_REDO = "on"
 # Zip 30, PREVIEW ONLY (never in [vars]): the shared preview database loses the Acting for others row whenever another channel re-seeds
 # it, so the preview shows the feature regardless. Live only ever follows the Settings row.
