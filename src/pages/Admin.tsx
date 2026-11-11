@@ -56,7 +56,7 @@ export function AdminApp() {
   // Instant taps (INSTANT_TAPS): a poll that set off before a save never draws over it, and taps still saving are drawn in. Off: as before.
   const tracker = useInstantTracker();
   const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend, demo], tracker);
-  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
+  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker, load.data?.tapGuardFix === true);
   useRefreshOnReturn(load.refresh);
   // Zip 12 step C, "Instant admin" (src/lastAdmin.ts): this phone's copy of its last dashboard, drawn at once with every action held and money
   // dimmed until the first fresh answer. Read once per page open; never in Pretend or the demo.

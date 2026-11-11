@@ -5,6 +5,7 @@ import { BANNER_TIMING, useToast } from './ui';
 import { startHold, trackHeld } from './undoHold';
 import { ADMIN_UNDO_MS } from '../shared/zip13';
 import { drawPatches, failureWords, LoadTracker, SaveLine, TapQueue, type TapResult } from './instant';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, dropThisTap, MOVED_PX } from '../shared/tapGuard';
 
 // Instant taps (INSTANT_TAPS) for a whole screen: the player page and the organizer page each make one root (useInstantRoot) and put
 // its store in <InstantContext.Provider>. Buttons call `useInstant()`: when it gives null, instant taps are off for this phone and the
@@ -68,10 +69,21 @@ export function useInstantTracker(): LoadTracker {
 // Money row moves). The second half of a quick double tap then lands on a DIFFERENT button: it must not count (it could join a game,
 // pay or drop the wrong person). While instant taps is on, a click within 400 ms and 24 px of the click before it, on another button,
 // is stopped before the page sees it. Keyboard clicks (no pointer position) are never stopped. The same idea as ui.tsx DOUBLE_TAP.
-const DOUBLE_TAP_MS = 400;
-const DOUBLE_TAP_PX = 24;
+//
+// Zip 35 "Tap guard fix" (shared/tapGuard.ts): with it on for this screen the rule is sharper. A repeat tap on the SAME button is stopped;
+// a tap on ANOTHER button is stopped only when the button tapped before is gone or has moved (the screen changed under the finger). A
+// neighbour that stayed put is a real tap and goes through (Hide from list, then Hide it, 23 px apart). Off: the rule above, unchanged.
 let guards = 0;
-let lastClick: { el: Element; at: number; x: number; y: number } | null = null;
+/** How many mounted screens have the Tap guard fix on (one screen at a time in practice). */
+let fixGuards = 0;
+type LastClick = { el: Element; at: number; x: number; y: number; left: number; top: number };
+let lastClick: LastClick | null = null;
+const TEXT_FIELD = 'input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]), textarea, select';
+function prevGoneOrMoved(prev: LastClick): boolean {
+  if (!prev.el.isConnected) return true;
+  const r = prev.el.getBoundingClientRect();
+  return Math.abs(r.left - prev.left) >= MOVED_PX || Math.abs(r.top - prev.top) >= MOVED_PX;
+}
 if (typeof document !== 'undefined') {
   document.addEventListener(
     'click',
@@ -83,25 +95,31 @@ if (typeof document !== 'undefined') {
       const now = performance.now();
       // A label and the switch inside it are one control (the browser clicks the switch for the label).
       const same = prev && (prev.el === el || prev.el.contains(el) || el.contains(prev.el) || (prev.el instanceof HTMLLabelElement && prev.el.control === el));
-      if (prev && !same && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX) {
+      const close = !!prev && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX;
+      const fix = fixGuards > 0;
+      if (prev && close && dropThisTap({ fix, hasPrev: true, same: !!same, close, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
       }
-      lastClick = { el, at: now, x: e.clientX, y: e.clientY };
+      // Where the button is now (only the Tap guard fix reads it later; off: nothing is measured).
+      const r = fix ? el.getBoundingClientRect() : null;
+      lastClick = { el, at: now, x: e.clientX, y: e.clientY, left: r?.left ?? 0, top: r?.top ?? 0 };
     },
     true,
   );
 }
-/** Turn the page-wide double-tap guard on while a screen with instant taps on is showing. */
-function useDoubleTapGuard(on: boolean) {
+/** Turn the page-wide double-tap guard on while a screen with instant taps on is showing. `fix`: the Tap guard fix is on for it too. */
+function useDoubleTapGuard(on: boolean, fix: boolean) {
   useEffect(() => {
     if (!on) return undefined;
     guards++;
+    if (fix) fixGuards++;
     return () => {
       guards--;
+      if (fix) fixGuards--;
     };
-  }, [on]);
+  }, [on, fix]);
 }
 
 // ---------- The button that was tapped shows it is working ----------
@@ -147,7 +165,7 @@ export const actingStamp = actingAs;
  * The root of a screen's instant taps. `data` is what the server sent, `reload` loads it again. Gives back the data with every tap still
  * waiting already drawn in, and the store for <InstantContext.Provider> (null when off: then `view` is `data` itself).
  */
-export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Promise<unknown>, tracker: LoadTracker): { view: T | null; store: InstantStore<T> | null } {
+export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Promise<unknown>, tracker: LoadTracker, tapGuardFix = false): { view: T | null; store: InstantStore<T> | null } {
   const toast = useToast();
   const [tick, setTick] = useState(0);
   const reloadRef = useRef(reload);
@@ -162,7 +180,7 @@ export function useInstantRoot<T>(on: boolean, data: T | null, reload: () => Pro
     q.attach();
     return () => q.dispose();
   }, [q]);
-  useDoubleTapGuard(on);
+  useDoubleTapGuard(on, tapGuardFix);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const view = useMemo(() => (on && data !== null && q.size > 0 ? drawPatches(data, q.patches()) : data), [data, tick, on]);
   const store = useMemo<InstantStore<T>>(

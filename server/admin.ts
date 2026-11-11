@@ -94,6 +94,7 @@ import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
+import { setTapGuardFixForAll, tapGuardFixFlags } from './tapGuardFix';
 import { phoneTagOf } from './phoneTag';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
@@ -257,6 +258,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const playersSheet = await playersSheetRedoFlags(ctx, group.id);
   // Zip 34 "Check-in pay line" (server/checkInPay.ts): a pay line in the Check-in text, only while on (off: this answer is exactly main's).
   const checkInPay = await checkInPayFlags(ctx, group.id);
+  // Zip 35 "Tap guard fix" (server/tapGuardFix.ts): which fast tap the page ignores, only while on (off: this answer is exactly main's).
+  const tapGuard = await tapGuardFixFlags(ctx, group.id);
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -408,6 +411,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
     ...(checkInPay.on ? { checkInPay: true as const } : {}),
     ...(checkInPay.forAll ? { checkInPayForAll: true as const } : {}),
+    ...(tapGuard.on ? { tapGuardFix: true as const } : {}),
+    ...(tapGuard.forAll ? { tapGuardFixForAll: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
     ...(playersSheet.forAll ? { playersSheetRedoForAll: true as const } : {}),
     ...(actingRows ? { actingOthers: actingRows } : {}),
@@ -2525,6 +2530,15 @@ export async function setPlayersSheetRedoSwitch(ctx: Ctx, body: Record<string, u
   const on = v.bool(body.on, 'on');
   await setPlayersSheetRedoForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'players_sheet_redo_on' : 'players_sheet_redo_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/tap-guard-switch { on }: Zip 35 "Tap guard fix" for every phone (player and organizer). Which fast tap the page ignores; no data changes. */
+export async function setTapGuardFixSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTapGuardFixForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'tap_guard_fix_on' : 'tap_guard_fix_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 
