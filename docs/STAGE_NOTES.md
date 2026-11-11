@@ -4312,3 +4312,17 @@ phone; preview only: `EXTENDED_TIME_PREVIEW = "on"`; Activity lines; `docs/FEATU
 - Pay in View as / Pretend: Pay opened the Pay sheet, but its Venmo button is silent on purpose in the demo copy (`openVenmo` never opens Venmo there), so it
   looked dead. In the demo copy only, that button (and Pay itself when there is no Pay sheet) now shows "Demo, nothing saved. Venmo would open here." and marks
   it paid on the copy; I paid says "Demo, nothing saved. Marked paid on the copy." Real phones are unchanged (`e2e/zip31.cjs`: the real site still owes $3).
+
+### Deploy (Wed Nov 11, 2026, 5:03 to 5:05 PM Eastern, on Alex's "ship it", after 🎾34.checkin was live)
+- Rebased on main `e763265` (🎾34 live as `ffd2763d` at 4:38 PM). Settings > Feature switches order: Extended time, Check-in pay line, Players sheet redo,
+  Acting for others. Final checks on that code: unit suite 2786 passed, 0 failed; `e2e/zip31.cjs` 103/103; `e2e/zip31-off.cjs` 10/10; the switch-row checks
+  money-rework 36, zip16 28, zip23 40, zip27 14, zip30 32, zip32 50, zip34 5 (its top-row check now knows Extended time sits above it).
+- Before: SQL export of live, saved to `pickleball-backups` as `export-20261111220509` (checked against the file); Time Travel bookmark
+  `00000f9d-00000000-00005120-95e8ac2f517eaae9247e65fefd049f87`; the 21 integrity checks all 0; pending migrations: only `0019_extended_time`.
+- Migration `0019_extended_time` applied to live (14 commands), then both check files: 21 checks 0, extension checks 0 (0 open shares).
+- PR #127 merged: main `0eaa6d5`. Site deployed from main with `npm run deploy`: deployment `18582eae` (5:04 PM). ROLLBACK ID: `ffd2763d` (🎾34, the
+  deployment before). The migration needs no rollback for a code rollback (main before 0019 runs on the migrated database, `e2e/zip31-off.cjs`).
+- After: live read-only check with NO PIN on the pages.dev address (the custom domain is not reachable from the build machine): home 200 "Pickleball",
+  /api/status 200, /admin 200, the page serves the new build (same asset as `18582eae`); the player answer has NO `extension` key (switch off). Database:
+  0 "Extended time" Settings rows (OFF), 0 shares, 0 games with extra time. Both check files 0 again.
+- The Extended time switch is OFF. Alex turns it on (Settings > Feature switches > "Extended time"), or tries it first on one phone with `?extendedtime=on`.
