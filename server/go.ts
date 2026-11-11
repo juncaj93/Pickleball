@@ -99,7 +99,7 @@ export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   // "Last call texts" (Zip 8) on top of round 2: Alex's last call words. Off: exactly as before.
   const lastCall = r2 && (await lastCallFor(ctx, group.id));
   // Zip 34 "Check-in pay line" on top of round 2: only a Check-in (4 or more in) can carry it, and only while somebody signed up still owes.
-  // Off: none of this runs, and the words are exactly what they were.
+  // Off: only the one switch read runs, and the words are exactly what they were.
   let someoneOwes = false;
   let priceCents = 0;
   const payLine = r2 && n >= MIN_PLAYERS && (await checkInPayFlags(ctx, group.id)).on;

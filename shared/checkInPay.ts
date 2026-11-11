@@ -12,7 +12,7 @@
 //    people who are signed up and in (never the waitlist, never the organizer). No money rule, price, seat or database change.
 import { formatPrice } from './money';
 import { checkInMessage } from './messages';
-import { checkInTextR2, dayGap, whenR2 } from './textsR2';
+import { checkInTextR2, dayGap, dayWordR2, whenR2 } from './textsR2';
 import { checkInTextLastCall } from './lastCall';
 
 export const CHECKIN_PAY_LINE = { task: 'checkin_pay_line_on', header: 'X-Checkin-Pay', link: 'checkinpay', env: 'CHECKIN_PAY_LINE', name: 'Check-in pay line' } as const;
@@ -43,8 +43,16 @@ interface SessionLike {
   endsAt: string;
 }
 
-/** "tonight" for a game tomorrow or today, "early" further out (the same rule as the other Check-in wordings). */
-const byWhen = (iso: string, tz: string, nowMs: number) => (dayGap(iso, tz, nowMs) <= 1 ? 'tonight' : 'early');
+/**
+ * When to tell Alex: "tonight" for a game tomorrow or tonight, "now" for a daytime game today (tonight would be wrong), "early" further out
+ * (the same word the other Check-in wordings use there).
+ */
+function byWhen(iso: string, tz: string, nowMs: number): 'tonight' | 'now' | 'early' {
+  const gap = dayGap(iso, tz, nowMs);
+  if (gap > 1) return 'early';
+  if (gap === 0 && dayWordR2(iso, tz, nowMs) === 'today') return 'now';
+  return 'tonight';
+}
 
 /**
  * The Check-in with the pay line (4 or more in, somebody signed up still owes). `priceCents` is the standard price the site shows players for

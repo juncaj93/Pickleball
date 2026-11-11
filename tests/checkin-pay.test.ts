@@ -41,6 +41,8 @@ describe('the words', () => {
     const far = checkInTextPayLine(thu730, TZ, Date.parse('2026-11-06T17:00:00Z'), 5, 1400, LINK).split('\n');
     expect(far[0]).toBe('Pickleball Thu Nov 12 @ 7:30pm!');
     expect(far[2]).toBe('Need out? Tell me early.'); // "tonight" would be wrong a week out
+    // A daytime game today: "tonight" would be wrong, so it says now.
+    expect(checkInTextPayLine({ startsAt: '2026-11-12T15:00:00.000Z', endsAt: '2026-11-12T17:00:00.000Z' }, TZ, Date.parse('2026-11-12T11:00:00Z'), 5, 1400, LINK).split('\n')[2]).toBe('Need out? Tell me now.');
   });
   it('is soft: no dashes, no threat, never says anyone is dropped, the address alone on the last line', () => {
     for (const t of [checkInTextPayLine(thu730, TZ, wedNoon, 6, 1400, LINK), checkInTextPayLine(thu730, TZ, Date.parse('2026-11-06T17:00:00Z'), 6, 1100, LINK)]) {

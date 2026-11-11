@@ -157,9 +157,9 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 5).map((e) => e.getAttribute('data-row')));
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 6).map((e) => e.getAttribute('data-row')));
     // (Zip 24's Booking hours row, Zip 27's Spent matches Totals row, Zip 30's Acting for others row and Zip 32's Players sheet redo row are newer and sit above it.)
-    assert(first[0] === 'playersSheetRedoAll' && first[1] === 'actingOthersAll' && first[2] === 'spentTotalsAll' && first[3] === 'bookingHoursAll' && first[4] === 'totalsRefreshAll', `newest first: ${first}`);
+    assert(first[0] === 'checkInPayAll' && first[1] === 'playersSheetRedoAll' && first[2] === 'actingOthersAll' && first[3] === 'spentTotalsAll' && first[4] === 'bookingHoursAll' && first[5] === 'totalsRefreshAll', `newest first: ${first}`);
     const row = page.locator('[data-row="totalsRefreshAll"]');
     assert(/Totals refresh/.test(await row.innerText()), 'row label');
     await row.locator('label').click();

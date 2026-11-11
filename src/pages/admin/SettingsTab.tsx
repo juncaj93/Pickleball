@@ -1377,7 +1377,7 @@ function BookingHoursRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 }
 /** Zip 34, "Check-in pay line" (CHECKIN_PAY_LINE, server/checkInPay.ts): a soft pay line in the night-before Check-in text while somebody signed up still owes. Words only. Off: only /admin?checkinpay=on. */
 function CheckInPayRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="checkInPayAll" path="/api/admin/checkin-pay-switch" name="Check-in pay line" hint="Check-in text adds Pay $14 to confirm, only while someone signed up still owes. Words only" flag={!!ctx.d.checkInPayForAll} dataAttr="data-checkin-pay-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="checkInPayAll" path="/api/admin/checkin-pay-switch" name="Check-in pay line" hint="Check-in text adds a pay line, only while someone signed up still owes. Words only" flag={!!ctx.d.checkInPayForAll} dataAttr="data-checkin-pay-all" />;
 }
 /** Zip 32, "Players sheet redo" (PLAYERS_SHEET_REDO, server/playersSheetRedo.ts): the Players sheet from Alex's mock. Organizer only, look only. Off: only /admin?playerssheet=on. */
 function PlayersSheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {

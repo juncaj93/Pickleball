@@ -220,7 +220,7 @@ SPENT_TOTALS = "on"
 # only. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Acting for others" (off at ship = nobody), plus a phone
 # opened once with /admin?actingothers=on. "off" = the kill switch, and it also stops recording the codes. Needs a deploy.
 ACTING_FOR_OTHERS = "on"
-# Zip 34 "Check-in pay line" (shared/checkInPay.ts): the night-before Check-in text (4 or more in) adds "Still in? Pay $14 to confirm." and "Need out? Tell me
+# Zip 34 "Check-in pay line" (shared/checkInPay.ts): the night-before Check-in text (4 or more in) adds "Still in? Pay <price> to confirm." and "Need out? Tell me
 # tonight." while somebody signed up (not the organizer) still owes, and is exactly as before once everyone has paid. Needs Texts round 2 on. Words only: no
 # price, money rule or recipient changes. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Check-in pay line" (off at ship = nobody),
 # plus a phone opened once with /admin?checkinpay=on. "off" = the kill switch. Needs a deploy.
