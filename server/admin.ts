@@ -90,6 +90,7 @@ import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
+import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { phoneTagOf } from './phoneTag';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
@@ -249,6 +250,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
   // Zip 23 "Totals refresh" (server/totalsRefresh.ts): the new Totals look, only while on (off: this answer is exactly main's).
   const totals = await totalsRefreshFlags(ctx, group.id);
+  // Zip 32 "Players sheet redo" (server/playersSheetRedo.ts): the new Players sheet look, only while on (off: this answer is exactly main's).
+  const playersSheet = await playersSheetRedoFlags(ctx, group.id);
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -395,6 +398,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
     ...(spentMatch.on ? { spentTotals: true as const } : {}),
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
+    ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
+    ...(playersSheet.forAll ? { playersSheetRedoForAll: true as const } : {}),
     ...(actingRows ? { actingOthers: actingRows } : {}),
     ...(acting.forAll ? { actingOthersForAll: true as const } : {}),
     ...(hours.on ? { bookingHours: true as const } : {}),
@@ -2443,6 +2448,15 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   const on = v.bool(body.on, 'on');
   await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/players-sheet-redo-switch { on }: Settings > Feature switches > "Players sheet redo" (Zip 32). Display only; moves no money. */
+export async function setPlayersSheetRedoSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setPlayersSheetRedoForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'players_sheet_redo_on' : 'players_sheet_redo_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

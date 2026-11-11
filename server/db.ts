@@ -112,6 +112,8 @@ export interface Env {
   TOTALS_REFRESH?: string;
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?spenttotals=on. Display only. */
   SPENT_TOTALS?: string;
+  /** Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?playerssheet=on. Organizer only, look only. */
+  PLAYERS_SHEET_REDO?: string;
   /** Zip 30 "Acting for others" (shared/actingForOthers.ts): the kill switch, allowed unless "off" ("off" also stops recording phone codes). Who sees it: Settings > Feature switches, /admin?actingothers=on. Organizer only, look only. */
   ACTING_FOR_OTHERS?: string;
   /** Zip 30, preview only ([env.preview.vars], never production): "on" shows Acting for others on that preview even if a re-seed dropped its Settings row. */

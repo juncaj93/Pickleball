@@ -116,7 +116,7 @@ function VrTitle({ cards, children }: { cards: boolean; children: ReactNode }) {
  * The second button on a row: "Request" (Venmo saved: opens Venmo with this person and what they owe), "Text" (no Venmo but a number: Messages
  * to them with the usual payment text), or the small gray words "no Venmo saved" (neither). Nothing is sent or charged here.
  */
-function RowRequest({ ctx, s, r }: { ctx: AdminCtx; s: AdminSessionView; r: AdminRosterEntry }) {
+export function RowRequest({ ctx, s, r }: { ctx: AdminCtx; s: AdminSessionView; r: AdminRosterEntry }) {
   const p = ctx.d.players.find((x) => x.id === r.playerId);
   const link = venmoRequestLinks(p?.venmo ?? null, r.owesCents, s.startsAt, ctx.d.group.timezone);
   if (link) {

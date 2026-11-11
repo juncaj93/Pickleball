@@ -521,6 +521,20 @@ html[data-alert-cards] .pop.toast .toast-action {
 html[data-alert-cards] .pop.toast .toast-action .m-undo-ring {
   color: var(--t-fill-ink);
 }
+/* Zip 32 (bug fix): the green Undo / OK pill used to carry the plain banner's negative margins (-16 px at the right), so it touched the toast's edge and
+   poked past its rounded corners. It now sits fully inside the toast with its own padding all round; the tap area stays 46 px tall through ::after. */
+html[data-alert-cards] .pop.toast:has(.toast-action) {
+  padding: 8px 10px 8px 12px;
+}
+html[data-alert-cards] .pop.toast .toast-action {
+  min-height: 0;
+  margin: 0 0 0 4px;
+}
+html[data-alert-cards] .pop.toast .toast-action::after {
+  content: '';
+  position: absolute;
+  inset: -4px -4px;
+}
 @media (prefers-color-scheme: dark) {
   html[data-alert-cards]:not([data-theme='light']) .pop.toast {
     box-shadow: 0 10px 28px rgb(0 0 0 / 50%);

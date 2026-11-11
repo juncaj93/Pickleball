@@ -220,6 +220,12 @@ SPENT_TOTALS = "on"
 # only. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Acting for others" (off at ship = nobody), plus a phone
 # opened once with /admin?actingothers=on. "off" = the kill switch, and it also stops recording the codes. Needs a deploy.
 ACTING_FOR_OTHERS = "on"
+# Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts): the "Players" sheet that opens from a game card's money cell (and the gear menu's
+# Players) redone from Alex's mock: "1 of 3 paid" with Remind, one list with Paid / Owes, Mark paid, Request and a three-dot menu for Remove, and
+# name chips to tap to add. Same actions as the old sheet. Organizer only, look only. "on" here only ALLOWS it; who sees it is Settings >
+# Feature switches > "Players sheet redo" (off at ship = nobody), plus a phone opened once with /admin?playerssheet=on. "off" = the kill
+# switch. Needs a deploy.
+PLAYERS_SHEET_REDO = "on"
 # Zip 24 "Booking hours" (shared/bookingHours.ts): a game outside the venue hours (8:00 AM to 10:00 PM Monday to Saturday, 8:00 AM to 7:00 PM
 # Sunday) is refused, on the screen and on the server, and Add game / Edit game get tap-to-pick times. Organizer only. Only a NEW game or a
 # CHANGED start or end is looked at; games that already exist are never touched. "on" here only ALLOWS it; who gets it is Settings > Feature
@@ -282,6 +288,7 @@ UNPAID_NUDGE = "on"
 TOTALS_REFRESH = "on"
 SPENT_TOTALS = "on"
 ACTING_FOR_OTHERS = "on"
+PLAYERS_SHEET_REDO = "on"
 # Zip 30, PREVIEW ONLY (never in [vars]): the shared preview database loses the Acting for others row whenever another channel re-seeds
 # it, so the preview shows the feature regardless. Live only ever follows the Settings row.
 ACTING_FOR_OTHERS_PREVIEW = "on"

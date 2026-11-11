@@ -608,6 +608,9 @@ export interface AdminDashboard {
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts), only while on (off: the answer is exactly as before): Players "Spent" counted the way Totals counts; and its Settings row. */
   spentTotals?: true;
   spentTotalsForAll?: true;
+  /** Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts), only while on (off: the answer is exactly as before): the new Players sheet look; and its Settings row. */
+  playersSheetRedo?: true;
+  playersSheetRedoForAll?: true;
   /** Zip 30 "Acting for others" (shared/actingForOthers.ts), only while on (off: the answer is exactly as before): the Home card's rows (taps made for someone else, last 7 days, newest first); and its Settings row. */
   actingOthers?: ActingRow[];
   actingOthersForAll?: true;

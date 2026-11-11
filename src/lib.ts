@@ -6,6 +6,7 @@ import { AFTER_GAME_CARD } from '../shared/afterGame';
 import { TOTALS_REFRESH } from '../shared/totalsRefresh';
 import { SPENT_TOTALS } from '../shared/spentTotals';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
+import { PLAYERS_SHEET_REDO } from '../shared/playersSheetRedo';
 import { phoneTag } from './phoneTag';
 import { BOOKING_HOURS } from '../shared/bookingHours';
 import { SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
@@ -222,6 +223,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(SPENT_TOTALS.link)) headers[SPENT_TOTALS.header] = 'on';
   // Zip 30 "Acting for others" private test switch for this phone (/admin?actingothers=on, =off ends it). See server/actingForOthers.ts.
   if (gameDayTest(ACTING_OTHERS.link)) headers[ACTING_OTHERS.header] = 'on';
+  // Zip 32 "Players sheet redo" private test switch for this phone (/admin?playerssheet=on, =off ends it). See server/playersSheetRedo.ts.
+  if (gameDayTest(PLAYERS_SHEET_REDO.link)) headers[PLAYERS_SHEET_REDO.header] = 'on';
   // Zip 24 "Booking hours" private test switch for this phone (/admin?bookinghours=on, =off ends it). See server/bookingHours.ts.
   if (gameDayTest(BOOKING_HOURS.link)) headers[BOOKING_HOURS.header] = 'on';
   // Zip 15 "Second Chance" private test switch for this phone (/admin?secondchance=on: the Home cards, never a Telegram), and the
@@ -781,7 +784,7 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, BOOKING_HOURS.link, ACTING_OTHERS.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);

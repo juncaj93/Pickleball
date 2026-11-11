@@ -1,0 +1,478 @@
+/* Zip 32, "Players sheet redo" (PLAYERS_SHEET_REDO): the Players sheet from Alex's mock (mocks/1_players_sheet_light.png / _dark.png). Every rule hangs
+ * on a class only the new sheet draws (.ps, .ps-sheet), so with the switch off nothing here applies and the old sheet looks exactly as before.
+ * Tokens: light first, then dark twice (the phone's dark mode, and the site's own dark choice), the same pattern as src/alert-cards.css.
+ * Every text and button color pair here is the site's own pair (src/alert-cards.css, src/mark-paid.css), at least 4.5:1. */
+
+.ps {
+  --ps-card: #ffffff;
+  --ps-line: #dad9cf;
+  --ps-ink: #18241d;
+  --ps-sub: #5b625d;
+  --ps-notice: #ecebe4;
+  --ps-green-tint: #e4f2ea;
+  --ps-green-ink: #226b4b;
+  --ps-green-fill: #226b4b;
+  --ps-green-fill-ink: #ffffff;
+  --ps-amber: #8a5a00;
+  --ps-amber-line: #b8780f;
+  --ps-blue: #2a3fb0;
+  --ps-blue-line: #2a3fb0;
+  --ps-purple-fill: #6a4fb0;
+  --ps-purple-fill-ink: #ffffff;
+  --ps-danger: #b3261e;
+  --ps-pop-shadow: 0 10px 28px rgb(10 20 15 / 20%);
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme='light']) .ps {
+    --ps-card: #18221c;
+    --ps-line: #2b3a31;
+    --ps-ink: #f1f3ec;
+    --ps-sub: #a4ada7;
+    --ps-notice: #263029;
+    --ps-green-tint: #1a2f24;
+    --ps-green-ink: #8be0b3;
+    --ps-green-fill: #7fd9a3;
+    --ps-green-fill-ink: #0b140f;
+    --ps-amber: #f0c26a;
+    --ps-amber-line: #e2a73c;
+    --ps-blue: #a5b5ee;
+    --ps-blue-line: #7f94e6;
+    --ps-purple-fill: #bba3f0;
+    --ps-purple-fill-ink: #1d1433;
+    --ps-danger: #ff9b92;
+    --ps-pop-shadow: 0 10px 28px rgb(0 0 0 / 50%);
+  }
+}
+html[data-theme='dark'] .ps {
+  --ps-card: #18221c;
+  --ps-line: #2b3a31;
+  --ps-ink: #f1f3ec;
+  --ps-sub: #a4ada7;
+  --ps-notice: #263029;
+  --ps-green-tint: #1a2f24;
+  --ps-green-ink: #8be0b3;
+  --ps-green-fill: #7fd9a3;
+  --ps-green-fill-ink: #0b140f;
+  --ps-amber: #f0c26a;
+  --ps-amber-line: #e2a73c;
+  --ps-blue: #a5b5ee;
+  --ps-blue-line: #7f94e6;
+  --ps-purple-fill: #bba3f0;
+  --ps-purple-fill-ink: #1d1433;
+  --ps-danger: #ff9b92;
+  --ps-pop-shadow: 0 10px 28px rgb(0 0 0 / 50%);
+}
+
+/* The sheet's body scrolls inside the sheet (the header stays put: .sheet-head is sticky and dialog.sheet scrolls, src/styles.css). The menus
+   below can open past the last row, so nothing in here clips. */
+.ps {
+  container: ps / inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: var(--ps-ink);
+  font-family: var(--body);
+}
+
+/* "1 of 3 paid · $14 each" and the purple Remind button. */
+.ps-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.ps-count {
+  margin: 0;
+  min-width: 0;
+  font-size: 1.15rem;
+  line-height: 1.25;
+}
+.ps-count b {
+  font-weight: 800;
+}
+.ps-each {
+  color: var(--ps-sub);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.ps-remind {
+  flex: none;
+  min-height: 44px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ps-purple-fill);
+  color: var(--ps-purple-fill-ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* "Closed" (a started or canceled game): one small grey line. */
+.ps-closed,
+.ps-empty {
+  margin: 0;
+  color: var(--ps-sub);
+  font-size: 0.95rem;
+}
+
+/* One slim grey notice for anyone who declined. No button on it. */
+.ps-declined {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--ps-notice);
+  color: var(--ps-sub);
+  font-size: 1rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.ps-declined b {
+  color: var(--ps-ink);
+  font-weight: 800;
+}
+.ps-dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--ps-sub);
+}
+
+/* The players: ONE card, thin lines between the rows. */
+.ps-card {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ps-line);
+  border-radius: 18px;
+  background: var(--ps-card);
+}
+.ps-row {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 4px;
+  padding: 10px 4px 10px 12px;
+  border-top: 1px solid var(--ps-line);
+}
+.ps-row:first-child {
+  border-top: 0;
+}
+.ps-ball {
+  display: grid;
+  place-items: center;
+}
+.ps-ball .ball {
+  width: 24px;
+  height: 24px;
+}
+.ps-who {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+.ps-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+.ps-time {
+  white-space: nowrap;
+}
+.ps-sub {
+  color: var(--ps-sub);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.ps-owes {
+  color: var(--ps-amber);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+.ps-acts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.ps-row[data-ps-state='removed'] {
+  opacity: 0.55;
+}
+
+/* Paid, and the other chips (Credit, Nothing owed, Waitlist). */
+.ps-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 800;
+  white-space: nowrap;
+  background: var(--ps-notice);
+  color: var(--ps-sub);
+}
+.ps-chip.ps-paid,
+.ps-chip.ps-ok {
+  background: var(--ps-green-tint);
+  color: var(--ps-green-ink);
+}
+.ps-chip.ps-warn {
+  color: var(--ps-amber);
+}
+
+/* Mark paid (amber outline) and Request (blue outline): the Home money card's own buttons, 34 px to see and 44 px to tap. */
+.ps-btn,
+.ps-acts .sc-req {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 34px;
+  min-width: 0;
+  margin: 0;
+  padding: 0 10px;
+  border: 1.5px solid;
+  border-radius: 10px;
+  background: transparent;
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ps-btn::after,
+.ps-acts .sc-req::after {
+  content: '';
+  position: absolute;
+  inset: -5px -2px;
+}
+.ps-btn.ps-amber {
+  color: var(--ps-amber);
+  border-color: var(--ps-amber-line);
+}
+.ps-acts .sc-req {
+  min-width: 0;
+  height: 34px;
+  color: var(--ps-blue);
+  border-color: var(--ps-blue-line);
+}
+.ps-acts .sc-req.sc-req-text {
+  color: var(--ps-blue);
+  border-color: var(--ps-blue-line);
+}
+.ps-acts .mp-none {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ps-sub);
+  white-space: normal;
+  max-width: 5.5rem;
+  line-height: 1.2;
+}
+.ps-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.ps-btn:active:not(:disabled),
+.ps-acts .sc-req:active {
+  filter: brightness(0.92);
+}
+.ps-btn:focus-visible,
+.ps-acts .sc-req:focus-visible,
+.ps-dots:focus-visible,
+.ps-pick:focus-visible,
+.ps-remind:focus-visible,
+.ps-add-btn:focus-visible,
+.ps-pop-item:focus-visible {
+  outline: 3px solid currentColor;
+  outline-offset: 2px;
+}
+
+/* The three-dot menu: 32 px to see, 44 px to tap. */
+.ps-menu,
+.ps-dots-gap {
+  position: relative;
+  width: 32px;
+  height: 32px;
+}
+.ps-dots {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ps-sub);
+  cursor: pointer;
+}
+.ps-dots::after {
+  content: '';
+  position: absolute;
+  inset: -6px -4px;
+}
+.ps-pop {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 2px);
+  z-index: 3;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid var(--ps-line);
+  border-radius: 14px;
+  background: var(--ps-card);
+  box-shadow: var(--ps-pop-shadow);
+}
+.ps-pop.ps-up {
+  top: auto;
+  bottom: calc(100% + 2px);
+}
+.ps-pop-item {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ps-danger);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: left;
+  cursor: pointer;
+}
+.ps-pop-item:active {
+  background: var(--ps-notice);
+}
+
+/* A row whose actions do not fit beside the name (a narrow phone or big text): the buttons drop to their own line under the name. */
+@container ps (max-width: 21rem) {
+  .ps-row[data-ps-wide] {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+  .ps-row[data-ps-wide] .ps-acts {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .ps-row[data-ps-wide] .ps-menu {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+/* A long name ('Christopher Vanderberg') gets the line to itself earlier than a short one. */
+@container ps (max-width: 27rem) {
+  .ps-row[data-ps-long][data-ps-wide] {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+  .ps-row[data-ps-long][data-ps-wide] .ps-acts {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .ps-row[data-ps-long][data-ps-wide] .ps-menu {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+@container ps (max-width: 15rem) {
+  .ps-row {
+    grid-template-columns: 24px minmax(0, 1fr) auto;
+  }
+  .ps-row .ps-acts {
+    grid-column: 2 / 4;
+    grid-row: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+  .ps-row .ps-menu,
+  .ps-row .ps-dots-gap {
+    grid-column: 3;
+    grid-row: 1;
+  }
+}
+
+/* ADD SOMEONE: a tappable chip for every eligible name, wrapping onto as many lines as it needs. */
+.ps-add {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ps-add-title {
+  margin: 4px 0 0;
+  color: var(--ps-sub);
+  font-size: 0.85rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.ps-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ps-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0 18px;
+  border: 1.5px solid var(--ps-line);
+  border-radius: 999px;
+  background: var(--ps-card);
+  color: var(--ps-ink);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.ps-pick[aria-pressed='true'] {
+  border: 2px solid var(--ps-green-fill);
+  padding: 0 17px;
+  color: var(--ps-green-ink);
+}
+.ps-add-btn {
+  min-height: 52px;
+  width: 100%;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ps-green-fill);
+  color: var(--ps-green-fill-ink);
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+.ps-add-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
