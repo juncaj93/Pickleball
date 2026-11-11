@@ -4193,3 +4193,14 @@ Game 4 (Booked, 8 in) is the 7-row case. The row is on in the seed (`BUILDING_ON
   390/360/320 x light/dark x text 100/125/150% with 3 and 10 players. Older scripts that list the switch rows (zip16, zip21, zip23, zip30, money-rework) were updated for the new top row.
   circles and round2 failed once under load and pass alone (circles also passes on main); instant-taps timing 136 ms under load, 19/19 alone.
 - `e2e/zip32-off.cjs` against main `c88d17b`: 22/22 identical with the switch OFF (the dashboard answer byte for byte, Home, and the old sheet from both openers, light and dark, 390 and 320).
+
+## Zip 34: Check-in text pay line (deployed Wed Nov 11, 2026, about 4:40 PM Eastern; switch OFF)
+
+- Shipped: switch "Check-in pay line" (`CHECKIN_PAY_LINE`), words only. The night-before Check-in text (4 or more in, Texts round 2 on) gets "N in. Still in? Pay $X to confirm." and "Need out? Tell me tonight." (early for a game more than a day away, now for a daytime game today) while a signed-up player who is not the organizer still owes. One shared builder (`checkInBody`, `shared/checkInPay.ts`) feeds the gear menu, the Home card and the Telegram link. Switch off or everyone paid: the text is exactly what it was. Alex decided: the line also shows on a game with no court booked.
+- No migration, no database change, no money logic. The live Settings row was left OFF; Alex turns it on himself.
+- Main commit: e763265 (PR #126). Live deployment: ffd2763d-2d57-4ea0-83cf-74ebccc60194.
+- ROLLBACK: the previous production deployment 05448495-8d43-477b-804e-38389d889033 (dd53dac) in Cloudflare (Workers & Pages > pickleball-club > Deployments > Rollback). Quicker, no deploy: `CHECKIN_PAY_LINE = "off"` or leave the Settings row off.
+- Restore points: SQL export `live-before-zip34-2026-11-11.sql` (saved with scripts/deploy-export.mjs); Time Travel bookmark `00000f9a-00000000-00005120-f880b5fff8785c5eb5bdddca744cff94`.
+- Integrity checks (21 columns) before and after: all 0.
+- Tests: unit 2744 passed, 2 skipped (36 new in tests/checkin-pay.test.ts); full browser suite 67 scripts, 62 passed in the first run (6 at a time, one port each); the other five (live, round2, motion, admin-motion, circles) failed only under load and passed alone (26, 25, 22, 28, 18). New e2e/zip34.cjs 5 of 5. Fresh reviewer: no blocking problem, its points fixed.
+- Running browser scripts in parallel needs a different E2E_PORT for each (several share a default port); auto-credit and money-visible have a fixed port.
