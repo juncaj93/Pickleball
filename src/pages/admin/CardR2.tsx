@@ -75,6 +75,12 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   const timeFade = useJustChanged(start, 300);
   const needsBook = !!courtNeed && !canceled;
   const length = lengthWords(gameMinutes(s.startsAt, s.endsAt));
+  // Zip 29: the Court | arrow button is for today's game and the coming ones; a game on an earlier day keeps what it showed (the cancel-by clock / nothing).
+  const dayNum = (ms: number) => {
+    const p = localParts(ms, tz);
+    return Date.UTC(p.year, p.month - 1, p.day);
+  };
+  const todayOrComing = dayNum(Date.parse(s.startsAt)) >= dayNum(now);
   // Zip 29: everyone who is in has paid (a green check), or somebody still owes (amber $). Nobody in yet: the plain green $ as before.
   const paidState = inCount > 0 ? (s.paidCount >= inCount ? 'all' : 'owed') : 'none';
   return (
@@ -177,7 +183,7 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
                     Book
                   </CourtReserveLink>
                 </span>
-              ) : s.courtNum !== undefined ? (
+              ) : s.courtNum !== undefined && todayOrComing ? (
                 // Zip 29: the game has a court number: "Court 13 | arrow" (the arrow opens directions, the same address and link as the player card).
                 <CourtJoined court={s.courtNum} dayLabel={formatShortDate(s.startsAt, tz)} />
               ) : (

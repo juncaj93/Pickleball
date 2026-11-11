@@ -1,14 +1,19 @@
 import { type ReactNode, useState } from 'react';
 import { AcIcon, AcTitle } from '../../AlertCard';
+import type { AdminRosterEntry, AdminSessionView } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
+import { siteAddress, smsHref } from '../../../shared/messages';
+import { paymentTextR2 } from '../../../shared/textsR2';
 import { formatShortDate, formatTime, formatWeekdayShort, localParts } from '../../../shared/time';
-import { venmoUsername } from '../../../shared/venmoRequest';
+import { venmoRequestLinks } from '../../../shared/venmoRequest';
+import { api, isIOS, openVenmo } from '../../lib';
 import { Sheet } from '../../ui';
 import type { AdminCtx } from '../Admin';
+import { opTap, useAction } from './action';
 import { RemindList } from './MoneyV2';
 import { ReworkRemind } from './MoneyReworkParts';
-import { unpaidRows } from './moneyList';
-import { VenmoRequestLink } from './VenmoLink';
+import { owedHomeGames } from './moneyList';
+import '../../mark-paid.css';
 import '../../venmo-request.css';
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -18,20 +23,18 @@ const dayKey = (ms: number, tz: string) => {
 };
 
 /**
- * Home, "Do this now": for each game on its game day or after that still has people who owe, one card, "Thu game: 3 haven't paid", with a
- * Remind button (opens the Remind sheet) and, per person, a Venmo request link when that player has a Venmo username saved, or the words
- * "no Venmo saved". Only with VENMO_REQUEST on; with it off nothing here exists.
+ * Home, "Do this now": for each game that still has people who owe, one card, "Thu game: 3 haven't paid", with a Remind button (opens the Remind
+ * sheet) and, per person, "Mark paid" next to "Request" (a Venmo username is saved), "Text" (no Venmo, a number is saved) or the words "no Venmo
+ * saved". Zip 29: this card took over from the second money card ("Mark paid tonight" / "Who owes you"), so it also lists the games coming up
+ * from their check-in time (src/pages/admin/moneyList.ts owedHomeGames). Only with VENMO_REQUEST on; with it off nothing here exists (and the old
+ * second card is drawn instead, exactly as before).
  */
 export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
   const [remind, setRemind] = useState<string | null>(null);
+  const { run } = useAction(ctx);
   if (ctx.d.venmoRequest !== true) return null;
   const tz = ctx.d.group.timezone;
-  const today = dayKey(Date.parse(ctx.d.now), tz);
-  const games = ctx.d.sessions
-    .filter((s) => s.hiddenFromList !== true && dayKey(Date.parse(s.startsAt), tz) <= today)
-    .map((s) => ({ s, rows: unpaidRows(s) }))
-    .filter((g) => g.rows.length > 0)
-    .sort((a, b) => a.s.startsAt.localeCompare(b.s.startsAt));
+  const games = owedHomeGames(ctx.d);
   if (games.length === 0) return null;
   const remindGame = games.find((g) => g.s.id === remind)?.s ?? null;
   return (
@@ -50,6 +53,10 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                   {rows.length === 1 ? "hasn't" : "haven't"} paid
                 </VrTitle>
                 <p className={ctx.d.alertCards === true ? 'small muted vr-sub ac-sub' : 'small muted vr-sub'}>
+                  {/* Two games on the same weekday (last Tuesday's and the coming one) would read the same: say which date. */}
+                  {games.some((g) => g.s.id !== s.id && formatWeekdayShort(g.s.startsAt, tz) === formatWeekdayShort(s.startsAt, tz) && dayKey(Date.parse(g.s.startsAt), tz) !== dayKey(Date.parse(s.startsAt), tz))
+                    ? `${formatShortDate(s.startsAt, tz)} · `
+                    : ''}
                   {common !== null ? `${formatPrice(common)} each` : 'Amounts differ'}
                   {s.state.flags.canceled ? ' · Canceled late, fee kept' : s.court ? ' · Court booked' : ''}
                 </p>
@@ -58,19 +65,31 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                 Remind
               </button>
             </div>
-            <ul className={ctx.d.alertCards === true ? 'vr-rows ac-body' : 'vr-rows'} aria-label={`Who owes for ${formatShortDate(s.startsAt, tz)}`}>
-              {rows.map((r) => {
-                const has = venmoUsername(ctx.d.players.find((p) => p.id === r.playerId)?.venmo ?? null) !== null;
-                return (
-                  <li key={r.playerId} data-vr-row={r.name}>
-                    <span className="vr-name">
-                      <strong>{r.name}</strong>
-                      {common === null && <span className="small muted"> · {formatPrice(r.owesCents)}</span>}
-                    </span>
-                    {has ? <VenmoRequestLink ctx={ctx} s={s} r={r} /> : <span className="small muted vr-none">no Venmo saved</span>}
-                  </li>
-                );
-              })}
+            <ul className="mp-rows" aria-label={`Who owes for ${formatShortDate(s.startsAt, tz)}`} data-vr-rows>
+              {rows.map((r) => (
+                <li key={r.playerId} className="mp-row" data-vr-row={r.name}>
+                  <span className="mp-name">
+                    <strong>{r.name}</strong>
+                    {common === null && <span className="mp-price">{formatPrice(r.owesCents)}</span>}
+                  </span>
+                  <button
+                    type="button"
+                    className="mp-btn mp-amber"
+                    data-vr-markpaid={r.name}
+                    aria-label={`Mark ${r.name} paid for ${formatShortDate(s.startsAt, tz)}`}
+                    onClick={() =>
+                      void run(
+                        () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents }),
+                        `${r.name} marked paid`,
+                        opTap({ kind: 'paid', sessionId: s.id, playerId: r.playerId }, 'Mark paid', ctx.d.adminUndo === true),
+                      )
+                    }
+                  >
+                    Mark paid
+                  </button>
+                  <RowRequest ctx={ctx} s={s} r={r} />
+                </li>
+              ))}
             </ul>
           </article>
         );
@@ -90,4 +109,37 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
 function VrTitle({ cards, children }: { cards: boolean; children: ReactNode }) {
   if (cards) return <AcTitle as="h3" className="vr-title">{children}</AcTitle>;
   return <h3 className="vr-title">{children}</h3>;
+}
+
+/**
+ * The second button on a row: "Request" (Venmo saved: opens Venmo with this person and what they owe), "Text" (no Venmo but a number: Messages
+ * to them with the usual payment text), or the small gray words "no Venmo saved" (neither). Nothing is sent or charged here.
+ */
+function RowRequest({ ctx, s, r }: { ctx: AdminCtx; s: AdminSessionView; r: AdminRosterEntry }) {
+  const p = ctx.d.players.find((x) => x.id === r.playerId);
+  const link = venmoRequestLinks(p?.venmo ?? null, r.owesCents, s.startsAt, ctx.d.group.timezone);
+  if (link) {
+    return (
+      <a
+        className="sc-req"
+        href={link.url}
+        data-app-href={link.appUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => openVenmo(e, link)}
+        data-venmo-request={r.name}
+        aria-label={`Venmo request ${formatPrice(r.owesCents)} from ${r.name}`}
+      >
+        Request
+      </a>
+    );
+  }
+  if (!p?.phone) return <span className="mp-none">no Venmo saved</span>;
+  const first = r.name.trim().split(/\s+/)[0] || r.name;
+  const body = paymentTextR2(first, r.owesCents, [s], ctx.d.group.timezone, Date.parse(ctx.d.now), siteAddress(ctx.d.group.playerLink));
+  return (
+    <a className="sc-req sc-req-text" href={smsHref(p.phone, body, isIOS)} data-sc-textone={r.name} aria-label={`Text ${r.name} about the ${formatPrice(r.owesCents)}`}>
+      Text
+    </a>
+  );
 }

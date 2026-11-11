@@ -209,6 +209,10 @@ async function main() {
     world.tonightId = tonight[0].id;
     assert((await api('POST', `/api/admin/sessions/${world.tonightId}/booked`)).ok(), 'book tonight');
     assert((await api('PUT', `/api/admin/sessions/${world.tonightId}/court-number`, { court: 13 })).ok(), 'court 13');
+    // A game from an earlier day (Sunday) with a court number, to prove past games keep what they showed.
+    const earlier = dash.sessions.filter((x) => x.startsAt >= '2026-11-08T00:00:00.000Z' && x.startsAt < '2026-11-10T00:00:00.000Z' && !x.state.flags.canceled).sort((a, b) => a.startsAt.localeCompare(b.startsAt))[0];
+    world.pastCourtId = earlier.id;
+    assert((await api('PUT', `/api/admin/sessions/${earlier.id}/court-number`, { court: 7 })).ok(), 'court 7 on an earlier game');
     const allPaid = dash.sessions.find((s) => s.note === 'All paid');
     world.allPaidId = allPaid.id;
     const j = await api('POST', `/api/admin/sessions/${allPaid.id}/me`, { in: true });
@@ -499,13 +503,8 @@ async function main() {
         await check(`item 3 (${tag}): the length line "${T.len && T.len.text}" is small, regular weight, gray, quieter than the time`, async () => {
           assert(T.len && T.time, 'no length line or time');
           assert(T.len.text === '2 hours', `Tonight's length ${T.len.text}`);
-          // KNOWN ON MAIN TOO (not this zip's): in the stacked big-text layout (text 150% on a phone) every THIS WEEK card's tile column is 0 px wide,
-          // so its time AND length line have no size at all (checked on main 88a5356: time 0 px). Nothing to compare there; the Tonight card is
-          // then exactly as broken as every other card. Reported to Alex, not fixed here.
-          if (T.time.size === 0 && T.len.size === 0) {
-            knownOnMain.add(`${tag}: time and length line have zero size in the stacked layout (same on main)`);
-            return;
-          }
+          // Zip 29 fixed the big-text layout where the tile column was 0 px wide (time and length had no size): both must have a real size at every text size.
+          assert(T.time.size > 0 && T.len.size > 0, `time ${T.time.size} px, length line ${T.len.size} px: they have no size`);
           assert(Number(T.len.weight) <= 500 && Number(T.time.weight) >= 650, `weights ${T.len.weight} vs ${T.time.weight}`);
           assert(T.len.size < T.time.size, `sizes ${T.len.size} vs ${T.time.size}`);
           const a = parseRgb(T.len.color);
@@ -548,14 +547,20 @@ async function main() {
   // =============================================================================================================================
   // ITEM 3 and 4a, 4b (the organizer's game cards)
   // =============================================================================================================================
-  const playerDirections = await (async () => {
-    const { ctx, page } = await phone(browser, { width: 390 });
+  // The player card's Court and Directions buttons: the link, and the outline and word colors (light and dark) the admin button must match.
+  const playerBtnLook = {};
+  let playerDirections = null;
+  for (const scheme of ['light', 'dark']) {
+    const { ctx, page } = await phone(browser, { width: 390, scheme });
     await page.goto(`${BASE}/?as=Alex`);
     await page.locator(`#row-${world.tonightId}`).waitFor();
-    const href = await page.locator(`#row-${world.tonightId} [data-gd-directions]`).getAttribute('href');
+    playerDirections = await page.locator(`#row-${world.tonightId} [data-gd-directions]`).getAttribute('href');
+    playerBtnLook[scheme] = await page.locator(`#row-${world.tonightId} .gd-btn`).first().evaluate((b) => {
+      const c = getComputedStyle(b);
+      return { border: c.borderTopColor, width: c.borderTopWidth, color: c.color };
+    });
     await ctx.close();
-    return href;
-  })();
+  }
 
   for (const scheme of ['light', 'dark'])
     for (const width of [390, 360, 320])
@@ -584,8 +589,10 @@ async function main() {
             const dir = c.querySelector('[data-court-directions]');
             const cancel = c.querySelector('[data-cancel-by]');
             const foot = c.querySelector('[data-r2-foot]');
+            const half = cj && cj.querySelector('[data-court-num]');
             return {
               id,
+              btnLook: cj ? { border: getComputedStyle(cj).borderTopColor, width: getComputedStyle(cj).borderTopWidth, h: R(cj).h, dividerColor: getComputedStyle(dir).borderLeftColor, dividerWidth: getComputedStyle(dir).borderLeftWidth, color: getComputedStyle(half).color, arrow: getComputedStyle(dir).color } : null,
               stacked: getComputedStyle(c.querySelector('.scard-tilecol')).flexDirection === 'row',
               cardW: R(c).w - 24,
               len: len ? { text: len.textContent, size: parseFloat(rgb(len, 'fontSize')), weight: rgb(len, 'fontWeight'), color: rgb(len, 'color'), r: R(len) } : null,
@@ -619,6 +626,13 @@ async function main() {
           assert(tonight.court.href === playerDirections && tonight.court.target === '_blank', `directions ${tonight.court.href} vs player ${playerDirections}`);
           assert(tonight.court.r.x >= tonight.court.cell.x - 0.5 && tonight.court.r.r <= tonight.court.cell.r + 0.5, `the button runs out of its cell: ${JSON.stringify(tonight.court.r)} cell ${JSON.stringify(tonight.court.cell)}`);
           assert(!tonight.cancelBy, 'a clock next to the court button');
+          // Zip 29 (Alex): the soft periwinkle outline of the player card's buttons (same color and 1 px), the deep blue words, the same 32 px height.
+          const pl = playerBtnLook[scheme];
+          const bl = tonight.btnLook;
+          assert(bl.border === pl.border && bl.width === pl.width, `outline ${bl.border} ${bl.width} vs the player's ${pl.border} ${pl.width}`);
+          assert(bl.dividerColor === pl.border && bl.dividerWidth === pl.width, `divider ${bl.dividerColor} ${bl.dividerWidth}`);
+          assert(bl.color === pl.color && bl.arrow === pl.color, `words ${bl.color}, arrow ${bl.arrow} vs the player's ${pl.color}`);
+          assert(Math.abs(bl.h - 32) <= 0.6, `height ${bl.h}`);
           for (const c of cards) {
             const s = sessions.find((x) => x.id === c.id);
             if (s.courtNum !== undefined) assert(c.court && c.court.text === `Court ${s.courtNum}`, `${c.id.slice(0, 8)}: court ${s.courtNum} but button ${c.court && c.court.text}`);
@@ -676,6 +690,32 @@ async function main() {
             assert(Math.abs(c.paid.txtSize - 0.86 * rem) <= 0.4, `text ${c.paid.txtSize} vs ${0.86 * rem}`);
           }
         });
+        await check(`money cards (${tag}): one card, "Who hasn't paid": Mark paid next to Request or Text on every row, Remind on every game, the second card is gone, nothing cut off`, async () => {
+          const m = await page.evaluate(() => ({
+            old: document.querySelectorAll('article[aria-label="Mark paid tonight"], article[aria-label="Who owes you"], [data-mp-card]').length,
+            cards: document.querySelectorAll('[data-vr-card]').length,
+            remind: document.querySelectorAll('[data-vr-card] [data-vr-remind]').length,
+            rows: [...document.querySelectorAll('[data-vr-row]')].map((r) => ({
+              who: r.getAttribute('data-vr-row'),
+              mark: r.querySelectorAll('button[data-vr-markpaid]').length,
+              request: r.querySelectorAll('[data-venmo-request]').length,
+              text: r.querySelectorAll('[data-sc-textone]').length,
+              none: /no Venmo saved/.test(r.textContent) ? 1 : 0,
+              buttons: r.querySelectorAll('button, a').length,
+            })),
+          }));
+          assert(m.old === 0, `the second money card is still there (${m.old})`);
+          assert(m.cards >= 3 && m.remind === m.cards, `${m.cards} game cards, ${m.remind} Remind buttons`);
+          assert(m.rows.length >= 6, `${m.rows.length} rows`);
+          for (const r of m.rows) {
+            assert(r.mark === 1, `${r.who}: ${r.mark} Mark paid buttons`);
+            assert(r.request + r.text + r.none === 1, `${r.who}: Request ${r.request}, Text ${r.text}, no-Venmo words ${r.none}`);
+            assert(r.buttons <= 2, `${r.who}: ${r.buttons} buttons on a row (two at most: Mark paid and Request or Text)`);
+          }
+          assert(m.rows.some((r) => r.request === 1) && m.rows.some((r) => r.text === 1), 'the world should have both a Request and a Text row');
+          const bad = await page.evaluate(findClipping, { root: '[data-vr-cards]' });
+          assert(bad.length === 0, bad.slice(0, 4).join(' | '));
+        });
         await check(`item 4a/4b (${tag}): nothing cut off or overlapping on the organizer's game cards`, async () => {
           const bad = [];
           for (const id of [world.tonightId, world.allPaidId]) {
@@ -688,6 +728,49 @@ async function main() {
         if (scheme === 'dark' && width === 390 && pct === 100) await page.locator(`#session-${world.tonightId}`).screenshot({ path: path.join(SHOTS, 'zip29-admin-card-dark.png') });
         await ctx.close();
       }
+
+  await check('money cards: Mark paid on a row of the merged card marks that player paid (Undo window, then saved) and the row goes', async () => {
+    const { ctx, page } = await phone(browser, { width: 390, signedIn: true });
+    const dashBefore = await (await ctx.request.get(BASE + '/api/admin/dashboard')).json();
+    await page.goto(`${BASE}/admin`);
+    await page.locator('[data-vr-card]').first().waitFor({ timeout: 20000 });
+    // Sage on the 8:45 PM extra game (Court 3) owes $14 in the world.
+    const card = page.locator(`[data-vr-card="${dashBefore.sessions.find((x) => x.courtNum === 3).id}"]`);
+    const sage = card.locator('[data-vr-row="Sage"]');
+    assert((await sage.count()) === 1, 'Sage is on the 8:45 PM card');
+    await sage.locator('button[data-vr-markpaid]').click();
+    await page.waitForTimeout(6500);
+    const after = await (await ctx.request.get(BASE + '/api/admin/dashboard')).json();
+    const s = after.sessions.find((x) => x.courtNum === 3);
+    const row = s.roster.find((r) => r.name === 'Sage');
+    assert(row.paymentStatus === 'paid', `Sage is ${row.paymentStatus} after Mark paid`);
+    assert((await page.locator(`[data-vr-card="${s.id}"] [data-vr-row="Sage"]`).count()) === 0, 'the row is gone');
+    await ctx.close();
+  });
+
+  await check('item 4a: a game from an earlier day keeps what it showed (no Court | arrow), though it has a court number', async () => {
+    const { ctx, page } = await phone(browser, { width: 390, signedIn: true });
+    await page.goto(`${BASE}/admin`);
+    await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
+    await page.locator('button', { hasText: /^Show all/ }).first().click();
+    await page.locator(`#session-${world.pastCourtId}`).waitFor({ timeout: 10000 });
+    let card = page.locator(`#session-${world.pastCourtId}`);
+    // A folded row: open it with a tap on its tile so the footer is drawn.
+    if ((await card.locator('[data-r2-foot]').count()) === 0) {
+      await card.locator('.tile').first().click().catch(() => card.click());
+      await page.waitForTimeout(500);
+      card = page.locator(`#session-${world.pastCourtId}`);
+    }
+    const cell = await page.evaluate((id) => {
+      const c = document.getElementById(`session-${id}`);
+      return { exists: !!c, joined: !!(c && c.querySelector('[data-court-joined]')), foot: !!(c && c.querySelector('[data-r2-foot]')) };
+    }, world.pastCourtId);
+    assert(cell.exists && !cell.joined, `earlier game: ${JSON.stringify(cell)}`);
+    // And the server really sent a court number for it (so the rule, not a missing number, is what hides the button).
+    const sent = (await (await ctx.request.get(BASE + '/api/admin/dashboard')).json()).sessions.find((x) => x.id === world.pastCourtId);
+    assert(sent.courtNum === 7, `court number sent: ${sent.courtNum}`);
+    await ctx.close();
+  });
 
   // =============================================================================================================================
   // ITEM 4c: the folded TONIGHT tile (WebKit, device scale 3)

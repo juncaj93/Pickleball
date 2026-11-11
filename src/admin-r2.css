@@ -225,10 +225,11 @@
   min-width: 0;
   height: 32px;
   box-sizing: border-box;
-  border: 1.5px solid var(--gd-blue);
+  /* Soft periwinkle outline, the same softness as the player card's Court and Directions buttons (1 px, the blue at 45 %); the words and the arrow keep the deep blue. */
+  border: 1px solid color-mix(in srgb, var(--gd-blue) 45%, transparent);
   border-radius: 10px;
   color: var(--gd-blue);
-  background: transparent;
+  background: color-mix(in srgb, var(--gd-blue) 2%, transparent);
 }
 .r2-courtbtn-half {
   position: relative;
@@ -262,7 +263,7 @@
 .r2-courtbtn-dir {
   width: 30px;
   flex: none;
-  border-left: 1.5px solid var(--gd-blue);
+  border-left: 1px solid color-mix(in srgb, var(--gd-blue) 45%, transparent);
 }
 .r2-courtbtn-dir svg {
   width: 15px;

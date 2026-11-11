@@ -3,7 +3,9 @@
  * (the phone's dark mode, and the site's own dark choice), the same pattern as src/alert-cards.css. */
 
 .mp-card,
-.sc-card {
+.sc-card,
+.vr-card-ac,
+.vr-card {
   --mp-muted: #6a6e66;
   --mp-amber: #8a5a00;
   --mp-amber-line: #b8780f;
@@ -14,7 +16,9 @@
 }
 @media (prefers-color-scheme: dark) {
   html:not([data-theme='light']) .mp-card,
-  html:not([data-theme='light']) .sc-card {
+  html:not([data-theme='light']) .sc-card,
+  html:not([data-theme='light']) .vr-card-ac,
+  html:not([data-theme='light']) .vr-card {
     --mp-muted: #9aa097;
     --mp-amber: #f0c26a;
     --mp-amber-line: #e2a73c;
@@ -25,7 +29,9 @@
   }
 }
 html[data-theme='dark'] .mp-card,
-html[data-theme='dark'] .sc-card {
+html[data-theme='dark'] .sc-card,
+html[data-theme='dark'] .vr-card-ac,
+html[data-theme='dark'] .vr-card {
   --mp-muted: #9aa097;
   --mp-amber: #f0c26a;
   --mp-amber-line: #e2a73c;
@@ -187,4 +193,49 @@ html[data-alert-cards] .mp-head .ac-title {
   .mp-row .sc-req {
     padding: 0 9px;
   }
+}
+
+/* Zip 29: the Home "Who hasn't paid" card now carries Mark paid and Request / Text on each row (the second money card is gone). */
+.vr-cards .mp-rows {
+  margin-top: 8px;
+}
+.vr-cards .mp-row .sc-req {
+  color: var(--mp-blue);
+  border-color: var(--mp-blue-line);
+}
+.vr-cards .mp-row .sc-req.sc-req-text {
+  color: var(--mp-purple);
+  border-color: var(--mp-purple-line);
+}
+.vr-cards .mp-row .sc-req {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  height: 34px;
+  padding: 0 12px;
+  border: 1.5px solid;
+  border-radius: 10px;
+  background: transparent;
+  font-family: var(--body);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.vr-cards .mp-row .sc-req::after {
+  content: '';
+  position: absolute;
+  inset: -5px 0;
+}
+/* No Venmo and no number: the small gray words, where the second button would be. */
+.mp-none {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--mp-muted);
+  white-space: nowrap;
 }

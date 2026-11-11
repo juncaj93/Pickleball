@@ -88,7 +88,10 @@
   }
   .schedule > .sched.tier-this .sched-tilecol,
   .schedule > .sched.tier-next .sched-tilecol {
-    width: auto;
+    /* Zip 29: a full-width row. It was `width: auto`, and because this column is a size container (its time is sized from its own width) and
+       the card keeps `align-items: flex-start`, its width came out 0 px: the time and the length line beside the tile had no size at all
+       (text 150% on a phone). Full width gives them room; the tile keeps its 84 / 70 px and the words sit beside it. */
+    width: 100%;
     flex-direction: row;
     align-items: center;
     gap: 12px;

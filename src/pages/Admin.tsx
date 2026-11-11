@@ -444,7 +444,10 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   // The same moving clock as the Do this now card, so the two always agree (also past midnight with no reload).
   const asking = new Set(courtCards(ctx.d, nowMs, `${window.location.origin}/admin`).filter((c) => c.kind === 'played').map((c) => c.session.id));
   const first: TodoItem[] = items.filter((i) => i.kind === 'finalize' && !asking.has(i.session.id));
-  const rest = items.filter((i) => i.kind !== 'finalize' && !refunds.includes(i));
+  // Zip 29: with "Venmo request" on, the "Who hasn't paid" card (Mark paid, Request or Text and Remind on every row) is the one money card; the second
+  // card ("Mark paid tonight" / "Who owes you") is gone. With it off the second card is drawn exactly as before (the first one does not exist then).
+  const oneMoneyCard = ctx.d.venmoRequest === true;
+  const rest = items.filter((i) => i.kind !== 'finalize' && !refunds.includes(i) && !(oneMoneyCard && (i.kind === 'tonight' || i.kind === 'owed')));
   const key = (item: TodoItem) =>
     item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');
   // Preview only (shared/previewCalm.ts): just this zip's cards (Second Chance, Mark paid tonight); ?alerts=all shows every card.
@@ -454,9 +457,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
       <>
         <SecondChanceHome ctx={ctx} />
         <UnpaidTextSheet ctx={ctx} />
-        {markPaid.map((item) => (
-          <TodoCard key={key(item)} ctx={ctx} item={item} />
-        ))}
+        {oneMoneyCard ? <OwedVenmoCards ctx={ctx} /> : markPaid.map((item) => <TodoCard key={key(item)} ctx={ctx} item={item} />)}
         <SessionsSection ctx={ctx} />
       </>
     );
