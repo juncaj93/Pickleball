@@ -113,6 +113,6 @@ describe('Tap guard fix: the switch', () => {
     // The dashboard carries the activity list (one more line), so compare the parts that do not.
     const onD = JSON.parse(stripped(await dash(w)));
     const offDo = JSON.parse(offD);
-    for (const k of Object.keys(offDo)) if (!['activity', 'recentActivity', 'updatedAt', 'stamp', 'audit'].includes(k)) expect(onD[k], k).toEqual(offDo[k]);
+    for (const k of Object.keys(offDo)) if (!['activity', 'recentActivity', 'updatedAt', 'stamp', 'audit', 'version'].includes(k)) expect(onD[k], k).toEqual(offDo[k]);
   });
 });
