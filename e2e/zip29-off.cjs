@@ -119,7 +119,15 @@ async function main() {
         assert(a.markPaid.length >= 1, 'main should show the old money card in this world');
         assert(b.merged === 0 && a.merged === 0, `merged card with the switch off: main ${a.merged}, branch ${b.merged}`);
         assert(b.markPaid.length === a.markPaid.length, `${b.markPaid.length} cards vs main's ${a.markPaid.length}`);
-        for (let i = 0; i < a.markPaid.length; i++) assert(a.markPaid[i] === b.markPaid[i], `card ${i} differs from main: ${a.markPaid[i].length} vs ${b.markPaid[i].length} characters`);
+        for (let i = 0; i < a.markPaid.length; i++) {
+          // (The two servers run on different ports, and a Text link carries the site's address: the port is the only difference allowed.)
+          const norm = (h) => h.replace(new RegExp(`(?:%3A|:)(?:${PM}|${PB})`, 'g'), ':PORT');
+          const x = norm(a.markPaid[i]);
+          const y = norm(b.markPaid[i]);
+          let k = 0;
+          while (k < x.length && x[k] === y[k]) k++;
+          assert(x === y, `card ${i} differs from main at ${k}: main «${x.slice(Math.max(0, k - 60), k + 60)}» branch «${y.slice(Math.max(0, k - 60), k + 60)}»`);
+        }
         assert(JSON.stringify(a.rows) === JSON.stringify(b.rows), 'the people differ');
       });
     }

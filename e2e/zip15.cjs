@@ -136,7 +136,7 @@ async function main() {
     const { ctx, page } = await admin();
     await page.locator('[data-sc-cards]').waitFor();
     const kinds = await page.evaluate(() => [...document.querySelectorAll('main article.ac, main section.do-now, main [data-refund-request], main [data-payment-claim], main [data-finalize], main [data-vr-cards]')].map((e) => e.getAttribute('aria-label') || e.className));
-    const extra = kinds.filter((k) => !/Mark paid tonight|who hasn't paid|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
+    const extra = kinds.filter((k) => !/Mark paid tonight|who hasn't paid|vr-card|sc-card|Second|Same-day/.test(k) && !/^(Tonight|Today|Tue|Reopened|Court open|4 signed)/.test(k));
     // No note on screen (Alex, Nov 8: the links work, nothing says so).
     assert((await page.locator('[data-preview-calm], [data-sc-pretend]').count()) === 0, 'a preview note on screen');
     // Zip 29: the one money card is "Who hasn't paid" (Mark paid on every row); the second card (Mark paid tonight / Who owes you) is gone.

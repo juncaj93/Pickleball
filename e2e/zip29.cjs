@@ -752,20 +752,15 @@ async function main() {
     const { ctx, page } = await phone(browser, { width: 390, signedIn: true });
     await page.goto(`${BASE}/admin`);
     await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
-    await page.locator('button', { hasText: /^Show all/ }).first().click();
-    await page.locator(`#session-${world.pastCourtId}`).waitFor({ timeout: 10000 });
-    let card = page.locator(`#session-${world.pastCourtId}`);
-    // A folded row: open it with a tap on its tile so the footer is drawn.
-    if ((await card.locator('[data-r2-foot]').count()) === 0) {
-      await card.locator('.tile').first().click().catch(() => card.click());
-      await page.waitForTimeout(500);
-      card = page.locator(`#session-${world.pastCourtId}`);
-    }
-    const cell = await page.evaluate((id) => {
-      const c = document.getElementById(`session-${id}`);
+    // Games from an earlier day live in History: tap the row to open its card in the sheet.
+    await page.locator('.tabbar button, .tabbar a', { hasText: /^History$/ }).first().click();
+    await page.locator(`li[data-session="${world.pastCourtId}"] .history-row`).click();
+    await page.locator('dialog[open] [data-r2-card]').waitFor({ timeout: 10000 });
+    const cell = await page.evaluate(() => {
+      const c = document.querySelector('dialog[open] [data-r2-card]');
       return { exists: !!c, joined: !!(c && c.querySelector('[data-court-joined]')), foot: !!(c && c.querySelector('[data-r2-foot]')) };
-    }, world.pastCourtId);
-    assert(cell.exists && !cell.joined, `earlier game: ${JSON.stringify(cell)}`);
+    });
+    assert(cell.exists && cell.foot && !cell.joined, `earlier game: ${JSON.stringify(cell)}`);
     // And the server really sent a court number for it (so the rule, not a missing number, is what hides the button).
     const sent = (await (await ctx.request.get(BASE + '/api/admin/dashboard')).json()).sessions.find((x) => x.id === world.pastCourtId);
     assert(sent.courtNum === 7, `court number sent: ${sent.courtNum}`);
