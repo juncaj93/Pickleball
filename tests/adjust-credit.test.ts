@@ -131,7 +131,7 @@ describe('Adjust credit: the switch', () => {
   });
   it('S6 no migration was added for it', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql'));
-    expect(files.at(-1)).toBe('0019_extended_time.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code), Zip 31 0019 (extended time); this feature itself still adds none
+    expect(files.filter((f) => f <= '0019_extended_time.sql').at(-1)).toBe('0019_extended_time.sql'); // Zip 33: newer migrations (0020) come from other zips // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code), Zip 31 0019 (extended time); this feature itself still adds none
   });
   it('S7 switch off and nothing adjusted: the dashboard credit data equals a world that never heard of it', async () => {
     const w = await world();

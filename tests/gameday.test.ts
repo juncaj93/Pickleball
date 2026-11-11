@@ -24,7 +24,7 @@ const courtOf = (w: W, id: string) => (w.app.db.raw.prepare('SELECT court FROM s
 describe('migration 0017: one nullable court column, 1 to 16', () => {
   it('adds only sessions.court (it was the newest migration until Zip 30 added 0018 and Zip 31 0019), and existing games stay empty', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort();
-    expect(files.filter((f) => f > '0017_court.sql')).toEqual(['0018_phone_tag.sql', '0019_extended_time.sql']);
+    expect(files.filter((f) => f > '0017_court.sql' && f <= '0019_extended_time.sql')).toEqual(['0018_phone_tag.sql', '0019_extended_time.sql']);
     const sql = readFileSync(new URL('../migrations/0017_court.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '').trim();
     // Additive only: exactly one statement, an ADD COLUMN. Nothing dropped, renamed, updated or copied.
     expect(sql.split(';').filter((x) => x.trim())).toHaveLength(1);

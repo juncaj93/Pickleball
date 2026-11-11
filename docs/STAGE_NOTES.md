@@ -4312,3 +4312,51 @@ phone; preview only: `EXTENDED_TIME_PREVIEW = "on"`; Activity lines; `docs/FEATU
 - Pay in View as / Pretend: Pay opened the Pay sheet, but its Venmo button is silent on purpose in the demo copy (`openVenmo` never opens Venmo there), so it
   looked dead. In the demo copy only, that button (and Pay itself when there is no Pay sheet) now shows "Demo, nothing saved. Venmo would open here." and marks
   it paid on the copy; I paid says "Demo, nothing saved. Marked paid on the copy." Real phones are unchanged (`e2e/zip31.cjs`: the real site still owes $3).
+
+## Zip 33: Games index (🎾33.index), Wed Nov 11, 2026
+Status: built and tested on fake data. NOT applied to the preview database, NOT deployed. Waiting for Alex's "ship it". Database change: quiet window only, and after 🎾31's 0019 is on main.
+No screen, money rule, price, credit rule, Telegram message or cost changed. Only `migrations/0020_games_index.sql` (three indexes) and tests were added.
+
+### What was slow, in plain words
+Every open screen asks "anything new?" every 5 seconds, and the Home screens and the 5-minute clock ask more. Two things made them read far more than needed, and both grow every week:
+1. The lookups for "games not ended yet" (or ended in the last 90 days) read every game ever made. No index on a game's end time.
+2. Every "is this feature switch on?" question reads ALL `mark` rows of `task_log`. Switch rows and per-game marks (court_booked, played, price_lock: about 3 per finished game) live in the same table, so with Fewer database trips ON (as on live) the shared switch read, the animation setting and the hidden-games read each read every mark. This was the biggest growth, bigger than the games table.
+
+### Measured (real D1 engine, locally: wrangler's workerd; the `rows_read` number D1 bills; every request's real statements, run by the real site code)
+Fake group shaped like live (10 players, switches ON as on live, about 3 marks and 6 to 8 sign-ups per old game), today 15 games, plus 35, 50, 100 and 500 games. Rows read per call, before -> after:
+
+| call | 15 games (today) | 35 | 50 | 100 | 500 |
+| --- | --- | --- | --- | --- | --- |
+| player 5-second check | 308 -> 250 | 589 -> 351 | 771 -> 356 | 1371 -> 356 | 6171 -> 356 |
+| player Home load | 798 -> 680 | 1599 -> 1181 | 2059 -> 1346 | 3559 -> 1846 | 15559 -> 5846 |
+| organizer 5-second check | 312 -> 317 | 832 -> 797 | 1014 -> 907 | 1564 -> 1207 | 5965 -> 3608 |
+| organizer Home load | 1590 -> 1458 | 4109 -> 3597 | 5659 -> 4792 | 10759 -> 8692 | 51560 -> 39893 |
+| Money tab | 325 -> 264 | 446 -> 265 | 536 -> 265 | 836 -> 265 | 3236 -> 265 |
+| History tab | 219 -> 209 | 279 -> 209 | 324 -> 209 | 474 -> 209 | 1674 -> 209 |
+| 5-minute clock tick | 69 -> 64 | 209 -> 64 | 314 -> 64 | 664 -> 64 | 3464 -> 64 |
+
+The player 5-second check (the busiest call) becomes flat. Real D1, preview database, BEFORE only (read-only, 65 games): games in window 65, sign-ups 274 and 87, all switch rows 43, animation setting 42, hidden games 42, organizer marks 84, tick games 65 rows. After numbers need 0020 applied to `pickleball-preview` (not done yet).
+
+### What is NOT fixed by indexes (needs a code change; NOT done, for Alex to decide)
+- Organizer Home still grows: lifetime "games played" count per player (reads every past sign-up), "oldest unpaid game" lookback (every game older than 90 days, from about Feb 2027), the id/date list of every game (credit history labels), late-drop counts (a small partial index on `session_players (session_id) WHERE late_drop_at IS NOT NULL` fixes it: held back because the brief caps this zip at three indexes; 500 games: 4425 rows saved per organizer Home), the organizer 5-second check's `task_log` marks read (all marks, part of the fingerprint). These touch money screens or the fingerprint, so no rewrite was done.
+- Two small costs of the games index: with every game still inside the 90-day window it sorts the window (a few more rows: organizer check 312 -> 317, tick at 15 games 69 -> 64 is a gain). It pays off clearly from about 35 games on.
+- `credit_ledger` and `refund_requests` are read whole by the organizer check; tiny today (20 and 1 rows).
+
+### Same answers
+`tests/games-index.test.ts` (6 tests): the file holds three CREATE INDEX IF NOT EXISTS and nothing else, runs twice, adds exactly the three names, row counts equal, the lookups use the new indexes (and did not before), every player and organizer answer (5-second checks, Home, Money, History, three players) holds the same JSON values with and without the indexes, and the DROP statements in the file bring the old plans back with the same answers. One field, `gameMonthCounts` (an object built from a query with no ORDER BY), lists its months in a different key order on the migrated database; the Money month list is rebuilt from the keys (`monthChoices` sorts), so the order is never read. Fresh reviewer: all plan changes checked on 238 statement shapes from about 77 test files, no changed result; found only that 10 older tests pinned 0018 as the newest migration (fixed: they look at the newest up to 0018).
+Integrity checks (21 columns): all 0 before and after on the local copies; on the preview database before: all 0 (info_open_late_fees 4). After: not run (migration not applied there yet).
+
+### Rollback
+Today's code runs on the migrated database unchanged (indexes are invisible to old code; every test in the suite runs it that way), so a code rollback needs NO database step. Statements, each instant, no data touched:
+```
+DROP INDEX IF EXISTS idx_sessions_group_ends;
+DROP INDEX IF EXISTS idx_task_log_switch_rows;
+DROP INDEX IF EXISTS idx_task_log_game_marks;
+```
+If 0019 lands later it applies normally (wrangler applies any file not yet recorded). If 0019 also creates `idx_sessions_group_ends`, it must use IF NOT EXISTS.
+
+### Zip 33 follow-up (Wed Nov 11, 2026, Alex's answers)
+- Migration 0020 applied to `pickleball-preview` ONLY (fake data; live untouched). All three indexes exist there; the 21 integrity checks read exactly what they read before (all 0, info_open_late_fees 4).
+- Real D1 numbers on the preview database (65 games, all inside the 90-day window, 42 switch rows, no per-game marks), rows read before -> after: games in window 65 -> 124 (the window is sorted; all 65 games qualify, so no saving yet), everyone's sign-ups 274 -> 239, own sign-ups 87 -> 84, alert tick 65 -> 54, hidden games 42 -> 0, shared switch read 43 -> 43, animation 42 -> 42, one switch question 33 -> 33. The indexes pay off as games age past 90 days and per-game marks pile up; the preview has neither, so it shows the plan switching, not the saving. The scaling table above is the real picture.
+- Decisions (Alex): stay at three indexes (no late-drop index). The code-level reads listed under "What is NOT fixed by indexes" are PARKED, no follow-up zip: revisit when live daily rows read approach the free plan's daily cap.
+- Ship order (Alex): 🎾31.extended (0019) first, then this. If 0019 or anything else touches `idx_sessions_group_ends`, use IF NOT EXISTS. Earliest window: Thu after 11 PM Eastern or Friday, quiet hours, after 🎾31 is live, and only after Alex says "ship it". Then: rebase on main, full unit suite alone, SQL backup, Time Travel bookmark, 21 checks before, apply 0020 live, deploy, live read-only check without a PIN, 21 checks after, rollback ID, drop statements ready.
