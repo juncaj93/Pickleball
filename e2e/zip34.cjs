@@ -136,7 +136,7 @@ async function main() {
   };
 
   // ================================================================ the Settings row
-  await check('the Settings row "Check-in pay line" is the TOP row, can be switched off and on with a tap, and holds at 390/360/320, light and dark', async () => {
+  await check('the Settings row "Check-in pay line" sits right under Zip 31\'s Extended time at the top, can be switched off and on with a tap, and holds at 390/360/320, light and dark', async () => {
     assert((await dash()).checkInPayForAll === true, 'the preview world should have the row on (PREVIEW SWITCHES RULE)');
     assert((await setSwitch(false)).ok, 'switch off');
     assert((await dash()).checkInPayForAll === undefined, 'off after the Settings row is off');
@@ -146,8 +146,9 @@ async function main() {
         await page.locator('.tabbar button', { hasText: 'Settings' }).click();
         await page.waitForTimeout(400);
         for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-row')));
-        assert(first[0] === 'checkInPayAll' && first[1] === 'playersSheetRedoAll', `newest first: ${first}`);
+        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 3).map((e) => e.getAttribute('data-row')));
+        // (Zip 31's Extended time is newer and sits on top.)
+        assert(first[0] === 'extendedTimeAll' && first[1] === 'checkInPayAll' && first[2] === 'playersSheetRedoAll', `newest first: ${first}`);
         const r = page.locator('[data-row="checkInPayAll"]');
         await r.scrollIntoViewIfNeeded();
         assert(/Check-in pay line/.test(await r.innerText()), 'row label');
