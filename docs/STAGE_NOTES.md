@@ -3972,3 +3972,55 @@ None added. Item 1 ships live as a look-only change (label and link on the Add g
 - Fresh reviewer (deploy rules and switch docs touched): no breaking problems; fixed its 5 wording and doc points, the `npm run deploy --dry-run` (no `--`) case, the no-`.git` case for the name check, README and PREVIEW_FAKE_DB deploy lines.
 
 - After Alex walked the preview: TONIGHT tile change dropped (tile and tests are exactly main's). Add game "Book court" and Edit game "Change court" approved. main was still `d290376` at that point (no 🎾27.money merge yet), so nothing to rebase. Re-run after the revert: zip7 33/33, zip18 103/103, zip21 8/8, zip22 8/8, zip24 26/26, instant-taps 19/19 (its one earlier failure was a 100 ms timing check under 4-at-once load), tsc clean, name check passes, unit tests zip28/zip7/preview-seed 50/50.
+
+## Zip 29: look and name polish (🎾29.polish) - built Wed Nov 11, 2026
+Look and name only. No money logic, no database change, no migration, no new cost, no new switch (the pieces below are display only; the Court button only
+exists where the "Game day card" row is already ON, because that is what sends the court number). Built on main `88a5356` (🎾27 and 🎾28 live). Branch
+`claude/new-session-np4za1`. NOT deployed (preview only; ships on Alex's "ship it").
+
+### What changed
+1. Rename to "Pickleball" (was "Pickleball Bros"). `SITE_NAME` and the fallback is "Pickleball"; the browser tab, the Home Screen title and the web app
+   name come from the Settings group name once a screen has it (`src/siteName.ts`, set by the player screen and the organizer's dashboard; blank falls
+   back to "Pickleball"; `shared/settings.ts` `siteNameFor`). Changed: `index.html` (title, apple title, description, share preview), `public/manifest.webmanifest`
+   (name and short name), `shared/settings.ts`, the two TEST Telegram alerts and the alert test text, the calendar file's PRODID, the Setup placeholder, the backup
+   error words, the fake preview group name ("Pickleball (PREVIEW, fake data)": the "PREVIEW, fake data" marker the wipe guard looks for stays), README, docs, tests
+   and the browser tests' fake group name. Left on purpose: `migrations/0001_init.sql` first comment line (an applied migration is never edited), the history
+   in this file and in `docs/AUDIT*.md`, and one "was Pickleball Bros until Zip 29" note in `docs/SITE_RULES.md`. Repo, domain, database and backup `format`
+   ('pickleball-backup') are unchanged. Phones keep the old name on a bookmark already added to the Home Screen until it is added again.
+2. Player Home Tonight card (`src/gameday.css`): the game day card is now the same size as every other THIS WEEK card. The old 66 px tile column and every
+   size override of the game day tile, time, badge and gap are gone; the tile is the normal THIS WEEK tile with a band on top (TONIGHT replaces the weekday, which
+   is no longer drawn: `weekday` prop removed from `PlayerTile`). Band: the site's TONIGHT colors (dark green and white letters; bright green and dark letters in
+   dark mode), as tall as the weekday row it replaces (`9px + the weekday's own size`), so the tile is exactly as tall as a plain one at any text size. Edge to
+   edge: a tile with a court ring lets the band run out under the ring (ring drawn as an inset shadow on top); a tile with its own border clips the band to
+   its rounded inside edge. Outline: the court ring (`--ts-booked`: ink in light, green in dark). Glow: one still-soft blur (it breathes between two blurs; no
+   hard ring; Reduce Motion holds a soft glow). Badge (every THIS WEEK card): 26 px, centered on the tile's top-right corner, on top, with a 3 px ring of the
+   card's own color. Court | Directions are the same buttons, now half of a narrower column (they fit side by side at 390 and 360, and 320 at normal text; at
+   bigger text they stack, as they did).
+3. Game length line: the player cards already had it (the game's own length, Zip 9). Admin game tiles now have it under the time (`scard-length`, from
+   `lengthWords(gameMinutes(start, end))`, regular weight, gray, smaller than the time, inside the 56 px column).
+4. Admin Home card (`CardR2.tsx`, `admin-r2.css`): (a) a game with a court number shows "Court 13 | arrow" in the footer's right cell (the arrow is the same
+   `directionsUrl(COURT_ADDRESS)` link as the player card's Directions; "Court 13" opens the court map like the player's Court button). No court number: the
+   cell is exactly as before (cancel-by clock, empty after the time, or the Book button, which keeps priority where a court is still needed because it is the only
+   Book button with the new layout). (b) money cell: everyone in has paid = green circle with a check and normal text; anyone owes, or nobody has paid = amber
+   circle with $ and amber text (`--warn-edge` circle, `--warn-fg` words, which keeps the contrast); nobody in yet keeps the plain look. Same circle (1.3125rem) and
+   text (0.86rem) size as before. (c) folded TONIGHT tile (`src/zip29.css`): the band has a real height (`clamp(16px, 1.05rem, 20px)`) with the word centered by flex
+   (no line-height luck), TONIGHT 7.5 px (was 6.75) growing to 8.5 px with big text, the tile clips the band to its rounded inside edge so no cream corner shows.
+   TOM keeps its 8 px. The tile stays 48 px wide.
+5. Duplicate money cards on admin Home: NOT deleted. They do NOT show the same information. "Who hasn't paid" cards (`OwedVenmoCards`, VENMO_REQUEST) list every game
+   on or before today, including games canceled late with the fee kept and late-fee debts (`unpaidRows`), with Remind and Venmo requests; "Mark paid tonight" / "Who
+   owes you" (`TodoCard`) list only confirmed players in games from the check-in time on (so future games too), no late-fee debts, with a Mark paid button the other
+   card lacks. Per the brief (different information: stop and ask), both stay; the question is in the report.
+
+### Found, not fixed (also on main 88a5356)
+- Big text (150% on a phone) switches the THIS WEEK cards to "tile above the words"; there the tile column is 0 px wide, so every card's time and length line
+  have no size at all (the date tile still shows). Checked on main with the same emulation. The Tonight card used to dodge it only because its 66 px column rule won.
+
+### Tests
+- `tests/zip29-rename.test.ts` (3): no file says Pickleball Bros / Pickle Bros (except the history), the fallback and tab names, `siteNameFor`. `tests/polish.test.ts` knows the new name.
+- `e2e/zip29.cjs` (in `npm run test:e2e`): WebKit at device scale 3 when it can start (else Chromium, and it says so), 390 / 360 / 320 (and 420 for the folded tile),
+  light and dark, text 100 / 125 / 150%: Tonight tile size equals the weekday tile; band colors and 4.5:1 contrast; word inside the band; pixels just inside both
+  rounded corners are the band's color; glow shadow, no clipping ancestor, no step in brightness along three lines out from the tile; badge on the corner, hit tests
+  all around it, pixels of the ring equal the card's color, no clipping ancestor (Tonight and weekday cards); buttons side by side; length lines; the admin length line,
+  Court button and its link equal to the player's, the clock cell unchanged, money cell states and sizes; the folded tile's glyph box at least 3 px inside the band
+  (above and below) and 2 px inside the tile each side, never touching the date number. `E2E_BREAK=tile|band|badge|glow` puts the old rules back and the matching checks fail.
+- `e2e/zip14.cjs` (66 px tile, weekday TUE) and `e2e/zip22.cjs` (7 px each side of the 6.75 px word) were rewritten for the new look.

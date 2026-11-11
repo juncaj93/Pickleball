@@ -32,7 +32,7 @@ The $14 above is the 2 hour game, the usual one. Every length has its own up-fro
 - The site never sends texts. It opens Messages with prepared text ending with the plain link. The only other outbound message is Telegram alerts to Alex.
 
 ## Player screen (live)
-- Three tiers: THIS WEEK (big tile), NEXT WEEK (smaller tile), LATER (flat rows). Start time sits under the date tile. A checkmark badge sits on the tile when you are in. Blue TONIGHT strip on game day.
+- Three tiers: THIS WEEK (big tile), NEXT WEEK (smaller tile), LATER (flat rows). Start time sits under the date tile. A checkmark badge sits on the tile when you are in. On game day the date tile wears a green TONIGHT band (the card is the same size as every other THIS WEEK card; Zip 29). The game's length ("2 hours") sits under the time on player cards and admin game tiles.
 - A game with no court booked is a normal game: status "Court not booked", count "3 of 4 in", button "I'm in". Players never see the words waitlist, waiting or standby on it. $14 due, Pay and I paid appear once the card says Court booked.
 - Counts show ball circles ("3 of 4 in", "N in" at 4 or more). Payment states: "$14 due" with Pay, "Paid $14", "Paid with credit" with Undo, part credit, waitlist, canceled.
 - A CREDIT chip near the top (only when balance is above zero) opens the last 10 credit changes. Drop out and I'm in toasts state what happened to money (money audit release, may be on a preview until Alex says ship it: check git log and docs).
