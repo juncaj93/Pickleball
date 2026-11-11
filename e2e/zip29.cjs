@@ -298,6 +298,7 @@ async function main() {
           mon: R(tile.querySelector('.mon')),
           ring: tb ? cs(tb, 'boxShadow') : null,
           ringBorder: tb ? cs(tb, 'borderTopColor') : null,
+          ownBorder: cs(tile, 'borderTopColor'),
           badge: chk ? R(chk) : null,
           badgeBorder: chk ? cs(chk, 'borderTopWidth') : null,
           badgeClippers: chk ? clippers(chk) : [],
@@ -359,6 +360,11 @@ async function main() {
           assert(ring, `ring ${T.ring}`);
           if (ink) assert(lum(ring) < 0.05, `outline should be black-ish: ${T.ring}`);
           else assert(lum(ring) > 0.45 && ring[1] > ring[0], `outline should be green: ${T.ring}`);
+          // An added game's Tonight tile has no court ring: its own border must be the same ink / green.
+          const own = m.bare && parseRgb(m.bare.ownBorder);
+          assert(own, `no plain-border Tonight tile (${m.bare && m.bare.ownBorder})`);
+          if (ink) assert(lum(own) < 0.05, `plain-border outline should be black-ish: ${m.bare.ownBorder}`);
+          else assert(lum(own) > 0.45 && own[1] > own[0], `plain-border outline should be green: ${m.bare.ownBorder}`);
         });
         await check(`item 2 (${tag}): the word TONIGHT sits fully inside its band (3 px above and below, 2 px each side)`, async () => {
           const g = T.tagGlyph;
@@ -366,6 +372,18 @@ async function main() {
           const band = T.tag;
           assert(g.y - band.y >= 3 && band.b - g.b >= 3, `glyph ${g.y.toFixed(1)}..${g.b.toFixed(1)} in band ${band.y.toFixed(1)}..${band.b.toFixed(1)}`);
           assert(g.x - T.tile.x >= 2 + T.bw && T.tile.r - g.r >= 2 + T.bw, `glyph ${g.x.toFixed(1)}..${g.r.toFixed(1)} in tile ${T.tile.x.toFixed(1)}..${T.tile.r.toFixed(1)}`);
+          // The check badge (centered on the tile's top-right corner) must not touch the word: at the word's top, middle and bottom, the circle's left
+          // edge is at least 2 px right of the word's end.
+          const b = T.badge;
+          const rad = b.w / 2;
+          const cx = b.x + rad;
+          const cy = b.y + rad;
+          for (const y of [g.y, (g.y + g.b) / 2, g.b]) {
+            const dy = y - cy;
+            if (Math.abs(dy) >= rad) continue;
+            const edge = cx - Math.sqrt(rad * rad - dy * dy);
+            assert(edge - g.r >= 2, `the word ends at ${g.r.toFixed(1)}, the badge starts at ${edge.toFixed(1)} (${(edge - g.r).toFixed(1)} px)`);
+          }
         });
         await check(`item 2 (${tag}): the band fills the tile edge to edge, no pale gap in the top corners (pixels; the ring tile and the plain-border tile)`, async () => {
           await freezeGlow(page);

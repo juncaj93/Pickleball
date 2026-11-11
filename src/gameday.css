@@ -75,6 +75,8 @@ html[data-game-day] .schedule > .sched.gd .ptile .day {
 /* A tile with no court ring of its own (an added game): the band is cut to the tile's rounded inside edge, so no cream corner shows. */
 html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight:not(.ts) {
   overflow: hidden;
+  /* Its own outline is the same ink (light) or green (dark) as the court ring on the other Tonight tiles. */
+  border-color: var(--ts-booked);
 }
 /* A tile with the court ring (Booked, Not booked, Waitlist): the ring is the tile's border. The band runs out under it to the tile's outer
    edge and the ring is drawn on top, so the band meets the outline with no gap at the corners, light or dark. The solid ring is an inset

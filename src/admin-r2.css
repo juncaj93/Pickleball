@@ -216,8 +216,8 @@
   flex: none;
 }
 
-/* Zip 29: "Court 13 | arrow", one outlined button in two halves (the player card's joined button look, in the admin footer). Each half is 44 px tall to
-   tap (the drawing is smaller). The words shrink a little on a narrow phone so the button never runs out of its cell. */
+/* Zip 29: "Court 13 | arrow", one outlined button in two halves (the player card's joined button look, in the admin footer). The button is 32 px tall and each half
+   has a 44 px tap area (the drawing is smaller). The words shrink a little on a narrow phone so the button never runs out of its cell. */
 .r2-courtbtn {
   display: inline-flex;
   align-items: stretch;
