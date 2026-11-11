@@ -454,7 +454,7 @@ openssl rand -base64 24                # prints a random code you can use
 npx wrangler pages secret put SETUP_TOKEN --project-name pickleball-club
 
 # 5. Build and publish
-npm run deploy
+npm run deploy      # guarded: it refuses unless you are on the main branch with everything committed (commit your wrangler.toml edit first)
 ```
 
 Wrangler prints the live address, for example `https://pickleball-club.pages.dev`.

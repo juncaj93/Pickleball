@@ -17,8 +17,19 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 
 ## Deploy
 
-- Site (Pages): `npm run deploy` (from main). Rollback: the previous production deployment in Cloudflare (Workers & Pages >
-  pickleball-club > Deployments > ... > Rollback).
+- Database change first (only when this deploy adds a file under `migrations/`; Audit A, A-07). Check what is pending, then apply it BEFORE the
+  site, so the new code never runs against a column that is not there yet:
+  `npx wrangler d1 migrations list pickleball --remote` (must show only the new file; if anything else is listed, stop: it would be applied too),
+  then `npm run db:migrate:remote`. The newest migration today is `0017_court`. A deploy with no new migration file skips this step.
+- Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06): `scripts/deploy.mjs` refuses unless you are on the `main`
+  branch AND the folder has no unsaved changes, then builds and ships with `--branch main` spelled out. From a detached checkout, from any
+  other branch or from a messy folder it stops and says why; nothing is built or sent. (A first deploy from a detached checkout once went to a
+  preview called "HEAD" instead of live.) `npm run deploy -- --dry-run` (note the `--` before it) shows what it would do without building or
+  sending anything. The build also runs `npm run check:names` first (fails if two files differ only by capital letters, which breaks the
+  build on a Mac). Rollback: the previous production deployment in Cloudflare (Workers & Pages > pickleball-club > Deployments > ... > Rollback).
+- Preview (fake data, never live): `npm run deploy:preview` (Zip 28). It refuses a detached checkout (the preview would be called "HEAD") and
+  refuses `main` (a main deploy is the live site), builds, and ships with `--branch <your branch name>`, so the preview has a clear name.
+  An unsaved-changes folder is allowed for a preview (it warns). Same `-- --dry-run` option. A preview needs no rollback (just deploy again).
 - Error box (`pickleball-error-box`, Zip 21, only when `worker/box.ts` or `shared/errorAlerts.ts` changed; BEFORE the site, which binds to it):
   `npx wrangler deploy --config worker/box.wrangler.toml`. Rollback: `npx wrangler rollback <version id> --config worker/box.wrangler.toml`.
 - Clock Worker (`pickleball-alerts-clock`, only when `worker/` changed): `npx wrangler deploy --config worker/wrangler.toml`.

@@ -30,22 +30,27 @@ async function loaded() {
   return { sql, summary, db, call, cookie, dash, login };
 }
 
+// Zip 28: the read-only tests share ONE built world (building it takes 2.4 to 4 seconds, and it was built again for every test, which is what
+// ran close to the 5 second limit on a busy machine). Tests that write (a player picking a name, loading the seed over itself) build their own.
+let shared: ReturnType<typeof loaded> | undefined;
+const once = () => (shared ??= loaded());
+
 describe('fake-data preview seed', () => {
   it('signs in with the fake PIN and names the group as fake', async () => {
-    const { login, dash } = await loaded();
+    const { login, dash } = await once();
     expect(login.res.status).toBe(200);
     expect(dash.group.name).toBe(FAKE_GROUP_NAME);
   });
 
   it('passes every live health check (all zeros)', async () => {
-    const { db } = await loaded();
+    const { db } = await once();
     const row = db.raw.prepare(HEALTH).get() as Record<string, number>;
     const bad = Object.entries(row).filter(([k, n]) => !k.startsWith('info_') && Number(n) !== 0);
     expect(bad).toEqual([]);
   });
 
   it('holds only made-up people: 313-555-01xx phones, no live names', async () => {
-    const { db, sql } = await loaded();
+    const { db, sql } = await once();
     const players = db.raw.prepare('SELECT display_name, phone_number FROM players').all() as { display_name: string; phone_number: string }[];
     expect(players.length).toBeGreaterThanOrEqual(8);
     // Every made-up player has a 313-555-01xx number, except the one saved with no number on purpose (for Text all).
@@ -56,7 +61,7 @@ describe('fake-data preview seed', () => {
   });
 
   it('covers every game state', async () => {
-    const { dash } = await loaded();
+    const { dash } = await once();
     const games = dash.sessions as any[];
     const past = games.filter((g) => Date.parse(g.endsAt) <= NOW);
     const next = games.filter((g) => Date.parse(g.startsAt) > NOW);
@@ -77,7 +82,7 @@ describe('fake-data preview seed', () => {
   });
 
   it('has the live-ON switches on from the seed, plus the one being built (PREVIEW SWITCHES RULE)', async () => {
-    const { dash } = await loaded();
+    const { dash } = await once();
     for (const k of ['adminV2ForAll', 'adminR2ForAll', 'adminR3ForAll', 'payAlwaysForAll', 'payNoteForAll', 'timeShiftForAll', 'lateFeesForAll', 'playerFix1ForAll', 'paySheetForAll', 'textsR2ForAll', 'lateFeeSplitForAll', 'moneyReworkForAll', 'instantTapsForAll', 'adjustCreditForAll', 'venmoRequestForAll', 'homeCollapseForAll', 'tonightGlowForAll', 'colorCleanupForAll', 'playerCardsSimpleForAll', 'lastCallTextsForAll', 'shortGamesForAll', 'cardTimeButtonsForAll', 'cardCleanupForAll'])
       expect(dash[k], k).toBe(true);
     // Zip 9: one 1.5 hour game, no note (the site already says the length once), priced $11 with Short games on.
@@ -93,7 +98,7 @@ describe('fake-data preview seed', () => {
   });
 
   it('covers every money state', async () => {
-    const { dash } = await loaded();
+    const { dash } = await once();
     const seats = (dash.sessions as any[]).flatMap((g) => g.roster.map((r: any) => ({ ...r, game: g })));
     const live = seats.filter((r) => r.status === 'confirmed' && r.game.status !== 'canceled' && !r.isOrganizer);
     expect(live.some((r) => r.paymentStatus === 'paid' && r.creditCents === 0 && r.paymentAmountCents === 1400)).toBe(true); // paid cash

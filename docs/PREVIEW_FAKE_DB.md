@@ -126,10 +126,10 @@ Since Zip 15 (Sun Nov 8): the row being built is Second Chance (`ZIP15_SWITCHES_
 
 1. Push your branch (anything but `main`) and deploy a preview:
    ```
-   npm run build
-   npx wrangler pages deploy dist --project-name pickleball-club --branch some-branch-name
+   npm run deploy:preview
    ```
-   A `main` branch deploy is the LIVE site. Never use `--branch main` for a test.
+   (Zip 28: it builds, refuses a detached checkout and refuses `main`, and ships with `--branch <your branch name>`. The long form it runs is
+   `npx wrangler pages deploy dist --project-name pickleball-club --branch some-branch-name`.) A `main` branch deploy is the LIVE site. Never use `--branch main` for a test.
 2. Open the address it prints. Check the group name says **PREVIEW, fake data**.
 3. Tap anything. Re-seed whenever it gets messy (below).
 

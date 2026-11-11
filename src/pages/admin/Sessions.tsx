@@ -31,7 +31,7 @@ import { EditGameForm } from './EditGame';
 import { SessionCardR2 } from './CardR2';
 import { GameMenu } from './GameMenu';
 import { reach, reminderText } from './textMenu';
-import { markTask } from './DoNow';
+import { markTask } from './DoNowCard';
 import { isPlayed, lateDropsAll } from './todo';
 import '../../credit-session.css';
 import '../../admin-cards.css';

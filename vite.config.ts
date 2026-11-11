@@ -74,6 +74,11 @@ export default defineConfig(({ mode }) => {
       include: ['tests/**/*.test.ts'],
       environment: 'node',
       setupFiles: ['tests/setup-speed.ts'],
+      // Zip 28: the default 5 seconds is too tight for the files that build a whole fake world or run a long scenario when the machine is busy
+      // (preview-seed took 2.4 to 4.0 seconds a test on 4 shared cores, card-cleanup and audit-behind-clock similar). Nothing is skipped or loosened:
+      // every assertion still runs; a test that really hangs still fails, just after 30 seconds. Tests that set their own longer limit keep it.
+      testTimeout: 30_000,
+      hookTimeout: 30_000,
     },
   };
 });
