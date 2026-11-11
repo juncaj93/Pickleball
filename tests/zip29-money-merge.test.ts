@@ -83,3 +83,22 @@ describe('Home money cards merged: nobody is lost', () => {
     expect(comingOnly).toBeGreaterThan(0);
   }, 120_000);
 });
+
+// A case the fake world does not have: somebody who dropped late from a game still ahead (a later day) and owes the fee. Neither old card showed
+// them before game day (the old first card started on game day, the old second card listed seats still in the game), so the merged card must not either.
+describe('merged card: coming games list only the people who are in them', () => {
+  const row = (playerId: string, status: string, owes: number, lateFee: boolean) => ({ playerId, name: playerId, status, isOrganizer: false, paymentStatus: 'unpaid', owesCents: owes, lateFee: lateFee ? { oweCents: owes } : null });
+  const game = (id: string, startsAt: string, roster: any[]) => ({ id, startsAt, endsAt: startsAt, hiddenFromList: false, state: { flags: { canceled: false } }, roster });
+  const d: any = {
+    now: '2026-11-10T15:00:00.000Z', // Tue Nov 10, 10 AM Eastern
+    group: { timezone: 'America/Detroit', settings: { checkInHours: 24 } },
+    sessions: [
+      game('tonight', '2026-11-11T00:00:00.000Z', [row('in-1', 'confirmed', 1400, false), row('left-1', 'withdrawn', 1400, true)]),
+      game('tomorrow', '2026-11-11T14:00:00.000Z', [row('in-2', 'confirmed', 1400, false), row('left-2', 'withdrawn', 1400, true)]),
+    ],
+  };
+  it('today\'s game lists the late-fee debt too (as the old first card did); tomorrow\'s game lists only the seat that is in', () => {
+    const got = Object.fromEntries(owedHomeGames(d).map((g) => [g.s.id, g.rows.map((r) => r.playerId)]));
+    expect(got).toEqual({ tonight: ['in-1', 'left-1'], tomorrow: ['in-2'] });
+  });
+});

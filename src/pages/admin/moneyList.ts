@@ -51,7 +51,9 @@ export function owedHomeGames(d: AdminDashboard): { s: AdminSessionView; rows: A
   const checkInMs = d.group.settings.checkInHours * 3600_000;
   return d.sessions
     .filter((s) => s.hiddenFromList !== true && (dayNum(Date.parse(s.startsAt)) <= today || (!s.state.flags.canceled && nowMs >= Date.parse(s.startsAt) - checkInMs)))
-    .map((s) => ({ s, rows: unpaidRows(s) }))
+    // A game that is still ahead (a later day) lists only the players who are in it, as the old second card did: somebody who dropped late from a coming game
+    // and owes the fee was on neither old card until game day, and the merged card shows no one the old cards did not.
+    .map((s) => ({ s, rows: unpaidRows(s).filter((r) => dayNum(Date.parse(s.startsAt)) <= today || r.status === 'confirmed') }))
     .filter((g) => g.rows.length > 0)
     .sort((a, b) => a.s.startsAt.localeCompare(b.s.startsAt));
 }

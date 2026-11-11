@@ -239,3 +239,22 @@ html[data-alert-cards] .mp-head .ac-title {
   color: var(--mp-muted);
   white-space: nowrap;
 }
+
+/* Big text on the Home money card: a row grows and wraps (the "no Venmo saved" words or a button drop to a second line inside the row) instead of
+   a fixed 50 px row with something sticking out of it. At normal text the row is still exactly 50 px. */
+.vr-cards .mp-row {
+  height: auto;
+  min-height: 50px;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  padding-block: 4px;
+}
+.vr-cards .mp-row .mp-name {
+  flex: 1 1 6rem;
+}
+.vr-cards .mp-row .mp-none {
+  flex: 0 1 auto;
+  margin-left: auto;
+  white-space: normal;
+  text-align: right;
+}

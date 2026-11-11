@@ -754,7 +754,11 @@ async function main() {
     await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
     // Games from an earlier day live in History: tap the row to open its card in the sheet.
     await page.locator('.tabbar button, .tabbar a', { hasText: /^History$/ }).first().click();
-    await page.locator(`li[data-session="${world.pastCourtId}"] .history-row`).click();
+    await page.locator('main button', { hasText: /^Sessions$/ }).first().click();
+    let row = page.locator(`li[data-session="${world.pastCourtId}"] .history-row`);
+    if ((await row.count()) === 0) await page.locator('main button', { hasText: /^Show older$/ }).first().click().catch(() => {});
+    row = page.locator(`li[data-session="${world.pastCourtId}"] .history-row`);
+    await row.click();
     await page.locator('dialog[open] [data-r2-card]').waitFor({ timeout: 10000 });
     const cell = await page.evaluate(() => {
       const c = document.querySelector('dialog[open] [data-r2-card]');

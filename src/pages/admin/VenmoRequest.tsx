@@ -31,7 +31,7 @@ const dayKey = (ms: number, tz: string) => {
  */
 export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
   const [remind, setRemind] = useState<string | null>(null);
-  const { run } = useAction(ctx);
+  const { run, busy } = useAction(ctx);
   if (ctx.d.venmoRequest !== true) return null;
   const tz = ctx.d.group.timezone;
   const games = owedHomeGames(ctx.d);
@@ -75,6 +75,7 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                   <button
                     type="button"
                     className="mp-btn mp-amber"
+                    disabled={busy}
                     data-vr-markpaid={r.name}
                     aria-label={`Mark ${r.name} paid for ${formatShortDate(s.startsAt, tz)}`}
                     onClick={() =>
