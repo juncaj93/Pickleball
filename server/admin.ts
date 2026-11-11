@@ -1087,9 +1087,10 @@ export async function cardDone(ctx: Ctx, body: Record<string, unknown>) {
 /**
  * Move a session to a new date or time. Its deadline resets to the default for the new time.
  * `whileCanceled` is only for Second Chance (Zip 35, server/secondChance.ts): it moves a canceled game BEFORE reopening it, so a refused
- * time leaves the game canceled and untouched. The route (PUT .../time) never passes it.
+ * time leaves the game canceled and untouched. `restoring` (also only Second Chance) puts the game's ORIGINAL time back after a failed reopen, so the
+ * hours rule is not applied to a time the game already had. The route (PUT .../time) passes neither.
  */
-export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileCanceled = false) {
+export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileCanceled = false, restoring = false) {
   const { group, session } = await adminSession(ctx);
   if (session.status === 'canceled' && !whileCanceled) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
@@ -1102,7 +1103,7 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileC
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
   // Zip 24 "Booking hours": only a CHANGED start or end is looked at (an existing game outside the hours is never blocked for other edits).
-  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
+  if (!restoring) await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
   const deadline = defaultDeadline(startsAt, settingsOf(group));
   const move = ctx.db
     .prepare(

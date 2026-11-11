@@ -86,13 +86,14 @@ export function decide(mode, git, checks) {
         return {
           ok: false,
           rule: 'loud',
-          message: `Not deploying to live: it is ${t.label}, inside loud hours (Monday and Wednesday from 6:00 PM through Tuesday and Thursday 11:00 PM, Eastern). Loud hours end ${nextQuiet(checks.nowMs)}. If this is on purpose, run again with --override-loud-hours. (Also never in the hour after Alex texts the group; this check cannot see that.)`,
+          message: `Not deploying to live: it is ${t.label}, inside loud hours (Monday and Wednesday from 6:00 PM through Tuesday and Thursday 11:00 PM, Eastern). Loud hours end ${nextQuiet(checks.nowMs)}. If this is on purpose, run again with: npm run deploy -- --override-loud-hours (the -- matters). (Also never in the hour after Alex texts the group; this check cannot see that.)`,
         };
       }
       if (t.loud) notes.push(`WARNING: loud hours (${t.label}); going ahead only because --override-loud-hours was passed.`);
     }
-    if (checks && checks.head !== undefined) {
+    if (checks && (checks.head !== undefined || checks.needNetwork)) {
       const short = (s) => String(s).slice(0, 7);
+      if (!checks.head) return { ok: false, rule: 'github', message: "Not deploying to live: could not read this folder's commit. A live deploy needs to know exactly what it ships." };
       if (!checks.remoteMain) {
         return { ok: false, rule: 'github', message: "Not deploying to live: could not read GitHub's main (no network, or no access to origin). A live deploy must be exactly GitHub's main; try again when GitHub answers." };
       }
@@ -135,8 +136,9 @@ export function liveShaFromList(text) {
     }
   }
   if (!list) return null;
-  const prod = list.find((d) => d && String(d.Environment).toLowerCase() === 'production' && typeof d.Source === 'string' && /^[0-9a-f]{7,40}$/i.test(d.Source));
-  return prod ? prod.Source : null;
+  // The NEWEST Production deployment is the one that counts; if it has no commit hash we cannot tell what is live (never fall back to an older one).
+  const prod = list.find((d) => d && String(d.Environment).toLowerCase() === 'production');
+  return prod && typeof prod.Source === 'string' && /^[0-9a-f]{7,40}$/i.test(prod.Source) ? prod.Source : null;
 }
 
 function gitRunner(cwd) {
@@ -193,7 +195,7 @@ export function main(argv, deps = {}) {
   let result = decide(mode, git, mode === 'production' ? { nowMs: now(), overrideLoud } : undefined);
   if (result.ok && mode === 'production') {
     const net = (deps.network ?? (() => liveFacts(process.cwd())))();
-    result = decide(mode, git, { nowMs: now(), overrideLoud, ...net });
+    result = decide(mode, git, { nowMs: now(), overrideLoud, needNetwork: true, ...net });
   }
   if (!result.ok) {
     err(result.message);

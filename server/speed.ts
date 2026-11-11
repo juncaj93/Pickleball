@@ -89,7 +89,7 @@ export function fewerQueriesDb(inner: D1Database, mode: 'fast' | 'decide'): Fewe
   const speedAnswer = (values: unknown[]): { x: 1 } | null | undefined => {
     const [groupId, task] = values as [string, string];
     // (The Zip 13 rows and Zip 14's Game day card row too: they are answered by the same read, so they add no trip either.)
-    if (!speedKnown || typeof task !== 'string' || !(task.startsWith('speed_') || ZIP13_TASKS.has(task) || task === GAME_DAY_CARD.task || task === SECOND_CHANCE.task || task === UNPAID_NUDGE.task || task === AFTER_GAME_CARD.task || task === ERROR_ALERTS.task || task === TOTALS_REFRESH.task || task === SPENT_TOTALS.task || task === BOOKING_HOURS.task || task === ACTING_OTHERS.task || task === PLAYERS_SHEET_REDO.task || task === CHECKIN_PAY_LINE.task || task === TAP_GUARD_FIX.task || task === EXTENDED_TIME.task || task === TAP_GUARD_FIX.task)) return undefined;
+    if (!speedKnown || typeof task !== 'string' || !(task.startsWith('speed_') || ZIP13_TASKS.has(task) || task === GAME_DAY_CARD.task || task === SECOND_CHANCE.task || task === UNPAID_NUDGE.task || task === AFTER_GAME_CARD.task || task === ERROR_ALERTS.task || task === TOTALS_REFRESH.task || task === SPENT_TOTALS.task || task === BOOKING_HOURS.task || task === ACTING_OTHERS.task || task === PLAYERS_SHEET_REDO.task || task === CHECKIN_PAY_LINE.task || task === EXTENDED_TIME.task || task === TAP_GUARD_FIX.task)) return undefined;
     return speedKnown.get(String(groupId))?.has(task) ? { x: 1 } : null;
   };
   // Answers sent early (prefetch), one per question that will ask for it: each is handed out once, as is (no copy). A read the

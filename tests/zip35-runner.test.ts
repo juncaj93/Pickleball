@@ -113,9 +113,12 @@ describe('the run', () => {
     expect(lib.summary(result, { lanes: 1, totalSeconds: 2 })).toMatch(/hang\s+FAIL \(timeout\)/);
     const kid = Number(readFileSync(join(s.root, 'kid.pid'), 'utf8'));
     await new Promise((r) => setTimeout(r, 300));
+    // Gone, or only a zombie waiting to be collected (a container without an init process keeps those around).
     let alive = true;
     try {
       process.kill(kid, 0);
+      const state = readFileSync(`/proc/${kid}/stat`, 'utf8').split(') ')[1]?.[0];
+      if (state === 'Z') alive = false;
     } catch {
       alive = false;
     }

@@ -235,7 +235,7 @@ export function previewCalmFor(ctx: Ctx): boolean {
 export async function secondChanceAction(
   ctx: Ctx,
   body: Record<string, unknown>,
-  tools: { decide: (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>; reschedule: (ctx: Ctx, body: Record<string, unknown>, whileCanceled?: boolean) => Promise<unknown> },
+  tools: { decide: (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>; reschedule: (ctx: Ctx, body: Record<string, unknown>, whileCanceled?: boolean, restoring?: boolean) => Promise<unknown> },
 ) {
   const group = await requireAdmin(ctx);
   if (!(await secondChanceFor(ctx, group.id))) throw new HttpError(404, 'not_found', 'Not found.');
@@ -314,7 +314,7 @@ export async function secondChanceAction(
       if (hoursOn && moved) {
         // Best effort: back to the original time (the card then offers the same choices again). If this too is refused the time stays moved.
         const back = { startsAt: session.starts_at, endsAt: session.ends_at };
-        await tools.reschedule(ctx, back, true).catch(() => undefined);
+        await tools.reschedule(ctx, back, true, true).catch(() => undefined);
       }
     }
     throw err;

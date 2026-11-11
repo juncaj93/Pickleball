@@ -2,7 +2,7 @@
 // get its new time must leave the game exactly as it was (still canceled, nothing moved, no money touched).
 import { describe, expect, it } from 'vitest';
 import { playerPhone, sentText, setupGroup, TestApp } from './harness';
-import { pickTimes, SECOND_CHANCE } from '../shared/secondChance';
+import { pickTimes, SECOND_CHANCE, SECOND_CHANCE_TEST } from '../shared/secondChance';
 import { BOOKING_HOURS } from '../shared/bookingHours';
 
 const TZ = 'America/Detroit';
@@ -86,7 +86,8 @@ describe('Second Chance reopen with Booking hours', () => {
     expect(before.row.status).toBe('canceled');
     const r = await act(w, s.id, { action: 'reopen', minutes: H(21) }, HOURS_ON); // 9:00 PM + 2 hours = 11:00 PM, closes 10:00 PM
     expect(r.status).toBe(400);
-    expect(String(r.data.message ?? r.data.error ?? '')).toMatch(/venue is open|Pick one of the times/);
+    expect(String(r.data.message ?? '')).toMatch(/Pick one of the times shown/); // the picker list refuses it
+    expect(r.data.error).toBe('invalid_time');
     const after = await game(w, s.id);
     expect(after.status).toBe('canceled'); // main: reopened (status planned) and then refused
     expect(after.startsAt).toBe(before.row.startsAt);
@@ -136,15 +137,45 @@ describe('Second Chance reopen with Booking hours', () => {
     expect(seats(w, s.id)).toEqual(before.seats);
     expect(ledger(w)).toEqual(before.ledger);
   });
-  it('a time in the past (a preview pretending it is noon) is refused before anything is reopened', async () => {
+  it('a time in the past (a preview pretending it is noon, really 5:00 PM) is refused BEFORE anything is reopened', async () => {
+    const w = await world();
+    (w.app.env as unknown as Record<string, unknown>).SECOND_CHANCE_TEST = 'on';
+    const s = await canceledWithThree(w);
+    w.app.now = Date.parse('2026-10-27T21:00:00Z'); // really 5:00 PM
+    const before = { seats: seats(w, s.id), ledger: ledger(w) };
+    const pretend = { ...HOURS_ON, [SECOND_CHANCE_TEST.header]: 'on' };
+    // The pretend clock is noon, so 4:30 PM is on the list; the real clock says it is gone.
+    const r = await act(w, s.id, { action: 'reopen', minutes: H(16, 30) }, pretend);
+    expect(r.status).toBe(400);
+    expect(r.data.message).toBe('Pick a time in the future.');
+    expect((await game(w, s.id)).status).toBe('canceled');
+    expect(seats(w, s.id)).toEqual(before.seats);
+    expect(ledger(w)).toEqual(before.ledger);
+    expect(w.app.db.raw.prepare("SELECT task FROM task_log WHERE session_id = ? AND task = 'sc_reopened'").all(s.id)).toEqual([]);
+  });
+  it('a game whose OWN time is outside the hours: reopening at that time is refused with the hours message; a fitting time works', async () => {
     const w = await world();
     const s = await canceledWithThree(w);
-    w.app.now = Date.parse('2026-10-27T21:00:00Z'); // really 5:00 PM; a 4:30 PM start is already gone
-    const r = await act(w, s.id, { action: 'reopen', minutes: H(16, 30) }, HOURS_ON);
-    expect(r.status).toBeGreaterThanOrEqual(400);
+    w.app.db.raw.prepare('UPDATE sessions SET starts_at = ?, ends_at = ? WHERE id = ?').run('2026-10-28T00:30:00.000Z', '2026-10-28T02:30:00.000Z', s.id); // 8:30 PM to 10:30 PM
+    const own = await act(w, s.id, { action: 'reopen' }, HOURS_ON);
+    expect(own.status).toBe(400);
+    expect(String(own.data.message)).toMatch(/venue is open 8:00 AM to 10:00 PM/);
     expect((await game(w, s.id)).status).toBe('canceled');
+    expect((await act(w, s.id, { action: 'reopen', minutes: H(19) }, HOURS_ON)).status).toBe(200);
   });
-  it('the move failing after the reopen (another game takes the slot in that instant) puts the game back as it was', async () => {
+  it('an out-of-hours game whose reopen fails after the move: the ORIGINAL (out-of-hours) time still comes back', async () => {
+    const w = await world();
+    const s = await canceledWithThree(w);
+    w.app.db.raw.prepare('UPDATE sessions SET starts_at = ?, ends_at = ? WHERE id = ?').run('2026-10-28T00:30:00.000Z', '2026-10-28T02:30:00.000Z', s.id);
+    w.app.db.raw.exec(`CREATE TRIGGER no_reopen2 BEFORE UPDATE OF canceled_at ON sessions WHEN NEW.canceled_at IS NULL BEGIN SELECT RAISE(ABORT, 'disk said no'); END;`);
+    const r = await act(w, s.id, { action: 'reopen', minutes: H(19) }, HOURS_ON);
+    w.app.db.raw.exec('DROP TRIGGER no_reopen2');
+    expect(r.status).toBeGreaterThanOrEqual(400);
+    const after = await game(w, s.id);
+    expect(after.status).toBe('canceled');
+    expect(after.startsAt).toBe('2026-10-28T00:30:00.000Z');
+  });
+  it('the move refused at the last instant (another game takes the slot): nothing was reopened, the game is exactly as it was', async () => {
     const w = await world();
     const s = await canceledWithThree(w);
     const before = { seats: seats(w, s.id), ledger: ledger(w), pot: await pot(w, 'Blair'), row: await game(w, s.id) };

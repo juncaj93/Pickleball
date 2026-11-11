@@ -218,10 +218,20 @@ async function main() {
         const b = await page.locator('#B').boundingBox();
         // A's bottom edge, then B's top edge: 100 - 84 = 16 px apart.
         await page.mouse.click(a.x + 60, a.y + a.height - 1);
+        await page.waitForTimeout(280); // a quick but aimed tap: after 0.2 s
         await page.mouse.click(b.x + 60, b.y + 1);
         return hitsOf(page);
       });
       assert(on ? h.A === 1 && h.B === 1 : h.A === 1 && h.B === 0, `two neighbours, tap guard ${on ? 'ON' : 'OFF'}: A=${h.A} B=${h.B} (ON: both; OFF: B dropped, as today)`);
+      // 2b. the same neighbours tapped back to back (under 0.2 s): the second half of a double tap, dropped in both
+      h = await lab(on, async (page) => {
+        const a = await page.locator('#A').boundingBox();
+        const b = await page.locator('#B').boundingBox();
+        await page.mouse.click(a.x + 60, a.y + a.height - 1);
+        await page.mouse.click(b.x + 60, b.y + 1);
+        return hitsOf(page);
+      });
+      assert(h.A === 1 && h.B === 0, `neighbours tapped back to back, tap guard ${on ? 'ON' : 'OFF'}: A=${h.A} B=${h.B} (B must be dropped)`);
       // 3. far apart: always both
       h = await lab(on, async (page) => {
         await clickAt(page, '#A');
@@ -317,7 +327,8 @@ async function main() {
           confirm = [...document.querySelectorAll('dialog[open] button')].find((b) => /^Hide it$/.test(b.textContent.trim()));
         }
         if (!confirm) return { opened: false };
-        fire(confirm, 210, 410); // 14 px away, well inside 400 ms
+        await new Promise((r) => setTimeout(r, 280)); // quick but aimed: after 0.2 s, still inside 400 ms
+        fire(confirm, 210, 410); // 14 px away
         return { opened: true };
       }, tests[0].id);
       assert(out.opened, `tap guard ${on ? 'ON' : 'OFF'}: the question did not open`);

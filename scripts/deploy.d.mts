@@ -8,6 +8,7 @@ export interface LiveFacts {
 export interface ProductionChecks {
   nowMs?: number;
   overrideLoud?: boolean;
+  needNetwork?: boolean;
   head?: string | null;
   remoteMain?: string | null;
   live?: LiveFacts;

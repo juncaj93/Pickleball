@@ -90,6 +90,9 @@ describe('decide(): production rules, in order', () => {
     expect(unknown.message).toMatch(/could not tell what is live/);
     expect(decide('production', git, { nowMs: QUIET, head: HEAD, remoteMain: HEAD, live: { relation: 'unknown', sha: 'abcdef1' } }).message).toMatch(/git fetch origin/);
   });
+  it('production whose network facts did not arrive is refused, never waved through', () => {
+    expect(decide('production', git, { nowMs: QUIET, needNetwork: true })).toMatchObject({ ok: false, rule: 'github' });
+  });
   it('a preview is never touched by the new rules, loud hours or not', () => {
     expect(decide('preview', { branch: 'zip-35', dirty: false })).toEqual({ ok: true, branch: 'zip-35', warn: undefined });
     expect(decide('preview', { branch: 'zip-35', dirty: false }, { nowMs: at('2026-11-10T23:12:00Z') } as never).ok).toBe(true);
@@ -153,6 +156,11 @@ describe('main(): the command, with fake git, fake clock, nothing built', () => 
     expect(r.status).toBe(0);
     expect(r.out).toMatch(/1 commit behind main. This deploy ships: 60b446d Merge #128/);
   });
+  it('network facts that did not arrive: refused, nothing built', () => {
+    const r = run(['production'], { network: () => ({}) });
+    expect(r.status).toBe(1);
+    expect(r.ran).toEqual([]);
+  });
   it('a preview in the middle of loud hours is fine and reads no network', () => {
     let read = false;
     const r = run(['preview'], { git: () => ({ branch: 'claude/zip-35', dirty: true }), now: () => at('2026-11-12T15:00:00Z'), network: () => ((read = true), good) });
@@ -176,6 +184,7 @@ describe('reading what is live from `wrangler pages deployment list --json`', ()
     expect(liveShaFromList('not json')).toBeNull();
     expect(liveShaFromList('')).toBeNull();
     expect(liveShaFromList('[{"Environment":"Production","Source":"nothex!"}]')).toBeNull();
+    expect(liveShaFromList('[{"Environment":"Production","Source":"-"},{"Environment":"Production","Source":"1111111"}]')).toBeNull(); // newest has no hash: never use an older one
   });
 });
 

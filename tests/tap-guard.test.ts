@@ -26,6 +26,10 @@ describe('switch ON', () => {
   it('two buttons side by side, both still in place: both work (Hide from list, then Hide it)', () => {
     expect(on({ same: false, prevGoneOrMoved: false })).toBe(false);
   });
+  it('another button tapped within 0.2 s, even though the first one stayed put (a sheet opened under the finger): dropped; after 0.2 s it goes through', () => {
+    expect(on({ same: false, prevGoneOrMoved: false, quick: true })).toBe(true);
+    expect(on({ same: false, prevGoneOrMoved: false, quick: false })).toBe(false);
+  });
   it('another button after the first one was replaced or slid away (a double tap on I paid or Mark paid): dropped', () => {
     expect(on({ same: false, prevGoneOrMoved: true })).toBe(true);
   });

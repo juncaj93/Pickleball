@@ -5,7 +5,7 @@ import { BANNER_TIMING, useToast } from './ui';
 import { startHold, trackHeld } from './undoHold';
 import { ADMIN_UNDO_MS } from '../shared/zip13';
 import { drawPatches, failureWords, LoadTracker, SaveLine, TapQueue, type TapResult } from './instant';
-import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, dropThisTap, MOVED_PX } from '../shared/tapGuard';
+import { DOUBLE_TAP_MS, DOUBLE_TAP_PX, dropThisTap, MOVED_PX, REFLEX_MS } from '../shared/tapGuard';
 
 // Instant taps (INSTANT_TAPS) for a whole screen: the player page and the organizer page each make one root (useInstantRoot) and put
 // its store in <InstantContext.Provider>. Buttons call `useInstant()`: when it gives null, instant taps are off for this phone and the
@@ -71,8 +71,9 @@ export function useInstantTracker(): LoadTracker {
 // is stopped before the page sees it. Keyboard clicks (no pointer position) are never stopped. The same idea as ui.tsx DOUBLE_TAP.
 //
 // Zip 35 "Tap guard fix" (shared/tapGuard.ts): with it on for this screen the rule is sharper. A repeat tap on the SAME button is stopped;
-// a tap on ANOTHER button is stopped only when the button tapped before is gone or has moved (the screen changed under the finger). A
-// neighbour that stayed put is a real tap and goes through (Hide from list, then Hide it, 23 px apart). Off: the rule above, unchanged.
+// a tap on ANOTHER button is stopped only when the button tapped before is gone or has moved (the screen changed under the finger), or when it
+// comes within 0.2 s of the last tap (too fast to be aimed: a sheet that opened under the finger). A neighbour that stayed put and is tapped
+// after 0.2 s is a real tap and goes through (Hide from list, then Hide it, 23 px apart). Off: the rule above, unchanged.
 let guards = 0;
 /** How many mounted screens have the Tap guard fix on (one screen at a time in practice). */
 let fixGuards = 0;
@@ -102,7 +103,7 @@ if (typeof document !== 'undefined') {
       const close = !!prev && now - prev.at < DOUBLE_TAP_MS && Math.hypot(e.clientX - prev.x, e.clientY - prev.y) < DOUBLE_TAP_PX;
       // Tap guard fix: the switch's own click, sent by the browser for the label that was just tapped, is the same tap (and the label stays "the last tap").
       if (pair && close) return;
-      if (prev && close && dropThisTap({ fix, hasPrev: true, same: !!same, pair, close, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
+      if (prev && close && dropThisTap({ fix, hasPrev: true, same: !!same, pair, close, quick: fix && !!prev && now - prev.at < REFLEX_MS, prevGoneOrMoved: fix && !same ? prevGoneOrMoved(prev) : false, textField: fix && el.matches(TEXT_FIELD) })) {
         e.preventDefault();
         e.stopImmediatePropagation();
         return;
