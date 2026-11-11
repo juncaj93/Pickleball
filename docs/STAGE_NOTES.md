@@ -4136,3 +4136,10 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
 - Rerun: zip30 32/32, zip30-off 19/19 (switch off = main), unit acting-others, speed-queries, activity, preview-seed, backup-zip19,
   readonly-pin 94/94, tsc clean.
 
+### Answers and plan (Wed Nov 11, 2026)
+- Record phone codes from deploy day, even with the switch off (so phones are already learned when Alex turns it on): yes, as built.
+- Leave the test rows in the fake History; do NOT re-seed the preview.
+- Deploy only on Alex's own "ship it", after Zip 29 is live: rebase on main, full unit suite alone, the browser checks for the screens Zip 29
+  changed (admin Home, money card, tiles), zip30 and zip30-off; then a quiet window (Wed Nov 11 6 AM to 6 PM, or Thu after 11 PM): SQL backup,
+  Time Travel bookmark, migration 0018, then the site; rollback ID; a live check WITHOUT any PIN. The switch stays OFF; Alex turns it on.
+
