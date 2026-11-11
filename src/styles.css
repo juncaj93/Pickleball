@@ -2897,6 +2897,12 @@ body:has(.tabbar) .pop {
   width: 19px;
   height: 19px;
 }
+/* Zip 32: the green check on a "Played" line (the text stays gray). */
+.court-line .court-icon-played {
+  width: 19px;
+  height: 19px;
+  color: var(--ok-fg);
+}
 .court-sub {
   font-size: 0.8rem;
   color: var(--ink-2);

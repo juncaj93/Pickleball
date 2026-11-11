@@ -21,7 +21,7 @@ import type { AdminCtx } from '../Admin';
 import { courtLine, ShortPanel, TimeCheck, useAction } from './Sessions';
 import { CourtSwitch } from './CourtSwitch';
 import { GameMenu } from './GameMenu';
-import { lateDropsAll } from './todo';
+import { isPlayed, lateDropsAll } from './todo';
 import '../../admin-r2.css';
 import { ShortGameTilePill } from './ShortGame';
 
@@ -145,7 +145,8 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             {s.timeCheck && ctx.d.timeShift !== false && <TimeCheck ctx={ctx} s={s} />}
           </div>
           <div className="r2-gear">
-            <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />
+            {/* Zip 32 (bug fix): a played (finalized) game has no gear: its menu (Players, Cancel session) was clipped by the sheet, and Reopen is the way to change it. */}
+            {!isPlayed(s) && <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />}
           </div>
         </div>
         {!canceled && (

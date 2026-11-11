@@ -166,8 +166,26 @@ async function main() {
     await call(api.request, 'POST', `/api/admin/sessions/${s.id}/payment`, { playerId: id.Mitchel, paid: true });
   }
 
-  const open = async (scheme, width) => {
+  // `at` (Zip 32): the pretend "now" the page should see too. The page's own clock is the real one, so a game on the pretend game day was
+  // already past on the page once the real calendar got there (the four Nov 10 tests failed on main from Nov 10 on). With `at` the page's
+  // Date is shifted to that moment, the same way the other scripts do it (e2e/zip30.cjs shift()).
+  const open = async (scheme, width, at = null) => {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true, colorScheme: scheme });
+    if (at) {
+      await ctx.addInitScript((delta) => {
+        const Real = Date;
+        class Shifted extends Real {
+          constructor(...x) {
+            if (x.length === 0) super(Real.now() + delta);
+            else super(...x);
+          }
+          static now() {
+            return Real.now() + delta;
+          }
+        }
+        window.Date = Shifted;
+      }, Date.parse(at) - Date.now());
+    }
     await ctx.route(/venmo\.com/, (r) => r.abort());
     const page = await ctx.newPage();
     const errors = [];
@@ -643,7 +661,7 @@ async function main() {
     ['2026-11-10T07:00:00-05:00', false, '13 hours before'],
   ]) {
     await clock(iso);
-    const { ctx, page } = await open('light', 390);
+    const { ctx, page } = await open('light', 390, iso);
     await check(`Cancel session ${label}: ${asked ? 'asks' : 'does not ask'} "Were you charged for this court?"`, async () => {
       const card = page.locator('section[aria-labelledby="sessions-title"] article', { hasText: 'Tue, Nov 10' }).first();
       await card.getByRole('button', { name: /^Game menu for/ }).click();
@@ -667,7 +685,7 @@ async function main() {
   }
   {
     await clock('2026-11-10T09:00:00-05:00');
-    const { ctx, page } = await open('light', 390);
+    const { ctx, page } = await open('light', 390, '2026-11-10T09:00:00-05:00');
     // Brandon pays cash for Nov 10 before it is canceled (Ryan paid it with credit, Julian used $5 of credit).
     await call(api.request, 'POST', `/api/admin/sessions/${nov10.id}/payment`, { playerId: id.Brandon, paid: true });
     let afterCancel = null;

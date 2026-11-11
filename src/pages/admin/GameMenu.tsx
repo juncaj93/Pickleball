@@ -76,8 +76,17 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
       const gr = g.getBoundingClientRect();
       const bar = document.querySelector('.tabbar')?.getBoundingClientRect();
       const vv = window.visualViewport;
-      const bottom = Math.min(bar ? bar.top : Infinity, vv ? vv.offsetTop + vv.height : window.innerHeight) - 8;
-      const topLimit = Math.max(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0, vv?.offsetTop ?? 0) + 8;
+      let bottom = Math.min(bar ? bar.top : Infinity, vv ? vv.offsetTop + vv.height : window.innerHeight) - 8;
+      let topLimit = Math.max(document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 0, vv?.offsetTop ?? 0) + 8;
+      // Zip 32 (bug fix): inside a sheet (History > Sessions, a game's card) the pop-up must also stay inside that sheet, whose edge hid the top
+      // of it before. If it fits neither under nor over the gear there, it becomes the panel above the tab bar (below), which scrolls.
+      const dlg = g.closest('dialog');
+      if (dlg) {
+        const dr = dlg.getBoundingClientRect();
+        const head = dlg.querySelector('.sheet-head')?.getBoundingClientRect();
+        bottom = Math.min(bottom, dr.bottom - 8);
+        topLimit = Math.max(topLimit, (head ? head.bottom : dr.top) + 8);
+      }
       if (gr.bottom + 2 + need <= bottom) setPlace('down');
       else if (gr.top - 2 - need >= topLimit) setPlace('up');
       else setPlace('sheet');
@@ -285,7 +294,8 @@ export function GameMenu({ ctx, s, canCalendar }: { ctx: AdminCtx; s: AdminSessi
       >
         <GearIcon />
       </button>
-      {(open || fading) && (place === 'sheet' ? createPortal(menu, document.body) : menu)}
+      {/* The panel goes to the body, or INTO the sheet the gear is in (the body sits under an open sheet, which is on the top layer). */}
+      {(open || fading) && (place === 'sheet' ? createPortal(menu, gear.current?.closest('dialog') ?? document.body) : menu)}
       {ctx.d.moneyRework === true && <HideConfirm ctx={ctx} s={s} open={askHide} onClose={() => setAskHide(false)} />}
     </div>
   );

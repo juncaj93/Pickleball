@@ -210,6 +210,10 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched "Booking hours" on`;
     case 'booking_hours_off':
       return `${who} switched "Booking hours" off`;
+    case 'players_sheet_redo_on':
+      return `${who} switched "Players sheet redo" on`;
+    case 'players_sheet_redo_off':
+      return `${who} switched "Players sheet redo" off`;
     case 'acting_others_on':
       return `${who} switched "Acting for others" on`;
     case 'acting_others_off':

@@ -45,6 +45,7 @@ export { useAction } from './action';
 import { opTap, useAction } from './action';
 import { viewFlat, viewPrice } from '../../../shared/gameLength';
 import { ShortGameTilePill } from './ShortGame';
+import { PlayersSheet } from './PlayersSheet';
 
 /**
  * One organizer game card. `courtNeed` (new layout, or round 2): this game is the one "Court still needs to be booked" is
@@ -99,7 +100,7 @@ function SessionCardClassic({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSess
           <div className="scard-top">
             {showSwitch ? <CardSwitch ctx={ctx} s={s} value={switchValue} /> : <div className="court-line top-line">{courtLine(court)}</div>}
             <div className="card-icons">
-              <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />
+              {!isPlayed(s) && <GameMenu ctx={ctx} s={s} canCalendar={court.kind === 'booked' && live} />}
             </div>
           </div>
           {showSwitch && later && <div className="court-sub small muted">{court.text}</div>}
@@ -244,7 +245,8 @@ export function TimeCheck({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
 export function courtLine(court: { kind: string; text: string }) {
   return (
     <div className="court-status">
-      <CourtIcon kind={court.kind as CourtKind} />
+      {/* Zip 32 (bug fix): "Played" shows a green check, not the circle-with-slash a Canceled game keeps. */}
+      <CourtIcon kind={court.text === 'Played' ? 'played' : (court.kind as CourtKind)} />
       <span>{court.text}</span>
     </div>
   );
@@ -479,7 +481,7 @@ export function SessionSheets({
     players_text: `Text the players · ${title}`,
   };
   return (
-    <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose}>
+    <Sheet open={!!s && !!kind} title={kind ? titles[kind as Exclude<SheetKind, 'cancel'>] : ''} onClose={onClose} className={kind === 'roster' && ctx.d.playersSheetRedo === true ? 'ps-sheet' : undefined}>
       {s && kind === 'edit' && (
         <EditGameForm
           ctx={ctx}
@@ -488,7 +490,8 @@ export function SessionSheets({
           onDone={(moved, statusChanged) => (moved ? ctx.open(statusChanged ? 'moved_set' : 'moved', s.id) : onClose())}
         />
       )}
-      {s && kind === 'roster' && <RosterManager ctx={ctx} s={s} />}
+      {/* "Players sheet redo" (PLAYERS_SHEET_REDO): the new look for everything that opens this sheet (the money cell and the gear's Players). Off: the old sheet, untouched. */}
+      {s && kind === 'roster' && (ctx.d.playersSheetRedo === true ? <PlayersSheet ctx={ctx} s={s} /> : <RosterManager ctx={ctx} s={s} />)}
       {s && kind === 'payments' && <PaymentsManager ctx={ctx} s={s} />}
       {s && kind === 'players_text' && <PlayersText ctx={ctx} s={s} />}
       {s && (kind === 'canceled' || kind === 'moved' || kind === 'moved_set') && <ChangeText ctx={ctx} s={s} canceled={kind === 'canceled'} askCourt={kind === 'moved'} />}
@@ -610,7 +613,12 @@ const ROSTER_LABEL: Record<string, string> = {
   declined: 'Declined',
 };
 
-function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+/**
+ * The roster sheet's actions, in one place so the old sheet (RosterManager below) and the new Players sheet (PlayersSheet.tsx, "Players sheet
+ * redo") run exactly the same code: Remove (held 5 seconds for Undo, with the money line in the toast), Give spot / To waitlist, and the
+ * "full" rule. Moved here unchanged from RosterManager.
+ */
+export function useRosterOps(ctx: AdminCtx, s: AdminSessionView) {
   const { busy, run } = useAction(ctx);
   const toast = useToast();
   const [removing, setRemoving] = useState<AdminRosterEntry | null>(null);
@@ -662,6 +670,11 @@ function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
   // "Card cleanup" (Zip 10): no Max players cap and no waitlist; only the database's 12 stops a Give spot.
   const cleanup = ctx.d.cardCleanup === true;
   const full = s.confirmedCount >= (cleanup ? MAX_PLAYERS_LIMIT : ctx.d.group.settings.maxPlayers);
+  return { busy, run, removing, setRemoving, held, removeHeld, live, act, inRoster, others, cleanup, full };
+}
+
+function RosterManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView }) {
+  const { busy, removing, setRemoving, held, removeHeld, live, act, others, cleanup, full } = useRosterOps(ctx, s);
 
   return (
     <div className="stack">
