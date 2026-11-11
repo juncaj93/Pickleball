@@ -81,7 +81,7 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
 
   const markPaid = (r: AdminRosterEntry) =>
     void run(
-      () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents }),
+      () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents, ...(r.extCents ? { extCents: r.extCents } : {}) }),
       `${r.name} marked paid`,
       opTap({ kind: 'paid', sessionId: s.id, playerId: r.playerId }, 'Mark paid', ctx.d.adminUndo === true),
     );
@@ -159,7 +159,9 @@ export function PlayersSheet({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView })
                     </span>
                   ) : owes ? (
                     <span className="ps-sub ps-owes" data-ps-owes-line>
-                      Owes {formatPrice(r.owesCents)}
+                      Owes {formatPrice(r.owesCents + (r.extCents ?? 0))}
+                      {/* Zip 31: extra time riding on this game; Mark paid takes both. */}
+                      {r.extCents ? ` (incl. ${formatPrice(r.extCents)} extension)` : ''}
                       {r.lateFee ? <span className="ps-fee"> · {lateFeeLine(r)?.split(' · ')[0]}</span> : null}
                     </span>
                   ) : (

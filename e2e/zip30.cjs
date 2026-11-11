@@ -203,9 +203,9 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 3).map((e) => e.getAttribute('data-row')));
-    // (Zip 32's Players sheet redo row and Zip 34's Check-in pay line row are newer and sit on top of it.)
-    assert(first[0] === 'checkInPayAll' && first[1] === 'playersSheetRedoAll' && first[2] === 'actingOthersAll', `newest first: ${first}`);
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 4).map((e) => e.getAttribute('data-row')));
+    // (Zip 32's Players sheet redo row and Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit on top of it.)
+    assert(first[0] === 'extendedTimeAll' && first[1] === 'checkInPayAll' && first[2] === 'playersSheetRedoAll' && first[3] === 'actingOthersAll', `newest first: ${first}`);
     const row = page.locator('[data-row="actingOthersAll"]');
     assert(/Acting for others/.test(await row.innerText()), 'row label');
     await row.locator('label').click();

@@ -74,6 +74,8 @@ route('POST', '/api/sessions/:id/undo-credit', (ctx) => player.playerUndoCredit(
 route('POST', '/api/sessions/:id/use-cash-out', player.playerUseCashOut);
 route('POST', '/api/sessions/:id/decline', (ctx) => player.playerDecline(ctx));
 route('POST', '/api/me/refund-request', player.playerRequestRefund);
+route('POST', '/api/me/extension-paid', player.playerExtensionPaidRoute);
+route('POST', '/api/me/extension-seen', player.playerExtensionSeenRoute);
 route('POST', '/api/me/refund-request/cancel', (ctx) => player.playerCancelRefundRequest(ctx));
 route('GET', '/api/sessions/:id/calendar.ics', (ctx) => player.sessionCalendarFile(ctx));
 // The old calendar subscription feed is gone: its links now get a plain "Not found".
@@ -103,6 +105,7 @@ route('POST', '/api/admin/sessions/:id/decision', admin.decide);
 route('POST', '/api/admin/sessions/:id/roster', admin.editRoster);
 route('POST', '/api/admin/sessions/:id/payment', admin.setPayment);
 route('POST', '/api/admin/sessions/:id/claim', admin.answerClaim);
+route('POST', '/api/admin/sessions/:id/extension-payment', admin.setExtensionPayment);
 route('POST', '/api/admin/sessions/:id/finalize', finalizeSession);
 route('POST', '/api/admin/sessions/:id/reopen', (ctx) => reopenFinalize(ctx));
 route('POST', '/api/admin/refund-requests/:id', resolveRefundRequest);
@@ -170,6 +173,7 @@ route('PUT', '/api/admin/checkin-pay-switch', admin.setCheckInPaySwitch);
 route('PUT', '/api/admin/players-sheet-redo-switch', admin.setPlayersSheetRedoSwitch);
 // Zip 30 (server/actingForOthers.ts): Acting for others.
 route('PUT', '/api/admin/acting-others-switch', admin.setActingOthersSwitch);
+route('PUT', '/api/admin/extended-time-switch', admin.setExtendedTimeSwitch);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));

@@ -4193,3 +4193,122 @@ Game 4 (Booked, 8 in) is the 7-row case. The row is on in the seed (`BUILDING_ON
   390/360/320 x light/dark x text 100/125/150% with 3 and 10 players. Older scripts that list the switch rows (zip16, zip21, zip23, zip30, money-rework) were updated for the new top row.
   circles and round2 failed once under load and pass alone (circles also passes on main); instant-taps timing 136 ms under load, 19/19 alone.
 - `e2e/zip32-off.cjs` against main `c88d17b`: 22/22 identical with the switch OFF (the dashboard answer byte for byte, Home, and the old sheet from both openers, light and dark, 390 and 320).
+## Zip 31: Extended time (🎾31.extended, EXTENDED_TIME, ships OFF) - built Wed Nov 11, 2026; on a preview, waiting for "ship it"
+Branch `claude/new-session-hj7h0d` (the brief's name "🎾31.extended" is the session name). Built on main `6d45848` (🎾29 live). 🎾30.phonetag (PR #122,
+migration `0018_phone_tag`) was NOT merged when this was built: this zip's migration is numbered `0019` so it lands after 0018; it must deploy after 🎾30
+(rebase on main, rerun the tests). MOVES MONEY. One database change (migration `0019_extended_time`, Alex approved the idea; the live migration waits for his
+"ship it"). NOT deployed.
+
+### The rule (shared/extension.ts)
+- Extra court cost: $12 for +30 min, $24 for +1 hr, one court (two courts at once are two games, each with its own extension; no multiplier).
+- N = everyone who played, Alex too if he played. Everyone who played except Alex pays ROUND UP(cost / N) whole dollars; Alex covers the rest (can be $0).
+  If rounding up would collect more than the cost, the share is rounded DOWN. Alex absent: the same split, he covers the remainder. Not played: never charged.
+- 4 / 5 / 6 played (Alex in): +30 min $3, $3, $2 each (Alex $3, $0, $2); +1 hr $6, $5, $4 (Alex $6, $4, $4). 9 played, +30 min: $1 each ($8), Alex $4.
+- The game's own price (floor(4 x up-front / N)) is not touched; the share is a separate charge.
+
+### What changed (all behind the switch)
+1. Finalize card: "Change who played" reads "Edit players / time". "Everyone played" is the shortcut (no extension).
+2. Who played sheet (option A, tiles; `src/pages/admin/ExtendedTime.tsx`, `src/extended-time.css`): "Who played · Thu, Nov 12" and the X; "4 played · $14 each"
+   (live); two columns of big tiles (pickleball, bold name, "(you)" for Alex); on = green outline and a small check badge; off = gray name, dashed gray outline,
+   no badge; EXTENDED TIME None | +30 min | +1 hr (the site's segmented control, None by default); +30 / +1 hr shows the soft amber "3 others pay $3 each" /
+   "You cover $3"; Confirm. Many players: the tile grid scrolls inside the sheet, the rest stays in view; a narrow phone at big text gets one column.
+   Everything the old sheet did is kept (price line, who can be toggled, the unconfirmed I paid warning, Undo on the toast, Reopen).
+3. Money (`server/extension.ts`): the shares are set in the SAME all-or-nothing batch as the finalize, after its credit back. Each share lives on the player's own
+   seat of that game (so it belongs to the person: dropping out of a later game, never playing again or reopening a later game never touches it). Setting a share
+   is "move to this number": credit already on it plus cash already paid is compared with the new share; too much comes back as credit (a ledger 'kept' row),
+   too little is owed again, and usable credit (never a pending cash out) is used at once for what is owed (a 'used' row). Both ledger rows carry reason
+   `ext:<game id>` and NO session_id, so no seat of any game counts them. Reopen moves every share of that game to $0 first (credit back), then reopens; if the
+   reopen stops, the shares are put back. An I paid on a share that is not confirmed stops a change that would hand it back ("Confirm it or clear it first"),
+   the same rule Finalize already has. Court cost: the extra cost is written on the game at Finalize (`sessions.extra_cost_cents`).
+4. Paying: the next game the player owes on (the soonest coming game they are in, unpaid, with an amount due; else none, the alert only) reads "$17 due" with
+   "incl. $3 extension" at the right end of the I paid / Drop out row; Pay opens Venmo for $17; I paid claims both (`ext_via` = that seat), Alex's Mark paid on
+   that seat confirms both, Unmark undoes both. "Pay now instead" on the alert opens the Pay sheet for just the extension; its I paid waits for Alex like every
+   I paid. Home ("Extra time: 1 hasn't paid") and the Money game card list every share still owed: bold name, "$3 extension · Thu, Nov 12", Mark paid (Confirm
+   after an I paid), Request / Text / "no Venmo saved", Remind; Undo on the toast. A debt stays until paid, however old (the lookback read now also keeps games
+   with a share owed, in the same one read).
+5. Player alerts (text only, no title, X): amber "You owe **$3** for the extra 30 min we added to yesterday's game. It'll be added to your next game." with
+   "Pay now instead"; two or more games: ONE alert with the total ("for extra time on past games"); credit used: the blue credit card (the site's credit color)
+   "Your **$3** credit was used for ..." or "**$2** of your credit was used for ... You owe $1 more, added to your next game." "tonight's game" (same evening),
+   "yesterday's game" (next day), else "the Nov 10 game". The X closes it for good (saved on the seat, so every phone); it cancels no debt; a new or changed
+   share brings it back.
+6. History: Activity lines for the game ("Alex added 30 min of extra time for Thu, Nov 12: $12 court, 3 pay $3 each, you cover $3") and for every share that moved
+   ("Blair's extra time share went from $6 to $3 for Thu, Nov 12, $3 back as credit"); the player's credit sheet ("$3 used for extra time on Nov 12",
+   "$1 back from Nov 12 (extra time changed)").
+
+### Totals (server/money.ts)
+- Court costs: + the extra court cost of every played game. Collected ("Players paid"): + what players put toward their shares once it is real money (credit used,
+  or cash Alex confirmed; an I paid not yet confirmed is Held). Your cost follows (court + membership - collected), so it rises by exactly Alex's part.
+- Example (4 played, 2 hours, $48 court, all paid $14, +30 min): before Court costs $48, Collected $42, your court part $6. After Finalize: Court costs $60,
+  Collected $42 (nobody has paid the extension yet), your court part $18. Once the three $3 shares are paid: Collected $51, your court part $9 (your $3).
+
+### Database (migrations/0019_extended_time.sql)
+- `sessions`: `extra_minutes`, `extra_cost_cents` (nullable). `session_players`: `ext_cents` (nullable), `ext_credit_cents`, `ext_paid_cents`, `ext_claim_cents`,
+  `ext_last_cents` (0 by default), `ext_claim_at`, `ext_paid_at`, `ext_via`, `ext_seen_at`, `ext_at` (nullable); one partial index on `ext_via`. Additive only:
+  nothing filled, copied or rewritten. Main's code runs unchanged on the migrated database (`e2e/zip31-off.cjs`), so a code rollback needs no database step.
+  Removing the columns (only to remove the feature's data): drop the index, then each column. Credit moved for an extension stays in `credit_ledger` and keeps
+  counting, so nothing is lost.
+- Reads added on player screens: ZERO (`tests/zip31-extension.test.ts`: the same 7 trips and statements with the switch on and off; the numbers come with the
+  seat rows the screen already reads). The organizer screens: the switch read (answered by the shared switch read with Fewer database trips on, as on live).
+- New read-only checks for the new data: `scripts/integrity-checks-extension.sql` (7 columns + 1 info). Separate file so the 21 older checks still run on a
+  database before 0019.
+
+### Switch
+`EXTENDED_TIME` in `[vars]` and `[env.preview.vars]` (kill switch); Settings > Feature switches > "Extended time" (top row, OFF at ship); `?extendedtime=on` per
+phone; preview only: `EXTENDED_TIME_PREVIEW = "on"`; Activity lines; `docs/FEATURE_SWITCHES.md`. Off: exactly main (`e2e/zip31-off.cjs`, 10/10, byte for byte).
+
+### Fresh review (two rounds; independent reviewers who did not write the code, money and database)
+- Round 1 (asked to make the money wrong: rounding 1 to 12 players, Alex absent, toggles after confirm, reopen, double taps): 2 blocking, 5 should-fix,
+  all fixed with a test each (`tests/zip31-extension.test.ts`, "review round 1 fixes"): (1) a share recomputed after cash came with the next game, then an
+  Unmark of that seat, left a hidden $3 debt; (2) a "$17" I paid made with the switch on could not be settled after it was turned off (the seat now always
+  carries its shares, one write and no read; Alex's owed rows show while any are open, even with the switch off); (3) the Home claim card's answer did not
+  follow the shares; (4) a refused Reopen still moved credit (every Reopen check now runs before any extra time money moves); (5) a player's "Didn't pay?"
+  could undo a payment Alex confirmed; (6) Money "Credits owed" missed credit handed back from a share; (7) the share no longer rides on a game the game-day
+  "You owe" card already asks for (the two cards never show different amounts).
+- Round 2: the seven fixes hold; 1 blocking (narrow) and 2 should-fix, fixed: a payment Alex confirmed on the extension row itself no longer follows the
+  next game's seat; an Unmark of a seat whose "$17" was paid and whose $3 was handed back as credit since takes that credit back (or is refused, "already
+  used or cashed out", as main refuses a Reopen when credit back was used); a stale tap that changes nothing moves no extra time; a "$17" I paid arriving
+  after the switch was turned off is refused ("Look again"), never recorded as $14. Kept as notes: Unmark then Mark paid again on the seat leaves the $3
+  owed (visible on Alex's rows and the alert; with Undo on the toasts it does not happen); with the switch OFF a Reopen still moves shares to $0 and a
+  redo with it off writes none (the extra time ends up on Alex, as main would); race-only partial batches in Reopen.
+- The crash test (`tests/audit-attack.test.ts`, requests cut off at every write) then caught that the seat-follow write swallowed errors; now only the
+  "database has no such column" case (before 0019) is forgiven.
+
+### Tests (Wed Nov 11, 2026, final code)
+- Unit suite alone: 2707 passed, 0 failed, 2 skipped on purpose (160 files, 706 s). New: `tests/zip31-extension.test.ts` (37): the rounding table for 1 to
+  12 players, +30 and +1 hr, Alex in and out, and the cap rule; the alert words; switch off and the kill switch; the whole money flow (shares, Totals,
+  $17 with the next game, Pay now, Mark paid, Undo); credit exactly / bigger / smaller / zero and a pending cash out; every edge case Alex decided; zero extra
+  player reads (7 trips on and off); the preview-only switch; the migration is additive; the review fixes. The integrity checks (21 old + the extension file)
+  read 0 after every scenario. Updated: the 7 "newest migration" pins, `tests/speed-queries.test.ts` (the new switch row), `tests/gameday.test.ts`.
+- `e2e/zip31.cjs` 98/98: the OFF label and old sheet; the ON card and tiles sheet; strict clipping (`e2e/clip-check.cjs`) on the sheet with 4, 6 and 10 players,
+  the Home rows, the owe alert and the "$17 due" card at 390 / 360 / 320, light and dark, text 100 / 125 / 150%; Pay now sheet; both credit alerts.
+  `e2e/clip-check.cjs` learned that a box inside a scroll area (`[class*="scroll"]`) is only drawn where the area shows it (the tiles grid scrolls).
+- `e2e/zip31-off.cjs` 10/10 (needs `MAIN_DIR`): main and this branch side by side on the MIGRATED database, switch off: Home, the sheet, player pages,
+  the dashboard / player / Money answers and a Finalize, byte for byte. Main reading the migrated database is the code rollback.
+- Whole browser suite once, 4 at a time (65 scripts): 56 passed; names, circles, live, auto-credit, motion, audit-player-flows, zip6 and run failed on
+  timeouts while the machine ran out of memory (and one leftover server held run.cjs's port); each passes alone (24, 18, 26, 22, 22, 93, 28, 229).
+  `credit.cjs` fails the same 4 checks on main 6d45848 (they look for "Tue, Nov 10", now past): 149 passed, 4 failed on both.
+
+### Round 2 (after the first report, Wed Nov 11, 2026)
+- Rebased on main `c88d17b` (🎾30.phonetag live, `0018_phone_tag` applied). This zip's migration stays `0019_extended_time`; the branch was squashed
+  to one commit first so the rebase resolved once (Settings rows: Extended time on top, then Acting for others; the newest-first browser checks and the
+  migration pins know both).
+- Alex's answer 3: when a row shows a combined due ("$17", incl. $3 extension: Home's money card and the Money game rows), Mark paid takes BOTH in one tap
+  (`extCents` with the seat's own amount; the shares are recorded as paid with that seat, then the seat; a refused seat payment puts the shares back).
+  Unmark (and so Undo) reverses both. The game it rides on is ONE rule for the player's card and the organizer's rows (`extRideOn`, server/player.ts).
+- Alex's answer 5 (Unmark, then Mark paid again, left the $3 owed): fixed by the same change: after the Unmark the row shows "$17" again and Mark paid takes
+  both. Tests: combined Mark paid, Unmark, Mark paid again; only the game part owed; only the extension owed (the extension row takes it); a stale amount.
+- Alex's answer 4: shares already set stay owed, in Totals and listed for Alex when the switch is turned off (as built).
+
+### Round 3 (after Alex walked the preview, Wed Nov 11, 2026)
+- Rebased on main `dd53dac` (🎾32.sheets live). Settings > Feature switches: Extended time on top, then Players sheet redo, then Acting for others (the
+  newest-first browser checks list all three; `e2e/zip27.cjs` was still on the pre-32 order and now has the full one). Migration stays `0019_extended_time`.
+- 🎾32 took the gear off played games: the Finalize card's "Edit players / time" is on the card itself, not the gear, so it is unaffected. 🎾32's new
+  Players sheet (its own switch) shows "Owes $17 (incl. $3 extension)" and its Mark paid takes both, like Home and the Money rows.
+- Alert size: the extension alerts now use the money card's own classes (`.ac-sub` 13 px line, `.ac-link` 14 px bold link like "I paid", the same badge, X
+  and padding); bold only on the amount. At that size the old words ran to 3 lines, so the short wording: "You owe $3 for tonight's extra 30 min. It's added
+  to your next game." (credit: "Your $3 credit was used for tonight's extra 30 min."; part: "$2 of your credit was used for tonight's extra 30 min. You owe $1
+  more, added to your next game."; an older game: "the extra 30 min on Nov 10"). `e2e/zip31.cjs` checks the text and link match the money card, every alert on
+  the page has the same badge, X, padding, line and link size, at most 2 lines at 390 and 360, strict clipping at 390/360/320, light and dark.
+- Pay in View as / Pretend: Pay opened the Pay sheet, but its Venmo button is silent on purpose in the demo copy (`openVenmo` never opens Venmo there), so it
+  looked dead. In the demo copy only, that button (and Pay itself when there is no Pay sheet) now shows "Demo, nothing saved. Venmo would open here." and marks
+  it paid on the copy; I paid says "Demo, nothing saved. Marked paid on the copy." Real phones are unchanged (`e2e/zip31.cjs`: the real site still owes $3).

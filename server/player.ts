@@ -1,4 +1,5 @@
 import type { CreditEntryView, GroupView } from '../shared/api';
+import { claimShares, extendedTimeFor, extRowsOf, followSeat, hasViaShares, myExtShares, playerExtensionPaid, playerExtensionSeen, seatIdOf, undoClaimAt } from './extension';
 import { sessionCalendar } from '../shared/calendar';
 import { DEFAULT_VENUE_NAME, zelleNumberOf } from '../shared/settings';
 import { joinOutcome } from '../shared/spots';
@@ -90,7 +91,7 @@ import { timeShiftFor } from './timeShift';
 import { motionFor, motionSettingRead } from './motion';
 import { payAlwaysFor } from './payAlways';
 import { phoneTagOf } from './phoneTag';
-import { flatOf, organizerIdRead, playersRead, priceOf, type ReadSpec, sessionStartsRead, specialFlatOf } from './repo';
+import { flatOf, organizerIdRead, playersRead, priceOf, type ReadSpec, type RosterRow, type SessionRow, sessionStartsRead, specialFlatOf } from './repo';
 import { capOf, type GroupSettings } from '../shared/settings';
 import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
@@ -222,7 +223,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
             kind: e.kind,
             cents: e.cents,
             sessionId: e.sessionId,
-            sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : null,
+            // Zip 31: credit for extra time names its game for the words ("used for extra time on Nov 12"), never as a seat.
+            sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : e.extSessionId ? (startsOf.get(e.extSessionId) ?? null) : null,
             at: e.createdAt,
             endedAt: e.endedAt,
             endedReason: (e.endedReason as CreditEntryView['endedReason']) ?? null,
@@ -261,6 +263,21 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const paySheetOn = await paySheetFor(ctx, group.id);
   // Zip 14 "Game day card" (server/gameDay.ts): the flag and each game's court only while on, so off this answer is exactly main's.
   const gameDay = await gameDayCardFor(ctx, group.id);
+  // Zip 31 "Extended time" (server/extension.ts): this player's own shares, from the rows already loaded above (no extra read).
+  const extOn = !!me && !meIsOrganizer && (await extendedTimeFor(ctx, group.id));
+  const myShares = extOn ? myExtShares(extRowsOf(sessions, rosters), me!.id) : [];
+  const extOwedCents = myShares.reduce((sum, x) => sum + x.owedCents, 0);
+  const upcoming = sessions
+    .filter((s) => Date.parse(s.ends_at) > ctx.nowMs && !hiddenIds.has(s.id))
+    .map((s) => {
+      const view = playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift, lateFees);
+      const court = gameDay ? courtOrNull(s.court) : null;
+      return court !== null ? { ...view, court } : view;
+    });
+  const payDue = payDueOf(owed, tz, ctx.nowMs);
+  // The game the shares ride on ("$17 due"): the same rule the organizer's rows use (extRideOn).
+  const nextForExt =
+    extOwedCents > 0 ? extRideOn({ playerId: me!.id, sessions, rosters, ledger, reserved, settings, tz, nowMs: ctx.nowMs, timeShift, lateFees, hiddenIds }) : null;
   return {
     group: {
       name: group.name,
@@ -316,28 +333,61 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...(previewCalmFor(ctx) ? { previewCalm: true as const } : {}),
     // Preview only (GAME_DAY_TEST is never set on live): this phone sees the next game's date as today.
     ...(gameDay && gameDayTestFor(ctx) ? { gameDayTest: true as const } : {}),
+    ...(extOn ? { extension: { owedCents: extOwedCents, nextSessionId: nextForExt, shares: myShares } } : {}),
     now: ctx.nowIso,
     // Upcoming sessions only. Money lives in the card at the top on game day.
     lateFees,
     feeNotices,
-    sessions: sessions
-      .filter((s) => Date.parse(s.ends_at) > ctx.nowMs && !hiddenIds.has(s.id))
-      .map((s) => {
-        const view = playerSessionView(s, rosters.get(s.id) ?? [], me?.id ?? null, ctx.nowMs, settings, tz, meIsOrganizer, { usableCents: credit.usableCents, hasCredit: credit.balanceCents > 0 || !!credit.pending, seat: mySeat(s.id) }, timeShift, lateFees);
-        const court = gameDay ? courtOrNull(s.court) : null;
-        return court !== null ? { ...view, court } : view;
-      }),
+    sessions: upcoming,
     owed,
-    payDue: owed.filter((o) => {
-      // A late fee shows on the top card at once (it is owed now, whatever the hour).
-      if (o.lateFee) return true;
-      const p = localParts(Date.parse(o.startsAt), tz);
-      return ctx.nowMs >= zonedTimeToUtc(p.year, p.month, p.day, PAY_FROM_HOUR, 0, tz);
-    }),
+    payDue,
     credit,
     suggestion,
     version,
   };
+}
+
+/** The owed games the top "You owe" card asks for now (a late fee at once, a game from PAY_FROM_HOUR on its day). */
+function payDueOf<T extends { lateFee?: unknown; startsAt: string }>(owed: T[], tz: string, nowMs: number): T[] {
+  return owed.filter((o) => {
+    // A late fee shows on the top card at once (it is owed now, whatever the hour).
+    if (o.lateFee) return true;
+    const p = localParts(Date.parse(o.startsAt), tz);
+    return nowMs >= zonedTimeToUtc(p.year, p.month, p.day, PAY_FROM_HOUR, 0, tz);
+  });
+}
+
+/**
+ * Zip 31 "Extended time": the game a player's extra time rides on ("$17 due"), worked out the same way on the player's screen and on the
+ * organizer's rows: the soonest coming game they are in, unpaid, with an amount due on its card (where Pay shows), and not a game the top
+ * "You owe" card already asks for (game day: that card pays the game alone, so two cards never show different amounts). Null: none (the
+ * alert only). From the rows the screen already loaded: no read.
+ */
+export function extRideOn(a: {
+  playerId: string;
+  sessions: SessionRow[];
+  rosters: Map<string, RosterRow[]>;
+  ledger: Parameters<typeof potBalance>[0];
+  reserved: Map<string, number>;
+  settings: ReturnType<typeof settingsOf>;
+  tz: string;
+  nowMs: number;
+  timeShift: boolean;
+  lateFees: boolean;
+  hiddenIds: Set<string>;
+}): string | null {
+  const balance = potBalance(a.ledger, a.playerId);
+  const reserved = a.reserved.get(a.playerId) ?? 0;
+  const credit = { usableCents: usableCredit(balance, reserved), hasCredit: balance > 0 || reserved > 0 };
+  const onTopCard = new Set(payDueOf(owedOf(a.playerId, a.sessions, a.rosters, a.ledger as never, a.settings, a.nowMs), a.tz, a.nowMs).map((o) => o.sessionId));
+  for (const s of a.sessions) {
+    if (Date.parse(s.starts_at) <= a.nowMs || a.hiddenIds.has(s.id) || onTopCard.has(s.id)) continue;
+    const roster = a.rosters.get(s.id) ?? [];
+    if (!roster.some((r) => r.player_id === a.playerId && r.status === 'confirmed' && r.payment_status === 'unpaid')) continue;
+    const v = playerSessionView(s, roster, a.playerId, a.nowMs, a.settings, a.tz, false, { ...credit, seat: seatOf(a.rosters, a.ledger as never, a.playerId, s.id) }, a.timeShift, a.lateFees);
+    if (v.mine && v.mine.status === 'confirmed' && v.mine.paymentStatus === 'unpaid' && v.mine.oweCents > 0) return s.id;
+  }
+  return null;
 }
 
 export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
@@ -516,7 +566,48 @@ export async function playerPaid(ctx: Ctx, body: Record<string, unknown>) {
   const paid = v.bool(body.paid, 'paid');
   const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
   const name = p?.display_name ?? 'A player';
-  return applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name, body.cents === undefined ? null : v.cents(body.cents, 'cents'));
+  const shown = body.cents === undefined ? null : v.cents(body.cents, 'cents');
+  // Zip 31 "Extended time": the next game's "$17 due" pays the extra time too. Its I paid claims the shares first (ext_via = this seat),
+  // then the seat as always; if the seat's payment is refused, the shares' I paid is taken back. Off (or no extCents): exactly main's.
+  const extCents = body.extCents === undefined || body.extCents === null ? 0 : (v.cents(body.extCents, 'extCents') ?? 0);
+  if (paid && extCents > 0) {
+    // The screen showed extra time and it was switched off since: look again (never record $14 when $17 was sent).
+    if (!(await extendedTimeFor(ctx, who.group.id))) throw new HttpError(409, 'changed', 'This just changed. Look again.');
+    const seatId = await seatIdOf(ctx.db, who.session.id, who.playerId);
+    if (!seatId) throw new HttpError(409, 'not_in_session', "You're not in this game.");
+    await claimShares(ctx, who.playerId, extCents, seatId);
+    try {
+      const out = await applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name, shown);
+      await audit(ctx.db, who.group.id, who.session.id, 'extension_i_paid', { player: name, playerId: who.playerId, amountCents: extCents, withGame: true }, ctx.nowIso, name);
+      return out;
+    } catch (err) {
+      await undoClaimAt(ctx.db, who.playerId, ctx.nowIso).catch(() => {});
+      throw err;
+    }
+  }
+  // "Didn't pay?" on a seat that paid the extra time with it: that I paid goes too (only one still waiting: a payment Alex confirmed is
+  // never undone by the player, as on main). Looked up first, so a seat with no extra time does nothing more after its payment.
+  const via = !paid && (await hasViaShares(ctx.db, who.session.id, who.playerId));
+  const out = await applyPayment(ctx, who.group, who.session, who.playerId, paid, name, name, shown);
+  if (via) await followSeat(ctx, who.group.id, who.session.id, who.playerId, false, true);
+  return out;
+}
+
+/** POST /api/me/extension-paid { cents }: Zip 31, "Pay now instead" on the extra time alert, then I paid. */
+export async function playerExtensionPaidRoute(ctx: Ctx, body: Record<string, unknown>) {
+  const who = await viewer(ctx);
+  refuseDemo(ctx, who);
+  if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
+  const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
+  return playerExtensionPaid(ctx, who.group, who.playerId, p?.display_name ?? 'A player', body);
+}
+
+/** POST /api/me/extension-seen { sessionIds }: Zip 31, the X on an extra time alert. */
+export async function playerExtensionSeenRoute(ctx: Ctx, body: Record<string, unknown>) {
+  const who = await viewer(ctx);
+  refuseDemo(ctx, who);
+  if (!who.playerId) throw new HttpError(401, 'pick_name', 'Pick your name first.');
+  return playerExtensionSeen(ctx, who.group, who.playerId, body);
 }
 
 /** POST /api/sessions/:id/use-credit: "Use credit" on a game they already owe for (credit that arrived after they signed up). */

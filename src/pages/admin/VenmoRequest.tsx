@@ -40,8 +40,8 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
   return (
     <section className={ctx.d.alertCards === true ? 'ac-stack vr-cards' : 'stack vr-cards'} aria-label="Do this now: who hasn't paid" data-vr-cards>
       {games.map(({ s, rows }) => {
-        const amounts = new Set(rows.map((r) => r.owesCents));
-        const common = amounts.size === 1 ? rows[0].owesCents : null;
+        const amounts = new Set(rows.map((r) => r.owesCents + (r.extCents ?? 0)));
+        const common = amounts.size === 1 ? rows[0].owesCents + (rows[0].extCents ?? 0) : null;
         return (
           <article key={s.id} className={ctx.d.alertCards === true ? 'ac ac-amber vr-card-ac' : 'card vr-card'} data-vr-card={s.id} {...(ctx.d.alertCards === true ? { 'data-alert-card': 'amber' } : {})}>
             <div className="vr-head">
@@ -70,7 +70,13 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                 <li key={r.playerId} className="mp-row" data-vr-row={r.name}>
                   <span className="mp-name">
                     <strong>{r.name}</strong>
-                    {common === null && <span className="mp-price">{formatPrice(r.owesCents)}</span>}
+                    {common === null && <span className="mp-price">{formatPrice(r.owesCents + (r.extCents ?? 0))}</span>}
+                    {/* Zip 31: the extra time riding on this game; Mark paid takes both. */}
+                    {!!r.extCents && (
+                      <span className="mp-price xt-incl-admin" data-vr-ext={r.name}>
+                        incl. {formatPrice(r.extCents)} extension
+                      </span>
+                    )}
                   </span>
                   <button
                     type="button"
@@ -80,7 +86,7 @@ export function OwedVenmoCards({ ctx }: { ctx: AdminCtx }) {
                     aria-label={`Mark ${r.name} paid for ${formatShortDate(s.startsAt, tz)}`}
                     onClick={() =>
                       void run(
-                        () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents }),
+                        () => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid: true, seen: r.moneySeen, cents: r.owesCents, ...(r.extCents ? { extCents: r.extCents } : {}) }),
                         `${r.name} marked paid`,
                         opTap({ kind: 'paid', sessionId: s.id, playerId: r.playerId }, 'Mark paid', ctx.d.adminUndo === true),
                       )
@@ -118,7 +124,7 @@ function VrTitle({ cards, children }: { cards: boolean; children: ReactNode }) {
  */
 export function RowRequest({ ctx, s, r }: { ctx: AdminCtx; s: AdminSessionView; r: AdminRosterEntry }) {
   const p = ctx.d.players.find((x) => x.id === r.playerId);
-  const link = venmoRequestLinks(p?.venmo ?? null, r.owesCents, s.startsAt, ctx.d.group.timezone);
+  const link = venmoRequestLinks(p?.venmo ?? null, r.owesCents + (r.extCents ?? 0), s.startsAt, ctx.d.group.timezone);
   if (link) {
     return (
       <a

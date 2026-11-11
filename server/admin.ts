@@ -85,6 +85,8 @@ import { alertCardsFor, alertCardsForAll, setAlertCardsForAll } from './zip11';
 import { seatDotsFor, seatDotsForAll, setSeatDotsForAll } from './seatDots';
 import { gameDayCardFlags, gameDayCardFor, setGameDayCardForAll } from './gameDay';
 import { setUnpaidNudgeForAll, unpaidNudgeForAll } from './unpaidNudge';
+import { extRideOn } from './player';
+import { adminExtensionPayment, markSharesWithSeat, undoSharesWithSeat, extendedTimeFor, extendedTimeForAll, extRowsOf, followSeat, hasViaShares, setExtendedTimeForAll, unmarkBlockedBy } from './extension';
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
@@ -204,7 +206,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
               kind: e.kind,
               cents: e.cents,
               sessionId: e.sessionId,
-              sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : null,
+              sessionStartsAt: e.sessionId ? (startsOf.get(e.sessionId) ?? null) : e.extSessionId ? (startsOf.get(e.extSessionId) ?? null) : null,
               at: e.createdAt,
               endedAt: e.endedAt,
               endedReason: e.endedReason as CreditEntryView['endedReason'],
@@ -276,6 +278,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   }));
   // Zip 15 (server/secondChance.ts): the Home cards, only while on (off: this answer is exactly main's).
   const secondChance = await secondChanceFlags(ctx, group.id);
+  // Zip 31 "Extended time": while on, the game each player's extra time rides on (the same rule as their own screen, server/player.ts
+  // extRideOn), so the organizer's row for that game shows "$17 (incl. $3 extension)" and its Mark paid takes both. From the rows loaded above.
+  const extOnSeats = (await extendedTimeFor(ctx, group.id)) ? extRideOnSeats(sessions, rosters, ledger, reserved, settings, group.timezone, ctx.nowMs, timeShift, await lateFeesFor(ctx, group.id)) : null;
   return {
     // Signed in with the read-only PIN (server/viewOnly.ts): the screens show "View only". Absent for the real PIN, so its answer is unchanged.
     ...(viewOnlyCookie(ctx) ? { viewOnly: true as const } : {}),
@@ -295,7 +300,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
       hasGroupWord: !!group.group_word_hash,
     },
     players: players.map((p) => ({ ...adminPlayerView(p), lateDrops: lateDrops.get(p.id) ?? 0, played: played.get(p.id) ?? 0, ...(adminR3 ? { spentCents: spent.get(p.id) ?? 0 } : {}), ...(adminR2 && hiddenByOrganizer.has(p.id) ? { adminHidden: true } : {}), ...(month ? { monthPlayed: month.counts.get(p.id) ?? 0 } : {}) })),
-    sessions: sessionViews,
+    sessions: extOnSeats ? withExtOnSeats(sessionViews, extOnSeats) : sessionViews,
     audit: auditEntries,
     hiddenSessions: (await loadHiddenSessions(ctx.db, group, ctx.nowMs)).map((h) => ({ id: h.id, startsAt: h.starts_at, endsAt: h.ends_at })),
     creditLedger,
@@ -419,6 +424,16 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...((await errorAlertsForAll(ctx.db, group.id)) ? { errorAlertsForAll: true as const } : {}),
     // Zip 17 (server/unpaidNudge.ts): the Settings row only (admin screens do not change).
     ...((await unpaidNudgeForAll(ctx.db, group.id)) ? { unpaidNudgeForAll: true as const } : {}),
+    // Zip 31 "Extended time" (server/extension.ts): the Settings row, and while on for this phone the flag and every share still owed or
+    // waiting for a confirm (from the rows loaded above, no extra read). Off: not there, so this answer is exactly main's.
+    ...((await extendedTimeForAll(ctx.db, group.id)) ? { extendedTimeForAll: true as const } : {}),
+    ...((await extendedTimeFor(ctx, group.id)) ? { extendedTime: true as const } : {}),
+    // The shares still owed or waiting for a confirm: while on, and also after it is turned off while some are still open (a debt or an
+    // I paid made while it was on can always be settled). With no extra time ever used: not there, so the answer is exactly main's.
+    ...(() => {
+      const open = extRowsOf(sessions, rosters).filter((x) => x.owedCents > 0 || x.claimCents > 0);
+      return open.length > 0 ? { extensionOwed: open.map((x) => ({ sessionId: x.sessionId, startsAt: x.startsAt, minutes: x.minutes, playerId: x.playerId, name: x.name, shareCents: x.shareCents, owedCents: x.owedCents, claimCents: x.claimCents })) } : {};
+    })(),
     // Preview only (shared/previewCalm.ts): never on live.
     ...(previewCalmFor(ctx) ? { previewCalm: true as const } : {}),
     ...(moneyRework ? { hiddenGames: await hiddenGamesView(ctx, group.id, markedHidden, creditSessionIds, charges), gameMonthCounts: await gameMonthCounts(ctx, group, listHidden) } : {}),
@@ -1182,8 +1197,11 @@ export async function answerClaim(ctx: Ctx, body: Record<string, unknown>) {
   if (playerId === (await organizerIdOf(ctx.db, group))) throw new HttpError(409, 'organizer_pays_court', 'That is your court payment.');
   // An I paid on an open late fee is a payment on that game (it stays there): Mark paid / Unmark answer it.
   const row = (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId);
-  if (row && lateFeeKind(row, session)) return applyPayment(ctx, group, session, playerId, paid, null);
-  return answerClaimOn(ctx, group, session, playerId, paid);
+  const via = await hasViaShares(ctx.db, session.id, playerId);
+  const out = row && lateFeeKind(row, session) ? await applyPayment(ctx, group, session, playerId, paid, null) : await answerClaimOn(ctx, group, session, playerId, paid);
+  // Zip 31: extra time paid together with this seat ("$17 due") follows the answer (Paid confirms it, Didn't pay clears it).
+  if (via) await followSeat(ctx, group.id, session.id, playerId, paid, true, true);
+  return out;
 }
 
 /**
@@ -1269,7 +1287,48 @@ export async function setPayment(ctx: Ctx, body: Record<string, unknown>) {
   const playerId = v.id(body.playerId, 'playerId');
   const paid = v.bool(body.paid, 'paid');
   const seen = body.seen === undefined ? null : v.optionalText(body.seen, 'seen', 200);
-  return applyPayment(ctx, group, session, playerId, paid, null, undefined, body.cents === undefined ? null : v.cents(body.cents, 'cents'), seen);
+  // Zip 31 "Extended time": only a seat that extra time was paid with ("$17 due") does anything more (one small read first). Its Unmark is
+  // refused when that extra time was handed back as credit since and the player no longer has it.
+  const via = playerId !== group.organizer_player_id && (await hasViaShares(ctx.db, session.id, playerId));
+  if (via && !paid) {
+    const blocked = await unmarkBlockedBy(ctx.db, session.id, playerId);
+    if (blocked) throw new HttpError(409, 'extension_handed_back', blocked);
+  }
+  // The row showed "$17 (incl. $3 extension)": Mark paid takes both in one tap. The shares go first (only if they still owe exactly what the
+  // row showed), then the seat as always; a seat payment that is refused puts the shares back. Unmark later reverses both (they follow it).
+  const extCents = paid && body.extCents !== undefined && body.extCents !== null ? (v.cents(body.extCents, 'extCents') ?? 0) : 0;
+  if (extCents > 0 && playerId !== group.organizer_player_id) {
+    if (!(await extendedTimeFor(ctx, group.id))) throw new HttpError(409, 'changed', 'This just changed. Look again.');
+    await markSharesWithSeat(ctx, session.id, playerId, extCents);
+    try {
+      const out = await applyPayment(ctx, group, session, playerId, paid, null, undefined, body.cents === undefined ? null : v.cents(body.cents, 'cents'), seen);
+      await audit(ctx.db, group.id, session.id, 'extension_marked_paid', { player: (await loadRoster(ctx.db, session.id)).find((r) => r.player_id === playerId)?.display_name, playerId, amountCents: extCents, withGame: true }, ctx.nowIso);
+      return out;
+    } catch (err) {
+      await undoSharesWithSeat(ctx, session.id, playerId).catch(() => {});
+      throw err;
+    }
+  }
+  const out = await applyPayment(ctx, group, session, playerId, paid, null, undefined, body.cents === undefined ? null : v.cents(body.cents, 'cents'), seen);
+  // Extra time paid together with this seat ("$17 due") follows the seat's Mark paid / Unmark: one write, no read; also with the switch
+  // off, so a payment made while it was on can always be settled. Only when the seat itself changed (a stale tap moves nothing).
+  if (via && (out as { changed?: boolean }).changed !== false) await followSeat(ctx, group.id, session.id, playerId, paid);
+  return out;
+}
+
+/** POST /api/admin/sessions/:id/extension-payment { playerId, paid, cents? }: Zip 31, one share's Mark paid / Unmark (server/extension.ts). */
+export async function setExtensionPayment(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, session } = await adminSession(ctx);
+  return adminExtensionPayment(ctx, group, session, body);
+}
+
+/** PUT /api/admin/extended-time-switch { on }: Settings > Feature switches > "Extended time" (Zip 31). Moves money only when used at Finalize. */
+export async function setExtendedTimeSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setExtendedTimeForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'extended_time_on' : 'extended_time_off', {}, ctx.nowIso);
+  return { ok: true };
 }
 
 /**
@@ -2764,4 +2823,31 @@ export async function setPlayerCardsSwitch(ctx: Ctx, body: Record<string, unknow
   await setPlayerCardsForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'player_cards_on' : 'player_cards_off', {}, ctx.nowIso);
   return { ok: true, on };
+}
+
+/** Zip 31: for each player with extra time owed (no I paid waiting), the game it rides on and how much: "sessionId:playerId" -> cents. */
+function extRideOnSeats(
+  sessions: SessionRow[],
+  rosters: Map<string, RosterRow[]>,
+  ledger: Parameters<typeof extRideOn>[0]['ledger'],
+  reserved: Map<string, number>,
+  settings: ReturnType<typeof settingsOf>,
+  tz: string,
+  nowMs: number,
+  timeShift: boolean,
+  lateFees: boolean,
+): Map<string, number> {
+  const owed = new Map<string, number>();
+  for (const x of extRowsOf(sessions, rosters)) if (x.owedCents > 0) owed.set(x.playerId, (owed.get(x.playerId) ?? 0) + x.owedCents);
+  const out = new Map<string, number>();
+  for (const [playerId, cents] of owed) {
+    const on = extRideOn({ playerId, sessions, rosters, ledger, reserved, settings, tz, nowMs, timeShift, lateFees, hiddenIds: new Set() });
+    if (on) out.set(`${on}:${playerId}`, cents);
+  }
+  return out;
+}
+
+function withExtOnSeats(views: AdminDashboard['sessions'], on: Map<string, number>): AdminDashboard['sessions'] {
+  if (on.size === 0) return views;
+  return views.map((s) => (s.roster.some((r) => on.has(`${s.id}:${r.playerId}`)) ? { ...s, roster: s.roster.map((r) => (on.has(`${s.id}:${r.playerId}`) ? { ...r, extCents: on.get(`${s.id}:${r.playerId}`)! } : r)) } : s));
 }

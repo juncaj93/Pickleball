@@ -470,7 +470,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -478,6 +478,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <TidySwitches ctx={ctx} auto={auto} r3={r3} />
           ) : (
             <>
+              <ExtendedTimeRow ctx={ctx} auto={auto} />
               <CheckInPayRow ctx={ctx} auto={auto} />
               <PlayersSheetRow ctx={ctx} auto={auto} />
               <ActingOthersRow ctx={ctx} auto={auto} />
@@ -1383,6 +1384,12 @@ function CheckInPayRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 function PlayersSheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="playersSheetRedoAll" path="/api/admin/players-sheet-redo-switch" name="Players sheet redo" hint="The Players sheet from a game card: who paid, Mark paid and Request on each row, and names to tap to add. Same actions as before" flag={!!ctx.d.playersSheetRedoForAll} dataAttr="data-players-sheet-redo-all" />;
 }
+
+/** Zip 31, "Extended time" (EXTENDED_TIME, server/extension.ts): None | +30 min | +1 hr on the Who played sheet, shares on the next game. Moves money. Off: only ?extendedtime=on. */
+function ExtendedTimeRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="extendedTimeAll" path="/api/admin/extended-time-switch" name="Extended time" hint="Finalize: add +30 min or +1 hr. Each player's share goes on their next game" flag={!!ctx.d.extendedTimeForAll} dataAttr="data-extended-time-all" />;
+}
+
 /** Zip 30, "Acting for others" (ACTING_FOR_OTHERS, server/actingForOthers.ts): a note in History and a card on Home when a player taps for someone else. Organizer only, look only. Off: only /admin?actingothers=on. */
 function ActingOthersRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="actingOthersAll" path="/api/admin/acting-others-switch" name="Acting for others" hint="Home and History show when a player signs up, backs out or pays for someone else. Nothing is blocked. Organizer only" flag={!!ctx.d.actingOthersForAll} dataAttr="data-acting-others-all" />;
@@ -1619,6 +1626,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
   const rest = all.filter((x) => !stable.has(x.key));
   return (
     <div className="switches-tidy" data-switches-tidy>
+      <ExtendedTimeRow ctx={ctx} auto={auto} />
       <CheckInPayRow ctx={ctx} auto={auto} />
       <PlayersSheetRow ctx={ctx} auto={auto} />
       <ActingOthersRow ctx={ctx} auto={auto} />

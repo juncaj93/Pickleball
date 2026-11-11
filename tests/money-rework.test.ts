@@ -114,7 +114,7 @@ describe('MONEY_REWORK switch', () => {
   });
   it('S7 no migration was added for it', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql'));
-    expect(files.at(-1)).toBe('0018_phone_tag.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
+    expect(files.at(-1)).toBe('0019_extended_time.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code), Zip 31 0019 (extended time); this feature itself still adds none
   });
   it('S8 with it off, the new endpoints refuse and the old numbers are untouched', async () => {
     const { w, s0, month } = await playedGame();

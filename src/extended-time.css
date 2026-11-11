@@ -1,0 +1,247 @@
+/* Zip 31, "Extended time" (src/pages/admin/ExtendedTime.tsx, src/pages/PlayerHome.tsx): the Who played tiles sheet, the amber split
+   line, the extension rows on Home, the player's alert link and the "incl. $3 extension" note. Only drawn while the switch is on. */
+
+.xt-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* "4 played · $14 each": the count bold, the rest gray, as the mock. */
+.xt-summary {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 1.35rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+.xt-summary b {
+  font-weight: 700;
+}
+.xt-summary-rest {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+/* Two columns of big tiles. Many players: the sheet scrolls; Confirm stays pinned at the bottom. */
+.xt-grid {
+  list-style: none;
+  margin: 0;
+  padding: 10px 0 0;
+  display: grid;
+  /* Two columns on a phone; one where two would squeeze the names (a narrow phone with big text). */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, max(7.5em, calc((100% - 12px) / 2))), 1fr));
+  gap: 14px 12px;
+}
+.xt-tile {
+  position: relative;
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 16px;
+  border: 2.5px solid var(--court);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color var(--fast), background-color var(--fast);
+}
+.xt-tile:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+.xt-tile.off {
+  border: 2px dashed var(--line-strong);
+  background: transparent;
+  color: var(--ink-2);
+}
+.xt-tile.off .xt-ball {
+  opacity: 0.45;
+  filter: grayscale(1);
+}
+.xt-ball {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+}
+.xt-ball .ball {
+  width: 26px;
+  height: 26px;
+}
+.xt-name {
+  min-width: 0;
+  font-size: 1.08rem;
+  line-height: 1.2;
+  /* Long names wrap between words; only a word too long for the tile on its own breaks. */
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+.xt-name b {
+  font-weight: 700;
+}
+.xt-tile.off .xt-name b {
+  font-weight: 600;
+}
+.xt-you {
+  color: var(--ink-2);
+  font-size: 0.92em;
+  font-weight: 500;
+}
+/* The small green check badge on the tile's top-right corner. */
+.xt-check {
+  position: absolute;
+  top: -9px;
+  right: -7px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--court);
+  color: #fff;
+  box-shadow: 0 0 0 2.5px var(--sheet-bg);
+}
+
+.xt-extra {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.xt-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink-2);
+}
+.xt-seg button {
+  font-size: 1rem;
+}
+/* "3 others pay $3 each" on the left, "You cover $3" on the right, soft amber. Wraps under itself at big text. */
+.xt-split {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--warn-bg);
+  color: var(--ink-2);
+  font-size: 0.98rem;
+  line-height: 1.3;
+}
+.xt-split b {
+  color: var(--warn-fg);
+  font-weight: 700;
+}
+.xt-split-r {
+  margin-left: auto;
+}
+
+/* Many players: the tile grid scrolls inside the sheet, and the summary, EXTENDED TIME and Confirm stay in view (the sheet becomes a column
+   whose grid takes what room is left, never less than about two rows). At very big text the sheet scrolls as a whole, as every sheet does. */
+dialog.sheet[open]:has(.xt-sheet) {
+  display: flex;
+  flex-direction: column;
+}
+dialog.sheet[open]:has(.xt-sheet) > .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+.xt-sheet {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.xt-grid {
+  flex: 0 1 auto;
+  min-height: 132px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  /* Room for the badges that sit over the tiles' top edge, and for the focus ring. */
+  padding: 10px 8px 4px 2px;
+  margin: 0 -8px 0 -2px;
+}
+.xt-confirm {
+  flex: none;
+}
+
+/* Home: the extension rows ("$3 extension · Thu, Nov 12") under the bold name; the name keeps its "..." for a very long name, the
+   amount and date wrap instead of being cut. */
+.mp-rows .mp-row.xt-row {
+  height: auto;
+  min-height: 50px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  flex-wrap: wrap;
+}
+.mp-rows .xt-row .mp-name {
+  white-space: normal;
+  flex: 1 1 7rem;
+}
+.xt-row .mp-name strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.xt-row .xt-what {
+  display: block;
+  margin-left: 0;
+  font-weight: 500;
+  white-space: normal;
+}
+
+/* Player: the extension alerts use the money card's own classes (.ac, .ac-row, .ac-icon, .ac-sub, .ac-links, .ac-link, .ac-x; src/alert-cards.css),
+   so their text, link, badge, X and padding are the same size as every other alert. Only: no gap above the first line, the amount bold. */
+.ac .xt-alert-text {
+  margin-top: 0;
+}
+.ac .xt-alert-text b {
+  color: var(--ac-title, var(--ink));
+  font-weight: 800;
+}
+
+/* Player: the next game's "I paid / Drop out" row with "incl. $3 extension" at its right end. */
+.xt-incl-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+.xt-incl {
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: 0.86rem;
+  white-space: nowrap;
+}
+
+:root[data-theme='dark'] .xt-check {
+  color: #0d1a12;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .xt-check {
+    color: #0d1a12;
+  }
+}
+
+/* Money page: the game's EXTRA TIME rows. */
+.xt-money {
+  padding: 4px var(--gutter) 10px;
+}
+.xt-money .xt-label {
+  margin: 6px 0 2px;
+}
+
+.xt-nowrap {
+  white-space: nowrap;
+}
