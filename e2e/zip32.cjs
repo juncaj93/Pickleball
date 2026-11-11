@@ -143,7 +143,8 @@ async function main() {
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
     const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-row')));
-    assert(first[0] === 'playersSheetRedoAll', `newest first: ${first}`);
+    // (Zip 34's Check-in pay line row is newer and sits on top of it.)
+    assert(first[0] === 'checkInPayAll' && first[1] === 'playersSheetRedoAll', `newest first: ${first}`);
     const r = page.locator('[data-row="playersSheetRedoAll"]');
     assert(/Players sheet redo/.test(await r.innerText()), 'row label');
     assert(!(await r.locator('input[type=checkbox]').isChecked()), 'the row starts off');

@@ -164,6 +164,8 @@ route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
 route('PUT', '/api/admin/totals-refresh-switch', admin.setTotalsRefreshSwitch);
 route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
+// Zip 34 (server/checkInPay.ts): Check-in pay line.
+route('PUT', '/api/admin/checkin-pay-switch', admin.setCheckInPaySwitch);
 // Zip 32 (server/playersSheetRedo.ts): Players sheet redo.
 route('PUT', '/api/admin/players-sheet-redo-switch', admin.setPlayersSheetRedoSwitch);
 // Zip 30 (server/actingForOthers.ts): Acting for others.

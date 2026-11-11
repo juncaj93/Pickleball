@@ -6,15 +6,18 @@
 // give out is the same words the group already gets (a game time and the
 // site address), and all it can save is that the text was opened.
 import { MIN_PLAYERS } from '../shared/spots';
-import { checkInMessage, needPlayersMessage, siteAddress } from '../shared/messages';
-import { checkInTextR2, needPlayersTextR2 } from '../shared/textsR2';
+import { needPlayersMessage, siteAddress } from '../shared/messages';
+import { needPlayersTextR2 } from '../shared/textsR2';
 import { textsR2For } from './textsR2';
-import { checkInTextLastCall, needPlayersTextLastCall } from '../shared/lastCall';
+import { needPlayersTextLastCall } from '../shared/lastCall';
 import { lastCallFor } from './lastCall';
+import { checkInBody } from '../shared/checkInPay';
+import { checkInPayFlags, signedUpOweOnGame } from './checkInPay';
+import { withShortGames } from './zip9';
 import { playerLinkFor } from './admin';
 import type { Ctx } from './context';
 import { HttpError } from './http';
-import { confirmedOf, getGroup, getSession, loadRoster } from './repo';
+import { confirmedOf, getGroup, getSession, loadRoster, priceOf, settingsOf } from './repo';
 import { writeMark } from './tasks';
 import * as v from './validate';
 
@@ -95,17 +98,25 @@ export async function goText(ctx: Ctx, body: Record<string, unknown>) {
   const r2 = await textsR2For(ctx, group.id);
   // "Last call texts" (Zip 8) on top of round 2: Alex's last call words. Off: exactly as before.
   const lastCall = r2 && (await lastCallFor(ctx, group.id));
-  const text = lastCall
-    ? n < MIN_PLAYERS
-      ? needPlayersTextLastCall(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
-      : checkInTextLastCall(s, group.timezone, ctx.nowMs, n, link)
-    : r2
-    ? n < MIN_PLAYERS
-      ? needPlayersTextR2(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
-      : checkInTextR2(s, group.timezone, ctx.nowMs, n, link)
-    : n < MIN_PLAYERS
-      ? needPlayersMessage(s, group.timezone, ctx.nowMs, MIN_PLAYERS - n, link)
-      : checkInMessage(s, group.timezone, ctx.nowMs, link);
+  // Zip 34 "Check-in pay line" on top of round 2: only a Check-in (4 or more in) can carry it, and only while somebody signed up still owes.
+  // Off: only the one switch read runs, and the words are exactly what they were.
+  let someoneOwes = false;
+  let priceCents = 0;
+  const payLine = r2 && n >= MIN_PLAYERS && (await checkInPayFlags(ctx, group.id)).on;
+  if (payLine) {
+    // The price the players see for this game: the same rules (Short games, Booking hours) as their own screen.
+    await withShortGames(ctx, group);
+    someoneOwes = await signedUpOweOnGame(ctx, group, session);
+    priceCents = priceOf(session, settingsOf(group)).flatCents;
+  }
+  const text =
+    n < MIN_PLAYERS
+      ? lastCall
+        ? needPlayersTextLastCall(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
+        : r2
+        ? needPlayersTextR2(s, group.timezone, ctx.nowMs, n, MIN_PLAYERS - n, link)
+        : needPlayersMessage(s, group.timezone, ctx.nowMs, MIN_PLAYERS - n, link)
+      : checkInBody({ s, tz: group.timezone, nowMs: ctx.nowMs, signedUp: n, link, r2, lastCall, payLine, someoneOwes, priceCents });
   // Opening it counts as the organizer's tap on "Text the group" (not from Pretend or the demo).
   if (!ctx.env.SANDBOX && !read.test) {
     try {

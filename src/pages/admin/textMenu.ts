@@ -8,7 +8,6 @@ import {
   canceledTodayMessage,
   courtCanceledMessage,
   courtStillBookedMessage,
-  checkInMessage,
   finalMessage,
   movedMessage,
   needPlayersMessage,
@@ -21,7 +20,6 @@ import {
 import {
   canceledCreditTextR2,
   canceledFeeKeptTextR2,
-  checkInTextR2,
   courtCanceledTextR2,
   courtStillBookedTextR2,
   finalTextR2,
@@ -32,7 +30,8 @@ import {
   remindAllTextR2,
   shareTextR2,
 } from '../../../shared/textsR2';
-import { checkInTextLastCall, needPlayersTextLastCall } from '../../../shared/lastCall';
+import { needPlayersTextLastCall } from '../../../shared/lastCall';
+import { checkInBody, signedUpOwe } from '../../../shared/checkInPay';
 import { viewFlat } from '../../../shared/gameLength';
 
 export interface TextItem {
@@ -103,8 +102,22 @@ export function sessionTexts(d: AdminDashboard, s: AdminSessionView, nowMs: numb
   if (n < 4) items.push({ id: 'need', label: 'Need players', body: lastCall ? needPlayersTextLastCall(s, tz, nowMs, n, 4 - n, link) : r2 ? needPlayersTextR2(s, tz, nowMs, n, 4 - n, link) : needPlayersMessage(s, tz, nowMs, 4 - n, link), ...GROUP });
   // 4 or more in: the Check-in goes to everyone signed up, the waitlist too. TEXTS_R2: it opens with NO recipients everywhere (you pick the group chat).
   if (n >= 4) {
-    if (r2) items.push({ id: 'checkin', label: 'Check-in', body: lastCall ? checkInTextLastCall(s, tz, nowMs, n, link) : checkInTextR2(s, tz, nowMs, n, link), ...GROUP });
-    else items.push({ id: 'checkin', label: 'Check-in', body: checkInMessage(s, tz, nowMs, link), ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
+    // The words come from the one builder shared with the Telegram link (shared/checkInPay.ts). Zip 34 "Check-in pay line": a soft pay line while
+    // somebody signed up still owes (switch off, or everyone paid: exactly the words that were here before).
+    const body = checkInBody({
+      s,
+      tz,
+      nowMs,
+      signedUp: n,
+      link,
+      r2,
+      lastCall,
+      payLine: d.checkInPay === true,
+      someoneOwes: signedUpOwe(s.roster),
+      priceCents: viewFlat(s, d.group.settings.pricePerPlayerCents),
+    });
+    if (r2) items.push({ id: 'checkin', label: 'Check-in', body, ...GROUP });
+    else items.push({ id: 'checkin', label: 'Check-in', body, ...toNumbers('Everyone signed up', signed, me), who: 'Everyone signed up' });
   }
   // A waitlisted player who moved in after a drop (above the max, someone left).
   for (const r of confirmed.filter((x) => x.promotionReason === 'spot_opened' && x.promotedAt && !x.promotionNotifiedAt && x.playerId !== me)) {
