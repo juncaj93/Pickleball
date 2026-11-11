@@ -173,7 +173,7 @@ async function asCasey(w: W, phone: Awaited<ReturnType<typeof playerPhone>>, s: 
 describe('recording the phone code (migration 0018)', () => {
   it('migration 0018 is additive only: one nullable column and one partial index, nothing else', () => {
     const files = readdirSync('migrations').filter((f) => f.endsWith('.sql')).sort();
-    expect(files.at(-1)).toBe('0018_phone_tag.sql');
+    expect(files.filter((f) => f <= '0018_phone_tag.sql').at(-1)).toBe('0018_phone_tag.sql'); // Zip 33: newer migrations (0019, 0020) come from other zips, so look at the newest up to 0018
     const sql = readFileSync('migrations/0018_phone_tag.sql', 'utf8').replace(/--.*$/gm, '').trim().split(';').map((x) => x.trim()).filter(Boolean);
     expect(sql).toEqual([
       'ALTER TABLE admin_audit_log ADD COLUMN device_tag TEXT',

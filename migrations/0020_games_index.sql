@@ -1,0 +1,39 @@
+-- Zip 33, "Games index" (speed up the database). Indexes only.
+--
+-- Why: the free database plan has a daily limit on rows read. Every open screen
+-- asks the site "is anything new?" every 5 seconds, and the Home screens and the
+-- 5-minute clock ask a lot more. Two kinds of lookup read far more than they
+-- need, and the waste grows every week:
+--   * "the games that have not ended yet (or ended in the last 90 days)": the
+--     database had no shortcut for that, so it read EVERY game ever made and
+--     threw the old ones away.
+--   * "is this feature switch on?" and "which games are hidden?": switches and
+--     per-game marks share one table (task_log), and every one of those
+--     questions read all of it. Each finished game adds about 3 marks.
+-- An index is a table of contents: it lets the database jump straight to the
+-- rows it needs.
+--
+-- 1. idx_sessions_group_ends: a group's games by when they end. Used by the
+--    5-second check (player and organizer), both Home loads, the alert tick and
+--    the money and credit reads that only look at recent or upcoming games.
+-- 2. idx_task_log_switch_rows: only the switch rows (the ones that belong to no
+--    game), by time. Answers "is this switch on?", the shared switch read and
+--    the animation setting by reading only the switch rows (a few dozen, ever).
+-- 3. idx_task_log_game_marks: only the per-game marks, by name. Answers "which
+--    games are hidden?" by reading only those marks.
+--
+-- Additive only: no column, no row, no money record and no answer changes.
+-- Nothing existing is dropped or rewritten. Code that does not know about
+-- these indexes (every build before Zip 33) works the same on the migrated
+-- database, so a rollback of the site needs NO database step.
+-- Cost: each new or edited game writes one extra index entry (a few a week),
+-- and each task_log row (a switch flip, a "Do this now" tap, a finalized game)
+-- writes at most one. All small.
+--
+-- Rollback (never needed for a code rollback; each is instant and touches no data):
+--   DROP INDEX IF EXISTS idx_sessions_group_ends;
+--   DROP INDEX IF EXISTS idx_task_log_switch_rows;
+--   DROP INDEX IF EXISTS idx_task_log_game_marks;
+CREATE INDEX IF NOT EXISTS idx_sessions_group_ends ON sessions (group_id, ends_at);
+CREATE INDEX IF NOT EXISTS idx_task_log_switch_rows ON task_log (group_id, kind, at) WHERE session_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_task_log_game_marks ON task_log (group_id, task) WHERE kind = 'mark' AND session_id IS NOT NULL;

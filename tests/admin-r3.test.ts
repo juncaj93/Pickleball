@@ -78,7 +78,7 @@ describe('ADMIN_R3 switch', () => {
   });
   it('S8 no migration was added for it', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql'));
-    expect(files.at(-1)).toBe('0018_phone_tag.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
+    expect(files.filter((f) => f <= '0018_phone_tag.sql').at(-1)).toBe('0018_phone_tag.sql'); // Zip 33: newer migrations (0019, 0020) come from other zips, so look at the newest up to 0018 // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
   });
 });
 

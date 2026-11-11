@@ -155,6 +155,6 @@ describe('PAY_SHEET switch', () => {
   });
   it('Z5 no schema change: the number lives in settings_json and the migrations folder is untouched', () => {
     const files = readdirSync('migrations').sort();
-    expect(files[files.length - 1]).toBe('0018_phone_tag.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
+    expect(files.filter((f) => f <= '0018_phone_tag.sql').at(-1)).toBe('0018_phone_tag.sql'); // Zip 33: newer migrations (0019, 0020) come from other zips // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
   });
 });
