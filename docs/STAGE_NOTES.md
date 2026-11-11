@@ -4152,3 +4152,21 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
   4 fail on main (they look for "Tue, Nov 10", now past). round2 1 (banner timing under load): 25/25 alone. zip29 ran in Chromium: WebKit is not
   installed in this container (zip29 falls back by itself and says so); 29's own WebKit run is in its notes.
 - `e2e/zip30-off.cjs` against main `6d45848`: 19/19 identical with the switch off.
+
+### Deploy (Wed Nov 11, 2026, 11:17 to 11:20 AM Eastern, a quiet window, on Alex's "ship it") - LIVE with ACTING_FOR_OTHERS OFF
+- Before: main equaled live (production `a4406c1b-d23f-476f-bdc8-78adaac582c4` = `6d45848`, 🎾29.polish). PR #122 merged as `c88d17b`.
+- SQL export of live (`npx wrangler d1 export pickleball --remote`, 11:17 AM, 201,718 bytes, 549 INSERT lines, kept out of git), saved to
+  `pickleball-backups` as `export-20261111161941`. Time Travel bookmark (11:17 AM): `00000f55-00000002-00005120-543716e076aa3e0530abadffd17bdc52`.
+  Whole database only if ever needed: `npx wrangler d1 time-travel restore pickleball --bookmark=00000f55-00000002-00005120-543716e076aa3e0530abadffd17bdc52`.
+- Integrity checks: 21 columns, all 0 before and after the migration (identical). Money, read only, before = after: 12 paid seats, $168.00 paid;
+  credit ledger 5 rows, $70.00 total, $28.00 open; 3 finalized games, prices and played counts identical; court cost 0 rows set; 8 price locks
+  identical; 306 History lines, 11 players, 14 games.
+- Migration 0018 applied to live (`npm run db:migrate:remote`, 11:18 AM; the only pending file). After: the column and `idx_audit_phone` exist,
+  0 lines with a code, no "Acting for others" row (the switch is OFF).
+- Production deployment `f56850ea-ae14-4936-8609-4ef46a852a3a` = main `c88d17b` (11:19 AM). ROLLBACK: Pages deployment
+  `a4406c1b-d23f-476f-bdc8-78adaac582c4` (🎾29, `6d45848`); it runs unchanged on the migrated database, View as included, so no database step.
+  Quickest off: the switch is already off; `ACTING_FOR_OTHERS = "off"` (deploy) also stops recording codes.
+- Live check WITHOUT any PIN (backup address; the custom address does not answer from this sandbox): home 200; `/api/status` setupComplete true;
+  `/api/admin/dashboard` and `PUT /api/admin/acting-others-switch` unsigned 401; the live script is this build's file (`index-BRwbfYVm.js`) and
+  carries the phone code and the card. Admin screens: Alex checks them himself.
+- From now on every player tap records its phone code quietly (Alex, Wed Nov 11: yes), so phones are learned before the switch goes on.
