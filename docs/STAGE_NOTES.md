@@ -4235,3 +4235,9 @@ DROP INDEX IF EXISTS idx_task_log_switch_rows;
 DROP INDEX IF EXISTS idx_task_log_game_marks;
 ```
 If 0019 lands later it applies normally (wrangler applies any file not yet recorded). If 0019 also creates `idx_sessions_group_ends`, it must use IF NOT EXISTS.
+
+### Zip 33 follow-up (Wed Nov 11, 2026, Alex's answers)
+- Migration 0020 applied to `pickleball-preview` ONLY (fake data; live untouched). All three indexes exist there; the 21 integrity checks read exactly what they read before (all 0, info_open_late_fees 4).
+- Real D1 numbers on the preview database (65 games, all inside the 90-day window, 42 switch rows, no per-game marks), rows read before -> after: games in window 65 -> 124 (the window is sorted; all 65 games qualify, so no saving yet), everyone's sign-ups 274 -> 239, own sign-ups 87 -> 84, alert tick 65 -> 54, hidden games 42 -> 0, shared switch read 43 -> 43, animation 42 -> 42, one switch question 33 -> 33. The indexes pay off as games age past 90 days and per-game marks pile up; the preview has neither, so it shows the plan switching, not the saving. The scaling table above is the real picture.
+- Decisions (Alex): stay at three indexes (no late-drop index). The code-level reads listed under "What is NOT fixed by indexes" are PARKED, no follow-up zip: revisit when live daily rows read approach the free plan's daily cap.
+- Ship order (Alex): 🎾31.extended (0019) first, then this. If 0019 or anything else touches `idx_sessions_group_ends`, use IF NOT EXISTS. Earliest window: Thu after 11 PM Eastern or Friday, quiet hours, after 🎾31 is live, and only after Alex says "ship it". Then: rebase on main, full unit suite alone, SQL backup, Time Travel bookmark, 21 checks before, apply 0020 live, deploy, live read-only check without a PIN, 21 checks after, rollback ID, drop statements ready.
