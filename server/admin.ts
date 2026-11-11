@@ -1888,6 +1888,8 @@ export async function backupFile(ctx: Ctx): Promise<Response> {
   // Read-only PIN (server/viewOnly.ts): never hand out the real PIN's hash or the group word's hash (a short PIN can be guessed
   // from its hash offline). The file is otherwise the same, so View as still works; a restore needs the real PIN's own file.
   if (viewOnlyCookie(ctx)) backup.tables.groups = backup.tables.groups.map((g) => ({ ...g, admin_pin_hash: '', group_word_hash: null }));
+  // Zip 30: nor the phone codes (History's device_tag): a helper with the read-only PIN gets the History lines without them.
+  if (viewOnlyCookie(ctx) && backup.tables.admin_audit_log) backup.tables.admin_audit_log = backup.tables.admin_audit_log.map((r) => ('device_tag' in r ? { ...r, device_tag: null } : r));
   const body = JSON.stringify(backup, null, 1);
   return new Response(body, {
     headers: {
@@ -2444,7 +2446,6 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   return { ok: true, on };
 }
 
-/** PUT /api/admin/spent-totals-switch { on }: Settings > Feature switches > "Spent matches Totals" (Zip 27, A-05). Display only; moves no money. */
 /** PUT /api/admin/acting-others-switch { on }: Zip 30 "Acting for others" for every organizer phone. Look only; no data changes. */
 export async function setActingOthersSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
@@ -2454,6 +2455,7 @@ export async function setActingOthersSwitch(ctx: Ctx, body: Record<string, unkno
   return { ok: true, on };
 }
 
+/** PUT /api/admin/spent-totals-switch { on }: Settings > Feature switches > "Spent matches Totals" (Zip 27, A-05). Display only; moves no money. */
 export async function setSpentTotalsSwitch(ctx: Ctx, body: Record<string, unknown>) {
   const group = await requireAdmin(ctx);
   const on = v.bool(body.on, 'on');

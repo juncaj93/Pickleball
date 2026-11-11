@@ -169,6 +169,12 @@ Backups made before the "any number from 4 to 10" change (Oct 29, 2026) have no
 restores onto a database that has migration 0013 applied; run the migrations first
 (step 2 does that for the practice copy, and the live database already has them).
 
+Backups made after Zip 30 (migration 0018, phone codes) have a `device_tag` on each History line. They restore onto a database that has
+migration 0018 applied (run the migrations first, as above); onto an older practice copy built from a checkout before Zip 30 they fail with
+"no column named device_tag". Backups made before Zip 30 restore fine onto the new database (every line without a code). The restore test
+(`npm run restore-test`) may say the rows lack a column when it checks a copy made before Zip 30 with the new code: expected until the first
+weekly copy after the deploy. A backup downloaded with the read-only PIN has the phone codes blanked.
+
 Restoring a backup file also empties the "Do this now" log (`task_log`, Nov 2026): which card buttons were
 tapped, which smart alerts went out, and the Smart alerts switch. After a restore, check Settings > Alerts >
 Smart alerts (it comes back On), and done tasks may show on Home again until tapped. An alert that came due

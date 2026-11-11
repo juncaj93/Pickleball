@@ -65,6 +65,8 @@ describe('the rule: when is a tap "for someone else"?', () => {
   it("Alex's own player name: a phone it has acted from is Alex's and is never flagged, whoever it acts as", () => {
     const alex = (n: string) => n === 'Alex';
     expect(verdicts([line('A', 'Alex'), line('A', 'Alex'), line('A', 'Alex'), line('A', 'Brandon'), line('A', 'Nathan', 'player_self_paid')], alex)).toEqual([null, null, null, null, null]);
+    // Alex's phone is his for EVERY tap, also the ones before his own name first acted from it (signed out, or another browser).
+    expect(verdicts([line('A2', 'Brandon'), line('A2', 'Nathan'), line('A2', 'Alex')], alex)).toEqual([null, null, null]);
     // Without the exemption the same taps would be flagged (the test proves the exemption is what keeps them quiet).
     expect(verdicts([line('B', 'Alex'), line('B', 'Alex'), line('B', 'Alex'), line('B', 'Brandon')])).toEqual([null, null, null, "from Alex's phone"]);
   });
@@ -381,6 +383,10 @@ describe('the switch (ships OFF)', () => {
     expect(d.actingOthers.length).toBe(1);
     const lines = await history(w);
     expect(lines[0].action).toBe('acting_others_on');
+    // The read-only PIN's backup file has the phone codes blanked (the real PIN's file keeps them).
+    const roBackup = (await ro.call('GET', '/api/admin/backup')).data;
+    expect(roBackup.tables.admin_audit_log.some((r: { device_tag?: string | null }) => r.device_tag)).toBe(false);
+    expect((await w.organizer.call('GET', '/api/admin/backup')).data.tables.admin_audit_log.some((r: { device_tag?: string | null }) => r.device_tag === TAG_M)).toBe(true);
     await w.organizer.call('PUT', '/api/admin/acting-others-switch', { on: false });
     expect((await dash(w)).actingOthers).toBeUndefined();
     // The kill switch: the row can be on, the screens still show nothing.

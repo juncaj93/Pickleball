@@ -65,20 +65,22 @@ const key = (name: string) => name.trim().toLowerCase();
  *  - A phone's usual name is the name it acted as most, once it has made at least 3 taps and more than half of them were as that name.
  *  - A tap is "for someone else" when (a) the phone has a usual name and acts as a different name ("from Mitchel's phone"), or (b) the
  *    phone is still too new to have one (1 or 2 taps so far) and acts as a name it has never acted as ("from a new phone").
- *  - Never flagged: a phone's very first tap; a tap from a phone that has a tie between names (two people sharing it equally); a tap
- *    from a phone that Alex's own player name has used (`exempt`).
+ *  - Never flagged: a phone's very first tap; a tap from a phone that has a tie between names (two people sharing it equally); any tap,
+ *    before or after, from a phone that Alex's own player name has ever used (`exempt`).
  * Taps without a code (the organizer's phone, View as, old app versions) are not in `lines` at all.
  * Returns the flagged lines by id.
  */
 export function judgeTaps(lines: TaggedLine[], exempt: (name: string) => boolean = () => false): Map<string, From> {
   const out = new Map<string, From>();
-  const phones = new Map<string, { counts: Map<string, { name: string; n: number }>; total: number; alex: boolean }>();
+  // Alex's phones first: a phone his own player name has ever acted from is his for every tap, earlier ones too.
+  const alexPhones = new Set(lines.filter((l) => isPlayerTap(l) && exempt(l.name)).map((l) => l.tag));
+  const phones = new Map<string, { counts: Map<string, { name: string; n: number }>; total: number }>();
   for (const line of lines) {
-    if (!isPlayerTap(line)) continue;
+    if (!isPlayerTap(line) || alexPhones.has(line.tag)) continue;
     let p = phones.get(line.tag);
-    if (!p) phones.set(line.tag, (p = { counts: new Map(), total: 0, alex: false }));
+    if (!p) phones.set(line.tag, (p = { counts: new Map(), total: 0 }));
     const me = key(line.name);
-    if (!p.alex && p.total > 0) {
+    if (p.total > 0) {
       const usual = usualName(p.counts, p.total);
       if (usual) {
         if (key(usual) !== me) out.set(line.id, { kind: 'phone', name: usual });
@@ -90,7 +92,6 @@ export function judgeTaps(lines: TaggedLine[], exempt: (name: string) => boolean
     if (c) c.n += 1;
     else p.counts.set(me, { name: line.name, n: 1 });
     p.total += 1;
-    if (exempt(line.name)) p.alex = true;
   }
   return out;
 }
