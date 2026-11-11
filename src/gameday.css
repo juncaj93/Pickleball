@@ -32,63 +32,115 @@ html[data-game-day] .schedule > .sched.tier-this .sched-main {
   margin-top: 2px; /* + the body's 5 px gap = 7 px */
 }
 
-/* ---- The game day card (the day of the game) ---- */
-html[data-game-day] .schedule > .sched.gd {
-  gap: 12px;
+/* ---- The game day card (the day of the game) ----
+   Zip 29 (Alex approved the look 2026-11-10): the Tonight card is the SAME size as every other THIS WEEK card. Its date tile is the normal
+   tile (same column, same height, same type) with a filled band on top that says TONIGHT and takes the place of the weekday. Nothing
+   below sets a size of its own for the tile, the time or the badge: those come from the normal THIS WEEK rules. */
+:root {
+  /* The band is as tall as the weekday row it replaces (9 px of tile padding + the weekday's own size), so the tile is exactly as tall as
+     a plain one at any text size. The same cap as the weekday's (src/large-text.css), so the band grows with big text but never past the tile. */
+  --gd-dow: min(0.8rem, 15.6cqw);
+  --gd-band-font: min(0.58rem, 11.2cqw);
 }
-/* The tile column: 66 px, so TONIGHT and the weekday both fit (mock10 .tn .dt). */
-html[data-game-day] .schedule > .sched.gd .sched-tilecol {
-  width: 66px;
-  gap: 6px;
+@media (max-width: 380px) {
+  :root {
+    --gd-dow: min(0.8rem, 17.2cqw);
+    --gd-band-font: min(0.58rem, 11.2cqw);
+  }
 }
-html[data-game-day] .schedule > .sched.gd .tile.ptile {
-  --z7-r: 13px;
-  --z7-bw: 2px;
-  border-width: 2px;
-  border-radius: 13px;
-  padding: 0 0 6px;
-  overflow: hidden;
-}
+/* The band: a flex box with its own height, so the word is centered inside it by layout, never by font metrics or a fixed line height.
+   (The old 8.5 px label on a padded line was what ran out of room on a real iPhone.) */
 html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
-  padding: 3px 0;
-  margin: 0 0 3px;
-  font-size: 8.5px;
-  letter-spacing: 0.06em;
-}
-html[data-game-day] .schedule > .sched.gd .ptile .dow,
-html[data-game-day] .schedule > .sched.gd .ptile .mon {
-  display: block;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-}
-html[data-game-day] .schedule > .sched.gd .ptile .day {
-  display: block;
-  font-size: 27px;
-  line-height: 1.05;
-  margin: 0;
-}
-/* The glow pulse at 2.4 s (the shimmer stays the Tonight card's 3.6 s). Reduce Motion: src/zip7.css holds both still. */
-html[data-game-day][data-tonight-glow] .schedule > .sched.gd .tile.day-tonight {
-  animation-duration: 2.4s;
-}
-/* The check badge just outside the tile's top-right corner (its center on the corner). */
-html[data-game-day] .schedule > .sched.gd .tile-wrap > .tile-check {
-  width: 22px;
-  height: 22px;
-  top: -11px;
-  right: -11px;
-}
-html[data-game-day] .schedule > .sched.gd .tile-wrap > .tile-check svg {
-  width: 13px;
-  height: 13px;
-}
-/* "7:30 PM" and "2 hours" under the tile. */
-html[data-game-day] .schedule > .sched.gd .sched-time {
-  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  height: calc(9px + var(--gd-dow));
+  margin: 0 0 5px;
+  padding: 0 2px;
+  border-radius: 0;
+  font-size: var(--gd-band-font);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-indent: 0.1em; /* the last letter's tracking would push the word left of center */
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: visible;
 }
-html[data-game-day] .schedule > .sched.gd .sched-time .z9-length {
-  font-size: 12px;
+/* A narrow phone (the tile is 76 px there and the badge takes a corner): a little less tracking so the word keeps clear of the badge. */
+@media (max-width: 380px) {
+  html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
+    letter-spacing: 0.07em;
+  }
+}
+/* No weekday under the band any more (TONIGHT, 10, NOV). */
+html[data-game-day] .schedule > .sched.gd .ptile .day {
+  margin-top: 0;
+}
+/* A tile with no court ring of its own (an added game): the band is cut to the tile's rounded inside edge, so no cream corner shows. */
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight:not(.ts) {
+  overflow: hidden;
+  /* Its own outline is the same ink (light) or green (dark) as the court ring on the other Tonight tiles. */
+  border-color: var(--ts-booked);
+}
+/* A tile with the court ring (Booked, Not booked, Waitlist): the ring is the tile's border. The band runs out under it to the tile's outer
+   edge and the ring is drawn on top, so the band meets the outline with no gap at the corners, light or dark. The solid ring is an inset
+   shadow (a border can round to a whole pixel, an inset shadow cannot), as on the organizer's tiles. */
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts {
+  background-clip: border-box;
+}
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts .day-tag {
+  width: calc(100% + 2 * var(--tb-w, 2px));
+  height: calc(9px + var(--gd-dow) + var(--tb-w, 2px));
+  margin: calc(var(--tb-w, 2px) * -1) calc(var(--tb-w, 2px) * -1) 5px;
+  padding-top: var(--tb-w, 2px);
+  border-radius: var(--z7-r, 16px) var(--z7-r, 16px) 0 0;
+}
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts .tb {
+  z-index: 1;
+}
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts .tb-solid {
+  border-width: 0;
+  box-shadow: inset 0 0 0 var(--tb-w, 2px) var(--ts-booked);
+}
+html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts-none .tb-solid {
+  box-shadow: inset 0 0 0 var(--tb-w, 2px) var(--ts-none);
+}
+/* The glow: one soft green blur around the tile only. No hard-edged ring, and it breathes between two blurs (the old pulse had a
+   5 px solid ring that read as a cut-off line). Nothing around the tile clips it (a test checks every ancestor). */
+html[data-game-day][data-tonight-glow] .schedule > .sched.gd .tile.day-tonight {
+  animation: gd-glow 2.4s ease-in-out infinite;
+}
+@keyframes gd-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 12px 1px rgb(var(--z7-glow) / 34%);
+  }
+  50% {
+    box-shadow: 0 0 20px 3px rgb(var(--z7-glow) / 52%);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-game-day][data-tonight-glow] .schedule > .sched.gd .tile.day-tonight {
+    animation: none;
+    box-shadow: 0 0 16px 2px rgb(var(--z7-glow) / 42%);
+  }
+}
+/* The check badge: the same 26 px badge as on every other THIS WEEK card, centered on the tile's top-right corner, drawn on top of the tile and
+   its band, with a clear 3 px ring of the card's own color around it (so it reads as separate from the band and the outline). */
+html[data-game-day] .schedule > .sched.tier-this .tile-wrap > .tile-check {
+  width: 26px;
+  height: 26px;
+  top: -13px;
+  right: -13px;
+  box-sizing: border-box;
+  border: 3px solid var(--pc-card);
+  z-index: 5;
+}
+html[data-game-day] .schedule > .sched.tier-this .tile-wrap > .tile-check svg {
+  width: 15px;
+  height: 15px;
 }
 /* The ball row: the real balls, still (no ripple), 16 px like the mock, 7 px below the buttons. */
 html[data-game-day] .schedule > .sched.gd .sched-main {

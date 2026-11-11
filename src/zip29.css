@@ -1,0 +1,41 @@
+/* Zip 29, the folded TONIGHT tile on the organizer's Home (the small 48 px date tile on a folded game row).
+ *
+ * What was wrong (Alex's iPhone, Audit B item B02): the strip was a 6.75 px word on a padded line box, so its height came from font metrics and
+ * the word had almost no room above and below it; on a real iPhone it looked cut off. Now the strip has a real height of its own and the word
+ * is centered inside it by layout (flex), so no font rendering can push it out. The height and the type grow with the text size up to a safe
+ * cap (so the strip never takes over the tile), the tile clips the strip to its own rounded inside edge (no cream corner showing, light or
+ * dark), and nothing in the strip can be cut: the tile only clips at the rounded border, never across the word.
+ * Colors are the site's existing TONIGHT colors (--z7-tonight-bg / --z7-tonight-ink): a dark green strip with white letters in light mode,
+ * a bright green strip with dark letters in dark mode, the same as the player card's strip.
+ */
+:root[data-tonight-glow] .hv2-short .tile.day-tonight,
+:root[data-tonight-glow] .hv2-short .tile.day-tomorrow {
+  --z7-r: 10px;
+  /* The strip is cut to the tile's rounded inside edge by the tile itself. The glow is the tile's own shadow, which an overflow clip never touches. */
+  overflow: hidden;
+  padding-top: 0;
+}
+:root[data-tonight-glow] .hv2-short .tile .day-tag {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: 100%;
+  /* 16 px at normal text, up to 20 px with big text. A fixed box, not a line height. */
+  height: clamp(16px, 1.05rem, 20px);
+  margin: 0 0 2px;
+  padding: 0 1px;
+  border-radius: 0;
+  /* TOM keeps the 8 px it always had; only TONIGHT, the long word, gets the new size below. */
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: visible;
+}
+/* TONIGHT: 7.5 px at normal text (it was 6.75), growing a little with big text up to 8.5 px, never wider than the tile's inside edge allows. */
+:root[data-tonight-glow] .hv2-short .tile .day-tag.tonight {
+  font-size: clamp(7.5px, 0.47rem, 8.5px);
+  letter-spacing: 0.01em;
+}

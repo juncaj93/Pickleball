@@ -175,6 +175,30 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Zip 29: the money cell has two looks. Everyone who is in has paid: a green circle with a check, the count in normal text. Somebody still owes
+   (or nobody has paid yet): an amber circle with $ and the count in amber. Same circle size and same text size as before. The site's own green
+   (--primary) and amber (--warn-edge for the circle, --warn-fg for the words, which keeps the contrast the words need). */
+.r2-dol svg {
+  width: 0.9em;
+  height: 0.9em;
+  display: block;
+}
+.r2-paid[data-paid-state='owed'] .r2-dol {
+  background: var(--warn-edge);
+  color: var(--r2-owe-ink, #ffffff);
+}
+.r2-paid[data-paid-state='owed'] .r2-paid-text {
+  color: var(--warn-fg);
+}
+:root[data-theme='dark'] .r2-paid[data-paid-state='owed'] .r2-dol {
+  --r2-owe-ink: #1c1300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) .r2-paid[data-paid-state='owed'] .r2-dol {
+    --r2-owe-ink: #1c1300;
+  }
+}
+
 /* The cancel-by time: a clock and the time. Quiet gray, red inside the last 24 hours. */
 .r2-cancel {
   display: inline-flex;
@@ -190,6 +214,68 @@
 }
 .r2-cancel svg {
   flex: none;
+}
+
+/* Zip 29: "Court 13 | arrow", one outlined button in two halves (the player card's joined button look, in the admin footer). The button is 32 px tall and each half
+   has a 44 px tap area (the drawing is smaller). The words shrink a little on a narrow phone so the button never runs out of its cell. */
+.r2-courtbtn {
+  display: inline-flex;
+  align-items: stretch;
+  max-width: 100%;
+  min-width: 0;
+  height: 32px;
+  box-sizing: border-box;
+  /* Soft periwinkle outline, the same softness as the player card's Court and Directions buttons (1 px, the blue at 45 %); the words and the arrow keep the deep blue. */
+  border: 1px solid color-mix(in srgb, var(--gd-blue) 45%, transparent);
+  border-radius: 10px;
+  color: var(--gd-blue);
+  background: color-mix(in srgb, var(--gd-blue) 2%, transparent);
+}
+.r2-courtbtn-half {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.r2-courtbtn-half::before {
+  content: '';
+  position: absolute;
+  inset: -6px 0;
+}
+.r2-courtbtn-num {
+  padding: 0 7px;
+  font-size: clamp(0.72rem, 3.3vw, 0.84rem);
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+.r2-courtbtn-dir {
+  width: 30px;
+  flex: none;
+  border-left: 1px solid color-mix(in srgb, var(--gd-blue) 45%, transparent);
+}
+.r2-courtbtn-dir svg {
+  width: 15px;
+  height: 15px;
+}
+.r2-courtbtn-half:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+  border-radius: 8px;
+}
+.r2-courtbtn-half:active {
+  background: color-mix(in srgb, var(--gd-blue) 10%, transparent);
 }
 
 /* Book (with the arrow the CourtReserve link already carries) when a court is needed. */

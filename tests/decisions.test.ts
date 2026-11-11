@@ -92,7 +92,7 @@ describe('backup file', () => {
   });
 
   it('refuses a file that is not a backup', () => {
-    expect(() => backupToSql({ hello: 1 })).toThrow('not a Pickleball Bros backup');
+    expect(() => backupToSql({ hello: 1 })).toThrow('not a Pickleball backup');
     expect(() => backupToSql({ format: 'pickleball-backup', version: 1, tables: { groups: [] } })).toThrow('missing');
   });
 

@@ -4,6 +4,7 @@ import { DEFAULT_TIMEZONE, localParts } from '../shared/time';
 import { applyTheme, getTheme, setTheme, type ThemeChoice, useNow } from './lib';
 import { AutoModeIcon, MoonIcon, SunIcon, useToast } from './ui';
 import { canMove, motionOn } from './motion';
+import { useSiteName } from './siteName';
 
 const DOW = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -46,9 +47,11 @@ export function TopBar({
   /** Swap to Alex (Zip 13): the title and a small swap icon after it are ONE button. Left out: the plain title, exactly as before. */
   onTitle?: { onClick: () => void; label: string };
 }) {
+  // The tab says the group's name from Settings (src/siteName.ts); "Pickleball" until a screen has it.
+  const siteName = useSiteName();
   useEffect(() => {
-    document.title = title === SITE_NAME ? SITE_NAME : `${title} · ${SITE_NAME}`;
-  }, [title]);
+    document.title = title === SITE_NAME || title === siteName ? siteName : `${title} · ${siteName}`;
+  }, [title, siteName]);
   return (
     <header className="topbar">
       <div className="topbar-inner topbar-row">

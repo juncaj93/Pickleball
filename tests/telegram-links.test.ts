@@ -82,7 +82,7 @@ describe('tappable words in Telegram alerts', () => {
     await ctx.organizer.call('GET', '/api/admin/dashboard');
     expect((await ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {})).status).toBe(200);
     const b = bodies.at(-1);
-    expect(b.text).toBe('TEST smart alert from Pickleball Bros. Nothing to do. Real ones look like: "Tuesday: 3 players in, need a 4th. Text the group"');
+    expect(b.text).toBe('TEST smart alert from Pickleball. Nothing to do. Real ones look like: "Tuesday: 3 players in, need a 4th. Text the group"');
     expect(b.entities).toHaveLength(1);
     expect(b.text.slice(b.entities[0].offset, b.entities[0].offset + b.entities[0].length)).toBe('Text the group');
     expect(b.entities[0].url).toMatch(/^https:\/\/pickleball\.juncaj\.net\/go\/[A-Za-z0-9_.-]+$/);

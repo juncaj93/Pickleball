@@ -69,7 +69,7 @@ async function seed({ BASE, token }) {
   await ok(
     await post(setup, '/api/setup', {
       setupToken: token,
-      groupName: 'Pickleball Bros',
+      groupName: 'Pickleball',
       pin: PIN,
       venmoUrl: 'https://venmo.com/u/organizer',
       players: NAMES.slice(0, 16).map((name, i) => ({ name, phone: `2485553${String(i).padStart(3, '0')}` })),

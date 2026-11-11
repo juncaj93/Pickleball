@@ -37,7 +37,7 @@ const NAME = /^[a-z_][a-z0-9_]*$/;
  */
 export function backupToSql(backup, columns) {
   if (!backup || backup.format !== 'pickleball-backup' || backup.version !== 1 || typeof backup.tables !== 'object') {
-    throw new Error('This is not a Pickleball Bros backup file.');
+    throw new Error('This is not a Pickleball backup file.');
   }
   for (const t of TABLES) {
     // Backups made before the credit pot or refund requests existed lack those tables; they restore as empty.

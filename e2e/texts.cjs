@@ -82,7 +82,7 @@ async function main() {
   };
   await call(api.request, 'POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     // Nathan has no number saved.

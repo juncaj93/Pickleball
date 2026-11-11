@@ -215,7 +215,7 @@ export async function testAlert(ctx: Ctx) {
   const group = await requireAdmin(ctx);
   if (ctx.env.SANDBOX || isPretend(ctx.db)) throw new HttpError(403, 'demo_only', 'Demo only. Nothing was saved.');
   if (!connected(ctx.env)) throw new HttpError(409, 'not_connected', 'Not connected: the bot token or chat ID is missing on Cloudflare.');
-  const sent = await deliver(ctx, group.id, 'Test alert from Pickleball Bros. Alerts are working.');
+  const sent = await deliver(ctx, group.id, 'Test alert from Pickleball. Alerts are working.');
   if (!sent.ok) throw new HttpError(502, 'telegram_failed', sent.error);
   return { ok: true, alerts: await alertsView(ctx, group.id) };
 }

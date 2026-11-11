@@ -98,7 +98,7 @@ async function main() {
   const api = await browser.newContext();
   await call(api.request, 'POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     players: PEOPLE.map(([name, phone]) => ({ name, phone })),

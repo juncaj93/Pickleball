@@ -80,7 +80,7 @@ export function sessionCalendar(input: {
   const lines = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Pickleball Bros//EN',
+    'PRODID:-//Pickleball//EN',
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     ...vtimezone(tz),

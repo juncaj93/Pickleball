@@ -66,7 +66,7 @@ async function main() {
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const made = await post((await browser.newContext()).request, '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     players: NAMES.map((name, i) => ({ name, phone: `24855505${String(i).padStart(2, '0')}` })),

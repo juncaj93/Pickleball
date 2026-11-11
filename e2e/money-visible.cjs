@@ -118,7 +118,7 @@ async function main() {
   };
   await call(api.request, 'POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     players: PEOPLE.map((name, i) => ({ name, phone: `248555010${i}` })),

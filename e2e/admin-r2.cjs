@@ -68,7 +68,7 @@ async function main() {
   const put = (req, url, data) => req.put(BASE + url, { data, headers: { Origin: BASE } });
   const made = await post((await browser.newContext()).request, '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     players: NAMES.map((name, i) => ({ name, phone: `24855505${String(i).padStart(2, '0')}` })),
@@ -160,7 +160,7 @@ async function main() {
     const { ctx, page } = await openAdmin({ r2: false });
     assert((await page.locator('.scard-r2, .r2-foot, .r2m-game, .r2-players').count()) === 0, 'no round 2 parts on Home');
     assert((await page.locator('[data-updated]').count()) === 1, '"Updated just now" is still there');
-    assert((await page.locator('.topbar h1').innerText()) === 'Pickleball Bros', 'title is the group name');
+    assert((await page.locator('.topbar h1').innerText()) === 'Pickleball', 'title is the group name');
     assert((await page.locator('.topbar .mode-btn').count()) === 0, 'no light/dark button in the header');
     assert((await page.locator('.add-pill ~ a, .week-break a.btn').first().innerText()).includes('Book a court'), 'Book a court wording');
     await tab(page, 'Money');

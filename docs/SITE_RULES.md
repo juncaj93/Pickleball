@@ -1,7 +1,7 @@
 # SITE_RULES: how the site is meant to work (updated Mon Nov 9, 2026: game-length price table and venue hours added in Zip 28; before that Mon Nov 2, 2026, copied into the repo with two fixes to match the code). The code is the truth; if this disagrees with the code, keep the code and say so in the report.
 
 ## Basics
-- Private pickleball group site "Pickleball Bros" at pickleball.juncaj.net (backup pickleball-club-9h0.pages.dev). Cloudflare Pages + Pages Functions + D1, free plan, $0. Repo has docs/ (read docs/STAGE_NOTES.md first).
+- Private pickleball group site "Pickleball" (was "Pickleball Bros" until Zip 29) at pickleball.juncaj.net (backup pickleball-club-9h0.pages.dev). Cloudflare Pages + Pages Functions + D1, free plan, $0. Repo has docs/ (read docs/STAGE_NOTES.md first).
 - Organizer (Alex) signs in at /admin with a PIN. Players pick their name once (remembered per device). "View as" lets Alex see a player screen in a demo copy where nothing is saved.
 - Sessions are Tue and Thu. Usual time is 7:00 to 9:00 PM (7:30 to 9:30 PM when that is what was booked); Tue Nov 3 is 8:00 to 10:00 PM. Each game has its own start time and its own court status. First real game Tue Nov 3, 2026. Times Eastern (America/Detroit) with AM/PM, never UTC.
 
@@ -32,7 +32,7 @@ The $14 above is the 2 hour game, the usual one. Every length has its own up-fro
 - The site never sends texts. It opens Messages with prepared text ending with the plain link. The only other outbound message is Telegram alerts to Alex.
 
 ## Player screen (live)
-- Three tiers: THIS WEEK (big tile), NEXT WEEK (smaller tile), LATER (flat rows). Start time sits under the date tile. A checkmark badge sits on the tile when you are in. Blue TONIGHT strip on game day.
+- Three tiers: THIS WEEK (big tile), NEXT WEEK (smaller tile), LATER (flat rows). Start time sits under the date tile. A checkmark badge sits on the tile when you are in. On game day the date tile wears a green TONIGHT band (the card is the same size as every other THIS WEEK card; Zip 29). The game's length ("2 hours") sits under the time on player cards and admin game tiles.
 - A game with no court booked is a normal game: status "Court not booked", count "3 of 4 in", button "I'm in". Players never see the words waitlist, waiting or standby on it. $14 due, Pay and I paid appear once the card says Court booked.
 - Counts show ball circles ("3 of 4 in", "N in" at 4 or more). Payment states: "$14 due" with Pay, "Paid $14", "Paid with credit" with Undo, part credit, waitlist, canceled.
 - A CREDIT chip near the top (only when balance is above zero) opens the last 10 credit changes. Drop out and I'm in toasts state what happened to money (money audit release, may be on a preview until Alex says ship it: check git log and docs).

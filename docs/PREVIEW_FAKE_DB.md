@@ -59,7 +59,7 @@ Not on the small preview: games with 11 or 12 in (there are only 10 names; the l
 (Below: the OLDER big world, now only for the local browser tests.)
 
 
-- Name on screen: **Pickleball Bros (PREVIEW, fake data)**. If you ever see that
+- Name on screen: **Pickleball (PREVIEW, fake data)**. If you ever see that
   name, you are on the practice copy.
 - Organizer sign-in at `/admin` on the preview address: PIN `739514` (this line is the only place the PIN is written; the seed command and its test read it from here).
 - Players: Organizer Orla (the organizer's own player) and 13 made-up players

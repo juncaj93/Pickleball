@@ -128,7 +128,9 @@ async function main() {
   // ---------------------------------------------------------------- Item 3: the folded TONIGHT tile
   for (const width of [390, 375, 360, 320]) {
     for (const scheme of ['light', 'dark']) {
-      await check(`folded TONIGHT tile at ${width} ${scheme}: at least 7 px clear on both sides of the word, TOM and plain tiles unchanged`, async () => {
+      // Zip 29 replaced the 6.75 px word with a real band height and a 7.5 px word (the tile stays 48 px), so the room each side is about 4 px, not 7;
+      // e2e/zip29.cjs measures the glyph box in WebKit at device scale 3. Here: still centered, at least 3 px clear, TOM and plain tiles unchanged.
+      await check(`folded TONIGHT tile at ${width} ${scheme}: at least 3 px clear on both sides of the word, centered, TOM and plain tiles unchanged`, async () => {
         const { ctx, page, errors } = await openAdmin({ width, scheme });
         await page.locator('.day-tag.tonight').first().waitFor({ timeout: 15000 });
         // Fold tonight's card (a tap on the card, as on the phone) when it starts open.
@@ -151,7 +153,7 @@ async function main() {
           return { tileW: r.width, left: tr.left - (r.left + bw), right: r.right - bw - tr.right, font: getComputedStyle(tag).fontSize, word: tag.innerText.trim() };
         });
         assert(m.word === 'TONIGHT', `the word: ${m.word}`);
-        assert(m.left >= 7 && m.right >= 7, `room inside the tile: ${JSON.stringify(m)}`);
+        assert(m.left >= 3 && m.right >= 3, `room inside the tile: ${JSON.stringify(m)}`);
         assert(Math.abs(m.left - m.right) < 1, `centered: ${JSON.stringify(m)}`);
         const others = await page.evaluate(() =>
           [...document.querySelectorAll('.hv2-short .tile')].filter((t) => !t.querySelector('.day-tag.tonight')).map((t) => ({ w: t.getBoundingClientRect().width, tag: t.querySelector('.day-tag') ? getComputedStyle(t.querySelector('.day-tag')).fontSize : null })),
