@@ -200,7 +200,8 @@ async function main() {
   assert((await setSwitch(true)).ok, 'switch on');
 
   // ================================================================ strict clipping (the Zip 18 rule)
-  const g1Names = ['Zoe', 'Wren', 'Rowan', 'Sage', 'Quinn', 'Reese'];
+  // (Quinn stays out on purpose: the sheet still needs a name to tap.)
+  const g1Names = ['Zoe', 'Wren', 'Rowan', 'Sage', 'Reese'];
   /** The roster check at the top: the sheet is drawn at every width, scheme and text size; nothing clips, overlaps or goes sideways; header stays put. */
   async function clipRun(label) {
     for (const scheme of ['light', 'dark'])
@@ -451,6 +452,8 @@ async function main() {
       assert((await wd.getByRole('menuitem', { name: 'Move Vic to the waitlist' }).count()) === 1, 'To waitlist in the menu');
       await w.ctx.close();
       // More names than free seats: nothing is added, the picks stay, it says how many fit.
+      // (Zoe leaves the waitlist first: raising Max players would move a waiting player in by itself.)
+      assert((await call('POST', `/api/admin/sessions/${g1.id}/roster`, { playerId: idOf('Zoe'), action: 'withdraw' })).ok, 'Zoe off the waitlist');
       assert((await call('PUT', '/api/admin/group', { settings: { maxPlayers: (await sessionOf(g1.id)).confirmedCount + 1 } })).ok, 'one spot left');
       const o = await openAdmin();
       await openByMoneyCell(o.page, g1.id);
@@ -459,7 +462,7 @@ async function main() {
       await od.locator('[data-ps-chip="Rowan"]').click();
       await od.locator('[data-ps-add-btn]').click();
       await o.page.locator('.pop.toast').first().waitFor({ timeout: 4000 });
-      assert(/Only 1 spot left/.test(await o.page.locator('.pop.toast').first().innerText()), await o.page.locator('.pop.toast').first().innerText());
+      assert(/Only 1 spot left/.test(await o.page.locator('.pop.toast').first().innerText()), `${await o.page.locator('.pop.toast').first().innerText()} (confirmed ${(await sessionOf(g1.id)).confirmedCount}, roster ${JSON.stringify((await sessionOf(g1.id)).roster.map((r) => r.name + ':' + r.status))})`);
       assert((await od.locator('[data-ps-chip="Quinn"]').getAttribute('aria-pressed')) === 'true', 'the picks stay');
       await o.ctx.close();
     } finally {

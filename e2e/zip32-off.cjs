@@ -81,7 +81,7 @@ async function main() {
   const sides = { main: await site(MAIN, 5651, path.join(ROOT, '.data', 'zip32-off-main.sqlite'), seedFile), branch: await site(ROOT, 5652, path.join(ROOT, '.data', 'zip32-off-branch.sqlite'), seedFile) };
   const browser = await chromium.launch();
   const got = { main: {}, branch: {} };
-  const blank = (t) => t.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"');
+  const blank = (t) => t.replace(/localhost:565\d/g, 'localhost:<port>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"');
   for (const [name, s] of Object.entries(sides)) {
     for (const scheme of ['light', 'dark'])
       for (const width of [390, 320]) {

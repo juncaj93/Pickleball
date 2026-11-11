@@ -4152,3 +4152,44 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
   4 fail on main (they look for "Tue, Nov 10", now past). round2 1 (banner timing under load): 25/25 alone. zip29 ran in Chromium: WebKit is not
   installed in this container (zip29 falls back by itself and says so); 29's own WebKit run is in its notes.
 - `e2e/zip30-off.cjs` against main `6d45848`: 19/19 identical with the switch off.
+
+
+## Zip 32: Polish 2 and the Players sheet redo (🎾32.sheets, Wed Nov 11, 2026)
+
+Screens only: no money logic, no database change (no migration), no Telegram, no new cost. Ships with the new switch OFF.
+
+### Part A, four live-on bug fixes
+1. Undo toast: the green pill carried the plain banner's negative margins, so it touched the toast's edge and poked past its corners. It now sits fully inside
+   (10 px right, 9 px top and bottom; tap area still 46 px). Checked light and dark, 390/360/320, text 100 and 150%, animations on and off (`src/alert-cards.css`).
+2. Played: the History > Sessions sheet showed the circle-with-slash (the Canceled icon). Played now gets a green check (`CourtIcon kind="played"`). Canceled keeps its slash.
+3. Gear: removed on a played (finalized) game (`isPlayed`), on both card layouts. Kept on upcoming, canceled and not-yet-finalized games. The real cause of the clipping:
+   inside a sheet the menu opened UPWARD past the sheet's top edge (it only checked the screen, not the sheet), and the "panel above the tab bar" fallback was drawn
+   under the open sheet. It now measures against the sheet it is in and, if it fits neither under nor over the gear, shows the scrolling panel inside the sheet.
+   Not covered elsewhere once the gear is gone from a played game: "Text the group > Final price" (also on Home as the dismissible "Final price" card, so it only
+   matters after that card is dismissed) and a view-only Players list (Money and History still show who paid).
+4. `e2e/credit.cjs`: the four "Tue, Nov 10" tests failed on main because the page's own clock is the real one. They now shift the page to the pretend clock. 153/153.
+
+### Part B, Players sheet redo (`PLAYERS_SHEET_REDO`, Settings row "Players sheet redo", OFF)
+- Files: `shared/playersSheetRedo.ts`, `server/playersSheetRedo.ts`, `src/pages/admin/PlayersSheet.tsx`, `src/players-sheet.css`; wiring like the other switches (db.ts, admin.ts, app.ts,
+  speed.ts, api.ts, lib.ts, vite.config.ts, activity.ts, SettingsTab top row, wrangler.toml `[vars]` and preview). Private link `/admin?playerssheet=on`. Documented in `docs/FEATURE_SWITCHES.md`.
+- Both places that open the sheet (the money cell on both card layouts, the gear's Players) go through one `SessionSheets`, so both open the new one.
+- Every action is the old one: Remind = the sheet the Home money card opens; Mark paid and Request = that card's own call, link and Undo; Remove = the old Remove
+  (same question, same 5-second Undo; the roster actions moved unchanged into one shared hook `useRosterOps`); Add = Give spot, same call and rules.
+- Reviewer (fresh, read-only) found no money problem and two real gaps, both fixed: the old sheet's waitlist actions (Give spot for a waiting player; To waitlist in
+  the row menu) and late-fee rows (counted in "x of y paid" but not listed). Also: more names than free seats adds nobody and says how many fit; menu button 44 px.
+- Who marked it paid: `selfPaid` (the player tapped I paid, still waiting for Alex) reads "Marked paid by Mitchel"; credit-covered reads "Paid with credit"; any other paid seat
+  "You marked it paid". Times are the recorded `paid_at`. Nothing new is stored. A player's unconfirmed I paid shows the green Paid chip like the mock, with no confirm button
+  on this sheet (Money still has it).
+- Left out on purpose: the host (Alex) is not a row or a chip (his In / Out is on the card), so Remove and Give spot on the host are not on this sheet.
+
+### Preview scene (docs/PREVIEW_FAKE_DB.md)
+Only the fixed names. Game 1 (next Booked game): Alex in, Parker paid (his own I paid), Vic and Christopher Vanderberg owe, Reese declined (one `decline` call added to the seed).
+Game 4 (Booked, 8 in) is the 7-row case. The row is on in the seed (`BUILDING_ON`).
+
+### Tests
+- Unit, full suite alone: 2709 passed, 2 skipped on purpose (one run found `tests/speed-queries.test.ts` listing the known switch rows; the new row was added to it, then it passes). `tests/zip32.test.ts`: 6 new.
+- Browser: whole `test:e2e` list, 4 at a time, one port each: 2619 checks, 0 failed after fixes. `e2e/zip32.cjs` 50/50 (new): the switch, Settings row on top, private link, layout,
+  who marked it, Mark paid and Undo, Remind, Remove and Undo, Add (one, two, full game, too many names, waitlist), both openers, the three Part A fixes, strict clipping at
+  390/360/320 x light/dark x text 100/125/150% with 3 and 10 players. Older scripts that list the switch rows (zip16, zip21, zip23, zip30, money-rework) were updated for the new top row.
+  circles and round2 failed once under load and pass alone (circles also passes on main); instant-taps timing 136 ms under load, 19/19 alone.
+- `e2e/zip32-off.cjs` against main `c88d17b`: 22/22 identical with the switch OFF (the dashboard answer byte for byte, Home, and the old sheet from both openers, light and dark, 390 and 320).
