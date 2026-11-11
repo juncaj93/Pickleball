@@ -428,13 +428,19 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
     await orgIn(two);
     await join('Quinn', two);
     await w.org.ok('POST', `/api/admin/sessions/${two.id}/decision`, { decision: 'cancel', confirm: true });
-    w.db.raw.prepare('UPDATE sessions SET canceled_at = ? WHERE id IN (?, ?)').run(new Date(atD(21, 0, -1)).toISOString(), chance.id, two.id);
+    // Zip 35: a Second Chance game near closing time (8:00 PM to 10:00 PM, the last start that fits the venue hours): Alex, Rowan and Sage in, nobody
+    // paid (no money moves), canceled the night before. With Booking hours on, its Reopen picker stops at 8:00 PM (nothing after it fits).
+    const late = await make(20, 0);
+    await orgIn(late);
+    for (const n of ['Rowan', 'Sage']) await join(n, late);
+    await w.org.ok('POST', `/api/admin/sessions/${late.id}/decision`, { decision: 'cancel', confirm: true });
+    w.db.raw.prepare('UPDATE sessions SET canceled_at = ? WHERE id IN (?, ?, ?)').run(new Date(atD(21, 0, -1)).toISOString(), chance.id, two.id, late.id);
     const same = await make(20, 15);
     for (const n of [SMALL_LONG, 'Vic', SMALL_NO_NUMBER]) await join(n, same);
     await orgPays(SMALL_LONG, same);
     w.db.raw.prepare('UPDATE sessions SET created_at = ? WHERE id = ?').run(new Date(atD(10, 0)).toISOString(), same.id);
     await refresh();
-    summary.push(`Second Chance game day ${D.y}-${String(D.m).padStart(2, '0')}-${String(D.d).padStart(2, '0')}: canceled the night before with 3 in (Alex, Parker paid then credit, Wren); one with 2 in (Alex, Quinn): no card; a same-day game (Christopher Vanderberg paid; Vic and Reese owe)`);
+    summary.push(`Second Chance game day ${D.y}-${String(D.m).padStart(2, '0')}-${String(D.d).padStart(2, '0')}: canceled the night before with 3 in (Alex, Parker paid then credit, Wren); one with 2 in (Alex, Quinn): no card; a same-day game (Christopher Vanderberg paid; Vic and Reese owe); Zip 35: a third Second Chance game at 8:00 PM near closing time (Alex, Rowan, Sage in, nobody paid)`);
   }
 
   // 22. After-game cards (Zip 16), part 2: finalize the three morning games now. Game 1: 6 played, $9, $5 back. Game 2: 5 played, $11,
