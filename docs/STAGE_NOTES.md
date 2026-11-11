@@ -4052,7 +4052,7 @@ exists where the "Game day card" row is already ON, because that is what sends t
 - Big text fixed: at 150% on a phone the THIS WEEK cards stack (tile above the words); the tile column had `width: auto` inside a size container and came out 0 px wide, so the time and the length line
   beside the tile had no size (also on main). `src/large-text.css`: that column is now full width in the stacked layout. `e2e/zip29.cjs` now fails if the time or the length line has no size at any text size.
 
-## Zip 30: phone tag and "Acting for others" (🎾30.phonetag, ACTING_FOR_OTHERS, ships OFF) - built Tue Nov 10 to Wed Nov 11, 2026; on a preview, waiting for "ship it"
+## Zip 30: phone tag and "Acting for others" (🎾30.phonetag, ACTING_FOR_OTHERS, ships OFF) - built Tue Nov 10, 2026 (night) to Wed Nov 11, 12:30 AM; on a preview, waiting for "ship it"
 Branch `claude/new-session-kmm7br` (the brief's name "🎾30.phonetag" is the session name). Built on main `88a5356`. Organizer only, look only. No money or credit logic, no Telegram, no push, no new cost. ONE database change (Alex approved Tue Nov 10): migration `0018_phone_tag`. NOT deployed; the migration is on the fake preview database only.
 
 ### Why
@@ -4076,4 +4076,43 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
 `ACTING_FOR_OTHERS` kill switch in `[vars]` and `[env.preview.vars]` ("off" also stops the recording); Settings > Feature switches > "Acting for others" (top row); `/admin?actingothers=on` per phone; Activity lines; `docs/FEATURE_SWITCHES.md`.
 
 ### Preview
-- https://claude-new-session-kmm7br.pickleball-club-9h0.pages.dev (first deployment `610d45cf`). Migration 0018 applied to `pickleball-preview` (Wed Nov 11, about 4:20 AM Eastern), then one INSERT turned the "Acting for others" row on (no re-seed, no names added). Rows on there: every row in the preview database before (all live rows plus Booking hours, Totals refresh, Spent matches Totals) plus Acting for others.
+- https://claude-new-session-kmm7br.pickleball-club-9h0.pages.dev (deployment `d3120ca7`, the final code; the first was `610d45cf`). Migration 0018 applied to `pickleball-preview` (Tue Nov 10, about 11:30 PM Eastern; checked on D1: the column takes a code, the index is used, the check row removed), then one INSERT turned the "Acting for others" row on (no re-seed, no names added). Rows on there: every row in the preview database before (all live rows plus Booking hours, Totals refresh, Spent matches Totals) plus Acting for others.
+
+### Fresh review (an independent reviewer who did not write the code, database and privacy)
+- Nothing blocking (so no second round). Checked: the migration is additive and the rollback order works; the partial index is used; the
+  missing-column fallback only forgives that one error and never writes a line twice; main on the migrated database (both `SELECT *` reads
+  map fields one by one, View as and the restore test read the columns live); zero player reads; the code is pattern-checked and always a
+  bound value; no screen ever gets a raw code; switch off = main.
+- Fixed from it: (1) the weekly backup stress test (below); (2) a phone Alex's own player name has EVER acted from is exempt for every tap,
+  earlier ones too (it used to count only from his first tap there); (3) the read-only PIN's backup file blanks the phone codes;
+  (4) `docs/RESTORE.md` note for backups made after 0018; (5) a misplaced comment.
+- Notes kept for Alex: codes are recorded from deploy day even with the row off (by design, so phones are learned before the switch goes on;
+  `ACTING_FOR_OTHERS = "off"` stops it); a player could dodge the recording (a fake organizer cookie, a private window each time) and that is
+  accepted; History opens with one extra switch read on the organizer screen.
+
+### Tests (Tue Nov 10 night to Wed Nov 11, 2026)
+- Unit, full suite alone: 2690 passed, 1 failed, 2 skipped on purpose (806 s). The failure was mine: `tests/backup-zip19.test.ts` "a copy
+  over 20 steps" packs 5000 large fake History lines right under the weekly backup's 45-step limit (main: 41 steps); the empty `device_tag` on
+  every line (about 18 characters) moved 25-line blocks from 5 to 4 per step, so 51 steps. Live is about 20 times smaller (a few steps).
+  The test now uses 4000 lines (still several chains, over 20 steps): 15/15. Files touched afterwards rerun: acting-others, readonly-pin,
+  backup-zip19 all pass. tsc and build clean.
+- New: `tests/acting-others.test.ts` (32): the rule (Mitchel x3 then Brandon "from Mitchel's phone"; a brand-new phone not flagged; a new
+  phone acting as a new name; two people sharing one phone, both ways, quiet at a tie; cleared data = a new phone; Alex's phone exempt,
+  earlier taps too; auto credit and organizer lines left out; later taps never change earlier verdicts), recording (every kind of tap,
+  the cookie backup, the organizer phone records nothing, View as and the demo copy record nothing, the kill switch, bad codes), ZERO extra
+  reads on the player screen and the same trips on a tap, a database without 0018, main's write on a migrated one, the index, the switch
+  (off = no keys, on = History note and card rows, private link, Settings row, read-only PIN refused and its backup blanked, kill switch),
+  players never see it, 7-day card window, View as rollback with a backup that has codes, the preview row.
+- Updated: the 8 "newest migration" pins (0017 to 0018), `tests/speed-queries.test.ts` (the new switch row is not main's), and the
+  backup stress test above.
+- Browser, the full `npm run test:e2e` list (64 scripts, zip30 added) once, 4 at a time: 2246 passed, 14 failed. Then alone: admin-motion
+  28/28, circles 18/18, late-fee-split 6/6, pay-sheet 23/23, round2 25/25 (load flakes); money-rework 36/36 after its newest-first list
+  learned the new row; credit 4 failures are the same on main (they look for "Tue, Nov 10", now in the past); player-fix1 "I paid on
+  tonight's card" fails now and then on main as well (main 1 of 3 runs, branch 1 of 3): an old race in that check, not this zip.
+- `e2e/zip30.cjs` (30, final code): the switch, the phone code (storage + cookie, each restores the other, sent on player requests only),
+  Casey x3 then Harper (card and History), +N more, the X, the organizer phone, View as, the look against the mock, and strict clipping at
+  390/360/320, light and dark, text 100/125/150% with the longest names (proven to fail with broken CSS, `E2E_BREAK`).
+- `e2e/zip30-off.cjs` (19, needs `MAIN_DIR`, final code): main and the branch side by side on the migrated database after the same four
+  tagged taps: organizer Home at 390/360/320 light and dark, History light and dark, Players, Money, Settings apart from the row, the player
+  screen light and dark, and the dashboard, History and player answers byte for byte; main's View as on the migrated database opens.
+

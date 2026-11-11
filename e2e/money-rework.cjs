@@ -797,7 +797,7 @@ async function main() {
       assert(live.includes('Ask for payment on every game') && live.includes('Moved-game notice for everyone'), `oldest ones too: ${live}`);
       assert(!live.includes('Money page rework'), 'the newest switch stays out of the group');
       // This test server keeps the two animation switches dark, so those two rows sit above the group as well.
-      assert(names.length === 29 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the eleven newest sit above the group): ${names.length} vs ${live.length}`);
+      assert(names.length === 30 + 2 + live.length - live.filter((n) => /^Animations/.test(n)).length, `nothing else is listed (the twelve newest sit above the group): ${names.length} vs ${live.length}`);
       const m = await tidy.evaluate((el) => {
         const rows = [...el.querySelectorAll('.set-row')];
         return rows.map((r) => {
