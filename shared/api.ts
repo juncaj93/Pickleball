@@ -602,6 +602,9 @@ export interface AdminDashboard {
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
   totalsRefresh?: true;
   totalsRefreshForAll?: true;
+  /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts), only while on (off: the answer is exactly as before): Players "Spent" counted the way Totals counts; and its Settings row. */
+  spentTotals?: true;
+  spentTotalsForAll?: true;
   /** Zip 24 "Booking hours" (shared/bookingHours.ts), only while on (off: the answer is exactly as before): the tap-to-pick times on Add game and Edit game, the hours rule, and the Settings row. */
   bookingHours?: true;
   bookingHoursForAll?: true;

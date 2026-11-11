@@ -179,12 +179,13 @@ describe('monthly money', () => {
     // Sessions nobody played don't count either.
     expect(m.sessions.filter((x: any) => x.state === 'not_played').every((x: any) => x.courtCostCents === 0)).toBe(true);
 
-    // A lower typical cost and the rest of B paying.
+    // A lower typical cost: Zip 27 (Audit A, A-01) changed this on purpose. B was finalized with the $48 typical cost, so it keeps $48
+    // (before Zip 27 it followed the new $40 and the month read $90 of courts, "You covered $6"). Games still to come use the new $40.
     const settings = (await dash(ctx)).group.settings;
     await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Dinks', settings: { ...settings, typicalCourtCostCents: 4000, monthlyMembershipCents: 3000 } });
     m = await money(ctx, '2026-11');
-    expect(m.courtCostCents).toBe(9000);
-    expect(m.bottomLine).toBe('You covered $6 of the court costs');
+    expect(m.courtCostCents).toBe(9800);
+    expect(m.bottomLine).toBe('You covered $14 of the court costs');
   });
 
   it('6 played at $9: collected is what was kept, and the $5 back each is credit owed, not taken off Left', async () => {

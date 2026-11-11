@@ -1121,14 +1121,14 @@ describe('fewer than 4, and the flat price setting', () => {
     expect((await groupOf(phones.Alex)).owed).toEqual([expect.objectContaining({ amountCents: 1100 })]);
     expect((await monthFor(ctx, s))).toMatchObject({ collectedCents: 4 * 1100 });
     expect((await monthFor(ctx, s)).sessions.find((x: any) => x.id === s.id).priceCents).toBe(1100);
-    // Reopen and redo at the new price: the formula uses $20 now.
+    // Reopen and redo: Zip 27 (Audit A, A-01) changed this on purpose. A finalized game keeps the price rules it was finalized under, so the
+    // redo is still the $14 game it was ($11 each, $3 back), not a $20 one. (Before Zip 27 the redo used $20: $16 each, and the $14 seats owed $2.)
     expect((await reopen(ctx, s.id)).status).toBe(200);
     expect((await finalize(ctx, s.id)).status).toBe(200);
     view = await adminSession(ctx, s.id);
-    expect(view.finalized).toMatchObject({ playedCount: 5, priceCents: 1600 });
-    // The $14 payments are below the new $16: rule 5, "paid < due": the $14 stays against the seat and $2 is owed; Alex owes $16.
-    for (const name of names.slice(1)) expect(row(view, name)).toMatchObject({ creditBackCents: 0, paymentStatus: 'unpaid', paidEarlierCents: 1400, owesCents: 200 });
-    expect(row(view, 'Alex').owesCents).toBe(1600);
+    expect(view.finalized).toMatchObject({ playedCount: 5, priceCents: 1100 });
+    for (const name of names.slice(1)) expect(row(view, name)).toMatchObject({ creditBackCents: 300, paymentStatus: 'paid', owesCents: 0 });
+    expect(row(view, 'Alex').owesCents).toBe(1100);
     // A new game: $20 each until finalized, 5 play at $16, $4 back.
     const s2 = await nextSession(ctx, [s.id]);
     const p2 = await joinAll(ctx, s2.id, names);

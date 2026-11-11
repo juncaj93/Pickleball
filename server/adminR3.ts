@@ -6,6 +6,8 @@ import { seatCredit } from '../shared/credit';
 import { adminR2For } from './adminR2';
 import { loadLedger } from './credit';
 import { loadRosters, loadSessions } from './repo';
+import { FEE_KEPT } from '../shared/lateFees';
+import { seatIsClaim, seatKeptCents } from './seatMoney';
 
 // "Admin screens, round 3" (ADMIN_R3): the organizer's Edit game and Add game forms, the Settings clean-up and the Players page.
 // On for a request when:
@@ -51,9 +53,18 @@ export async function adminR3For(ctx: Ctx, groupId: string): Promise<boolean> {
  * with the fee kept (Money does count those as collected). The organizer's own seat is skipped (they pay the venue).
  * Only runs while round 3 is on. Must never break the dashboard, so the caller treats any failure as "no numbers".
  */
-export async function spentByPlayer(db: D1Database, groupId: string, organizerId: string | null, range?: { from: string; to: string }): Promise<Map<string, number>> {
+export async function spentByPlayer(
+  db: D1Database,
+  groupId: string,
+  organizerId: string | null,
+  range?: { from: string; to: string },
+  /** "Spent matches Totals" (Zip 27, A-05) on for this screen: count every seat the way Money > Totals counts "Players paid". Off: as before. */
+  matchTotals = false,
+): Promise<Map<string, number>> {
   // `range` (the Players redo, Zip 13): only games that start inside it (one month). Left out: every game, exactly as before.
-  const sessions = (await loadSessions(db, groupId, '0000')).filter((s) => s.finalized_at && s.status !== 'canceled' && (!range || (s.starts_at >= range.from && s.starts_at < range.to)));
+  const inRange = (s: { starts_at: string }) => !range || (s.starts_at >= range.from && s.starts_at < range.to);
+  if (matchTotals) return spentLikeTotals(db, groupId, organizerId, inRange);
+  const sessions = (await loadSessions(db, groupId, '0000')).filter((s) => s.finalized_at && s.status !== 'canceled' && inRange(s));
   if (sessions.length === 0) return new Map();
   const rosters = await loadRosters(db, groupId, '0000');
   // The credit rows of one seat, found once (seatCredit only looks at rows of its own game and player).
@@ -72,6 +83,29 @@ export async function spentByPlayer(db: D1Database, groupId: string, organizerId
       if (r.payment_status !== 'paid' || r.refunded_at) continue;
       const seat = seatCredit(bySeat.get(`${s.id}:${r.player_id}`) ?? [], s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at });
       const cents = Math.max(0, (r.payment_amount_cents ?? 0) - seat.backCents);
+      if (cents > 0) spent.set(r.player_id, (spent.get(r.player_id) ?? 0) + cents);
+    }
+  }
+  return spent;
+}
+
+/**
+ * Zip 27 (A-05), "Spent matches Totals" on: each player's Spent is exactly their part of Money > Totals' "Players paid" for the same games:
+ * a game once it is finalized (played) or canceled late with the venue fee kept, every seat but the organizer's and an unanswered "I paid"
+ * claim, counted per seat by the one rule Totals uses (server/seatMoney.ts): what they paid minus what came back as credit, or the cash
+ * held on a seat that still owes the rest. So a late-drop fee, a no-show fee and a kept late-cancel fee count, and summing every player's
+ * Spent for a month gives that month's "Players paid". Read only.
+ */
+async function spentLikeTotals(db: D1Database, groupId: string, organizerId: string | null, inRange: (s: { starts_at: string }) => boolean): Promise<Map<string, number>> {
+  const sessions = (await loadSessions(db, groupId, '0000')).filter((s) => inRange(s) && ((s.finalized_at && s.status !== 'canceled') || (s.status === 'canceled' && s.canceled_by === FEE_KEPT)));
+  if (sessions.length === 0) return new Map();
+  const rosters = await loadRosters(db, groupId, '0000');
+  const ledger = (await loadLedger(db, groupId)).filter((e) => e.playerId !== organizerId);
+  const spent = new Map<string, number>();
+  for (const s of sessions) {
+    for (const r of rosters.get(s.id) ?? []) {
+      if (r.player_id === organizerId || seatIsClaim(r, s)) continue;
+      const cents = seatKeptCents(r, s, ledger);
       if (cents > 0) spent.set(r.player_id, (spent.get(r.player_id) ?? 0) + cents);
     }
   }

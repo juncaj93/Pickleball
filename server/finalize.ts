@@ -17,7 +17,7 @@ import { auditLateFeeOwed } from './roster';
 import { FEE_MIN_PLAYERS, lateFeeKind } from '../shared/lateFees';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
 import * as v from './validate';
-import { flatOf, priceOf, specialFlatOf } from './repo';
+import { flatOf, priceLockStatements, priceOf, specialFlatOf } from './repo';
 import { gameFinalPrice } from '../shared/gameLength';
 
 /** Over, not canceled, not finalized, and someone was in (or paid): the Finalize card shows. */
@@ -82,7 +82,9 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
   const organizerId = await organizerIdOf(ctx.db, group);
   const n = playedIds.size;
   // The final price for this game: floor(4 x $14 / N) for a normal game, the 1.5 hour row's table with "Short games" on.
-  const price = gameFinalPrice(priceOf(session, settings), n);
+  // A redo after Reopen uses the rules the game was first finalized under (its price lock, Zip 27 A-01), not today's switches.
+  const gp = priceOf(session, settings);
+  const price = gameFinalPrice(gp, n);
   const now = ctx.nowIso;
   const claimed = `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND finalized_at = ${sqlText(now)})`;
   // Late fees (shared/lateFees.ts rule 4): with fewer than 4 played, someone who was in and did not play owes their $14
@@ -105,6 +107,8 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
         .prepare(`UPDATE session_players SET late_drop_at = ?1, late_drop_done_at = NULL, updated_at = ?1 WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND ${claimed}`)
         .bind(now, session.id, pid),
     ),
+    // Zip 27 (A-01): write down the price rules this finalize used, so a later switch or Settings change never re-prices this game.
+    ...priceLockStatements(ctx.db, group.id, session.id, gp, now, claimed),
   ];
   const backs: { player: string; playerId: string; cents: number; reason: 'finalized' | 'not_played' }[] = [];
   const base = { groupId: group.id, sessionId: session.id, nowIso: now, guard: claimed };
@@ -118,8 +122,18 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       .bind(now, used, r.id);
   for (const r of roster) {
     if (r.player_id === organizerId) continue;
-    // Owes the late fee: everything on the seat stays as it is.
-    if (owing.has(r.player_id)) continue;
+    // Owes the late fee: everything on the seat stays as it is, except (Zip 27, A-02) cash paid at a lower price than the game's price now
+    // (the game was made longer after they paid): that cash is held against the seat, the same way a played seat's is below, so the
+    // seat owes the rest of the fee instead of reading "paid".
+    if (owing.has(r.player_id)) {
+      const paidCash = r.payment_status === 'paid' && !r.refunded_at && !r.self_paid_at ? (r.payment_amount_cents ?? 0) : 0;
+      const fee = gp.flatCents;
+      if (paidCash > 0 && paidCash < fee) {
+        const onSeat = await usedOn(ctx, session.id, r.player_id);
+        statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));
+      }
+      continue;
+    }
     // An open late-drop debt on a seat that left: its money stays on the game until it is cleared or paid.
     if (lateFeeKind(r, session)) continue;
     const paid = r.payment_status === 'paid' && !r.refunded_at ? (r.payment_amount_cents ?? 0) : 0;

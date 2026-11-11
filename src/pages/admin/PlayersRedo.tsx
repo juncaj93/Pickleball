@@ -2,6 +2,7 @@ import '../../players-redo.css';
 import type { ReactNode } from 'react';
 import type { AdminDashboard, AdminPlayer, PlayerSummary } from '../../../shared/api';
 import { formatPrice } from '../../../shared/money';
+import { spentText } from '../../../shared/spentTotals';
 import { formatWeekdayShort, weekTier } from '../../../shared/time';
 import { api, useLoad } from '../../lib';
 import { Sheet } from '../../ui';
@@ -167,7 +168,7 @@ function DetailsBody({ ctx, player, children }: { ctx: AdminCtx; player: AdminPl
       <section className="pr-cd" aria-label={month} data-pr-card="month">
         <h4>{month}</h4>
         <Kv label="Games played" value={sum ? String(sum.month.played) : null} data="month-played" />
-        <Kv label="Spent" value={sum ? formatPrice(sum.month.spentCents) : null} data="month-spent" />
+        <Kv label="Spent" value={sum ? spentText(sum.month.spentCents, formatPrice) : null} data="month-spent" />
       </section>
       <section className="pr-cd" aria-label="Money" data-pr-card="money">
         <h4>MONEY</h4>
@@ -187,7 +188,7 @@ function DetailsBody({ ctx, player, children }: { ctx: AdminCtx; player: AdminPl
       <section className="pr-cd" aria-label="All time" data-pr-card="all">
         <h4>ALL TIME</h4>
         <Kv label="Games played" value={sum ? String(sum.allTime.played) : null} data="all-played" />
-        <Kv label="Spent" value={sum ? formatPrice(sum.allTime.spentCents) : null} data="all-spent" />
+        <Kv label="Spent" value={sum ? spentText(sum.allTime.spentCents, formatPrice) : null} data="all-spent" />
       </section>
       {load.error && <p className="small muted">Couldn't load the month and All time numbers. Close and open again.</p>}
       {children}

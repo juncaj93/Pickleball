@@ -499,10 +499,10 @@ export async function playerWithdraw(ctx: Ctx) {
     const p = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(who.playerId).first<{ display_name: string }>();
     await audit(ctx.db, who.group.id, who.session.id, 'credit_back', { player: p?.display_name ?? 'A player', playerId: who.playerId, amountCents: res.creditBackCents, reason: 'dropped' }, ctx.nowIso);
   }
-  await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? flatOf(who.session, settingsOf(who.group)) : null);
+  await afterTap(ctx, watch, res.lateFee && !res.lateFee.paid ? (res.lateFee.oweCents ?? flatOf(who.session, settingsOf(who.group))) : null);
   // creditBackCents: cash paid that became credit; creditReturnedCents: credit used on the game that went back.
   // lateFee: the drop left the game short, so their $14 stays on it (or is owed) unless someone takes the spot.
-  return { result, creditBackCents: res.creditBackCents, creditReturnedCents: res.creditReturnedCents, ...(res.lateFee ? { lateFee: { cents: flatOf(who.session, settingsOf(who.group)), paid: res.lateFee.paid } } : {}) };
+  return { result, creditBackCents: res.creditBackCents, creditReturnedCents: res.creditReturnedCents, ...(res.lateFee ? { lateFee: { cents: res.lateFee.oweCents ?? flatOf(who.session, settingsOf(who.group)), paid: res.lateFee.paid } } : {}) };
 }
 
 /**

@@ -204,6 +204,10 @@ export function activityText(e: ActivityEntry, tz: string, organizer: string, op
       return `${who} switched "Booking hours" on`;
     case 'booking_hours_off':
       return `${who} switched "Booking hours" off`;
+    case 'spent_totals_on':
+      return `${who} switched "Spent matches Totals" on`;
+    case 'spent_totals_off':
+      return `${who} switched "Spent matches Totals" off`;
     case 'totals_refresh_on':
       return `${who} switched "Totals refresh" on`;
     case 'totals_refresh_off':
