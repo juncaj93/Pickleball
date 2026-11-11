@@ -4193,3 +4193,15 @@ Game 4 (Booked, 8 in) is the 7-row case. The row is on in the seed (`BUILDING_ON
   390/360/320 x light/dark x text 100/125/150% with 3 and 10 players. Older scripts that list the switch rows (zip16, zip21, zip23, zip30, money-rework) were updated for the new top row.
   circles and round2 failed once under load and pass alone (circles also passes on main); instant-taps timing 136 ms under load, 19/19 alone.
 - `e2e/zip32-off.cjs` against main `c88d17b`: 22/22 identical with the switch OFF (the dashboard answer byte for byte, Home, and the old sheet from both openers, light and dark, 390 and 320).
+
+
+### Deploy (Wed Nov 11, 2026, 2:47 PM Eastern, quiet window)
+- Merged as PR #124, main `dd53dac`. Live was `c88d17b` (equal to main) before.
+- Production deployment `05448495-8d43-477b-804e-38389d889033` (commit dd53dac).
+- ROLLBACK ID: previous production deployment `f56850ea-ae14-4936-8609-4ef46a852a3a` (commit c88d17b). No database change, so rolling the code back is enough.
+- Before: full unit suite alone on merged main 2709 passed, 2 skipped, 0 failed (638 s). SQL backup of live (`live-before-zip32-2026-11-11.sql`, 557 INSERT lines, in the session
+  scratch folder, not in git: it has phone numbers). Time Travel bookmark `00000f82-00000000-00005120-371de01837e4389708e846db1ea5ed1e` (not needed: no data change).
+  Integrity checks: all 21 columns 0.
+- After: the live bundle holds the new switch code, `/api/status` ok, the organizer answer needs the PIN (401 without it), integrity checks all 21 columns 0.
+  No PIN was used. The switch "Players sheet redo" has no Settings row value yet: it is OFF for everyone; Alex turns it on in Settings > Feature switches.
+- The custom domain was not reachable from the build container; the live checks ran on the backup address pickleball-club-9h0.pages.dev (same deployment).
