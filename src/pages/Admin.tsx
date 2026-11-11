@@ -16,6 +16,7 @@ import { DemoBar, PretendPicker } from './admin/Pretend';
 import { ModeButton, TopBar } from '../Shell';
 import { CourtReserveLink, DollarIcon, Empty, ErrorState, GearIcon, HistoryIcon, HomeIcon, Notice, PeopleIcon, ScheduleSkeleton, Sheet, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
+import { setSiteName } from '../siteName';
 import { AcIcon, AcTitle } from '../AlertCard';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
@@ -258,6 +259,8 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
   // looks after its own motion, so the organizer's steps back while it is showing.
   useAdminMotion(d.motion === true, !viewing);
   useZip7Root(d, !viewing);
+  // The browser tab follows the group name from Settings (Zip 29).
+  useEffect(() => setSiteName(d.group.name), [d.group.name]);
   const motion = useMotion();
   useSwitchStretch(motion);
   useDetailsEase(motion);

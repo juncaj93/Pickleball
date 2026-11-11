@@ -31,7 +31,7 @@ You need a computer with this project on it, and Node installed (the same setup
 used to deploy). In a terminal, in the project folder:
 
 1. **Turn the file into database steps.** This prints a summary line, like
-   "Backup made Tue, Nov 3, 9:54 PM Eastern (Pickleball Bros). Rows: ...", so
+   "Backup made Tue, Nov 3, 9:54 PM Eastern (Pickleball). Rows: ...", so
    you can check it's the right file:
 
    ```

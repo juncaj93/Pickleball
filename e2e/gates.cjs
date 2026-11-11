@@ -66,7 +66,7 @@ async function main() {
   };
   await call('POST', '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     players: ['Alex', 'Alec', 'Armen', 'Ryan', 'Brandon', 'Julian', 'Mitchel', 'Nathan'].map((name) => ({ name })),
   });

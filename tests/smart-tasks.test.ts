@@ -751,7 +751,7 @@ describe('the tick endpoint', () => {
     const r = await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {});
     expect(r.status).toBe(200);
     await g.app.settle();
-    expect(g.sent[0].startsWith('TEST smart alert from Pickleball Bros.')).toBe(true);
+    expect(g.sent[0].startsWith('TEST smart alert from Pickleball.')).toBe(true);
     const p = await g.ctx.organizer.call('POST', '/api/admin/alerts/smart-test', {}, { 'X-Pretend-Now': '2026-11-03T12:00' });
     expect(p.status).toBe(403);
   });

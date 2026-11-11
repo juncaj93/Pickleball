@@ -2,6 +2,7 @@ import { actingWhoChanged, InstantContext, markPressed, useInstant, useInstantRo
 import { declinePatch, iPaidPatch, leaveWaitlistPatch } from '../playerPatches';
 import { createContext, Fragment, type ReactNode, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { DEFAULT_ZELLE_NUMBER, SITE_NAME } from '../../shared/settings';
+import { setSiteName } from '../siteName';
 import type { GroupView, PlayerSessionView } from '../../shared/api';
 import { formatPrice, parseVenmoHandle, venmoNote, venmoPayUrl } from '../../shared/money';
 import { NO_VENMO_STAY_MS, noVenmoMessage, watchVenmoLaunch } from '../venmoFallback';
@@ -318,6 +319,11 @@ export function PlayerHome({
   }, [switching]);
 
   const g = instant.view;
+  const groupNameNow = g?.group.name;
+  // The browser tab and the header fallback follow the group name from Settings (Zip 29).
+  useEffect(() => {
+    if (groupNameNow) setSiteName(groupNameNow);
+  }, [groupNameNow]);
   const toast = useToast();
 
   // ---- Motion (the MOTION switch). Visual only; with it off none of this does anything. ----
@@ -2145,7 +2151,7 @@ const CHECK = (
  * blue TONIGHT strip where the weekday would be. Extra (added by hand): an
  * ink tile (cream in dark mode). A check badge on the corner when you're in.
  */
-function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day, weekday }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string; day?: TileDay; weekday?: boolean }) {
+function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day }: { iso: string; tz: string; mine: boolean; tonight: boolean; extra: boolean; ts?: string; day?: TileDay }) {
   const p = localParts(Date.parse(iso), tz);
   const month = formatMonthDay(iso, tz).split(' ')[0].toUpperCase();
   // TONIGHT_GLOW on: `day` is given (tonight, tomorrow or null) and decides the tag; off, `day` is undefined and the old blue TONIGHT strip is drawn.
@@ -2166,8 +2172,7 @@ function PlayerTile({ iso, tz, mine, tonight, extra, ts = '', day, weekday }: { 
       <div className={`tile ptile${extra ? ' extra' : ''}${mine ? ' mine' : ''}${ts}${day ? ` day-${day}` : ''}`}>
         {ts && <TileBorders />}
         {tag}
-        {/* Zip 14, the game day card: the weekday under the TONIGHT strip too (TONIGHT, TUE, 10, NOV), as in the approved mock. */}
-        {weekday && (day === 'tonight' || (day === undefined && tonight)) && <span className="dow">{TILE_DOW[p.weekday]}</span>}
+        {/* Zip 29: no weekday under the TONIGHT band any more (TONIGHT, 10, NOV), as in the approved mock. */}
         <span className="day">{p.day}</span>
         <span className="mon">{month}</span>
       </div>
@@ -2788,7 +2793,7 @@ export function ScheduleRow({
       aria-labelledby={`s-${s.id}`}
     >
       <div className="sched-tilecol">
-        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={(tonight || gameDay) && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} weekday={gameDay} />
+        <PlayerTile iso={s.startsAt} tz={tz} mine={isIn} tonight={(tonight || gameDay) && !s.canceled} extra={false} ts={s.extra ? '' : tsClass(ts, flip)} day={dayTag} />
         <div className="sched-when-col">
         {(() => {
           // Only the start ("7:30 PM") so it always fits under the tile. A game of another length also shows

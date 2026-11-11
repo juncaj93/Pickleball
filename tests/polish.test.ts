@@ -16,7 +16,7 @@ function files(dir: string): string[] {
   });
 }
 
-describe('the name is Pickleball Bros', () => {
+describe('the name is Pickleball', () => {
   const all = files(ROOT).map((p) => ({ p, text: readFileSync(p, 'utf8') }));
 
   it('the old names appear nowhere in the code, pages or texts', () => {
@@ -30,11 +30,11 @@ describe('the name is Pickleball Bros', () => {
   it('the browser tab, Home Screen icon, web app and share previews use it', () => {
     const html = readFileSync(join(ROOT, 'index.html'), 'utf8');
     const manifest = JSON.parse(readFileSync(join(ROOT, 'public/manifest.webmanifest'), 'utf8'));
-    expect(SITE_NAME).toBe('Pickleball Bros');
-    expect(html).toContain('<title>Pickleball Bros</title>');
-    expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Pickle Bros" />');
-    expect(html).toContain('<meta property="og:title" content="Pickleball Bros" />');
-    expect(manifest).toMatchObject({ name: 'Pickleball Bros', short_name: 'Pickle Bros' });
+    expect(SITE_NAME).toBe('Pickleball');
+    expect(html).toContain('<title>Pickleball</title>');
+    expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Pickleball" />');
+    expect(html).toContain('<meta property="og:title" content="Pickleball" />');
+    expect(manifest).toMatchObject({ name: 'Pickleball', short_name: 'Pickleball' });
   });
 
   it('the calendar event is still called Pickleball', async () => {
@@ -46,10 +46,10 @@ describe('the name is Pickleball Bros', () => {
 
   it('the group name stays editable in Settings', async () => {
     const ctx = await setupGroup();
-    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Pickleball Bros' });
-    expect((await ctx.organizer.call('GET', '/api/admin/dashboard')).data.group.name).toBe('Pickleball Bros');
-    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Pickle Bros' });
-    expect((await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data.group.name).toBe('Pickle Bros');
+    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Pickleball' });
+    expect((await ctx.organizer.call('GET', '/api/admin/dashboard')).data.group.name).toBe('Pickleball');
+    await ctx.organizer.call('PUT', '/api/admin/group', { name: 'Tuesday Crew' });
+    expect((await (await playerPhone(ctx, 'Alex')).call('GET', '/api/group')).data.group.name).toBe('Tuesday Crew');
   });
 });
 

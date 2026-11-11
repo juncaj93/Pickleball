@@ -191,7 +191,7 @@ async function runSequence(browser, seed, t0) {
   phones = Object.fromEntries(NAMES.map((n, i) => [n, PHONE_OF(i)]));
   const made = await post(setupCtx.request, '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     players: NAMES.map((name) => ({ name, phone: phones[name] })),

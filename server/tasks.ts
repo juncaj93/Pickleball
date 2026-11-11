@@ -186,7 +186,7 @@ export async function smartTestAlert(ctx: Ctx) {
   }
   // With TEXTS_R2 on for everyone the real alerts read "Tomorrow: ..." (the test follows the same switch, so it shows what the real ones say).
   const sample = (await textsR2ForAlerts(ctx, group.id)) ? 'Tomorrow' : 'Tuesday';
-  const text = `TEST smart alert from Pickleball Bros. Nothing to do. Real ones look like: "${sample}: 3 players in, need a 4th. Text the group: ${link}"`;
+  const text = `TEST smart alert from Pickleball. Nothing to do. Real ones look like: "${sample}: 3 players in, need a 4th. Text the group: ${link}"`;
   const sent = await deliver(ctx, group.id, text);
   if (!sent.ok) throw new HttpError(502, 'telegram_failed', sent.error);
   return { ok: true };

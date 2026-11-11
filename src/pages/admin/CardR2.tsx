@@ -9,6 +9,10 @@ import { type Hold, startHold, trackHeld } from '../../undoHold';
 import { actingStamp } from '../../InstantTaps';
 import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
+import { gameMinutes, lengthWords } from '../../../shared/gameLength';
+import { COURT_ADDRESS, directionsUrl } from '../../../shared/zip9';
+import { CourtMap } from '../../GameDay';
+import { DirectionsArrowIcon } from '../../CardButtons';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
 import { tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../../timeShift';
 import { DateTile } from '../PlayerHome';
@@ -70,6 +74,9 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
   const blink = whoChanged || paidFlash;
   const timeFade = useJustChanged(start, 300);
   const needsBook = !!courtNeed && !canceled;
+  const length = lengthWords(gameMinutes(s.startsAt, s.endsAt));
+  // Zip 29: everyone who is in has paid (a green check), or somebody still owes (amber $). Nobody in yet: the plain green $ as before.
+  const paidState = inCount > 0 ? (s.paidCount >= inCount ? 'all' : 'owed') : 'none';
   return (
     <div className="r2-wrap">
       <article
@@ -89,6 +96,12 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
             <div className={`scard-time${tsClass(ts, flip)}${timeFade ? ' m-time-fade' : ''}`} data-card-time data-ts={ts ?? undefined} aria-hidden="true">
               {tsTime(start, ts)}
             </div>
+            {/* Zip 29: the game's own length ("2 hours", "1.5 hours") in small gray under the time. */}
+            {length && (
+              <div className="scard-length" data-card-length aria-hidden="true">
+                {length}
+              </div>
+            )}
             <ShortGameTilePill ctx={ctx} s={s} />
           </div>
           <div className="r2-mid">
@@ -137,12 +150,19 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
                 type="button"
                 className={`r2-paid${paidFlash ? ' m-flash' : ''}`}
                 data-paid-cell
+                data-paid-state={paidState}
                 data-all-paid={inCount > 0 && s.paidCount === inCount ? 'yes' : undefined}
                 aria-label={`${s.paidCount} of ${inCount} paid. Open the players list.`}
                 onClick={() => ctx.open('roster', s.id)}
               >
                 <span className="r2-dol" aria-hidden="true">
-                  $
+                  {paidState === 'all' ? (
+                    <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="m3.6 8.4 2.8 2.8 6-6.4" />
+                    </svg>
+                  ) : (
+                    '$'
+                  )}
                 </span>
                 <span className="r2-paid-text">
                   <RollText text={`${s.paidCount} of ${inCount}`} />
@@ -157,6 +177,9 @@ export function SessionCardR2({ ctx, s, courtNeed }: { ctx: AdminCtx; s: AdminSe
                     Book
                   </CourtReserveLink>
                 </span>
+              ) : s.courtNum !== undefined ? (
+                // Zip 29: the game has a court number: "Court 13 | arrow" (the arrow opens directions, the same address and link as the player card).
+                <CourtJoined court={s.courtNum} dayLabel={formatShortDate(s.startsAt, tz)} />
               ) : (
                 live && <CancelBy startsAt={s.startsAt} now={now} tz={tz} />
               )}
@@ -220,6 +243,27 @@ function InOut({ ctx, s, seat, onSeat }: { ctx: AdminCtx; s: AdminSessionView; s
         Out
       </button>
     </div>
+  );
+}
+
+/**
+ * Zip 29: the footer's right cell when the game has a court number: one outlined button in two halves, "Court 13" (opens the court map, like the
+ * player card's Court button) and an arrow (opens directions: the same address and the same link the player card's Directions button uses).
+ */
+function CourtJoined({ court, dayLabel }: { court: number; dayLabel: string }) {
+  const [mapOpen, setMapOpen] = useState(false);
+  const courtRef = useRef<HTMLButtonElement>(null);
+  const ua = typeof navigator === 'undefined' ? '' : navigator.userAgent;
+  return (
+    <span className="r2-courtbtn" role="group" aria-label={`${dayLabel}: court and directions`} data-court-joined>
+      <button ref={courtRef} type="button" className="r2-courtbtn-half r2-courtbtn-num" data-court-num={court} aria-haspopup="dialog" aria-label={`Court ${court}, show it on the court map`} onClick={() => setMapOpen(true)}>
+        Court {court}
+      </button>
+      <a className="r2-courtbtn-half r2-courtbtn-dir" href={directionsUrl(COURT_ADDRESS, ua)} target="_blank" rel="noopener noreferrer" data-court-directions aria-label={`Directions to the courts for ${dayLabel}`}>
+        <DirectionsArrowIcon />
+      </a>
+      <CourtMap open={mapOpen} onClose={() => setMapOpen(false)} lit={court} anchor={courtRef} label={`Court map. This game is on Court ${court}.`} />
+    </span>
   );
 }
 

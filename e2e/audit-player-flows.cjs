@@ -89,7 +89,7 @@ async function main() {
   const setup = (await browser.newContext()).request;
   const made = await post(setup, '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     // Setup takes 20 names at most; the organizer adds the rest below.

@@ -1,4 +1,4 @@
-# Pickleball Bros
+# Pickleball
 
 A private, phone-friendly website for a group that plays every **Tuesday and
 Thursday, 8:00–10:00 PM Eastern** on one court. It handles sign-ups (any

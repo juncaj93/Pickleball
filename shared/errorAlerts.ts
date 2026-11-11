@@ -257,5 +257,5 @@ export const errorText = {
   summary: (extra: Extra, nowMs: number, adminUrl: string) => `${extraLine(extra, nowMs)} Tap to open Admin: ${adminUrl}`,
   /** The Settings test button: clearly marked TEST. */
   test: (adminUrl: string) =>
-    `TEST error alert from Pickleball Bros. Nothing is wrong. Real ones look like: "Site error: the weekly backup failed at 3:00 AM." Tap to open Admin: ${adminUrl}`,
+    `TEST error alert from Pickleball. Nothing is wrong. Real ones look like: "Site error: the weekly backup failed at 3:00 AM." Tap to open Admin: ${adminUrl}`,
 };

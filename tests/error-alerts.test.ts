@@ -247,7 +247,7 @@ describe('the messages (short, Eastern 12-hour, no em dashes, the admin link)', 
     expect(errorText.clockStopped(SUN_3AM, SUN_3AM + 2 * HOUR, null, ADMIN)).toContain('stopped for 2 hours (3:00 AM to 5:00 AM)');
     expect(errorText.clockStopped(SUN_3AM, SUN_3AM + 3 * HOUR + 10 * MIN, null, ADMIN)).toContain('stopped for 3 hours 10 minutes');
     expect(errorText.summary({ n: 4, since: at }, at + 30 * MIN, ADMIN)).toBe(`4 more errors in the last hour. Tap to open Admin: ${ADMIN}`);
-    expect(errorText.test(ADMIN)).toMatch(/^TEST error alert from Pickleball Bros\. Nothing is wrong\./);
+    expect(errorText.test(ADMIN)).toMatch(/^TEST error alert from Pickleball\. Nothing is wrong\./);
   });
   it('the held-back count rides along; over an hour old it says since when', () => {
     expect(errorText.backup(false, SUN_3AM + HOUR, { n: 2, since: SUN_3AM + 20 * MIN }, ADMIN)).toBe(
@@ -683,7 +683,7 @@ describe('Settings > Feature switches > "Error alerts", and the TEST button', ()
   it('the TEST button: one message marked TEST, switch on or off; refused in the demo; Not connected says so', async () => {
     const w = await world({ on: false });
     expect((await w.g.organizer.call('POST', '/api/admin/error-alerts/test', {})).data).toEqual({ ok: true });
-    expect(w.sent).toEqual([`TEST error alert from Pickleball Bros. Nothing is wrong. Real ones look like: "Site error: the weekly backup failed at 3:00 AM." Tap to open Admin: ${ADMIN}`]);
+    expect(w.sent).toEqual([`TEST error alert from Pickleball. Nothing is wrong. Real ones look like: "Site error: the weekly backup failed at 3:00 AM." Tap to open Admin: ${ADMIN}`]);
     expect((await w.g.organizer.call('POST', '/api/admin/error-alerts/test', {})).status).toBe(429);
     resetTestTimer();
     w.app.env.TELEGRAM_CHAT_ID = undefined;

@@ -63,7 +63,7 @@ async function main() {
   const setup = await browser.newContext();
   const res = await setup.request.post(BASE + '/api/setup', {
     headers: { Origin: BASE },
-    data: { setupToken: SETUP_TOKEN, groupName: 'Pickleball Bros', pin: PIN, players: ['Alex', 'Ryan', 'Brandon', 'Julian'].map((name) => ({ name })) },
+    data: { setupToken: SETUP_TOKEN, groupName: 'Pickleball', pin: PIN, players: ['Alex', 'Ryan', 'Brandon', 'Julian'].map((name) => ({ name })) },
   });
   assert(res.ok(), `setup failed: ${res.status()}`);
 

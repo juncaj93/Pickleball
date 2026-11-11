@@ -1,4 +1,4 @@
-# Pickleball Bros design notes
+# Pickleball design notes
 
 The look follows Apple's own iPhone apps: calm gray background, white cards,
 clear type, quick to scan. All of it lives in `src/styles.css`, tokens first.

@@ -88,7 +88,7 @@ export function SetupPage() {
             </label>
             <label className="field">
               Group name
-              <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} maxLength={60} required placeholder="Pickleball Bros" />
+              <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} maxLength={60} required placeholder="Pickleball" />
             </label>
             <p className="small muted">
               Sessions: every Tuesday and Thursday, {minutesLabel(DEFAULT_SETTINGS.defaultStartMinutes)} to {minutesLabel(DEFAULT_SETTINGS.defaultEndMinutes)} Eastern time. You can change the usual time later in Settings &gt; Schedule.

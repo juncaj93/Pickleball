@@ -24,7 +24,7 @@ export function joinParts(header, parts) {
   const text = sorted.map((p) => p.data).join('');
   if (text.length !== header.bytes) throw new Error('This copy does not add up (wrong size).');
   const backup = JSON.parse(text);
-  if (backup.format !== 'pickleball-backup') throw new Error('This is not a Pickleball Bros backup.');
+  if (backup.format !== 'pickleball-backup') throw new Error('This is not a Pickleball backup.');
   return backup;
 }
 

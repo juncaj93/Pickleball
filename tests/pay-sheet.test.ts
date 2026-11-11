@@ -139,7 +139,7 @@ describe('PAY_SHEET switch', () => {
     const w = await world();
     await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: null });
     expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('');
-    await w.organizer.call('PUT', '/api/admin/group', { name: 'Pickleball Bros' });
+    await w.organizer.call('PUT', '/api/admin/group', { name: 'Pickleball' });
     expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('');
     await w.organizer.call('PUT', '/api/admin/group', { zelleNumber: '248-247-9231' });
     expect((await group(w, 'Alex', ON)).group.zelleNumber).toBe('248-247-9231');

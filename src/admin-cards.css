@@ -17,6 +17,17 @@
   width: 100%;
   box-sizing: border-box;
 }
+.scard-length {
+  /* Zip 29: the game's length under the time: small, regular weight, a tad gray, clearly quieter than the time. */
+  text-align: center;
+  font-family: var(--body, inherit);
+  font-size: min(0.72rem, 18cqw);
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: 0;
+  white-space: nowrap;
+  color: var(--z9-length, var(--ink-2));
+}
 .scard-time {
   text-align: center;
   font-family: var(--display);

@@ -124,7 +124,7 @@ async function main() {
   const setup = (await browser.newContext()).request;
   const made = await post(setup, '/api/setup', {
     setupToken: SETUP_TOKEN,
-    groupName: 'Pickleball Bros',
+    groupName: 'Pickleball',
     pin: PIN,
     venmoUrl: 'https://venmo.com/u/organizer',
     players: NAMES.map((name, i) => ({ name, phone: `24855501${String(i).padStart(2, '0')}` })),

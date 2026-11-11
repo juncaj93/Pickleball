@@ -1,7 +1,7 @@
 # SITE_RULES: how the site is meant to work (updated Mon Nov 9, 2026: game-length price table and venue hours added in Zip 28; before that Mon Nov 2, 2026, copied into the repo with two fixes to match the code). The code is the truth; if this disagrees with the code, keep the code and say so in the report.
 
 ## Basics
-- Private pickleball group site "Pickleball Bros" at pickleball.juncaj.net (backup pickleball-club-9h0.pages.dev). Cloudflare Pages + Pages Functions + D1, free plan, $0. Repo has docs/ (read docs/STAGE_NOTES.md first).
+- Private pickleball group site "Pickleball" (was "Pickleball Bros" until Zip 29) at pickleball.juncaj.net (backup pickleball-club-9h0.pages.dev). Cloudflare Pages + Pages Functions + D1, free plan, $0. Repo has docs/ (read docs/STAGE_NOTES.md first).
 - Organizer (Alex) signs in at /admin with a PIN. Players pick their name once (remembered per device). "View as" lets Alex see a player screen in a demo copy where nothing is saved.
 - Sessions are Tue and Thu. Usual time is 7:00 to 9:00 PM (7:30 to 9:30 PM when that is what was booked); Tue Nov 3 is 8:00 to 10:00 PM. Each game has its own start time and its own court status. First real game Tue Nov 3, 2026. Times Eastern (America/Detroit) with AM/PM, never UTC.
 

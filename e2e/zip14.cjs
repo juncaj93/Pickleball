@@ -5,8 +5,8 @@
  * Fake preview world on game day (Tue Nov 10, 3:28 PM Eastern) with the Zip 14 parts (SEED_ZIP14=1): two extra games tonight, one on
  * Court 3 (Indy paid) and one with no court (Indy owes, a long name in it), plus the regular 8 PM game. Its own dev server with
  * GAME_DAY_TEST=on (as on a preview); nothing touches Cloudflare or the live site.
- * Checks: the card at 390, 360 and 320 wide, light and dark (66 px tile, 17 px "You're in", two equal 30 px buttons on one line, no
- * calendar or arrow buttons, the check badge on the tile's corner, nothing sideways), Court opens the map with that court lit (tap outside,
+ * Checks: the card at 390, 360 and 320 wide, light and dark (Zip 29: the Tonight tile is the same size as the other THIS WEEK tiles with the TONIGHT band and no weekday, 17 px "You're in", two equal
+ * 30 px buttons on one line, no calendar or arrow buttons, the check badge on the tile's corner, nothing sideways), Court opens the map with that court lit (tap outside,
  * X and Escape close it), Court TBD shows the pop-up that goes by itself, Directions (Apple Maps on an iPhone, Google elsewhere), Reduce
  * Motion holds everything still, the Thursday card, Pay and I paid still work, the organizer Court row and picker (Edit game and Add
  * game) and the card following it, a player and the read-only PIN refused, the Settings row, and the preview-only "next game as today".
@@ -140,7 +140,7 @@ async function main() {
   // ------------------------------------------------------------------------------------------------ the card, every size
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
-      await check(`card ${width} px ${scheme}: 66 px TONIGHT tile with weekday, 17 px You're in, two equal one-line buttons, no calendar or arrow button`, async () => {
+      await check(`card ${width} px ${scheme}: TONIGHT tile the size of the other cards' tiles (band, no weekday), 17 px You're in, two equal one-line buttons, no calendar or arrow button`, async () => {
         const { ctx, page } = await openPlayer('Indy', width, scheme);
         for (const [g, label] of [
           [courtGame, 'Court 3'],
@@ -161,9 +161,10 @@ async function main() {
             });
             return { tile: box('.tile'), tag: box('.day-tag, .tonight-tag'), dow: box('.tile .dow'), check: box('.tile-check'), stin: box('.st-in'), btns, joined: !!el.querySelector('.z9-joined, .cal-icon-link'), time: box('.sched-time'), card: box(':scope') };
           });
-          assert(Math.abs(m.tile.w - 66) < 1, `${label}: tile ${m.tile.w} wide`);
+          // Zip 29: the normal THIS WEEK tile (84 px, 76 px on a phone 380 px or narrower), no longer the 66 px one.
+          assert(Math.abs(m.tile.w - (width <= 380 ? 76 : 84)) < 1.5, `${label}: tile ${m.tile.w} wide`);
           assert(m.tag && /TONIGHT/.test(m.tag.text), `${label}: TONIGHT strip`);
-          assert(m.dow && m.dow.text === 'TUE', `${label}: the weekday under the strip`);
+          assert(m.dow === null, `${label}: no weekday under the strip any more (Zip 29)`);
           assert(m.stin && m.stin.fs === '17px', `${label}: You're in ${m.stin && m.stin.fs}`);
           assert(m.btns.length === 2, `${label}: two buttons`);
           assert(Math.abs(m.btns[0].w - m.btns[1].w) < 1 && Math.abs(m.btns[0].h - 30) < 0.6 && m.btns[0].y === m.btns[1].y, `${label}: equal 30 px buttons side by side ${JSON.stringify(m.btns)}`);

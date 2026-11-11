@@ -26,7 +26,7 @@ import { backupToSql } from './backup-sql.mjs';
 import { localParts, zonedTimeToUtc } from '../shared/time';
 import { holidayFor } from '../shared/holidays';
 
-export const FAKE_GROUP_NAME = 'Pickleball Bros (PREVIEW, fake data)';
+export const FAKE_GROUP_NAME = 'Pickleball (PREVIEW, fake data)';
 
 /**
  * The fake organizer PIN lives in ONE place: docs/PREVIEW_FAKE_DB.md (the line "Organizer sign-in ... PIN `dddddd`").

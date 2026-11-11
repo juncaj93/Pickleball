@@ -99,8 +99,12 @@ export function zelleNumberOf(settingsJson: string | null | undefined): string {
 }
 
 export const DEFAULT_VENUE_NAME = 'Northville Pickleball Club';
-/** The site's name: header fallback, browser tab, Home Screen icon. The group's own name lives in Settings. */
-export const SITE_NAME = 'Pickleball Bros';
+/** The site's name: the fallback when no group name is known yet (header, browser tab, Home Screen icon). Once a screen has the group's name from Settings, that name is used instead. The group's own name lives in Settings. */
+export const SITE_NAME = 'Pickleball';
+/** The name to show: the group's name from Settings, or the fallback when it is blank or missing. */
+export function siteNameFor(groupName: string | null | undefined): string {
+  return (groupName ?? '').trim() || SITE_NAME;
+}
 /** Where the organizer books the court on CourtReserve. */
 export const COURTRESERVE_BOOKING_URL = 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442';
 /** Where the organizer changes or cancels an existing CourtReserve booking. */
