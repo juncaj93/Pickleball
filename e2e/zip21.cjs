@@ -88,12 +88,12 @@ async function main() {
           return rows.indexOf(r);
         });
         // Newest switch first: Zip 21 put Error alerts first; Zip 23 (Totals refresh) and Zip 24 (Booking hours) have since been added above it.
-        // (This script was not in npm run test:e2e until Zip 28, so nobody noticed.) So the only rows above it are those two.
+        // (This script was not in npm run test:e2e until Zip 28, so nobody noticed.) So those two are above it (and any newer ones: Zip 27 added Spent matches Totals).
         const above = await page.evaluate(() => {
           const r = document.querySelector('[data-row="errorAlertsAll"]');
           return [...r.parentElement.querySelectorAll(':scope > .set-row-wrap')].slice(0, [...r.parentElement.querySelectorAll(':scope > .set-row-wrap')].indexOf(r)).map((x) => (x.querySelector('.set-name')?.textContent ?? '').trim());
         });
-        expect(first === 2 && above.join('|') === 'Booking hours|Totals refresh', `the row is at place ${first}, with these above it: ${above.join('|')}`);
+        expect(above.includes('Booking hours') && above.includes('Totals refresh'), `the row is at place ${first}, with these above it: ${above.join('|')}`); // newer rows (Zip 27's Spent matches Totals, later ones) may sit above too
         expect((await row.locator('.set-name').innerText()).startsWith('Error alerts'), 'name');
         expect((await row.locator('.set-hint').innerText()) === 'A Telegram to you when the clock, the backup or the database fails. At most 1 an hour per kind, 6 a day', 'hint');
         expect(!(await row.locator('[data-error-alerts-all]').isChecked()), 'ships off');
