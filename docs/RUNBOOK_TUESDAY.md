@@ -28,9 +28,9 @@ The fake database `pickleball-preview` must NEVER be deleted, reset any other wa
 2. Workers & Pages, then **pickleball-club**, then **Deployments**.
 3. Find the deployment before the bad one (each row shows the time and the
    first words of the change). The last known good one is in
-   `docs/STAGE_NOTES.md` under the latest deploy ("Code rollback: ...").
-   As of Sun Nov 1, 5:28 PM: live is `d156b8e0`; the one before it is `071a533a` (the new database column is
-   harmless to the older code, so rolling back is safe).
+   `docs/STAGE_NOTES.md` under the latest deploy ("ROLLBACK: ...").
+   The current live deployment and the one before it are written in `docs/STAGE_NOTES.md` after every deploy (the ids that used to be
+   listed here, from Sun Nov 1, are long out of date: do not use them).
 4. Tap the three dots on that row, then **Rollback to this deployment**, then confirm.
 5. Open pickleball.juncaj.net and check it loads.
 
@@ -48,7 +48,8 @@ From your phone, fastest first:
   Alerts, turn off **Telegram alerts to me** (the top switch).
 - **Stop the clock itself** (only if the switches above don't help): Cloudflare
   dashboard, Workers & Pages, **pickleball-alerts-clock**, Settings, Triggers,
-  delete the cron "*/5 * * * *". To bring it back, add the same cron again.
+  delete the cron "*/5 * * * *". To bring it back, add the same cron again. (This also stops the alerts, last calls, the games that are
+  added each week and the weekly backups, since the same 5-minute tick does all of them.)
 
 Turning alerts back on never sends old alerts twice: each alert is written down
 once it goes. An alert more than an hour late is skipped, never sent late.
@@ -69,13 +70,14 @@ The notice asks players who are in to confirm a moved start time. It never moves
 
 - Quick fix with no deploy: none needed for money. If players are confused, text them with the card's
   Text button or Text the group.
-- To switch it off for everyone (no deploy): /admin, Settings, Schedule, turn off **Moved-game notice for everyone**.
+- To switch it off for everyone (no deploy): /admin, Settings, then the collapsed **Feature switches** section, turn off **Moved-game notice for everyone**.
   The notice, "Confirmed 2 of 3" and the Edit game note go away; tile borders and "~" times stay (they are just looks).
 - To test it on one phone only while it is off: open pickleball.juncaj.net/?timeshift=on on that phone
   (?timeshift=off ends it).
 - Last resort kill switch: in `wrangler.toml`, `TIME_SHIFT = "off"`, then deploy from main. Answers are kept.
 - Never deploy this code to a database without migration 0016 (`npx wrangler d1 migrations list pickleball --remote`
-  must show nothing to apply). Without it, I'm in again and moving a game fail.
+  must show nothing to apply; today the newest migration is 0017_court, and migrations apply in order, so 0016 is in). Without it, I'm in again and moving a game
+  fail. `docs/DEPLOY.md` has the migration step.
 
 Other switches in the code (each needs a deploy):
 

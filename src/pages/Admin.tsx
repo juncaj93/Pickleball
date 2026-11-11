@@ -19,14 +19,14 @@ import { useZip7Root } from '../zip7';
 import { AcIcon, AcTitle } from '../AlertCard';
 import { rememberedAdminMotion, useAdminMotion, useDetailsEase, useMotion, useSwitchStretch } from '../motion';
 import { PlayerHome } from './PlayerHome';
-import { COURTRESERVE_BOOKING_URL, COURTRESERVE_CANCEL_URL, minutesToHHMM } from '../../shared/settings';
+import { COURTRESERVE_BOOKING_URL, minutesToHHMM } from '../../shared/settings';
 import { checkBookingTimes, isPickerLength } from '../../shared/bookingHours';
 import { PICKER_MINUTES } from '../../shared/gameLength';
 import { GameTimeCard, startForDate } from './admin/TimePicker';
 import { type SheetKind, SessionCard, SessionSheets } from './admin/Sessions';
 import { buildTodo, homeBadgeCount, lateDrops, type TodoItem } from './admin/todo';
 import { FinalizeCard, PaymentClaimCard, RefundRequestCard } from './admin/HomeCards';
-import { DoNowCard, useServerNow } from './admin/DoNow';
+import { DoNowCard, useServerNow } from './admin/DoNowCard';
 import { OwedVenmoCards } from './admin/VenmoRequest';
 import { RequestButton, SecondChanceHome, UnpaidTextSheet } from './admin/SecondChance';
 import { MarkPaidRows, type MpRow, sharedDate } from './admin/MarkPaidRows';
@@ -884,9 +884,10 @@ function AddGameForm({ ctx, onDone }: { ctx: AdminCtx; onDone: () => void }) {
           <input className="bh-box" type="text" value={note} onChange={(e) => setNote(e.target.value)} maxLength={80} placeholder={courtOn ? 'Bring water' : 'Court 3, bring water'} />
         </label>
         {error && <Notice tone="danger">{error}</Notice>}
-        {/* One row, pinned at the bottom of the sheet: the same blue CourtReserve button as Edit game, and Add game, equal halves. */}
+        {/* One row, pinned at the bottom of the sheet: a blue CourtReserve button and Add game, equal halves. Here it books a NEW court
+            (the same link as the "Book" button on Home); Edit game keeps "Change court" and the bookings list. */}
         <div className="bh-actions" data-bh-actions>
-          <CourtReserveLink href={COURTRESERVE_CANCEL_URL}>Change court</CourtReserveLink>
+          <CourtReserveLink href={COURTRESERVE_BOOKING_URL}>Book court</CourtReserveLink>
           <button className="btn big" type="submit" disabled={busy}>
             {busy ? 'Adding…' : 'Add game'}
           </button>

@@ -191,7 +191,10 @@ async function main() {
     const kids = await f.evaluate((el) => [...el.children].map((c) => c.className.split(' ')[0] + (c.tagName === 'BUTTON' ? ':' + c.textContent : '')));
     assert(kids.join('|') === 'bh-card|bh-card|bh-actions', `form children: ${kids}`);
     const acts = await f.locator('[data-bh-actions]').evaluate((e) => [...e.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
-    assert(acts.join('|') === 'Change court (opens CourtReserve)|Add game', `bottom row: ${acts}`);
+    assert(acts.join('|') === 'Book court (opens CourtReserve)|Add game', `bottom row: ${acts}`);
+    // Zip 28: in Add game the blue button books a NEW court (the same link as Home's "Book"), not the bookings list.
+    const addHref = await f.locator('[data-bh-actions] a').getAttribute('href');
+    assert(addHref === 'https://mobileapp.courtreserve.com/Online/Reservations/Bookings/13765?sId=19442', `Add game Book court link: ${addHref}`);
     const text = (await card1.innerText()).replace(/\s+/g, ' ');
     assert(/^Date .*Court .*Not set Start 8:00 PM End 10:00 PM Length 1.5 hr \$11 each 2 hr \$14 each 2.5 hr past close 3 hr past close$/.test(text), `card 1 words: ${text}`);
     // The Court box is a half; Date is a half; Start a half; End a half.
@@ -551,6 +554,9 @@ async function main() {
     assert(kids.join('|') === 'bh-card|bh-card|bh-actions', `form children: ${kids}`);
     const acts = await f.locator('[data-bh-actions]').evaluate((e) => [...e.children].map((c) => c.textContent.replace(/\s+/g, ' ').trim()));
     assert(acts.join('|') === 'Change court (opens CourtReserve)|Save', `bottom row: ${acts}`);
+    // Zip 28: Edit game keeps "Change court" and the bookings list.
+    const editHref = await f.locator('[data-bh-actions] a').getAttribute('href');
+    assert(editHref === 'https://mobileapp.courtreserve.com/Online/Bookings/List/13765?type=1', `Edit game Change court link: ${editHref}`);
     assert((await f.locator('[data-bh-actions] a').getAttribute('href')).includes('courtreserve.com'), 'the blue button still opens CourtReserve');
     assert(!/Cancel by/.test(await f.innerText()), 'no "Cancel by" line');
     assert((await f.locator('[data-cancel-by]').count()) === 0, 'no cancel-by line element');

@@ -1,4 +1,4 @@
-# SITE_RULES: how the site is meant to work (updated Mon Nov 2, 2026; copied into the repo with two fixes to match the code). The code is the truth; if this disagrees with the code, keep the code and say so in the report.
+# SITE_RULES: how the site is meant to work (updated Mon Nov 9, 2026: game-length price table and venue hours added in Zip 28; before that Mon Nov 2, 2026, copied into the repo with two fixes to match the code). The code is the truth; if this disagrees with the code, keep the code and say so in the report.
 
 ## Basics
 - Private pickleball group site "Pickleball Bros" at pickleball.juncaj.net (backup pickleball-club-9h0.pages.dev). Cloudflare Pages + Pages Functions + D1, free plan, $0. Repo has docs/ (read docs/STAGE_NOTES.md first).
@@ -6,9 +6,25 @@
 - Sessions are Tue and Thu. Usual time is 7:00 to 9:00 PM (7:30 to 9:30 PM when that is what was booked); Tue Nov 3 is 8:00 to 10:00 PM. Each game has its own start time and its own court status. First real game Tue Nov 3, 2026. Times Eastern (America/Detroit) with AM/PM, never UTC.
 
 ## Players and money
-- Any number 4 to 10 plays (Max players setting). Beyond max, waitlist. A game under 4 is NOT canceled by the site: it stays on until Alex cancels it himself ("Did you guys play?" > Cancel game, the gear menu, or "Didn't open"). Fixed Nov 2: this line used to say "Under 4 the game is canceled", which the code never did.
+- Any number 4 to 10 plays (Max players setting; the code lets the setting go up to 12, the default is 10, and the price tables stop at 10 in: the 1.5, 2.5 and 3 hour games charge their 10-player price at 11 or 12, while the 2 hour game keeps the formula, $5 at 11 and $4 at 12). Beyond max, waitlist. A game under 4 is NOT canceled by the site: it stays on until Alex cancels it himself ("Did you guys play?" > Cancel game, the gear menu, or "Didn't open"). Fixed Nov 2: this line used to say "Under 4 the game is canceled", which the code never did.
 - Everyone pays a flat $14 up front. After the game the organizer finalizes who played. Final price floor(4 x 14 / N), never above $14. Extra comes back as credit.
 - Price table: N=4 $14 (back $0), 5 $11 ($3), 6 $9 ($5), 7 $8 ($6), 8 $7 ($7), 9 $6 ($8), 10 $5 ($9).
+
+## Game length prices and venue hours (Zip 28; read from `shared/gameLength.ts` and `shared/bookingHours.ts`, the code is the truth)
+The $14 above is the 2 hour game, the usual one. Every length has its own up-front price and court cost. Final price = floor(4 x up-front / N), never above the up-front price; whatever a player paid above it comes back as credit. Under 4 in, everyone pays the up-front price (nothing back).
+
+| Game length | Up front | Court (what Alex pays the venue) | Final price at 4, 5, 6, 7, 8, 9, 10 in | When it counts |
+| --- | --- | --- | --- | --- |
+| 1.5 hr | $11 | $36 | $11, $9, $7, $6, $5, $4, $4 | only while Short games is ON for everyone (it is on live) |
+| 2 hr | $14 | $48 | $14, $11, $9, $8, $7, $6, $5 | always (the usual game; the price setting is Settings > Money) |
+| 2.5 hr | $18 | $60 | $18, $14, $12, $10, $9, $8, $7 | only while Booking hours is ON for everyone (it shipped OFF in Zip 24) |
+| 3 hr | $21 | $72 | $21, $16, $14, $12, $10, $9, $8 | only while Booking hours is ON for everyone |
+
+- The 4 x up-front rule gives 2 hr, 2.5 hr and 3 hr exactly. The 1.5 hr row is a hand-written table: at 5 in it charges $9 (the rule alone would give $8). The code wins.
+- With Short games or Booking hours OFF, that length is priced as a 2 hour game ($14, court $48), exactly as before the switch existed.
+- Court cost on Money > Totals uses these court amounts unless a real cost was typed in for the game.
+
+**Venue hours (Booking hours, Zip 24; the rule only applies while that switch is ON for everyone):** 8:00 AM to 10:00 PM Monday to Saturday, 8:00 AM to 7:00 PM Sunday, Eastern, by the game's own date. A new game, or a game whose start or end is changed, cannot start before 8:00 AM, end after closing or run past midnight. A game that already exists is never blocked or changed because it sits outside the hours. The last start is closing minus the game length (2 hr: 8:00 PM Mon to Sat, 5:00 PM Sunday).
 - One credit pot per player. Credit is used automatically at I'm in. Drop out, late drop, canceled game, removed or unmarked all return credit.
 - Late drops owe $14 (switch LATE_FEES, ships OFF; docs/FEATURE_SWITCHES.md): with it on, a drop inside the 12 hours before the start (start minus 12 hours, one clock everywhere) that leaves fewer than 4 in keeps the dropper's $14 on the game unless someone takes the spot (the oldest debt clears first, one per new seat). A no-show owes $14 only if fewer than 4 played. A cancel inside 12 hours asks "Did the venue waive the fee?". With LATE_FEE_SPLIT on (needs LATE_FEES; ships OFF), a No with 5 or more in prices every seat like a played game (floor(4 x 14 / N): 6 in = $9 each) and gives anything paid above that back as credit; 4 or fewer stays $14 each. Off: drops, Finalize and cancels return money as above. The organizer plays but pays the venue, never the group, and never uses credit.
 - Players can "Request cash out from Alex". Organizer gets one Telegram alert and a Home card with a Venmo button, then Mark refunded.

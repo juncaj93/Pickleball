@@ -9,7 +9,7 @@ import { SmsDraft } from '../../ui';
 import { RollText } from '../../motion';
 import { MoneyTabV2 } from './MoneyV2';
 import { MoneyTabR2 } from './MoneyR2';
-import { MoneyTabRework } from './MoneyRework';
+import { MoneyTabRework } from './MoneyReworkScreen';
 
 /** A canceled game where someone's payment became credit. */
 const creditBackRows = (s: AdminSessionView) => s.roster.filter((r) => !r.isOrganizer && r.creditBackCents > 0);
