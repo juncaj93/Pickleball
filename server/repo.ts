@@ -82,6 +82,9 @@ export interface SessionRow {
   court_state: 'waitlist' | 'opened' | 'not_opened' | null;
   /** Zip 14 (migration 0017): which court, 1 to 16, or null (not set). Optional: a database before 0017 has no such column. */
   court?: number | null;
+  /** Zip 31 (migration 0019): the extra court time added at Finalize (30 or 60) and what the venue charged for it. Missing before 0019. */
+  extra_minutes?: number | null;
+  extra_cost_cents?: number | null;
   shown_early: number;
   holiday_hours_ok_at: string | null;
   day_before_done_at: string | null;
@@ -125,6 +128,17 @@ export interface RosterRow {
   played: number | null;
   /** "Time may shift": the start time they agreed to and when (shared/timeShift.ts). NULL: the current time. Missing before migration 0016. */
   time_confirmed?: string | null;
+  /** Zip 31 "Extended time" (migration 0019, shared/extension.ts): this player's share of a game's extra court time. Missing before 0019. */
+  ext_cents?: number | null;
+  ext_credit_cents?: number;
+  ext_paid_cents?: number;
+  ext_claim_cents?: number;
+  ext_claim_at?: string | null;
+  ext_last_cents?: number;
+  ext_paid_at?: string | null;
+  ext_via?: string | null;
+  ext_seen_at?: string | null;
+  ext_at?: string | null;
   display_name: string;
   phone_number: string | null;
 }
@@ -599,16 +613,24 @@ export async function loadHiddenSessions(db: D1Database, group: GroupRow, nowMs:
  * someone still owes for an older game or an "I paid" claim is unanswered,
  * so neither ever drops off.
  */
-export const lookbackRead = (groupId: string, nowMs: number, defaultMs: number): ReadSpec => ({
+export const lookbackRead = (groupId: string, nowMs: number, defaultMs: number, ext = true): ReadSpec => ({
   sql: `SELECT MIN(s.ends_at) AS oldest FROM session_players sp JOIN sessions s ON s.id = sp.session_id
        WHERE s.group_id = ? AND s.ends_at <= ?
          AND ((s.status <> 'canceled' AND sp.status = 'confirmed' AND sp.payment_status = 'unpaid')
            -- an unanswered "I paid" claim (seat that left, or a canceled game) stays on the organizer's Home
            OR (sp.payment_status = 'paid' AND sp.refunded_at IS NULL AND sp.self_paid_at IS NOT NULL AND (sp.status <> 'confirmed' OR s.status = 'canceled'))
            -- an open late fee still owed (shared/lateFees.ts) stays on the player's Pay card and the organizer's Money tab
-           OR (sp.payment_status = 'unpaid' AND ${OPEN_FEE('sp')}))`,
+           OR (sp.payment_status = 'unpaid' AND ${OPEN_FEE('sp')})${ext ? EXT_OPEN : ''})`,
   values: [groupId, new Date(nowMs - defaultMs).toISOString()],
 });
+
+/**
+ * Zip 31 "Extended time" (migration 0019): a share of extra court time still owed, or an I paid on one still waiting for the organizer,
+ * keeps its game in the lookback forever (Alex: a debt is never lost, even if the player never plays again). The same one read.
+ */
+const EXT_OPEN = `
+           -- extra court time still owed or waiting for the organizer (Zip 31)
+           OR (sp.ext_cents > sp.ext_credit_cents + sp.ext_paid_cents + sp.ext_claim_cents OR sp.ext_claim_cents > 0)`;
 
 export async function lookbackIso(db: D1Database, groupId: string, nowMs: number, defaultMs: number): Promise<string> {
   const usual = new Date(nowMs - defaultMs).toISOString();
@@ -616,7 +638,12 @@ export async function lookbackIso(db: D1Database, groupId: string, nowMs: number
   const row = await db
     .prepare(r.sql)
     .bind(...r.values)
-    .first<{ oldest: string | null }>();
+    .first<{ oldest: string | null }>()
+    // A database from before migration 0019 (no extension columns): the same read without them, exactly as before Zip 31.
+    .catch(() => {
+      const old = lookbackRead(groupId, nowMs, defaultMs, false);
+      return db.prepare(old.sql).bind(...old.values).first<{ oldest: string | null }>();
+    });
   // Sessions are loaded with ends_at > since, so step just before the oldest.
   return row?.oldest ? new Date(Date.parse(row.oldest) - 1).toISOString() : usual;
 }

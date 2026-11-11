@@ -114,6 +114,8 @@ export interface Env {
   SPENT_TOTALS?: string;
   /** Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?playerssheet=on. Organizer only, look only. */
   PLAYERS_SHEET_REDO?: string;
+  /** Zip 34 "Check-in pay line" (shared/checkInPay.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?checkinpay=on. Words only. */
+  CHECKIN_PAY_LINE?: string;
   /** Zip 30 "Acting for others" (shared/actingForOthers.ts): the kill switch, allowed unless "off" ("off" also stops recording phone codes). Who sees it: Settings > Feature switches, /admin?actingothers=on. Organizer only, look only. */
   ACTING_FOR_OTHERS?: string;
   /** Zip 30, preview only ([env.preview.vars], never production): "on" shows Acting for others on that preview even if a re-seed dropped its Settings row. */
@@ -128,6 +130,10 @@ export interface Env {
   SECOND_CHANCE_TEST?: string;
   /** Zip 17 "Unpaid nudge" (shared/unpaidNudge.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?nudge=on. Refuses a player's own sign-up at 3 unpaid games. */
   UNPAID_NUDGE?: string;
+  /** Zip 31 "Extended time" (shared/extension.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?extendedtime=on. Moves money. */
+  EXTENDED_TIME?: string;
+  /** Zip 31, preview only ([env.preview.vars], never [vars]): "on" shows Extended time on this preview whatever the shared fake database's row says. */
+  EXTENDED_TIME_PREVIEW?: string;
   /** Zip 21 "Error alerts" (shared/errorAlerts.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches (Alex's Telegram only). */
   ERROR_ALERTS?: string;
   /** Zip 21: the error box (worker/box.ts, a Durable Object in the Worker pickleball-error-box): what the error alerts remember. Missing = no error alerts. */

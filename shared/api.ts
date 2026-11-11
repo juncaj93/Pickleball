@@ -215,6 +215,12 @@ export interface GroupView {
   afterGameCard?: true;
   /** Zip 16, only while on: this player's own credit back from Finalize in the last 7 days (the real ledger rows). */
   afterGame?: AfterGameCredit[];
+  /**
+   * Zip 31 "Extended time" (shared/extension.ts), only while on for this phone (off: not there, so the answer is exactly main's). Their
+   * own shares of extra court time: what is owed in all, the game it rides on ("$17 due", the soonest coming game where they owe and Pay
+   * shows; none: the alert only), and the shares for the alerts.
+   */
+  extension?: { owedCents: number; nextSessionId: string | null; shares: import('./extension').ExtShareView[] };
   /** Preview only (PREVIEW_CALM is set, previews only): the site is a preview, so ?as=Name may pick that name on this phone. Never on live. */
   preview?: true;
   /** "Late drops owe $14" is on for this screen (server/lateFees.ts). False or missing: drops work exactly as before. */
@@ -291,6 +297,11 @@ export interface AdminRosterEntry {
   shareCents: number | null;
   /** What they still owe right now (0 when paid or nothing owed). */
   owesCents: number;
+  /**
+   * Zip 31 "Extended time", only while on: extra time owed that rides on THIS game (the player's "$17 due"); the row shows owesCents + this,
+   * "incl. $3 extension", and its Mark paid takes both (sent as extCents). Not there: no extra time on this seat.
+   */
+  extCents?: number;
   waitlistPosition: number | null;
   promotedAt: string | null;
   refundedAt: string | null;
@@ -549,6 +560,10 @@ export interface AdminDashboard {
   lastCallTexts?: boolean;
   /** Settings > Feature switches > "Last call texts" is on (for everyone). */
   lastCallTextsForAll?: boolean;
+  /** Zip 34 "Check-in pay line" is on for this screen (server/checkInPay.ts): the Check-in text carries a soft pay line while somebody signed up still owes. Missing: the words are exactly as before. */
+  checkInPay?: boolean;
+  /** The Settings > Feature switches row for the Check-in pay line: on for every organizer phone and the texted Telegram link. */
+  checkInPayForAll?: boolean;
   /** "Tonight glow" is on for this screen / Settings > Feature switches > "Tonight glow" is on (for everyone). */
   tonightGlow?: boolean;
   tonightGlowForAll?: boolean;
@@ -631,6 +646,10 @@ export interface AdminDashboard {
   secondChanceForAll?: true;
   /** Zip 17: Settings > Feature switches > "Unpaid nudge" is on for everyone. */
   unpaidNudgeForAll?: true;
+  /** Zip 31 "Extended time" (shared/extension.ts): the Settings row; the flag for this phone; and while on, every share still owed or waiting for a confirm. */
+  extendedTimeForAll?: true;
+  extendedTime?: true;
+  extensionOwed?: { sessionId: string; startsAt: string; minutes: number; playerId: string; name: string; shareCents: number; owedCents: number; claimCents: number }[];
   /** Zip 21, Settings > Feature switches > "Error alerts" (shared/errorAlerts.ts): only while on. */
   errorAlertsForAll?: true;
   /** Preview only (shared/previewCalm.ts): admin Home shows only this zip's cards (?alerts=all shows every one). Never on live. */
@@ -767,6 +786,10 @@ export interface MonthlyMoney {
     /** Once finalized: how many played and the final price each. */
     playedCount: number | null;
     priceCents: number | null;
+    /** Zip 31 "Extended time": a played game with extra time (already inside collectedCents and courtCostCents). */
+    extraMinutes?: number;
+    extraCostCents?: number;
+    extraCollectedCents?: number;
   }[];
   /**
    * "Money page rework" only (server/money.ts): the two cards on the Totals tab. "So far" counts a game only once it is finalized, plus

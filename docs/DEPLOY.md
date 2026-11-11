@@ -20,7 +20,8 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
 - Database change first (only when this deploy adds a file under `migrations/`; Audit A, A-07). Check what is pending, then apply it BEFORE the
   site, so the new code never runs against a column that is not there yet:
   `npx wrangler d1 migrations list pickleball --remote` (must show only the new file; if anything else is listed, stop: it would be applied too),
-  then `npm run db:migrate:remote`. The newest applied migration today is `0018_phone_tag` (Zip 30: one nullable column and one small index on the History table; rollback note inside the file). `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file) is built but not applied anywhere yet; it needs Alex's ship it, and 0019 (🎾31) goes first. A deploy with no new migration file skips this step.
+  then `npm run db:migrate:remote`. The newest migration is `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file; applied to live Wed Nov 11, see STAGE_NOTES), before it `0019_extended_time` (Zip 31; it goes AFTER `0018_phone_tag` from Zip 30, 0018 is live since Wed Nov 11). A deploy with no new migration file skips this step. After 0019, also run the extension checks
+  (read-only, every column 0): `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks-extension.sql)"`.
 - Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06): `scripts/deploy.mjs` refuses unless you are on the `main`
   branch AND the folder has no unsaved changes, then builds and ships with `--branch main` spelled out. From a detached checkout, from any
   other branch or from a messy folder it stops and says why; nothing is built or sent. (A first deploy from a detached checkout once went to a

@@ -26,7 +26,9 @@ import { applyOverlay, canJoinInstantly, type Overlay } from '../optimistic';
 import { ModeButton, TopBar } from '../Shell';
 import { BANNER_TIMING, CalendarPlusIcon, ConfirmDialog, Empty, ErrorState, FilterIcon, NamesLine, Notice, Pickleball, ScheduleSkeleton, Sheet, SpotDots, Spinner, useToast } from '../ui';
 import { useZip7Root } from '../zip7';
-import { AcBalls, AlertCard } from '../AlertCard';
+import { AcBalls, AcIcon, AcX, AlertCard } from '../AlertCard';
+import { extAlerts, inclNote } from '../../shared/extension';
+import '../extended-time.css';
 import { afterGameCard, oweMoreText } from '../../shared/afterGame';
 import { tileDay, type TileDay } from '../../shared/zip7';
 import { canMove, motionOn, rememberedMotion, rememberMotion, RollText, setMotion, useJustChanged, useLingering, useMotion, usePullToRefresh, useStatusMorph } from '../motion';
@@ -743,6 +745,8 @@ export function PlayerHome({
               }}
             />
             <FeeNotices g={view!} />
+            {/* Zip 31 "Extended time" (only while on): "You owe $3 for the extra 30 min..." and the credit-used alerts. */}
+            {g.extension && <ExtensionAlerts g={view!} onChanged={load.reload} />}
             {view!.payDue.length > 0 && <PayCard g={view!} onChanged={load.reload} enter={live} />}
             {/* Zip 16 (AFTER_GAME_CARD): "$5 back to your credit" after Finalize, once, until closed or 7 days old. */}
             {g.afterGameCard === true && <AfterGameCard g={view!} />}
@@ -788,6 +792,7 @@ export function PlayerHome({
             {/* Preview only (calm): just the cards the zips being built change: the owe card (Unpaid nudge on, or it owes more after Finalize) and the after-game card. */}
             {g.previewCalm === true && view!.payDue.length > 0 && (nudge || (g.afterGameCard === true && view!.payDue.every((o) => !!o.more))) && <PayCard g={view!} onChanged={load.reload} enter={live} />}
             {g.previewCalm === true && g.afterGameCard === true && <AfterGameCard g={view!} />}
+            {g.previewCalm === true && g.extension && <ExtensionAlerts g={view!} onChanged={load.reload} />}
             {g.sessions.length === 0 && <Empty>No upcoming sessions yet.</Empty>}
             <div className={`schedule${g.playerFix1 ? ' pf1' : ''}`}>
               {/* Nothing to list (My games with no games): the switch still has a line of its own. */}
@@ -1267,11 +1272,15 @@ function FeeNotices({ g }: { g: GroupView }) {
   );
 }
 
+/** View as / Pretend (the demo copy): what Pay and I paid say, since nothing is sent or saved (Zip 31; real phones never see these). */
+const DEMO_PAY_TOAST = 'Demo, nothing saved. Venmo would open here.';
+const DEMO_PAID_TOAST = 'Demo, nothing saved. Marked paid on the copy.';
+
 /**
  * "I paid" / "Didn't pay?": the player marks their own payment, for one session or several. "I paid" sends the
  * amount the screen showed for each game, so a price that changed in the meantime is refused, not recorded.
  */
-function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => Promise<void>, guard = false) {
+function usePaid(owed: { sessionId: string; cents: number; extCents?: number }[], onChanged: () => Promise<void>, guard = false) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const ids = owed.map((o) => o.sessionId);
@@ -1291,11 +1300,12 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
         patch: paid ? iPaidPatch(ids) : null,
         save: async () => {
           for (const o of owed) {
-            await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
+            // Zip 31: the extra time riding on this game ("$17 due") is paid with it (extCents); none: exactly the old body.
+            await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents, ...(o.extCents ? { extCents: o.extCents } : {}) } : { paid });
             went++;
           }
         },
-        saved: paid ? 'Marked paid' : 'Marked not paid',
+        saved: paid ? (demoOn() ? DEMO_PAID_TOAST : 'Marked paid') : 'Marked not paid',
         what: paid ? 'I paid' : "Didn't pay",
         failText: () => (went > 0 ? `Saved for ${went} of ${owed.length} games; the rest didn't save. Tap again.` : null),
       });
@@ -1306,8 +1316,8 @@ function usePaid(owed: { sessionId: string; cents: number }[], onChanged: () => 
     setBusy(true);
     const release = holdLive();
     try {
-      for (const o of owed) await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents } : { paid });
-      toast(paid ? 'Marked paid' : 'Marked not paid');
+      for (const o of owed) await api('POST', `/api/sessions/${o.sessionId}/paid`, paid ? { paid, cents: o.cents, ...(o.extCents ? { extCents: o.extCents } : {}) } : { paid });
+      toast(paid ? (demoOn() ? DEMO_PAID_TOAST : 'Marked paid') : 'Marked not paid');
       await onChanged();
     } catch (err) {
       if (isDemo(err)) toast(err.message);
@@ -1388,6 +1398,13 @@ function PaySheet({
             rel="noopener noreferrer"
             aria-label={`Pay ${formatPrice(cents)} with the Venmo app`}
             onClick={(e) => {
+              // View as / Pretend (the demo copy): Venmo never opens, so the tap says so and marks it paid on the copy (nothing saved).
+              if (demoOn()) {
+                e.preventDefault();
+                toast(DEMO_PAY_TOAST);
+                onPaid();
+                return;
+              }
               onTapPay();
               openVenmo(e, pay);
             }}
@@ -1419,6 +1436,93 @@ function PaySheet({
         </button>
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * Zip 31, "Extended time" (shared/extension.ts extAlerts): the alerts at the top of the player's screen, text only (no title line).
+ *  - amber, coin $ badge: "You owe **$3** for the extra 30 min we added to yesterday's game. It'll be added to your next game." with a small
+ *    underlined "Pay now instead" (the Pay sheet for just that amount; its I paid waits for the organizer like every I paid);
+ *  - blue (the credit color, like the other credit alerts): "Your **$3** credit was used for ..." (or part of it, and what is still owed).
+ * The X closes it for good on every phone (saved on the server; it cancels no debt). A new or changed share brings it back.
+ */
+function ExtensionAlerts({ g, onChanged }: { g: GroupView; onChanged: () => Promise<void> }) {
+  const toast = useToast();
+  const tz = g.group.timezone;
+  const [closed, setClosed] = useState<string[]>([]);
+  const [sheet, setSheet] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const ext = g.extension;
+  if (!ext) return null;
+  const alerts = extAlerts(
+    ext.shares.map((x) => (closed.includes(x.sessionId) ? { ...x, seen: true } : x)),
+    Date.parse(g.now),
+    tz,
+  );
+  const owed = ext.owedCents;
+  const pay = venmoPayUrl(g.group.venmoUrl, owed, `Pickleball extra court time${g.me?.name ? ` - ${g.me.name}` : ''}`);
+  const close = async (ids: string[]) => {
+    setClosed((c) => [...c, ...ids]);
+    try {
+      await api('POST', '/api/me/extension-seen', { sessionIds: ids });
+    } catch (err) {
+      if (isDemo(err)) return;
+      // It simply shows again next time.
+    }
+  };
+  const paidNow = async () => {
+    setSaving(true);
+    const release = holdLive();
+    try {
+      await api('POST', '/api/me/extension-paid', { cents: owed });
+      setSheet(false);
+      toast('Marked paid');
+      await onChanged();
+    } catch (err) {
+      if (isDemo(err)) toast(err.message);
+      else toast(err instanceof ApiError ? err.message : 'That did not work. Try again.', 'error');
+      await onChanged();
+    } finally {
+      setSaving(false);
+      release();
+    }
+  };
+  if (alerts.length === 0) return null;
+  return (
+    <>
+      {alerts.map((a) => (
+        <article
+          key={`${a.kind}:${a.sessionIds.join(',')}`}
+          className={`ac ${a.kind === 'owe' ? 'ac-amber' : 'ac-blue'} xt-alert`}
+          data-alert-card={a.kind === 'owe' ? 'amber' : 'blue'}
+          data-ext-alert={a.kind}
+          aria-label={a.kind === 'owe' ? 'Extra time owed' : 'Credit used for extra time'}
+        >
+          <div className="ac-row">
+            <AcIcon name={a.kind === 'owe' ? 'owe' : 'credit'} />
+            <div className="ac-text">
+              {/* The money card's own text line and link (src/alert-cards.css .ac-sub, .ac-link): one style for every alert; bold only on the amount. */}
+              <p className="ac-sub xt-alert-text">
+                {a.text.before}
+                <b>{a.text.amount}</b>
+                {a.text.after}
+              </p>
+              {a.kind === 'owe' && owed > 0 && pay.url && (
+                <div className="ac-links">
+                  <button type="button" className="ac-link" data-ext-paynow onClick={() => setSheet(true)}>
+                    Pay now instead
+                  </button>
+                </div>
+              )}
+            </div>
+            <AcX label={a.kind === 'owe' ? 'Extra time owed' : 'Credit used for extra time'} onX={() => void close(a.sessionIds)} />
+          </div>
+        </article>
+      ))}
+      {pay.url && owed > 0 && (
+        <PaySheet g={g} open={sheet} onClose={() => setSheet(false)} cents={owed} pay={pay} onTapPay={() => {}} busy={saving} saving={saving} onPaid={() => void paidNow()} />
+      )}
+    </>
   );
 }
 
@@ -2214,10 +2318,14 @@ function RowPay({
   drop: ReactNode;
 }) {
   const mine = s.mine!;
-  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents }], onChanged, !!g.playerFix1);
+  // Zip 31 "Extended time": the extra time owed rides on this game when it is the one the server picked ("$17 due", "incl. $3 extension").
+  const extCents = g.extension && g.extension.nextSessionId === s.id && mine.paymentStatus !== 'paid' && mine.oweCents > 0 ? g.extension.owedCents : 0;
+  const dueCents = mine.oweCents + extCents;
+  const paid = usePaid([{ sessionId: s.id, cents: mine.oweCents, ...(extCents > 0 ? { extCents } : {}) }], onChanged, !!g.playerFix1);
   const credit = useCredit(onChanged, [s.id], !!g.playerFix1);
   const payTap = usePayTapped(s.id);
   const watchNoVenmo = useNoVenmoNote(g.group.organizerName, !!g.payNote);
+  const rowToast = useToast();
   const busy = paid.busy || credit.busy || paid.blocked || credit.blocked;
   // PAY_SHEET: Pay opens a small sheet instead of jumping straight into the Venmo app.
   const [sheet, setSheet] = useState(false);
@@ -2274,7 +2382,7 @@ function RowPay({
   const showCredit = mine.useCreditCents > 0;
   const chip = (
     <span className="pchip chip-warn" data-owe>
-      <RollText text={`${formatPrice(mine.oweCents)} due`} />
+      <RollText text={`${formatPrice(dueCents)} due`} />
       {showCredit && !left && (
         <span className="chip-credit">
           {' · '}
@@ -2298,7 +2406,7 @@ function RowPay({
       </div>
     );
   }
-  const pay = venmoPayUrl(g.group.venmoUrl, mine.oweCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name));
+  const pay = venmoPayUrl(g.group.venmoUrl, dueCents, venmoNote(s.startsAt, g.group.timezone, g.me?.name) + (extCents > 0 ? ' + extra time' : ''));
   const filled = 'btn pay-btn';
   const outline = 'btn pay-btn outline';
   const creditBtn = showCredit && (
@@ -2307,7 +2415,7 @@ function RowPay({
     </button>
   );
   const creditHint = showCredit && !left ? <span className="credit-hint sr-only">{creditHintText(mine.useCreditCents, g.credit.usableCents, mine.oweCents)}</span> : null;
-  const payLabel = `Pay ${formatPrice(mine.oweCents)}`;
+  const payLabel = `Pay ${formatPrice(dueCents)}`;
   // Always pay first when credit does not cover it; "I paid" stays for anyone who paid another way.
   const payBtn = pay.url ? (
     <a
@@ -2316,11 +2424,18 @@ function RowPay({
       data-app-href={pay.appUrl ?? undefined}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`Pay ${formatPrice(mine.oweCents)} with Venmo`}
+      aria-label={`Pay ${formatPrice(dueCents)} with Venmo`}
       onClick={(e) => {
         if (g.paySheet) {
           e.preventDefault();
           setSheet(true);
+          return;
+        }
+        if (demoOn()) {
+          // The demo copy: Venmo never opens; say so and mark it paid on the copy (nothing saved).
+          e.preventDefault();
+          rowToast(DEMO_PAY_TOAST);
+          void paid.set(true);
           return;
         }
         payTap.mark();
@@ -2347,7 +2462,7 @@ function RowPay({
           g={g}
           open={sheet}
           onClose={() => setSheet(false)}
-          cents={mine.oweCents}
+          cents={dueCents}
           pay={pay}
           onTapPay={payTap.mark}
           busy={busy}
@@ -2367,9 +2482,14 @@ function RowPay({
           {payBtn}
         </span>
       </div>
-      <div className="sched-links inline-links">
+      <div className={`sched-links inline-links${extCents > 0 ? ' xt-incl-row' : ''}`}>
         {iPaid}
         {drop}
+        {extCents > 0 && (
+          <span className="xt-incl" data-ext-incl>
+            {inclNote(extCents)}
+          </span>
+        )}
       </div>
     </>
   );

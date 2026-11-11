@@ -771,7 +771,8 @@ export function payMoneyLine(r: AdminRosterEntry, s: AdminSessionView, tz: strin
     if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
     else if (!played && !r.refundedAt) parts.push('not finalized yet');
   } else if (r.status === 'confirmed' && r.shareCents !== null) {
-    parts.push(`owes ${formatPrice(r.owesCents)}`);
+    // Zip 31: extra time riding on this game ("$17 due" on the player's card) shows here too, and Mark paid takes both.
+    parts.push(r.extCents ? `owes ${formatPrice(r.owesCents + r.extCents)} (incl. ${formatPrice(r.extCents)} extension)` : `owes ${formatPrice(r.owesCents)}`);
     if (r.creditCents > 0) parts.push(`${formatPrice(r.creditCents)} credit used`);
   } else if (r.creditBackCents > 0) parts.push(`${formatPrice(r.creditBackCents)} back as credit`);
   return parts.join(' · ');
@@ -800,7 +801,7 @@ export function PaymentsManager({ ctx, s }: { ctx: AdminCtx; s: AdminSessionView
   const feeRows = s.roster.filter((r) => r.lateFee);
   const setPaid = (r: AdminRosterEntry, paid: boolean) =>
     // With the amount this screen showed as owed (refused if a Finalize or redo changed it since).
-    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId }, paid ? 'Mark paid' : 'Unmark', ctx.d.adminUndo === true));
+    run(() => api('POST', `/api/admin/sessions/${s.id}/payment`, { playerId: r.playerId, paid, seen: r.moneySeen, ...(paid && r.owesCents > 0 ? { cents: r.owesCents, ...(r.extCents ? { extCents: r.extCents } : {}) } : {}) }), paid ? `${r.name} marked paid` : `${r.name} marked unpaid`, opTap({ kind: paid ? 'paid' : 'unpaid', sessionId: s.id, playerId: r.playerId }, paid ? 'Mark paid' : 'Unmark', ctx.d.adminUndo === true));
   const price = viewFlat(s, ctx.d.group.settings.pricePerPlayerCents);
   const played = isPlayed(s);
   const fin = s.finalized;

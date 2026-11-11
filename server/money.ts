@@ -84,8 +84,10 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
   const keptLeft = keptRemaining(ledger.filter((e) => e.reason !== 'cash' && e.reason !== 'adjusted'));
   const owedBySession = new Map<string, number>();
   for (const e of ledger) {
-    if (e.kind !== 'kept' || !e.sessionId || e.endedAt || e.reason === 'cash') continue;
-    owedBySession.set(e.sessionId, (owedBySession.get(e.sessionId) ?? 0) + (keptLeft.get(e.id) ?? 0));
+    // Zip 31: credit handed back from a share of extra time counts in the month of the game it came from (it names it in extSessionId).
+    const from = e.sessionId ?? e.extSessionId ?? null;
+    if (e.kind !== 'kept' || !from || e.endedAt || e.reason === 'cash') continue;
+    owedBySession.set(from, (owedBySession.get(from) ?? 0) + (keptLeft.get(e.id) ?? 0));
   }
   // Canceled games the venue still charged for count their court cost.
   const charges = await loadCancelCharges(ctx.db, group.id);
@@ -144,15 +146,23 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
       held += roster
         .filter((r) => r.player_id !== organizerId && (r.status === 'confirmed' || lateFeeKind(r, s)) && r.payment_status === 'unpaid')
         .reduce((sum, r) => sum + seatCredit(ledger, s.id, r.player_id, { paymentStatus: r.payment_status, paidAt: r.paid_at, refundedAt: r.refunded_at }).usedCents, 0);
+    // Zip 31 "Extended time": the venue's charge for the extra time (written at Finalize) counts in the court costs of a played game,
+    // and what the players put toward their shares counts as collected once it is real money (credit used, or cash the organizer
+    // confirmed); an I paid not confirmed yet is held. A game with no extra time adds $0 to every line.
+    const extCost = state === 'played' ? (s.extra_cost_cents ?? 0) : 0;
+    const extIn = state === 'played' ? roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + (r.ext_credit_cents ?? 0) + (r.ext_paid_cents ?? 0), 0) : 0;
+    held += roster.filter((r) => r.player_id !== organizerId).reduce((sum, r) => sum + (r.ext_claim_cents ?? 0), 0);
     courts += charged;
     if (state === 'played' || feeKept) collected += kept;
     if (state === 'played') courts += cost;
+    courts += extCost;
+    collected += extIn;
     if (rework) {
       if (state === 'played' || (state === 'canceled' && charged > 0)) {
         rwSessions++;
         projPlayersCents += PROJECTED_PLAYERS_PER_COURT * flatOf(s, settings);
-        rwCourts += state === 'played' ? cost : charged;
-        rwCollected += kept;
+        rwCourts += (state === 'played' ? cost : charged) + extCost;
+        rwCollected += kept + extIn;
       } else if (state === 'not_finalized' || state === 'upcoming') {
         // Zip 13: every game still to come counts in Projected as if it will be played, whatever its court status (Booked, Not booked
         // or Waitlist), until or unless it is canceled (a canceled game's state is 'canceled', so it never gets here). Display only.
@@ -167,8 +177,10 @@ export async function monthMoneyOf(ctx: Ctx, group: GroupRow, year: number, mont
       endsAt: s.ends_at,
       state,
       charged: charged > 0,
-      collectedCents: state === 'played' || feeKept ? kept : 0,
-      courtCostCents: state === 'played' ? cost : charged,
+      collectedCents: (state === 'played' || feeKept ? kept : 0) + extIn,
+      courtCostCents: (state === 'played' ? cost : charged) + extCost,
+      // Zip 31: the extra time in those two numbers (only when there was some, so a game without it reads exactly as before).
+      ...(extCost > 0 ? { extraMinutes: s.extra_minutes ?? 0, extraCostCents: extCost, extraCollectedCents: extIn } : {}),
       typicalCost: s.court_cost_cents === null,
       playedCount: s.finalized_at ? (s.final_played_count ?? 0) : null,
       priceCents: s.finalized_at ? (s.final_price_cents ?? flatOf(s, settings)) : null,
