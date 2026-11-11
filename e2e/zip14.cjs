@@ -167,7 +167,9 @@ async function main() {
           assert(m.dow === null, `${label}: no weekday under the strip any more (Zip 29)`);
           assert(m.stin && m.stin.fs === '17px', `${label}: You're in ${m.stin && m.stin.fs}`);
           assert(m.btns.length === 2, `${label}: two buttons`);
-          assert(Math.abs(m.btns[0].w - m.btns[1].w) < 1 && Math.abs(m.btns[0].h - 30) < 0.6 && m.btns[0].y === m.btns[1].y, `${label}: equal 30 px buttons side by side ${JSON.stringify(m.btns)}`);
+          // Zip 29: the tile column is the normal 84 px (76 px on a narrow phone), so at 320 "Directions" needs a little more than half the row: still side by
+          // side on one line, but no longer exactly equal there (at 360 and up they are equal).
+          assert(Math.abs(m.btns[0].w - m.btns[1].w) < (width <= 340 ? 9 : 1) && Math.abs(m.btns[0].h - 30) < 0.6 && m.btns[0].y === m.btns[1].y, `${label}: equal 30 px buttons side by side ${JSON.stringify(m.btns)}`);
           assert(m.btns.every((b) => b.oneLine), `${label}: words on one line ${JSON.stringify(m.btns)}`);
           assert(m.btns[0].text === label && /Directions/.test(m.btns[1].text), `${label}: words`);
           assert(!m.joined, `${label}: no calendar or arrow button on game day`);

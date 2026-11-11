@@ -45,7 +45,7 @@ html[data-game-day] .schedule > .sched.tier-this .sched-main {
 @media (max-width: 380px) {
   :root {
     --gd-dow: min(0.8rem, 17.2cqw);
-    --gd-band-font: min(0.58rem, 12.4cqw);
+    --gd-band-font: min(0.58rem, 11.2cqw);
   }
 }
 /* The band: a flex box with its own height, so the word is centered inside it by layout, never by font metrics or a fixed line height.
@@ -67,6 +67,12 @@ html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
   line-height: 1.2;
   white-space: nowrap;
   overflow: visible;
+}
+/* A narrow phone (the tile is 76 px there and the badge takes a corner): a little less tracking so the word keeps clear of the badge. */
+@media (max-width: 380px) {
+  html[data-game-day] .schedule > .sched.gd .tile.ptile .day-tag {
+    letter-spacing: 0.07em;
+  }
 }
 /* No weekday under the band any more (TONIGHT, 10, NOV). */
 html[data-game-day] .schedule > .sched.gd .ptile .day {
@@ -104,7 +110,7 @@ html[data-game-day] .schedule > .sched.gd .tile.ptile.day-tonight.ts-none .tb-so
 /* The glow: one soft green blur around the tile only. No hard-edged ring, and it breathes between two blurs (the old pulse had a
    5 px solid ring that read as a cut-off line). Nothing around the tile clips it (a test checks every ancestor). */
 html[data-game-day][data-tonight-glow] .schedule > .sched.gd .tile.day-tonight {
-  animation: gd-glow 2.6s ease-in-out infinite;
+  animation: gd-glow 2.4s ease-in-out infinite;
 }
 @keyframes gd-glow {
   0%,
