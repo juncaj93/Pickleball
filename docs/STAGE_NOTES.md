@@ -4024,3 +4024,14 @@ exists where the "Game day card" row is already ON, because that is what sends t
   Court button and its link equal to the player's, the clock cell unchanged, money cell states and sizes; the folded tile's glyph box at least 3 px inside the band
   (above and below) and 2 px inside the tile each side, never touching the date number. `E2E_BREAK=tile|band|badge|glow` puts the old rules back and the matching checks fail.
 - `e2e/zip14.cjs` (66 px tile, weekday TUE) and `e2e/zip22.cjs` (7 px each side of the 6.75 px word) were rewritten for the new look.
+
+### Results (Wed Nov 11, 2026, code final = branch `claude/new-session-np4za1`)
+- Unit suite alone: 2663 passed, 0 failed, 2 skipped on purpose (157 files; 1 file skipped on purpose); tsc and `npm run build` clean.
+- `e2e/zip29.cjs`: 297 of 297, WebKit at device scale 3. Proof that it bites: with the old rules put back (`E2E_BREAK=tile|band|badge|glow`) it fails (1, 2, 3 and 3 checks).
+- Whole browser suite once, 4 at a time (65 scripts): the failures were all explained and re-run: 6 scripts that share a port with another script (alerts, court, card-times, late-fees,
+  circles, zip16: "already set up" or 401) pass alone on their own ports; run.cjs crashed on the shared screenshots folder and passes 229/229 alone; circles failed 1 check under load and passes 18/18 alone;
+  zip14 and zip22 were rewritten for the new look and pass (22/22, 8/8); zip7 33/33. `credit.cjs` fails the same 4 checks on main 88a5356 (they depend on the date): 149 passed, 4 failed on both.
+- Independent reviewer (read-only, fresh): nothing blocking. Taken: the plain-border Tonight tile (an added game) now has the ink / green outline too; a test for the gap between the word and the badge
+  (and a little less tracking on phones 380 px wide or narrower); a comment fixed. Not taken: the Court | arrow also shows on a past game (harmless, the brief says "when the game has a court number").
+- Preview: https://claude-new-session-np4za1.pickleball-club-9h0.pages.dev (deployment `0e6cd2eb`). The fake database was re-seeded once (new fake group name "Pickleball (PREVIEW, fake data)"). No new switch.
+  Preview-only link to see game day on any day: `/?as=Alex&gamedaytest=on`.
