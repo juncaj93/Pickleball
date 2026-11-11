@@ -4096,7 +4096,7 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
   every line (about 18 characters) moved 25-line blocks from 5 to 4 per step, so 51 steps. Live is about 20 times smaller (a few steps).
   The test now uses 4000 lines (still several chains, over 20 steps): 15/15. Files touched afterwards rerun: acting-others, readonly-pin,
   backup-zip19 all pass. tsc and build clean.
-- New: `tests/acting-others.test.ts` (32): the rule (Mitchel x3 then Brandon "from Mitchel's phone"; a brand-new phone not flagged; a new
+- New: `tests/acting-others.test.ts` (31): the rule (Mitchel x3 then Brandon "from Mitchel's phone"; a brand-new phone not flagged; a new
   phone acting as a new name; two people sharing one phone, both ways, quiet at a tie; cleared data = a new phone; Alex's phone exempt,
   earlier taps too; auto credit and organizer lines left out; later taps never change earlier verdicts), recording (every kind of tap,
   the cookie backup, the organizer phone records nothing, View as and the demo copy record nothing, the kill switch, bad codes), ZERO extra
