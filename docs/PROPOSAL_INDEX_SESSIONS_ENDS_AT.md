@@ -1,7 +1,7 @@
 # Proposal: one database index so the 5-second check skips old games
 
 Status: **waiting for Alex's OK, not before Wed Nov 4, 2026** (it is a database change).
-Written Sun Nov 1, 2026. Times are Eastern. (Zip 28, Mon Nov 9: the file is now named `0018_...` because `0017_court` was taken by Zip 14; nothing else changed.)
+Written Sun Nov 1, 2026. Times are Eastern. (Zip 28, Mon Nov 9: the file is now named `0018_...` because `0017_court` was taken by Zip 14; nothing else changed. Zip 30, Tue Nov 10: `0018_phone_tag` now takes 0018, so this file would become `0019_...` if Alex OKs it.)
 
 ## Why
 

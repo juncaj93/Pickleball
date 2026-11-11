@@ -131,7 +131,7 @@ describe('Adjust credit: the switch', () => {
   });
   it('S6 no migration was added for it', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql'));
-    expect(files.at(-1)).toBe('0017_court.sql'); // Zip 14 added 0017 (the court column); this feature itself still adds none
+    expect(files.at(-1)).toBe('0018_phone_tag.sql'); // Zip 14 added 0017 (the court column), Zip 30 0018 (the phone code); this feature itself still adds none
   });
   it('S7 switch off and nothing adjusted: the dashboard credit data equals a world that never heard of it', async () => {
     const w = await world();

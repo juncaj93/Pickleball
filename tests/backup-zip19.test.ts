@@ -349,7 +349,10 @@ describe('safety', () => {
   it('a copy over 20 steps runs as several chains, each started once, and still joins into exactly the one-shot file', async () => {
     const ctx = await busyGroup();
     const ins = ctx.app.db.raw.prepare("INSERT INTO admin_audit_log (id, group_id, session_id, actor_label, action, details_json, created_at) SELECT ?, id, NULL, 'organizer', 'test', ?, ? FROM groups");
-    for (let i = 0; i < 5000; i++) ins.run(`b-${i}`, JSON.stringify({ note: 'y'.repeat(260), i }), new Date(at('2026-09-01T00:00:00Z') + i * 1000).toISOString());
+    // Zip 30: 4000 lines (was 5000). Migration 0018 adds an empty device_tag to every History line (about 18 characters), so 5000 of these
+    // 260-character lines no longer fit 5 buckets per step and needed 51 steps, over MAX_STEPS (45; main made 41). 4000 still runs as
+    // several chains (over 20 steps). Live is about 20 times smaller than this.
+    for (let i = 0; i < 4000; i++) ins.run(`b-${i}`, JSON.stringify({ note: 'y'.repeat(260), i }), new Date(at('2026-09-01T00:00:00Z') + i * 1000).toISOString());
     const backups = store();
     let started = 0;
     const inline: StepRunner = (body) => runStep(ctx.app.db, backups, body, inline);

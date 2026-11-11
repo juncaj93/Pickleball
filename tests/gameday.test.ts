@@ -22,9 +22,9 @@ const setCourt = (w: W, id: string, court: unknown, headers: Record<string, stri
 const courtOf = (w: W, id: string) => (w.app.db.raw.prepare('SELECT court FROM sessions WHERE id = ?').get(id) as { court: number | null }).court;
 
 describe('migration 0017: one nullable court column, 1 to 16', () => {
-  it('is the newest migration, adds only sessions.court, and existing games stay empty', () => {
+  it('adds only sessions.court (it was the newest migration until Zip 30 added 0018), and existing games stay empty', () => {
     const files = readdirSync(new URL('../migrations/', import.meta.url)).filter((f) => f.endsWith('.sql')).sort();
-    expect(files.at(-1)).toBe('0017_court.sql');
+    expect(files.filter((f) => f > '0017_court.sql')).toEqual(['0018_phone_tag.sql']);
     const sql = readFileSync(new URL('../migrations/0017_court.sql', import.meta.url), 'utf8').replace(/--.*$/gm, '').trim();
     // Additive only: exactly one statement, an ADD COLUMN. Nothing dropped, renamed, updated or copied.
     expect(sql.split(';').filter((x) => x.trim())).toHaveLength(1);

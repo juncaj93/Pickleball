@@ -1,0 +1,25 @@
+-- Zip 30, "Acting for others" (Alex approved a small database change, Tue Nov 10, 2026):
+-- the phone a player action came from.
+--
+-- Each phone keeps a random code in its own browser (not a fingerprint: just a
+-- random string made on that phone). A player's own tap (I'm in, Drop out,
+-- Still in, I paid, Use credit and the rest that already appear in History)
+-- sends it, and the site writes it into the History line that tap already
+-- makes. Organizer screens then work out which name each phone usually acts as
+-- and point out a tap made for someone else ("Brandon said I'm in for Tue,
+-- Nov 10 (from Mitchel's phone)"). Player screens never read it.
+--
+-- One new nullable column on admin_audit_log, plus one small index that only
+-- covers rows that have a code. Every existing History line stays NULL:
+-- nothing is filled, copied or guessed here. No data is rewritten.
+--
+-- Additive only: nothing existing is dropped, renamed or rewritten, and code
+-- that ignores this column (the build before Zip 30) keeps working, including
+-- View as (since Zip 14 its copy leaves out any column its own tables lack).
+-- So a rollback of the site needs no database change.
+-- Rollback of the column itself (never needed for a code rollback; it deletes
+-- every saved phone code and nothing else), in this order:
+--   DROP INDEX idx_audit_phone;
+--   ALTER TABLE admin_audit_log DROP COLUMN device_tag;
+ALTER TABLE admin_audit_log ADD COLUMN device_tag TEXT;
+CREATE INDEX idx_audit_phone ON admin_audit_log (group_id, created_at) WHERE device_tag IS NOT NULL;

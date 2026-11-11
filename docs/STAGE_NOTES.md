@@ -4051,3 +4051,104 @@ exists where the "Game day card" row is already ON, because that is what sends t
 - Not booked Tonight tiles keep the gray court ring (as is).
 - Big text fixed: at 150% on a phone the THIS WEEK cards stack (tile above the words); the tile column had `width: auto` inside a size container and came out 0 px wide, so the time and the length line
   beside the tile had no size (also on main). `src/large-text.css`: that column is now full width in the stacked layout. `e2e/zip29.cjs` now fails if the time or the length line has no size at any text size.
+
+## Zip 30: phone tag and "Acting for others" (🎾30.phonetag, ACTING_FOR_OTHERS, ships OFF) - built Tue Nov 10, 2026 (night) to Wed Nov 11, 12:30 AM; on a preview, waiting for "ship it"
+Branch `claude/new-session-kmm7br` (the brief's name "🎾30.phonetag" is the session name). Built on main `88a5356`. Organizer only, look only. No money or credit logic, no Telegram, no push, no new cost. ONE database change (Alex approved Tue Nov 10): migration `0018_phone_tag`. NOT deployed; the migration is on the fake preview database only.
+
+### Why
+A player used "Not you?" to sign up as another player, then changed it for him. Alex wants to SEE that quietly, not block or confirm it (no "Signing in as Brandon" step, no name lock: not built).
+
+### What it is
+1. Phone tag. Each phone makes a random code once (16 random bytes from the browser, not a fingerprint), keeps it in browser storage with a cookie copy (`pb_phone`, about 400 days; each copy restores the other), and sends it as `X-Phone-Tag` on player requests (never on organizer requests, never in View as or the demo copy). `server/phoneTag.ts` reads it from the request only (no database read) and `audit()` writes it into the History line the tap already makes: I'm in, Drop out, Still in, check-in, Can't make it, I paid, Didn't pay, Use credit, Undo credit, cash-out credit, refund request and its cancel, and the texted-link taps. No code when the request comes from a phone signed in as the organizer (that cookie is sent on every /api request from Alex's phone), in the demo copy, with a bad code, or with the kill switch "off". Codes are recorded whether the Settings row is on or off (the row only decides what the organizer screens show), so a phone already has its usual name the day the switch goes on.
+2. History (Activity): a tap made for someone else gets a note, "Brandon said I'm in for Tue, Nov 10 (from Mitchel's phone)" or "(from a new phone)". Normal taps get nothing.
+3. Home card "Acting for others" at the very top (mocks `acting_for_others_light.png` / `_dark.png`): gray circle with the swap arrows, bold title, X; rows "Mitchel signed up for Brandon" with the time on the right ("Mon 7:12 PM" for an earlier day); the last 7 days; up to 3 rows, then "+N more in History" (opens History); the X hides it on that phone (like the other Home card X's), History keeps every line, a newer tap brings the card back. Same surface, border, corners and shadow as the "Tue game" card. Gone when empty.
+4. The rule (`shared/actingForOthers.ts` judgeTaps; each tap judged only on the taps before it): a phone's usual name is the only name it has acted as, from its first tap (changed Wed Nov 11, see below); once two or more names have used it, the name it acted as most once it has made at least 3 taps and more than half were as that name. A tap counts as "for someone else" when the phone has a usual name and acts as a different name ("from Mitchel's phone"), or when the phone is still too new (1 or 2 taps) and acts as a name it has never used ("from a new phone"). Never: a phone's first tap; a phone with a tie (two people sharing it equally); a phone Alex's own player name has acted from; the organizer's signed-in phone; View as; taps with no code. Two people sharing one phone are flagged both ways while one of them has more than half the taps, and it goes quiet at a tie.
+5. Limits: a private window, cleared browser data (both copies), another browser or another device looks like a new phone. It cannot tell when someone uses the real owner's phone.
+
+### Database
+- `migrations/0018_phone_tag.sql`: `ALTER TABLE admin_audit_log ADD COLUMN device_tag TEXT;` and `CREATE INDEX idx_audit_phone ON admin_audit_log (group_id, created_at) WHERE device_tag IS NOT NULL;`. Additive only; every old line stays NULL; nothing filled, copied or rewritten.
+- Reads added on player screens: zero (`tests/acting-others.test.ts` "NO extra database reads": the player answer makes the same queries with or without a code; a tap makes the same trips, only its History INSERT names one more column). Organizer screens, only while the switch is on: one read of the lines that have a code from the last 180 days (the index holds only those lines; checked on D1 with EXPLAIN QUERY PLAN: `SEARCH admin_audit_log USING INDEX idx_audit_phone`), plus the switch read (answered by the shared switch read when Fewer database trips is on, as on live).
+- New code without the column (before 0018): the tap writes its line without the code (only the missing-column error is forgiven), organizer screens read nothing.
+- Rollback: the site before Zip 30 (main `88a5356`) works unchanged on the migrated database, View as included (its demo copy leaves out columns its own tables lack, since Zip 14): `e2e/zip30-off.cjs` runs main on the migrated database and `tests/acting-others.test.ts` loads a backup with codes into a demo copy built without 0018. So a code rollback needs NO database step. Only to remove the column itself (deletes every phone code, nothing else), in this order: `DROP INDEX idx_audit_phone;` then `ALTER TABLE admin_audit_log DROP COLUMN device_tag;`.
+- The codes are in backup files and the export (like the rest of History). They are random strings, not names, numbers or anything about the phone; no screen ever shows a code (only names).
+
+### Switch
+`ACTING_FOR_OTHERS` kill switch in `[vars]` and `[env.preview.vars]` ("off" also stops the recording); Settings > Feature switches > "Acting for others" (top row); `/admin?actingothers=on` per phone; Activity lines; `docs/FEATURE_SWITCHES.md`.
+
+### Preview
+- https://claude-new-session-kmm7br.pickleball-club-9h0.pages.dev (deployment `d3120ca7`, the final code; the first was `610d45cf`). Migration 0018 applied to `pickleball-preview` (Tue Nov 10, about 11:30 PM Eastern; checked on D1: the column takes a code, the index is used, the check row removed), then one INSERT turned the "Acting for others" row on (no re-seed, no names added). Rows on there: every row in the preview database before (all live rows plus Booking hours, Totals refresh, Spent matches Totals) plus Acting for others.
+
+### Fresh review (an independent reviewer who did not write the code, database and privacy)
+- Nothing blocking (so no second round). Checked: the migration is additive and the rollback order works; the partial index is used; the
+  missing-column fallback only forgives that one error and never writes a line twice; main on the migrated database (both `SELECT *` reads
+  map fields one by one, View as and the restore test read the columns live); zero player reads; the code is pattern-checked and always a
+  bound value; no screen ever gets a raw code; switch off = main.
+- Fixed from it: (1) the weekly backup stress test (below); (2) a phone Alex's own player name has EVER acted from is exempt for every tap,
+  earlier ones too (it used to count only from his first tap there); (3) the read-only PIN's backup file blanks the phone codes;
+  (4) `docs/RESTORE.md` note for backups made after 0018; (5) a misplaced comment.
+- Notes kept for Alex: codes are recorded from deploy day even with the row off (by design, so phones are learned before the switch goes on;
+  `ACTING_FOR_OTHERS = "off"` stops it); a player could dodge the recording (a fake organizer cookie, a private window each time) and that is
+  accepted; History opens with one extra switch read on the organizer screen.
+
+### Tests (Tue Nov 10 night to Wed Nov 11, 2026)
+- Unit, full suite alone: 2690 passed, 1 failed, 2 skipped on purpose (806 s). The failure was mine: `tests/backup-zip19.test.ts` "a copy
+  over 20 steps" packs 5000 large fake History lines right under the weekly backup's 45-step limit (main: 41 steps); the empty `device_tag` on
+  every line (about 18 characters) moved 25-line blocks from 5 to 4 per step, so 51 steps. Live is about 20 times smaller (a few steps).
+  The test now uses 4000 lines (still several chains, over 20 steps): 15/15. Files touched afterwards rerun: acting-others, readonly-pin,
+  backup-zip19 all pass. tsc and build clean.
+- New: `tests/acting-others.test.ts` (31): the rule (Mitchel x3 then Brandon "from Mitchel's phone"; a brand-new phone not flagged; a new
+  phone acting as a new name; two people sharing one phone, both ways, quiet at a tie; cleared data = a new phone; Alex's phone exempt,
+  earlier taps too; auto credit and organizer lines left out; later taps never change earlier verdicts), recording (every kind of tap,
+  the cookie backup, the organizer phone records nothing, View as and the demo copy record nothing, the kill switch, bad codes), ZERO extra
+  reads on the player screen and the same trips on a tap, a database without 0018, main's write on a migrated one, the index, the switch
+  (off = no keys, on = History note and card rows, private link, Settings row, read-only PIN refused and its backup blanked, kill switch),
+  players never see it, 7-day card window, View as rollback with a backup that has codes, the preview row.
+- Updated: the 8 "newest migration" pins (0017 to 0018), `tests/speed-queries.test.ts` (the new switch row is not main's), and the
+  backup stress test above.
+- Browser, the full `npm run test:e2e` list (64 scripts, zip30 added) once, 4 at a time: 2246 passed, 14 failed. Then alone: admin-motion
+  28/28, circles 18/18, late-fee-split 6/6, pay-sheet 23/23, round2 25/25 (load flakes); money-rework 36/36 after its newest-first list
+  learned the new row; credit 4 failures are the same on main (they look for "Tue, Nov 10", now in the past); player-fix1 "I paid on
+  tonight's card" fails now and then on main as well (main 1 of 3 runs, branch 1 of 3): an old race in that check, not this zip.
+- `e2e/zip30.cjs` (30, final code): the switch, the phone code (storage + cookie, each restores the other, sent on player requests only),
+  Casey x3 then Harper (card and History), +N more, the X, the organizer phone, View as, the look against the mock, and strict clipping at
+  390/360/320, light and dark, text 100/125/150% with the longest names (proven to fail with broken CSS, `E2E_BREAK`).
+- `e2e/zip30-off.cjs` (19, needs `MAIN_DIR`, final code): main and the branch side by side on the migrated database after the same four
+  tagged taps: organizer Home at 390/360/320 light and dark, History light and dark, Players, Money, Settings apart from the row, the player
+  screen light and dark, and the dashboard, History and player answers byte for byte; main's View as on the migrated database opens.
+
+### Preview test that did not work (Alex, Wed Nov 11, about 12:30 AM) and the fix
+- What Alex saw: History "Sage said I'm in" and "Parker said I'm in" with no "(from ...)", no card, only one Parker I'm in.
+- Checked on the preview database (read only): every tap WAS written with its phone code (the private window's code was saved and sent,
+  so storage, the cookie and the "never Alex's phone" rule were fine). Two causes:
+  1. The Settings row was OFF: another channel re-seeded the shared preview database at 12:27 AM Wed Nov 11 (every seed row has that time)
+     from a branch that does not know this zip's row, which dropped it. With the row off nothing shows. Fix: preview-only
+     `ACTING_FOR_OTHERS_PREVIEW = "on"` in `[env.preview.vars]` (never `[vars]`, a test checks), so this zip's preview shows it whatever
+     the shared database's row says; the row was also put back with one INSERT (no re-seed).
+  2. Only one Parker tap reached the site: Drop out waits 5 seconds for Undo, and the I'm in right after it cancels the drop, so nothing is
+     sent (by design, older code). With one tap the phone had no usual name under the 3-tap rule, so even with the row on it would have read
+     "a new phone", not "Parker's phone". Every phone is new on the first day, so the rule changed: a phone that has only ever acted as one
+     name has that name from its first tap ("from Parker's phone"); the 3-tap, more-than-half rule now applies only to phones two or more
+     names have used. A phone's first tap is still never flagged.
+  Also seen: the private window's code changed two minutes in (a new private tab or window is a new phone, as designed).
+- New tests: `e2e/zip30.cjs` "Alex's exact taps" (every tap through the screen: I'm in, Drop out, I'm in, Not you? > another name, I'm in;
+  History note and Home card), and "a browser that blocks storage" (the cookie alone keeps one code). `tests/acting-others.test.ts`: Alex's
+  case, the third-name case, the preview-only switch. The browser check and 3 unit tests fail on the old rule and pass on the new one.
+- Rerun: zip30 32/32, zip30-off 19/19 (switch off = main), unit acting-others, speed-queries, activity, preview-seed, backup-zip19,
+  readonly-pin 94/94, tsc clean.
+
+### Answers and plan (Wed Nov 11, 2026)
+- Record phone codes from deploy day, even with the switch off (so phones are already learned when Alex turns it on): yes, as built.
+- Leave the test rows in the fake History; do NOT re-seed the preview.
+- Deploy only on Alex's own "ship it", after Zip 29 is live: rebase on main, full unit suite alone, the browser checks for the screens Zip 29
+  changed (admin Home, money card, tiles), zip30 and zip30-off; then a quiet window (Wed Nov 11 6 AM to 6 PM, or Thu after 11 PM): SQL backup,
+  Time Travel bookmark, migration 0018, then the site; rollback ID; a live check WITHOUT any PIN. The switch stays OFF; Alex turns it on.
+
+
+### Rebase and final tests before the deploy (Wed Nov 11, 2026, 10:20 AM to 11:17 AM Eastern)
+- Rebased on main `6d45848` (🎾29.polish live, deployment `a4406c1b`). Conflicts: only `package.json` (the browser-test list: kept 29's `zip29.cjs`,
+  added `zip30.cjs` after it) and the end of this file (29's section kept whole, this one after it). The card still sits first on 29's Home.
+- Unit, full suite alone: 2703 passed, 0 failed, 2 skipped on purpose (685 s). tsc and the name check clean.
+- Browser, the full `npm run test:e2e` list (65 scripts, zip29 and zip30 included) once, 4 at a time: 2574 passed, 5 failed. credit 4: the same
+  4 fail on main (they look for "Tue, Nov 10", now past). round2 1 (banner timing under load): 25/25 alone. zip29 ran in Chromium: WebKit is not
+  installed in this container (zip29 falls back by itself and says so); 29's own WebKit run is in its notes.
+- `e2e/zip30-off.cjs` against main `6d45848`: 19/19 identical with the switch off.

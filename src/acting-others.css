@@ -1,0 +1,134 @@
+/* Zip 30, "Acting for others" (src/pages/admin/ActingOthers.tsx): the slim card at the top of admin Home, from Alex's mocks
+   (acting_for_others_light.png / _dark.png). The same surface, border, corners and shadow as the "Tue game" card (the alert card look, which
+   is on live), with the site's own colors as the fallback, so it reads right in light and dark either way. Text sizes are rem so big text scales.
+   Only drawn while the switch is on. */
+
+.afo {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px 4px;
+  border: 1px solid var(--ac-line, var(--line-strong));
+  border-radius: 18px;
+  background: var(--ac-card, var(--surface));
+  color: var(--ac-title, var(--ink));
+  box-shadow: var(--ac-shadow, none);
+  text-align: left;
+}
+
+.afo-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 36px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ac-line, var(--line));
+}
+/* The neutral gray circle with the swap arrows. */
+.afo-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--ac-gray-tint, var(--muted-bg));
+  color: var(--ac-title, var(--ink));
+}
+.afo-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 1.0625rem;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: 0.1px;
+  color: var(--ac-title, var(--ink));
+  overflow-wrap: break-word;
+}
+/* The X: a plain gray mark, 44 px to tap. */
+.afo-x {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-right: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ac-sub, var(--ink-2));
+  cursor: pointer;
+}
+.afo-x::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+.afo-x:focus-visible,
+.afo-more:focus-visible {
+  outline: 2px solid var(--ac-title, var(--ink));
+  outline-offset: 2px;
+}
+
+.afo-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.afo-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 4px;
+  border-top: 1px solid var(--ac-line, var(--line));
+}
+.afo-row:first-child {
+  border-top: 0;
+}
+.afo-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.3;
+  color: var(--ac-title, var(--ink));
+  overflow-wrap: anywhere;
+}
+.afo-text strong {
+  font-weight: 750;
+}
+.afo-verb {
+  color: var(--ac-sub, var(--ink-2));
+}
+.afo-time {
+  flex: none;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  color: var(--ac-sub, var(--ink-2));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.afo-more-row {
+  padding: 0;
+}
+.afo-more {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ac-sub, var(--ink-2));
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}

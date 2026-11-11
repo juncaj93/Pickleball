@@ -164,6 +164,8 @@ route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
 route('PUT', '/api/admin/totals-refresh-switch', admin.setTotalsRefreshSwitch);
 route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
+// Zip 30 (server/actingForOthers.ts): Acting for others.
+route('PUT', '/api/admin/acting-others-switch', admin.setActingOthersSwitch);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));

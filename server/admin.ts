@@ -89,6 +89,9 @@ import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
+import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
+import { phoneTagOf } from './phoneTag';
+import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
 import { previewCalmFor, secondChanceAction, secondChanceFlags, secondChanceView, setSecondChanceForAll } from './secondChance';
 import { courtOrNull } from '../shared/gameDay';
@@ -246,6 +249,12 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const redo = await zip13Flags(ctx, group.id, 'playersRedo');
   // Zip 23 "Totals refresh" (server/totalsRefresh.ts): the new Totals look, only while on (off: this answer is exactly main's).
   const totals = await totalsRefreshFlags(ctx, group.id);
+  // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
+  // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
+  const acting = await actingOthersFlags(ctx, group.id);
+  const actingRows = acting.on
+    ? (await actingOthersPicture(ctx.db, group.id, ctx.nowMs, [group.organizer_name, players.find((p) => p.id === organizerId)?.display_name])).rows
+    : null;
   // Zip 24 "Booking hours" (server/bookingHours.ts): the tap-to-pick times and the hours rule, only while on (off: this answer is exactly main's).
   const hours = await bookingHoursFlags(ctx, group.id);
   const swap = await zip13Flags(ctx, group.id, 'swapButton');
@@ -386,6 +395,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
     ...(spentMatch.on ? { spentTotals: true as const } : {}),
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
+    ...(actingRows ? { actingOthers: actingRows } : {}),
+    ...(acting.forAll ? { actingOthersForAll: true as const } : {}),
     ...(hours.on ? { bookingHours: true as const } : {}),
     ...(hours.forAll ? { bookingHoursForAll: true as const } : {}),
     ...(gameDay.on ? { gameDayCard: true as const } : {}),
@@ -1416,6 +1427,7 @@ export async function applyPayment(
       { player: row.display_name, amountCents: price, cashCents: price - used, creditCents: used },
       ctx.nowIso,
       actor ?? (self ? self : 'organizer'),
+      self ? phoneTagOf(ctx) : null,
     );
   } else {
     if (row.payment_status !== 'paid') {
@@ -1506,6 +1518,7 @@ export async function applyPayment(
       { player: row.display_name, previousAmountCents: row.payment_amount_cents, previousPaidAt: row.paid_at, ...(creditBack > 0 ? { creditReturnedCents: creditBack } : {}) },
       ctx.nowIso,
       actor ?? (self ? self : 'organizer'),
+      self ? phoneTagOf(ctx) : null,
     );
   }
   return { ok: true, changed: true };
@@ -1875,6 +1888,8 @@ export async function backupFile(ctx: Ctx): Promise<Response> {
   // Read-only PIN (server/viewOnly.ts): never hand out the real PIN's hash or the group word's hash (a short PIN can be guessed
   // from its hash offline). The file is otherwise the same, so View as still works; a restore needs the real PIN's own file.
   if (viewOnlyCookie(ctx)) backup.tables.groups = backup.tables.groups.map((g) => ({ ...g, admin_pin_hash: '', group_word_hash: null }));
+  // Zip 30: nor the phone codes (History's device_tag): a helper with the read-only PIN gets the History lines without them.
+  if (viewOnlyCookie(ctx) && backup.tables.admin_audit_log) backup.tables.admin_audit_log = backup.tables.admin_audit_log.map((r) => ('device_tag' in r ? { ...r, device_tag: null } : r));
   const body = JSON.stringify(backup, null, 1);
   return new Response(body, {
     headers: {
@@ -1888,6 +1903,14 @@ export async function backupFile(ctx: Ctx): Promise<Response> {
 
 const ACTIVITY_PAGE = 80;
 
+/** Zip 30: the organizer's own player name (only asked while "Acting for others" is on). */
+async function organizerNameOf(ctx: Ctx, group: GroupRow): Promise<string | null> {
+  const id = await organizerIdOf(ctx.db, group);
+  if (!id) return null;
+  const row = await ctx.db.prepare('SELECT display_name FROM players WHERE id = ?').bind(id).first<{ display_name: string }>();
+  return row?.display_name ?? null;
+}
+
 /** GET /api/admin/activity?before=<iso>: History > Activity, newest first. */
 export async function activity(ctx: Ctx): Promise<ActivityPage> {
   const group = await requireAdmin(ctx);
@@ -1900,15 +1923,25 @@ export async function activity(ctx: Ctx): Promise<ActivityPage> {
     )
     .bind(group.id, until, ACTIVITY_PAGE + 1)
     .all<{ id: string; actor_label: string; action: string; details_json: string; created_at: string; session_starts_at: string | null }>();
+  // Zip 30 "Acting for others" (server/actingForOthers.ts): a tap made for someone else gets "from Mitchel's phone", only while on (off: this
+  // answer is exactly main's and the phone-code read never runs).
+  const acting = await actingOthersFlags(ctx, group.id);
+  const judged = acting.on
+    ? (await actingOthersPicture(ctx.db, group.id, ctx.nowMs, [group.organizer_name, await organizerNameOf(ctx, group)])).judged
+    : null;
   return {
-    entries: results.slice(0, ACTIVITY_PAGE).map((a) => ({
-      id: a.id,
-      actorLabel: a.actor_label,
-      action: a.action,
-      details: safeParse(a.details_json),
-      createdAt: a.created_at,
-      sessionStartsAt: a.session_starts_at,
-    })),
+    entries: results.slice(0, ACTIVITY_PAGE).map((a) => {
+      const from = judged?.get(a.id);
+      return {
+        id: a.id,
+        actorLabel: a.actor_label,
+        action: a.action,
+        details: safeParse(a.details_json),
+        createdAt: a.created_at,
+        sessionStartsAt: a.session_starts_at,
+        ...(from ? { from: fromNote(from) } : {}),
+      };
+    }),
     more: results.length > ACTIVITY_PAGE,
   };
 }
@@ -2410,6 +2443,15 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   const on = v.bool(body.on, 'on');
   await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/acting-others-switch { on }: Zip 30 "Acting for others" for every organizer phone. Look only; no data changes. */
+export async function setActingOthersSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setActingOthersForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'acting_others_on' : 'acting_others_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

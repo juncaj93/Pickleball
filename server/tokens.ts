@@ -11,6 +11,7 @@ import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 import { capOf } from '../shared/settings';
 import { flatOf, specialFlatOf } from './repo';
+import { phoneTagOf } from './phoneTag';
 import { withShortGames } from './zip9';
 import { withCardCleanup } from './zip10';
 import { refuseOverLimit } from './unpaidNudge';
@@ -117,7 +118,7 @@ const SCOPE_ACTIONS: Record<TokenScope, readonly string[]> = {
  */
 /** A tap on a texted link goes in the Activity log under the player's name. */
 async function logLinkAction(ctx: Ctx, r: Resolved, action: string, result: string, extra: Record<string, unknown> = {}) {
-  await audit(ctx.db, r.group.id, r.session.id, `player_${action}`, { player: r.playerName, result, via: 'link', ...extra }, ctx.nowIso, r.playerName);
+  await audit(ctx.db, r.group.id, r.session.id, `player_${action}`, { player: r.playerName, result, via: 'link', ...extra }, ctx.nowIso, r.playerName, phoneTagOf(ctx));
 }
 
 export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {

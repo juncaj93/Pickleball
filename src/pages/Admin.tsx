@@ -1,3 +1,4 @@
+import { ActingOthersCard } from './admin/ActingOthers';
 import { InstantContext, useInstant, useInstantRoot, useInstantTracker } from '../InstantTaps';
 import { type ActOptions, opTap, useAction } from './admin/action';
 import { type CSSProperties, Fragment, type FormEvent, type ReactElement, type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
@@ -354,7 +355,7 @@ function Dashboard({ d, reload, quiet, live }: { d: AdminDashboard; reload: () =
       />
       {tab !== 'settings' && !r2 && <UpdatedLine at={checkedAt} />}
       <main className={`page has-tabs stack-lg${tab === 'settings' ? '' : ' admin-page'}`}>
-        {tab === 'home' && <HomeTab key={fresh} ctx={ctx} />}
+        {tab === 'home' && <HomeTab key={fresh} ctx={ctx} onHistory={() => pickTab('history')} />}
         {tab === 'players' && <PlayersTab key={fresh} ctx={ctx} />}
         {tab === 'money' && <MoneyTab key={fresh} ctx={ctx} />}
         {/* The new History keeps its NEW group when you tap the History tab again (that is not leaving the tab). */}
@@ -434,7 +435,7 @@ function UpdatedLine({ at }: { at: number }) {
 
 // ---------- Needs attention ----------
 
-function HomeTab({ ctx }: { ctx: AdminCtx }) {
+function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) {
   const nowMs = useServerNow(ctx.d.now);
   const items = buildTodo(ctx.d);
   // Order: refund requests, then "Do this now", then games to finalize, then the text cards, then the rest.
@@ -455,6 +456,7 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
     const markPaid = items.filter((i) => i.kind === 'tonight');
     return (
       <>
+        <ActingOthersCard ctx={ctx} onHistory={onHistory} />
         <SecondChanceHome ctx={ctx} />
         <UnpaidTextSheet ctx={ctx} />
         {oneMoneyCard ? <OwedVenmoCards ctx={ctx} /> : markPaid.map((item) => <TodoCard key={key(item)} ctx={ctx} item={item} />)}
@@ -464,6 +466,8 @@ function HomeTab({ ctx }: { ctx: AdminCtx }) {
   }
   return (
     <>
+      {/* Zip 30, Acting for others (only while on): taps made for someone else, at the very top of Home. */}
+      <ActingOthersCard ctx={ctx} onHistory={onHistory} />
       {/* Zip 15, Second Chance (only while on): same-day game cards at the top of Home, and Telegram 1's "text who hasn't paid" sheet. */}
       <SecondChanceHome ctx={ctx} />
       <UnpaidTextSheet ctx={ctx} />
