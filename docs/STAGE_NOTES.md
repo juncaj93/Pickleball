@@ -4143,3 +4143,12 @@ A player used "Not you?" to sign up as another player, then changed it for him. 
   changed (admin Home, money card, tiles), zip30 and zip30-off; then a quiet window (Wed Nov 11 6 AM to 6 PM, or Thu after 11 PM): SQL backup,
   Time Travel bookmark, migration 0018, then the site; rollback ID; a live check WITHOUT any PIN. The switch stays OFF; Alex turns it on.
 
+
+### Rebase and final tests before the deploy (Wed Nov 11, 2026, 10:20 AM to 11:17 AM Eastern)
+- Rebased on main `6d45848` (🎾29.polish live, deployment `a4406c1b`). Conflicts: only `package.json` (the browser-test list: kept 29's `zip29.cjs`,
+  added `zip30.cjs` after it) and the end of this file (29's section kept whole, this one after it). The card still sits first on 29's Home.
+- Unit, full suite alone: 2703 passed, 0 failed, 2 skipped on purpose (685 s). tsc and the name check clean.
+- Browser, the full `npm run test:e2e` list (65 scripts, zip29 and zip30 included) once, 4 at a time: 2574 passed, 5 failed. credit 4: the same
+  4 fail on main (they look for "Tue, Nov 10", now past). round2 1 (banner timing under load): 25/25 alone. zip29 ran in Chromium: WebKit is not
+  installed in this container (zip29 falls back by itself and says so); 29's own WebKit run is in its notes.
+- `e2e/zip30-off.cjs` against main `6d45848`: 19/19 identical with the switch off.
