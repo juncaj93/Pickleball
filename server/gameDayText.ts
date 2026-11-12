@@ -138,7 +138,7 @@ export async function textFor(ctx: Ctx, group: GroupRow, session: SessionRow): P
 /**
  * POST /api/gdt { token }: the numbers and the words for that game, looked up now. The token is the only key. Anything wrong (the switch
  * is off, a bad token, a game that does not exist) answers the same "This link does not work."; a link past the game's end says it expired.
- * `token` "preview" (a preview with GAME_DAY_TEXT_PREVIEW only, never live) opens the next game, so the page can be tried with fake data.
+ * `token` "preview" (a preview with GAME_DAY_TEXT_PREVIEW only, never live) opens the next game that has players to text, so the page can be tried with fake data.
  */
 export async function gameDayTextPage(ctx: Ctx, body: Record<string, unknown>) {
   const token = v.text(body.token, 'token', { max: 300 });
@@ -148,10 +148,18 @@ export async function gameDayTextPage(ctx: Ctx, body: Record<string, unknown>) {
   let session: SessionRow | null = null;
   if (token === 'preview') {
     if (!gameDayTextPreview(ctx)) throw bad();
-    session = await ctx.db
-      .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND ends_at > ? ORDER BY starts_at LIMIT 1")
+    // The next game that has at least one player to text (a fake world has empty games too), else simply the next game.
+    const { results } = await ctx.db
+      .prepare("SELECT * FROM sessions WHERE group_id = ? AND status <> 'canceled' AND ends_at > ? ORDER BY starts_at LIMIT 25")
       .bind(group.id, ctx.nowIso)
-      .first<SessionRow>();
+      .all<SessionRow>();
+    session = results[0] ?? null;
+    for (const s of results) {
+      if ((await recipientsOf(ctx, group, s)).numbers.length > 0) {
+        session = s;
+        break;
+      }
+    }
   } else {
     const secret = ctx.env.CRON_SECRET ?? '';
     if (!secret) throw bad();
