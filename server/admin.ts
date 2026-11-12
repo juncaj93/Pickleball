@@ -89,6 +89,8 @@ import { extRideOn } from './player';
 import { adminExtensionPayment, markSharesWithSeat, undoSharesWithSeat, extendedTimeFor, extendedTimeForAll, extRowsOf, followSeat, hasViaShares, setExtendedTimeForAll, unmarkBlockedBy } from './extension';
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
+import { homeScreenTipForAll, setHomeScreenTipForAll } from './homeScreenTip';
+import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
@@ -418,6 +420,9 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     // Zip 16 "After-game cards" (server/afterGame.ts): its Settings row, only while on.
     ...((await afterGameCardForAll(ctx.db, group.id)) ? { afterGameCardForAll: true as const } : {}),
+    // Zip 37 (server/homeScreenTip.ts, server/gameDayText.ts): the two Settings rows only, only while on (the admin screens do not change).
+    ...((await homeScreenTipForAll(ctx.db, group.id)) ? { homeScreenTipForAll: true as const } : {}),
+    ...((await gameDayTextForAll(ctx.db, group.id)) ? { gameDayTextForAll: true as const } : {}),
     ...(secondChance.on ? { secondChance: await secondChanceView(ctx, group, sessions, rosters, organizerId, sessionViews, playerLinkFor(ctx, group)) } : {}),
     ...(secondChance.forAll ? { secondChanceForAll: true as const } : {}),
     // Zip 21 (server/errorAlerts.ts): the Settings row only (no screen changes; the alerts go to Telegram).
@@ -2512,6 +2517,24 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   const on = v.bool(body.on, 'on');
   await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/home-screen-tip-switch { on }: Settings > Feature switches > "Home Screen tip" (Zip 37). Look only: a card on the player's Home. */
+export async function setHomeScreenTipSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setHomeScreenTipForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'home_screen_tip_on' : 'home_screen_tip_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/game-day-text-switch { on }: Settings > Feature switches > "Game day text" (Zip 37). Sends the organizer one Telegram an hour before a booked game; texts nobody. */
+export async function setGameDayTextSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setGameDayTextForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'game_day_text_on' : 'game_day_text_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

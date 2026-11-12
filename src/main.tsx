@@ -9,6 +9,7 @@ import { PlayerHome } from './pages/PlayerHome';
 import { SiteHome } from './pages/SiteHome';
 import { AdminApp } from './pages/Admin';
 import { GoPage } from './pages/GoPage';
+import { GameDayTextPage } from './pages/GameDayTextPage';
 import { watchKeyboard } from './keyboard';
 // Last, so its big-text rules win over the page styles above.
 import './large-text.css';
@@ -40,6 +41,8 @@ function App() {
     return <SiteHome />;
   }
   if ((m = path.match(/^\/go\/([A-Za-z0-9_.-]+)\/?$/))) return <GoPage token={m[1]} />;
+  // Zip 37: the hour-before Telegram's private "Text the players" link.
+  if ((m = path.match(/^\/gt\/([A-Za-z0-9_.-]+)\/?$/))) return <GameDayTextPage token={m[1]} />;
   if (/^\/admin\/?$/.test(path)) return <AdminApp />;
   if (/^\/setup\/?$/.test(path)) return <SetupPage />;
   return <SiteHome />;

@@ -67,7 +67,9 @@ export function ourAddress(siteUrl: string, courtReserve: readonly string[]): (u
   const site = siteUrl.replace(/\/$/, '');
   const esc = site.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const go = new RegExp(`^${esc}/go/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$`);
+  // Zip 37: the game day text link (/gt/<signed token>), the one "Text the players" link in the hour-before reminder (no phone number in it).
+  const gt = new RegExp(`^${esc}/gt/[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+$`);
   // Zip 15: Telegram 1's link to the organizer's own page, which shows the unpaid players' text (sign-in needed; no phone in the link).
   const unpaid = new RegExp(`^${esc}/admin\\?unpaid=[0-9a-f-]{36}$`);
-  return (url: string) => courtReserve.includes(url) || (/^https:\/\//.test(site) && (go.test(url) || unpaid.test(url)));
+  return (url: string) => courtReserve.includes(url) || (/^https:\/\//.test(site) && (go.test(url) || gt.test(url) || unpaid.test(url)));
 }

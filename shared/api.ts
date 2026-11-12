@@ -198,6 +198,8 @@ export interface GroupView {
   lastScreen?: boolean;
   /** "Seat dots" is on for this screen (server/seatDots.ts): every empty seat a dashed ring. Missing: exactly as before. */
   seatDots?: boolean;
+  /** Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): this phone may show the Add to Home Screen card (the phone decides when). Missing: exactly as before. */
+  homeScreenTip?: true;
   /**
    * Swap to Alex (Zip 13): this phone is signed in as the organizer (real PIN), the switch is on, and the page shows the organizer's own
    * name (Zip 18): the title "Alex" + swap icon goes to Admin. Missing for everyone else, and always in View as.
@@ -617,6 +619,9 @@ export interface AdminDashboard {
   gameDayCardForAll?: true;
   /** Zip 16 "After-game cards" (shared/afterGame.ts): its Settings row. */
   afterGameCardForAll?: true;
+  /** Zip 37 "Home Screen tip" and "Game day text" (shared/homeScreenTip.ts, shared/gameDayText.ts): their Settings rows, only while on. */
+  homeScreenTipForAll?: true;
+  gameDayTextForAll?: true;
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
   totalsRefresh?: true;
   totalsRefreshForAll?: true;

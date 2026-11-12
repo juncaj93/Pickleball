@@ -134,6 +134,14 @@ export interface Env {
   EXTENDED_TIME?: string;
   /** Zip 31, preview only ([env.preview.vars], never [vars]): "on" shows Extended time on this preview whatever the shared fake database's row says. */
   EXTENDED_TIME_PREVIEW?: string;
+  /** Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?homescreentip=on. Look only. */
+  HOME_SCREEN_TIP?: string;
+  /** Zip 37, preview only ([env.preview.vars], never [vars]): "on" shows the Home Screen tip on this preview whatever the shared fake database's row says. */
+  HOME_SCREEN_TIP_PREVIEW?: string;
+  /** Zip 37 "Game day text" (shared/gameDayText.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches (the clock's Telegram has no phone, so no private link). */
+  GAME_DAY_TEXT?: string;
+  /** Zip 37, preview only ([env.preview.vars], never [vars]): "on" turns Game day text on for this preview and lets /gt/preview open the next game's text page. */
+  GAME_DAY_TEXT_PREVIEW?: string;
   /** Zip 21 "Error alerts" (shared/errorAlerts.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches (Alex's Telegram only). */
   ERROR_ALERTS?: string;
   /** Zip 21: the error box (worker/box.ts, a Durable Object in the Worker pickleball-error-box): what the error alerts remember. Missing = no error alerts. */
