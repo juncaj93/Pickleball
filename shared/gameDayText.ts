@@ -1,5 +1,5 @@
 // Zip 37 (Nov 2026): GAME_DAY_TEXT ("Game day text"), ships OFF. Words, links and one Telegram to the organizer.
-//  - About an hour before a booked game with 4 or more in, the organizer gets one Telegram with a private "Text the players" link.
+//  - About an hour before a booked game with 2 or more in, the organizer gets one Telegram with a private "Text the players" link.
 //  - The link opens a page on the site (/gt/<token>) that asks the server for the players' numbers and the words, then opens Messages
 //    addressed ONLY to the players signed up for that game (confirmed, not the organizer, not waitlisted, not dropped out) who have a
 //    number saved. Nothing sends until the organizer taps send. The site itself never sends a text.
@@ -8,16 +8,15 @@
 //        Pickleball tonight @ 8pm! (Court 12)
 //
 //        Northville Pickleball Club
-//        Directions:
-//        https://maps.apple.com/?daddr=...
+//        Directions: https://maps.apple.com/?daddr=Northville+Pickleball+Club
 //
 //        Still owe $14? Pay here: pickleball.juncaj.net
-//    "(Court 12)" only when a court number is set; the last line only while somebody signed up still owes.
+//    Always the word "tonight" (never the weekday and date). "(Court 12)" only when a court number is set; the last line only while somebody signed up still owes.
 // One builder (gameDayTextBody) makes the words, one (smsGroupHref) makes the Messages link, so the page and the tests ask the same code.
 import { formatPrice } from './money';
 import { normalizePhone } from './messages';
-import { dayWordR2, shortTime } from './textsR2';
-import { COURT_ADDRESS } from './zip9';
+import { shortTime } from './textsR2';
+import { COURT_NAME, directionsUrl } from './zip9';
 
 export const GAME_DAY_TEXT = { task: 'game_day_text_on', env: 'GAME_DAY_TEXT', name: 'Game day text' } as const;
 
@@ -41,9 +40,9 @@ export function reminderDue(startsAtMs: number, nowMs: number): boolean {
   return left <= REMINDER_LEAD_MS && left >= REMINDER_LATEST_MS;
 }
 
-/** The direct Apple Maps link for the court (no redirect, no /map page): the same address the Directions button on the game day card uses. */
-export function mapsDirectLink(address: string = COURT_ADDRESS): string {
-  return `https://maps.apple.com/?daddr=${encodeURIComponent(address).replace(/%20/g, '+').replace(/%2C/g, ',')}`;
+/** The direct Apple Maps link for the club (no redirect, no /map page): the same link the Directions button on the game day card builds for an iPhone. */
+export function mapsDirectLink(): string {
+  return directionsUrl(COURT_NAME, 'iPhone');
 }
 
 export interface GameDayTextInput {
@@ -54,8 +53,6 @@ export interface GameDayTextInput {
   court: number | null;
   /** The venue's name (Settings > Venue name, else the default club name). */
   clubName: string;
-  /** The court's address (the one the Directions button uses). */
-  address?: string;
   /** What each player owes for this game as the money card shows it, when somebody signed up still owes; null: nobody does (no pay line). */
   oweCents: number | null;
   /** The plain site address, like "pickleball.juncaj.net". */
@@ -66,11 +63,10 @@ export interface GameDayTextInput {
 export function gameDayTextBody(i: GameDayTextInput): string {
   const court = i.court !== null && Number.isInteger(i.court) ? ` (Court ${i.court})` : '';
   const lines = [
-    `Pickleball ${dayWordR2(i.startsAt, i.tz, i.nowMs)} @ ${shortTime(i.startsAt, i.tz)}!${court}`,
+    `Pickleball tonight @ ${shortTime(i.startsAt, i.tz)}!${court}`,
     '',
     i.clubName,
-    'Directions:',
-    mapsDirectLink(i.address),
+    `Directions: ${mapsDirectLink()}`,
   ];
   if (i.oweCents !== null && i.oweCents > 0) lines.push('', `Still owe ${formatPrice(i.oweCents)}? Pay here: ${i.siteName}`);
   return lines.join('\n');
@@ -94,9 +90,12 @@ export function encodeBody(body: string): string {
 }
 
 /**
- * The Messages link for a group text: `sms:+1N1,+1N2&body=...` on an iPhone or iPad (comma between numbers, & before body, the way the
- * site's one-person link already writes it), `sms:+1N1,+1N2?body=...` elsewhere. Opening it only fills in the composer.
+ * The Messages link for a group text, in the formats the site already uses for its other group texts (shared/messages.ts smsHref):
+ * iPhone with two or more numbers `sms://open?addresses=+1A,+1B&body=...` (the only form that put every number in the To line on the
+ * organizer's iPhone), iPhone with one `sms:+1A&body=...`, elsewhere `sms:+1A,+1B?body=...`. Opening it only fills in the composer.
  */
 export function smsGroupHref(numbers: readonly string[], body: string, ios: boolean): string {
-  return `sms:${numbers.join(',')}${ios ? '&' : '?'}body=${encodeBody(body)}`;
+  const text = encodeBody(body);
+  if (ios && numbers.length > 1) return `sms://open?addresses=${numbers.join(',')}&body=${text}`;
+  return `sms:${numbers.join(',')}${ios ? '&' : '?'}body=${text}`;
 }

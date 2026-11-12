@@ -6,6 +6,8 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { activityText } from '../shared/activity';
+import { smsHref } from '../shared/messages';
+import { COURT_NAME, directionsUrl } from '../shared/zip9';
 import { gameDayTextAllowed, gameDayTextBody, GAME_DAY_TEXT, mapsDirectLink, recipientNumbers, reminderDue, smsGroupHref } from '../shared/gameDayText';
 import { HOME_SCREEN_TIP, homeScreenTipAllowed, isIosSafari, LONG_AGO_MS, SECOND_VISIT_MS, tipVerdict, type TipInput } from '../shared/homeScreenTip';
 import { linkText, ourAddress } from '../server/telegram-links';
@@ -204,12 +206,14 @@ describe('Part B: the words', () => {
       'Pickleball tonight @ 8pm! (Court 12)',
       '',
       'Northville Pickleball Club',
-      'Directions:',
-      mapsDirectLink(),
+      `Directions: ${mapsDirectLink()}`,
       '',
       'Still owe $14? Pay here: pickleball.juncaj.net',
     ]);
-    expect(mapsDirectLink()).toBe('https://maps.apple.com/?daddr=40100+Six+Mile+Rd,+Northville,+MI+48168,+United+States');
+    expect(mapsDirectLink()).toBe('https://maps.apple.com/?daddr=Northville+Pickleball+Club');
+    expect(directionsUrl(COURT_NAME, 'iPhone')).toBe('https://maps.apple.com/?daddr=Northville+Pickleball+Club');
+    expect(directionsUrl(COURT_NAME, 'Mozilla/5.0 (Linux; Android 14)')).toBe('https://www.google.com/maps/dir/?api=1&destination=Northville+Pickleball+Club');
+    expect(directionsUrl()).toBe(directionsUrl(COURT_NAME));
     expect(text).not.toMatch(/\/map\b|redirect|\/go\//);
   });
   it('no court set: no "(Court N)"', () => {
@@ -225,11 +229,12 @@ describe('Part B: the words', () => {
     expect(gameDayTextBody(input({ oweCents: 1100 }))).toMatch(/Still owe \$11\? Pay here:/);
     expect(gameDayTextBody(input({ oweCents: 1450 }))).toMatch(/Still owe \$14\.50\? Pay here:/);
   });
-  it('the time is the real start: 8pm, 7:30pm, 12pm, no leading zero; an early game says "today"', () => {
+  it('the word is always "tonight" (never the weekday and date, even a day or a week ahead); the time is the real start: 8pm, 7:30pm, 12pm, no leading zero', () => {
     const t = (iso2: string, nowMs: number) => gameDayTextBody(input({ startsAt: iso2, nowMs })).split('\n')[0];
     expect(t('2026-11-12T00:30:00.000Z', Date.parse('2026-11-11T23:30:00Z'))).toBe('Pickleball tonight @ 7:30pm! (Court 12)');
-    expect(t('2026-11-11T17:00:00.000Z', Date.parse('2026-11-11T16:00:00Z'))).toBe('Pickleball today @ 12pm! (Court 12)');
-    expect(t('2026-11-11T14:05:00.000Z', Date.parse('2026-11-11T13:05:00Z'))).toBe('Pickleball today @ 9:05am! (Court 12)');
+    expect(t('2026-11-11T17:00:00.000Z', Date.parse('2026-11-11T16:00:00Z'))).toBe('Pickleball tonight @ 12pm! (Court 12)');
+    expect(t('2026-12-02T00:00:00.000Z', Date.parse('2026-11-12T00:00:00Z'))).toBe('Pickleball tonight @ 7pm! (Court 12)');
+    expect(t('2026-11-12T23:05:00.000Z', Date.parse('2026-11-11T13:05:00Z'))).toBe('Pickleball tonight @ 6:05pm! (Court 12)');
   });
   it('the builder prints the club name it is given', () => {
     expect(gameDayTextBody(input({ clubName: 'Some Other Club' })).split('\n')[2]).toBe('Some Other Club');
@@ -238,10 +243,19 @@ describe('Part B: the words', () => {
 
 describe('Part B: the Messages link', () => {
   const body = gameDayTextBody(input());
-  it('iPhone: sms:+1N1,+1N2&body= (comma between numbers, & before body)', () => {
+  it('iPhone, two or more players: the older group format sms://open?addresses=+1N1,+1N2&body= (both numbers in the To line)', () => {
     const href = smsGroupHref(['+13135550101', '+13135550102'], body, true);
-    expect(href.startsWith('sms:+13135550101,+13135550102&body=')).toBe(true);
-    expect(href).not.toMatch(/\?body=|open\?addresses/);
+    expect(href.startsWith('sms://open?addresses=+13135550101,+13135550102&body=')).toBe(true);
+    // Two numbers make two addresses; six make six.
+    const addresses = (h: string) => /^sms:\/\/open\?addresses=([^&]*)&body=/.exec(h)![1].split(',');
+    expect(addresses(href)).toEqual(['+13135550101', '+13135550102']);
+    const six = ['+13135550101', '+13135550102', '+13135550103', '+13135550104', '+13135550105', '+13135550106'];
+    expect(addresses(smsGroupHref(six, body, true))).toEqual(six);
+    // The same addresses part the site's other group texts (shared/messages.ts smsHref) write.
+    expect(smsHref(['+13135550101', '+13135550102'], 'x', true).startsWith('sms://open?addresses=+13135550101,+13135550102&body=')).toBe(true);
+  });
+  it('iPhone, one player: sms:+1N&body= (the one-person format)', () => {
+    expect(smsGroupHref(['+13135550101'], body, true).startsWith('sms:+13135550101&body=')).toBe(true);
   });
   it('elsewhere: ?body=', () => {
     expect(smsGroupHref(['+13135550101'], body, false).startsWith('sms:+13135550101?body=')).toBe(true);
@@ -400,7 +414,7 @@ describe('Part B: the page (POST /api/gdt)', () => {
     // Blair 0101, Casey 0102, Emery 0104 (Devon has none, Frankie dropped, Alex is the organizer 0100).
     expect(res.data.numbers).toEqual(['+13135550101', '+13135550102', '+13135550104']);
     expect(res.data.withoutNumber).toBe(1);
-    expect(res.data.body).toMatch(/^Pickleball tonight @ 8pm!\n\nNorthville Pickleball Club\nDirections:\nhttps:\/\/maps\.apple\.com\//);
+    expect(res.data.body).toMatch(/^Pickleball tonight @ 8pm!\n\nNorthville Pickleball Club\nDirections: https:\/\/maps\.apple\.com\/\?daddr=Northville\+Pickleball\+Club/);
     expect(res.data.preview).toBeUndefined();
     // The club's name goes with the court's address (one pair): the venue name typed on bookings in Settings does not change the text.
     g.raw("UPDATE groups SET venue_name = 'Some Booking Name'");
@@ -445,7 +459,7 @@ describe('Part B: the page (POST /api/gdt)', () => {
     }
     body = await open();
     expect(body).not.toMatch(/Still owe/);
-    expect(body.endsWith('Court 12)\n\nNorthville Pickleball Club\nDirections:\n' + mapsDirectLink())).toBe(true);
+    expect(body.endsWith('Court 12)\n\nNorthville Pickleball Club\nDirections: ' + mapsDirectLink())).toBe(true);
   });
 
   it('fewer than one player with a number: the page gets an empty list (it shows a calm message, Messages never opens)', async () => {
@@ -579,7 +593,7 @@ describe('Part B: the Telegram an hour before the game', () => {
     expect(g.sent.length).toBeGreaterThanOrEqual(count);
   });
 
-  it('a missed tick still sends it until 15 minutes before the start; not after, not with fewer than 4 in, not for a game with no court or no number to text', async () => {
+  it('a missed tick still sends it until 15 minutes before the start; not after, not with fewer than 2 in, not for a canceled game, not for a game with no court or no number to text', async () => {
     const start = Date.parse(START);
     const sends = async (setup: (g: Awaited<ReturnType<typeof world>>) => Promise<void> | void, at: number) => {
       const g = await world();
@@ -596,8 +610,15 @@ describe('Part B: the Telegram an hour before the game', () => {
     expect(await sends(() => {}, start - 10 * MIN)).toBe(0);
     expect(await sends(() => {}, start + 5 * MIN)).toBe(0);
     expect(await sends(() => {}, start - 70 * MIN)).toBe(0);
-    // Three in (a player drops out first): the game is not on.
-    expect(await sends(async (g) => { await (await playerPhone(g.w, 'Frankie')).call('POST', `/api/sessions/${g.id}/withdraw`, {}); await (await playerPhone(g.w, 'Emery')).call('POST', `/api/sessions/${g.id}/withdraw`, {}); }, start - 55 * MIN)).toBe(0);
+    // The Telegram needs at least 2 in (the organizer counts): 1 in sends nothing, 2 or 3 in send it.
+    const drop = (names: string[]) => async (g: Awaited<ReturnType<typeof world>>) => {
+      for (const n of names) await (await playerPhone(g.w, n)).call('POST', `/api/sessions/${g.id}/withdraw`, {});
+    };
+    expect(await sends(drop(['Casey', 'Devon', 'Emery', 'Frankie']), start - 55 * MIN)).toBe(0);
+    expect(await sends(drop(['Devon', 'Emery', 'Frankie']), start - 55 * MIN)).toBe(1);
+    expect(await sends(drop(['Emery', 'Frankie']), start - 55 * MIN)).toBe(1);
+    // A canceled game never.
+    expect(await sends(async (g) => { await g.w.organizer.call('POST', `/api/admin/sessions/${g.id}/decision`, { decision: 'cancel', confirm: true, charged: false }); }, start - 55 * MIN)).toBe(0);
     // Court not booked.
     expect(await sends(async (g) => { await g.w.organizer.call('POST', `/api/admin/sessions/${g.id}/court-status`, { status: 'not_booked' }); }, start - 55 * MIN)).toBe(0);
     // Nobody has a number.

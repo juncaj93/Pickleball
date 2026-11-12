@@ -76,7 +76,7 @@ async function main() {
   const sides = { main: await site(MAIN, 5661, path.join(ROOT, '.data', 'zip37-off-main.sqlite'), seedFile), branch: await site(ROOT, 5662, path.join(ROOT, '.data', 'zip37-off-branch.sqlite'), seedFile) };
   const browser = await chromium.launch();
   const got = { main: {}, branch: {} };
-  const blank = (t) => t.replace(/localhost:566\d/g, 'localhost:<port>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"').replace(/ m-enter/g, '').replace(/ data-sw-main=""/g, '');
+  const blank = (t) => t.replace(/localhost:566\d/g, 'localhost:<port>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"').replace(/https:\/\/maps\.apple\.com\/\?daddr=[^"'\s]*/g, 'MAPS').replace(/ m-enter/g, '').replace(/ data-sw-main=""/g, '');
   const shiftClock = (ctx) =>
     ctx.addInitScript((delta) => {
       const Real = Date;

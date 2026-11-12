@@ -1,7 +1,6 @@
-import { MIN_PLAYERS } from '../shared/spots';
 import { dayLabelR2, shortTime } from '../shared/textsR2';
 import { siteAddress } from '../shared/messages';
-import { DEFAULT_VENUE_NAME } from '../shared/settings';
+import { COURT_NAME } from '../shared/zip9';
 import { GAME_DAY_TEXT, GAME_TEXT_TASK, gameDayTextAllowed, gameDayTextBody, recipientNumbers, reminderDue } from '../shared/gameDayText';
 import { playerLinkFor } from './admin';
 import { type AlertRow, connected, deliver, PAUSED_PREFIX, prefsOf, TIMEOUT_ERROR } from './alerts';
@@ -127,9 +126,8 @@ export async function textFor(ctx: Ctx, group: GroupRow, session: SessionRow): P
     tz: group.timezone,
     nowMs: ctx.nowMs,
     court: typeof session.court === 'number' ? session.court : null,
-    // The club's name and its address are one pair: the address is the one constant the Directions button on the game day card uses, so the
-    // name is the club's default name too (not Settings > Venue name, which is the name written on a booking).
-    clubName: DEFAULT_VENUE_NAME,
+    // The club's name is ONE constant (shared/zip9.ts COURT_NAME), the same one every Directions link searches; not Settings > Venue name.
+    clubName: COURT_NAME,
     oweCents: owes ? priceOf(session, settingsOf(group)).flatCents : null,
     siteName: siteAddress(playerLinkFor(ctx, group)),
   });
@@ -187,6 +185,8 @@ export async function gameDayTextPage(ctx: Ctx, body: Record<string, unknown>) {
 
 const RETRY_AFTER_MS = 5 * 60_000;
 const MAX_TRIES = 3;
+/** The hour-before Telegram needs at least this many players in (the organizer counts), never for a canceled game. */
+const MIN_IN = 2;
 
 const siteUrl = (ctx: Ctx) => (ctx.env.SITE_URL || ctx.url.origin).replace(/\/$/, '');
 
@@ -197,7 +197,7 @@ export function reminderMessage(startsAt: string, tz: string, nowMs: number, inC
 
 /**
  * Called by the 5-minute clock with the games it already read. Only when a booked game is 15 to 60 minutes from its start (the window) does it
- * look at its switch row, and only while "Game day text" is on does it go on: for each such game with 4 or more in and at least one player with
+ * look at its switch row, and only while "Game day text" is on does it go on: for each such game with 2 or more in and at least one player with
  * a number, claim the alert (once per game), then send it. Never breaks the tick. Never from the demo or Pretend.
  */
 export async function tickGameText(ctx: Ctx, group: GroupRow, games: SessionRow[]): Promise<void> {
@@ -222,7 +222,7 @@ export async function tickGameText(ctx: Ctx, group: GroupRow, games: SessionRow[
       if (failed.length >= MAX_TRIES || failed.some((l) => ctx.nowMs - Date.parse(l.at) < RETRY_AFTER_MS)) continue;
       const roster = await loadRoster(ctx.db, s.id);
       const inCount = confirmedOf(roster).length;
-      if (inCount < MIN_PLAYERS) continue;
+      if (inCount < MIN_IN) continue;
       if ((await recipientsOf(ctx, group, s)).numbers.length === 0) continue;
       const text = reminderMessage(s.starts_at, group.timezone, ctx.nowMs, inCount, `${siteUrl(ctx)}/gt/${await makeGdtToken(secret, s.id, s.ends_at)}`);
       // Claimed before sending (the table's unique index): two ticks at once can never both send it. Only while the game is still on.

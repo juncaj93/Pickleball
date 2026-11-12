@@ -275,7 +275,7 @@ async function main() {
         assert((await dir.getAttribute('aria-label')) === 'Directions', 'directions label');
         assert((await cal.getAttribute('href')) === `/api/sessions/${shortGame.id}/calendar.ics`, 'calendar href');
         const href = await dir.getAttribute('href');
-        assert(href === 'https://maps.apple.com/?daddr=40100%20Six%20Mile%20Rd%2C%20Northville%2C%20MI%2048168%2C%20United%20States', `iPhone maps link: ${href}`);
+        assert(href === 'https://maps.apple.com/?daddr=Northville+Pickleball+Club', `iPhone maps link: ${href}`);
         // Size: about 26 px tall, icons about 15 px, and each half has a 44 px tall hit area (the ::before).
         const m = await b.evaluate((el) => {
           const r = el.getBoundingClientRect();
@@ -314,7 +314,7 @@ async function main() {
     await page.locator('.schedule article').first().waitFor();
     await page.waitForTimeout(600);
     const href = await card(page, shortGame.id).locator('[data-card-directions]').getAttribute('href');
-    assert(href === 'https://www.google.com/maps/dir/?api=1&destination=40100%20Six%20Mile%20Rd%2C%20Northville%2C%20MI%2048168%2C%20United%20States', href);
+    assert(href === 'https://www.google.com/maps/dir/?api=1&destination=Northville+Pickleball+Club', href);
     const text = await card(page, shortGame.id).innerText();
     assert(/\$11 due/.test(text) && /Pay/.test(text), `"$11 due" and Pay: ${text}`);
     const labels = await card(page, shortGame.id).locator('[aria-label*="Pay"]').evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
