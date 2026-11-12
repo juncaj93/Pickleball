@@ -145,7 +145,7 @@ describe('the list and the wiring', () => {
       const head = readFileSync(join(ROOT, 'e2e', f), 'utf8').slice(0, 1500);
       if (/also run by npm run test:e2e/.test(head)) expect(SCRIPTS, f).toContain(f.replace(/\.cjs$/, ''));
     }
-    expect(SCRIPTS).toEqual(expect.arrayContaining(['auto-credit', 'money-visible', 'zip27', 'zip35']));
+    expect(SCRIPTS).toEqual(expect.arrayContaining(['auto-credit', 'money-visible', 'zip27', 'zip35', 'zip35-calm']));
   });
   it('no script in the list has a fixed port any more: each reads E2E_PORT', () => {
     for (const n of SCRIPTS) {

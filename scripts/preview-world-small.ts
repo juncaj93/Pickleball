@@ -46,7 +46,40 @@ export function smallSwitchRows(nowMs: number): string {
   return [...new Set(rows)].map((task) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'preview-${task}', id, NULL, '${task}', 'mark', '${at}' FROM groups;`).join('\n') + '\n';
 }
 
-export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
+/**
+ * PREVIEW CALM RULE (docs/SITE_RULES.md): the default preview opens CALM. After the whole world is built (the same code as the full world, so every
+ * scene stays one flag away), everything the zip being tested does not need is taken out: all games except `keep`, their seats, payments, credit
+ * and History lines, and every credit entry and cash-out request (so no "haven't paid" piles, no credit chips, no cash-out cards). Empty future
+ * regular games stay (the site makes them by itself). The players, their Venmo names, and the switch rows are untouched.
+ */
+export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: string; startsAt: string; endsAt: string }): string {
+  const ids = keep.map((k) => `'${k}'`).join(',');
+  const tables = (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map((t) => t.name);
+  const emptyFuture = `SELECT s.id FROM sessions s WHERE s.starts_at > '${new Date(nowMs).toISOString()}' AND s.status <> 'canceled' AND COALESCE(s.is_extra, 0) = 0 AND NOT EXISTS (SELECT 1 FROM session_players p WHERE p.session_id = s.id)`;
+  const doomed = `(SELECT id FROM sessions WHERE id NOT IN (${ids}) AND id NOT IN (${emptyFuture}))`;
+  for (const t of tables) {
+    if (t === 'sessions') continue;
+    const cols = (raw.prepare(`PRAGMA table_info(${t})`).all() as { name: string }[]).map((c) => c.name);
+    if (t === 'credit_ledger' || t === 'refund_requests') raw.exec(`DELETE FROM ${t}`);
+    else if (cols.includes('session_id')) raw.exec(`DELETE FROM ${t} WHERE session_id IN ${doomed}`);
+  }
+  raw.exec(`DELETE FROM sessions WHERE id IN ${doomed}`);
+  // The empty regular games that stay are plain "Not booked" games (a Booked game with nobody in raises a red court card on Home).
+  raw.exec(`UPDATE sessions SET booking_status = 'needs_booking', status = CASE WHEN status = 'booked' THEN 'planned' ELSE status END WHERE id IN (${emptyFuture}) AND booking_status <> 'needs_booking'`);
+  // The empty regular games are taken off the organizer's Home and Money lists with the site's own "Hide from list" mark (the site makes
+  // games by itself and would put back any that were deleted; a hidden one stays hidden). Players still see them as plain empty games.
+  // (Backup files skip task_log, so these rows are returned as SQL and added to the end of the seed.)
+  const hide = (raw.prepare(`SELECT s.id, s.group_id FROM sessions s WHERE s.id IN (${emptyFuture}) AND s.id NOT IN (${ids})`).all() as { id: string; group_id: string }[])
+    .map((r) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES ('calm-hide-${r.id}', '${r.group_id}', '${r.id}', 'admin_hidden_game', 'mark', '${new Date(nowMs).toISOString()}');`)
+    .join('\n');
+  // The kept Second Chance game goes to its exact time now that the game that was in its way is gone.
+  if (move) raw.prepare('UPDATE sessions SET starts_at = ?, ends_at = ? WHERE id = ?').run(move.startsAt, move.endsAt, move.id);
+  return hide + '\n';
+}
+
+export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boolean } = {}): Promise<Seed> {
+  const keep: string[] = [];
+  let lateMove: { id: string; startsAt: string; endsAt: string } | undefined;
   const w = new World();
   const summary: string[] = [];
   const N = startMs;
@@ -177,6 +210,7 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
   // 3. Money page: a canceled test game with nobody in (the one game that can be hidden), only when there is room before the last past game.
   if (ms(pastNeverBooked.startsAt) - ms(pastBooked.startsAt) >= 4.5 * DAY) {
     const tg = await makeAt(ms(pastBooked.startsAt) + DAY, 120, 'Test game');
+    keep.push(tg.id);
     await w.org.ok('POST', `/api/admin/sessions/${tg.id}/decision`, { decision: 'cancel', confirm: true, reason: 'Test game' });
     summary.push('"Test game" (canceled early, nobody in, no money): the game to hide on Money');
   }
@@ -431,6 +465,8 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
     // Zip 35: a Second Chance game near closing time (8:00 PM to 10:00 PM, the last start that fits the venue hours): Alex, Rowan and Sage in, nobody
     // paid (no money moves), canceled the night before. With Booking hours on, its Reopen picker stops at 8:00 PM (nothing after it fits).
     const late = await make(20, 0);
+    keep.push(late.id);
+    lateMove = { id: late.id, startsAt: new Date(atD(20, 0)).toISOString(), endsAt: new Date(atD(22, 0)).toISOString() };
     await orgIn(late);
     for (const n of ['Rowan', 'Sage']) await join(n, late);
     await w.org.ok('POST', `/api/admin/sessions/${late.id}/decision`, { decision: 'cancel', confirm: true });
@@ -467,10 +503,15 @@ export async function buildSmallPreview(startMs = Date.now()): Promise<Seed> {
   const names = (dash.players as { name: string }[]).map((p) => p.name).sort();
   if (names.join('|') !== [...SMALL_NAMES].sort().join('|')) throw new Error(`the small preview must have exactly the fixed names, has: ${names.join(', ')}`);
 
+  let calmSql = '';
+  if (opts.calm) {
+    calmSql = calmDown(w.db.raw, keep, N, lateMove);
+    summary.push('CALM profile: only the 8:00 PM Second Chance game and the "Test game" are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
+  }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
   backup.tables.player_devices = [];
   await w.settle();
-  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + smallSwitchRows(N);
+  const sql = wipeExtras() + (backupToSql(backup) as string) + extraRows(w) + smallSwitchRows(N) + calmSql;
   return { sql, summary };
 }
