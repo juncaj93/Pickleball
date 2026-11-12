@@ -567,7 +567,7 @@ async function main() {
       for (const pct of [100, 125, 150]) {
         const tag = `${engineName}, ${width} px, ${scheme}, text ${pct}%`;
         const { ctx, page } = await phone(browser, { width, scheme, pct, signedIn: true });
-        await page.goto(`${BASE}/admin`);
+        await page.goto(`${BASE}/admin?alerts=all`);
         await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
         await page.waitForLoadState('networkidle');
         await bigText(page, pct);
@@ -732,7 +732,7 @@ async function main() {
   await check('money cards: Mark paid on a row of the merged card marks that player paid (Undo window, then saved) and the row goes', async () => {
     const { ctx, page } = await phone(browser, { width: 390, signedIn: true });
     const dashBefore = await (await ctx.request.get(BASE + '/api/admin/dashboard')).json();
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin?alerts=all`);
     await page.locator('[data-vr-card]').first().waitFor({ timeout: 20000 });
     // Sage on the 8:45 PM extra game (Court 3) owes $14 in the world.
     const card = page.locator(`[data-vr-card="${dashBefore.sessions.find((x) => x.courtNum === 3).id}"]`);
@@ -750,7 +750,7 @@ async function main() {
 
   await check('item 4a: a game from an earlier day keeps what it showed (no Court | arrow), though it has a court number', async () => {
     const { ctx, page } = await phone(browser, { width: 390, signedIn: true });
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin?alerts=all`);
     await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
     // Games from an earlier day live in History: tap the row to open its card in the sheet.
     await page.locator('.tabbar button, .tabbar a', { hasText: /^History$/ }).first().click();
@@ -779,7 +779,7 @@ async function main() {
       for (const pct of [100, 125, 150]) {
         const tag = `${engineName} @3x, ${width} px, ${scheme}, text ${pct}%`;
         const { ctx, page } = await phone(browser, { width, scheme, pct, signedIn: true, scale: 3 });
-        await page.goto(`${BASE}/admin`);
+        await page.goto(`${BASE}/admin?alerts=all`);
         await page.locator('[data-r2-card]').first().waitFor({ timeout: 20000 });
         await page.waitForLoadState('networkidle');
         // Fold every game that starts open (tap the date tile).
