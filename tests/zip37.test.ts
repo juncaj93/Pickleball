@@ -262,6 +262,9 @@ describe('Part B: the Messages link', () => {
     expect(recipientNumbers(['(313) 555-0101', '313-555-0102', '+1 313 555 0101', null, '', undefined, '1 (313) 555-0103', '(313) 555-0101'])).toEqual(['+13135550101', '+13135550102', '+13135550103']);
     expect(recipientNumbers([null, ''])).toEqual([]);
   });
+  it('a short or odd entry is skipped, never texted as a wrong number (no area code, a trailing extension, too long)', () => {
+    expect(recipientNumbers(['555-1234', '248 555 1234 12', '+1 313 555 0101', '12345', '+44 20 7946 0958', '+1234567890123456789'])).toEqual(['+13135550101', '+442079460958']);
+  });
 });
 
 describe('Part B: the private link\'s token', () => {
@@ -403,6 +406,19 @@ describe('Part B: the page (POST /api/gdt)', () => {
     g.raw("UPDATE groups SET venue_name = 'Some Booking Name'");
     const again = await g.w.app.client().call('POST', '/api/gdt', { token });
     expect(again.data.body.split('\n')[2]).toBe('Northville Pickleball Club');
+  });
+
+  it('a second player record with the organizer\'s own number never gets the text; a short number is skipped and counted', async () => {
+    const g = await world();
+    for (const n of ['Blair', 'Casey', 'Devon', 'Emery']) await g.join(n);
+    g.raw('UPDATE players SET phone_number = ? WHERE id = ?', '(313) 555-0100', g.w.byName.Blair); // Alex's own number on another record
+    g.raw('UPDATE players SET phone_number = ? WHERE id = ?', '555-1234', g.w.byName.Casey);
+    await g.switchOn();
+    g.setNow(Date.parse(START) - 55 * MIN);
+    const token = await makeGdtToken(SECRET, g.id, '2026-11-12T03:00:00.000Z');
+    const res = await g.w.app.client().call('POST', '/api/gdt', { token });
+    expect(res.data.numbers).toEqual(['+13135550103', '+13135550104']);
+    expect(res.data.withoutNumber).toBe(1); // Casey (short number); Blair is the organizer's duplicate, not a player to count
   });
 
   it('court line only when a court is set; pay line only while somebody signed up still owes (price as the money card shows it)', async () => {

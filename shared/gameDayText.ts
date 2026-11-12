@@ -81,7 +81,9 @@ export function recipientNumbers(phones: readonly (string | null | undefined)[])
   const out: string[] = [];
   for (const p of phones) {
     const n = p ? normalizePhone(p) : '';
-    if (n && !out.includes(n)) out.push(n);
+    // Only a real number goes to Messages: a plus and 10 to 15 digits. A short or odd entry ("555-1234", a trailing extension) is skipped,
+    // never texted as a wrong number.
+    if (/^\+\d{10,15}$/.test(n) && !out.includes(n)) out.push(n);
   }
   return out;
 }

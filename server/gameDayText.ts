@@ -11,7 +11,7 @@ import type { D1Database } from './db';
 import { HttpError } from './http';
 import { isPretend } from './pretend';
 import { signedUpOweOnGame } from './checkInPay';
-import { confirmedOf, getGroup, getSession, type GroupRow, loadRoster, organizerIdOf, priceOf, type SessionRow, settingsOf, visibleFrom } from './repo';
+import { confirmedOf, getGroup, getPlayers, getSession, type GroupRow, loadRoster, organizerIdOf, priceOf, type SessionRow, settingsOf, visibleFrom } from './repo';
 import { withShortGames } from './zip9';
 import * as v from './validate';
 
@@ -109,7 +109,10 @@ export async function readGdtToken(secret: string, token: string, nowMs: number)
 /** Who gets the text for this game: confirmed (so not waitlisted, not dropped out), never the organizer, only with a number saved. */
 export async function recipientsOf(ctx: Ctx, group: GroupRow, session: SessionRow): Promise<{ numbers: string[]; inGame: number; withoutNumber: number }> {
   const organizerId = await organizerIdOf(ctx.db, group);
-  const players = confirmedOf(await loadRoster(ctx.db, session.id)).filter((r) => r.player_id !== organizerId);
+  const roster = confirmedOf(await loadRoster(ctx.db, session.id));
+  // Never the organizer: by their player record, and also any number that is the organizer's own (a second record with the same number).
+  const own = organizerId ? recipientNumbers([roster.find((r) => r.player_id === organizerId)?.phone_number ?? (await getPlayers(ctx.db, group.id)).find((p) => p.id === organizerId)?.phone_number]) : [];
+  const players = roster.filter((r) => r.player_id !== organizerId && !recipientNumbers([r.phone_number]).some((n) => own.includes(n)));
   const numbers = recipientNumbers(players.map((r) => r.phone_number));
   return { numbers, inGame: players.length, withoutNumber: players.filter((r) => !recipientNumbers([r.phone_number]).length).length };
 }
@@ -202,10 +205,6 @@ export async function tickGameText(ctx: Ctx, group: GroupRow, games: SessionRow[
     const shownFrom = visibleFrom(group);
     for (const s of results) {
       if (s.starts_at < shownFrom && Number(s.shown_early) !== 1) continue;
-      const roster = await loadRoster(ctx.db, s.id);
-      const inCount = confirmedOf(roster).length;
-      if (inCount < MIN_PLAYERS) continue;
-      if ((await recipientsOf(ctx, group, s)).numbers.length === 0) continue;
       const { results: logs } = await ctx.db
         .prepare("SELECT kind, at FROM task_log WHERE session_id = ? AND task = ? AND kind IN ('sent', 'failed')")
         .bind(s.id, GAME_TEXT_TASK)
@@ -213,6 +212,10 @@ export async function tickGameText(ctx: Ctx, group: GroupRow, games: SessionRow[
       if (logs.some((l) => l.kind === 'sent')) continue;
       const failed = logs.filter((l) => l.kind === 'failed');
       if (failed.length >= MAX_TRIES || failed.some((l) => ctx.nowMs - Date.parse(l.at) < RETRY_AFTER_MS)) continue;
+      const roster = await loadRoster(ctx.db, s.id);
+      const inCount = confirmedOf(roster).length;
+      if (inCount < MIN_PLAYERS) continue;
+      if ((await recipientsOf(ctx, group, s)).numbers.length === 0) continue;
       const text = reminderMessage(s.starts_at, group.timezone, ctx.nowMs, inCount, `${siteUrl(ctx)}/gt/${await makeGdtToken(secret, s.id, s.ends_at)}`);
       // Claimed before sending (the table's unique index): two ticks at once can never both send it. Only while the game is still on.
       const claimId = newId();
