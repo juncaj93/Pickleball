@@ -182,9 +182,9 @@ export function stillInTextR2(startsAt: string, tz: string, nowMs: number, link:
 }
 
 /** 11A. TEXT THE PLAYERS, "Court canceled": the live words, line breaks only. */
-export function courtCanceledTextR2(bookingUrl: string = COURT_PUBLIC_BOOKING_URL, phone: string = COURTS_PHONE): string {
+export function courtCanceledTextR2(bookingUrl: string = COURT_PUBLIC_BOOKING_URL, phone: string = COURTS_PHONE, game: string = "today's game"): string {
   return lines([
-    "Hey guys, sorry, I have to back out of today's game.",
+    `Hey guys, sorry, I have to back out of ${game}.`,
     "I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person.",
     `Book online: ${bookingUrl}`,
     `or call the courts at ${phone}.`,
@@ -193,9 +193,9 @@ export function courtCanceledTextR2(bookingUrl: string = COURT_PUBLIC_BOOKING_UR
 }
 
 /** 11B. TEXT THE PLAYERS, "Court still booked (backup)": the live words, line breaks only. */
-export function courtStillBookedTextR2(phone: string = COURTS_PHONE): string {
+export function courtStillBookedTextR2(phone: string = COURTS_PHONE, game: string = "today's game"): string {
   return lines([
-    "Hey guys, sorry, I have to back out of today's game.",
+    `Hey guys, sorry, I have to back out of ${game}.`,
     'The court is still booked under my name, so you can still play.',
     'They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing.',
     `Questions? Call the courts at ${phone}.`,

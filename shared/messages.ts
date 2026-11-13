@@ -172,25 +172,43 @@ export function formatPhone(phone: string | null | undefined): string {
   return `(${ten.slice(0, 3)}) ${ten.slice(3, 6)}-${ten.slice(6)}`;
 }
 
-// ---------- "Text the players" (LATE_FEES on): the organizer backs out of today's game ----------
-// Alex's exact words (Nov 2). They always say "today's game": he only sends them on game day.
+// ---------- "Text the players" (LATE_FEES on): the organizer backs out of a game ----------
+// Alex's exact words (Nov 2). They say "today's game" when the game is today (Eastern). Zip 40: another day says
+// "tomorrow's game" or the weekday ("Tuesday's game"). With no game given, the old "today's game" stays.
+
+/** "today's game", "tomorrow's game" or "Tuesday's game", by calendar days in the group's time zone (never 24-hour math). */
+export function backOutGame(startsAt: string | undefined, tz: string | undefined, nowMs: number | undefined): string {
+  if (!startsAt || !tz || nowMs === undefined) return "today's game";
+  const g = localParts(Date.parse(startsAt), tz);
+  const n = localParts(nowMs, tz);
+  const dayNum = (p: { year: number; month: number; day: number }) => Date.UTC(p.year, p.month - 1, p.day) / 86_400_000;
+  const gap = dayNum(g) - dayNum(n);
+  if (gap === 0) return "today's game";
+  if (gap === 1) return "tomorrow's game";
+  return `${formatWeekday(startsAt, tz)}'s game`;
+}
+
+/** The same day choice for "Pickleball today is canceled": "today", "tomorrow" or "Tuesday". */
+export function backOutDay(startsAt: string | undefined, tz: string | undefined, nowMs: number | undefined): string {
+  return backOutGame(startsAt, tz, nowMs).replace(/'s game$/, '');
+}
 
 /** A. The main one: the court is canceled, the players can book the same slot as non-members. */
-export function courtCanceledMessage(bookingUrl: string = COURT_PUBLIC_BOOKING_URL, phone: string = COURTS_PHONE): string {
-  return `Hey guys, sorry, I have to back out of today's game. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: ${bookingUrl} or call the courts at ${phone}. Sorry again, hope you can still get it in!`;
+export function courtCanceledMessage(bookingUrl: string = COURT_PUBLIC_BOOKING_URL, phone: string = COURTS_PHONE, game: string = "today's game"): string {
+  return `Hey guys, sorry, I have to back out of ${game}. I canceled the court, so you can still book the same slot as non-members. It's only $2 more per person. Book online: ${bookingUrl} or call the courts at ${phone}. Sorry again, hope you can still get it in!`;
 }
 
 /** B. The backup: the venue would not cancel, so the court is still booked under the organizer's name. */
-export function courtStillBookedMessage(phone: string = COURTS_PHONE): string {
-  return `Hey guys, sorry, I have to back out of today's game. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at ${phone}. Sorry again!`;
+export function courtStillBookedMessage(phone: string = COURTS_PHONE, game: string = "today's game"): string {
+  return `Hey guys, sorry, I have to back out of ${game}. The court is still booked under my name, so you can still play. They might charge you $2 more each since the non-member rate is $16. They may be cool though and let you play under my membership pricing. Questions? Call the courts at ${phone}. Sorry again!`;
 }
 
 /** After a cancel inside 12 hours where the venue did NOT waive the fee: everyone who was in still owes their share. */
-export function canceledFeeKeptMessage(priceCents: number, link: string): string {
-  return `Heads up: today's game is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your ${formatPrice(priceCents)} share still applies (if you already paid, you're all set). You can pay on the site: ${link}. Sorry about that!`;
+export function canceledFeeKeptMessage(priceCents: number, link: string, game: string = "today's game"): string {
+  return `Heads up: ${game} is canceled, and since it's inside 12 hours the venue is charging us for the court. If you were signed up, your ${formatPrice(priceCents)} share still applies (if you already paid, you're all set). You can pay on the site: ${link}. Sorry about that!`;
 }
 
 /** After a cancel inside 12 hours where the venue waived the fee: the usual credit text, saying "today" (sent on game day). */
-export function canceledTodayMessage(link: string, reason?: string | null): string {
-  return `${withReason('Pickleball today is canceled.', reason)} If you paid, it's now your credit. You can request a cash out on the site. ${link}`;
+export function canceledTodayMessage(link: string, reason?: string | null, day: string = 'today'): string {
+  return `${withReason(`Pickleball ${day} is canceled.`, reason)} If you paid, it's now your credit. You can request a cash out on the site. ${link}`;
 }
