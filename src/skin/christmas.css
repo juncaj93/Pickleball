@@ -1,0 +1,346 @@
+/* Zip 38: the Christmas skin. A SKIN, nothing more: no layout, words, money or behavior changes.
+ *
+ * Three groups of rules:
+ *   1. The logo button and its two speech bubbles: present whenever the skin is available (inside the window, switch on), theme on or off.
+ *   2. html[data-skin='christmas'] (theme ON): the slots. Seat ornaments, the candy cane section line, the snow cap on the top game card,
+ *      the red calendar tiles and the page color. <html data-skin> is set only by the PLAYER Home screen (src/skin/store.ts) and removed
+ *      on the way out, so no admin screen carries any of it. A second theme would be a second block like this one.
+ *   3. Motion: html[data-skin-anim='in'] for a moment after the tap that turns the theme ON; the small pieces that play on a join or a
+ *      jingle are classes on the ornament itself. prefers-reduced-motion: none of it moves, nothing glows.
+ */
+
+/* ---------- 1. The logo button and the bubbles ---------- */
+.skin-logo-wrap {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+}
+/* The logo is a button in both modes. Just me (.skin-logo-me): the NORMAL logo tile, nothing different to look at (only the organizer's own player gets the
+   button at all). Everyone (.skin-logo-all): the Christmas logo with the page's own color inside the tile (so light and dark both follow the page). */
+button.brand-tile.skin-logo {
+  position: relative;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+button.brand-tile.skin-logo.skin-logo-all {
+  background: var(--bg);
+}
+/* 32px to look at, 44px to tap. */
+button.brand-tile.skin-logo::before {
+  content: '';
+  position: absolute;
+  inset: -6px;
+}
+button.brand-tile.skin-logo:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+.skin-bubble {
+  position: absolute;
+  z-index: 60;
+  left: 0;
+  top: calc(100% + 10px);
+  padding: 9px 13px;
+  border-radius: 12px;
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 0.875rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 28%);
+  pointer-events: none;
+  animation:
+    xbub-in 0.28s ease-out both,
+    xbub-out 0.3s ease-in 1.7s forwards;
+}
+/* The spike, under the logo's middle. */
+.skin-bubble::before {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: -6px;
+  border: 6px solid transparent;
+  border-top: 0;
+  border-bottom-color: var(--ink);
+}
+@keyframes xbub-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xbub-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* ---------- 2. Theme ON: colors and slots ---------- */
+html[data-skin='christmas'] {
+  --xmas-red: #c8312f;
+  --xmas-cane-red: #c8312f;
+  --xmas-cane-white: #fff;
+  --xo-ring: rgb(74 79 70 / 70%);
+  /* The site's own page color token: everything that sits on the page color follows. Cards, tiles and sheets keep their fills. */
+  --bg: #edf3ec;
+}
+@media (prefers-color-scheme: dark) {
+  html[data-skin='christmas']:not([data-theme='light']) {
+    --xmas-cane-red: #e0453f;
+    --xmas-cane-white: #d9d2c8;
+    --xo-ring: rgb(184 191 178 / 70%);
+    --bg: #09180e;
+  }
+}
+html[data-skin='christmas'][data-theme='dark'] {
+  --xmas-cane-red: #e0453f;
+  --xmas-cane-white: #d9d2c8;
+  --xo-ring: rgb(184 191 178 / 70%);
+  --bg: #09180e;
+}
+
+/* Slot: seat marker. A filled seat is a glossy ornament with a gold cap; an empty seat is its dashed outline. */
+html[data-skin='christmas'] .dots .xorn {
+  display: block;
+  flex: none;
+  width: 22px;
+  height: 26px;
+  overflow: visible;
+  transform-origin: 50% 0;
+}
+html[data-skin='christmas'] .dots {
+  align-items: flex-start;
+}
+html[data-skin='christmas'] .schedule > .sched.tier-next .dots .xorn,
+html[data-skin='christmas'] .schedule > .sched.tier-later .dots .xorn,
+html[data-skin='christmas'] .schedule > .sched.cl-later .dots .xorn {
+  width: 19px;
+  height: 22.5px;
+}
+html[data-skin='christmas'] .schedule .dots.one-row {
+  --cl-ball: 22px;
+}
+html[data-skin='christmas'] .schedule .tier-next .dots.one-row,
+html[data-skin='christmas'] .schedule > .sched.gd .dots.one-row {
+  --cl-ball: 22px;
+}
+html[data-skin='christmas'] .schedule > .sched.tier-next .dots.one-row,
+html[data-skin='christmas'] .schedule > .sched.cl-later .dots.one-row {
+  --cl-ball: 19px;
+}
+/* The alert cards draw their seats small. */
+html[data-skin='christmas'][data-alert-cards] .ac-seats .xorn {
+  width: 15px;
+  height: 17.7px;
+}
+
+/* Slot: section divider. A candy cane (red and white stripes at 135 degrees) in place of the line: thick in THIS WEEK, thin after. */
+html[data-skin='christmas'] .schedule > .week-break::after {
+  height: 3px;
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, var(--xmas-cane-red) 0 6px, var(--xmas-cane-white) 6px 12px);
+  box-shadow: 0 0 0 1px rgb(200 49 47 / 40%);
+}
+html[data-skin='christmas'] .schedule > .week-break.tier-this::after {
+  height: 5px;
+}
+
+/* Slot: cap. Snow on the top game card, sitting on its top line, 12px tall, tapered ends, 30px in from each side. */
+html[data-skin='christmas'] .schedule > .sched.xs-top::before {
+  content: '';
+  position: absolute;
+  left: 30px;
+  right: 30px;
+  bottom: calc(100% + 1px);
+  height: 12px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 20' preserveAspectRatio='none'><path d='M0 20 C6 19 10 16 16 14 C20 8 30 6 36 10 C42 3 56 2 62 8 C70 1 86 0 94 7 C102 3 116 4 122 9 C130 2 146 1 154 8 C162 4 176 6 182 12 C188 15 194 18 200 20 Z' fill='%23ffffff'/><path d='M0 20 C6 19 10 16 16 14 C20 8 30 6 36 10 C42 3 56 2 62 8 C70 1 86 0 94 7 C102 3 116 4 122 9 C130 2 146 1 154 8 C162 4 176 6 182 12 C188 15 194 18 200 20' fill='none' stroke='%23aebfcc' stroke-width='1.2'/></svg>") no-repeat center / 100% 100%;
+  filter: drop-shadow(0 1px 0 rgb(0 0 0 / 10%));
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Slot: calendar tiles. TONIGHT and TOMORROW bands go red with a red tile border; every ordinary game tile gets a red outline (the
+   court-booked inset ring too); canceled games stay gray; the not-booked and waitlist rings keep their status colors; the TONIGHT glow
+   stays green and so does the check badge. */
+html[data-skin='christmas'] .schedule .tile .day-tag.tonight,
+html[data-skin='christmas'] .schedule .tile .day-tag.tomorrow,
+html[data-skin='christmas'] .schedule .tile .tonight-tag {
+  background: var(--xmas-red) !important;
+  color: #fff !important;
+}
+/* Red outlines are for games with a SET time only. A tile that carries a court-status ring (the "~8 PM" games and the games with no court set: class .ts) keeps
+   the regular theme's ring and its own colors (dotted for a waitlist, gray for not booked); only a booked ring turns red (the rule below). */
+html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile:not(.ts),
+html[data-skin='christmas'] .schedule .tile.day-tonight:not(.ts),
+html[data-skin='christmas'] .schedule .tile.day-tomorrow:not(.ts) {
+  border-color: var(--xmas-red) !important;
+}
+html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tonight:not(.ts-none):not(.ts-wait),
+html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tomorrow:not(.ts-none):not(.ts-wait) {
+  outline-color: var(--xmas-red) !important;
+}
+html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .tb-solid {
+  box-shadow: inset 0 0 0 var(--tb-w, 2px) var(--xmas-red) !important;
+  border-color: var(--xmas-red) !important;
+}
+
+/* ---------- 3. Motion ---------- */
+@keyframes xdrop {
+  0% {
+    transform: translateY(-16px) scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: translateY(2px) scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes xjoin {
+  0% {
+    transform: translateY(-22px);
+    opacity: 0;
+  }
+  30% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  48% {
+    transform: rotate(11deg);
+  }
+  66% {
+    transform: rotate(-8deg);
+  }
+  82% {
+    transform: rotate(4deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes xjingle {
+  0% {
+    transform: none;
+  }
+  22% {
+    transform: rotate(15deg);
+  }
+  50% {
+    transform: rotate(-11deg);
+  }
+  75% {
+    transform: rotate(5deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+@keyframes xspin {
+  from {
+    transform: rotate(0);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes xgrow {
+  0% {
+    transform: scale(0.55, 0.05);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04, 1.25);
+    opacity: 1;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+@keyframes xpop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.22) rotate(-6deg);
+  }
+  100% {
+    transform: none;
+  }
+}
+
+/* Tap ON: the logo pops, the snow cap pops up (candy canes and red tiles just appear). */
+html[data-skin-anim='in'] .skin-logo .brand-logo {
+  animation: xpop 0.32s cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+html[data-skin-anim='in'][data-skin='christmas'] .schedule > .sched.xs-top::before {
+  transform-origin: 50% 100%;
+  animation: xgrow 0.28s cubic-bezier(0.3, 1.4, 0.5, 1) 0.12s both;
+}
+/* Ornaments pop in about 40 ms apart; the first game's then jingle left to right (160 ms apart). */
+.xorn.xin {
+  animation: xdrop 0.3s cubic-bezier(0.3, 1.4, 0.5, 1) calc(40ms + var(--i, 0) * 40ms) backwards;
+}
+.xorn.xin.xin-j {
+  animation:
+    xdrop 0.3s cubic-bezier(0.3, 1.4, 0.5, 1) calc(40ms + var(--i, 0) * 40ms) backwards,
+    xjingle 0.9s ease-in-out calc(0.7s + var(--i, 0) * 160ms);
+}
+/* I'm in: only the new ornament drops on its thread, swings twice, settles with a small gold flash. At the 4th player the four jingle after it. */
+.xorn.xjoin {
+  animation: xjoin 0.95s ease-out backwards;
+}
+.xorn.xjoin.xjoin-j {
+  animation:
+    xjoin 0.95s ease-out backwards,
+    xjingle 0.9s ease-in-out calc(1s + var(--i, 0) * 160ms);
+}
+.xorn.xjingle.xjingle-j {
+  animation: xjingle 0.9s ease-in-out calc(1s + var(--i, 0) * 160ms);
+}
+/* Tap OFF: each ball spins once in place around its own center (the delay, 45 ms a ball, is set on the ball). */
+.ball.xspinb {
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+  animation: xspin 0.3s ease-in-out both;
+}
+/* "Game on" toast badge and the burst: an ornament where the ball was. */
+.pop.pop-ball .toast-icon .xorn {
+  width: 22px;
+  height: 26px;
+  overflow: visible;
+  display: block;
+  animation: ball-pop 0.55s cubic-bezier(0.2, 0.9, 0.3, 1.4) both;
+}
+.m-burst .xorn {
+  position: absolute;
+  left: -8px;
+  top: -9px;
+  width: 16px;
+  height: 19px;
+  opacity: 0;
+  animation: m-burst-out 400ms var(--ease-out) forwards;
+  animation-delay: calc(var(--k) * 12ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skin-bubble,
+  .skin-logo .brand-logo,
+  .xorn,
+  .ball.xspinb,
+  html[data-skin='christmas'] .schedule > .sched.xs-top::before {
+    animation: none !important;
+  }
+}

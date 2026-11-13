@@ -8,6 +8,8 @@ import { DEMO_MESSAGE, isIOS, VIEW_ONLY_MESSAGE } from './lib';
 import { adminMotionOn, canMove, motionOn, RollText, useMotion } from './motion';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
+import { useSkin, useSkinOn } from './skin/store';
+import { THEME } from './skin/theme';
 
 export function Chip({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`chip tone-${tone}`}>{children}</span>;
@@ -261,6 +263,7 @@ function UndoRing({ ms, spentMs = 0 }: { ms: number; spentMs?: number }) {
 function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void; stack?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   // A banner with a button can be drawn again elsewhere (into or out of a sheet): one that had started to go keeps going.
+  const skinOn = useSkinOn();
   const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>(shown.going ? 'down' : '');
   // How long it has been up already (0 for a new banner), so its time and its Undo ring carry on where they were.
   const spentAtDraw = useRef(shown.opts.keep || shown.opts.action ? Math.max(0, Date.now() - Math.floor(shown.id)) : 0).current;
@@ -362,7 +365,7 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
       {!shown.opts.nudge && (
       <span className="toast-icon" aria-hidden="true">
         {shown.opts.ball ? (
-          <Pickleball />
+          skinOn ? <THEME.Badge index={0} /> : <Pickleball />
         ) : shown.kind === 'error' ? (
           '!'
         ) : (
@@ -877,9 +880,14 @@ export function CourtIcon({ kind }: { kind: CourtKind | 'played' }) {
 }
 
 /** One pickleball: a yellow-green ball with the hole pattern. Inline SVG, no image files. */
-export function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
+export function Pickleball({ me, fresh, spin }: { me?: boolean; fresh?: boolean; /** Zip 38: the Christmas theme was just switched off: this ball spins once in place, `spin` seats after the first (45 ms apart). */ spin?: number }) {
   return (
-    <svg className={`ball${me ? ' me' : ''}${fresh ? ' ball-new' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+    <svg
+      className={`ball${me ? ' me' : ''}${fresh ? ' ball-new' : ''}${spin !== undefined ? ' xspinb' : ''}`}
+      style={spin !== undefined ? ({ animationDelay: `${spin * 45}ms` } as CSSProperties) : undefined}
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+    >
       <circle cx="10" cy="10" r="9" className="ball-skin" />
       <g className="ball-holes">
         <circle cx="10" cy="5.2" r="1.3" />
@@ -911,7 +919,10 @@ export function EmptySeat() {
   return <span className="dot" />;
 }
 
-export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean }) {
+export function SpotDots({ names, me, celebrate, oneRow, first }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean; /** Zip 38: the first game listed (its ornaments jingle when the theme is turned on). */ first?: boolean }) {
+  // Zip 38, Christmas skin: with the theme on, the seats are ornaments (src/skin/theme.tsx); just switched off, the balls spin back once.
+  const skin = useSkin();
+  const skinOn = skin.mode !== 'off' && skin.on;
   const slots = Math.max(MIN_PLAYERS, names.length);
   // Only balls that appeared since the last look spin in; the first look at a card is still.
   // The marker lasts for the whole spin, even if the card redraws (instant tap, then the server's data).
@@ -925,6 +936,37 @@ export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me
     const t = setTimeout(() => setFreshFrom(null), 700);
     return () => clearTimeout(t);
   }, [names.length]);
+  // Zip 38, ornament motion. Each ORNAMENT times its own motion and always plays it to the end (src/skin/theme.tsx): this card only says WHICH motion
+  // starts now (a moment: an id and a class per seat). A later redraw, or this card's own state moving on, can never cut an animation short.
+  //   a new player: the new ornament drops in on its thread and swings (xjoin); at the 4th player all four then jingle left to right (no glow anywhere)
+  //   the theme was just turned ON: the ornaments pop in 40 ms apart; the first game's then jingle too
+  const prevN = useRef<number | null>(null);
+  const eventId = useRef(0);
+  const [moments, setMoments] = useState<{ id: number; by: Record<number, string> }>({ id: 0, by: {} });
+  useLayoutEffect(() => {
+    const before = prevN.current;
+    prevN.current = names.length;
+    if (before === null || !skinOn || names.length <= before) return;
+    const crossing = before < MIN_PLAYERS && names.length >= MIN_PLAYERS;
+    const by: Record<number, string> = {};
+    for (let i = 0; i < names.length; i++) {
+      if (i >= before) by[i] = crossing ? 'xjoin xjoin-j' : 'xjoin';
+      else if (crossing) by[i] = 'xjingle xjingle-j';
+    }
+    setMoments({ id: ++eventId.current, by });
+  }, [names.length, skinOn]);
+  const popSeq = skinOn && skin.phase === 'in' ? skin.seq : 0;
+  useLayoutEffect(() => {
+    if (!popSeq) return;
+    const by: Record<number, string> = {};
+    for (let i = 0; i < names.length; i++) by[i] = first ? 'xin xin-j' : 'xin';
+    setMoments({ id: ++eventId.current, by });
+  }, [popSeq]); // eslint-disable-line react-hooks/exhaustive-deps
+  const seat = (i: number) => {
+    const filled = i < names.length;
+    if (!filled) return <THEME.Seat key={i} index={i} empty style={{ ['--i' as string]: i }} />;
+    return <THEME.Seat key={i} index={i} me={names[i] === me} moment={moments.by[i]} momentId={moments.id} style={{ ['--i' as string]: i }} />;
+  };
   return (
     <span
       className={`dots${celebrate ? ' dots-celebrate' : ''}${oneRow ? ' one-row' : ''}`}
@@ -933,7 +975,13 @@ export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me
       aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}
     >
       {Array.from({ length: slots }, (_, i) =>
-        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} /> : <EmptySeat key={i} />,
+        skinOn ? (
+          seat(i)
+        ) : i < names.length ? (
+          <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} spin={skin.mode !== 'off' && skin.phase === 'out' ? i : undefined} />
+        ) : (
+          <EmptySeat key={i} />
+        ),
       )}
     </span>
   );

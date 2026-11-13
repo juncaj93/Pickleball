@@ -30,6 +30,8 @@ import './gameday.css';
 import './zip29.css';
 // Zip 17 "Unpaid nudge" (src/unpaid-nudge.css): only classes the player page adds while the switch is on; loaded with the others.
 import './unpaid-nudge.css';
+// Zip 38: the Christmas skin (every rule sits under html[data-skin='christmas'] or the logo button; last so it wins over the card looks).
+import './skin/christmas.css';
 
 function App() {
   const path = usePath();

@@ -2925,8 +2925,9 @@ async function main() {
         const set = await p.evaluate(layoutReport, { roots: 'main .card', items: SETTINGS_ITEMS });
         assert(set.problems.length === 0, `Settings: ${set.problems.slice(0, 4).join(' | ')}`);
         // Each row: the name gets real width, the box is small and inside the card.
+        // (Zip 38: the 3-way Christmas skin row has three buttons instead of one switch; its own checks are in e2e/zip38.cjs.)
         const rows = await p.evaluate(() =>
-          [...document.querySelectorAll('.set-row')].map((r) => {
+          [...document.querySelectorAll('.set-row:not(.xs-row)')].map((r) => {
             const label = r.querySelector('.set-label').getBoundingClientRect();
             const box = r.querySelector('.set-input, .switch').getBoundingClientRect();
             const card = r.closest('.card').getBoundingClientRect();

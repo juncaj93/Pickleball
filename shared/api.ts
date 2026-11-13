@@ -200,6 +200,10 @@ export interface GroupView {
   lastScreen?: boolean;
   /** "Seat dots" is on for this screen (server/seatDots.ts): every empty seat a dashed ring. Missing: exactly as before. */
   seatDots?: boolean;
+  /** Zip 38 "Christmas skin", Everyone (shared/christmasSkin.ts): inside the window: the Christmas logo, the bubbles and the theme tap for every player. Missing: exactly as before. */
+  christmasSkin?: true;
+  /** Zip 38 "Christmas skin", Just me: only the organizer's own player gets this (the normal logo becomes the tap, the theme choice is kept on the server). Missing: exactly as before. */
+  christmasSkinMe?: { on: boolean };
   /** Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): this phone may show the Add to Home Screen card (the phone decides when). Missing: exactly as before. */
   homeScreenTip?: true;
   /**
@@ -625,6 +629,8 @@ export interface AdminDashboard {
   gameDayCardForAll?: true;
   /** Zip 16 "After-game cards" (shared/afterGame.ts): its Settings row. */
   afterGameCardForAll?: true;
+  /** Zip 38 "Christmas skin" (shared/christmasSkin.ts): its Settings row (Just me or Everyone), only while not off. */
+  christmasSkinMode?: 'me' | 'all';
   /** Zip 37 "Home Screen tip" and "Game day text" (shared/homeScreenTip.ts, shared/gameDayText.ts): their Settings rows, only while on. */
   homeScreenTipForAll?: true;
   gameDayTextForAll?: true;

@@ -115,6 +115,8 @@ import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
 import { gameDayCardFor, gameDayTestFor } from './gameDay';
 import { homeScreenTipFor } from './homeScreenTip';
+import { christmasSkinFor, christmasSkinModeFor, setChristmasSkinMeOn } from './christmasSkin';
+import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
@@ -188,6 +190,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
+  // Zip 38 "Christmas skin": one read for the organizer's own player only (the test mark); every other player's answer is as it was.
+  const skin = await christmasSkinFor(ctx, group.id, meIsOrganizer && !viewAsName, !!viewAsName);
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -328,6 +332,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // organizer (real PIN) showing the organizer's own name; never in View as, never for a player (players: no trip, never there).
     ...(meIsOrganizer && !viewAsName && (await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
+    // Zip 38 "Christmas skin" (3-way: Off, Just me, Everyone). Everyone: one true flag, only inside the window (the phone keeps its own theme choice).
+    // Just me: only for the organizer's own player, never in View as: their theme choice (the logo stays the normal one). Never in admin answers. Off: exactly main's.
+    ...(skin.all ? { christmasSkin: true as const } : {}),
+    ...(skin.me ? { christmasSkinMe: { on: skin.me.on } } : {}),
     // Zip 37 "Home Screen tip": one true flag (the phone decides when to draw the card). Never for the organizer's own page; View as carries it like the player's own phone and the screen never draws it there. Off: exactly main's.
     ...(me && !meIsOrganizer && (await homeScreenTipFor(ctx, group.id)) ? { homeScreenTip: true as const } : {}),
     // Zip 17, Unpaid nudge: only while on (off: this answer is exactly main's). The screen counts from `owed` with shared/unpaidNudge.ts.
@@ -407,6 +415,21 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'That name is not on the list.');
   await rememberPlayer(ctx, group, player.id);
   return { me: { id: player.id, name: player.display_name } };
+}
+
+/**
+ * POST /api/christmas-skin-me { on } (Zip 38): in Just me, the organizer's own player taps the normal logo to switch the Christmas theme on or off.
+ * The choice is kept on the server (an iPhone Home Screen app keeps its own storage, apart from Safari's, so a phone-only memory would not reach it).
+ * Only the organizer's own player can save it, never in View as, only while the switch is Just me and the kill switch allows it; anyone else gets
+ * a quiet "applied: false" and nothing is saved. Look only: it changes how the organizer's own player sees the player screens, nobody else's.
+ */
+export async function christmasSkinMe(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, playerId, viewAsName } = await viewer(ctx);
+  const on = v.bool(body.on, 'on');
+  const mine = !!playerId && !viewAsName && playerId === (await organizerIdOf(ctx.db, group));
+  if (!mine || !christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN) || (await christmasSkinModeFor(ctx, group.id)) !== 'me') return { ok: true, applied: false };
+  await setChristmasSkinMeOn(ctx.db, group.id, on, ctx.nowIso);
+  return { ok: true, applied: true, on };
 }
 
 /** Lowercase letters and single spaces, for comparing names. */

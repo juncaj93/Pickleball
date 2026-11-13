@@ -9,6 +9,7 @@ import { CHEAPER_FIX } from '../shared/cheaperFix';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
 import { PLAYERS_SHEET_REDO } from '../shared/playersSheetRedo';
 import { HOME_SCREEN_TIP } from '../shared/homeScreenTip';
+import { BACK_KEY, CHRISTMAS_SKIN, HINT_KEY, THEME_KEY, parseMode, parsePretendDate } from '../shared/christmasSkin';
 import { CHECKIN_PAY_LINE } from '../shared/checkInPay';
 import { TAP_GUARD_FIX } from '../shared/tapGuard';
 import { phoneTag } from './phoneTag';
@@ -240,6 +241,14 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(BOOKING_HOURS.link)) headers[BOOKING_HOURS.header] = 'on';
   // Zip 31 "Extended time" private test switch for this phone (?extendedtime=on, =off ends it). See server/extension.ts.
   if (gameDayTest(EXTENDED_TIME.link)) headers[EXTENDED_TIME.header] = 'on';
+  // Zip 38 "Christmas skin": the preview-only "pretend today is this day" (?xmasdate=2026-12-05) and "act like Just me / Everyone" (?xmasmode=me or all). The
+  // server ignores both unless CHRISTMAS_SKIN_PREVIEW is set, which only previews have. See server/christmasSkin.ts. (The old ?christmasskin links do nothing now.)
+  {
+    const mode = storageGet(`pb_${CHRISTMAS_SKIN.modeLink}`);
+    if (mode && parseMode(mode)) headers[CHRISTMAS_SKIN.modeHeader] = mode;
+    const day = storageGet(`pb_${CHRISTMAS_SKIN.dateLink}`);
+    if (day && parsePretendDate(day) !== null) headers[CHRISTMAS_SKIN.dateHeader] = day;
+  }
   // Zip 37 "Home Screen tip" private test switch for this phone (?homescreentip=on, =off ends it). See server/homeScreenTip.ts.
   if (gameDayTest(HOME_SCREEN_TIP.link)) headers[HOME_SCREEN_TIP.header] = 'on';
   // Zip 15 "Second Chance" private test switch for this phone (/admin?secondchance=on: the Home cards, never a Telegram), and the
@@ -259,7 +268,7 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // (it only exists on previews, never on live). Pretend's organizer screens and this phone's own pages keep them, as before.
   const asPlayer = viewAsId !== null && path.startsWith('/api/') && !path.startsWith('/api/admin/');
   // (Also kept: the two preview-only test clocks, ?gamedaytest= and ?noontest=: the server ignores them unless the site is a preview.)
-  const keep = new Set(['Content-Type', PREVIEW_CALM.header, GAME_DAY_TEST.header, SECOND_CHANCE_TEST.header]);
+  const keep = new Set(['Content-Type', PREVIEW_CALM.header, GAME_DAY_TEST.header, SECOND_CHANCE_TEST.header, CHRISTMAS_SKIN.dateHeader, CHRISTMAS_SKIN.modeHeader]);
   if (asPlayer) for (const k of Object.keys(headers)) if (!keep.has(k)) delete headers[k];
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
@@ -803,6 +812,34 @@ if (typeof window !== 'undefined') {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);
+  }
+  // Zip 38 (previews only in effect): ?xmasdate=2026-12-05 pretends today is that day (=off ends it); ?xmasmode=me|all acts like that Settings choice.
+  // ?xmasreset=1 makes this phone forget its Christmas theme choice and the first-visit bubbles, so a tester can see the first visit again.
+  {
+    const q = new URLSearchParams(window.location.search);
+    const day = q.get(CHRISTMAS_SKIN.dateLink);
+    if (day && parsePretendDate(day) !== null) storageSet(`pb_${CHRISTMAS_SKIN.dateLink}`, day);
+    else if (day === 'off') storageRemove(`pb_${CHRISTMAS_SKIN.dateLink}`);
+    // Preview only in effect: ?xmasmode=me or =all acts like that Settings choice on this phone; =off or =clear ends it.
+    const mode = q.get(CHRISTMAS_SKIN.modeLink);
+    if (mode && parseMode(mode) && mode !== 'off') storageSet(`pb_${CHRISTMAS_SKIN.modeLink}`, mode);
+    else if (mode === 'off' || mode === 'clear') storageRemove(`pb_${CHRISTMAS_SKIN.modeLink}`);
+    // The old private links (?christmasskin=on/off) are gone: nothing to do, and any note an earlier build left on this phone is dropped.
+    storageRemove('pb_christmasskin');
+    storageRemove('pb_xmas_server');
+    if (q.get('xmasreset') === '1') {
+      storageRemove(THEME_KEY);
+      storageRemove(HINT_KEY);
+      storageRemove(BACK_KEY);
+      // Used once: taken off the address so a reload does not forget the choice again.
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('xmasreset');
+        window.history.replaceState(window.history.state, '', url.toString());
+      } catch {
+        /* an address that cannot be rewritten: the reset just runs again on a reload */
+      }
+    }
   }
 }
 

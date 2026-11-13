@@ -90,6 +90,8 @@ import { adminExtensionPayment, markSharesWithSeat, undoSharesWithSeat, extended
 import { errorAlertsForAll, switchErrorAlerts } from './errorAlerts';
 import { afterGameCardForAll, setAfterGameCardForAll } from './afterGame';
 import { homeScreenTipForAll, setHomeScreenTipForAll } from './homeScreenTip';
+import { christmasSkinMode, setChristmasSkinMode } from './christmasSkin';
+import { parseMode } from '../shared/christmasSkin';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
@@ -429,6 +431,11 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(gameDay.forAll ? { gameDayCardForAll: true as const } : {}),
     // Zip 16 "After-game cards" (server/afterGame.ts): its Settings row, only while on.
     ...((await afterGameCardForAll(ctx.db, group.id)) ? { afterGameCardForAll: true as const } : {}),
+    // Zip 38 (server/christmasSkin.ts): its Settings row (Just me or Everyone), only while not off.
+    ...(await (async () => {
+      const mode = await christmasSkinMode(ctx.db, group.id);
+      return mode === 'off' ? {} : { christmasSkinMode: mode };
+    })()),
     // Zip 37 (server/homeScreenTip.ts, server/gameDayText.ts): the two Settings rows only, only while on (the admin screens do not change).
     ...((await homeScreenTipForAll(ctx.db, group.id)) ? { homeScreenTipForAll: true as const } : {}),
     ...((await gameDayTextForAll(ctx.db, group.id)) ? { gameDayTextForAll: true as const } : {}),
@@ -2595,6 +2602,16 @@ export async function setTotalsRefreshSwitch(ctx: Ctx, body: Record<string, unkn
   await setTotalsRefreshForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'totals_refresh_on' : 'totals_refresh_off', {}, ctx.nowIso);
   return { ok: true, on };
+}
+
+/** PUT /api/admin/christmas-skin-switch { mode: 'off' | 'me' | 'all' }: Settings > Feature switches > "Christmas skin" (Zip 38), a 3-way switch. Look only: the player screens' Christmas theme. */
+export async function setChristmasSkinSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const mode = parseMode(typeof body.mode === 'string' ? body.mode : null);
+  if (!mode) throw new HttpError(400, 'bad_mode', 'Choose Off, Just me or Everyone.');
+  await setChristmasSkinMode(ctx.db, group.id, mode, ctx.nowIso);
+  await audit(ctx.db, group.id, null, mode === 'all' ? 'christmas_skin_everyone' : mode === 'me' ? 'christmas_skin_me' : 'christmas_skin_off', {}, ctx.nowIso);
+  return { ok: true, mode };
 }
 
 /** PUT /api/admin/home-screen-tip-switch { on }: Settings > Feature switches > "Home Screen tip" (Zip 37). Look only: a card on the player's Home. */

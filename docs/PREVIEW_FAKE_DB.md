@@ -54,6 +54,8 @@ Never give Vic, Wren or Zoe a fee or a game that ends before the next re-seed: t
 
 The preview's switch rows are live's ON rows plus the zip being built (PREVIEW SWITCHES RULE): `LATER_ON_LIVE` and `BUILDING_ON` in `scripts/preview-world-small.ts`. Read on live Sun Nov 8, 7:05 PM: every Settings row is on, including Game day card, Second Chance and After-game cards, so the preview has them all, plus Unpaid nudge. A row that is off on live stays off here; `?gameday=on`, `/admin?secondchance=on` or `?aftergame=on` shows that card on one phone.
 
+Zip 38 (Christmas skin): the calm profile also keeps tonight's games and tomorrow's game, for PLAYERS only. The preview has the Christmas skin switch's two non-off modes by link (previews only, `CHRISTMAS_SKIN_PREVIEW`): **Just me:** `/?as=Alex&xmasmode=me` (the normal site and normal logo; tap the normal logo to switch the theme; any date; Alex is in no game until you tap I'm in). **Everyone:** `/?as=Alex&xmasmode=all&xmasdate=2026-12-05` (the Christmas logo, bubble and theme tap; any day from Nov 27 to Dec 31 works; a day before shows the plain site; no `xmasmode` acts like Everyone). `&xmasreset=1` makes the phone forget its theme choice and bubbles. In Just me the choice is saved on the server for Alex (the fake group): tap the logo again to switch it off. Tonight's games exist only for the day the preview was seeded (`?gamedaytest=on` shows the next game as today).
+
 Links (calm previews only; never on live): `/?as=Vic`, `/?as=Wren`, `/?as=Zoe`, `/?as=Quinn` and so on pick that name on the phone.
 Not on the small preview: games with 11 or 12 in (there are only 10 names; the local browser tests still have them).
 

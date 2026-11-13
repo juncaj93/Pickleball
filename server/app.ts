@@ -62,6 +62,8 @@ route('POST', '/api/access', enterGroupWord);
 route('GET', '/api/group', (ctx) => player.groupView(ctx));
 route('GET', '/api/group/version', (ctx) => player.groupVersion(ctx));
 route('POST', '/api/me', player.pickName);
+// Zip 38: Just me: the organizer's own player saves their Christmas theme choice (see server/player.ts).
+route('POST', '/api/christmas-skin-me', player.christmasSkinMe);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('PUT', '/api/me/days', player.setMyDays);
@@ -182,6 +184,8 @@ route('PUT', '/api/admin/extended-time-switch', admin.setExtendedTimeSwitch);
 // Zip 37: Home Screen tip and Game day text.
 route('PUT', '/api/admin/home-screen-tip-switch', admin.setHomeScreenTipSwitch);
 route('PUT', '/api/admin/game-day-text-switch', admin.setGameDayTextSwitch);
+// Zip 38: Christmas skin.
+route('PUT', '/api/admin/christmas-skin-switch', admin.setChristmasSkinSwitch);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));
