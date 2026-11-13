@@ -157,7 +157,7 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 7).map((e) => e.getAttribute('data-row')));
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.filter((e) => e.getAttribute('data-row') !== 'cheaperFixAll').slice(0, 7).map((e) => e.getAttribute('data-row')));
     // (Zip 24's Booking hours row, Zip 27's Spent matches Totals row, Zip 30's Acting for others row Zip 32's Players sheet redo row, Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit above it.)
     assert(first[0] === 'extendedTimeAll' && first[1] === 'checkInPayAll' && first[2] === 'playersSheetRedoAll' && first[3] === 'actingOthersAll' && first[4] === 'spentTotalsAll' && first[5] === 'bookingHoursAll' && first[6] === 'totalsRefreshAll', `newest first: ${first}`);
     const row = page.locator('[data-row="totalsRefreshAll"]');

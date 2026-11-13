@@ -623,6 +623,8 @@ export interface AdminDashboard {
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts), only while on (off: the answer is exactly as before): Players "Spent" counted the way Totals counts; and its Settings row. */
   spentTotals?: true;
   spentTotalsForAll?: true;
+  /** Zip 39 "Made cheaper after paying" (shared/cheaperFix.ts): its Settings row (the screens never read it; it changes only money moves). */
+  cheaperFixForAll?: true;
   /** Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts), only while on (off: the answer is exactly as before): the new Players sheet look; and its Settings row. */
   playersSheetRedo?: true;
   playersSheetRedoForAll?: true;

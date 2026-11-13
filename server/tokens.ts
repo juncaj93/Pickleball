@@ -7,6 +7,7 @@ import { HttpError } from './http';
 import { audit, confirmedOf, type GroupRow, loadRoster, type SessionRow, settingsOf } from './repo';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, joinSession, recordLateDrop, withdraw } from './roster';
 import { lateFeesFor } from './lateFees';
+import { cheaperFixFor } from './cheaperFix';
 import * as v from './validate';
 import { afterTap, watchTap } from './alerts';
 import { capOf } from '../shared/settings';
@@ -144,7 +145,8 @@ export async function actOnToken(ctx: Ctx, body: Record<string, unknown>) {
     if (burned.meta.changes !== 1) throw new HttpError(410, 'link_invalid', 'This link was already used.');
     const watch = await watchTap(ctx, r.group, r.session, r.token.player_id);
     const lateFees = await lateFeesFor(ctx, r.group.id);
-    const res = await withdraw(ctx.db, r.group, r.session, r.token.player_id, ctx.nowMs, { lateFees });
+    const cheaperFix = lateFees && (await cheaperFixFor(ctx, r.group.id, false));
+    const res = await withdraw(ctx.db, r.group, r.session, r.token.player_id, ctx.nowMs, { lateFees, cheaperFix });
     const late = res.freedSpot ? await recordLateDrop(ctx.db, r.session, r.token.player_id, ctx.nowMs, settingsOf(r.group), lateFees) : false;
     outcome = 'withdrawn';
     if (res.changed) await logLinkAction(ctx, r, 'withdraw', outcome, { late, ...(res.lateFee ? { owes: true } : {}) });

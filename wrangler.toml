@@ -215,6 +215,11 @@ TOTALS_REFRESH = "on"
 # credit month shown as "$8 credit". Organizer only, display only. "on" here only ALLOWS it; who gets it is Settings > Feature switches >
 # "Spent matches Totals" (off at ship = nobody), plus a phone opened once with /admin?spenttotals=on. "off" = the kill switch. Needs a deploy.
 SPENT_TOTALS = "on"
+# Zip 39 "Made cheaper after paying" (shared/cheaperFix.ts, server/cheaperFix.ts): a late fee kept on a game whose price went DOWN after a
+# player paid keeps only the fee and gives the rest back as credit (late cancel with the fee kept, late drop, no-show), and a new Price per
+# player reprices open games (Audit A, A-18). MOVES MONEY. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Made cheaper
+# after paying" (off at ship = nobody), plus an organizer phone opened once with /admin?cheaperfix=on. "off" = the kill switch. Needs a deploy.
+CHEAPER_FIX = "on"
 # Zip 30 "Acting for others" (shared/actingForOthers.ts): each phone keeps a random code and a player's own tap writes it into its History
 # line (migration 0018); organizer screens point out a tap made for someone else (a History note and a Home card). Organizer only, look
 # only. "on" here only ALLOWS it; who sees it is Settings > Feature switches > "Acting for others" (off at ship = nobody), plus a phone
@@ -297,6 +302,7 @@ SECOND_CHANCE_TEST = "on"
 UNPAID_NUDGE = "on"
 TOTALS_REFRESH = "on"
 SPENT_TOTALS = "on"
+CHEAPER_FIX = "on"
 ACTING_FOR_OTHERS = "on"
 CHECKIN_PAY_LINE = "on"
 PLAYERS_SHEET_REDO = "on"

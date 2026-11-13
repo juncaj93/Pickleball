@@ -2,7 +2,7 @@ import type { RosterStatus } from '../shared/api';
 import { deadlineMs } from '../shared/cards';
 import { capOf, type GroupSettings } from '../shared/settings';
 import { DB_LIMIT_MESSAGE } from '../shared/zip10';
-import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, holdShortCashStatements, moneyBackAt, seatMoneyBackStatements } from './credit';
+import { auditAutoCredit, type AutoCredit, autoCreditFor, autoCreditStatements, holdShortCashStatements, moneyBackAt, seatMoneyBackStatements, splitSeatStatements } from './credit';
 import { finishLateDropClear, LEAVES_SHORT, OPEN_FEE, OPEN_LATE_DROP, tagOldestLateDrop } from './lateFees';
 import { lateFeeCutoffMs } from '../shared/lateFees';
 import { newId } from './crypto';
@@ -351,7 +351,8 @@ export async function withdraw(
   playerId: string,
   nowMs: number,
   /** LATE_FEES on for this tap (server/lateFees.ts): a player's own drop inside the 12 hours that leaves the game short owes. */
-  opts: { lateFees?: boolean } = {},
+  /** cheaperFix (Zip 39, server/cheaperFix.ts): such a drop on a seat paid ABOVE the fee (the game was made cheaper after they paid) keeps only the fee. */
+  opts: { lateFees?: boolean; cheaperFix?: boolean } = {},
 ): Promise<{ freedSpot: boolean; changed: boolean; promoted: Promotion[]; creditBackCents: number; creditReturnedCents: number; lateFee: { paid: boolean; oweCents?: number } | null }> {
   assertOpen(session, nowMs);
   const existing = await existingRow(db, session.id, playerId);
@@ -361,7 +362,7 @@ export async function withdraw(
   const leaving = existing.status !== 'withdrawn';
   // Read first, for the answer only: the credit on the seat now, and the id the cash-back entry will get.
   const { results: onSeat } = await db
-    .prepare("SELECT id, amount_cents FROM credit_ledger WHERE kind = 'used' AND COALESCE(reason, '') <> 'cash' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+    .prepare("SELECT id, amount_cents FROM credit_ledger WHERE kind = 'used' AND COALESCE(reason, '') <> 'cash' AND session_id = ? AND player_id = ? AND ended_at IS NULL ORDER BY created_at, rowid")
     .bind(session.id, playerId)
     .all<{ id: string; amount_cents: number }>();
   const entryId = newId();
@@ -416,6 +417,10 @@ export async function withdraw(
           seatWhere: (sp) => `${sp}.status = 'withdrawn' AND ${sp}.played = 0 AND ${sp}.late_drop_at = ?1 AND ${sp}.late_drop_done_at IS NULL`,
         })
       : []),
+    // Zip 39 ("Made cheaper after paying", server/cheaperFix.ts; switch off: nothing here): the mirror of the hold above. A seat that holds MORE
+    // than the fee (the game was made cheaper after they paid) keeps exactly the fee on the game, and the rest comes back now as credit
+    // ('dropped'): the cash part first, then credit used on it. Only this drop's own new debt, read as it was before this batch.
+    ...(leaving && feeDrop && !isOrg && opts.cheaperFix ? await cheaperDropStatements(db, group, session, playerId, onSeat, nowIso) : []),
   ]);
   const changed = leaving && out[0].meta.changes === 1;
   const [kept, , ended] = out.slice(leaving ? 1 : 0);
@@ -444,6 +449,45 @@ export async function withdraw(
   // A court on Waitlist never moves anybody in or out of line by itself: a drop frees a seat for the first real waiter like any game.
   const promoted = changed ? await settle(db, session, nowIso, settingsOf(group)) : [];
   return { freedSpot: changed && existing.status === 'confirmed', changed, promoted, creditBackCents: cash, creditReturnedCents: credit, lateFee };
+}
+
+/**
+ * Zip 39: the late drop's trim (see withdraw). Nothing when the seat holds the fee or less, or carries an I paid nobody confirmed (a claim).
+ * The statements only run while this drop's own debt is on the seat (late_drop_at is this moment, still open) and the payment is as read.
+ */
+async function cheaperDropStatements(
+  db: D1Database,
+  group: GroupRow,
+  session: SessionRow,
+  playerId: string,
+  onSeat: { id: string; amount_cents: number }[],
+  nowIso: string,
+) {
+  const existing = await db
+    .prepare('SELECT id, player_id, payment_status, payment_amount_cents, refunded_at, self_paid_at FROM session_players WHERE session_id = ? AND player_id = ?')
+    .bind(session.id, playerId)
+    .first<{ id: string; player_id: string; payment_status: string; payment_amount_cents: number | null; refunded_at: string | null; self_paid_at: string | null }>();
+  if (!existing) return [];
+  const paid = existing.payment_status === 'paid' && !existing.refunded_at;
+  if (paid && existing.self_paid_at) return [];
+  const fee = flatOf(session, settingsOf(group));
+  const held = (
+    await db
+      .prepare("SELECT COALESCE(SUM(amount_cents), 0) AS c FROM credit_ledger WHERE kind = 'used' AND reason = 'cash' AND session_id = ? AND player_id = ? AND ended_at IS NULL")
+      .bind(session.id, existing.player_id)
+      .first<{ c: number }>()
+  )?.c ?? 0;
+  const seat = {
+    playerId: existing.player_id,
+    paid,
+    paymentCents: paid ? (existing.payment_amount_cents ?? 0) : 0,
+    used: onSeat.map((u) => ({ id: u.id, cents: u.amount_cents })),
+    heldCashCents: held,
+  };
+  if ((seat.paid ? seat.paymentCents : seat.used.reduce((s, u) => s + u.cents, 0) + held) <= fee) return [];
+  if (!/^[0-9A-Za-z-]+$/.test(existing.id) || !/^[0-9A-Za-z:.\-]+$/.test(nowIso)) throw new Error('unsafe sql text');
+  const guard = `EXISTS (SELECT 1 FROM session_players g WHERE g.id = '${existing.id}' AND g.status = 'withdrawn' AND g.played = 0 AND g.late_drop_at = '${nowIso}' AND g.late_drop_done_at IS NULL)`;
+  return splitSeatStatements(db, { groupId: group.id, sessionId: session.id, seat, priceCents: fee, nowIso, guard, seatStatus: 'withdrawn', reason: 'dropped' }).statements;
 }
 
 /**

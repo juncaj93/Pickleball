@@ -24,6 +24,7 @@ import { newId } from './crypto';
 import { claimSlot, releaseSlot } from './rate';
 import { auditLateFeeOwed, clearLateDrop, confirmAttendance, decline, joinSession, recordLateDrop, withdraw } from './roster';
 import { lateFeesFor } from './lateFees';
+import { cheaperFixFor } from './cheaperFix';
 
 /**
  * "Good news: someone took your spot for Tue, Nov 3. You no longer owe $14." The cleared late fees of THIS player only
@@ -541,7 +542,9 @@ export async function playerWithdraw(ctx: Ctx) {
   const who = await actingOn(ctx);
   const watch = await watchTap(ctx, who.group, who.session, who.playerId);
   const lateFees = await lateFeesFor(ctx, who.group.id);
-  const res = await withdraw(ctx.db, who.group, who.session, who.playerId, ctx.nowMs, { lateFees });
+  // Zip 39: a player's phone follows the Settings row only (cheaperFixFor with organizer false: no private link on a player phone).
+  const cheaperFix = lateFees && (await cheaperFixFor(ctx, who.group.id, false));
+  const res = await withdraw(ctx.db, who.group, who.session, who.playerId, ctx.nowMs, { lateFees, cheaperFix });
   const late = res.freedSpot ? await recordLateDrop(ctx.db, who.session, who.playerId, ctx.nowMs, settingsOf(who.group), lateFees) : false;
   const result = res.changed ? 'withdrawn' : 'not_in_session';
   if (res.changed) await logAction(ctx, who, 'withdraw', result, { late, ...(res.lateFee ? { owes: true } : {}) });

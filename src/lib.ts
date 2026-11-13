@@ -5,6 +5,7 @@ import { UNPAID_NUDGE } from '../shared/unpaidNudge';
 import { AFTER_GAME_CARD } from '../shared/afterGame';
 import { TOTALS_REFRESH } from '../shared/totalsRefresh';
 import { SPENT_TOTALS } from '../shared/spentTotals';
+import { CHEAPER_FIX } from '../shared/cheaperFix';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
 import { PLAYERS_SHEET_REDO } from '../shared/playersSheetRedo';
 import { CHECKIN_PAY_LINE } from '../shared/checkInPay';
@@ -223,6 +224,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(TOTALS_REFRESH.link)) headers[TOTALS_REFRESH.header] = 'on';
   // Zip 27 "Spent matches Totals" private test switch for this phone (/admin?spenttotals=on, =off ends it). See server/spentTotals.ts.
   if (gameDayTest(SPENT_TOTALS.link)) headers[SPENT_TOTALS.header] = 'on';
+  // Zip 39 "Made cheaper after paying" private test switch for this phone (/admin?cheaperfix=on, =off ends it). Only an organizer phone's counts (server/cheaperFix.ts).
+  if (gameDayTest(CHEAPER_FIX.link)) headers[CHEAPER_FIX.header] = 'on';
   // Zip 30 "Acting for others" private test switch for this phone (/admin?actingothers=on, =off ends it). See server/actingForOthers.ts.
   if (gameDayTest(ACTING_OTHERS.link)) headers[ACTING_OTHERS.header] = 'on';
   // Zip 34 "Check-in pay line" private test switch for this phone (/admin?checkinpay=on, =off ends it). See server/checkInPay.ts.
@@ -790,7 +793,7 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);

@@ -452,12 +452,17 @@ export interface SplitSeat {
  *   (a ledger entry is never edited, only ended);
  * - an unpaid seat whose credit now covers the split price is paid with it.
  * Nothing moves when the seat holds the split price or less (they owe the rest). Returns the statements and what came back.
+ * Zip 39 ("Made cheaper after paying", server/cheaperFix.ts) uses the same moves to keep exactly the fee on a seat paid above it: a late cancel
+ * with the fee kept (no split), and a late drop (`seatStatus` 'withdrawn', `reason` 'dropped': the seat has already left when these run).
+ * Left out, both are exactly the split's ('confirmed', 'canceled').
  */
 export function splitSeatStatements(
   db: D1Database,
-  args: { groupId: string; sessionId: string; seat: SplitSeat; priceCents: number; nowIso: string; guard: string },
+  args: { groupId: string; sessionId: string; seat: SplitSeat; priceCents: number; nowIso: string; guard: string; seatStatus?: 'confirmed' | 'withdrawn'; reason?: 'canceled' | 'dropped' },
 ): { statements: D1PreparedStatement[]; cashBackCents: number; creditBackCents: number } {
   const { groupId, sessionId, seat, priceCents, nowIso, guard } = args;
+  const status = args.seatStatus ?? 'confirmed';
+  const why = args.reason ?? 'canceled';
   const usedCents = seat.used.reduce((s, u) => s + u.cents, 0);
   const holds = seat.paid ? seat.paymentCents : usedCents + seat.heldCashCents;
   const excess = holds - priceCents;
@@ -468,7 +473,7 @@ export function splitSeatStatements(
     db
       .prepare(
         `UPDATE session_players SET payment_status = 'paid', payment_amount_cents = ?1, paid_at = COALESCE(paid_at, ?2), self_paid_at = NULL, payment_updated_at = ?2, updated_at = ?2
-         WHERE session_id = ?3 AND player_id = ?4 AND status = 'confirmed' AND ${sameSeat} AND ${guard}`,
+         WHERE session_id = ?3 AND player_id = ?4 AND status = '${status}' AND ${sameSeat} AND ${guard}`,
       )
       .bind(cents, nowIso, sessionId, seat.playerId);
   if (excess <= 0) {
@@ -488,8 +493,8 @@ export function splitSeatStatements(
       db
         .prepare(
           `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
-           SELECT ?1, ?2, ?3, 'kept', ?4, ?5, ?6, 'canceled'
-           WHERE EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = 'confirmed' AND ${sameSeat}) AND ${guard}`,
+           SELECT ?1, ?2, ?3, 'kept', ?4, ?5, ?6, '${why}'
+           WHERE EXISTS (SELECT 1 FROM session_players WHERE session_id = ?5 AND player_id = ?3 AND status = '${status}' AND ${sameSeat}) AND ${guard}`,
         )
         .bind(newId(), groupId, seat.playerId, fromCash, sessionId, nowIso),
     );
@@ -499,9 +504,9 @@ export function splitSeatStatements(
     statements.push(
       db
         .prepare(
-          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'canceled'
+          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = '${why}'
            WHERE session_id = ?2 AND player_id = ?3 AND ended_at IS NULL AND reason = 'cash'
-             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND ${sameSeat}) AND ${guard}`,
+             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = '${status}' AND ${sameSeat}) AND ${guard}`,
         )
         .bind(nowIso, sessionId, seat.playerId),
     );
@@ -513,7 +518,7 @@ export function splitSeatStatements(
             .prepare(
               `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
                SELECT ?1, ?2, ?3, '${kind}', ?4, ?5, ?6, 'cash'
-               WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND reason = 'cash' AND ended_at = ?6 AND ended_reason = 'canceled') AND ${guard}`,
+               WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND reason = 'cash' AND ended_at = ?6 AND ended_reason = '${why}') AND ${guard}`,
             )
             .bind(newId(), groupId, seat.playerId, keep, sessionId, nowIso),
         );
@@ -526,9 +531,9 @@ export function splitSeatStatements(
     statements.push(
       db
         .prepare(
-          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = 'canceled'
+          `UPDATE credit_ledger SET ended_at = ?1, ended_reason = '${why}'
            WHERE id IN (${ids}) AND ended_at IS NULL AND kind = 'used'
-             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = 'confirmed' AND ${sameSeat}) AND ${guard}`,
+             AND EXISTS (SELECT 1 FROM session_players WHERE session_id = ?2 AND player_id = ?3 AND status = '${status}' AND ${sameSeat}) AND ${guard}`,
         )
         .bind(nowIso, sessionId, seat.playerId),
     );
@@ -539,7 +544,7 @@ export function splitSeatStatements(
           .prepare(
             `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at)
              SELECT ?1, ?2, ?3, 'used', ?4, ?5, ?6
-             WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE id = ${first} AND ended_at = ?6 AND ended_reason = 'canceled') AND ${guard}`,
+             WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE id = ${first} AND ended_at = ?6 AND ended_reason = '${why}') AND ${guard}`,
           )
           .bind(newId(), groupId, seat.playerId, stays, sessionId, nowIso),
       );
