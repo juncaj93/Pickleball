@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect } from 'react';
 import type { SkinMode } from '../../shared/christmasSkin';
 import { api } from '../lib';
+import { makeMeSaver } from './meSave';
 import { resetSkin, setMePersist, setSkinAvailable } from './store';
 
 /**
@@ -12,9 +13,9 @@ export function useSkinRoot(mode: SkinMode, demo: boolean, meOn = false) {
   useLayoutEffect(() => {
     setSkinAvailable(mode, demo, meOn);
   }, [mode, demo]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Just me: a tap on the logo saves the choice on the server (so a Home Screen app, which keeps its own storage, has it too). A failure is quiet.
+  // Just me: a tap on the logo saves the choice on the server (so a Home Screen app, which keeps its own storage, has it too). One request at a time, always ending on the latest choice (src/skin/meSave.ts); a failure is retried, then quiet.
   useEffect(() => {
-    setMePersist((on) => void api('POST', '/api/christmas-skin-me', { on }).catch(() => {}));
+    setMePersist(makeMeSaver((on) => api('POST', '/api/christmas-skin-me', { on })));
     return () => setMePersist(null);
   }, []);
   // A layout cleanup runs before the next screen paints, so no admin screen can show a frame of the theme.

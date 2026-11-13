@@ -20,11 +20,15 @@ async function hasMark(db: D1Database, groupId: string, task: string): Promise<b
   const row = await db.prepare(SWITCH_READ).bind(groupId, task).first().catch(() => null);
   return !!row;
 }
+const DELETE_MARK = "DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark'";
+const INSERT_MARK = "INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)";
+/** The statements that make one mark exactly on or off (the delete and the insert always travel together, so two quick saves can never leave a row behind). */
+const markStatements = (db: D1Database, groupId: string, task: string, on: boolean, nowIso: string) => [
+  db.prepare(DELETE_MARK).bind(groupId, task),
+  ...(on ? [db.prepare(INSERT_MARK).bind(newId(), groupId, task, nowIso)] : []),
+];
 async function setMark(db: D1Database, groupId: string, task: string, on: boolean, nowIso: string): Promise<void> {
-  await db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark'").bind(groupId, task).run();
-  if (on) {
-    await db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), groupId, task, nowIso).run();
-  }
+  await db.batch(markStatements(db, groupId, task, on, nowIso));
 }
 
 /** The Settings row alone (no phone, no request): Off, Just me or Everyone. The kill switch is not visible there. */
@@ -35,8 +39,8 @@ export async function christmasSkinMode(db: D1Database, groupId: string): Promis
 
 /** Save the 3-way choice: exactly one of the two mode rows (or neither). */
 export async function setChristmasSkinMode(db: D1Database, groupId: string, mode: SkinMode, nowIso: string): Promise<void> {
-  await setMark(db, groupId, CHRISTMAS_SKIN.task, mode === 'all', nowIso);
-  await setMark(db, groupId, CHRISTMAS_SKIN.meTask, mode === 'me', nowIso);
+  // One batch: the three-way choice changes in one step (never two rows, never a half-changed switch).
+  await db.batch([...markStatements(db, groupId, CHRISTMAS_SKIN.task, mode === 'all', nowIso), ...markStatements(db, groupId, CHRISTMAS_SKIN.meTask, mode === 'me', nowIso)]);
 }
 
 /** The organizer's own theme choice in Just me (on = the Christmas theme is showing for them). */

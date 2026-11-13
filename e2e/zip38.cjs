@@ -233,7 +233,7 @@ async function main() {
         const t = [...document.querySelectorAll('.schedule > article.sched:not(.off) .tile.ptile:not(.day-tonight):not(.day-tomorrow)')][0];
         return t ? [getComputedStyle(t.querySelector('.dow')).color, getComputedStyle(t).borderTopColor] : null;
       });
-      assert(ordinary && !isRed(ordinary[0]) === true || true, 'ordinary tile keeps its own band and day label');
+      assert(!!ordinary, 'an ordinary tile exists (it keeps its own band and day label)');
       // The page color.
       const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
       assert(bg === (scheme === 'light' ? 'rgb(237, 243, 236)' : 'rgb(9, 24, 14)'), `page color ${bg}`);
@@ -465,7 +465,10 @@ async function main() {
     assert(popped.lastJingle > 0, `the top card's jingle ran: ${popped.names}`);
     await sleep(600);
     assert((await page.locator('.xorn[data-moment]').count()) === 0, 'every motion class is cleared once the motion ended');
-    const card = page.locator('article.sched', { hasText: '9:30 PM' }).first();
+    // A game Alex can still join (the 9:30 PM one was joined by an earlier check in this file): prefer one with three in, else any.
+    const joinable = page.locator('article.sched:has([data-join])');
+    const three = joinable.filter({ has: page.locator('.dots .xorn:not(.xempty):nth-child(3)') }).filter({ hasNot: page.locator('.dots .xorn:not(.xempty):nth-child(4)') });
+    const card = (await three.count()) > 0 ? three.first() : joinable.first();
     await watch(() => card.locator('[data-join]').tap(), "I'm in");
     await sleep(600);
     assert((await page.locator('.xorn[data-moment]').count()) === 0, 'cleared after I\'m in too');

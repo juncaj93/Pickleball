@@ -154,7 +154,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  /* Zip 38 (Alex): the sweep is about 60 percent as bright as it was and softer (a wider, gentler band); same timing. */
+  /* Zip 38 (Alex): the sweep is softer: half as bright in round 1, then another 20 to 25 percent less (13/12/12 percent where it was 35/30/30, about 37 to 40 percent of the original), in a wider, gentler band; same timing. */
   background: linear-gradient(110deg, transparent 22%, var(--z7-sweep) 50%, transparent 78%);
   background-size: 300% 100%;
   background-position: 130% 0;

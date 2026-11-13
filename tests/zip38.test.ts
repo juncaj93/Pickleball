@@ -526,7 +526,7 @@ describe('Part C: the 3-way switch (CHRISTMAS_SKIN: Off, Just me, Everyone; ship
     await setMode(w, 'off');
     expect(everyoneOutside).toBe(JSON.stringify(await group(w)));
   });
-  it('Just me costs one read for the organizer\'s own player only; outside the window nobody else asks anything; inside it everyone asks the usual one', async () => {
+  it('Just me: the organizer\'s own player alone asks the Just me rows (two reads); outside the window nobody else asks anything; inside it everyone asks the usual one', async () => {
     const w = await setupGroup();
     setOrganizer(w);
     await setMode(w, 'me');
@@ -677,6 +677,69 @@ describe('Part D: Just me (the organizer\'s own player only)', () => {
   });
 });
 
+describe('Part D2: saving the Just me choice (quick taps, failures)', () => {
+  it('quick taps are sent one at a time and the LAST choice always wins', async () => {
+    const { makeMeSaver } = await import('../src/skin/meSave');
+    const sent: boolean[] = [];
+    const open: (() => void)[] = [];
+    let inFlight = 0;
+    let maxInFlight = 0;
+    const save = makeMeSaver(
+      (on) =>
+        new Promise<void>((resolve) => {
+          inFlight++;
+          maxInFlight = Math.max(maxInFlight, inFlight);
+          sent.push(on);
+          open.push(() => {
+            inFlight--;
+            resolve();
+          });
+        }),
+    );
+    save(true);
+    save(false);
+    save(true);
+    save(false);
+    await Promise.resolve();
+    expect(sent).toEqual([true]); // only the first is on its way
+    open.shift()!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(sent).toEqual([true, false]); // then ONLY the latest choice, the ones in between are dropped
+    open.shift()!();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(maxInFlight).toBe(1);
+    expect(sent.at(-1)).toBe(false);
+  });
+  it('a failed save is tried again (3 times at most); a newer choice replaces a failing older one', async () => {
+    const { makeMeSaver } = await import('../src/skin/meSave');
+    let calls = 0;
+    const save = makeMeSaver(async () => {
+      calls++;
+      if (calls < 3) throw new Error('offline');
+    });
+    save(true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls).toBe(3);
+    const sent: boolean[] = [];
+    const flaky = makeMeSaver(async (on) => {
+      sent.push(on);
+      if (sent.length === 1) {
+        flakyLatest(false); // a newer tap arrives while the first is failing
+        throw new Error('offline');
+      }
+    });
+    const flakyLatest = flaky;
+    flaky(true);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(sent).toEqual([true, false]);
+  });
+  it('the server\'s change is one batch, so two quick saves can never leave a row behind', () => {
+    const src = readFileSync(new URL('../server/christmasSkin.ts', import.meta.url), 'utf8');
+    expect(src).toContain('await db.batch(markStatements(db, groupId, task, on, nowIso));');
+    expect(src).toContain('await db.batch([...markStatements(db, groupId, CHRISTMAS_SKIN.task');
+  });
+});
+
 describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
   const css = readFileSync(new URL('../src/skin/christmas.css', import.meta.url), 'utf8');
   const theme = readFileSync(new URL('../src/skin/theme.tsx', import.meta.url), 'utf8');
@@ -701,7 +764,9 @@ describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
   });
   it('every ornament animation plays to the end: each ornament times its own motion and clears it only when the LAST animation of the motion ends', () => {
     expect(theme).toContain("const LAST_ANIMATION: Record<string, string> = { xin: 'xdrop', 'xin xin-j': 'xjingle', xjoin: 'xjoin', 'xjoin xjoin-j': 'xjingle', 'xjingle xjingle-j': 'xjingle' };");
-    expect(theme).toContain('e.animationName === LAST_ANIMATION[playing.cls]');
+    expect(theme).toContain('if (e.animationName === LAST_ANIMATION[playing.cls]) finish(playing.id);');
+    // A motion that arrives while another is still playing waits for it (a 4th player joining right after the 3rd cannot cut the 3rd's drop short).
+    expect(theme).toContain('if (current.current) waiting.current = { id: momentId, cls: moment };');
     expect(theme).toContain('MOTION_SAFETY_MS = 4500');
     // The old cut-off: the pop-in class was removed by a 1.7 s timer while the first card's jingle runs until 2.1 s. No timer decides that any more.
     expect(ui).not.toMatch(/popIn \? \(first/);
@@ -716,7 +781,7 @@ describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
     // The regular theme keeps a status tile's own border see-through (its ring is drawn by .tb), which is what stops the doubled ring.
     expect(readFileSync(new URL('../src/time-shift.css', import.meta.url), 'utf8')).toMatch(/\.tile\.ts \{\s*border-color: transparent !important;/);
   });
-  it('the tonight shimmer: about 60 percent as bright as in round 1 (13 / 12 / 12 percent, from 35 / 30 / 30 originally), softer band, same timing (this change is on live)', () => {
+  it('the tonight shimmer: round 1 halved it (17 / 15 / 15), round 2 took another 20 to 25 percent off (13 / 12 / 12, from 35 / 30 / 30 originally), softer band, same timing (this change is on live)', () => {
     const z7 = readFileSync(new URL('../src/zip7.css', import.meta.url), 'utf8');
     expect([...z7.matchAll(/--z7-sweep: rgb\(255 255 255 \/ (\d+)%\);/g)].map((m) => m[1])).toEqual(['13', '12', '12']);
     expect(z7).toContain('linear-gradient(110deg, transparent 22%, var(--z7-sweep) 50%, transparent 78%)');

@@ -44,13 +44,31 @@ export function Ornament({ index, empty, className = '', style, moment, momentId
   const [playing, setPlaying] = useState<{ id: number; cls: string } | null>(null);
   const seen = useRef<number | undefined>(undefined);
   const safety = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // What is playing right now, and the one motion waiting for it to end (a second player joining while the first one's ornament is still dropping:
+  // the new motion starts when the old one has finished, so nothing is ever cut off).
+  const current = useRef<{ id: number; cls: string } | null>(null);
+  const waiting = useRef<{ id: number; cls: string } | null>(null);
+  const begin = (m: { id: number; cls: string }) => {
+    current.current = m;
+    setPlaying(m);
+    clearTimeout(safety.current);
+    safety.current = setTimeout(() => finish(m.id), MOTION_SAFETY_MS);
+  };
+  const finish = (id: number) => {
+    if (current.current?.id !== id) return;
+    current.current = null;
+    setPlaying(null);
+    clearTimeout(safety.current);
+    const next = waiting.current;
+    waiting.current = null;
+    if (next) begin(next);
+  };
   useLayoutEffect(() => {
     if (!moment || momentId === undefined || seen.current === momentId) return;
     seen.current = momentId;
-    setPlaying({ id: momentId, cls: moment });
-    clearTimeout(safety.current);
-    safety.current = setTimeout(() => setPlaying((p) => (p && p.id === momentId ? null : p)), MOTION_SAFETY_MS);
-  }, [moment, momentId]);
+    if (current.current) waiting.current = { id: momentId, cls: moment };
+    else begin({ id: momentId, cls: moment });
+  }, [moment, momentId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => clearTimeout(safety.current), []);
   const [c, d] = COLS[index % 4];
   if (empty) {
@@ -63,7 +81,7 @@ export function Ornament({ index, empty, className = '', style, moment, momentId
   }
   const onEnd = (e: AnimationEvent<SVGSVGElement>) => {
     if (e.target !== e.currentTarget || !playing) return;
-    if (e.animationName === LAST_ANIMATION[playing.cls]) setPlaying(null);
+    if (e.animationName === LAST_ANIMATION[playing.cls]) finish(playing.id);
   };
   return (
     <svg className={`xorn ${playing?.cls ?? ''} ${className}`.replace(/\s+/g, ' ').trim()} style={style} viewBox="0 0 22 26" aria-hidden="true" onAnimationEnd={onEnd} data-moment={playing?.id}>
