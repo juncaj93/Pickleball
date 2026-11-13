@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { firstSession, playerPhone, setupGroup } from './harness';
+import { firstSession, playerPhone, setupGroup, withoutIds } from './harness';
 
 /** Four in. With the max set to 4 the game is full; at the default max of 10 it is simply on. */
 async function fullSession(maxPlayers = 10) {
@@ -32,7 +32,7 @@ describe('confirmation links', () => {
 
     const look = await anon.call('POST', '/api/link', { token: blair });
     expect(look.data).toMatchObject({ scope: 'attendance', playerName: 'Blair', valid: true, myStatus: 'confirmed' });
-    expect(JSON.stringify(look.data)).not.toMatch(/555|phone|venmo|payment/i);
+    expect(withoutIds(JSON.stringify(look.data))).not.toMatch(/555|phone|venmo|payment/i);
 
     expect((await anon.call('POST', '/api/link/act', { token: blair, action: 'confirm' })).data.outcome).toBe('confirmed_attendance');
     expect((await anon.call('POST', '/api/link/act', { token: blair, action: 'withdraw' })).data.outcome).toBe('withdrawn');

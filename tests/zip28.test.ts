@@ -88,15 +88,9 @@ describe('A-06: the deploy guard', () => {
     git('commit', '-q', '-m', 'one');
     const run = (kind: string) => spawnSync('node', [join(ROOT, 'scripts/deploy.mjs'), kind, '--dry-run'], { cwd: dir, encoding: 'utf8' });
 
-    const live = run('production');
-    expect(live.status).toBe(0);
-    expect(live.stdout).toContain('--branch main');
-
-    // `npm run deploy --dry-run` (no `--`) reaches the script only as this environment value: it must still be a dry run.
-    const npmDry = spawnSync('node', [join(ROOT, 'scripts/deploy.mjs'), 'production'], { cwd: dir, encoding: 'utf8', env: { ...process.env, npm_config_dry_run: 'true' } });
-    expect(npmDry.status).toBe(0);
-    expect(npmDry.stdout).toContain('--branch main');
-
+    // A live deploy now also reads GitHub and Cloudflare (Zip 35), so the "all good" live case is run in this process with fake facts
+    // (tests/zip35-deploy-guard.test.ts has the full set); the refusals below stop before any network read.
+    expect(run('preview').status).toBe(1); // main: a preview from main is refused
     writeFileSync(join(dir, 'a.txt'), 'two');
     const dirty = run('production');
     expect(dirty.status).toBe(1);

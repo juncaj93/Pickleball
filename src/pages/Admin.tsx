@@ -56,7 +56,7 @@ export function AdminApp() {
   // Instant taps (INSTANT_TAPS): a poll that set off before a save never draws over it, and taps still saving are drawn in. Off: as before.
   const tracker = useInstantTracker();
   const load = useLoad(() => api<AdminDashboard>('GET', '/api/admin/dashboard'), [pretend, demo], tracker);
-  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
+  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker, load.data?.tapGuardFix === true);
   useRefreshOnReturn(load.refresh);
   // Zip 12 step C, "Instant admin" (src/lastAdmin.ts): this phone's copy of its last dashboard, drawn at once with every action held and money
   // dimmed until the first fresh answer. Read once per page open; never in Pretend or the demo.
@@ -452,24 +452,14 @@ function HomeTab({ ctx, onHistory }: { ctx: AdminCtx; onHistory?: () => void }) 
   const rest = items.filter((i) => i.kind !== 'finalize' && !refunds.includes(i) && !(oneMoneyCard && (i.kind === 'tonight' || i.kind === 'owed')));
   const key = (item: TodoItem) =>
     item.kind + ('session' in item ? item.session.id : 'request' in item ? item.request.id : 'claim' in item ? `${item.claim.sessionId}:${item.claim.playerId}` : '');
-  // Preview only (shared/previewCalm.ts): just this zip's cards (Second Chance, Mark paid tonight); ?alerts=all shows every card.
+  // Preview only (shared/previewCalm.ts): just this zip's cards (Zip 35: Second Chance) and the games list; no money piles ("who hasn't paid",
+  // Mark paid, Request, Remind), no Finalize cards. ?alerts=all shows every card.
   if (ctx.d.previewCalm === true) {
-    const markPaid = items.filter((i) => i.kind === 'tonight');
     return (
       <>
         <ActingOthersCard ctx={ctx} onHistory={onHistory} />
         <SecondChanceHome ctx={ctx} />
         <UnpaidTextSheet ctx={ctx} />
-        {oneMoneyCard ? <OwedVenmoCards ctx={ctx} /> : markPaid.map((item) => <TodoCard key={key(item)} ctx={ctx} item={item} />)}
-        {/* Zip 31 (Extended time): its own cards on the calm preview, the Finalize card and the extra time rows. */}
-        <ExtensionOwedCard ctx={ctx} />
-        {ctx.d.extendedTime === true && first.length > 0 && (
-          <section className="stack" aria-label="After the game">
-            {first.map((item) => (
-              <TodoCard key={key(item)} ctx={ctx} item={item} />
-            ))}
-          </section>
-        )}
         <SessionsSection ctx={ctx} />
       </>
     );

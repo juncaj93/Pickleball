@@ -22,14 +22,29 @@ The rules are in `docs/SITE_RULES.md` (DEPLOY WINDOWS); this is the short list o
   `npx wrangler d1 migrations list pickleball --remote` (must show only the new file; if anything else is listed, stop: it would be applied too),
   then `npm run db:migrate:remote`. The newest migration is `0020_games_index` (Zip 33: three indexes, no data, rollback statements inside the file; applied to live Wed Nov 11, see STAGE_NOTES), before it `0019_extended_time` (Zip 31; it goes AFTER `0018_phone_tag` from Zip 30, 0018 is live since Wed Nov 11). A deploy with no new migration file skips this step. After 0019, also run the extension checks
   (read-only, every column 0): `npx wrangler d1 execute pickleball --remote --command "$(grep -v '^\s*--' scripts/integrity-checks-extension.sql)"`.
-- Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06): `scripts/deploy.mjs` refuses unless you are on the `main`
-  branch AND the folder has no unsaved changes, then builds and ships with `--branch main` spelled out. From a detached checkout, from any
-  other branch or from a messy folder it stops and says why; nothing is built or sent. (A first deploy from a detached checkout once went to a
-  preview called "HEAD" instead of live.) `npm run deploy -- --dry-run` (note the `--` before it) shows what it would do without building or
-  sending anything. The build also runs `npm run check:names` first (fails if two files differ only by capital letters, which breaks the
+- Site (Pages): `npm run deploy` (from main). It is GUARDED (Zip 28, Audit A, A-06; the last two rules added in Zip 35). `scripts/deploy.mjs` checks five
+  rules in this order, stops at the first one that fails, and prints `Stopped by the "<rule>" rule`. Nothing is built or sent when it stops.
+  1. **branch**: you are on the `main` branch (not another branch, not a detached checkout; a first deploy from a detached checkout once went to a preview
+     called "HEAD" instead of live).
+  2. **dirty**: the folder has no unsaved changes.
+  3. **loud**: it is NOT loud hours: Monday and Wednesday from 6:00 PM through Tuesday and Thursday 11:00 PM, Eastern (daylight saving followed). It says
+     the Eastern time it is, when loud hours end, and the override. `npm run deploy -- --override-loud-hours` goes ahead on purpose and prints a WARNING;
+     it overrides ONLY this rule. The hour after Alex texts the group is also a no-deploy time; the script cannot see that, so it reminds you.
+  4. **github**: this folder's `main` is exactly GitHub's `main` (`git ls-remote origin refs/heads/main`). Unpushed or un-pulled work, or GitHub not
+     answering, stops it.
+  5. **live**: what is live (the newest Production deployment in `wrangler pages deployment list --project-name pickleball-club --environment production --json`,
+     its `Source` commit) is part of main. Live equal to main: it says so and ships the same code again. Live BEHIND main (the usual case: you just merged):
+     it prints how many commits and lists exactly what this deploy ships, then goes ahead. Live on a commit main does NOT contain (something was deployed
+     from somewhere else), or live unreadable (Cloudflare did not answer, or the commit is not in this folder: run `git fetch origin`): refused. There is
+     no override for rules 1, 2, 4 and 5.
+  It then builds and ships with `--branch main` spelled out. `npm run deploy -- --dry-run` (note the `--` before it) runs all five rules and prints the
+  decision and the command without building or sending anything (a dry run that is stopped still exits 1). The rules are one pure function
+  (`decide()` in `scripts/deploy.mjs`); `tests/zip35-deploy-guard.test.ts` feeds it fake clocks (every loud-hours edge, both sides of daylight saving) and
+  fake git and Cloudflare facts. The build also runs `npm run check:names` first (fails if two files differ only by capital letters, which breaks the
   build on a Mac). Rollback: the previous production deployment in Cloudflare (Workers & Pages > pickleball-club > Deployments > ... > Rollback).
 - Preview (fake data, never live): `npm run deploy:preview` (Zip 28). It refuses a detached checkout (the preview would be called "HEAD") and
-  refuses `main` (a main deploy is the live site), builds, and ships with `--branch <your branch name>`, so the preview has a clear name.
+  refuses `main` (a main deploy is the live site), builds, and ships with `--branch <your branch name>`, so the preview has a clear name. None of the
+  Zip 35 rules (loud hours, GitHub, live) apply to a preview, and it reads no network before building.
   An unsaved-changes folder is allowed for a preview (it warns). Same `-- --dry-run` option. A preview needs no rollback (just deploy again).
 - Error box (`pickleball-error-box`, Zip 21, only when `worker/box.ts` or `shared/errorAlerts.ts` changed; BEFORE the site, which binds to it):
   `npx wrangler deploy --config worker/box.wrangler.toml`. Rollback: `npx wrangler rollback <version id> --config worker/box.wrangler.toml`.

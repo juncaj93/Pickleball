@@ -485,7 +485,7 @@ describe('Second Chance with Booking hours ON (the audit\'s untested pair)', () 
     expect(health(w)).toEqual({});
   });
 
-  it('a reopen time that would end after closing is refused, and no money moves (A-11 is not part of Zip 27: the game is left reopened at its old time)', async () => {
+  it('a reopen time that would end after closing is refused, and no money moves (A-11, fixed in Zip 35: the game stays canceled)', async () => {
     const { w, s } = await canceled();
     await w.organizer.call('POST', `/api/admin/sessions/${s.id}/second-chance`, { action: 'booking' }, ON);
     const r = await w.organizer.call('POST', `/api/admin/sessions/${s.id}/second-chance`, { action: 'reopen', minutes: 21 * 60 + 30 }, ON);
@@ -494,7 +494,7 @@ describe('Second Chance with Booking hours ON (the audit\'s untested pair)', () 
     expect(health(w)).toEqual({});
   });
 
-  it.fails('A-11 (known, not fixed here): after that refusal the game should still be canceled', async () => {
+  it('A-11 (fixed in Zip 35): after that refusal the game is still canceled', async () => {
     const { w, s } = await canceled();
     await w.organizer.call('POST', `/api/admin/sessions/${s.id}/second-chance`, { action: 'booking' }, ON);
     await w.organizer.call('POST', `/api/admin/sessions/${s.id}/second-chance`, { action: 'reopen', minutes: 21 * 60 + 30 }, ON);

@@ -94,6 +94,7 @@ import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
+import { setTapGuardFixForAll, tapGuardFixFlags } from './tapGuardFix';
 import { phoneTagOf } from './phoneTag';
 import { fromNote } from '../shared/actingForOthers';
 import { bookingHoursFlags, bookingHoursForAll, enforceBookingHours, enforceUsualTime, setBookingHoursForAll } from './bookingHours';
@@ -257,6 +258,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const playersSheet = await playersSheetRedoFlags(ctx, group.id);
   // Zip 34 "Check-in pay line" (server/checkInPay.ts): a pay line in the Check-in text, only while on (off: this answer is exactly main's).
   const checkInPay = await checkInPayFlags(ctx, group.id);
+  // Zip 35 "Tap guard fix" (server/tapGuardFix.ts): which fast tap the page ignores, only while on (off: this answer is exactly main's).
+  const tapGuard = await tapGuardFixFlags(ctx, group.id);
   // Zip 30 "Acting for others" (server/actingForOthers.ts): the Home card's rows, only while on (off: this answer is exactly main's and the
   // phone-code read never runs). Organizer only; the organizer's own player name is never flagged.
   const acting = await actingOthersFlags(ctx, group.id);
@@ -408,6 +411,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
     ...(checkInPay.on ? { checkInPay: true as const } : {}),
     ...(checkInPay.forAll ? { checkInPayForAll: true as const } : {}),
+    ...(tapGuard.on ? { tapGuardFix: true as const } : {}),
+    ...(tapGuard.forAll ? { tapGuardFixForAll: true as const } : {}),
     ...(playersSheet.on ? { playersSheetRedo: true as const } : {}),
     ...(playersSheet.forAll ? { playersSheetRedoForAll: true as const } : {}),
     ...(actingRows ? { actingOthers: actingRows } : {}),
@@ -1079,10 +1084,15 @@ export async function cardDone(ctx: Ctx, body: Record<string, unknown>) {
   return { ok: true };
 }
 
-/** Move a session to a new date or time. Its deadline resets to the default for the new time. */
-export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
+/**
+ * Move a session to a new date or time. Its deadline resets to the default for the new time.
+ * `whileCanceled` is only for Second Chance (Zip 35, server/secondChance.ts): it moves a canceled game BEFORE reopening it, so a refused
+ * time leaves the game canceled and untouched. `restoring` (also only Second Chance) puts the game's ORIGINAL time back after a failed reopen, so the
+ * hours rule is not applied to a time the game already had. The route (PUT .../time) passes neither.
+ */
+export async function reschedule(ctx: Ctx, body: Record<string, unknown>, whileCanceled = false, restoring = false) {
   const { group, session } = await adminSession(ctx);
-  if (session.status === 'canceled') throw new HttpError(409, 'session_canceled', 'This session was canceled.');
+  if (session.status === 'canceled' && !whileCanceled) throw new HttpError(409, 'session_canceled', 'This session was canceled.');
   if (ctx.nowMs >= Date.parse(session.starts_at)) throw new HttpError(409, 'session_started', 'This session already started.');
   const startsAt = v.isoTime(body.startsAt, 'startsAt');
   const endsAt = v.isoTime(body.endsAt, 'endsAt');
@@ -1093,7 +1103,7 @@ export async function reschedule(ctx: Ctx, body: Record<string, unknown>) {
   if (Date.parse(startsAt) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
   if (startsAt === session.starts_at && endsAt === session.ends_at) return { ok: true, changed: false };
   // Zip 24 "Booking hours": only a CHANGED start or end is looked at (an existing game outside the hours is never blocked for other edits).
-  await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
+  if (!restoring) await enforceBookingHours(ctx, group.id, group.timezone, startsAt, endsAt);
   const deadline = defaultDeadline(startsAt, settingsOf(group));
   const move = ctx.db
     .prepare(
@@ -2521,6 +2531,15 @@ export async function setPlayersSheetRedoSwitch(ctx: Ctx, body: Record<string, u
   const on = v.bool(body.on, 'on');
   await setPlayersSheetRedoForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'players_sheet_redo_on' : 'players_sheet_redo_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/** PUT /api/admin/tap-guard-switch { on }: Zip 35 "Tap guard fix" for every phone (player and organizer). Which fast tap the page ignores; no data changes. */
+export async function setTapGuardFixSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setTapGuardFixForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'tap_guard_fix_on' : 'tap_guard_fix_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 

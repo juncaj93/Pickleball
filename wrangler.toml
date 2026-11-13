@@ -242,6 +242,11 @@ BOOKING_HOURS = "on"
 # Totals). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Extended time" (off at ship = nobody), plus a phone opened
 # once with ?extendedtime=on. "off" = the kill switch: nobody, not even the test link (shares already set stay owed and in Totals). Needs a deploy.
 EXTENDED_TIME = "on"
+# Zip 35 "Tap guard fix" (shared/tapGuard.ts): the page's fast-tap guard (Instant taps) drops only a repeat tap on the SAME button, or a tap on another
+# button when the one tapped before went away or moved; a quick tap on a neighbouring button (Hide from list, then Hide it) works. Look and feel only: no
+# price, money rule, seat or data. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Tap guard fix" (off at ship = nobody),
+# plus a phone opened once with ?tapguard=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+TAP_GUARD_FIX = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -305,6 +310,7 @@ PLAYERS_SHEET_REDO = "on"
 ACTING_FOR_OTHERS_PREVIEW = "on"
 BOOKING_HOURS = "on"
 EXTENDED_TIME = "on"
+TAP_GUARD_FIX = "on"
 # Preview only (never in [vars] above): Zip 31's preview shows Extended time even if a re-seed from another branch dropped its Settings row.
 EXTENDED_TIME_PREVIEW = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.

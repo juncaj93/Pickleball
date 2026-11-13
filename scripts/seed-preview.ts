@@ -2,6 +2,7 @@
 //
 //   npm run db:seed:preview              build the fake world, load it into pickleball-preview
 //   npm run db:seed:preview -- --dry-run build it and run the safety checks, touch nothing remote
+//   npm run db:seed:preview -- --full    the WHOLE world (every zip's scenes). The default is the CALM one (PREVIEW CALM RULE, docs/SITE_RULES.md).
 //   npm run db:seed:preview -- --out x.sql   also keep the SQL it would load
 //
 // How it works: it plays a fake group on a throwaway in-memory copy of the site (the real site code,
@@ -60,7 +61,7 @@ async function main() {
 
   console.log('Building the fake world on a throwaway in-memory copy...');
   // The SMALL world (Alex, Nov 8): the fixed names of docs/PREVIEW_FAKE_DB.md, nothing else (scripts/preview-world-small.ts).
-  const { sql, summary } = await buildSmallPreview(Date.now());
+  const { sql, summary } = await buildSmallPreview(Date.now(), { calm: !args.includes('--full') });
   for (const s of summary) console.log('  - ' + s);
 
   if (outFile) writeFileSync(outFile, sql);

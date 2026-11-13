@@ -86,6 +86,7 @@ async function main() {
 
   const phone = (width, scheme) => ({ viewport: { width, height: 900 }, deviceScaleFactor: 1, colorScheme: scheme, reducedMotion: 'reduce' });
   async function admin(width = 390, scheme = 'light', url = '/admin?noontest=on') {
+    // (Zip 35: the merged money card checks below need ?alerts=all: a calm Home no longer draws it. Callers that want the card pass it.)
     const ctx = await browser.newContext(phone(width, scheme));
     await ctx.route('https://venmo.com/**', (r) => r.abort());
     await ctx.route(/courtreserve\.com/, (r) => r.fulfill({ status: 200, body: 'CourtReserve' }));
@@ -132,7 +133,7 @@ async function main() {
     }
   });
 
-  await check('calm preview (PREVIEW_CALM): Home shows only the Second Chance cards and Mark paid; ?alerts=all shows every alert; the player page hides its alert cards', async () => {
+  await check('calm preview (PREVIEW_CALM): Home shows only the Second Chance cards (Zip 35: no money card on a calm Home); ?alerts=all shows every alert; the player page hides its alert cards', async () => {
     const { ctx, page } = await admin();
     await page.locator('[data-sc-cards]').waitFor();
     const kinds = await page.evaluate(() => [...document.querySelectorAll('main article.ac, main section.do-now, main [data-refund-request], main [data-payment-claim], main [data-finalize], main [data-vr-cards]')].map((e) => e.getAttribute('aria-label') || e.className));
@@ -140,7 +141,7 @@ async function main() {
     // No note on screen (Alex, Nov 8: the links work, nothing says so).
     assert((await page.locator('[data-preview-calm], [data-sc-pretend]').count()) === 0, 'a preview note on screen');
     // Zip 29: the one money card is "Who hasn't paid" (Mark paid on every row); the second card (Mark paid tonight / Who owes you) is gone.
-    assert((await page.locator('[data-vr-cards]').count()) === 1 && (await page.locator('[data-mp-card]').count()) === 0, 'the one money card');
+    assert((await page.locator('[data-vr-cards]').count()) === 0 && (await page.locator('[data-mp-card]').count()) === 0, 'no money card on a calm Home (Zip 35: PREVIEW CALM RULE)');
     assert(extra.length === 0, `other alert cards on the calm Home: ${extra.join(' | ')}`);
     const calmCount = await page.locator('main article.ac').count();
     await page.goto(BASE + '/admin?alerts=all');
@@ -173,7 +174,7 @@ async function main() {
   for (const scheme of ['light', 'dark']) {
     for (const width of [390, 360, 320]) {
       await check(`merged money card (Zip 29), ${width} px, ${scheme}: 50 px rows, name on one line, 34 px buttons with 14 px words, Mark paid and Request or Text on every row`, async () => {
-        const { ctx, page } = await admin(width, scheme);
+        const { ctx, page } = await admin(width, scheme, '/admin?noontest=on&alerts=all');
         const card = page.locator('[data-vr-card]').first();
         await card.waitFor();
         const m = await card.evaluate((c) => {
