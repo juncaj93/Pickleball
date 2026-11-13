@@ -1428,7 +1428,7 @@ function ChristmasSkinRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   };
   return (
     <div className="set-row-wrap" data-row={key}>
-      <div className="set-row">
+      <div className="set-row xs-row">
         <span className="set-label">
           <span className="set-name">
             Christmas skin <SaveMark state={auto.rows[key]} />
@@ -1436,7 +1436,7 @@ function ChristmasSkinRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
           <span className="set-hint">Just me: only you can tap the logo to try the Christmas look, any date. Everyone: from the Friday after Thanksgiving through Dec 31 players get a Christmas logo to tap. Look only</span>
         </span>
       </div>
-      <div className="segmented" role="group" aria-label="Christmas skin" data-christmas-skin-mode style={{ margin: '4px 0 6px' }}>
+      <div className="segmented xs-seg" role="group" aria-label="Christmas skin" data-christmas-skin-mode style={{ margin: '4px 0 6px' }}>
         {SKIN_MODES.map((m) => (
           <button key={m.v} type="button" aria-pressed={mode === m.v} data-xmas-mode={m.v} onClick={() => pick(m.v)}>
             {m.label}

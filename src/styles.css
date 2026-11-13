@@ -1185,6 +1185,17 @@ input[type='month']::-webkit-date-and-time-value {
   }
 }
 
+/* Zip 38: the 3-way "Christmas skin" Settings row. At big text the buttons wrap onto a second line instead of breaking a word in two. */
+.segmented.xs-seg {
+  display: flex;
+  flex-wrap: wrap;
+}
+.segmented.xs-seg button {
+  flex: 1 1 auto;
+  white-space: nowrap;
+  padding: 6px 10px;
+}
+
 .segmented.compact {
   flex: 0 1 210px;
   padding: 2px;
