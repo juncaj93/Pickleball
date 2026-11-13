@@ -113,6 +113,7 @@ import { alertCardsFor } from './zip11';
 import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
 import { gameDayCardFor, gameDayTestFor } from './gameDay';
+import { homeScreenTipFor } from './homeScreenTip';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
@@ -326,6 +327,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // organizer (real PIN) showing the organizer's own name; never in View as, never for a player (players: no trip, never there).
     ...(meIsOrganizer && !viewAsName && (await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
+    // Zip 37 "Home Screen tip": one true flag (the phone decides when to draw the card). Never for the organizer's own page; View as carries it like the player's own phone and the screen never draws it there. Off: exactly main's.
+    ...(me && !meIsOrganizer && (await homeScreenTipFor(ctx, group.id)) ? { homeScreenTip: true as const } : {}),
     // Zip 17, Unpaid nudge: only while on (off: this answer is exactly main's). The screen counts from `owed` with shared/unpaidNudge.ts.
     ...(me && !meIsOrganizer && (await unpaidNudgeFor(ctx, group.id)) ? { unpaidNudge: { limit: UNPAID_LIMIT } } : {}),
     // Zip 16 "After-game cards": the flag and this player's own credit back from Finalize (last 7 days), only while on.

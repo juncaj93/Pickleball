@@ -242,6 +242,14 @@ BOOKING_HOURS = "on"
 # Totals). "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Extended time" (off at ship = nobody), plus a phone opened
 # once with ?extendedtime=on. "off" = the kill switch: nobody, not even the test link (shares already set stay owed and in Totals). Needs a deploy.
 EXTENDED_TIME = "on"
+# Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): players on an iPhone or iPad in Safari (not already a Home Screen app) get one card at the top of Home from
+# their SECOND visit on ("Rather have this as an app?" with a "Show me how" sheet). Look only. "on" here only ALLOWS it; who gets it is Settings > Feature
+# switches > "Home Screen tip" (off at ship = nobody), plus a phone opened once with ?homescreentip=on. "off" = the kill switch. Needs a deploy.
+HOME_SCREEN_TIP = "on"
+# Zip 37 "Game day text" (shared/gameDayText.ts): about an hour before a booked game with 2 or more in, a Telegram to the organizer with a private "Text the
+# players" link that opens Messages to the players in that game (never the organizer), numbers looked up on the server, never in the message or the link.
+# "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Game day text" (off at ship = nobody). "off" = the kill switch. Needs a deploy.
+GAME_DAY_TEXT = "on"
 # Zip 35 "Tap guard fix" (shared/tapGuard.ts): the page's fast-tap guard (Instant taps) drops only a repeat tap on the SAME button, or a tap on another
 # button when the one tapped before went away or moved; a quick tap on a neighbouring button (Hide from list, then Hide it) works. Look and feel only: no
 # price, money rule, seat or data. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Tap guard fix" (off at ship = nobody),
@@ -313,6 +321,12 @@ EXTENDED_TIME = "on"
 TAP_GUARD_FIX = "on"
 # Preview only (never in [vars] above): Zip 31's preview shows Extended time even if a re-seed from another branch dropped its Settings row.
 EXTENDED_TIME_PREVIEW = "on"
+HOME_SCREEN_TIP = "on"
+# Zip 37, PREVIEW ONLY (never in [vars]): this preview shows the Home Screen tip and Game day text whatever the shared fake database says (a re-seed from another
+# branch drops the rows), and /gt/preview opens the game day text page for the next game. Live only ever follows the Settings rows.
+HOME_SCREEN_TIP_PREVIEW = "on"
+GAME_DAY_TEXT = "on"
+GAME_DAY_TEXT_PREVIEW = "on"
 # Preview only (shared/previewCalm.ts): Home and the player page show only the zip's own cards; ?alerts=all shows every alert on that phone.
 PREVIEW_CALM = "on"
 

@@ -75,5 +75,6 @@ module.exports = {
   'zip27',
   'zip35',
   'zip35-calm',
+  'zip37',
   ],
 };

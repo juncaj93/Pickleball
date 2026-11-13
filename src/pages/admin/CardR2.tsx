@@ -10,7 +10,7 @@ import { actingStamp } from '../../InstantTaps';
 import { ADMIN_UNDO_MS } from '../../../shared/zip13';
 import { MAX_PLAYERS_LIMIT } from '../../../shared/spots';
 import { gameMinutes, lengthWords } from '../../../shared/gameLength';
-import { COURT_ADDRESS, directionsUrl } from '../../../shared/zip9';
+import { COURT_NAME, directionsUrl } from '../../../shared/zip9';
 import { CourtMap } from '../../GameDay';
 import { DirectionsArrowIcon } from '../../CardButtons';
 import { RollText, useJustChanged, useLiveChanged } from '../../motion';
@@ -266,7 +266,7 @@ function CourtJoined({ court, dayLabel }: { court: number; dayLabel: string }) {
       <button ref={courtRef} type="button" className="r2-courtbtn-half r2-courtbtn-num" data-court-num={court} aria-haspopup="dialog" aria-label={`Court ${court}, show it on the court map`} onClick={() => setMapOpen(true)}>
         Court {court}
       </button>
-      <a className="r2-courtbtn-half r2-courtbtn-dir" href={directionsUrl(COURT_ADDRESS, ua)} target="_blank" rel="noopener noreferrer" data-court-directions aria-label={`Directions to the courts for ${dayLabel}`}>
+      <a className="r2-courtbtn-half r2-courtbtn-dir" href={directionsUrl(COURT_NAME, ua)} target="_blank" rel="noopener noreferrer" data-court-directions aria-label={`Directions to the courts for ${dayLabel}`}>
         <DirectionsArrowIcon />
       </a>
       <CourtMap open={mapOpen} onClose={() => setMapOpen(false)} lit={court} anchor={courtRef} label={`Court map. This game is on Court ${court}.`} />

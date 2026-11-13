@@ -1,6 +1,6 @@
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { COURT_ROWS, TBD_POP_MS, tbdText } from '../shared/gameDay';
-import { COURT_ADDRESS, directionsUrl } from '../shared/zip9';
+import { COURT_NAME, directionsUrl } from '../shared/zip9';
 import { localParts } from '../shared/time';
 import type { GroupView, PlayerSessionView } from '../shared/api';
 import { DirectionsArrowIcon } from './CardButtons';
@@ -72,7 +72,7 @@ export function GameDayButtons({ court, organizerName, dayLabel, held }: { court
           Directions
         </span>
       ) : (
-        <a className="gd-btn" href={directionsUrl(COURT_ADDRESS, ua)} target="_blank" rel="noopener noreferrer" data-gd-directions aria-label={`Directions to the courts for ${dayLabel}`}>
+        <a className="gd-btn" href={directionsUrl(COURT_NAME, ua)} target="_blank" rel="noopener noreferrer" data-gd-directions aria-label={`Directions to the courts for ${dayLabel}`}>
           <DirectionsArrowIcon />
           Directions
         </a>

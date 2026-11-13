@@ -23,6 +23,7 @@ import { HIDDEN_GAME_TASK, MONEY_REWORK_TASK, sessionHasMoney } from './moneyRew
 import { moneyReworkAllowed } from '../shared/moneyRework';
 import * as v from './validate';
 import { tickPings } from './secondChance';
+import { tickGameText } from './gameDayText';
 import { afterTick, tickFailed, tickSwitchSql, tickWatch, type TickWatch } from './errorAlerts';
 
 const DAY_MS = 86_400_000;
@@ -263,6 +264,9 @@ async function tickJobs(ctx: Ctx, watch: TickWatch): Promise<TickResult> {
   // Zip 15 (server/secondChance.ts): today's not-booked games, Telegram 1 (4 in) and 2 (4 paid), each once. Off: one switch read.
   await tickPings(ctx, group);
   if (offRows.results.length > 0) return { ok: true, sent: 0, failed: 0, skipped: 'smart_off' };
+  // Zip 37 (server/gameDayText.ts): the hour-before "Text the players" Telegram. It looks only at the games this tick already read, and asks for
+  // its switch row only while a booked game is 15 to 60 minutes from its start, so every other tick asks the database exactly what it did before.
+  await tickGameText(ctx, group, sessionRows.results as unknown as SessionRow[]);
 
   const settings = settingsOf(group);
   const textsR2 = textsR2Allowed(ctx.env.TEXTS_R2) && textsR2Rows.results.length > 0;

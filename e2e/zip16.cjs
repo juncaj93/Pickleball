@@ -278,7 +278,7 @@ async function main() {
     assert((await row.count()) === 1, 'the row is there');
     assert((await row.locator('.set-name').textContent()).includes('After-game cards'), 'its name');
     // Newest first: Zip 23's Totals refresh, Zip 21's Error alerts, then Zip 17's Unpaid nudge sit above it now.
-    const firstTwo = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 10).map((e) => e.getAttribute('data-row')));
+    const firstTwo = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 10));
     // (Zip 30's Acting for others is newer still and sits on top.)
     // (Zip 32's Players sheet redo is newer still, and Zip 34's Check-in pay line newer again; Zip 31's Extended time sits on top of all.)
     assert(firstTwo.join('|') === 'tapGuardFixAll|extendedTimeAll|checkInPayAll|playersSheetRedoAll|actingOthersAll|spentTotalsAll|bookingHoursAll|totalsRefreshAll|errorAlertsAll|unpaidNudgeAll', `newest first: ${firstTwo}`);
