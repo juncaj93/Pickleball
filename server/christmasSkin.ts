@@ -52,10 +52,11 @@ export async function setChristmasSkinTester(db: D1Database, groupId: string, on
  * organizer's own player and the organizer's test mark is set. The test mode ignores the date AND the Settings row (one phone, one player);
  * the kill switch beats it. The date is checked before any database read, so outside the window nobody but the organizer's own player costs a read.
  */
-export async function christmasSkinFor(ctx: Ctx, groupId: string, meIsOrganizer = false): Promise<{ on: boolean; test: boolean }> {
+export async function christmasSkinFor(ctx: Ctx, groupId: string, meIsOrganizer = false, viewAs = false): Promise<{ on: boolean; test: boolean }> {
   const off = { on: false, test: false };
   if (!christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return off;
-  if ((ctx.req.headers.get(CHRISTMAS_SKIN.header) ?? '').toLowerCase() === 'on') return { on: true, test: true };
+  // View as (the organizer's demo copy) never gets the test mode, whatever header comes with it; it follows the same rules as the player it shows.
+  if (!viewAs && (ctx.req.headers.get(CHRISTMAS_SKIN.header) ?? '').toLowerCase() === 'on') return { on: true, test: true };
   if (meIsOrganizer && (await christmasSkinTesterOn(ctx.db, groupId))) return { on: true, test: true };
   const preview = isPreview(ctx);
   const pretend = preview ? parsePretendDate(ctx.req.headers.get(CHRISTMAS_SKIN.dateHeader)) : null;

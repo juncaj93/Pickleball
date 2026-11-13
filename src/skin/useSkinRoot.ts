@@ -26,8 +26,10 @@ export function useSkinTesterSync(meId: string | null, viewAs: boolean, refresh:
     if (!meId || viewAs) return;
     const want = storageGet(SERVER_KEY);
     if (want !== 'on' && want !== 'off') return;
-    void api('POST', '/api/christmas-skin-tester', { on: want === 'on' })
-      .then(() => {
+    void api<{ applied?: boolean }>('POST', '/api/christmas-skin-tester', { on: want === 'on' })
+      .then((res) => {
+        // The server could not apply it right now (the kill switch is off for "on"): keep the note, try again at the next open.
+        if (res.applied === false) return;
         storageRemove(SERVER_KEY);
         // The answer on screen was drawn before the server knew: draw it again now (the link turns the skin on or off at once).
         refresh();

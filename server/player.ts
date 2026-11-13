@@ -191,7 +191,7 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
   // Zip 38 "Christmas skin": one read for the organizer's own player only (the test mark); every other player's answer is as it was.
-  const skin = await christmasSkinFor(ctx, group.id, meIsOrganizer && !viewAsName);
+  const skin = await christmasSkinFor(ctx, group.id, meIsOrganizer && !viewAsName, !!viewAsName);
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -427,9 +427,13 @@ export async function christmasSkinTester(ctx: Ctx, body: Record<string, unknown
   const { group, playerId, viewAsName } = await viewer(ctx);
   const on = v.bool(body.on, 'on');
   const mine = !!playerId && !viewAsName && playerId === (await organizerIdOf(ctx.db, group));
-  if (!mine || !christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return { ok: true, marked: false };
+  // Not the organizer's own player (or View as): nothing to do, and nothing to retry ("applied" so the phone drops its note).
+  if (!mine) return { ok: true, marked: false, applied: true };
+  // Clearing always works (even with the kill switch off, so an "off" link is never lost); setting needs the kill switch to allow it, else the
+  // phone keeps its note and tries again at its next open.
+  if (on && !christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return { ok: true, marked: false, applied: false };
   await setChristmasSkinTester(ctx.db, group.id, on, ctx.nowIso);
-  return { ok: true, marked: on };
+  return { ok: true, marked: on, applied: true };
 }
 
 /** Lowercase letters and single spaces, for comparing names. */

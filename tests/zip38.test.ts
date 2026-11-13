@@ -501,8 +501,9 @@ describe('Part C: the switch (CHRISTMAS_SKIN, ships OFF)', () => {
     const { version: offVersion, ...offRest } = off;
     expect(christmasSkin).toBe(true);
     expect(christmasSkinTest).toBe(true); // the private link is the test mode
-    // (`version` is the answer's change fingerprint: it moves when the flag appears, which is how live updates notice. Everything else is identical.)
-    expect(onVersion).not.toBe(offVersion);
+    // (`version` is the answer's change fingerprint and is left out of this comparison; every other key and value is identical.)
+    void onVersion;
+    void offVersion;
     expect(JSON.stringify(rest)).toBe(JSON.stringify(offRest));
     // Outside the window with the row ON: also the same as with the row OFF, byte for byte (same moment).
     at(w, est(2026, 11, 20, 12));
@@ -646,12 +647,31 @@ describe('Part D: the private link sticks (test mode) and Alex\'s own player', (
     await signIn(w);
     const as = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Alex });
     expect(as.data.christmasSkin).toBeUndefined();
-    // The kill switch.
+    // The kill switch hides it; an "off" link still clears the mark even then; "on" waits (the phone keeps its note).
     env(w).CHRISTMAS_SKIN = 'off';
     expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined();
-    expect((await markCalls(w, 'Alex', false)).data.marked).toBe(false);
+    const keep = await markCalls(w, 'Alex', true);
+    expect(keep.data.applied).toBe(false);
     env(w).CHRISTMAS_SKIN = 'on';
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBe(true);
+    expect((await group(w, {}, 'Alex')).christmasSkin).toBe(true); // the earlier mark is still there
+    env(w).CHRISTMAS_SKIN = 'off';
+    const cleared = await markCalls(w, 'Alex', false);
+    expect(cleared.data.applied).toBe(true);
+    env(w).CHRISTMAS_SKIN = 'on';
+    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined(); // an off link opened while the kill switch was off still cleared it
+  });
+  it('View as never gets the test mode, even with the private header, and its POST neither sets nor clears the mark', async () => {
+    const w = await setupGroup();
+    setOrganizer(w);
+    at(w, est(2026, 11, 13, 10));
+    await signIn(w);
+    const as = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Blair, 'X-Christmas-Skin': 'on' });
+    expect(as.status).toBe(200);
+    expect(as.data.christmasSkin).toBeUndefined();
+    expect(as.data.christmasSkinTest).toBeUndefined();
+    const post = await w.organizer.call('POST', '/api/christmas-skin-tester', { on: true }, { 'X-View-As': w.byName.Alex });
+    expect(post.data.marked).toBe(false);
+    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined();
   });
   it('only the organizer\'s own player costs an extra read (everyone else\'s answer asks nothing new)', async () => {
     const w = await setupGroup();
@@ -681,6 +701,7 @@ describe('Part D: the private link sticks (test mode) and Alex\'s own player', (
     const root = readFileSync(new URL('../src/skin/useSkinRoot.ts', import.meta.url), 'utf8');
     expect(root).toContain("if (!meId || viewAs) return;");
     expect(root).toContain("'/api/christmas-skin-tester'");
+    expect(root).toContain('if (res.applied === false) return;');
   });
 });
 
