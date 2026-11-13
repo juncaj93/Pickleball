@@ -80,8 +80,10 @@ async function main() {
   };
   if (!(await call('POST', '/api/admin/login', { pin: PIN })).ok) throw new Error('login failed');
   const dash = async (headers) => (await call('GET', '/api/admin/dashboard', undefined, headers)).json;
+  // The shared seed leaves both rows off (the calm preview stays calm; the real preview has both on through its preview-only vars), so turn them on here.
+  assert((await call('PUT', '/api/admin/home-screen-tip-switch', { on: true })).ok && (await call('PUT', '/api/admin/game-day-text-switch', { on: true })).ok, 'switching both on');
   const d0 = await dash();
-  assert(d0.homeScreenTipForAll === true && d0.gameDayTextForAll === true, 'the preview world should have both rows on (PREVIEW SWITCHES RULE: the switches being built are on in their own preview)');
+  assert(d0.homeScreenTipForAll === true && d0.gameDayTextForAll === true, 'both rows are on');
   const setTip = (on) => call('PUT', '/api/admin/home-screen-tip-switch', { on });
 
   /** A phone. `ua` iPhone Safari by default. `init` runs before the page's own scripts. */

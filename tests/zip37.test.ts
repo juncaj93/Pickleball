@@ -164,14 +164,16 @@ describe('Part A: the switch (HOME_SCREEN_TIP, ships OFF)', () => {
     expect(prod).toMatch(/^HOME_SCREEN_TIP = "on"$/m);
     expect(prod).toMatch(/^GAME_DAY_TEXT = "on"$/m);
   });
-  it('History words, and the preview seed has both rows on (the building zip\'s switches are on in its own preview)', () => {
+  it('History words, and the preview has both switches on through its own preview-only vars (not through the shared seed)', () => {
     const line = (action: string) => activityText({ id: 'x', action, details: {}, actorLabel: 'organizer', at: '2026-11-12T20:00:00.000Z', sessionId: null, playerId: null } as never, 'America/Detroit', 'Alex');
     expect(line('home_screen_tip_on')).toBe('Alex switched "Home Screen tip" on');
     expect(line('home_screen_tip_off')).toBe('Alex switched "Home Screen tip" off');
     expect(line('game_day_text_on')).toBe('Alex switched "Game day text" on');
     expect(line('game_day_text_off')).toBe('Alex switched "Game day text" off');
-    expect(BUILDING_ON).toContain('home_screen_tip_on');
-    expect(BUILDING_ON).toContain('game_day_text_on');
+    // The rows are NOT in the shared seed (the calm preview of Zip 35 must stay calm: its player Home has no extra card); this zip's preview has
+    // both switches on through the preview-only vars HOME_SCREEN_TIP_PREVIEW and GAME_DAY_TEXT_PREVIEW (checked above).
+    expect(BUILDING_ON).not.toContain('home_screen_tip_on');
+    expect(BUILDING_ON).not.toContain('game_day_text_on');
   });
   it('the Settings rows exist on the Feature switches page (no deploy needed to flip them)', () => {
     const src = readFileSync(new URL('../src/pages/admin/SettingsTab.tsx', import.meta.url), 'utf8');
