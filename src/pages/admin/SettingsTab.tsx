@@ -1398,7 +1398,7 @@ function ActingOthersRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 39, "Made cheaper after paying" (CHEAPER_FIX, server/cheaperFix.ts): a late fee on a game made cheaper after people paid keeps only the fee (the rest back as credit), and a new Price per player reprices open seats (Audit A, A-18). Moves money. Off: only /admin?cheaperfix=on on an organizer phone. */
 function CheaperFixRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="cheaperFixAll" path="/api/admin/cheaper-fix-switch" name="Made cheaper after paying" hint="A late fee on a game made cheaper after people paid keeps only the new price; the rest goes back as credit. A new Price per player reprices open games. Moves money" flag={!!ctx.d.cheaperFixForAll} dataAttr="data-cheaper-fix-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="cheaperFixAll" path="/api/admin/cheaper-fix-switch" name="Made cheaper after paying" hint="A late fee on a game made cheaper after people paid keeps only the new price; the rest goes back as credit. A new price in Settings > Money reprices open games. Moves money" flag={!!ctx.d.cheaperFixForAll} dataAttr="data-cheaper-fix-all" />;
 }
 
 /** Zip 27, "Spent matches Totals" (SPENT_TOTALS, server/spentTotals.ts, Audit A item A-05): Players "Spent" counted the way Money > Totals counts. Organizer only, display only. Off: only /admin?spenttotals=on. */
