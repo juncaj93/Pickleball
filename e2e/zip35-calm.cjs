@@ -157,8 +157,9 @@ async function main() {
   }
 
   for (const scheme of ['light', 'dark']) {
-    await check(`C4 (${scheme}): player Home (Rowan) at 390 px: plain games only, no alert cards, no money`, async () => {
-      const rowan = d0.players.find((p) => p.name === 'Rowan');
+    await check(`C4 (${scheme}): player Home (Reese) at 390 px: plain games only, no alert cards, no money`, async () => {
+      // Zip 38: the kept tonight games have Rowan in (and owing, which is a real pay card), so the calm check looks at Reese, who is in none of them.
+      const rowan = d0.players.find((p) => p.name === 'Reese');
       const ctx = await phone(scheme);
       await shift(ctx);
       await ctx.request.post(BASE + '/api/me', { data: { playerId: rowan.id }, headers: { Origin: BASE } });
@@ -170,7 +171,8 @@ async function main() {
       await page.locator('.schedule article.sched').first().waitFor({ timeout: 20000 });
       const text = await page.locator('body').innerText();
       for (const bad of ['CREDIT', 'Mark paid', 'Request cash out']) assert(!new RegExp(bad).test(text), `unrelated text on player Home: "${bad}"`);
-      assert((await page.locator('.ac, .pay-card, .credit-chip').count()) === 0, 'an alert card, pay card or credit chip is showing on the calm player Home');
+      const found = await page.evaluate(() => ['.ac', '[data-pay-card]', '.credit-chip'].map((q) => `${q}=${document.querySelectorAll(q).length}`).join(' '));
+      assert(/\.ac=0 \[data-pay-card\]=0 \.credit-chip=0/.test(found), `an alert card, pay card or credit chip is showing on the calm player Home: ${found}`);
       await ctx.close();
     });
   }
