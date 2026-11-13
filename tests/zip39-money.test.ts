@@ -224,6 +224,10 @@ describe('1. a game made cheaper after people paid, then a late fee: the extra c
     expect(await pot(w, 'Blair')).toBe(300);
     expect((await books(w)).total).toBe(before.total);
     expect(health(w)).toEqual({});
+    // One Activity line for the $3, like any money back.
+    const raw = (w.app.db as any).raw;
+    const lines = raw.prepare("SELECT details_json AS d FROM admin_audit_log WHERE session_id = ? AND action = 'credit_back'").all(g.id).map((r: any) => JSON.parse(r.d));
+    expect(lines).toEqual([expect.objectContaining({ player: 'Blair', amountCents: 300, reason: 'dropped' })]);
     await joinAll(w, g.id, ['Frankie']); // a sub takes the spot: the debt clears and the $11 comes back
     expect((await seat(w, g.id, 'Blair')).owesCents).toBe(0);
     expect(await pot(w, 'Blair')).toBe(1400);

@@ -1898,7 +1898,9 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
   // the rest. Cash is never taken back (it is settled at Finalize). A finalized game keeps its lock (Zip 27) and is not open anyway; a 1.5,
   // 2.5 or 3 hour game priced by its own row does not change, so nothing is written for it.
   if (settings.pricePerPlayerCents !== settingsOf(group).pricePerPlayerCents && (await cheaperFixFor(ctx, group.id, true))) {
-    const flags = { ...(group.short_games === true ? { shortGames: true as const } : {}), ...(group.long_games === true ? { longGames: true as const } : {}) };
+    // The rules for EVERYONE (the Settings rows), never this phone's private Short games link: the new price is everyone's.
+    const everyone = await everyoneSettings(ctx, group);
+    const flags = { ...(everyone.shortGames === true ? { shortGames: true as const } : {}), ...(everyone.longGames === true ? { longGames: true as const } : {}) };
     const before = { ...settingsOf(group), ...flags };
     const after = { ...settings, ...flags };
     const { results: open } = await ctx.db

@@ -435,6 +435,21 @@ export async function withdraw(
     const endedNow = new Set(now.map((r) => r.id));
     credit = onSeat.filter((r) => endedNow.has(r.id)).reduce((sum, r) => sum + r.amount_cents, 0);
   }
+  // Zip 39: what the "Made cheaper after paying" trim gave back (cash that became credit, plus credit used on the seat that went back,
+  // net of what stays on it), as one Activity line like any other money back. Only when the switch was on for this drop.
+  if (changed && feeDrop && !isOrg && opts.cheaperFix) {
+    const t = await db
+      .prepare(
+        `SELECT
+           (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE session_id = ?1 AND player_id = ?2 AND kind = 'kept' AND reason = 'dropped' AND created_at = ?3 AND id <> ?4) +
+           (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE session_id = ?1 AND player_id = ?2 AND kind = 'used' AND COALESCE(reason, '') <> 'cash' AND ended_at = ?3 AND ended_reason = 'dropped') -
+           (SELECT COALESCE(SUM(amount_cents), 0) FROM credit_ledger WHERE session_id = ?1 AND player_id = ?2 AND kind = 'used' AND COALESCE(reason, '') <> 'cash' AND created_at = ?3 AND ended_at IS NULL) AS c,
+           (SELECT display_name FROM players WHERE id = ?2) AS name`,
+      )
+      .bind(session.id, playerId, nowIso, entryId)
+      .first<{ c: number; name: string | null }>();
+    if (t && t.c > 0) await audit(db, group.id, session.id, 'credit_back', { player: t.name ?? 'A player', playerId, amountCents: t.c, reason: 'dropped' }, nowIso);
+  }
   // Did this drop leave an open late-drop debt (its money stayed on the game)?
   const after = changed && feeDrop ? await existingRow(db, session.id, playerId) : null;
   const lateFee = isOpenLateDrop(after) ? (isOrg ? { paid: false } : await lateFeeLeft(db, session.id, playerId, flatOf(session, settingsOf(group)))) : null;

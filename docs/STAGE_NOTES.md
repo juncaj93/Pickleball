@@ -4374,6 +4374,11 @@ Branch `claude/new-session-iu01w9` (the brief's name "🎾39.moneyfix" is the se
 3. A-18 (switch ON only): a new Price per player reprices the seats of open games (`updateGroup`), the way the Short games and Booking hours rows already do. `tests/ledger-fuzz.test.ts` G stays `it.fails` (it runs with the switch off).
 4. Found while testing (no switch, every game): `splitSeatStatements` (the fee split's seat moves, now shared) re-inserted "the credit that stays on the seat" and a re-held cash pair from an EXISTS check that a second run at the same millisecond also passes. Both inserts now also need "no such live row on the seat yet". A single run is unchanged (that run has just ended those rows). Proof: the run-twice test fails without the guard and passes with it.
 
+### Fresh review (an independent reviewer who did not write the code)
+- Nothing that moves wrong money; books balanced in every probe (drop trim on a credit seat; no-show, Clear, Reopen and redo); switch off builds main's exact SQL; every value put into SQL text is checked.
+- Fixed from it: (1) the late-drop trim now writes its own "credit back" Activity line ("$3 ... dropped"); the drop's answer to the player is unchanged (no new player words); (2) A-18 repricing uses the rules for everyone (the Settings rows), never the organizer phone's private Short games link.
+- Left as is, written under known gaps in `docs/FEATURE_SWITCHES.md` (each is how main's fee split already behaves): Unmark after a trim keeps the credit that came back; an I paid confirmed after the fee is not trimmed; a game made cheaper after a late drop keeps the old amount until Clear.
+
 ### Not done (questions for Alex)
 - A-14 (a cash seat paid at an old LOWER price reads "Paid, owes $0" until Finalize): a product decision. Today the gap is asked at Finalize (or at a late fee since Zip 27). Asking at the moment the game is made pricier would change what players see and owe before the game.
 - A-11: not in this zip (its `it.fails` untouched).
