@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect } from 'react';
+import { useLayoutEffect } from 'react';
 import { resetSkin, setSkinAvailable } from './store';
 
 /**
@@ -10,5 +10,6 @@ export function useSkinRoot(available: boolean, demo: boolean) {
   useLayoutEffect(() => {
     setSkinAvailable(available, demo);
   }, [available, demo]);
-  useEffect(() => resetSkin, []);
+  // A layout cleanup runs before the next screen paints, so no admin screen can show a frame of the theme.
+  useLayoutEffect(() => resetSkin, []);
 }

@@ -945,9 +945,14 @@ export function SpotDots({ names, me, celebrate, oneRow, first }: { names: strin
     prevN.current = names.length;
     if (before === null || !skinOn || before >= MIN_PLAYERS || names.length < MIN_PLAYERS) return undefined;
     setJingle(true);
+    return undefined;
+  }, [names.length, skinOn]);
+  // Its own timer, so another join or a tap on the logo within the 3 seconds cannot leave the jingle switched on.
+  useEffect(() => {
+    if (!jingle) return undefined;
     const t = setTimeout(() => setJingle(false), 3000);
     return () => clearTimeout(t);
-  }, [names.length, skinOn]);
+  }, [jingle]);
   const popIn = skinOn && skin.phase === 'in';
   const seat = (i: number) => {
     const filled = i < names.length;

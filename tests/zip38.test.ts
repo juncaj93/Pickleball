@@ -17,6 +17,7 @@ import {
   logoFor,
   parsePretendDate,
   readTheme,
+  sameEasternDay,
   takeFirstVisitHint,
   thanksgivingDay,
   THEME_KEY,
@@ -159,6 +160,11 @@ describe('Part B: the phone\'s memory and the logo', () => {
     expect(readFileSync(new URL('../shared/christmasSkin.ts', import.meta.url), 'utf8')).toContain('BUBBLE_MS = 2000');
     expect(store).toContain('BUBBLE_MS');
   });
+  it('a saved last screen lends its Christmas flag to the same Eastern day only', () => {
+    expect(sameEasternDay(est(2026, 12, 31, 10), est(2026, 12, 31, 23, 59))).toBe(true);
+    expect(sameEasternDay(est(2026, 12, 31, 23, 59), est(2027, 1, 1, 0, 1))).toBe(false);
+    expect(sameEasternDay(est(2026, 11, 26, 12), est(2026, 11, 27, 12))).toBe(false);
+  });
   it('the logo file is in public/ (the clean one, 128 x 128 PNG)', () => {
     const png = readFileSync(new URL('../public/logo-xmas.png', import.meta.url));
     expect(png.subarray(1, 4).toString()).toBe('PNG');
@@ -284,6 +290,29 @@ describe('Part B: the store (theme on and off, bubbles, reduced motion), run wit
     const block = css.slice(css.indexOf('@media (prefers-reduced-motion: reduce)'));
     expect(block).toMatch(/animation: none !important/);
     for (const part of ['.skin-bubble', '.xorn', '.ball.xspinb', '.xs-top::before', '.sched.gd .dots .xorn']) expect(block).toContain(part);
+  });
+  it('a phone that blocks storage sees the first-visit bubble once per page load, not on every return to Home', async () => {
+    vi.useFakeTimers();
+    const { attrs } = fakePage({ block: true });
+    const s = await load();
+    s.setSkinAvailable(true, false);
+    expect(s.skinOnNow()).toBe(false);
+    expect(s.skinStateNow().bubble).toBe('first');
+    vi.advanceTimersByTime(2100);
+    expect(s.skinStateNow().bubble).toBeNull();
+    s.resetSkin();
+    vi.advanceTimersByTime(100);
+    s.setSkinAvailable(true, false); // the player Home comes back
+    expect(s.skinStateNow().bubble).toBeNull(); // not shown a second time (storage cannot remember it, the page does)
+    s.toggleSkin();
+    expect(attrs['data-skin']).toBe('christmas');
+  });
+  it('another join or a tap within the 3 seconds cannot leave the jingle on (its own timer)', () => {
+    const src = readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8');
+    expect(src).toMatch(/if \(!jingle\) return undefined;\s*const t = setTimeout\(\(\) => setJingle\(false\), 3000\);\s*return \(\) => clearTimeout\(t\);\s*\}, \[jingle\]\);/);
+  });
+  it('leaving the player Home resets before the next screen paints (layout cleanup)', () => {
+    expect(readFileSync(new URL('../src/skin/useSkinRoot.ts', import.meta.url), 'utf8')).toContain('useLayoutEffect(() => resetSkin, [])');
   });
   it('a phone that blocks storage: available, toggles on and off without a single error', async () => {
     vi.useFakeTimers();

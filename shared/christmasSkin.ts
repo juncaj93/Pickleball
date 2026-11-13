@@ -28,6 +28,13 @@ export function easternDate(ms: number): { year: number; month: number; day: num
   return { year: get('year'), month: get('month'), day: get('day') };
 }
 
+/** Same Eastern calendar day? (A saved last screen only lends its Christmas flag to the same day, so the window closing never leaves a stale logo.) */
+export function sameEasternDay(a: number, b: number): boolean {
+  const x = easternDate(a);
+  const y = easternDate(b);
+  return x.year === y.year && x.month === y.month && x.day === y.day;
+}
+
 /** US Thanksgiving: the fourth Thursday of November. Returns the day of the month (22 to 28). */
 export function thanksgivingDay(year: number): number {
   const firstWeekday = new Date(Date.UTC(year, 10, 1)).getUTCDay(); // 0 = Sunday

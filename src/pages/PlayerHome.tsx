@@ -46,6 +46,7 @@ import { SkinLogo } from '../skin/SkinLogo';
 import { useSkin, useSkinOn } from '../skin/store';
 import { THEME } from '../skin/theme';
 import { useSkinRoot } from '../skin/useSkinRoot';
+import { sameEasternDay } from '../../shared/christmasSkin';
 import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
@@ -347,7 +348,7 @@ export function PlayerHome({
   useZip7Root(g);
   // Zip 38 "Christmas skin": what the server said (or, on a repeat visit, what the saved last screen said, so the logo does not flicker).
   // Only this Home screen sets it, and it puts everything back on the way out, so no admin screen carries the theme.
-  useSkinRoot(!!(g ? g.christmasSkin : saved?.view.christmasSkin), !!viewAs);
+  useSkinRoot(!!(g ? g.christmasSkin : saved && sameEasternDay(saved.savedAt, Date.now()) ? saved.view.christmasSkin : false), !!viewAs);
   const skin = useSkin();
   // Preview only (g.preview exists only where PREVIEW_CALM is set, never on live): ?as=Harper opens the page as that fake player, the same
   // as picking the name on Who are you?. On live the server never says preview, so the link does nothing.

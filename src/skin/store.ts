@@ -25,6 +25,8 @@ export interface SkinState {
 const IDLE: SkinState = { inWindow: false, on: false, phase: 'idle', seq: 0, bubble: null };
 let state: SkinState = IDLE;
 let demo = false;
+/** The first-visit bubble was already shown in this page load (a phone that blocks storage cannot remember it, so this keeps it to once). */
+let hintShown = false;
 let timers: ReturnType<typeof setTimeout>[] = [];
 const listeners = new Set<() => void>();
 
@@ -104,7 +106,8 @@ export function setSkinAvailable(available: boolean, isDemo: boolean) {
     return;
   }
   const on = isDemo ? false : readTheme(memory);
-  const hint = !isDemo && !on && takeFirstVisitHint(memory);
+  const hint = !isDemo && !on && !hintShown && takeFirstVisitHint(memory);
+  if (hint) hintShown = true;
   emit({ inWindow: true, on, phase: 'idle', seq: state.seq, bubble: hint ? 'first' : null });
   if (hint) {
     later(BUBBLE_MS, () => state.bubble === 'first' && emit({ ...state, bubble: null }));
@@ -142,3 +145,5 @@ export const useSkin = (): SkinState => useSyncExternalStore(subscribe, () => st
 /** The theme is showing right now (available AND on). */
 export const useSkinOn = (): boolean => useSyncExternalStore(subscribe, () => state.inWindow && state.on, () => false);
 export const skinOnNow = () => state.inWindow && state.on;
+/** The whole state right now (for tests). */
+export const skinStateNow = (): SkinState => state;
