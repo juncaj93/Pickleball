@@ -4489,3 +4489,10 @@ Branch `claude/new-session-iu01w9` (the brief's name "🎾39.moneyfix" is the se
 
 ### Deploy: NOT deployed (waiting)
 Blocked on: 🎾35 (PR #129) not merged or live, 🎾37 not seen; the read-only PIN for the live money check; Thu night is loud until 11 PM. Needs, in a quiet window (Sat Nov 14 or Sun Nov 15 preferred): merge to main after 🎾35 (expect a small conflict in the Settings rows list and the six e2e order checks), backup + Time Travel bookmark, money-check before, `npm run deploy`, money-check after (must be IDENTICAL: the switch ships OFF), integrity checks.
+
+## Zip 40: Text the players wording (live Fri Nov 13, 2026, 9:55 AM Eastern)
+
+- Wording only, no switch, no database change. "Text the players" (both tabs) and the two old-wording late-cancel texts now say "today's game", "tomorrow's game" or the weekday ("Tuesday's game") by Eastern calendar day. Today reads exactly as before. Audit of every message: docs/TEXT_AUDIT.md.
+- Deployment: b31b5d96-f290-4085-baf4-9adf2f58e0d7 (commit b5fc08d). Rollback: the previous production deployment (live before was f73a557) in Cloudflare Pages > pickleball-club > Deployments > Rollback.
+- Time Travel bookmark before: 00001199-00000000-00005122-8d90f62f76e4e8c4afa95631c0178b49. Backup export saved as export-20261113145513 in pickleball-backups. Integrity checks all 0 before and after.
+- Tests: unit 2,961 passed (17 new); full browser run 73 of 74 scripts green, 2,799 checks. zip18 ("View as Parker" Demo banner check) fails on main without this change too (it failed on a different Parker check there), so it was not touched.
