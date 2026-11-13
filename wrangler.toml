@@ -246,7 +246,7 @@ EXTENDED_TIME = "on"
 # their SECOND visit on ("Rather have this as an app?" with a "Show me how" sheet). Look only. "on" here only ALLOWS it; who gets it is Settings > Feature
 # switches > "Home Screen tip" (off at ship = nobody), plus a phone opened once with ?homescreentip=on. "off" = the kill switch. Needs a deploy.
 HOME_SCREEN_TIP = "on"
-# Zip 37 "Game day text" (shared/gameDayText.ts): about an hour before a booked game with 4 or more in, a Telegram to the organizer with a private "Text the
+# Zip 37 "Game day text" (shared/gameDayText.ts): about an hour before a booked game with 2 or more in, a Telegram to the organizer with a private "Text the
 # players" link that opens Messages to the players in that game (never the organizer), numbers looked up on the server, never in the message or the link.
 # "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Game day text" (off at ship = nobody). "off" = the kill switch. Needs a deploy.
 GAME_DAY_TEXT = "on"

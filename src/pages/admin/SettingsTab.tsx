@@ -1394,7 +1394,7 @@ function HomeScreenTipRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
 
 /** Zip 37, "Game day text" (GAME_DAY_TEXT, server/gameDayText.ts): a Telegram to you an hour before a booked game with a Text the players link. Texts nobody itself. */
 function GameDayTextRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="gameDayTextAll" path="/api/admin/game-day-text-switch" name="Game day text" hint="Telegram an hour before a booked game with 4 or more in: a Text the players link that opens Messages to the players. Nothing sends until you tap send" flag={!!ctx.d.gameDayTextForAll} dataAttr="data-game-day-text-all" />;
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="gameDayTextAll" path="/api/admin/game-day-text-switch" name="Game day text" hint="Telegram an hour before a booked game with 2 or more in: a Text the players link that opens Messages to the players. Nothing sends until you tap send" flag={!!ctx.d.gameDayTextForAll} dataAttr="data-game-day-text-all" />;
 }
 
 /** Zip 31, "Extended time" (EXTENDED_TIME, server/extension.ts): None | +30 min | +1 hr on the Who played sheet, shares on the next game. Moves money. Off: only ?extendedtime=on. */
