@@ -163,10 +163,12 @@ async function main() {
       const page = await ctx.newPage();
       await page.goto(BASE + '/');
       await page.waitForTimeout(2500);
-      const fit = await page.evaluate(() => ({ h: document.documentElement.scrollHeight, w: window.innerHeight }));
-      assert(fit.h <= fit.w + 2, `player Home needs scrolling: ${fit.h}px vs ${fit.w}px`);
+      // Zip 38: the calm profile also keeps tonight's and tomorrow's games for the player screens (the Christmas skin needs them), so the player
+      // Home is no longer one screen. What stays calm: no alert cards, no pay card, no credit chip, no "You owe".
+      await page.locator('.schedule article.sched').first().waitFor({ timeout: 20000 });
       const text = await page.locator('body').innerText();
-      for (const bad of ['owe', 'Pay', 'credit', 'CREDIT', 'You owe', 'paid']) assert(!new RegExp(bad).test(text), `unrelated text on player Home: "${bad}"`);
+      for (const bad of ['You owe', 'CREDIT', 'Mark paid', 'Request cash out']) assert(!new RegExp(bad).test(text), `unrelated text on player Home: "${bad}"`);
+      assert((await page.locator('.ac, .pay-card, .credit-chip').count()) === 0, 'an alert card, pay card or credit chip is showing on the calm player Home');
       await ctx.close();
     });
   }

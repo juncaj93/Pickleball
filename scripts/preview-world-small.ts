@@ -52,8 +52,9 @@ export function smallSwitchRows(nowMs: number): string {
  * and History lines, and every credit entry and cash-out request (so no "haven't paid" piles, no credit chips, no cash-out cards). Empty future
  * regular games stay (the site makes them by itself). The players, their Venmo names, and the switch rows are untouched.
  */
-export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: string; startsAt: string; endsAt: string }): string {
-  const ids = keep.map((k) => `'${k}'`).join(',');
+export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: string; startsAt: string; endsAt: string }, playerOnly: string[] = []): string {
+  // `playerOnly` (Zip 38): games the PLAYER screens need (tonight, tomorrow) that stay out of the organizer's Home and Money lists, like the empty regular games.
+  const ids = [...keep, ...playerOnly].map((k) => `'${k}'`).join(',');
   const tables = (raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all() as { name: string }[]).map((t) => t.name);
   const emptyFuture = `SELECT s.id FROM sessions s WHERE s.starts_at > '${new Date(nowMs).toISOString()}' AND s.status <> 'canceled' AND COALESCE(s.is_extra, 0) = 0 AND NOT EXISTS (SELECT 1 FROM session_players p WHERE p.session_id = s.id)`;
   const doomed = `(SELECT id FROM sessions WHERE id NOT IN (${ids}) AND id NOT IN (${emptyFuture}))`;
@@ -72,13 +73,18 @@ export function calmDown(raw: any, keep: string[], nowMs: number, move?: { id: s
   const hide = (raw.prepare(`SELECT s.id, s.group_id FROM sessions s WHERE s.id IN (${emptyFuture}) AND s.id NOT IN (${ids})`).all() as { id: string; group_id: string }[])
     .map((r) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES ('calm-hide-${r.id}', '${r.group_id}', '${r.id}', 'admin_hidden_game', 'mark', '${new Date(nowMs).toISOString()}');`)
     .join('\n');
+  const hidePlayerOnly = playerOnly
+    .map((id) => `INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'calm-hide-${id}', group_id, id, 'admin_hidden_game', 'mark', '${new Date(nowMs).toISOString()}' FROM sessions WHERE id = '${id}';`)
+    .join('\n');
   // The kept Second Chance game goes to its exact time now that the game that was in its way is gone.
   if (move) raw.prepare('UPDATE sessions SET starts_at = ?, ends_at = ? WHERE id = ?').run(move.startsAt, move.endsAt, move.id);
-  return hide + '\n';
+  return hide + '\n' + hidePlayerOnly + '\n';
 }
 
 export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boolean } = {}): Promise<Seed> {
   const keep: string[] = [];
+  /** Zip 38 (Christmas skin): the games the player screens need to show it (tonight, tomorrow); kept in the calm profile, hidden from the organizer's lists. */
+  const skinKeep: string[] = [];
   let lateMove: { id: string; startsAt: string; endsAt: string } | undefined;
   const w = new World();
   const summary: string[] = [];
@@ -357,14 +363,20 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
     const start = Math.max(tonightStart, Math.ceil((N + 30 * 60_000) / 900_000) * 900_000);
     if (eastDate(start) === tonightDate) {
       const tg = await makeAt(start, 120, 'Tonight test');
+      skinKeep.push(tg.id);
       await setCourt(tg, 'booked');
       for (const n of ['Parker', 'Rowan', SMALL_LONG]) await join(n, tg);
       summary.push('"Tonight test": Booked, 3 in (Parker, Rowan, Christopher Vanderberg)');
     }
   }
   const tomorrowStart = zonedTimeToUtc(pt.year, pt.month, pt.day + dayShift + 1, 18, 45, TZ);
-  if (!hasOpenGameOn(eastDate(tomorrowStart))) {
+  const tomorrowDate = eastDate(tomorrowStart);
+  // (Zip 38: when another scene already has a game tomorrow, the calm profile keeps the first one for the player screens.)
+  const tomorrowExisting = games().find((g) => !g.state.flags.canceled && ms(g.endsAt) > N && eastDate(ms(g.startsAt)) === tomorrowDate);
+  if (tomorrowExisting) skinKeep.push(tomorrowExisting.id);
+  if (!hasOpenGameOn(tomorrowDate)) {
     const tm = await makeAt(tomorrowStart, 120, 'Tomorrow test');
+    skinKeep.push(tm.id);
     for (const n of ['Sage', SMALL_LONG]) await join(n, tm);
     summary.push('"Tomorrow test": not booked, 2 in (Sage, Christopher Vanderberg)');
   }
@@ -409,6 +421,7 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
         const res = await w.org.ok('POST', '/api/admin/sessions', { startsAt: new Date(start).toISOString(), endsAt: new Date(start + 2 * HOUR).toISOString(), note: null, ...(i === 0 ? { court: 3 } : {}) });
         await refresh();
         const g = games().find((x) => x.id === res.id);
+        skinKeep.push(g.id);
         await setCourt(g, 'booked');
         // (Not Vic, Wren or Quinn: tonight's money joins the owe card at once, and would change their cards.)
         for (const n of i === 0 ? ['Parker', 'Rowan', 'Sage', SMALL_LONG] : ['Parker', 'Rowan', SMALL_LONG]) await join(n, g);
@@ -505,8 +518,8 @@ export async function buildSmallPreview(startMs = Date.now(), opts: { calm?: boo
 
   let calmSql = '';
   if (opts.calm) {
-    calmSql = calmDown(w.db.raw, keep, N, lateMove);
-    summary.push('CALM profile: only the 8:00 PM Second Chance game and the "Test game" are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
+    calmSql = calmDown(w.db.raw, keep, N, lateMove, skinKeep);
+    summary.push('CALM profile: only the 8:00 PM Second Chance game, the "Test game" and (Zip 38, player screens only) the tonight and tomorrow games are kept; every other game, payment, credit entry and cash-out request is left out (npm run db:seed:preview -- --full builds the whole world)');
   }
   const backupRes = await w.org.call('GET', '/api/admin/backup');
   const backup = JSON.parse(backupRes.text);
