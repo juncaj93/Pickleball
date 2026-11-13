@@ -144,14 +144,19 @@ async function main() {
   await check('a tap turns it on (the server agrees), another turns it off again', async () => {
     const { ctx, page, errors } = await openSettings({ width: 390, scheme: 'dark' });
     const row = page.locator('[data-row="cheaperFixAll"]');
+    const answers = [];
+    page.on('response', (r) => { if (r.url().includes('cheaper-fix-switch')) answers.push(`${r.status()}`); });
+    page.on('request', (r) => { if (r.method() !== 'GET') answers.push(`${r.method()} ${new URL(r.url()).pathname}`); });
     for (const want of [true, false]) {
-      await row.locator('input').click({ force: true });
+      await page.waitForTimeout(900); // like a person: a second tap on the same spot within the double-tap guard's window is dropped on purpose
+      await row.scrollIntoViewIfNeeded();
+      await row.locator('label').click();
       let ok = false;
       for (let i = 0; i < 40 && !ok; i++) {
         await sleep(250);
         ok = ((await dash()).cheaperFixForAll === true) === want;
       }
-      assert(ok, `server says ${want ? 'on' : 'off'}`);
+      assert(ok, `server says ${want ? 'off' : 'on'} (requests: ${answers.join(', ') || 'none'})`);
       assert((await row.locator('input').isChecked()) === want, `the switch shows ${want ? 'on' : 'off'}`);
     }
     assert(errors.length === 0, errors.join(' | '));
