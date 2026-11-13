@@ -4558,3 +4558,10 @@ The calm profile now also keeps the games the skin needs, for PLAYERS only: toni
 - `zip38-off` against the branch's own base commit `f73a557` plus only the softer shimmer lines: Off 24, Everyone-outside-window 24, Just me 24 (every non-organizer player and every organizer screen identical to main), clock-jump 12 (HTML and answers).
 - Preview rebuilt calm (reseeded, redeployed) and both links tried in light and dark; the saved Just me choice was switched back off, so the fake data is clean.
 - **Main has moved on** (Zip 40, organizer text messages: `shared/messages.ts`, `shared/textsR2.ts`, `src/pages/admin/textMenu.ts`, `LateFees.tsx`, plus `docs/STAGE_NOTES.md` and `e2e/suite.cjs`). Before any deploy this branch needs main merged in; the only overlaps with this branch are the notes and the browser-suite list. Not merged now, per the instructions.
+
+## Zip 40: Text the players wording (live Fri Nov 13, 2026, 9:55 AM Eastern)
+
+- Wording only, no switch, no database change. "Text the players" (both tabs) and the two old-wording late-cancel texts now say "today's game", "tomorrow's game" or the weekday ("Tuesday's game") by Eastern calendar day. Today reads exactly as before. Audit of every message: docs/TEXT_AUDIT.md.
+- Deployment: b31b5d96-f290-4085-baf4-9adf2f58e0d7 (commit b5fc08d). Rollback: the previous production deployment (live before was f73a557) in Cloudflare Pages > pickleball-club > Deployments > Rollback.
+- Time Travel bookmark before: 00001199-00000000-00005122-8d90f62f76e4e8c4afa95631c0178b49. Backup export saved as export-20261113145513 in pickleball-backups. Integrity checks all 0 before and after.
+- Tests: unit 2,961 passed (17 new); full browser run 73 of 74 scripts green, 2,799 checks. zip18 ("View as Parker" Demo banner check) fails on main without this change too (it failed on a different Parker check there), so it was not touched.

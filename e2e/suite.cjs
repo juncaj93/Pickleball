@@ -46,6 +46,7 @@ module.exports = {
   'player-fix1',
   'pay-sheet',
   'texts-r2',
+  'text-fix',
   'late-fee-split',
   'money-rework',
   'instant-taps',

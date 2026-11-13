@@ -5,6 +5,8 @@ import type { AdminDashboard, AdminRosterEntry, AdminSessionView } from '../../.
 import {
   canceledFeeKeptMessage,
   canceledMessage,
+  backOutDay,
+  backOutGame,
   canceledTodayMessage,
   courtCanceledMessage,
   courtStillBookedMessage,
@@ -212,11 +214,15 @@ export interface BackOutText {
   body: string;
 }
 
-/** The two texts for backing out of today's game, main one first. */
-export function backOutTexts(r2 = false): BackOutText[] {
+/**
+ * The two texts for backing out of a game, main one first. Given the game, its day, and now, the words name the day
+ * ("today's game", "tomorrow's game", "Tuesday's game"). Without them: "today's game", as before.
+ */
+export function backOutTexts(r2 = false, game?: { startsAt: string; tz: string; nowMs: number }): BackOutText[] {
+  const g = backOutGame(game?.startsAt, game?.tz, game?.nowMs);
   return [
-    { id: 'court_canceled', label: 'Court canceled', body: r2 ? courtCanceledTextR2() : courtCanceledMessage() },
-    { id: 'court_booked', label: 'Court still booked (backup)', body: r2 ? courtStillBookedTextR2() : courtStillBookedMessage() },
+    { id: 'court_canceled', label: 'Court canceled', body: r2 ? courtCanceledTextR2(undefined, undefined, g) : courtCanceledMessage(undefined, undefined, g) },
+    { id: 'court_booked', label: 'Court still booked (backup)', body: r2 ? courtStillBookedTextR2(undefined, g) : courtStillBookedMessage(undefined, g) },
   ];
 }
 
@@ -241,11 +247,11 @@ export function lateCancelText(d: AdminDashboard, s: AdminSessionView, reason: s
     // With the fee split (LATE_FEE_SPLIT) the share is the split price ("your $9 share"); the words are otherwise the same.
     const body = r2
       ? canceledFeeKeptTextR2(s, d.group.timezone, nowMs, s.feeSplit?.priceCents ?? viewFlat(s, d.group.settings.pricePerPlayerCents), link, why)
-      : canceledFeeKeptMessage(s.feeSplit?.priceCents ?? viewFlat(s, d.group.settings.pricePerPlayerCents), link);
+      : canceledFeeKeptMessage(s.feeSplit?.priceCents ?? viewFlat(s, d.group.settings.pricePerPlayerCents), link, backOutGame(s.startsAt, d.group.timezone, nowMs));
     return { body, to: 'The players who were in', feeKept: true, reach: confirmedReach(d, s, true) };
   }
   return {
-    body: r2 ? canceledCreditTextR2(s, d.group.timezone, nowMs, link, why) : canceledTodayMessage(link, reason),
+    body: r2 ? canceledCreditTextR2(s, d.group.timezone, nowMs, link, why) : canceledTodayMessage(link, reason, backOutDay(s.startsAt, d.group.timezone, nowMs)),
     to: 'Everyone signed up and waiting',
     feeKept: false,
     reach: reach(s.roster.filter((r) => r.status === 'confirmed' || r.status === 'waitlisted'), d.me?.id ?? null),
