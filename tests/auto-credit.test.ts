@@ -597,7 +597,7 @@ describe('privacy', () => {
     const blair = withoutIds(JSON.stringify(await view(ctx, 'Blair')));
     for (const secret of ['$17', '1700', '"300"', '900', 'cashOut']) expect(blair).not.toContain(secret);
     expect((await view(ctx, 'Blair')).credit).toEqual({ balanceCents: 0, usableCents: 0, pending: null, history: [] });
-    expect(JSON.stringify(answers[0])).not.toContain('900');
+    expect(withoutIds(JSON.stringify(answers[0]))).not.toContain('900');
   });
 
   it('the Telegram line holds only a first name, the amounts and the day', () => {

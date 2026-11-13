@@ -470,7 +470,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -480,6 +480,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
             <>
               <HomeScreenTipRow ctx={ctx} auto={auto} />
               <GameDayTextRow ctx={ctx} auto={auto} />
+              <TapGuardRow ctx={ctx} auto={auto} />
               <ExtendedTimeRow ctx={ctx} auto={auto} />
               <CheckInPayRow ctx={ctx} auto={auto} />
               <PlayersSheetRow ctx={ctx} auto={auto} />
@@ -1397,6 +1398,11 @@ function GameDayTextRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="gameDayTextAll" path="/api/admin/game-day-text-switch" name="Game day text" hint="Telegram an hour before a booked game with 2 or more in: a Text the players link that opens Messages to the players. Nothing sends until you tap send" flag={!!ctx.d.gameDayTextForAll} dataAttr="data-game-day-text-all" />;
 }
 
+/** Zip 35, "Tap guard fix" (TAP_GUARD_FIX, server/tapGuardFix.ts): a quick tap on a neighbouring button works; a repeat tap on the same button is still ignored. Every phone. Off: only ?tapguard=on. */
+function TapGuardRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
+  return <Zip7Row ctx={ctx} auto={auto} rowKey="tapGuardFixAll" path="/api/admin/tap-guard-switch" name="Tap guard fix" hint="A quick tap on the next button works (Hide from list, then Hide it). Tapping the same button twice still counts once" flag={!!ctx.d.tapGuardFixForAll} dataAttr="data-tap-guard-fix-all" />;
+}
+
 /** Zip 31, "Extended time" (EXTENDED_TIME, server/extension.ts): None | +30 min | +1 hr on the Who played sheet, shares on the next game. Moves money. Off: only ?extendedtime=on. */
 function ExtendedTimeRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="extendedTimeAll" path="/api/admin/extended-time-switch" name="Extended time" hint="Finalize: add +30 min or +1 hr. Each player's share goes on their next game" flag={!!ctx.d.extendedTimeForAll} dataAttr="data-extended-time-all" />;
@@ -1640,6 +1646,7 @@ function TidySwitches({ ctx, auto, r3 }: { ctx: AdminCtx; auto: Autosave; r3: bo
     <div className="switches-tidy" data-switches-tidy>
       <HomeScreenTipRow ctx={ctx} auto={auto} />
       <GameDayTextRow ctx={ctx} auto={auto} />
+      <TapGuardRow ctx={ctx} auto={auto} />
       <ExtendedTimeRow ctx={ctx} auto={auto} />
       <CheckInPayRow ctx={ctx} auto={auto} />
       <PlayersSheetRow ctx={ctx} auto={auto} />

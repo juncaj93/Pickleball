@@ -256,7 +256,7 @@ export function PlayerHome({
     [groupKey, viewAs?.id, pretend, demo],
     tracker,
   );
-  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
+  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker, load.data?.tapGuardFix === true);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);

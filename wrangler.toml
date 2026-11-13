@@ -250,6 +250,11 @@ HOME_SCREEN_TIP = "on"
 # players" link that opens Messages to the players in that game (never the organizer), numbers looked up on the server, never in the message or the link.
 # "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Game day text" (off at ship = nobody). "off" = the kill switch. Needs a deploy.
 GAME_DAY_TEXT = "on"
+# Zip 35 "Tap guard fix" (shared/tapGuard.ts): the page's fast-tap guard (Instant taps) drops only a repeat tap on the SAME button, or a tap on another
+# button when the one tapped before went away or moved; a quick tap on a neighbouring button (Hide from list, then Hide it) works. Look and feel only: no
+# price, money rule, seat or data. "on" here only ALLOWS it; who gets it is Settings > Feature switches > "Tap guard fix" (off at ship = nobody),
+# plus a phone opened once with ?tapguard=on. "off" = the kill switch: nobody, not even the test link. Needs a deploy.
+TAP_GUARD_FIX = "on"
 
 # Preview deployments (any branch that is not main) use the throwaway
 # database "pickleball-preview" (fake data only), never the live one, so a
@@ -313,6 +318,7 @@ PLAYERS_SHEET_REDO = "on"
 ACTING_FOR_OTHERS_PREVIEW = "on"
 BOOKING_HOURS = "on"
 EXTENDED_TIME = "on"
+TAP_GUARD_FIX = "on"
 # Preview only (never in [vars] above): Zip 31's preview shows Extended time even if a re-seed from another branch dropped its Settings row.
 EXTENDED_TIME_PREVIEW = "on"
 HOME_SCREEN_TIP = "on"

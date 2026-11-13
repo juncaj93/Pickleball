@@ -168,6 +168,8 @@ route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
 route('PUT', '/api/admin/totals-refresh-switch', admin.setTotalsRefreshSwitch);
 route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
+// Zip 35 (server/tapGuardFix.ts): Tap guard fix.
+route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);
 // Zip 34 (server/checkInPay.ts): Check-in pay line.
 route('PUT', '/api/admin/checkin-pay-switch', admin.setCheckInPaySwitch);
 // Zip 32 (server/playersSheetRedo.ts): Players sheet redo.

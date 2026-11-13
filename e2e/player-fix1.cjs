@@ -110,7 +110,7 @@ async function main() {
     const a = await open('Ryan');
     assert((await a.page.locator('.schedule.pf1').count()) === 0, 'the new look is on with the switch off');
     const r = row(a.page);
-    assert((await r.locator('a.pay-btn').count()) === 0, 'Pay on tonight\'s card with the switch off');
+    assert((await r.locator('a.pay-btn:not(.m-ghost)').count()) === 0, 'Pay on tonight\'s card with the switch off');
     assert((await r.getByRole('button', { name: 'I paid' }).count()) === 0, 'I paid on tonight\'s card with the switch off');
     assert(/\$14 due/.test(await r.innerText()) && /Drop out/.test(await r.innerText()), `card: ${squash(await r.innerText())}`);
     const top = a.page.locator('section.pay-card');
@@ -128,7 +128,7 @@ async function main() {
     const a = await open('Ryan', { query: '/?playerfix1=on' });
     assert((await a.page.locator('.schedule.pf1').count()) === 1, 'the new look is not on');
     const r = row(a.page);
-    const pay = r.locator('a.pay-btn');
+    const pay = r.locator('a.pay-btn:not(.m-ghost)');
     assert((await pay.count()) === 1, 'Pay on tonight\'s card');
     assert(squash(await pay.innerText()) === 'Pay', `Pay label: ${await pay.innerText()}`);
     assert((await r.getByRole('button', { name: 'I paid' }).count()) === 1, 'I paid on tonight\'s card');
@@ -144,14 +144,14 @@ async function main() {
     // Another phone is not switched on.
     const other = await open(L.NOSPACE);
     assert((await other.page.locator('.schedule.pf1').count()) === 0, 'another phone has the new look');
-    assert((await row(other.page).locator('a.pay-btn').count()) === 0, 'another phone has Pay on tonight\'s card');
+    assert((await row(other.page).locator('a.pay-btn:not(.m-ghost)').count()) === 0, 'another phone has Pay on tonight\'s card');
     assert(!(await other.page.evaluate(() => localStorage.getItem('pb_player_fix1'))), 'another phone is remembered as switched on');
     await other.ctx.close();
     // ?playerfix1=off ends it on this phone.
     await a.page.goto(BASE + '/?playerfix1=off');
     await a.page.locator('.schedule article').first().waitFor();
     assert((await a.page.locator('.schedule.pf1').count()) === 0, '?playerfix1=off should end the private test');
-    assert((await row(a.page).locator('a.pay-btn').count()) === 0, 'Pay is back on the top card only');
+    assert((await row(a.page).locator('a.pay-btn:not(.m-ghost)').count()) === 0, 'Pay is back on the top card only');
     await a.ctx.close();
   });
 
@@ -161,7 +161,7 @@ async function main() {
     const shape = (id) =>
       a.page.evaluate((rid) => {
         const r = document.getElementById(`row-${rid}`);
-        const pay = r.querySelector('a.pay-btn');
+        const pay = r.querySelector('a.pay-btn:not(.m-ghost)');
         const links = [...r.querySelectorAll('.sched-links .link-btn')].map((b) => b.textContent.trim());
         const chip = r.querySelector('[data-owe]');
         return { pay: pay && pay.textContent.trim(), links, chip: chip && chip.textContent.trim(), payNextToChip: !!(pay && chip && pay.closest('.pay-line') === chip.closest('.pay-line')), outline: pay && pay.classList.contains('outline') };
@@ -227,9 +227,9 @@ async function main() {
     await r.getByRole('button', { name: "Didn't pay?" }).click();
     await a.page.locator('section.pay-card').waitFor({ timeout: 8000 });
     assert((await ryanSeat()).selfPaid === false, 'server: not paid again');
-    await r.locator('a.pay-btn').waitFor({ timeout: 8000 });
+    await r.locator('a.pay-btn:not(.m-ghost)').waitFor({ timeout: 8000 });
     await r.getByText(/\$14 due/).first().waitFor({ timeout: 8000 });
-    assert((await r.locator('a.pay-btn').count()) === 1, 'the card owes again with its Pay');
+    assert((await r.locator('a.pay-btn:not(.m-ghost)').count()) === 1, 'the card owes again with its Pay');
     await a.ctx.close();
   });
   await check('I paid on the top card: the same record, and tonight\'s card reads Paid $14 as well', async () => {
@@ -264,7 +264,7 @@ async function main() {
     const snap = await moneyNow();
     await a.page.locator('section.pay-card').getByRole('link', { name: /Pay \$14 with Venmo/ }).click();
     await a.page.waitForTimeout(300);
-    await row(a.page).locator('a.pay-btn').click();
+    await row(a.page).locator('a.pay-btn:not(.m-ghost)').click();
     await a.page.waitForTimeout(300);
     assert((await moneyNow()) === snap, 'a Pay tap moved money');
     await a.ctx.close();
@@ -319,13 +319,13 @@ async function main() {
     await sect.locator('[data-row="playerFix1All"] .save-mark.saved').waitFor();
     assert((await dash()).playerFix1ForAll === true, 'saved on the server');
     let p = await open('Ryan');
-    assert((await row(p.page).locator('a.pay-btn').count()) === 1, 'every phone has Pay on tonight\'s card');
+    assert((await row(p.page).locator('a.pay-btn:not(.m-ghost)').count()) === 1, 'every phone has Pay on tonight\'s card');
     await p.ctx.close();
     await sw.click();
     await page.waitForTimeout(700);
     assert((await dash()).playerFix1ForAll === false, 'switched off again');
     p = await open('Ryan');
-    assert((await row(p.page).locator('a.pay-btn').count()) === 0, 'today\'s look is back');
+    assert((await row(p.page).locator('a.pay-btn:not(.m-ghost)').count()) === 0, 'today\'s look is back');
     await p.ctx.close();
     const act = await (await areq.get(`${BASE}/api/admin/activity`)).json();
     await ctx.close();
@@ -334,11 +334,11 @@ async function main() {
   });
   await check('a phone left open picks up the Settings switch by itself (5-second refresh)', async () => {
     const p = await open('Ryan');
-    assert((await row(p.page).locator('a.pay-btn').count()) === 0, 'off to begin with');
+    assert((await row(p.page).locator('a.pay-btn:not(.m-ghost)').count()) === 0, 'off to begin with');
     await ok(await put(areq, '/api/admin/player-fix1', { on: true }), 'on');
-    await row(p.page).locator('a.pay-btn').waitFor({ timeout: 12000 });
+    await row(p.page).locator('a.pay-btn:not(.m-ghost)').waitFor({ timeout: 12000 });
     await ok(await put(areq, '/api/admin/player-fix1', { on: false }), 'off');
-    await row(p.page).locator('a.pay-btn').waitFor({ state: 'detached', timeout: 12000 });
+    await row(p.page).locator('a.pay-btn:not(.m-ghost)').waitFor({ state: 'detached', timeout: 12000 });
     await p.ctx.close();
   });
 

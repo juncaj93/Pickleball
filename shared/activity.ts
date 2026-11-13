@@ -244,6 +244,10 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} confirmed extra time paid with the next game`;
     case 'extension_unmarked_with_seat':
       return `${who} unmarked extra time paid with the next game`;
+    case 'tap_guard_fix_on':
+      return `${who} switched "Tap guard fix" on`;
+    case 'tap_guard_fix_off':
+      return `${who} switched "Tap guard fix" off`;
     case 'checkin_pay_line_on':
       return `${who} switched "Check-in pay line" on`;
     case 'checkin_pay_line_off':

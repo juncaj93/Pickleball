@@ -7,6 +7,7 @@
 // Card steps and sent Telegrams are task_log rows on the game (the table's unique index keeps each to one per game).
 import type { AdminDashboard, AdminSessionView } from '../shared/api';
 import { MIN_PLAYERS } from '../shared/spots';
+import { checkBookingTimes, hoursLine } from '../shared/bookingHours';
 import { COURTRESERVE_BOOKING_URL } from '../shared/settings';
 import { siteAddress } from '../shared/messages';
 import { localParts, zonedTimeToUtc } from '../shared/time';
@@ -29,6 +30,7 @@ import {
 } from '../shared/secondChance';
 import { connected, deliver, PAUSED_PREFIX, prefsOf, TIMEOUT_ERROR, type AlertRow } from './alerts';
 import { requireAdmin } from './auth';
+import { bookingHoursFlags } from './bookingHours';
 import type { Ctx } from './context';
 import { newId } from './crypto';
 import type { D1Database } from './db';
@@ -233,7 +235,7 @@ export function previewCalmFor(ctx: Ctx): boolean {
 export async function secondChanceAction(
   ctx: Ctx,
   body: Record<string, unknown>,
-  tools: { decide: (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>; reschedule: (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown> },
+  tools: { decide: (ctx: Ctx, body: Record<string, unknown>) => Promise<unknown>; reschedule: (ctx: Ctx, body: Record<string, unknown>, whileCanceled?: boolean, restoring?: boolean) => Promise<unknown> },
 ) {
   const group = await requireAdmin(ctx);
   if (!(await secondChanceFor(ctx, group.id))) throw new HttpError(404, 'not_found', 'Not found.');
@@ -269,14 +271,27 @@ export async function secondChanceAction(
   // Reopen. Already reopened from the card (a retry after a time change that did not save): only the time change is left to do.
   const already = game.marks.has(SC.reopened) && session.status !== 'canceled';
   if (!already && !isChance(game, nowMs, tz)) throw new HttpError(409, 'not_second_chance', 'This game is not a Second Chance game any more. Look again.');
-  const choices = pickTimes(session.starts_at, tz, nowMs);
+  // Booking hours known (Zip 35, A-11): offer only starts whose END is inside the venue hours too, and check the pick BEFORE anything is
+  // reopened. Off: every line below is the old flow, step for step.
+  const hoursOn = (await bookingHoursFlags(ctx, group.id)).on;
+  const length = Date.parse(session.ends_at) - Date.parse(session.starts_at);
+  const choices = pickTimes(session.starts_at, tz, nowMs, hoursOn ? { lengthMs: length } : undefined);
+  if (hoursOn && !already && choices.length === 0) {
+    throw new HttpError(409, 'no_time_fits', `${hoursLine(localParts(Date.parse(session.starts_at), tz).weekday)} No time fits a game this long, so nothing was reopened or changed.`);
+  }
   const minutes = body.minutes === undefined || body.minutes === null ? null : Number(body.minutes);
   if (minutes !== null && !choices.includes(minutes)) throw new HttpError(400, 'invalid_time', 'Pick one of the times shown.');
   const p = localParts(Date.parse(session.starts_at), tz);
   const newStart = minutes === null ? session.starts_at : new Date(zonedTimeToUtc(p.year, p.month, p.day, Math.floor(minutes / 60), minutes % 60, tz)).toISOString();
   const moved = newStart !== session.starts_at;
-  const length = Date.parse(session.ends_at) - Date.parse(session.starts_at);
-  const move = () => tools.reschedule(ctx, { startsAt: newStart, endsAt: new Date(Date.parse(newStart) + length).toISOString() });
+  const newEnd = new Date(Date.parse(newStart) + length).toISOString();
+  if (hoursOn && (moved || !already)) {
+    // The time that would be saved (a game left at its own time too) must fit, or nothing at all happens.
+    const fits = checkBookingTimes(newStart, newEnd, tz);
+    if (!fits.ok) throw new HttpError(400, 'invalid_time', fits.message);
+    if (moved && Date.parse(newStart) <= ctx.nowMs) throw new HttpError(400, 'invalid_time', 'Pick a time in the future.');
+  }
+  const move = (whileCanceled = false) => tools.reschedule(ctx, { startsAt: newStart, endsAt: newEnd }, whileCanceled);
   if (already) {
     if (moved) await move();
     return { ok: true, changed: moved };
@@ -285,6 +300,9 @@ export async function secondChanceAction(
     const clash = await ctx.db.prepare('SELECT 1 AS x FROM sessions WHERE group_id = ? AND starts_at = ? AND id <> ?').bind(group.id, newStart, session.id).first();
     if (clash) throw new HttpError(409, 'time_taken', "There's already a game at that time. Pick another time.");
   }
+  // Booking hours on: the move goes FIRST, while the game is still canceled (one all-or-nothing save: refused means nothing changed, the
+  // game stays canceled and no money moves), then the reopen. A reopen that does not go through puts the original time back.
+  if (hoursOn && moved) await move(true);
   // The mark first (the original time goes with it, for TEXT 2's "(instead of 7:30)"), so a reopened game is never left without its card;
   // taken back if the reopen itself does not go through.
   await mark(ctx.db, group.id, session.id, SC.reopened, session.starts_at, ctx.nowIso);
@@ -293,10 +311,15 @@ export async function secondChanceAction(
   } catch (err) {
     if ((await getSession(ctx.db, group.id, session.id))?.status === 'canceled') {
       await ctx.db.prepare("DELETE FROM task_log WHERE session_id = ? AND task = ? AND kind = 'mark'").bind(session.id, SC.reopened).run();
+      if (hoursOn && moved) {
+        // Best effort: back to the original time (the card then offers the same choices again). If this too is refused the time stays moved.
+        const back = { startsAt: session.starts_at, endsAt: session.ends_at };
+        await tools.reschedule(ctx, back, true, true).catch(() => undefined);
+      }
     }
     throw err;
   }
-  if (moved) await move();
+  if (moved && !hoursOn) await move();
   return { ok: true, changed: true };
 }
 

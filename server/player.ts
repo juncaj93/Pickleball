@@ -96,6 +96,7 @@ import { capOf, type GroupSettings } from '../shared/settings';
 import { payNoteFor } from './payNote';
 import { playerFix1For } from './playerFix1';
 import { instantTapsFor } from './instantTaps';
+import { tapGuardFixFlags } from './tapGuardFix';
 import { homeCollapseFor } from './homeCollapse';
 import { colorCleanupFor, playerCardsFor, tonightGlowFor } from './zip7';
 import { paySheetFor } from './paySheet';
@@ -303,6 +304,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     playerFix1: await playerFix1For(ctx, group.id),
     paySheet: paySheetOn,
     ...((await instantTapsFor(ctx, group.id)) ? { instantTaps: true } : {}),
+    // Zip 35 "Tap guard fix" (server/tapGuardFix.ts): only while on (off: this answer is exactly main's).
+    ...((await tapGuardFixFlags(ctx, group.id)).on ? { tapGuardFix: true } : {}),
     ...((await homeCollapseFor(ctx, group.id)) ? { homeCollapse: true } : {}),
     ...((await tonightGlowFor(ctx, group.id)) ? { tonightGlow: true } : {}),
     ...((await colorCleanupFor(ctx, group.id)) ? { colorCleanup: true } : {}),

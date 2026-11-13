@@ -142,9 +142,9 @@ async function main() {
     await page.locator('.tabbar button', { hasText: 'Settings' }).click();
     await page.waitForTimeout(400);
     for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 3));
-    // (Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit on top of it.)
-    assert(first[0] === 'extendedTimeAll' && first[1] === 'checkInPayAll' && first[2] === 'playersSheetRedoAll', `newest first: ${first}`);
+    const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 4));
+    // (Zip 35's Tap guard fix, Zip 34's Check-in pay line row and Zip 31's Extended time row are newer and sit on top of it.)
+    assert(first[0] === 'tapGuardFixAll' && first[1] === 'extendedTimeAll' && first[2] === 'checkInPayAll' && first[3] === 'playersSheetRedoAll', `newest first: ${first}`);
     const r = page.locator('[data-row="playersSheetRedoAll"]');
     assert(/Players sheet redo/.test(await r.innerText()), 'row label');
     assert(!(await r.locator('input[type=checkbox]').isChecked()), 'the row starts off');

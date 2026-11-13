@@ -205,7 +205,7 @@ async function main() {
   // ---------- 2. ON: the card, the sheet ----------
   await check('ON: "Edit players / time"; the tiles sheet: 4 tiles, summary, None picked, +30 min line, tap a tile off', async () => {
     const { ctx, page } = await phone({ signedIn: true });
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin?alerts=all`);
     await page.locator(`[data-finalize="${g4}"]`).waitFor({ timeout: 15000 });
     const label = (await page.locator(`[data-finalize="${g4}"] [data-change-played]`).innerText()).trim();
     assert(label === 'Edit players / time', `label: ${label}`);
@@ -254,7 +254,7 @@ async function main() {
         for (const pct of pcts)
           await check(`sheet with ${n} players, ${width} ${scheme} ${pct}%: nothing clipped, Confirm in view without scrolling`, async () => {
             const { ctx, page } = await phone({ width, scheme, signedIn: true });
-            await page.goto(`${BASE}/admin`);
+            await page.goto(`${BASE}/admin?alerts=all`);
             await page.locator(`[data-finalize="${sid}"]`).waitFor({ timeout: 15000 });
             await bigText(page, pct);
             await openSheet(page, sid);
@@ -279,7 +279,7 @@ async function main() {
   // ---------- 4. Confirm +30 min, then every screen that shows it ----------
   await check('Confirm with +30 min: the game is final, $12 extra court cost written, three $3 shares', async () => {
     const { ctx, page } = await phone({ signedIn: true });
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin?alerts=all`);
     await page.locator(`[data-finalize="${g4}"]`).waitFor({ timeout: 15000 });
     await openSheet(page, g4);
     await page.locator('dialog[open] .xt-seg [data-extra="30"]').click();
@@ -302,7 +302,7 @@ async function main() {
       for (const pct of pcts)
         await check(`Home extension rows, ${width} ${scheme} ${pct}%: "$3 extension · Thu, Nov 12", Mark paid, nothing clipped`, async () => {
           const { ctx, page } = await phone({ width, scheme, signedIn: true });
-          await page.goto(`${BASE}/admin`);
+          await page.goto(`${BASE}/admin?alerts=all`);
           await page.locator('[data-ext-owed]').waitFor({ timeout: 15000 });
           await bigText(page, pct);
           const sage = page.locator('[data-ext-owed] [data-ext-row="Sage"]');
@@ -428,7 +428,7 @@ async function main() {
 
   await check('View as (the demo copy): Pay on "$17 due", then the sheet\'s Venmo button, says "Demo, nothing saved" and the card reads paid; nothing is saved', async () => {
     const { ctx, page } = await phone({ signedIn: true });
-    await page.goto(`${BASE}/admin`);
+    await page.goto(`${BASE}/admin?alerts=all`);
     await page.getByRole('button', { name: /View as/ }).first().click();
     await page.locator('dialog[open] .name-grid button', { hasText: 'Sage' }).click();
     await page.waitForTimeout(3500);

@@ -147,8 +147,8 @@ async function main() {
         await page.waitForTimeout(400);
         for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
         const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.map((e) => e.getAttribute('data-row')).filter((k) => k !== 'homeScreenTipAll' && k !== 'gameDayTextAll').slice(0, 3));
-        // (Zip 31's Extended time is newer and sits on top.)
-        assert(first[0] === 'extendedTimeAll' && first[1] === 'checkInPayAll' && first[2] === 'playersSheetRedoAll', `newest first: ${first}`);
+        // (Zip 35's Tap guard fix and Zip 31's Extended time are newer and sit on top.)
+        assert(first[0] === 'tapGuardFixAll' && first[1] === 'extendedTimeAll' && first[2] === 'checkInPayAll', `newest first: ${first}`);
         const r = page.locator('[data-row="checkInPayAll"]');
         await r.scrollIntoViewIfNeeded();
         assert(/Check-in pay line/.test(await r.innerText()), 'row label');
