@@ -15,7 +15,7 @@
  * Nothing here touches Cloudflare or the live site.
  */
 const { spawn, spawnSync } = require('node:child_process');
-const { readFileSync, mkdirSync, rmSync, copyFileSync } = require('node:fs');
+const { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync } = require('node:fs');
 const { DatabaseSync } = require('node:sqlite');
 const crypto = require('node:crypto');
 const path = require('node:path');
@@ -75,6 +75,7 @@ async function site(dir, port, dbFile, seedFile, isBranch) {
 }
 
 /**
+ * Alex: two look changes ship to EVERYONE, switch on or off (the tonight shimmer is softer; the ring on MY ball is gone).
  * Alex (round 1): the tonight shimmer is softer for EVERYONE, switch on or off, so today's main is not the page the branch must match any more:
  * it must match main PLUS that one shimmer change. This copies the branch's src/zip7.css over the main checkout's, after checking the only
  * lines that differ are the shimmer lines (the --z7-sweep colors and the sweep's gradient). Nothing else is allowed to differ.
@@ -90,12 +91,19 @@ function giveMainTheSofterShimmer() {
   if (bad.length) throw new Error(`src/zip7.css differs from main in more than the shimmer: ${bad.join(' | ')}`);
   if (mainOnly.length === 0 && branchOnly.length === 0) throw new Error('src/zip7.css has no shimmer change to expect');
   copyFileSync(path.join(ROOT, 'src/zip7.css'), path.join(MAIN, 'src/zip7.css'));
+  // Alex (approved, Nov 13): the green ring around MY seat's pickleball is gone for everyone (the plain ball, like everyone's). Main gets the same one
+  // rule taken out of src/styles.css, character for character, and nothing else.
+  spawnSync('git', ['-C', MAIN, 'checkout', '--', 'src/styles.css']);
+  const ring = "/* Your own ball: a green ring. */\n.ball.me .ball-skin {\n  stroke: var(--primary);\n  stroke-width: 2;\n}\n";
+  const styles = readFileSync(path.join(MAIN, 'src/styles.css'), 'utf8');
+  if (styles.split(ring).length !== 2) throw new Error("main's src/styles.css does not hold the own-ball ring rule exactly once (main moved?)");
+  writeFileSync(path.join(MAIN, 'src/styles.css'), styles.replace(ring, ''));
   return mainOnly.length + branchOnly.length;
 }
 
 async function main() {
   const shimmerLines = giveMainTheSofterShimmer();
-  console.log(`main gets the softer tonight shimmer (${shimmerLines} CSS lines), nothing else`);
+  console.log(`main gets the softer tonight shimmer (${shimmerLines} CSS lines) and the own-ball ring taken out, nothing else`);
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   const seedFile = path.join(ROOT, '.data', 'zip38-off-seed.sqlite');
   rmSync(seedFile, { force: true });

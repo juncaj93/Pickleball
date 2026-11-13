@@ -168,6 +168,29 @@ async function main() {
     await ctx.close();
   });
 
+  for (const scheme of ['light', 'dark']) {
+    await check(`R the plain theme: my own seat's pickleball has no ring (${scheme}); everyone's balls look the same, my name stays bold`, async () => {
+      const { ctx, page } = await phone({ scheme });
+      // Switch Off for everyone: the plain theme, no Christmas anything.
+      await page.goto(`${BASE}/?as=Alex&xmasmode=off`);
+      await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+      await sleep(900);
+      const info = await page.evaluate(() => {
+        const mine = document.querySelector('.dots .ball.me .ball-skin');
+        const other = document.querySelector('.dots .ball:not(.me) .ball-skin');
+        if (!mine || !other) return null;
+        const a = getComputedStyle(mine);
+        const b = getComputedStyle(other);
+        const boldName = [...document.querySelectorAll('.names-line strong, .names-line b')].some((n) => n.textContent.trim() === 'Alex');
+        return { mine: [a.stroke, a.strokeWidth], other: [b.stroke, b.strokeWidth], boldName };
+      });
+      assert(info, 'a game with my own ball and someone else\'s ball is on screen');
+      assert(info.mine.join() === info.other.join(), `my ball is the plain ball (mine ${info.mine}, theirs ${info.other})`);
+      assert(info.boldName, 'my name stays bold');
+      await ctx.close();
+    });
+  }
+
   await check('A a tap anywhere closes the first-visit bubble', async () => {
     const { ctx, page } = await phone();
     await home(page, `${LINK}&xmasreset=1`);

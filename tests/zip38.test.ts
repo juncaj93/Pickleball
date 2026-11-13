@@ -740,6 +740,17 @@ describe('Part D2: saving the Just me choice (quick taps, failures)', () => {
   });
 });
 
+describe('Part F: the ring on my own pickleball is gone for everyone (live change, switch or not)', () => {
+  it('no rule in any stylesheet draws a ring on a ball marked .me; the markup still marks it (names stay bold through their own rule)', () => {
+    for (const f of ['../src/styles.css', '../src/player-cards.css', '../src/zip10.css', '../src/alert-cards.css', '../src/gameday.css', '../src/players-sheet.css', '../src/motion.css', '../src/seat-dots.css']) {
+      const css = readFileSync(new URL(f, import.meta.url), 'utf8');
+      expect(css, f).not.toMatch(/\.ball\.me|\.me \.ball-skin|ball\.me/);
+    }
+    const ui = readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8');
+    expect(ui).toContain("className={`ball${me ? ' me' : ''}");
+  });
+});
+
 describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
   const css = readFileSync(new URL('../src/skin/christmas.css', import.meta.url), 'utf8');
   const theme = readFileSync(new URL('../src/skin/theme.tsx', import.meta.url), 'utf8');

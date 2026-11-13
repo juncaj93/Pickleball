@@ -2242,11 +2242,7 @@ body:has(.tabbar) .pop {
 .ball .ball-holes {
   fill: color-mix(in srgb, var(--ball-ink) 55%, var(--ball));
 }
-/* Your own ball: a green ring. */
-.ball.me .ball-skin {
-  stroke: var(--primary);
-  stroke-width: 2;
-}
+/* Your own ball (class .me, kept in the markup) is the plain ball like everyone's: the green ring was taken out (Alex, Nov 13). Your name stays bold. */
 
 /* Every name that's in (and the waitlist or standby line under it): small
    plain text on lines of their own, all names, wrapping when they don't fit.
