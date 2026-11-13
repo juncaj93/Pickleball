@@ -4,13 +4,13 @@
  *
  * The SMALL fake world (scripts/load-small-local.ts) as of Thu Nov 12, 2026, 3:00 PM Eastern (the day of the approved mock: TONIGHT games,
  * TOMORROW games, a canceled game, next week), its own dev server, every wrangler.toml switch as on live. The phone opens the page with the
- * private link ?christmasskin=on (the date window itself is proved in tests/zip38.test.ts).
+ * preview-style switch (CHRISTMAS_SKIN_PREVIEW) pretending it is Dec 5 (the date window itself is proved in tests/zip38.test.ts).
  *   A  first visit: the Christmas logo shows, the theme is OFF, the bubble "Tap for Christmas theme" shows about 2 s and never again;
- *   B  tap ON: ornaments (4 colors in turn, empty = dashed, my own seat keeps its ring), candy canes (5 px, then 3 px), snow cap on the top
+ *   B  tap ON: ornaments (4 colors in turn, empty = dashed, no ring, nothing moves at rest), candy canes (5 px, then 3 px), snow cap on the top
  *      card only, red TONIGHT/TOMORROW bands, red outlines (canceled stays gray), the page color; "Tap to switch back"; remembered on reload;
  *   C  tap OFF: balls back and spinning once, 45 ms apart, canes and cap gone at once; the logo stays; remembered;
  *   D  motion: pop-in classes, the first card's jingle, I'm in = only the new ornament drops, the 4th player jingles all four, the Game on
- *      toast badge is an ornament with the same words, the glow on game day cards only (never an empty seat);
+ *      toast badge is an ornament with the same words; every ornament animation plays to the end even through a redraw; Just me (only Alex, normal logo, kept on the server) and Everyone;
  *   E  reduced motion: no animation anywhere; blocked storage never crashes; the admin screens never get any of it;
  *   F  light and dark, 390 / 360 / 320, text 100 / 125 / 150 percent: nothing clipped, nothing sideways.
  */
@@ -195,13 +195,10 @@ async function main() {
       const stops = await page.evaluate(() => [...document.querySelectorAll('.schedule article.sched')[0].querySelectorAll('.dots .xorn:not(.xempty) radialGradient stop:nth-child(2)')].map((s) => s.getAttribute('stop-color')));
       assert(stops.join(',') === '#e5483f,#37b873,#f2b33d,#4f7be0'.split(',').slice(0, stops.length).join(','), `ornament colors by seat: ${stops}`);
       // My own seat keeps a ring.
-      assert((await page.locator('.xorn.me').count()) > 0, 'my own ornament is marked');
-      // No ring any more: nothing is drawn around it; a very faint gold glow and a tiny slow sway instead, only on mine.
-      assert((await page.locator('.xorn.me circle[stroke]').count()) === 0, 'no ring around my ornament');
-      const mine = await page.evaluate(() => { const o = document.querySelector('.xorn.me'); const cs = getComputedStyle(o); return [cs.animationName, cs.filter]; });
-      assert(mine[0] === 'xsway' && /drop-shadow/.test(mine[1]), `my ornament sways and glows faintly: ${mine}`);
-      const others = await page.evaluate(() => [...document.querySelectorAll('.dots .xorn:not(.me)')].map((o) => getComputedStyle(o).animationName + '|' + getComputedStyle(o).filter));
-      assert(others.length > 0 && others.every((x) => x === 'none|none'), `everyone else's ornaments stay still: ${[...new Set(others)]}`);
+      // No ring, no glow, no sway: nothing is drawn around any ornament and nothing moves on a card at rest.
+      assert((await page.locator('.xorn:not(.xempty) circle[stroke]').count()) === 0, 'no ring around any filled ornament (the dashed ones are the empty seats)');
+      const atRest = await page.evaluate(() => [...document.querySelectorAll('.dots .xorn')].map((o) => getComputedStyle(o).animationName + '|' + getComputedStyle(o).filter));
+      assert(atRest.length > 0 && atRest.every((x) => x === 'none|none'), `nothing moves or glows at rest: ${[...new Set(atRest)]}`);
       // The candy cane: 5 px in THIS WEEK, 3 px in NEXT WEEK.
       const thisCane = await pseudo(page, '.schedule > .week-break.tier-this', '::after', ['height', 'background-image']);
       const nextCane = await pseudo(page, '.schedule > .week-break.tier-next:not(.filter-only)', '::after', ['height', 'background-image']);
@@ -217,9 +214,21 @@ async function main() {
       assert(isRed(band), `TONIGHT band ${band}`);
       const tom = await page.evaluate(() => getComputedStyle(document.querySelector('.tile .day-tag.tomorrow')).backgroundColor);
       assert(isRed(tom), `TOMORROW band ${tom}`);
-      const borders = await page.evaluate(() => [...document.querySelectorAll('.schedule > article.sched')].map((a) => [a.classList.contains('off'), getComputedStyle(a.querySelector('.tile.ptile')).borderTopColor]));
-      assert(borders.filter(([off]) => !off).every(([, c]) => isRed(c)), `ordinary tiles red: ${JSON.stringify(borders)}`);
-      assert(borders.filter(([off]) => off).length > 0 && borders.filter(([off]) => off).every(([, c]) => !isRed(c)), 'canceled tile is not red');
+      const borders = await page.evaluate(() =>
+        [...document.querySelectorAll('.schedule > article.sched')].map((a) => {
+          const t = a.querySelector('.tile.ptile');
+          return [a.classList.contains('off'), t.classList.contains('ts'), t.classList.contains('ts-booked'), getComputedStyle(t).borderTopColor, getComputedStyle(t.querySelector('.tb-solid') || t).boxShadow];
+        }),
+      );
+      // Red outlines on games with a SET time (no court-status ring): their tile border is red. Booked games' ring (.tb-solid) is red too.
+      const plainTiles = borders.filter(([off, ts]) => !off && !ts);
+      assert(plainTiles.length > 0 && plainTiles.every(([, , , c]) => isRed(c)), `set-time tiles red: ${JSON.stringify(plainTiles)}`);
+      assert(borders.filter(([off, , booked]) => !off && booked).every(([, , , , shadow]) => /200, 49, 47/.test(shadow)), 'the court-booked ring is red too');
+      // The "~8 PM" and no-court games keep the regular theme's ring: a see-through border plus the status ring, never a red border doubling it.
+      const ringTiles = borders.filter(([off, ts, booked]) => !off && ts && !booked);
+      assert(ringTiles.length > 0, 'the world has tiles with a court-status ring');
+      assert(ringTiles.every(([, , , c]) => !isRed(c) && /rgba\(0, 0, 0, 0\)|transparent/.test(c)), `court-status tiles keep their own ring: ${JSON.stringify(ringTiles)}`);
+      assert(borders.filter(([off]) => off).length > 0 && borders.filter(([off]) => off).every(([, , , c]) => !isRed(c)), 'canceled tile is not red');
       const ordinary = await page.evaluate(() => {
         const t = [...document.querySelectorAll('.schedule > article.sched:not(.off) .tile.ptile:not(.day-tonight):not(.day-tomorrow)')][0];
         return t ? [getComputedStyle(t.querySelector('.dow')).color, getComputedStyle(t).borderTopColor] : null;
@@ -292,7 +301,7 @@ async function main() {
     await ctx.close();
   });
 
-  await check('D motion: pop-in, the first card jingles, then only my own ornament moves (no tonight glow)', async () => {
+  await check('D motion: pop-in, the first card jingles, then nothing moves at rest', async () => {
     const { ctx, page } = await phone();
     await home(page, `${LINK}&xmasreset=1`);
     await sleep(2200);
@@ -312,9 +321,9 @@ async function main() {
     assert(/xgrow/.test(snow['animation-name']), `the cap pops up: ${snow['animation-name']}`);
     await sleep(2400);
     assert((await page.evaluate(() => document.documentElement.getAttribute('data-skin-anim'))) === null, 'the marker goes away');
-    // The one-by-one glow is gone: the only ongoing motion on any card is MY ornament's sway.
-    const moving = await page.evaluate(() => [...document.querySelectorAll('.dots .xorn')].filter((o) => getComputedStyle(o).animationName !== 'none').map((o) => o.classList.contains('me')));
-    assert(moving.length > 0 && moving.every(Boolean), `only my ornaments move: ${moving}`);
+    // Nothing moves on a card at rest afterwards (no glow, no sway).
+    const moving = await page.evaluate(() => [...document.querySelectorAll('.dots .xorn')].filter((o) => getComputedStyle(o).animationName !== 'none').length);
+    assert(moving === 0, `${moving} ornaments still animate at rest`);
     assert(page.errors.length === 0, page.errors.join(' | '));
     await ctx.close();
   });
@@ -349,79 +358,72 @@ async function main() {
     await ctx.close();
   });
 
-  await check('G the private link sticks: whole skin on at every open (theme ON, Christmas logo), before the window, until ?christmasskin=off', async () => {
+  await check('G Just me: normal site and normal logo for everyone; only Alex can tap the normal logo; the choice is kept on the server (a Home Screen app has it); no bubbles', async () => {
+    const JM = 'xmasmode=me';
+    const a = await phone();
+    await a.page.goto(`${BASE}/?as=Alex&${JM}`);
+    await a.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await sleep(900);
+    assert((await logoSrc(a.page)) === '/logo.png', `the NORMAL logo: ${await logoSrc(a.page)}`);
+    assert((await a.page.locator('[data-skin-logo="me"]').count()) === 1, 'the logo is the tap for Alex');
+    assert((await attr(a.page)) === null && (await bubble(a.page)) === null, 'nothing on, no bubble');
+    const tile = await a.page.evaluate(() => getComputedStyle(document.querySelector('.topbar .brand-tile')).backgroundColor);
+    assert(tile === 'rgb(230, 238, 228)', `the normal tile fill (not the page color): ${tile}`);
+    await tapLogo(a.page);
+    await sleep(2600);
+    assert((await attr(a.page)) === 'christmas' && (await a.page.locator('.xorn').count()) > 0, 'theme on after the tap');
+    assert((await logoSrc(a.page)) === '/logo.png', 'still the normal logo');
+    assert((await bubble(a.page)) === null, 'no "Tap to switch back" in Just me');
+    // Same phone, reloaded: still on (saved on the server).
+    await a.page.reload();
+    await a.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await sleep(900);
+    assert((await attr(a.page)) === 'christmas', 'on after a reload');
+    await a.ctx.close();
+    // A fresh phone with empty storage (the Home Screen app): Alex is picked, the theme is already on.
+    const b = await phone();
+    await b.page.goto(`${BASE}/?as=Alex&${JM}`);
+    await b.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await sleep(1200);
+    assert((await attr(b.page)) === 'christmas', 'a fresh phone as Alex has the theme on');
+    // Everyone else: the plain site, no button, no bubble.
+    const c = await phone();
+    await c.page.goto(`${BASE}/?as=Parker&${JM}`);
+    await c.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await sleep(900);
+    assert((await attr(c.page)) === null && (await logoSrc(c.page)) === '/logo.png' && (await c.page.locator('[data-skin-logo]').count()) === 0, 'Parker sees the normal site');
+    assert((await c.page.locator('.xorn').count()) === 0 && (await bubble(c.page)) === null, 'no ornaments, no bubble for Parker');
+    await c.ctx.close();
+    // Turn it off again (and leave the fake data as it was).
+    await tapLogo(b.page);
+    await sleep(900);
+    assert((await attr(b.page)) === null, 'a tap turns it off');
+    await b.page.reload();
+    await b.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await sleep(900);
+    assert((await attr(b.page)) === null, 'and off is kept too');
+    await b.ctx.close();
+  });
+
+  await check('G Everyone: the Christmas logo and the first-visit bubble for every player, and every player can tap', async () => {
     const { ctx, page } = await phone();
-    // The server is pinned at Thu Nov 12: outside the window, and without the pretend date this phone has no skin at all.
-    await page.goto(`${BASE}/?as=Alex`);
+    await page.goto(`${BASE}/?as=Parker&xmasmode=all&xmasdate=2026-12-05&xmasreset=1`);
     await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
     await sleep(500);
-    assert((await attr(page)) === null && (await logoSrc(page)) === '/logo.png', 'plain before the link');
-    await page.goto(`${BASE}/?as=Alex&christmasskin=on`);
-    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(900);
-    assert((await logoSrc(page)) === '/logo-xmas.png', 'Christmas logo');
-    assert((await attr(page)) === 'christmas', 'theme is ON without a tap');
-    assert((await bubble(page)) === null, 'no bubble in the test mode');
-    assert((await page.locator('.xorn.xin, .xorn.xjoin').count()) === 0, 'no pop-in at open');
-    // Every later open, no link in the address: still the whole skin.
-    for (let i = 0; i < 2; i++) {
-      await page.goto(`${BASE}/`);
-      await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-      await sleep(700);
-      assert((await attr(page)) === 'christmas' && (await logoSrc(page)) === '/logo-xmas.png', `open ${i + 2}: skin on`);
-    }
-    // A tap on the logo works for this visit but is not remembered: the next open is ON again.
+    assert((await logoSrc(page)) === '/logo-xmas.png' && (await bubble(page)) === 'Tap for Christmas theme', 'Christmas logo and the first-visit bubble for Parker');
+    await sleep(2400);
     await tapLogo(page);
-    await sleep(500);
-    assert((await attr(page)) === null, 'a tap turns it off for this visit');
-    await page.goto(`${BASE}/`);
-    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(700);
-    assert((await attr(page)) === 'christmas', 'back ON at the next open');
-    await page.goto(`${BASE}/?christmasskin=off`);
-    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(900);
-    assert((await attr(page)) === null && (await logoSrc(page)) === '/logo.png', 'the off link puts everything back');
+    await sleep(2600);
+    assert((await attr(page)) === 'christmas', 'Parker can turn it on');
     await ctx.close();
   });
 
-  await check('G a Home Screen app (its own empty storage): Alex picks his name once and has the whole skin; everyone else is untouched; the off link clears it for all his phones', async () => {
-    const a = await phone();
-    await a.page.goto(`${BASE}/?as=Alex&christmasskin=on`);
-    await a.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(1200); // the page told the server
-    await a.ctx.close();
-    // A new phone with nothing stored (the Home Screen app): picking the name Alex is enough.
-    const b = await phone();
-    await b.page.goto(`${BASE}/?as=Alex`);
-    await b.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(1500);
-    await b.page.reload();
-    await b.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(700);
-    assert((await attr(b.page)) === 'christmas' && (await logoSrc(b.page)) === '/logo-xmas.png', 'Alex on a fresh phone has the whole skin');
-    // Another player on another fresh phone: nothing.
-    const c = await phone();
-    await c.page.goto(`${BASE}/?as=Parker`);
-    await c.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(900);
-    assert((await attr(c.page)) === null && (await logoSrc(c.page)) === '/logo.png' && (await c.page.locator('[data-skin-logo]').count()) === 0, 'Parker is untouched');
-    // The off link, opened as Alex, clears the mark.
-    await b.page.goto(`${BASE}/?christmasskin=off`);
-    await b.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(1500);
-    const d = await phone();
-    await d.page.goto(`${BASE}/?as=Alex`);
-    await d.page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
-    await sleep(1200);
-    assert((await attr(d.page)) === null && (await logoSrc(d.page)) === '/logo.png', 'cleared on every phone');
-    await b.ctx.close();
-    await c.ctx.close();
-    await d.ctx.close();
-  });
-
-  await check('G the private link changes nothing on the organizer screens or for the dashboard', async () => {
+  await check('G the old ?christmasskin links do nothing; the organizer screens are the same with the preview mode stored', async () => {
     const { ctx, page } = await phone();
+    await page.goto(`${BASE}/?as=Parker&christmasskin=on`); // (the old private link, kept here to prove it does nothing)
+    await page.locator('.schedule article.sched').first().waitFor({ timeout: 30000 });
+    await sleep(900);
+    assert((await attr(page)) === null && (await logoSrc(page)) === '/logo.png', 'the old link does nothing');
     const r = await ctx.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } });
     assert(r.ok(), 'organizer sign-in');
     const html = async (query) => {
@@ -430,12 +432,86 @@ async function main() {
       await sleep(900);
       return page.evaluate(() => document.querySelector('main').outerHTML.replace(/ id="[^"]*"/g, '').replace(/aria-labelledby="[^"]*"/g, ''));
     };
-    const plain = await html('?christmasskin=off');
-    const withLink = await html('?christmasskin=on');
-    assert(plain === withLink, 'the organizer Home is the same with the private link on');
+    const plain = await html('?xmasmode=off');
+    const stored = await html('?xmasmode=me');
+    assert(plain === stored, 'the organizer Home is the same with the preview mode set');
     assert((await attr(page)) === null && (await logoSrc(page)) === '/logo.png', 'admin never gets the theme or logo');
     await ctx.close();
   });
+
+  await check('H every ornament animation plays to the end, even when the page redraws in the middle (theme on, then I\'m in)', async () => {
+    const { ctx, page } = await phone();
+    await home(page, `${LINK}&xmasreset=1`);
+    await sleep(2200);
+    // The animations of every ornament, right after the tap; then redraw the whole page (the light/dark button re-renders it) while they run.
+    const watch = async (trigger, label) => {
+      await trigger();
+      await sleep(60);
+      const res = await page.evaluate(async () => {
+        const mine = () => document.getAnimations().filter((a) => a.effect && a.effect.target && a.effect.target.classList && a.effect.target.classList.contains('xorn') && a.effect.target.closest('.dots'));
+        const anims = mine();
+        const names = anims.map((a) => a.animationName);
+        const settled = Promise.allSettled(anims.map((a) => a.finished));
+        const btn = document.querySelector('.mode-btn');
+        if (btn) { btn.click(); await new Promise((r) => setTimeout(r, 250)); btn.click(); await new Promise((r) => setTimeout(r, 250)); btn.click(); }
+        const out = await settled;
+        return { total: anims.length, names: [...new Set(names)], rejected: out.filter((o) => o.status === 'rejected').length, lastJingle: names.filter((n) => n === 'xjingle').length };
+      });
+      assert(res.total > 0, `${label}: animations were running (${res.total})`);
+      assert(res.rejected === 0, `${label}: ${res.rejected} of ${res.total} animations were cut off (${res.names})`);
+      return res;
+    };
+    const popped = await watch(() => tapLogo(page), 'theme on');
+    assert(popped.lastJingle > 0, `the top card's jingle ran: ${popped.names}`);
+    await sleep(600);
+    assert((await page.locator('.xorn[data-moment]').count()) === 0, 'every motion class is cleared once the motion ended');
+    const card = page.locator('article.sched', { hasText: '9:30 PM' }).first();
+    await watch(() => card.locator('[data-join]').tap(), "I'm in");
+    await sleep(600);
+    assert((await page.locator('.xorn[data-moment]').count()) === 0, 'cleared after I\'m in too');
+    assert(page.errors.length === 0, page.errors.join(' | '));
+    await ctx.close();
+  });
+
+  for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [360, 'light'], [320, 'dark']]) {
+    await check(`S Settings at ${width} ${scheme}: the 3-way "Christmas skin" row (Off, Just me, Everyone) is on top, fits, ships Off, and each tap saves`, async () => {
+      const { ctx, page } = await phone({ width, scheme });
+      const r = await ctx.request.post(BASE + '/api/admin/login', { data: { pin: PIN }, headers: { Origin: BASE } });
+      assert(r.ok(), 'organizer sign-in');
+      const mode = async () => (await (await ctx.request.get(`${BASE}/api/admin/dashboard`)).json()).christmasSkinMode ?? 'off';
+      assert((await mode()) === 'off', 'ships Off');
+      await page.goto(`${BASE}/admin`);
+      await page.locator('.tabbar').waitFor({ timeout: 30000 });
+      await page.locator('.tabbar button', { hasText: 'Settings' }).click();
+      await sleep(500);
+      for (const sm of await page.locator('details > summary').all()) await sm.click().catch(() => {});
+      const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').first().getAttribute('data-row');
+      assert(first === 'christmasSkinAll', `newest first: ${first}`);
+      const row = page.locator('[data-row="christmasSkinAll"]');
+      assert((await row.locator('.set-name').innerText()).includes('Christmas skin'), 'its name');
+      const labels = await row.locator('[data-xmas-mode]').allInnerTexts();
+      assert(labels.join('|') === 'Off|Just me|Everyone', `three choices: ${labels}`);
+      assert((await row.locator('[data-xmas-mode="off"]').getAttribute('aria-pressed')) === 'true', 'Off is selected');
+      const fit = await row.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        return [...el.querySelectorAll('.set-name, .set-hint, [data-xmas-mode]')].every((x) => {
+          const q = x.getBoundingClientRect();
+          return q.left >= box.left - 0.5 && q.right <= box.right + 0.5 && q.width > 0;
+        });
+      });
+      assert(fit, 'everything sits inside the row');
+      assert(await noSideways(page), 'sideways scroll');
+      for (const [pick, want] of [['all', 'all'], ['me', 'me'], ['off', 'off']]) {
+        await row.locator(`[data-xmas-mode="${pick}"]`).click();
+        await sleep(900);
+        assert((await mode()) === want, `tapping ${pick} saves ${want}, the server says ${await mode()}`);
+        assert((await row.locator(`[data-xmas-mode="${pick}"]`).getAttribute('aria-pressed')) === 'true', `${pick} is selected`);
+      }
+      await row.screenshot({ path: path.join(SHOTS || '/tmp', `zip38-settings-${width}-${scheme}.png`) });
+      assert(page.errors.length === 0, page.errors.join(' | '));
+      await ctx.close();
+    });
+  }
 
   await check('E reduced motion: nothing animates, the swaps are instant', async () => {
     const { ctx, page } = await phone({ reduced: true });

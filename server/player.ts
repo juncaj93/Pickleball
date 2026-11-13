@@ -115,7 +115,7 @@ import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
 import { gameDayCardFor, gameDayTestFor } from './gameDay';
 import { homeScreenTipFor } from './homeScreenTip';
-import { christmasSkinFor, setChristmasSkinTester } from './christmasSkin';
+import { christmasSkinFor, christmasSkinModeFor, setChristmasSkinMeOn } from './christmasSkin';
 import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
@@ -332,10 +332,10 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     // organizer (real PIN) showing the organizer's own name; never in View as, never for a player (players: no trip, never there).
     ...(meIsOrganizer && !viewAsName && (await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
-    // Zip 38 "Christmas skin": one true flag, only while the switch is on for this phone AND today is inside the window (the phone keeps its own theme on/off). Never in admin answers. Off: exactly main's.
-    ...(skin.on ? { christmasSkin: true as const } : {}),
-    // The test mode (private link, or the organizer's own player with the organizer's test mark): the phone starts with the theme ON.
-    ...(skin.test ? { christmasSkinTest: true as const } : {}),
+    // Zip 38 "Christmas skin" (3-way: Off, Just me, Everyone). Everyone: one true flag, only inside the window (the phone keeps its own theme choice).
+    // Just me: only for the organizer's own player, never in View as: their theme choice (the logo stays the normal one). Never in admin answers. Off: exactly main's.
+    ...(skin.all ? { christmasSkin: true as const } : {}),
+    ...(skin.me ? { christmasSkinMe: { on: skin.me.on } } : {}),
     // Zip 37 "Home Screen tip": one true flag (the phone decides when to draw the card). Never for the organizer's own page; View as carries it like the player's own phone and the screen never draws it there. Off: exactly main's.
     ...(me && !meIsOrganizer && (await homeScreenTipFor(ctx, group.id)) ? { homeScreenTip: true as const } : {}),
     // Zip 17, Unpaid nudge: only while on (off: this answer is exactly main's). The screen counts from `owed` with shared/unpaidNudge.ts.
@@ -418,22 +418,18 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
 }
 
 /**
- * POST /api/christmas-skin-tester { on } (Zip 38): the private link tells the server, so the organizer's own player gets the test mode on every
- * phone, a Home Screen app included (an iPhone Home Screen app keeps its own storage, apart from Safari's). Only the organizer's own player
- * (the name set in Settings) can set or clear it, never in View as, never against the kill switch; anyone else gets a quiet "marked: false"
- * and nothing is saved. Look only: it changes how the organizer's own player sees the player screens, nobody else's.
+ * POST /api/christmas-skin-me { on } (Zip 38): in Just me, the organizer's own player taps the normal logo to switch the Christmas theme on or off.
+ * The choice is kept on the server (an iPhone Home Screen app keeps its own storage, apart from Safari's, so a phone-only memory would not reach it).
+ * Only the organizer's own player can save it, never in View as, only while the switch is Just me and the kill switch allows it; anyone else gets
+ * a quiet "applied: false" and nothing is saved. Look only: it changes how the organizer's own player sees the player screens, nobody else's.
  */
-export async function christmasSkinTester(ctx: Ctx, body: Record<string, unknown>) {
+export async function christmasSkinMe(ctx: Ctx, body: Record<string, unknown>) {
   const { group, playerId, viewAsName } = await viewer(ctx);
   const on = v.bool(body.on, 'on');
   const mine = !!playerId && !viewAsName && playerId === (await organizerIdOf(ctx.db, group));
-  // Not the organizer's own player (or View as): nothing to do, and nothing to retry ("applied" so the phone drops its note).
-  if (!mine) return { ok: true, marked: false, applied: true };
-  // Clearing always works (even with the kill switch off, so an "off" link is never lost); setting needs the kill switch to allow it, else the
-  // phone keeps its note and tries again at its next open.
-  if (on && !christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return { ok: true, marked: false, applied: false };
-  await setChristmasSkinTester(ctx.db, group.id, on, ctx.nowIso);
-  return { ok: true, marked: on, applied: true };
+  if (!mine || !christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN) || (await christmasSkinModeFor(ctx, group.id)) !== 'me') return { ok: true, applied: false };
+  await setChristmasSkinMeOn(ctx.db, group.id, on, ctx.nowIso);
+  return { ok: true, applied: true, on };
 }
 
 /** Lowercase letters and single spaces, for comparing names. */

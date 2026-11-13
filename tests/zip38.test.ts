@@ -8,14 +8,15 @@ import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { activityText } from '../shared/activity';
 import {
+  BACK_KEY,
   BUBBLE_BACK,
   BUBBLE_FIRST,
   CHRISTMAS_SKIN,
   christmasSkinAllowed,
-  BACK_KEY,
   HINT_KEY,
   inChristmasWindow,
   logoFor,
+  parseMode,
   parsePretendDate,
   readTheme,
   sameEasternDay,
@@ -174,6 +175,7 @@ describe('Part B: the phone\'s memory and the logo', () => {
   });
 });
 
+
 describe('Part B: the store (theme on and off, bubbles, reduced motion), run with a fake page', () => {
   const realGlobals = { document: (globalThis as any).document, matchMedia: (globalThis as any).matchMedia, localStorage: (globalThis as any).localStorage };
   afterEach(() => {
@@ -200,46 +202,44 @@ describe('Part B: the store (theme on and off, bubbles, reduced motion), run wit
   }
   const load = async () => import('../src/skin/store');
 
-  it('available: the theme starts off, the first-visit bubble shows, then fades by itself; a tap turns it on with the second bubble; off again leaves the logo', async () => {
+  it('Everyone: the theme starts off, the first-visit bubble shows then fades; a tap turns it on with "Tap to switch back"; off again leaves the logo', async () => {
     vi.useFakeTimers();
     const { attrs, store } = fakePage();
     const s = await load();
-    s.setSkinAvailable(true, false);
+    s.setSkinAvailable('all', false);
     expect(attrs['data-skin']).toBeUndefined();
-    let now = s.skinOnNow();
-    expect(now).toBe(false);
+    expect(s.skinStateNow().bubble).toBe('first');
     expect(store[HINT_KEY]).toBe('1');
     vi.advanceTimersByTime(2100);
+    expect(s.skinStateNow().bubble).toBeNull();
     s.toggleSkin();
     expect(attrs['data-skin']).toBe('christmas');
     expect(attrs['data-skin-anim']).toBe('in');
     expect(store[THEME_KEY]).toBe('on');
-    expect(s.skinOnNow()).toBe(true);
+    expect(s.skinStateNow().bubble).toBe('back');
     vi.advanceTimersByTime(s.IN_MS + 50);
     expect(attrs['data-skin-anim']).toBeUndefined();
     s.toggleSkin();
     expect(attrs['data-skin']).toBeUndefined();
     expect(attrs['data-skin-anim']).toBe('out');
     expect(store[THEME_KEY]).toBe('off');
-    expect(s.skinOnNow()).toBe(false);
-    now = s.skinOnNow();
+    expect(s.skinStateNow().mode).toBe('all'); // the Christmas logo stays
     vi.advanceTimersByTime(s.OUT_MS + 50);
     expect(attrs['data-skin-anim']).toBeUndefined();
   });
-  it('remembered on: a phone that turned it on comes back with the theme on and no bubble and no pop-in marker', async () => {
+  it('Everyone, remembered on: a phone that turned it on comes back with the theme on, no bubble, no pop-in marker', async () => {
     vi.useFakeTimers();
     const { attrs } = fakePage({ store: { [THEME_KEY]: 'on', [HINT_KEY]: '1' } });
     const s = await load();
-    s.setSkinAvailable(true, false);
+    s.setSkinAvailable('all', false);
     expect(attrs['data-skin']).toBe('christmas');
     expect(attrs['data-skin-anim']).toBeUndefined();
   });
-  it('not available (outside the window or switch off): nothing is set, a tap does nothing, nothing is written', async () => {
+  it('Off: nothing is set, a tap does nothing, nothing is written', async () => {
     vi.useFakeTimers();
     const { attrs, store } = fakePage({ store: { [THEME_KEY]: 'on' } });
     const s = await load();
-    s.setSkinAvailable(false, false);
-    expect(attrs['data-skin']).toBeUndefined();
+    s.setSkinAvailable('off', false);
     s.toggleSkin();
     expect(attrs['data-skin']).toBeUndefined();
     expect(store[HINT_KEY]).toBeUndefined();
@@ -248,31 +248,32 @@ describe('Part B: the store (theme on and off, bubbles, reduced motion), run wit
     vi.useFakeTimers();
     const { attrs } = fakePage({ store: { [THEME_KEY]: 'on', [HINT_KEY]: '1' } });
     const s = await load();
-    s.setSkinAvailable(true, false);
+    s.setSkinAvailable('all', false);
     expect(attrs['data-skin']).toBe('christmas');
-    s.setSkinAvailable(false, false);
+    s.setSkinAvailable('off', false);
     expect(attrs['data-skin']).toBeUndefined();
     expect(s.skinOnNow()).toBe(false);
   });
-  it('leaving the player Home (admin, another page) puts everything back', async () => {
+  it('leaving the player Home puts everything back', async () => {
     vi.useFakeTimers();
     const { attrs } = fakePage({ store: { [THEME_KEY]: 'on', [HINT_KEY]: '1' } });
     const s = await load();
-    s.setSkinAvailable(true, false);
+    s.setSkinAvailable('all', false);
     s.resetSkin();
     expect(attrs['data-skin']).toBeUndefined();
     expect(s.skinOnNow()).toBe(false);
   });
-  it('View as (the organizer\'s demo copy): starts off whatever this phone chose, no bubble, nothing remembered', async () => {
+  it('View as: starts off whatever this phone chose, no bubble, nothing remembered', async () => {
     vi.useFakeTimers();
     const { attrs, store } = fakePage({ store: { [THEME_KEY]: 'on' } });
     const s = await load();
-    s.setSkinAvailable(true, true);
+    s.setSkinAvailable('all', true);
     expect(attrs['data-skin']).toBeUndefined();
     expect(store[HINT_KEY]).toBeUndefined();
     s.toggleSkin();
     expect(attrs['data-skin']).toBe('christmas');
     expect(store[THEME_KEY]).toBe('on'); // the organizer's own memory is untouched
+    expect(s.skinStateNow().bubble).toBeNull();
     s.toggleSkin();
     expect(store[THEME_KEY]).toBe('on');
   });
@@ -280,7 +281,7 @@ describe('Part B: the store (theme on and off, bubbles, reduced motion), run wit
     vi.useFakeTimers();
     const { attrs } = fakePage({ reduced: true });
     const s = await load();
-    s.setSkinAvailable(true, false);
+    s.setSkinAvailable('all', false);
     s.toggleSkin();
     expect(attrs['data-skin']).toBe('christmas');
     expect(attrs['data-skin-anim']).toBeUndefined();
@@ -296,95 +297,87 @@ describe('Part B: the store (theme on and off, bubbles, reduced motion), run wit
     vi.useFakeTimers();
     const { attrs } = fakePage({ block: true });
     const s = await load();
-    s.setSkinAvailable(true, false);
-    expect(s.skinOnNow()).toBe(false);
+    s.setSkinAvailable('all', false);
     expect(s.skinStateNow().bubble).toBe('first');
     vi.advanceTimersByTime(2100);
     expect(s.skinStateNow().bubble).toBeNull();
     s.resetSkin();
-    vi.advanceTimersByTime(100);
-    s.setSkinAvailable(true, false); // the player Home comes back
-    expect(s.skinStateNow().bubble).toBeNull(); // not shown a second time (storage cannot remember it, the page does)
+    s.setSkinAvailable('all', false); // the player Home comes back
+    expect(s.skinStateNow().bubble).toBeNull();
     s.toggleSkin();
     expect(attrs['data-skin']).toBe('christmas');
+    expect(() => s.toggleSkin()).not.toThrow();
   });
-  it('another join or a tap within the 3 seconds cannot leave the jingle on (its own timer)', () => {
-    const src = readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8');
-    expect(src).toMatch(/if \(!jingle\) return undefined;\s*const t = setTimeout\(\(\) => setJingle\(false\), 3000\);\s*return \(\) => clearTimeout\(t\);\s*\}, \[jingle\]\);/);
-  });
-  it('leaving the player Home resets before the next screen paints (layout cleanup)', () => {
-    expect(readFileSync(new URL('../src/skin/useSkinRoot.ts', import.meta.url), 'utf8')).toContain('useLayoutEffect(() => resetSkin, [])');
-  });
-  it('"Tap to switch back" shows only the first time the theme is turned ON on a phone (not every time, not in View as)', async () => {
+  it('"Tap to switch back" shows only the first time the theme is turned ON on a phone (not every time, not after a reload, not in View as)', async () => {
     vi.useFakeTimers();
     const { store } = fakePage();
     const s = await load();
-    s.setSkinAvailable(true, false);
+    s.setSkinAvailable('all', false);
     vi.advanceTimersByTime(2100);
-    s.toggleSkin(); // on, first time
+    s.toggleSkin();
     expect(s.skinStateNow().bubble).toBe('back');
     expect(store[BACK_KEY]).toBe('1');
     vi.advanceTimersByTime(2100);
-    expect(s.skinStateNow().bubble).toBeNull();
-    s.toggleSkin(); // off
-    s.toggleSkin(); // on again
+    s.toggleSkin();
+    s.toggleSkin();
     expect(s.skinStateNow().on).toBe(true);
     expect(s.skinStateNow().bubble).toBeNull();
-    // A page reload (a new store) on the same phone: still never again.
     s.resetSkin();
     vi.resetModules();
     const again = await load();
-    again.setSkinAvailable(true, false);
+    again.setSkinAvailable('all', false);
     again.toggleSkin();
     again.toggleSkin();
     again.toggleSkin();
     expect(again.skinStateNow().bubble).toBeNull();
-    // View as: no bubble at all.
     vi.resetModules();
     fakePage();
     const demo = await load();
-    demo.setSkinAvailable(true, true);
+    demo.setSkinAvailable('all', true);
     demo.toggleSkin();
     expect(demo.skinStateNow().bubble).toBeNull();
   });
-  it('the test mode (private link): the theme is ON at every open, whatever this phone remembered, no bubbles, nothing remembered, until the link is turned off', async () => {
+  it('Just me: starts from the saved choice, no bubble ever, a tap saves the choice on the SERVER (not on the phone), nothing for storage', async () => {
     vi.useFakeTimers();
-    const { attrs, store } = fakePage({ store: { [THEME_KEY]: 'off' } });
+    const { attrs, store } = fakePage();
     const s = await load();
-    s.setSkinAvailable(true, false, true);
-    expect(attrs['data-skin']).toBe('christmas');
+    const saved: boolean[] = [];
+    s.setMePersist((on) => void saved.push(on));
+    s.setSkinAvailable('me', false, false);
+    expect(s.skinStateNow().mode).toBe('me');
+    expect(attrs['data-skin']).toBeUndefined();
     expect(s.skinStateNow().bubble).toBeNull();
     expect(store[HINT_KEY]).toBeUndefined();
-    expect(attrs['data-skin-anim']).toBeUndefined(); // no pop-in at open
-    s.toggleSkin(); // a tap on the logo still works for this visit...
+    s.toggleSkin();
+    expect(attrs['data-skin']).toBe('christmas');
+    expect(saved).toEqual([true]);
+    expect(store[THEME_KEY]).toBeUndefined(); // not kept in this phone's storage (a Home Screen app has its own storage)
+    expect(s.skinStateNow().bubble).toBeNull(); // no "Tap to switch back" in Just me
+    s.toggleSkin();
+    expect(saved).toEqual([true, false]);
     expect(attrs['data-skin']).toBeUndefined();
-    expect(store[THEME_KEY]).toBe('off'); // ...but nothing is written
-    expect(s.skinStateNow().bubble).toBeNull();
-    // The next open: ON again.
+    // A new page load: the server's saved choice is what shows.
     s.resetSkin();
-    vi.resetModules();
-    const { attrs: attrs2 } = fakePage({ store: { [THEME_KEY]: 'off' } });
-    const s2 = await load();
-    s2.setSkinAvailable(true, false, true);
-    expect(attrs2['data-skin']).toBe('christmas');
-    // The link turned off: the server answers without the flag, the phone puts everything away.
-    s2.setSkinAvailable(false, false, false);
-    expect(attrs2['data-skin']).toBeUndefined();
+    s.setSkinAvailable('me', false, true);
+    expect(attrs['data-skin']).toBe('christmas');
   });
-  it('a phone that blocks storage: available, toggles on and off without a single error', async () => {
+  it('a phone that blocks storage: Everyone toggles on and off without a single error', async () => {
     vi.useFakeTimers();
     const { attrs } = fakePage({ block: true });
     const s = await load();
-    expect(() => s.setSkinAvailable(true, false)).not.toThrow();
+    expect(() => s.setSkinAvailable('all', false)).not.toThrow();
     expect(() => s.toggleSkin()).not.toThrow();
     expect(attrs['data-skin']).toBe('christmas');
     expect(() => s.toggleSkin()).not.toThrow();
     expect(attrs['data-skin']).toBeUndefined();
+  });
+  it('leaving the player Home resets before the next screen paints (layout cleanup)', () => {
+    expect(readFileSync(new URL('../src/skin/useSkinRoot.ts', import.meta.url), 'utf8')).toContain('useLayoutEffect(() => resetSkin, [])');
   });
 });
 
 // ---------------------------------------------------------------------------------------------------------------------------------
-// Part C: the switch
+// Part C: the 3-way switch
 // ---------------------------------------------------------------------------------------------------------------------------------
 
 type W = Awaited<ReturnType<typeof setupGroup>>;
@@ -401,147 +394,162 @@ const signIn = async (w: W) => {
   const r = await w.organizer.call('POST', '/api/admin/login', { pin: PIN });
   expect(r.status).toBe(200);
 };
-/** Flip the Settings row (signs in again first, so it works after the clock has jumped). */
-const flip = async (w: W, on: boolean) => {
+/** Set the 3-way Settings switch (signs in again first, so it works after the clock has jumped). */
+const setMode = async (w: W, mode: 'off' | 'me' | 'all') => {
   await signIn(w);
-  const r = await w.organizer.call('PUT', '/api/admin/christmas-skin-switch', { on });
+  const r = await w.organizer.call('PUT', '/api/admin/christmas-skin-switch', { mode });
   expect(r.status).toBe(200);
 };
+const setOrganizer = (w: W, name = 'Alex') => void w.app.db.raw.prepare('UPDATE groups SET organizer_name = ?').run(name);
 
-describe('Part C: the switch (CHRISTMAS_SKIN, ships OFF)', () => {
-  it('names and kill switch', () => {
-    expect(CHRISTMAS_SKIN).toEqual({ task: 'christmas_skin_on', testerTask: 'christmas_skin_tester', header: 'X-Christmas-Skin', dateHeader: 'X-Christmas-Date', link: 'christmasskin', dateLink: 'xmasdate', env: 'CHRISTMAS_SKIN', name: 'Christmas skin' });
+describe('Part C: the 3-way switch (CHRISTMAS_SKIN: Off, Just me, Everyone; ships OFF)', () => {
+  it('names, modes and the kill switch', () => {
+    expect(CHRISTMAS_SKIN).toEqual({ task: 'christmas_skin_on', meTask: 'christmas_skin_me', meOnTask: 'christmas_skin_me_on', modeHeader: 'X-Christmas-Mode', dateHeader: 'X-Christmas-Date', modeLink: 'xmasmode', dateLink: 'xmasdate', env: 'CHRISTMAS_SKIN', name: 'Christmas skin' });
+    expect(parseMode('ME')).toBe('me');
+    expect(parseMode(' all ')).toBe('all');
+    expect(parseMode('off')).toBe('off');
+    for (const bad of [null, undefined, '', 'on', 'everyone', 'just me']) expect(parseMode(bad as never)).toBeNull();
     expect(christmasSkinAllowed(undefined)).toBe(true);
-    expect(christmasSkinAllowed('on')).toBe(true);
     expect(christmasSkinAllowed(' OFF ')).toBe(false);
   });
-  it('off at ship: no flag anywhere, even inside the window; the row on + inside the window gives the flag; the row on + outside gives none', async () => {
+  it('Off (ships so): no flag anywhere, even inside the window; the dashboard says nothing', async () => {
     const w = await setupGroup();
     at(w, est(2026, 12, 5, 12));
     expect((await group(w)).christmasSkin).toBeUndefined();
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toBeUndefined();
     await signIn(w);
-    expect((await dash(w)).christmasSkinForAll).toBeUndefined();
-    await flip(w, true);
-    await signIn(w);
-    expect((await dash(w)).christmasSkinForAll).toBe(true);
-    // Inside the window, every day we care about.
+    expect((await dash(w)).christmasSkinMode).toBeUndefined();
+  });
+  it('Everyone: every player gets the flag inside the window (Nov 27 to Dec 31), none outside it (Nov 26, Jan 1), no Just me object; the dashboard says "all"', async () => {
+    const w = await setupGroup();
+    await setMode(w, 'all');
     for (const t of [est(2026, 11, 27, 0, 0, 1), est(2026, 12, 5, 12), est(2026, 12, 25, 9), est(2026, 12, 31, 23, 59, 59)]) {
       at(w, t);
-      expect((await group(w)).christmasSkin).toBe(true);
+      const a = await group(w);
+      expect(a.christmasSkin).toBe(true);
+      expect(a.christmasSkinMe).toBeUndefined();
     }
-    // Outside: Nov 26 (Thanksgiving), Nov 12, Jan 1, next summer.
     for (const t of [est(2026, 11, 26, 23, 59, 59), est(2026, 11, 12, 15), est(2027, 1, 1, 0, 0, 0), est(2027, 7, 4, 12)]) {
       at(w, t);
       expect((await group(w)).christmasSkin).toBeUndefined();
     }
-    // Off again: no flag inside the window either.
-    at(w, est(2026, 12, 5, 12));
-    await flip(w, false);
-    expect((await group(w)).christmasSkin).toBeUndefined();
     await signIn(w);
-    expect((await dash(w)).christmasSkinForAll).toBeUndefined();
-  });
-  it('2027 works with no edit: the row on, Fri Nov 26, 2027 gives the flag, Thu Nov 25 does not', async () => {
-    const w = await setupGroup();
-    await flip(w, true);
+    expect((await dash(w)).christmasSkinMode).toBe('all');
+    // 2027 works with no edit.
     at(w, est(2027, 11, 25, 20));
     expect((await group(w)).christmasSkin).toBeUndefined();
     at(w, est(2027, 11, 26, 8));
     expect((await group(w)).christmasSkin).toBe(true);
   });
-  it('the kill switch beats the row and the private link', async () => {
+  it('the three choices replace each other: exactly one row at a time; a bad value is refused; players cannot flip it', async () => {
     const w = await setupGroup();
+    const rows = () => (w.app.db.raw.prepare("SELECT task FROM task_log WHERE task LIKE 'christmas_skin%' ORDER BY task").all() as { task: string }[]).map((r) => r.task);
+    await setMode(w, 'me');
+    expect(rows()).toEqual(['christmas_skin_me']);
+    await setMode(w, 'all');
+    expect(rows()).toEqual(['christmas_skin_on']);
+    await setMode(w, 'off');
+    expect(rows()).toEqual([]);
+    const bad = await w.organizer.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'sometimes' });
+    expect(bad.status).toBe(400);
+    const old = await w.organizer.call('PUT', '/api/admin/christmas-skin-switch', { on: true });
+    expect(old.status).toBe(400); // the old on/off body is not a mode
+    const blair = await playerPhone(w, 'Blair');
+    expect((await blair.call('PUT', '/api/admin/christmas-skin-switch', { mode: 'all' })).status).toBe(401);
+  });
+  it('the kill switch beats every mode', async () => {
+    const w = await setupGroup();
+    setOrganizer(w);
     at(w, est(2026, 12, 5, 12));
-    await flip(w, true);
+    await setMode(w, 'all');
     env(w).CHRISTMAS_SKIN = 'off';
     expect((await group(w)).christmasSkin).toBeUndefined();
-    expect((await group(w, { 'X-Christmas-Skin': 'on' })).christmasSkin).toBeUndefined();
+    await setMode(w, 'me');
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toBeUndefined();
     env(w).CHRISTMAS_SKIN = 'on';
-    expect((await group(w)).christmasSkin).toBe(true);
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toBeDefined();
   });
-  it('the private test link (one phone) shows the skin whatever the date, and does nothing for anyone else', async () => {
-    const w = await setupGroup();
-    at(w, est(2026, 11, 13, 10)); // today, well before the window
-    expect((await group(w)).christmasSkin).toBeUndefined();
-    expect((await group(w, { 'X-Christmas-Skin': 'on' })).christmasSkin).toBe(true);
-    expect((await group(w, { 'X-Christmas-Skin': 'off' })).christmasSkin).toBeUndefined();
-    expect((await group(w)).christmasSkin).toBeUndefined();
-  });
-  it('the pretend date works only on a preview (the var exists only there); the live site ignores it', async () => {
+  it('the old private link does nothing: the header X-Christmas-Skin is ignored everywhere', async () => {
     const w = await setupGroup();
     at(w, est(2026, 11, 13, 10));
-    const pretend = (day: string) => ({ 'X-Christmas-Date': day });
-    // Live: no preview var, so the header does nothing even with the row on.
-    await flip(w, true);
-    expect((await group(w, pretend('2026-12-05'))).christmasSkin).toBeUndefined();
-    await flip(w, false);
-    expect((await group(w, pretend('2026-12-05'))).christmasSkin).toBeUndefined();
-    // A preview: the switch is on by itself, and the date decides.
+    const a = await group(w, { 'X-Christmas-Skin': 'on' });
+    expect(a.christmasSkin).toBeUndefined();
+    expect(a.christmasSkinMe).toBeUndefined();
+    const lib = readFileSync(new URL('../src/lib.ts', import.meta.url), 'utf8');
+    expect(lib).not.toContain('X-Christmas-Skin');
+    expect(lib).not.toMatch(/gameDayTest\(CHRISTMAS/);
+  });
+  it('previews only: the mode header and the pretend date; the live site (no preview var) ignores both', async () => {
+    const w = await setupGroup();
+    setOrganizer(w);
+    at(w, est(2026, 11, 13, 10));
+    const h = (mode: string, day?: string) => ({ 'X-Christmas-Mode': mode, ...(day ? { 'X-Christmas-Date': day } : {}) });
+    // Live: nothing listens.
+    expect((await group(w, h('all', '2026-12-05'))).christmasSkin).toBeUndefined();
+    expect((await group(w, h('me'), 'Alex')).christmasSkinMe).toBeUndefined();
     env(w).CHRISTMAS_SKIN_PREVIEW = 'on';
     expect((await group(w)).christmasSkin).toBeUndefined(); // today (Nov 13) is outside the window, like live
-    expect((await group(w, pretend('2026-12-05'))).christmasSkin).toBe(true);
-    expect((await group(w, pretend('2026-11-27'))).christmasSkin).toBe(true);
-    expect((await group(w, pretend('2026-11-26'))).christmasSkin).toBeUndefined();
-    expect((await group(w, pretend('2027-01-01'))).christmasSkin).toBeUndefined();
-    expect((await group(w, pretend('garbage'))).christmasSkin).toBeUndefined();
-    // View as carries it the same way (the organizer's demo copy follows the same date).
-    const as = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Blair, ...pretend('2026-12-05') });
-    expect(as.status).toBe(200);
+    expect((await group(w, { 'X-Christmas-Date': '2026-12-05' })).christmasSkin).toBe(true); // no mode given: acts like Everyone
+    expect((await group(w, h('all', '2026-12-05'))).christmasSkin).toBe(true);
+    expect((await group(w, h('all', '2026-11-26'))).christmasSkin).toBeUndefined();
+    expect((await group(w, h('all', '2027-01-01'))).christmasSkin).toBeUndefined();
+    expect((await group(w, h('off', '2026-12-05'))).christmasSkin).toBeUndefined();
+    expect((await group(w, h('all', 'garbage'))).christmasSkin).toBeUndefined();
+    // Just me on a preview: only the organizer's own player, on any date (today is before the window).
+    const me = await group(w, h('me'), 'Alex');
+    expect(me.christmasSkinMe).toEqual({ on: false });
+    expect(me.christmasSkin).toBeUndefined();
+    expect((await group(w, h('me'), 'Blair')).christmasSkinMe).toBeUndefined();
+    // View as carries the date and Everyone like the player it shows, never Just me.
+    await signIn(w);
+    const as = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Blair, ...h('all', '2026-12-05') });
     expect(as.data.christmasSkin).toBe(true);
-    // The kill switch still wins on a preview.
+    const asMe = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Alex, ...h('me') });
+    expect(asMe.data.christmasSkinMe).toBeUndefined();
     env(w).CHRISTMAS_SKIN = 'off';
-    expect((await group(w, pretend('2026-12-05'))).christmasSkin).toBeUndefined();
+    expect((await group(w, h('all', '2026-12-05'))).christmasSkin).toBeUndefined();
   });
-  it('OFF means unchanged: the player answer is the same JSON as before, plus exactly one flag while the skin shows', async () => {
+  it('OFF means unchanged: the player answer is the same JSON as before, plus exactly one flag while Everyone shows; outside the window with Everyone it is the same as Off', async () => {
     const w = await setupGroup();
     at(w, est(2026, 12, 5, 12));
     const off = await group(w);
-    const on = await group(w, { 'X-Christmas-Skin': 'on' });
-    const { christmasSkin, christmasSkinTest, version: onVersion, ...rest } = on;
+    await setMode(w, 'all');
+    const on = await group(w);
+    const { christmasSkin, version: onVersion, ...rest } = on;
     const { version: offVersion, ...offRest } = off;
     expect(christmasSkin).toBe(true);
-    expect(christmasSkinTest).toBe(true); // the private link is the test mode
-    // (`version` is the answer's change fingerprint and is left out of this comparison; every other key and value is identical.)
     void onVersion;
     void offVersion;
     expect(JSON.stringify(rest)).toBe(JSON.stringify(offRest));
-    // Outside the window with the row ON: also the same as with the row OFF, byte for byte (same moment).
     at(w, est(2026, 11, 20, 12));
-    const rowOff = JSON.stringify(await group(w));
-    await flip(w, true);
-    expect(JSON.stringify(await group(w))).toBe(rowOff);
+    const everyoneOutside = JSON.stringify(await group(w));
+    await setMode(w, 'off');
+    expect(everyoneOutside).toBe(JSON.stringify(await group(w)));
   });
-  it('outside the window the database is not asked about the switch at all (no extra trip on any ordinary day)', async () => {
+  it('Just me costs one read for the organizer\'s own player only; outside the window nobody else asks anything; inside it everyone asks the usual one', async () => {
     const w = await setupGroup();
-    await flip(w, true);
+    setOrganizer(w);
+    await setMode(w, 'me');
     const asked: string[] = [];
     const real = w.app.db.prepare.bind(w.app.db);
     (w.app.db as any).prepare = (sql: string) => {
       const stmt = real(sql);
       const bind = stmt.bind.bind(stmt);
       stmt.bind = (...v: unknown[]) => {
-        if (v.includes('christmas_skin_on')) asked.push(sql);
+        if (v.some((x) => typeof x === 'string' && x.startsWith('christmas_skin'))) asked.push(`${v.find((x) => typeof x === 'string' && (x as string).startsWith('christmas_skin'))}`);
         return bind(...v);
       };
       return stmt;
     };
     at(w, est(2026, 11, 13, 10));
-    await group(w);
+    await group(w, {}, 'Blair');
     expect(asked).toEqual([]);
+    await group(w, {}, 'Alex');
+    expect(asked).toEqual(['christmas_skin_me', 'christmas_skin_me_on']);
+    asked.length = 0;
     at(w, est(2026, 12, 5, 10));
-    await group(w);
-    expect(asked.length).toBeGreaterThan(0);
-  });
-  it('a player cannot flip it; the organizer\'s own answers (dashboard, Money, Players) never carry the player flag', async () => {
-    const w = await setupGroup();
-    at(w, est(2026, 12, 5, 12));
-    await flip(w, true);
-    const blair = await playerPhone(w, 'Blair');
-    expect((await blair.call('PUT', '/api/admin/christmas-skin-switch', { on: false })).status).toBe(401);
-    await signIn(w);
-    const d = await dash(w);
-    expect(d.christmasSkin).toBeUndefined();
-    expect(JSON.stringify(d)).not.toMatch(/"christmasSkin":true/);
+    await group(w, {}, 'Blair');
+    expect(asked).toEqual(['christmas_skin_on']);
   });
   it('the preview-only var is only in [env.preview.vars]; the kill switch is in [vars]', () => {
     const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
@@ -553,18 +561,19 @@ describe('Part C: the switch (CHRISTMAS_SKIN, ships OFF)', () => {
     expect(preview).toMatch(/^CHRISTMAS_SKIN_PREVIEW = "on"$/m);
     expect(preview).toMatch(/^CHRISTMAS_SKIN = "on"$/m);
   });
-  it('History words and the Settings row (on top of both Feature switches lists, no deploy needed to flip it)', () => {
+  it('History words and the Settings row: a 3-way control on top of both Feature switches lists (no deploy needed)', () => {
     const line = (action: string) => activityText({ id: 'x', action, details: {}, actorLabel: 'organizer', at: '2026-11-12T20:00:00.000Z', sessionId: null, playerId: null } as never, 'America/Detroit', 'Alex');
-    expect(line('christmas_skin_on')).toBe('Alex switched "Christmas skin" on');
+    expect(line('christmas_skin_everyone')).toBe('Alex switched "Christmas skin" to Everyone');
+    expect(line('christmas_skin_me')).toBe('Alex switched "Christmas skin" to Just me');
     expect(line('christmas_skin_off')).toBe('Alex switched "Christmas skin" off');
     const src = readFileSync(new URL('../src/pages/admin/SettingsTab.tsx', import.meta.url), 'utf8');
     expect(src.match(/<ChristmasSkinRow /g)?.length).toBe(2);
     expect(src).toContain('/api/admin/christmas-skin-switch');
+    for (const label of ["label: 'Off'", "label: 'Just me'", "label: 'Everyone'"]) expect(src).toContain(label);
     expect(src).toMatch(/<ChristmasSkinRow ctx=\{ctx\} auto=\{auto\} \/>\s*<CheaperFixRow/);
   });
   it('the skin is a skin: the CSS sits under the theme attribute or the logo button, and the admin screens never set it', () => {
     const css = readFileSync(new URL('../src/skin/christmas.css', import.meta.url), 'utf8');
-    // Every selector in the theme-ON group names html[data-skin='christmas']; the only others are the logo button, bubbles, motion classes.
     const sel = css
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .split('}')
@@ -573,11 +582,8 @@ describe('Part C: the switch (CHRISTMAS_SKIN, ships OFF)', () => {
     const allowed = /^(html\[data-skin='christmas'\]|html\[data-skin-anim|\.skin-|button\.brand-tile\.skin-logo|\.xorn|\.ball\.xspinb|\.pop\.pop-ball|\.m-burst|\.skin-logo)/;
     const stray = sel.filter((s) => !s.split(',').every((p) => allowed.test(p.trim()) || /^(\d+(\.\d+)?%|from|to)/.test(p.trim())));
     expect(stray).toEqual([]);
-    const admin = readFileSync(new URL('../src/pages/Admin.tsx', import.meta.url), 'utf8');
-    expect(admin).not.toMatch(/skin\//);
-    // Only the player Home mounts the skin hook.
-    const home = readFileSync(new URL('../src/pages/PlayerHome.tsx', import.meta.url), 'utf8');
-    expect(home).toContain('useSkinRoot(');
+    expect(readFileSync(new URL('../src/pages/Admin.tsx', import.meta.url), 'utf8')).not.toMatch(/skin\//);
+    expect(readFileSync(new URL('../src/pages/PlayerHome.tsx', import.meta.url), 'utf8')).toContain('useSkinRoot(');
   });
   it('slots: a second theme can swap them (logo, seat, badge, and the CSS block per theme id)', () => {
     const theme = readFileSync(new URL('../src/skin/theme.tsx', import.meta.url), 'utf8');
@@ -587,143 +593,134 @@ describe('Part C: the switch (CHRISTMAS_SKIN, ships OFF)', () => {
   });
 });
 
-describe('Part D: the private link sticks (test mode) and Alex\'s own player', () => {
-  const setOrganizer = (w: W, name = 'Alex') => void w.app.db.raw.prepare('UPDATE groups SET organizer_name = ?').run(name);
-  const markCalls = (w: W, who: string, on: boolean, h: Record<string, string> = {}) => playerPhone(w, who).then((c) => c.call('POST', '/api/christmas-skin-tester', { on }, h));
+describe('Part D: Just me (the organizer\'s own player only)', () => {
+  const meCall = (w: W, who: string, on: boolean, h: Record<string, string> = {}) => playerPhone(w, who).then((c) => c.call('POST', '/api/christmas-skin-me', { on }, h));
 
-  it('the private link: the whole skin (flag AND test mode), whatever the date and whatever the Settings row says for everyone else', async () => {
-    const w = await setupGroup();
-    at(w, est(2026, 11, 13, 10)); // before the window, the row never switched on
-    const a = await group(w, { 'X-Christmas-Skin': 'on' });
-    expect(a.christmasSkin).toBe(true);
-    expect(a.christmasSkinTest).toBe(true);
-    // Everyone else: nothing.
-    const b = await group(w);
-    expect(b.christmasSkin).toBeUndefined();
-    expect(b.christmasSkinTest).toBeUndefined();
-  });
-  it('the window and the row alone give the flag but NOT the test mode (the theme starts off for everyone)', async () => {
-    const w = await setupGroup();
-    await flip(w, true);
-    at(w, est(2026, 12, 5, 12));
-    const a = await group(w);
-    expect(a.christmasSkin).toBe(true);
-    expect(a.christmasSkinTest).toBeUndefined();
-  });
-  it('the organizer\'s own player: the mark gives the test mode on any phone (a Home Screen app) and nobody else is touched', async () => {
+  it('Just me: only the organizer\'s own player gets anything (the theme choice, any date); the answer has no Christmas logo flag; nobody else is touched', async () => {
     const w = await setupGroup();
     setOrganizer(w);
-    at(w, est(2026, 11, 13, 10));
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined();
-    const res = await markCalls(w, 'Alex', true, { 'X-Christmas-Skin': 'on' });
-    expect(res.status).toBe(200);
-    expect(res.data.marked).toBe(true);
-    // A brand new phone (no private header): Alex's answer has the whole skin; Blair's and everyone else's has nothing.
-    const alex = await group(w, {}, 'Alex');
-    expect(alex.christmasSkin).toBe(true);
-    expect(alex.christmasSkinTest).toBe(true);
-    for (const who of ['Blair', 'Casey']) {
-      const other = await group(w, {}, who);
-      expect(other.christmasSkin).toBeUndefined();
-      expect(other.christmasSkinTest).toBeUndefined();
+    await setMode(w, 'me');
+    for (const t of [est(2026, 11, 13, 10), est(2026, 12, 5, 12), est(2027, 3, 3, 12)]) {
+      at(w, t);
+      const alex = await group(w, {}, 'Alex');
+      expect(alex.christmasSkinMe).toEqual({ on: false });
+      expect(alex.christmasSkin).toBeUndefined();
+      for (const who of ['Blair', 'Casey']) {
+        const other = await group(w, {}, who);
+        expect(other.christmasSkin).toBeUndefined();
+        expect(other.christmasSkinMe).toBeUndefined();
+      }
     }
-    // Still there in December with the row OFF for everyone (it ignores both).
-    at(w, est(2026, 12, 5, 12));
-    expect((await group(w, {}, 'Alex')).christmasSkinTest).toBe(true);
-    // The link turned off: gone.
-    expect((await markCalls(w, 'Alex', false)).data.marked).toBe(false);
-    expect((await group(w, {}, 'Alex')).christmasSkinTest).toBeUndefined();
+    await signIn(w);
+    expect((await dash(w)).christmasSkinMode).toBe('me');
   });
-  it('only the organizer\'s own player can set it (anyone else gets a quiet no and nothing is saved); never in View as; the kill switch beats it', async () => {
+  it('Alex\'s theme choice is kept on the server (so a Home Screen app has it), and only Alex can save it', async () => {
+    const w = await setupGroup();
+    setOrganizer(w);
+    await setMode(w, 'me');
+    at(w, est(2026, 11, 13, 10));
+    const on = await meCall(w, 'Alex', true);
+    expect(on.status).toBe(200);
+    expect(on.data.applied).toBe(true);
+    // A brand new phone (nothing stored): picking the name Alex is enough.
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toEqual({ on: true });
+    // Another player cannot save it, and nothing changes.
+    const blair = await meCall(w, 'Blair', false);
+    expect(blair.data.applied).toBe(false);
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toEqual({ on: true });
+    const off = await meCall(w, 'Alex', false);
+    expect(off.data.applied).toBe(true);
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toEqual({ on: false });
+  });
+  it('the save only works in Just me, never in View as, never against the kill switch', async () => {
     const w = await setupGroup();
     setOrganizer(w);
     at(w, est(2026, 11, 13, 10));
-    const blair = await markCalls(w, 'Blair', true);
-    expect(blair.status).toBe(200);
-    expect(blair.data.marked).toBe(false);
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined();
-    await markCalls(w, 'Alex', true);
-    // View as (the organizer's demo copy of Alex) does not get it and does not set it.
+    // Off or Everyone: no.
+    for (const mode of ['off', 'all'] as const) {
+      await setMode(w, mode);
+      expect((await meCall(w, 'Alex', true)).data.applied).toBe(false);
+    }
+    await setMode(w, 'me');
+    // View as (the organizer's demo copy of Alex) neither gets it nor saves it.
     await signIn(w);
     const as = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Alex });
-    expect(as.data.christmasSkin).toBeUndefined();
-    // The kill switch hides it; an "off" link still clears the mark even then; "on" waits (the phone keeps its note).
+    expect(as.data.christmasSkinMe).toBeUndefined();
+    const post = await w.organizer.call('POST', '/api/christmas-skin-me', { on: true }, { 'X-View-As': w.byName.Alex });
+    expect(post.data.applied).toBe(false);
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toEqual({ on: false });
     env(w).CHRISTMAS_SKIN = 'off';
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined();
-    const keep = await markCalls(w, 'Alex', true);
-    expect(keep.data.applied).toBe(false);
+    expect((await meCall(w, 'Alex', true)).data.applied).toBe(false);
     env(w).CHRISTMAS_SKIN = 'on';
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBe(true); // the earlier mark is still there
-    env(w).CHRISTMAS_SKIN = 'off';
-    const cleared = await markCalls(w, 'Alex', false);
-    expect(cleared.data.applied).toBe(true);
-    env(w).CHRISTMAS_SKIN = 'on';
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined(); // an off link opened while the kill switch was off still cleared it
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toEqual({ on: false });
   });
-  it('View as never gets the test mode, even with the private header, and its POST neither sets nor clears the mark', async () => {
+  it('switching away from Just me hides it again; the saved choice is not lost but shows nothing', async () => {
     const w = await setupGroup();
     setOrganizer(w);
-    at(w, est(2026, 11, 13, 10));
-    await signIn(w);
-    const as = await w.organizer.call('GET', '/api/group', undefined, { 'X-View-As': w.byName.Blair, 'X-Christmas-Skin': 'on' });
-    expect(as.status).toBe(200);
-    expect(as.data.christmasSkin).toBeUndefined();
-    expect(as.data.christmasSkinTest).toBeUndefined();
-    const post = await w.organizer.call('POST', '/api/christmas-skin-tester', { on: true }, { 'X-View-As': w.byName.Alex });
-    expect(post.data.marked).toBe(false);
-    expect((await group(w, {}, 'Alex')).christmasSkin).toBeUndefined();
+    at(w, est(2026, 12, 5, 12));
+    await setMode(w, 'me');
+    await meCall(w, 'Alex', true);
+    await setMode(w, 'off');
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toBeUndefined();
+    await setMode(w, 'me');
+    expect((await group(w, {}, 'Alex')).christmasSkinMe).toEqual({ on: true });
   });
-  it('only the organizer\'s own player costs an extra read (everyone else\'s answer asks nothing new)', async () => {
-    const w = await setupGroup();
-    setOrganizer(w);
-    await markCalls(w, 'Alex', true);
-    const asked: string[] = [];
-    const real = w.app.db.prepare.bind(w.app.db);
-    (w.app.db as any).prepare = (sql: string) => {
-      const stmt = real(sql);
-      const bind = stmt.bind.bind(stmt);
-      stmt.bind = (...v: unknown[]) => {
-        if (v.includes('christmas_skin_tester')) asked.push(sql);
-        return bind(...v);
-      };
-      return stmt;
-    };
-    at(w, est(2026, 11, 13, 10));
-    await group(w, {}, 'Blair');
-    expect(asked).toEqual([]);
-    await group(w, {}, 'Alex');
-    expect(asked.length).toBe(1);
-  });
-  it('the page tells the server only for the private link, once a name is picked, never in View as; and the link also clears the first-ON note', () => {
-    const lib = readFileSync(new URL('../src/lib.ts', import.meta.url), 'utf8');
-    expect(lib).toContain("if (link === 'on' || link === 'off') storageSet(SERVER_KEY, link);");
-    expect(lib).toContain('storageRemove(BACK_KEY);');
-    const root = readFileSync(new URL('../src/skin/useSkinRoot.ts', import.meta.url), 'utf8');
-    expect(root).toContain("if (!meId || viewAs) return;");
-    expect(root).toContain("'/api/christmas-skin-tester'");
-    expect(root).toContain('if (res.applied === false) return;');
+  it('the page: in Just me the NORMAL logo is the tap (no Christmas picture, no bubble, the normal tile fill); Everyone gets the Christmas picture', () => {
+    const logo = readFileSync(new URL('../src/skin/SkinLogo.tsx', import.meta.url), 'utf8');
+    expect(logo).toContain("const christmasLogo = skin.mode === 'all';");
+    expect(logo).toContain("src={christmasLogo ? THEME.logoSrc(true) : '/logo.png'}");
+    const css = readFileSync(new URL('../src/skin/christmas.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/button\.brand-tile\.skin-logo\.skin-logo-all \{\s*background: var\(--bg\);/);
+    expect(css).not.toMatch(/\.skin-logo-me \{[^}]*background/);
+    const store = readFileSync(new URL('../src/skin/store.ts', import.meta.url), 'utf8');
+    expect(store).toContain("state.mode === 'all' && !demo && !backShown");
   });
 });
 
-describe('Part E: the look changes (Alex, round 1)', () => {
+describe('Part E: the look and the motion (Alex, rounds 1 and 2)', () => {
   const css = readFileSync(new URL('../src/skin/christmas.css', import.meta.url), 'utf8');
   const theme = readFileSync(new URL('../src/skin/theme.tsx', import.meta.url), 'utf8');
-  it('my own ornament has no ring any more: just a very faint gold glow and a tiny slow sway, and only mine', () => {
+  const ui = readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8');
+  it('nothing moves on a card at rest and nothing glows: no ring, no glow, no sway, no pulse, no gold flash in any ornament motion', () => {
     expect(theme).not.toMatch(/stroke="var\(--primary\)"/);
-    expect(theme).not.toMatch(/r=\{r\}/);
-    expect(css).toMatch(/\.dots \.xorn\.me:not\(\.xin\):not\(\.xjoin\):not\(\.xjingle\) \{\s*filter: drop-shadow\(0 0 3px rgb\(242 179 61 \/ 32%\)\);\s*animation: xsway 5\.5s ease-in-out infinite;/);
-    expect(css).toMatch(/@keyframes xsway \{\s*0%,\s*100% \{\s*transform: rotate\(-2\.5deg\);\s*\}\s*50% \{\s*transform: rotate\(2\.5deg\);/);
+    expect(css).not.toMatch(/xsway|xglow|\.xorn\.me|sched\.gd \.dots \.xorn/);
+    const motion = css.slice(css.indexOf('/* ---------- 3. Motion'));
+    expect(motion).not.toMatch(/drop-shadow\(0 0 [4-9]px/);
+    expect(motion).not.toMatch(/#f2b33d|242 179 61/);
+    // The only animations that ever sit on an ornament are the moment classes (pop-in, drop-in, jingle).
+    const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((b) => b.split('{')).filter((x) => x.length === 2);
+    const animated = rules.filter(([sel, body]) => /\.xorn/.test(sel) && /animation:\s*(?!none)/.test(body)).map(([sel]) => sel.trim());
+    expect(animated.length).toBeGreaterThan(3);
+    for (const sel of animated) expect(sel).toMatch(/\.xin|\.xjoin|\.xjingle|\.pop\.pop-ball|\.m-burst/);
+    expect(ui).not.toContain("'--pd'");
   });
-  it('the one-by-one glow on tonight cards is gone (no xglow, no game day glow rule, no per-seat delay)', () => {
-    expect(css).not.toMatch(/xglow/);
-    expect(css).not.toMatch(/sched\.gd \.dots \.xorn/);
-    expect(readFileSync(new URL('../src/ui.tsx', import.meta.url), 'utf8')).not.toContain("'--pd'");
+  it('the I\'m in drop is the finished animation: drops from above, swings a couple of times, settles (xjoin, 0.95 s), and the jingle after the 4th player', () => {
+    expect(css).toMatch(/@keyframes xjoin \{\s*0% \{\s*transform: translateY\(-22px\);\s*opacity: 0;\s*\}\s*30% \{\s*transform: translateY\(0\);\s*opacity: 1;\s*\}\s*48% \{\s*transform: rotate\(11deg\);\s*\}\s*66% \{\s*transform: rotate\(-8deg\);\s*\}\s*82% \{\s*transform: rotate\(4deg\);\s*\}\s*100% \{\s*transform: none;\s*\}\s*\}/);
+    expect(css).toContain('animation: xjoin 0.95s ease-out backwards;');
+    expect(css).toContain('xjingle 0.9s ease-in-out calc(1s + var(--i, 0) * 160ms)');
   });
-  it('the tonight shimmer is about half as bright and softer, same timing, light and dark (this one change is on live)', () => {
+  it('every ornament animation plays to the end: each ornament times its own motion and clears it only when the LAST animation of the motion ends', () => {
+    expect(theme).toContain("const LAST_ANIMATION: Record<string, string> = { xin: 'xdrop', 'xin xin-j': 'xjingle', xjoin: 'xjoin', 'xjoin xjoin-j': 'xjingle', 'xjingle xjingle-j': 'xjingle' };");
+    expect(theme).toContain('e.animationName === LAST_ANIMATION[playing.cls]');
+    expect(theme).toContain('MOTION_SAFETY_MS = 4500');
+    // The old cut-off: the pop-in class was removed by a 1.7 s timer while the first card's jingle runs until 2.1 s. No timer decides that any more.
+    expect(ui).not.toMatch(/popIn \? \(first/);
+    expect(ui).not.toContain('setJingle');
+    // The longest motion (the top card's pop-in plus jingle, 6 seats) ends well inside the safety net.
+    const longest = 0.7 + 5 * 0.16 + 0.9;
+    expect(longest).toBeLessThan(4.5);
+  });
+  it('tiles with a court-status ring (the "~8 PM" games and games with no court set) keep the regular theme\'s ring; red outlines only on set-time games', () => {
+    expect(css).toMatch(/\.tile\.ptile:not\(\.ts\),\s*html\[data-skin='christmas'\] \.schedule \.tile\.day-tonight:not\(\.ts\),\s*html\[data-skin='christmas'\] \.schedule \.tile\.day-tomorrow:not\(\.ts\) \{\s*border-color: var\(--xmas-red\) !important;/);
+    expect(css).toMatch(/\.ts-booked \.tb-solid \{\s*box-shadow: inset 0 0 0 var\(--tb-w, 2px\) var\(--xmas-red\) !important;/);
+    // The regular theme keeps a status tile's own border see-through (its ring is drawn by .tb), which is what stops the doubled ring.
+    expect(readFileSync(new URL('../src/time-shift.css', import.meta.url), 'utf8')).toMatch(/\.tile\.ts \{\s*border-color: transparent !important;/);
+  });
+  it('the tonight shimmer: about 60 percent as bright as in round 1 (13 / 12 / 12 percent, from 35 / 30 / 30 originally), softer band, same timing (this change is on live)', () => {
     const z7 = readFileSync(new URL('../src/zip7.css', import.meta.url), 'utf8');
-    expect([...z7.matchAll(/--z7-sweep: rgb\(255 255 255 \/ (\d+)%\);/g)].map((m) => m[1])).toEqual(['17', '15', '15']);
+    expect([...z7.matchAll(/--z7-sweep: rgb\(255 255 255 \/ (\d+)%\);/g)].map((m) => m[1])).toEqual(['13', '12', '12']);
     expect(z7).toContain('linear-gradient(110deg, transparent 22%, var(--z7-sweep) 50%, transparent 78%)');
-    expect(z7).toContain('animation: z7-sweep 3.6s ease-in-out infinite;'); // the same timing
+    expect(z7).toContain('animation: z7-sweep 3.6s ease-in-out infinite;');
     expect(z7).toMatch(/@keyframes z7-sweep \{\s*0%,\s*55% \{\s*background-position: 130% 0;\s*\}\s*100% \{\s*background-position: -30% 0;/);
   });
 });

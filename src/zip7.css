@@ -16,7 +16,7 @@
   --z7-tomorrow-bg: #dff0e6;
   --z7-tomorrow-ink: #1f6b45;
   --z7-glow: 47 143 91;
-  --z7-sweep: rgb(255 255 255 / 17%);
+  --z7-sweep: rgb(255 255 255 / 13%);
   /* Color cleanup */
   --z7-text-fill: #6a56a6;
   --z7-text-ink: #ffffff;
@@ -35,7 +35,7 @@
   --z7-tomorrow-bg: #1c3a2a;
   --z7-tomorrow-ink: #8be0b3;
   --z7-glow: 76 197 138;
-  --z7-sweep: rgb(255 255 255 / 15%);
+  --z7-sweep: rgb(255 255 255 / 12%);
   --z7-text-fill: #b2a0e6;
   --z7-text-ink: #1d1433;
   --z7-credit-fg: #93a6e6;
@@ -54,7 +54,7 @@
     --z7-tomorrow-bg: #1c3a2a;
     --z7-tomorrow-ink: #8be0b3;
     --z7-glow: 76 197 138;
-    --z7-sweep: rgb(255 255 255 / 15%);
+    --z7-sweep: rgb(255 255 255 / 12%);
     --z7-text-fill: #b2a0e6;
     --z7-text-ink: #1d1433;
     --z7-credit-fg: #93a6e6;
@@ -154,7 +154,7 @@
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  /* Zip 38 (Alex): the sweep is about half as bright and softer (a wider, gentler band); same timing. */
+  /* Zip 38 (Alex): the sweep is about 60 percent as bright as it was and softer (a wider, gentler band); same timing. */
   background: linear-gradient(110deg, transparent 22%, var(--z7-sweep) 50%, transparent 78%);
   background-size: 300% 100%;
   background-position: 130% 0;

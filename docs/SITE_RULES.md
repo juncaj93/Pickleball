@@ -39,7 +39,7 @@ The $14 above is the 2 hour game, the usual one. Every length has its own up-fro
 - Screens refresh by themselves every 5 seconds (slows after 2 minutes idle, stops after 10). Drop out has a 5-second Undo.
 - Cancel with a reason ("Canceled - Thanksgiving").
 - Light and dark mode.
-- Christmas skin (Zip 38, switch "Christmas skin", ships OFF; docs/FEATURE_SWITCHES.md): a look-only theme for the player screens from the Friday after US Thanksgiving through Dec 31 (Eastern). Inside that window the Christmas logo shows; tapping it turns a Christmas look (ornaments, candy canes, snow cap, red tiles) on and off, remembered per phone. Admin screens never get it. Outside the window, or with the switch off, the site is exactly as before.
+- Christmas skin (Zip 38, a 3-way switch Off / Just me / Everyone in Settings, ships Off; docs/FEATURE_SWITCHES.md): a look-only theme for the player screens. Just me: only the organizer's own player can tap the normal logo to try the Christmas theme, on any date, and nobody else sees anything. Everyone: from the Friday after US Thanksgiving through Dec 31 (Eastern) the Christmas logo shows and every player can tap it to turn a Christmas look (ornaments, candy canes, snow cap, red tiles) on and off, remembered per phone. Admin screens never get it. Outside the window, or Off, the site is exactly as before. (The tonight tile's light sweep was made softer for everyone, switch or not.)
 
 ## Admin screen (live)
 - Three-way court switch per game: Not booked | Waitlist | Booked ("Not booked" always on two lines). Waitlist means the venue has a waitlist; players see "Court not booked".

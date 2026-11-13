@@ -4,7 +4,7 @@
 //   Seat           a seat marker: a filled seat (index = seat order, `me` = my own seat) or an empty one
 //   Badge          the small badge in the "Game on" toast and the pieces of the burst
 //   (CSS slots)    section divider line, top game card cap, tonight/tomorrow tile band, page color: christmas.css
-import { useId, type CSSProperties, type ReactElement } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type AnimationEvent, type CSSProperties, type ReactElement } from 'react';
 import { logoFor } from '../../shared/christmasSkin';
 
 export interface SeatProps {
@@ -13,6 +13,9 @@ export interface SeatProps {
   me?: boolean;
   className?: string;
   style?: CSSProperties;
+  /** The motion to play now (CSS classes: 'xin', 'xin xin-j', 'xjoin', 'xjoin xjoin-j', 'xjingle xjingle-j') and the id of the moment it belongs to. */
+  moment?: string;
+  momentId?: number;
 }
 
 export interface SkinTheme {
@@ -25,12 +28,30 @@ export interface SkinTheme {
 /** Ornament colors by seat: red, green, gold, blue (light, dark). */
 const COLS: [string, string][] = [['#e5483f', '#b3261e'], ['#37b873', '#1f7a4a'], ['#f2b33d', '#c28a14'], ['#4f7be0', '#2f55b0']];
 
+/** The animation that ends each moment (the last one to finish): the ornament clears its motion class when THAT one ends. */
+const LAST_ANIMATION: Record<string, string> = { xin: 'xdrop', 'xin xin-j': 'xjingle', xjoin: 'xjoin', 'xjoin xjoin-j': 'xjingle', 'xjingle xjingle-j': 'xjingle' };
+/** Safety net: if the browser never reports the end (reduce motion has no animation at all), the motion class goes after this long. */
+const MOTION_SAFETY_MS = 4500;
+
 /**
  * One Christmas ornament, 22 x 26: a gold cap and a glossy ball (a filled seat), or a dashed outline of the same shape (an empty seat).
- * My own seat has no ring: it has a very faint gold glow and a tiny slow sway instead (CSS, `.xorn.me`, src/skin/christmas.css).
+ * Nothing is drawn around it (no ring, no glow) and it does not move at rest, mine included. Its motion (pop in, drop in on its thread and swing,
+ * jingle) is timed by the ornament ITSELF: when a moment starts it keeps the motion class until the browser says the last animation ended, whatever the
+ * page does meanwhile (a redraw, a refresh, the card's own state moving on), so an animation is always played out and never cut off.
  */
-export function Ornament({ index, empty, me, className = '', style }: SeatProps) {
+export function Ornament({ index, empty, className = '', style, moment, momentId }: SeatProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const [playing, setPlaying] = useState<{ id: number; cls: string } | null>(null);
+  const seen = useRef<number | undefined>(undefined);
+  const safety = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!moment || momentId === undefined || seen.current === momentId) return;
+    seen.current = momentId;
+    setPlaying({ id: momentId, cls: moment });
+    clearTimeout(safety.current);
+    safety.current = setTimeout(() => setPlaying((p) => (p && p.id === momentId ? null : p)), MOTION_SAFETY_MS);
+  }, [moment, momentId]);
+  useEffect(() => () => clearTimeout(safety.current), []);
   const [c, d] = COLS[index % 4];
   if (empty) {
     return (
@@ -40,8 +61,12 @@ export function Ornament({ index, empty, me, className = '', style }: SeatProps)
       </svg>
     );
   }
+  const onEnd = (e: AnimationEvent<SVGSVGElement>) => {
+    if (e.target !== e.currentTarget || !playing) return;
+    if (e.animationName === LAST_ANIMATION[playing.cls]) setPlaying(null);
+  };
   return (
-    <svg className={`xorn${me ? ' me' : ''} ${className}`.trim()} style={style} viewBox="0 0 22 26" aria-hidden="true">
+    <svg className={`xorn ${playing?.cls ?? ''} ${className}`.replace(/\s+/g, ' ').trim()} style={style} viewBox="0 0 22 26" aria-hidden="true" onAnimationEnd={onEnd} data-moment={playing?.id}>
       <defs>
         <radialGradient id={`xg${uid}`} cx=".35" cy=".3" r=".8">
           <stop offset="0" stopColor="#fff" stopOpacity=".9" />

@@ -470,7 +470,7 @@ export function SettingsTab({ ctx }: { ctx: AdminCtx }) {
           note={
             ctx.d.moneyRework === true
               ? undefined
-              : [ctx.d.christmasSkinForAll ? 'Christmas skin on' : '', ctx.d.cheaperFixForAll ? 'Made cheaper after paying on' : '', ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
+              : [ctx.d.christmasSkinMode ? `Christmas skin ${ctx.d.christmasSkinMode === 'me' ? 'just me' : 'everyone'}` : '', ctx.d.cheaperFixForAll ? 'Made cheaper after paying on' : '', ctx.d.homeScreenTipForAll ? 'Home Screen tip on' : '', ctx.d.gameDayTextForAll ? 'Game day text on' : '', ctx.d.tapGuardFixForAll ? 'Tap guard fix on' : '', ctx.d.extendedTimeForAll ? 'Extended time on' : '', ctx.d.checkInPayForAll ? 'Check-in pay line on' : '', ctx.d.playersSheetRedoForAll ? 'Players sheet redo on' : '', ctx.d.actingOthersForAll ? 'Acting for others on' : '', ctx.d.spentTotalsForAll ? 'Spent matches Totals on' : '', ctx.d.bookingHoursForAll ? 'Booking hours on' : '', ctx.d.totalsRefreshForAll ? 'Totals refresh on' : '', ctx.d.errorAlertsForAll ? 'Error alerts on' : '', ctx.d.unpaidNudgeForAll ? 'Unpaid nudge on' : '', ctx.d.afterGameCardForAll ? 'After-game cards on' : '', ctx.d.secondChanceForAll ? 'Second Chance on' : '', ctx.d.gameDayCardForAll ? 'Game day card on' : '', ctx.d.adminUndoForAll ? 'Undo on' : '', ctx.d.swapButtonForAll ? 'Swap on' : '', ctx.d.playersRedoForAll ? 'Players redo on' : '', ctx.d.speedLastScreenAdminForAll ? 'Instant admin on' : '', ctx.d.seatDotsForAll ? 'Seat dots on' : '', ctx.d.speedLastScreenForAll ? 'Last screen on' : '', ctx.d.speedDirectLoadForAll ? 'Load at once on' : '', ctx.d.speedFewerQueriesForAll ? 'Fewer trips on' : '', ctx.d.alertCardsForAll ? 'Alert cards on' : '', ctx.d.cardCleanupForAll ? 'Card cleanup on' : '', ctx.d.shortGamesForAll ? 'Short games on' : '', ctx.d.cardTimeButtonsForAll ? 'Card time on' : '', ctx.d.lastCallTextsForAll ? 'Last call texts on' : '', ctx.d.tonightGlowForAll ? 'Tonight glow on' : '', ctx.d.colorCleanupForAll ? 'Color cleanup on' : '', ctx.d.playerCardsSimpleForAll ? 'Simpler player cards on' : '', ctx.d.homeCollapseForAll ? 'Home collapse on' : '', ctx.d.adjustCreditForAll ? 'Adjust credit on' : '', ctx.d.venmoRequestForAll ? 'Venmo request on' : '', ctx.d.instantTapsForAll ? 'Instant taps on' : '', ctx.d.moneyReworkForAll ? 'Money rework on' : '', ctx.d.adminV2ForAll ? 'New layout on' : '', ctx.d.adminR2ForAll ? 'Round 2 on' : '', ctx.d.adminR3ForAll ? 'Round 3 on' : '', ctx.d.payNoteForAll ? 'Venmo note on' : '', ctx.d.playerFix1ForAll ? 'Player fixes on' : '', ctx.d.paySheetForAll ? 'Pay sheet on' : '', ctx.d.lateFeesForAll ? 'Late fees on' : '', ctx.d.textsR2ForAll ? 'Texts round 2 on' : '', ctx.d.lateFeeSplitForAll ? 'Fee split on' : ''].filter(Boolean).join(', ') || undefined
           }
           sections={sections}
         >
@@ -1390,9 +1390,62 @@ function PlayersSheetRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
   return <Zip7Row ctx={ctx} auto={auto} rowKey="playersSheetRedoAll" path="/api/admin/players-sheet-redo-switch" name="Players sheet redo" hint="The Players sheet from a game card: who paid, Mark paid and Request on each row, and names to tap to add. Same actions as before" flag={!!ctx.d.playersSheetRedoForAll} dataAttr="data-players-sheet-redo-all" />;
 }
 
-/** Zip 38, "Christmas skin" (CHRISTMAS_SKIN, server/christmasSkin.ts): a look-only Christmas theme on the player screens, from the Friday after Thanksgiving through Dec 31. Off: only ?christmasskin=on. */
+/**
+ * Zip 38, "Christmas skin" (CHRISTMAS_SKIN, server/christmasSkin.ts): a look-only Christmas theme on the player screens, a 3-way switch.
+ * Off: nothing. Just me: only your own player can tap the normal logo to switch the Christmas theme on and off, on any date (nobody else sees anything).
+ * Everyone: from the Friday after Thanksgiving through Dec 31 the Christmas logo shows and every player can tap it. Saves itself; no schema change.
+ */
+const SKIN_MODES: { v: 'off' | 'me' | 'all'; label: string }[] = [
+  { v: 'off', label: 'Off' },
+  { v: 'me', label: 'Just me' },
+  { v: 'all', label: 'Everyone' },
+];
 function ChristmasSkinRow({ ctx, auto }: { ctx: AdminCtx; auto: Autosave }) {
-  return <Zip7Row ctx={ctx} auto={auto} rowKey="christmasSkinAll" path="/api/admin/christmas-skin-switch" name="Christmas skin" hint="From the Friday after Thanksgiving through Dec 31, players see a Christmas logo they can tap to turn on a Christmas look (ornaments, candy canes). Look only" flag={!!ctx.d.christmasSkinForAll} dataAttr="data-christmas-skin-all" />;
+  const toast = useToast();
+  const initial = ctx.d.christmasSkinMode ?? 'off';
+  const [mode, setMode] = useState<'off' | 'me' | 'all'>(initial);
+  // What the server last confirmed: a failed save always snaps back to this.
+  const confirmed = useRef<'off' | 'me' | 'all'>(initial);
+  const saving = useRef(false);
+  const key = 'christmasSkinAll';
+  const pick = (next: 'off' | 'me' | 'all') => {
+    if (next === mode || saving.current) return;
+    saving.current = true;
+    setMode(next);
+    void auto.save(key, { mode: next }, '/api/admin/christmas-skin-switch').then((ok) => {
+      saving.current = false;
+      if (ok) {
+        confirmed.current = next;
+        toast(`Christmas skin: ${SKIN_MODES.find((m) => m.v === next)?.label}`);
+      } else {
+        setMode(confirmed.current);
+        auto.clear(key);
+        if (ctx.d.viewOnly === true) toast(VIEW_ONLY_MESSAGE);
+        else toast("That didn't save. The switch is back where it was.", 'error');
+      }
+      return ctx.reload();
+    });
+  };
+  return (
+    <div className="set-row-wrap" data-row={key}>
+      <div className="set-row">
+        <span className="set-label">
+          <span className="set-name">
+            Christmas skin <SaveMark state={auto.rows[key]} />
+          </span>
+          <span className="set-hint">Just me: only you can tap the logo to try the Christmas look, any date. Everyone: from the Friday after Thanksgiving through Dec 31 players get a Christmas logo to tap. Look only</span>
+        </span>
+      </div>
+      <div className="segmented" role="group" aria-label="Christmas skin" data-christmas-skin-mode style={{ margin: '4px 0 6px' }}>
+        {SKIN_MODES.map((m) => (
+          <button key={m.v} type="button" aria-pressed={mode === m.v} data-xmas-mode={m.v} onClick={() => pick(m.v)}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+      <SaveProblem state={auto.rows[key]} />
+    </div>
+  );
 }
 
 /** Zip 37, "Home Screen tip" (HOME_SCREEN_TIP, server/homeScreenTip.ts): a card on the player's Home, iPhone Safari only. Look only. Off: only ?homescreentip=on. */

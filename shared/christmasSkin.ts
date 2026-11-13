@@ -1,24 +1,28 @@
-// Zip 38 (Nov 2026): CHRISTMAS_SKIN ("Christmas skin"), ships OFF. A look-only theme for the PLAYER screens, never the admin screens.
+// Zip 38 (Nov 2026): CHRISTMAS_SKIN ("Christmas skin"). A look-only theme for the PLAYER screens, never the admin screens.
 //
-// Two layers, both decided here as plain functions so the screen and the tests ask the very same question:
-//   1. The WINDOW: the Friday after US Thanksgiving through Dec 31, Eastern (2026: Fri Nov 27 to Thu Dec 31). Computed every year, no
-//      yearly edit. Outside the window, or with the switch off, the site is exactly as it is today. Inside it (and with the switch on)
-//      the Christmas logo replaces the normal logo and STAYS, whether the theme is on or off.
-//   2. The THEME: starts OFF on every phone. Tapping the logo turns it ON and OFF; each phone remembers its own choice. ON = ornaments
-//      for the seat balls, candy canes in the section lines, a snow cap on the top game card, red calendar tiles, a sage (light) or very
-//      dark green (dark) page color. Nothing about words, layout, money or behavior changes.
+// Settings > Feature switches > "Christmas skin" is a 3-WAY switch: Off, Just me, Everyone. It ships OFF. (No schema change: it is stored the way
+// every other switch is, as rows in task_log: no row = Off, one row = Just me, the old "on" row = Everyone.)
+//   Off       nothing, exactly as the site is today.
+//   Just me   everyone sees the normal site and the NORMAL logo (no Christmas logo, no bubble, nothing). Only the organizer's own player (the name
+//             set in Settings, on any phone, a Home Screen app included) can tap the normal logo to switch the Christmas theme on and off, on any
+//             date. That choice is kept on the server (an iPhone Home Screen app keeps its own storage, apart from Safari's). Nobody else knows.
+//   Everyone  inside the WINDOW (the Friday after US Thanksgiving through Dec 31, Eastern; 2026: Fri Nov 27 to Thu Dec 31; computed every year)
+//             the Christmas logo shows on every player screen, the first-visit bubble shows, and every player can tap the logo to switch the theme
+//             on and off (each phone remembers its own choice, localStorage, every call wrapped: a phone that blocks storage never crashes).
+// The THEME (when on): ornaments for the seat balls, candy canes in the section lines, a snow cap on the top game card, red calendar tiles, a
+// sage (light) or very dark green (dark) page color. Nothing about words, layout, money or behavior changes. It starts OFF.
 //
-// The server answers ONE flag ("christmasSkin": true) that already means "switch on for this phone AND inside the window". The phone only
-// keeps the theme's own on/off memory (localStorage, every call wrapped: a phone that blocks storage never crashes).
-//
-// The PRIVATE LINK (?christmasskin=on, =off ends it) is the organizer's own test mode: the whole skin (Christmas logo AND the theme itself)
-// is on every time the site opens, whatever the date and whatever the Settings row says for everyone else, until ?christmasskin=off. The
-// answer then also carries "christmasSkinTest": true, which makes the phone start with the theme ON and say nothing about it. An iPhone Home
-// Screen app keeps its own storage, separate from Safari's, so the link also tells the SERVER (a single group-level mark, task
-// "christmas_skin_tester"): the organizer's OWN player (the name set in Settings, whichever phone picked it) then gets the test mode too.
-// Nobody else's answer, page or pictures change.
+// The server answers "christmasSkin": true (Everyone, inside the window) or "christmasSkinMe": { on } (Just me, the organizer's own player only).
+// Outside all that the answer carries nothing, so it is exactly today's.
 
-export const CHRISTMAS_SKIN = { task: 'christmas_skin_on', testerTask: 'christmas_skin_tester', header: 'X-Christmas-Skin', dateHeader: 'X-Christmas-Date', link: 'christmasskin', dateLink: 'xmasdate', env: 'CHRISTMAS_SKIN', name: 'Christmas skin' } as const;
+export const CHRISTMAS_SKIN = { task: 'christmas_skin_on', meTask: 'christmas_skin_me', meOnTask: 'christmas_skin_me_on', modeHeader: 'X-Christmas-Mode', dateHeader: 'X-Christmas-Date', modeLink: 'xmasmode', dateLink: 'xmasdate', env: 'CHRISTMAS_SKIN', name: 'Christmas skin' } as const;
+
+export type SkinMode = 'off' | 'me' | 'all';
+/** "off", "me" or "all" (anything else is nothing). */
+export function parseMode(text: string | null | undefined): SkinMode | null {
+  const t = (text ?? '').trim().toLowerCase();
+  return t === 'off' || t === 'me' || t === 'all' ? t : null;
+}
 
 /** A wrangler.toml kill switch: allowed unless it says "off". Who sees it is Settings' call. */
 export function christmasSkinAllowed(flag: string | undefined | null): boolean {
@@ -83,7 +87,6 @@ export function parsePretendDate(text: string | null | undefined): number | null
 export const THEME_KEY = 'pb_xmas_theme'; // 'on' when this phone turned the theme on; anything else (or nothing) = off
 export const HINT_KEY = 'pb_xmas_hint'; // '1' once the first-visit bubble has been shown on this phone
 export const BACK_KEY = 'pb_xmas_back'; // '1' once the "Tap to switch back" bubble has been shown on this phone (the first ON only)
-export const SERVER_KEY = 'pb_xmas_server'; // 'on' / 'off': the private link was just opened and the server still has to be told (see server/christmasSkin.ts)
 
 /** Reads and writes that never throw (a phone that blocks storage still works; it just forgets). */
 export interface Memory {

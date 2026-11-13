@@ -252,6 +252,10 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} switched "Check-in pay line" on`;
     case 'checkin_pay_line_off':
       return `${who} switched "Check-in pay line" off`;
+    case 'christmas_skin_everyone':
+      return `${who} switched "Christmas skin" to Everyone`;
+    case 'christmas_skin_me':
+      return `${who} switched "Christmas skin" to Just me`;
     case 'christmas_skin_on':
       return `${who} switched "Christmas skin" on`;
     case 'christmas_skin_off':

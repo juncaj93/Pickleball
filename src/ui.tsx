@@ -922,7 +922,7 @@ export function EmptySeat() {
 export function SpotDots({ names, me, celebrate, oneRow, first }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean; /** Zip 38: the first game listed (its ornaments jingle when the theme is turned on). */ first?: boolean }) {
   // Zip 38, Christmas skin: with the theme on, the seats are ornaments (src/skin/theme.tsx); just switched off, the balls spin back once.
   const skin = useSkin();
-  const skinOn = skin.inWindow && skin.on;
+  const skinOn = skin.mode !== 'off' && skin.on;
   const slots = Math.max(MIN_PLAYERS, names.length);
   // Only balls that appeared since the last look spin in; the first look at a card is still.
   // The marker lasts for the whole spin, even if the card redraws (instant tap, then the server's data).
@@ -933,33 +933,39 @@ export function SpotDots({ names, me, celebrate, oneRow, first }: { names: strin
     prevCount.current = names.length;
     if (before === null || names.length <= before) return;
     setFreshFrom((cur) => (cur === null ? before : Math.min(cur, before)));
-    // An ornament's drop takes about a second, so its marker lasts that long.
-    const t = setTimeout(() => setFreshFrom(null), skinOn ? 1100 : 700);
+    const t = setTimeout(() => setFreshFrom(null), 700);
     return () => clearTimeout(t);
   }, [names.length]);
-  // Zip 38: this game just reached 4 while the theme is on: after the new ornament lands, all the ornaments jingle left to right.
+  // Zip 38, ornament motion. Each ORNAMENT times its own motion and always plays it to the end (src/skin/theme.tsx): this card only says WHICH motion
+  // starts now (a moment: an id and a class per seat). A later redraw, or this card's own state moving on, can never cut an animation short.
+  //   a new player: the new ornament drops in on its thread and swings (xjoin); at the 4th player all four then jingle left to right (no glow anywhere)
+  //   the theme was just turned ON: the ornaments pop in 40 ms apart; the first game's then jingle too
   const prevN = useRef<number | null>(null);
-  const [jingle, setJingle] = useState(false);
-  useEffect(() => {
+  const eventId = useRef(0);
+  const [moments, setMoments] = useState<{ id: number; by: Record<number, string> }>({ id: 0, by: {} });
+  useLayoutEffect(() => {
     const before = prevN.current;
     prevN.current = names.length;
-    if (before === null || !skinOn || before >= MIN_PLAYERS || names.length < MIN_PLAYERS) return undefined;
-    setJingle(true);
-    return undefined;
+    if (before === null || !skinOn || names.length <= before) return;
+    const crossing = before < MIN_PLAYERS && names.length >= MIN_PLAYERS;
+    const by: Record<number, string> = {};
+    for (let i = 0; i < names.length; i++) {
+      if (i >= before) by[i] = crossing ? 'xjoin xjoin-j' : 'xjoin';
+      else if (crossing) by[i] = 'xjingle xjingle-j';
+    }
+    setMoments({ id: ++eventId.current, by });
   }, [names.length, skinOn]);
-  // Its own timer, so another join or a tap on the logo within the 3 seconds cannot leave the jingle switched on.
-  useEffect(() => {
-    if (!jingle) return undefined;
-    const t = setTimeout(() => setJingle(false), 3000);
-    return () => clearTimeout(t);
-  }, [jingle]);
-  const popIn = skinOn && skin.phase === 'in';
+  const popSeq = skinOn && skin.phase === 'in' ? skin.seq : 0;
+  useLayoutEffect(() => {
+    if (!popSeq) return;
+    const by: Record<number, string> = {};
+    for (let i = 0; i < names.length; i++) by[i] = first ? 'xin xin-j' : 'xin';
+    setMoments({ id: ++eventId.current, by });
+  }, [popSeq]); // eslint-disable-line react-hooks/exhaustive-deps
   const seat = (i: number) => {
     const filled = i < names.length;
     if (!filled) return <THEME.Seat key={i} index={i} empty style={{ ['--i' as string]: i }} />;
-    const fresh = freshFrom !== null && i >= freshFrom;
-    const moment = fresh ? (jingle ? 'xjoin xjoin-j' : 'xjoin') : jingle ? 'xjingle xjingle-j' : popIn ? (first ? 'xin xin-j' : 'xin') : '';
-    return <THEME.Seat key={i} index={i} me={names[i] === me} className={moment} style={{ ['--i' as string]: i }} />;
+    return <THEME.Seat key={i} index={i} me={names[i] === me} moment={moments.by[i]} momentId={moments.id} style={{ ['--i' as string]: i }} />;
   };
   return (
     <span
@@ -972,7 +978,7 @@ export function SpotDots({ names, me, celebrate, oneRow, first }: { names: strin
         skinOn ? (
           seat(i)
         ) : i < names.length ? (
-          <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} spin={skin.inWindow && skin.phase === 'out' ? i : undefined} />
+          <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} spin={skin.mode !== 'off' && skin.phase === 'out' ? i : undefined} />
         ) : (
           <EmptySeat key={i} />
         ),

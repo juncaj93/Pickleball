@@ -138,7 +138,7 @@ export interface Env {
   EXTENDED_TIME?: string;
   /** Zip 31, preview only ([env.preview.vars], never [vars]): "on" shows Extended time on this preview whatever the shared fake database's row says. */
   EXTENDED_TIME_PREVIEW?: string;
-  /** Zip 38 "Christmas skin" (shared/christmasSkin.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?christmasskin=on. Look only. */
+  /** Zip 38 "Christmas skin" (shared/christmasSkin.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches > Christmas skin (Off, Just me, Everyone). Look only. */
   CHRISTMAS_SKIN?: string;
   /** Zip 38, preview only ([env.preview.vars], never [vars]): "on" shows the skin on this preview (inside the window) and lets ?xmasdate=YYYY-MM-DD pretend today. */
   CHRISTMAS_SKIN_PREVIEW?: string;

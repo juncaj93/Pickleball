@@ -1,14 +1,15 @@
 /* Zip 38: the Christmas skin OFF must be exactly today's site. This runs today's main (a git worktree, path in MAIN_DIR) and this branch side by
  * side (main plus the one softer-shimmer change Alex asked for, see giveMainTheSofterShimmer) on two copies of the same fake world, with every other row as on live, three ways (SCENARIO):
  *   off-row     the Christmas skin row OFF (today, Nov 12, outside the window anyway);
- *   row-on-out  the row ON but today (Nov 12) is outside the window: nothing may change either;
+ *   row-on-out  the switch on Everyone but today (Nov 12) is outside the window: nothing may change either;
+ *   just-me     the switch on Just me: every player (not the organizer's own player) and every organizer screen must be identical to main;
  *   off-inside  the row OFF with the clock inside the window (Dec 5): the switch is off, so nothing may change.
  * Then it compares:
  *  - the player Home as three fake players (HTML and picture, light and dark, 390 and 320; no logo swap, no ornament, no cap, ever);
  *  - the player answers (/api/group) and the organizer dashboard byte for byte;
  *  - organizer Home (the picture, light and dark, 390).
  *
- *   MAIN_DIR=/path/to/main-worktree SCENARIO=off-row|row-on-out|off-inside node e2e/zip38-off.cjs
+ *   MAIN_DIR=/path/to/main-worktree SCENARIO=off-row|row-on-out|just-me|off-inside node e2e/zip38-off.cjs
  *
  * Not part of npm run test:e2e (it needs the second checkout, with its own node_modules made of hard links, not a symlink).
  * Nothing here touches Cloudflare or the live site.
@@ -49,7 +50,7 @@ async function site(dir, port, dbFile, seedFile, isBranch) {
   copyFileSync(seedFile, dbFile);
   const db = new DatabaseSync(dbFile);
   db.prepare("DELETE FROM task_log WHERE task = 'christmas_skin_on'").run(); // the new row OFF; every other row as seeded (as on live)
-  if (isBranch && SCENARIO === 'row-on-out') db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'x-christmas', id, NULL, 'christmas_skin_on', 'mark', '2026-11-12T23:00:00.000Z' FROM groups").run();
+  if (isBranch && (SCENARIO === 'row-on-out' || SCENARIO === 'just-me')) db.prepare(`INSERT INTO task_log (id, group_id, session_id, task, kind, at) SELECT 'x-christmas', id, NULL, '${SCENARIO === 'just-me' ? 'christmas_skin_me' : 'christmas_skin_on'}', 'mark', '2026-11-12T23:00:00.000Z' FROM groups`).run();
   db.close();
   const server = spawn('npx', ['vite', '--port', String(port), '--strictPort'], {
     cwd: dir,
@@ -84,7 +85,7 @@ function giveMainTheSofterShimmer() {
   const b = readFileSync(path.join(ROOT, 'src/zip7.css'), 'utf8').split('\n');
   const mainOnly = a.filter((l) => !b.includes(l));
   const branchOnly = b.filter((l) => !a.includes(l));
-  const shimmer = /z7-sweep|linear-gradient\(110deg|the sweep is about half as bright/;
+  const shimmer = /z7-sweep|linear-gradient\(110deg|Zip 38 \(Alex\): the sweep/;
   const bad = [...mainOnly, ...branchOnly].filter((l) => !shimmer.test(l));
   if (bad.length) throw new Error(`src/zip7.css differs from main in more than the shimmer: ${bad.join(' | ')}`);
   if (mainOnly.length === 0 && branchOnly.length === 0) throw new Error('src/zip7.css has no shimmer change to expect');
@@ -106,8 +107,8 @@ async function main() {
   // (off-inside: a clock jumped to Dec 5 makes each server's upkeep add next weeks' games with fresh random ids, so the change fingerprint, which hashes those ids, differs between two servers whatever the code: it is blanked there. Off and row-on-out compare it byte for byte.)
   const rowNote = (t) => {
     let out = t;
-    if (SCENARIO === 'row-on-out') out = out.replace(/"christmasSkinForAll":true,?/g, '');
-    if (SCENARIO === 'row-on-out' || SCENARIO === 'off-inside') out = out.replace(/"version":"[^"]*"/g, '"version":"<v>"');
+    if (SCENARIO === 'row-on-out' || SCENARIO === 'just-me') out = out.replace(/"christmasSkinMode":"(all|me)",?/g, '');
+    if (SCENARIO === 'row-on-out' || SCENARIO === 'just-me' || SCENARIO === 'off-inside') out = out.replace(/"version":"[^"]*"/g, '"version":"<v>"');
     return out;
   };
   const blank = (t) => rowNote(t).replace(/localhost:566\d/g, 'localhost:<port>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"').replace(/https:\/\/maps\.apple\.com\/\?daddr=[^"'\s]*/g, 'MAPS').replace(/ m-enter/g, '').replace(/ data-sw-main=""/g, '').replace(/ data-sw=""/g, '');

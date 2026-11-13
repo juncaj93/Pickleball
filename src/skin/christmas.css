@@ -15,16 +15,19 @@
   flex: none;
   display: inline-flex;
 }
+/* The logo is a button in both modes. Just me (.skin-logo-me): the NORMAL logo tile, nothing different to look at (only the organizer's own player gets the
+   button at all). Everyone (.skin-logo-all): the Christmas logo with the page's own color inside the tile (so light and dark both follow the page). */
 button.brand-tile.skin-logo {
   position: relative;
   padding: 0;
   font: inherit;
   color: inherit;
-  /* The normal tile, with the page's own color inside it (so light and dark both follow the page). */
-  background: var(--bg);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   touch-action: manipulation;
+}
+button.brand-tile.skin-logo.skin-logo-all {
+  background: var(--bg);
 }
 /* 32px to look at, 44px to tap. */
 button.brand-tile.skin-logo::before {
@@ -174,13 +177,15 @@ html[data-skin='christmas'] .schedule .tile .tonight-tag {
   background: var(--xmas-red) !important;
   color: #fff !important;
 }
-html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile,
-html[data-skin='christmas'] .schedule .tile.day-tonight,
-html[data-skin='christmas'] .schedule .tile.day-tomorrow {
+/* Red outlines are for games with a SET time only. A tile that carries a court-status ring (the "~8 PM" games and the games with no court set: class .ts) keeps
+   the regular theme's ring and its own colors (dotted for a waitlist, gray for not booked); only a booked ring turns red (the rule below). */
+html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile:not(.ts),
+html[data-skin='christmas'] .schedule .tile.day-tonight:not(.ts),
+html[data-skin='christmas'] .schedule .tile.day-tomorrow:not(.ts) {
   border-color: var(--xmas-red) !important;
 }
-html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tonight,
-html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tomorrow {
+html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tonight:not(.ts-none):not(.ts-wait),
+html[data-skin='christmas'] .schedule .tile.ptile.mine.day-tomorrow:not(.ts-none):not(.ts-wait) {
   outline-color: var(--xmas-red) !important;
 }
 html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .tb-solid {
@@ -207,12 +212,10 @@ html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .
   0% {
     transform: translateY(-22px);
     opacity: 0;
-    filter: none;
   }
   30% {
     transform: translateY(0);
     opacity: 1;
-    filter: drop-shadow(0 0 7px #f2b33d);
   }
   48% {
     transform: rotate(11deg);
@@ -225,17 +228,14 @@ html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .
   }
   100% {
     transform: none;
-    filter: none;
   }
 }
 @keyframes xjingle {
   0% {
     transform: none;
-    filter: none;
   }
   22% {
     transform: rotate(15deg);
-    filter: drop-shadow(0 0 6px #f2b33d);
   }
   50% {
     transform: rotate(-11deg);
@@ -245,7 +245,6 @@ html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .
   }
   100% {
     transform: none;
-    filter: none;
   }
 }
 @keyframes xspin {
@@ -268,15 +267,6 @@ html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .
   100% {
     transform: none;
     opacity: 1;
-  }
-}
-@keyframes xsway {
-  0%,
-  100% {
-    transform: rotate(-2.5deg);
-  }
-  50% {
-    transform: rotate(2.5deg);
   }
 }
 @keyframes xpop {
@@ -326,13 +316,6 @@ html[data-skin-anim='in'][data-skin='christmas'] .schedule > .sched.xs-top::befo
   transform-origin: 50% 50%;
   animation: xspin 0.3s ease-in-out both;
 }
-/* My own ornament, and only mine: a very faint gold glow and a tiny slow left-right sway (a few degrees, calm, always while it is on screen).
-   Nothing is drawn around it, so nothing can clip. Everyone else's ornaments stay still. A seat that is joining or jingling waits its turn. */
-html[data-skin='christmas'] .dots .xorn.me:not(.xin):not(.xjoin):not(.xjingle) {
-  filter: drop-shadow(0 0 3px rgb(242 179 61 / 32%));
-  animation: xsway 5.5s ease-in-out infinite;
-}
-
 /* "Game on" toast badge and the burst: an ornament where the ball was. */
 .pop.pop-ball .toast-icon .xorn {
   width: 22px;
