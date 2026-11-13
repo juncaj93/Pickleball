@@ -112,6 +112,8 @@ export interface Env {
   TOTALS_REFRESH?: string;
   /** Zip 27 "Spent matches Totals" (shared/spentTotals.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?spenttotals=on. Display only. */
   SPENT_TOTALS?: string;
+  /** Zip 39 "Made cheaper after paying" (shared/cheaperFix.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?cheaperfix=on (organizer phone only). Moves money. */
+  CHEAPER_FIX?: string;
   /** Zip 32 "Players sheet redo" (shared/playersSheetRedo.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, /admin?playerssheet=on. Organizer only, look only. */
   PLAYERS_SHEET_REDO?: string;
   /** Zip 35 "Tap guard fix" (shared/tapGuard.ts): the kill switch, allowed unless "off". Who gets it: Settings > Feature switches, ?tapguard=on. Look and feel only: which fast tap the page ignores. */

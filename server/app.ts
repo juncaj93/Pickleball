@@ -167,6 +167,8 @@ route('PUT', '/api/admin/after-game-card-switch', admin.setAfterGameCardSwitch);
 route('PUT', '/api/admin/second-chance-switch', admin.setSecondChanceSwitch);
 route('PUT', '/api/admin/totals-refresh-switch', admin.setTotalsRefreshSwitch);
 route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
+// Zip 39 (server/cheaperFix.ts): Made cheaper after paying.
+route('PUT', '/api/admin/cheaper-fix-switch', admin.setCheaperFixSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
 // Zip 35 (server/tapGuardFix.ts): Tap guard fix.
 route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);

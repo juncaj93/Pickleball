@@ -146,7 +146,7 @@ async function main() {
       for (const width of [390, 360, 320]) {
         const { ctx, page } = await openAdmin({ width, scheme, tab: 'Settings' });
         for (const s of await page.locator('details > summary').all()) await s.click().catch(() => {});
-        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 3).map((e) => e.getAttribute('data-row')));
+        const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.filter((e) => !['cheaperFixAll', 'homeScreenTipAll', 'gameDayTextAll'].includes(e.getAttribute('data-row'))).slice(0, 3).map((e) => e.getAttribute('data-row')));
         assert(first[0] === 'tapGuardFixAll' && first[1] === 'extendedTimeAll', `newest first: ${first}`);
         const r = page.locator('[data-row="tapGuardFixAll"]');
         await r.scrollIntoViewIfNeeded();

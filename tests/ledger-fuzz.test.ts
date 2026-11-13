@@ -1296,6 +1296,8 @@ describe('ledger fuzz: regression cases', () => {
   // price to $6: the seat stays unpaid with $7 of credit on a $6 seat until Finalize. Her screen and Who paid say
   // $0 due, the court row counts the $6 price, Held counts the $7 credit, and Mark paid would record $6 with $7
   // credit inside it. Nothing reprices seats when the price setting changes (updateGroup in server/admin.ts).
+  // Zip 39 (Audit A item A-18): fixed behind the switch "Made cheaper after paying" (CHEAPER_FIX, ships OFF); proven in tests/zip39-money.test.ts.
+  // This replay runs with the switch off (as live until Alex turns it on), so it still fails here on purpose.
   it.fails('G. Price lowered below the credit already on an unpaid seat leaves it unpaid with credit above its price', async () => {
     await expectClean([{ t: 'tpl', rich: true }, { t: 'join', p: 'Gale', g: 0 }, { t: 'price', cents: 600 }]);
   });

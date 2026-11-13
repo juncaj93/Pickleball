@@ -13,6 +13,7 @@ import { creditBackStatements, holdCashStatements, repriceStatements, USABLE } f
 import { HttpError } from './http';
 import { writeMark } from './tasks';
 import { lateFeesFor } from './lateFees';
+import { cheaperFixFor } from './cheaperFix';
 import { auditLateFeeOwed } from './roster';
 import { FEE_MIN_PLAYERS, lateFeeKind } from '../shared/lateFees';
 import { audit, confirmedOf, getSession, type GroupRow, loadRoster, organizerIdOf, type RosterRow, type SessionRow, settingsOf } from './repo';
@@ -54,7 +55,9 @@ export async function finalizeSession(ctx: Ctx, body: Record<string, unknown>) {
   // "Everyone played" sends none: no extension.
   const extra: ExtraMinutes | null = (await extendedTimeFor(ctx, group.id)) ? (isExtraMinutes(body.extraMinutes) ? body.extraMinutes : 0) : null;
   if (body.extraMinutes !== undefined && body.extraMinutes !== null && !isExtraMinutes(body.extraMinutes)) throw new HttpError(400, 'invalid_extra', 'Pick None, +30 min or +1 hr.');
-  return applyFinalize(ctx, group, session, playedIds, await lateFeesFor(ctx, group.id), extra);
+  // Zip 39 "Made cheaper after paying" (server/cheaperFix.ts): only with late fees on is there a no-show to trim.
+  const lateFees = await lateFeesFor(ctx, group.id);
+  return applyFinalize(ctx, group, session, playedIds, lateFees, extra, lateFees && (await cheaperFixFor(ctx, group.id, true)));
 }
 
 /** A value put straight into SQL text (an id or a time this server made), refused if it could break out of quotes. */
@@ -80,7 +83,7 @@ export async function moneyState(ctx: Ctx, sessionId: string): Promise<string> {
  * paying at the same moment, or a request cut off halfway can never leave a
  * game half-finalized.
  */
-export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false, extra: ExtraMinutes | null = null) {
+export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionRow, playedIds: Set<string>, lateFees = false, extra: ExtraMinutes | null = null, cheaperFix = false) {
   const settings = settingsOf(group);
   const state = await moneyState(ctx, session.id);
   const roster = await loadRoster(ctx.db, session.id);
@@ -137,6 +140,12 @@ export async function applyFinalize(ctx: Ctx, group: GroupRow, session: SessionR
       if (paidCash > 0 && paidCash < fee) {
         const onSeat = await usedOn(ctx, session.id, r.player_id);
         statements.push(...holdCashStatements(ctx.db, { ...base, playerId: r.player_id, cents: Math.max(0, paidCash - onSeat), paymentCents: paidCash }));
+      } else if (cheaperFix && paidCash > fee) {
+        // Zip 39 ("Made cheaper after paying", server/cheaperFix.ts; off: nothing here): the mirror. Paid MORE than the fee (the game was made
+        // cheaper after they paid): the part above it comes back as credit exactly the way a played seat's does ('finalized', the payment stays
+        // as paid), so Totals counts the fee, a Reopen takes it back, an Unmark takes it back, and Clear gives back only what is left.
+        statements.push(...creditBackStatements(ctx.db, { ...base, playerId: r.player_id, cents: paidCash - fee, reason: 'finalized', playedCount: n, settle: false }));
+        backs.push({ player: r.display_name, playerId: r.player_id, cents: paidCash - fee, reason: 'finalized' });
       }
       continue;
     }

@@ -93,6 +93,7 @@ import { homeScreenTipForAll, setHomeScreenTipForAll } from './homeScreenTip';
 import { gameDayTextForAll, setGameDayTextForAll } from './gameDayText';
 import { setTotalsRefreshForAll, totalsRefreshFlags } from './totalsRefresh';
 import { setSpentTotalsForAll, spentTotalsFlags } from './spentTotals';
+import { cheaperFixFlags, cheaperFixFor, setCheaperFixForAll } from './cheaperFix';
 import { actingOthersFlags, actingOthersPicture, setActingOthersForAll } from './actingForOthers';
 import { playersSheetRedoFlags, setPlayersSheetRedoForAll } from './playersSheetRedo';
 import { checkInPayFlags, setCheckInPayForAll } from './checkInPay';
@@ -173,6 +174,8 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
   const adminR3 = await adminR3For(ctx, group.id);
   // Zip 27 "Spent matches Totals" (server/spentTotals.ts): Players "Spent" counted the way Totals counts, only while on (off: this answer is exactly main's).
   const spentMatch = await spentTotalsFlags(ctx, group.id);
+  // Zip 39 "Made cheaper after paying" (server/cheaperFix.ts): only its Settings row shows here (off: this answer is exactly main's).
+  const cheaper = await cheaperFixFlags(ctx, group.id);
   const spent = adminR3 ? await spentByPlayer(ctx.db, group.id, organizerId, undefined, spentMatch.on).catch(() => new Map<string, number>()) : new Map<string, number>();
   // Each seat's part of the credit pot: credit used on it, cash paid toward it earlier, and what came back from it.
   const potFor = (sessionId: string) => (r: RosterRow) =>
@@ -411,6 +414,7 @@ export async function dashboard(ctx: Ctx): Promise<AdminDashboard> {
     ...(totals.forAll ? { totalsRefreshForAll: true as const } : {}),
     ...(spentMatch.on ? { spentTotals: true as const } : {}),
     ...(spentMatch.forAll ? { spentTotalsForAll: true as const } : {}),
+    ...(cheaper.forAll ? { cheaperFixForAll: true as const } : {}),
     ...(checkInPay.on ? { checkInPay: true as const } : {}),
     ...(checkInPay.forAll ? { checkInPayForAll: true as const } : {}),
     ...(tapGuard.on ? { tapGuardFix: true as const } : {}),
@@ -697,6 +701,13 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
     ? `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND canceled_at = ${sqlText(ctx.nowIso)} AND canceled_by = '${FEE_KEPT}' AND final_price_cents = ${plan.priceCents} AND finalized_at IS NULL)`
     : '';
   const seatMoves = plan ? plan.seats.map((seat) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: plan.priceCents, nowIso: ctx.nowIso, guard: claimed })) : [];
+  // Zip 39 ("Made cheaper after paying", server/cheaperFix.ts): no split, and a seat holds MORE than the fee (the game was made cheaper after
+  // they paid). Each such seat keeps exactly the fee and the rest comes back as credit, with the split's own moves. Then, like the split, the
+  // cancel only goes ahead if no seat or credit on the game changed since it was read. No such seat (every normal game), or the switch off:
+  // nothing here, and the cancel is exactly main's.
+  const trim = !plan && (await cheaperFixFor(ctx, group.id, true)) ? await cheaperCancelPlan(ctx, group, session, organizerId) : null;
+  const trimmed = `EXISTS (SELECT 1 FROM sessions WHERE id = ${sqlText(session.id)} AND canceled_at = ${sqlText(ctx.nowIso)} AND canceled_by = '${FEE_KEPT}' AND finalized_at IS NULL)`;
+  const trimMoves = trim ? trim.seats.map((seat) => splitSeatStatements(ctx.db, { groupId: group.id, sessionId: session.id, seat, priceCents: trim.feeCents, nowIso: ctx.nowIso, guard: trimmed })) : [];
   const [cancel] = await ctx.db.batch([
     plan
       ? ctx.db
@@ -705,13 +716,21 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
              WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL AND ${SPLIT_STATE(session.id)} = ?6`,
           )
           .bind(ctx.nowIso, reason, session.id, plan.priceCents, plan.count, plan.state)
-      : ctx.db
-          .prepare(
-            `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, updated_at = ?1
+      : trim
+        ? ctx.db
+            .prepare(
+              `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, updated_at = ?1
+               WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL AND ${SPLIT_STATE(session.id)} = ?4`,
+            )
+            .bind(ctx.nowIso, reason, session.id, trim.state)
+        : ctx.db
+            .prepare(
+              `UPDATE sessions SET status = 'canceled', canceled_at = ?1, canceled_by = '${FEE_KEPT}', cancel_reason = ?2, updated_at = ?1
              WHERE id = ?3 AND status <> 'canceled' AND finalized_at IS NULL`,
-          )
-          .bind(ctx.nowIso, reason, session.id),
+            )
+            .bind(ctx.nowIso, reason, session.id),
     ...seatMoves.flatMap((m) => m.statements),
+    ...trimMoves.flatMap((m) => m.statements),
     // Zip 27 (A-02): a seat that paid less than the fee it now owes (the game was made longer after they paid) owes the rest: its cash is
     // held against it, the way Finalize does it. Only seats this cancel made owe; the split's own moves above already ran.
     ...holdShortCashStatements(ctx.db, {
@@ -780,6 +799,13 @@ async function cancelFeeKept(ctx: Ctx, group: GroupRow, session: SessionRow, rea
     },
     ctx.nowIso,
   );
+  // Zip 39: credit (not cash) that went back to the pot from a seat paid above the fee: one line each, like the split's below.
+  if (trim) {
+    for (let i = 0; i < trim.seats.length; i++) {
+      const cents = trimMoves[i].creditBackCents;
+      if (cents > 0) await audit(ctx.db, group.id, session.id, 'credit_back', { player: names.get(trim.seats[i].playerId) ?? 'A player', playerId: trim.seats[i].playerId, amountCents: cents, reason: 'canceled' }, ctx.nowIso);
+    }
+  }
   // Credit that went back to the pot from a seat (it was paid with more credit than the split price): one line each,
   // like the cash part above.
   if (plan) {
@@ -820,6 +846,25 @@ async function splitPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organiz
     seats.push(await splitSeatOf(ctx, session.id, r));
   }
   return { priceCents, count: confirmed.length, state, seats };
+}
+
+/**
+ * Zip 39 ("Made cheaper after paying"): the seats a late cancel with the fee kept (no split) trims to the fee: in, not the organizer, not an
+ * unconfirmed I paid (a claim waits for Alex), holding more than the fee. Null when there are none (then the cancel is exactly main's).
+ * The money state is read FIRST, as in splitPlan, so the seats read below are never older than the cancel's check.
+ */
+async function cheaperCancelPlan(ctx: Ctx, group: GroupRow, session: SessionRow, organizerId: string | null) {
+  const state = (await ctx.db.prepare(`SELECT ${SPLIT_STATE(session.id)} AS s`).first<{ s: string }>())?.s ?? '';
+  const feeCents = flatOf(session, settingsOf(group));
+  const seats: SplitSeat[] = [];
+  for (const r of await loadRoster(ctx.db, session.id)) {
+    if (r.status !== 'confirmed' || r.player_id === organizerId) continue;
+    if (r.payment_status === 'paid' && !r.refunded_at && r.self_paid_at) continue;
+    const seat = await splitSeatOf(ctx, session.id, r);
+    const holds = seat.paid ? seat.paymentCents : seat.used.reduce((s, u) => s + u.cents, 0) + seat.heldCashCents;
+    if (holds > feeCents) seats.push(seat);
+  }
+  return seats.length ? { state, feeCents, seats } : null;
 }
 
 /**
@@ -899,7 +944,10 @@ export async function clearLateFee(ctx: Ctx, body: Record<string, unknown>) {
         .first<{ c: number }>()
     )?.c ?? 0;
     if (paid > 0 && !row.self_paid_at) {
-      statements.push(...creditBackStatements(ctx.db, { groupId: group.id, sessionId: session.id, playerId, cents: paid, reason: 'not_played', nowIso: now, settle: true, guard: tagged }));
+      // Zip 39: a no-show paid above the fee already got the part above it back at Finalize ('finalized', with "Made cheaper after paying"
+      // on): only the rest comes back now. Every other seat has none, so this is exactly main's.
+      const already = await creditBackLeft(ctx.db, session.id, playerId);
+      statements.push(...creditBackStatements(ctx.db, { groupId: group.id, sessionId: session.id, playerId, cents: paid - already, reason: 'not_played', nowIso: now, settle: true, guard: tagged }));
     } else if (paid === 0 && used > 0) {
       statements.push(
         ctx.db
@@ -1859,6 +1907,25 @@ export async function updateGroup(ctx: Ctx, body: Record<string, unknown>) {
     ctx.nowIso,
   );
   await ensureSessions(ctx.db, { ...group, settings_json: JSON.stringify(storedSettings), first_session_date: firstSessionDate }, ctx.nowMs);
+  // Zip 39, Audit A item A-18 ("Made cheaper after paying", server/cheaperFix.ts; off: nothing here, exactly main's): a new "Price per player"
+  // changes the flat price of every open game that follows it, so their seats are repriced now, the way the Short games and Booking hours
+  // switches already do it: an unpaid seat whose credit now covers the price is paid with it, a seat paid with credit that is now short owes
+  // the rest. Cash is never taken back (it is settled at Finalize). A finalized game keeps its lock (Zip 27) and is not open anyway; a 1.5,
+  // 2.5 or 3 hour game priced by its own row does not change, so nothing is written for it.
+  if (settings.pricePerPlayerCents !== settingsOf(group).pricePerPlayerCents && (await cheaperFixFor(ctx, group.id, true))) {
+    // The rules for EVERYONE (the Settings rows), never this phone's private Short games link: the new price is everyone's.
+    const everyone = await everyoneSettings(ctx, group);
+    const flags = { ...(everyone.shortGames === true ? { shortGames: true as const } : {}), ...(everyone.longGames === true ? { longGames: true as const } : {}) };
+    const before = { ...settingsOf(group), ...flags };
+    const after = { ...settings, ...flags };
+    const { results: open } = await ctx.db
+      .prepare(`SELECT *, ${priceLockCol('sessions')} FROM sessions WHERE group_id = ? AND status <> 'canceled' AND finalized_at IS NULL AND ends_at > ?`)
+      .bind(group.id, new Date(ctx.nowMs - 30 * 86_400_000).toISOString())
+      .all<SessionRow>();
+    for (const s of open) {
+      if (flatOf(s, after) !== flatOf(s, before)) await ctx.db.batch(repriceStatements(ctx.db, s.id, flatOf(s, after), ctx.nowIso));
+    }
+  }
   if (settings.maxPlayers > oldMax) {
     // More room: people already waiting move in, first in line first, exactly as after a drop (their credit goes on the
     // same way). Without this the next new I'm in would take the seat ahead of them.
@@ -2590,6 +2657,18 @@ export async function setSpentTotalsSwitch(ctx: Ctx, body: Record<string, unknow
   const on = v.bool(body.on, 'on');
   await setSpentTotalsForAll(ctx.db, group.id, on, ctx.nowIso);
   await audit(ctx.db, group.id, null, on ? 'spent_totals_on' : 'spent_totals_off', {}, ctx.nowIso);
+  return { ok: true, on };
+}
+
+/**
+ * PUT /api/admin/cheaper-fix-switch { on }: Settings > Feature switches > "Made cheaper after paying" (Zip 39, shared/cheaperFix.ts). Moves money,
+ * but only from the next late fee or price change on: turning it on or off changes nothing that already happened.
+ */
+export async function setCheaperFixSwitch(ctx: Ctx, body: Record<string, unknown>) {
+  const group = await requireAdmin(ctx);
+  const on = v.bool(body.on, 'on');
+  await setCheaperFixForAll(ctx.db, group.id, on, ctx.nowIso);
+  await audit(ctx.db, group.id, null, on ? 'cheaper_fix_on' : 'cheaper_fix_off', {}, ctx.nowIso);
   return { ok: true, on };
 }
 
