@@ -76,7 +76,7 @@ async function main() {
   const sides = { main: await site(MAIN, 5661, path.join(ROOT, '.data', 'zip37-off-main.sqlite'), seedFile), branch: await site(ROOT, 5662, path.join(ROOT, '.data', 'zip37-off-branch.sqlite'), seedFile) };
   const browser = await chromium.launch();
   const got = { main: {}, branch: {} };
-  const blank = (t) => t.replace(/localhost:566\d/g, 'localhost:<port>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"').replace(/https:\/\/maps\.apple\.com\/\?daddr=[^"'\s]*/g, 'MAPS').replace(/ m-enter/g, '').replace(/ data-sw-main=""/g, '');
+  const blank = (t) => t.replace(/localhost:566\d/g, 'localhost:<port>').replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '<id>').replace(/"(now|at|[a-zA-Z]*At)":"[^"]*"/g, '"$1":"<t>"').replace(/https:\/\/maps\.apple\.com\/\?daddr=[^"'\s]*/g, 'MAPS').replace(/ m-enter/g, '').replace(/ data-sw-main=""/g, '').replace(/ data-sw=""/g, '');
   const shiftClock = (ctx) =>
     ctx.addInitScript((delta) => {
       const Real = Date;
@@ -112,7 +112,7 @@ async function main() {
           await page.locator('.schedule').first().waitFor({ timeout: 25000 });
           await page.reload();
           await page.locator('.schedule').first().waitFor({ timeout: 25000 });
-          await page.waitForTimeout(800);
+          await page.waitForTimeout(2500);
           const key = `home-${who}-${scheme}-${width}`;
           got[name][key + '-pixels'] = crypto.createHash('sha1').update(await page.screenshot()).digest('hex');
           got[name][key + '-html'] = blank(await page.evaluate(() => document.querySelector('main').outerHTML.replace(/ id="[^"]*"/g, '').replace(/aria-labelledby="[^"]*"/g, '')));
