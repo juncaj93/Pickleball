@@ -9,6 +9,7 @@ import { CHEAPER_FIX } from '../shared/cheaperFix';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
 import { PLAYERS_SHEET_REDO } from '../shared/playersSheetRedo';
 import { HOME_SCREEN_TIP } from '../shared/homeScreenTip';
+import { CHRISTMAS_SKIN, HINT_KEY, THEME_KEY, parsePretendDate } from '../shared/christmasSkin';
 import { CHECKIN_PAY_LINE } from '../shared/checkInPay';
 import { TAP_GUARD_FIX } from '../shared/tapGuard';
 import { phoneTag } from './phoneTag';
@@ -240,6 +241,13 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(BOOKING_HOURS.link)) headers[BOOKING_HOURS.header] = 'on';
   // Zip 31 "Extended time" private test switch for this phone (?extendedtime=on, =off ends it). See server/extension.ts.
   if (gameDayTest(EXTENDED_TIME.link)) headers[EXTENDED_TIME.header] = 'on';
+  // Zip 38 "Christmas skin" private test switch for this phone (?christmasskin=on, =off ends it; it ignores the date) and the preview-only
+  // "pretend today is this day" (?xmasdate=2026-12-05; the server ignores it unless CHRISTMAS_SKIN_PREVIEW is set, only on previews). See server/christmasSkin.ts.
+  if (gameDayTest(CHRISTMAS_SKIN.link)) headers[CHRISTMAS_SKIN.header] = 'on';
+  {
+    const day = storageGet(`pb_${CHRISTMAS_SKIN.dateLink}`);
+    if (day && parsePretendDate(day) !== null) headers[CHRISTMAS_SKIN.dateHeader] = day;
+  }
   // Zip 37 "Home Screen tip" private test switch for this phone (?homescreentip=on, =off ends it). See server/homeScreenTip.ts.
   if (gameDayTest(HOME_SCREEN_TIP.link)) headers[HOME_SCREEN_TIP.header] = 'on';
   // Zip 15 "Second Chance" private test switch for this phone (/admin?secondchance=on: the Home cards, never a Telegram), and the
@@ -259,7 +267,7 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   // (it only exists on previews, never on live). Pretend's organizer screens and this phone's own pages keep them, as before.
   const asPlayer = viewAsId !== null && path.startsWith('/api/') && !path.startsWith('/api/admin/');
   // (Also kept: the two preview-only test clocks, ?gamedaytest= and ?noontest=: the server ignores them unless the site is a preview.)
-  const keep = new Set(['Content-Type', PREVIEW_CALM.header, GAME_DAY_TEST.header, SECOND_CHANCE_TEST.header]);
+  const keep = new Set(['Content-Type', PREVIEW_CALM.header, GAME_DAY_TEST.header, SECOND_CHANCE_TEST.header, CHRISTMAS_SKIN.dateHeader]);
   if (asPlayer) for (const k of Object.keys(headers)) if (!keep.has(k)) delete headers[k];
   if (viewAsId && path.startsWith('/api/') && !path.startsWith('/api/admin/')) headers['X-View-As'] = viewAsId;
   else if (groupKey) headers['X-Group-Key'] = groupKey;
@@ -799,10 +807,30 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link, CHRISTMAS_SKIN.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);
+  }
+  // Zip 38: ?xmasdate=2026-12-05 (preview only in effect) pretends today is that day; =off ends it. ?xmasreset=1 makes this phone forget its
+  // Christmas theme choice and the first-visit bubble, so a tester can see the first visit again.
+  {
+    const q = new URLSearchParams(window.location.search);
+    const day = q.get(CHRISTMAS_SKIN.dateLink);
+    if (day && parsePretendDate(day) !== null) storageSet(`pb_${CHRISTMAS_SKIN.dateLink}`, day);
+    else if (day === 'off') storageRemove(`pb_${CHRISTMAS_SKIN.dateLink}`);
+    if (q.get('xmasreset') === '1') {
+      storageRemove(THEME_KEY);
+      storageRemove(HINT_KEY);
+      // Used once: taken off the address so a reload does not forget the choice again.
+      try {
+        const url = new URL(window.location.href);
+        url.searchParams.delete('xmasreset');
+        window.history.replaceState(window.history.state, '', url.toString());
+      } catch {
+        /* an address that cannot be rewritten: the reset just runs again on a reload */
+      }
+    }
   }
 }
 

@@ -8,6 +8,8 @@ import { DEMO_MESSAGE, isIOS, VIEW_ONLY_MESSAGE } from './lib';
 import { adminMotionOn, canMove, motionOn, RollText, useMotion } from './motion';
 import { formatPhone, smsHref } from '../shared/messages';
 import type { ApiError } from './lib';
+import { useSkin, useSkinOn } from './skin/store';
+import { THEME } from './skin/theme';
 
 export function Chip({ tone, children }: { tone: Tone; children: ReactNode }) {
   return <span className={`chip tone-${tone}`}>{children}</span>;
@@ -261,6 +263,7 @@ function UndoRing({ ms, spentMs = 0 }: { ms: number; spentMs?: number }) {
 function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void; stack?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   // A banner with a button can be drawn again elsewhere (into or out of a sheet): one that had started to go keeps going.
+  const skinOn = useSkinOn();
   const [leaving, setLeaving] = useState<'' | 'left' | 'right' | 'down'>(shown.going ? 'down' : '');
   // How long it has been up already (0 for a new banner), so its time and its Undo ring carry on where they were.
   const spentAtDraw = useRef(shown.opts.keep || shown.opts.action ? Math.max(0, Date.now() - Math.floor(shown.id)) : 0).current;
@@ -362,7 +365,7 @@ function Banner({ shown, onGone, stack = 0 }: { shown: Shown; onGone: () => void
       {!shown.opts.nudge && (
       <span className="toast-icon" aria-hidden="true">
         {shown.opts.ball ? (
-          <Pickleball />
+          skinOn ? <THEME.Badge index={0} /> : <Pickleball />
         ) : shown.kind === 'error' ? (
           '!'
         ) : (
@@ -877,9 +880,14 @@ export function CourtIcon({ kind }: { kind: CourtKind | 'played' }) {
 }
 
 /** One pickleball: a yellow-green ball with the hole pattern. Inline SVG, no image files. */
-export function Pickleball({ me, fresh }: { me?: boolean; fresh?: boolean }) {
+export function Pickleball({ me, fresh, spin }: { me?: boolean; fresh?: boolean; /** Zip 38: the Christmas theme was just switched off: this ball spins once in place, `spin` seats after the first (45 ms apart). */ spin?: number }) {
   return (
-    <svg className={`ball${me ? ' me' : ''}${fresh ? ' ball-new' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+    <svg
+      className={`ball${me ? ' me' : ''}${fresh ? ' ball-new' : ''}${spin !== undefined ? ' xspinb' : ''}`}
+      style={spin !== undefined ? ({ animationDelay: `${spin * 45}ms` } as CSSProperties) : undefined}
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+    >
       <circle cx="10" cy="10" r="9" className="ball-skin" />
       <g className="ball-holes">
         <circle cx="10" cy="5.2" r="1.3" />
@@ -911,7 +919,10 @@ export function EmptySeat() {
   return <span className="dot" />;
 }
 
-export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean }) {
+export function SpotDots({ names, me, celebrate, oneRow, first }: { names: string[]; me?: string | null; celebrate?: boolean; oneRow?: boolean; /** Zip 38: the first game listed (its ornaments jingle when the theme is turned on). */ first?: boolean }) {
+  // Zip 38, Christmas skin: with the theme on, the seats are ornaments (src/skin/theme.tsx); just switched off, the balls spin back once.
+  const skin = useSkin();
+  const skinOn = skin.inWindow && skin.on;
   const slots = Math.max(MIN_PLAYERS, names.length);
   // Only balls that appeared since the last look spin in; the first look at a card is still.
   // The marker lasts for the whole spin, even if the card redraws (instant tap, then the server's data).
@@ -922,9 +933,29 @@ export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me
     prevCount.current = names.length;
     if (before === null || names.length <= before) return;
     setFreshFrom((cur) => (cur === null ? before : Math.min(cur, before)));
-    const t = setTimeout(() => setFreshFrom(null), 700);
+    // An ornament's drop takes about a second, so its marker lasts that long.
+    const t = setTimeout(() => setFreshFrom(null), skinOn ? 1100 : 700);
     return () => clearTimeout(t);
   }, [names.length]);
+  // Zip 38: this game just reached 4 while the theme is on: after the new ornament lands, all the ornaments jingle left to right.
+  const prevN = useRef<number | null>(null);
+  const [jingle, setJingle] = useState(false);
+  useEffect(() => {
+    const before = prevN.current;
+    prevN.current = names.length;
+    if (before === null || !skinOn || before >= MIN_PLAYERS || names.length < MIN_PLAYERS) return undefined;
+    setJingle(true);
+    const t = setTimeout(() => setJingle(false), 3000);
+    return () => clearTimeout(t);
+  }, [names.length, skinOn]);
+  const popIn = skinOn && skin.phase === 'in';
+  const seat = (i: number) => {
+    const filled = i < names.length;
+    if (!filled) return <THEME.Seat key={i} index={i} empty style={{ ['--i' as string]: i }} />;
+    const fresh = freshFrom !== null && i >= freshFrom;
+    const moment = fresh ? (jingle ? 'xjoin xjoin-j' : 'xjoin') : jingle ? 'xjingle xjingle-j' : popIn ? (first ? 'xin xin-j' : 'xin') : '';
+    return <THEME.Seat key={i} index={i} me={names[i] === me} className={moment} style={{ ['--i' as string]: i, ['--pd' as string]: `${(i % 4) * 1.8}s` }} />;
+  };
   return (
     <span
       className={`dots${celebrate ? ' dots-celebrate' : ''}${oneRow ? ' one-row' : ''}`}
@@ -933,7 +964,13 @@ export function SpotDots({ names, me, celebrate, oneRow }: { names: string[]; me
       aria-label={`${names.length} in${names.length < MIN_PLAYERS ? `, ${MIN_PLAYERS - names.length} more needed` : ''}`}
     >
       {Array.from({ length: slots }, (_, i) =>
-        i < names.length ? <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} /> : <EmptySeat key={i} />,
+        skinOn ? (
+          seat(i)
+        ) : i < names.length ? (
+          <Pickleball key={i} me={names[i] === me} fresh={freshFrom !== null && i >= freshFrom} spin={skin.inWindow && skin.phase === 'out' ? i : undefined} />
+        ) : (
+          <EmptySeat key={i} />
+        ),
       )}
     </span>
   );

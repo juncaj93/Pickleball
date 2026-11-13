@@ -42,6 +42,10 @@ import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtF
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
 import { HomeScreenTip } from '../homeScreenTip';
+import { SkinLogo } from '../skin/SkinLogo';
+import { useSkin, useSkinOn } from '../skin/store';
+import { THEME } from '../skin/theme';
+import { useSkinRoot } from '../skin/useSkinRoot';
 import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
@@ -341,6 +345,10 @@ export function PlayerHome({
   useLayoutEffect(() => () => setMotion(false), []);
   // Zip 7 switches (Tonight glow, Color cleanup, Simpler player cards): <html> attributes, only while their answer is yes.
   useZip7Root(g);
+  // Zip 38 "Christmas skin": what the server said (or, on a repeat visit, what the saved last screen said, so the logo does not flicker).
+  // Only this Home screen sets it, and it puts everything back on the way out, so no admin screen carries the theme.
+  useSkinRoot(!!(g ? g.christmasSkin : saved?.view.christmasSkin), !!viewAs);
+  const skin = useSkin();
   // Preview only (g.preview exists only where PREVIEW_CALM is set, never on live): ?as=Harper opens the page as that fake player, the same
   // as picking the name on Who are you?. On live the server never says preview, so the link does nothing.
   const asTried = useRef(false);
@@ -672,6 +680,7 @@ export function PlayerHome({
         </div>
       )}
       <TopBar
+        skinLogo={skin.inWindow ? <SkinLogo /> : undefined}
         // Zip 18: no small group-name label over the name (for everyone); the name sits centered against the logo tile.
         eyebrow=""
         // Swap to Alex (Zip 18): on the organizer's own player page (the server says so only for a phone signed in as the organizer
@@ -837,6 +846,7 @@ export function PlayerHome({
                       celebrating={celebrating.has(s.id)}
                       prev={swapFrom ? (swapFrom.get(s.id) ?? null) : undefined}
                       leaving={leaving}
+                      top={i === 0}
                     />
                   </Fragment>
                 );
@@ -2500,13 +2510,14 @@ function RowPay({
 
 /** "Game on": 8 small pickleballs pop out of the card once (about 400 ms). Decoration only; it never takes a tap. */
 function Burst() {
+  const skinOn = useSkinOn();
   return (
     <span className="m-burst" aria-hidden="true">
       {Array.from({ length: 8 }, (_, k) => {
         const a = (k / 8) * Math.PI * 2 + 0.2;
         return (
           <span key={k} style={{ display: 'contents', ['--k' as string]: k, ['--dx' as string]: `${Math.round(Math.cos(a) * 74)}px`, ['--dy' as string]: `${Math.round(Math.sin(a) * 46)}px` }}>
-            <Pickleball />
+            {skinOn ? <THEME.Badge index={k} /> : <Pickleball />}
           </span>
         );
       })}
@@ -2559,6 +2570,7 @@ export function ScheduleRow({
   minHeight,
   contentTop,
   prev,
+  top,
 }: {
   s: PlayerSessionView;
   g: GroupView;
@@ -2584,7 +2596,10 @@ export function ScheduleRow({
   celebrating?: boolean;
   /** Fading out of the list. */
   leaving?: boolean;
+  /** Zip 38, Christmas skin: the first game listed (the snow cap sits on it, its ornaments jingle when the theme is turned on). */
+  top?: boolean;
 }) {
+  const skinOn = useSkinOn();
   const tz = g.group.timezone;
   const toast = useToast();
   const instantTaps = useInstant<GroupView>();
@@ -2904,7 +2919,7 @@ export function ScheduleRow({
     <article
       ref={rowRef}
       id={`row-${s.id}`}
-      className={`sched ${cleanup && tier === 'later' ? 'tier-next cl-later' : `tier-${tier}`}${cleanup ? ' cl' : ''}${gameDay ? ' gd' : ''}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
+      className={`sched ${cleanup && tier === 'later' ? 'tier-next cl-later' : `tier-${tier}`}${top && skinOn ? ' xs-top' : ''}${cleanup ? ' cl' : ''}${gameDay ? ' gd' : ''}${s.canceled ? ' off' : ''}${highlight ? ' highlight' : ''}${leaving ? ' leaving' : ''}${asking ? ' ts-asking' : ''}${moneyFresh ? ' m-fresh' : ''}${justJoined ? ' m-joined' : ''}${paidFresh ? ' m-paid' : ''}`}
       aria-hidden={leaving ? true : undefined}
       data-tier={tier}
       data-held={held ? 'yes' : undefined}
@@ -2970,14 +2985,14 @@ export function ScheduleRow({
             (cleanup ? (
               // Card cleanup: the circles alone (the same size as before; past 4 they keep coming on the same row), the count is read out.
               <div className="in-line cl-balls">
-                <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} oneRow />
+                <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} oneRow first={top} />
               </div>
             ) : (
               <div className="in-line">
                 <span className="in-count">
                   <RollText text={simple ? s.countText : countLine(s)} />
                 </span>
-                <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} />
+                <SpotDots names={names} me={g.me?.name} celebrate={celebrating && !gameDay} first={top} />
               </div>
             ))}
           {showCount && <NamesLine names={names} me={g.me?.name} everyone={everyone} icon={cleanup} />}

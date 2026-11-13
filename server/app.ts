@@ -182,6 +182,8 @@ route('PUT', '/api/admin/extended-time-switch', admin.setExtendedTimeSwitch);
 // Zip 37: Home Screen tip and Game day text.
 route('PUT', '/api/admin/home-screen-tip-switch', admin.setHomeScreenTipSwitch);
 route('PUT', '/api/admin/game-day-text-switch', admin.setGameDayTextSwitch);
+// Zip 38: Christmas skin.
+route('PUT', '/api/admin/christmas-skin-switch', admin.setChristmasSkinSwitch);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));

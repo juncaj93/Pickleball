@@ -32,6 +32,7 @@ export function TopBar({
   tools,
   chip,
   onTitle,
+  skinLogo,
 }: {
   /** The small label over the title. Empty: no label at all (the organizer header with Swap to Alex on). */
   eyebrow: string;
@@ -46,6 +47,8 @@ export function TopBar({
   chip?: ReactNode;
   /** Swap to Alex (Zip 13): the title and a small swap icon after it are ONE button. Left out: the plain title, exactly as before. */
   onTitle?: { onClick: () => void; label: string };
+  /** Zip 38, Christmas skin: the tappable Christmas logo (player Home only, inside the window). Left out: the usual logo, exactly as before. */
+  skinLogo?: ReactNode;
 }) {
   // The tab says the group's name from Settings (src/siteName.ts); "Pickleball" until a screen has it.
   const siteName = useSiteName();
@@ -56,9 +59,11 @@ export function TopBar({
     <header className="topbar">
       <div className="topbar-inner topbar-row">
         {/* The logo on a rounded tile with an outline (green in dark mode, black in light). public/logo-xmas.png is staged for later, unused. */}
-        <span className="brand-tile" aria-hidden="true">
-          <img className="brand-logo" src="/logo.png" alt="" width="24" height="24" />
-        </span>
+        {skinLogo ?? (
+          <span className="brand-tile" aria-hidden="true">
+            <img className="brand-logo" src="/logo.png" alt="" width="24" height="24" />
+          </span>
+        )}
         <div className="topbar-text">
           {eyebrow !== '' && <div className="eyebrow">{eyebrow}</div>}
           {onTitle ? (
