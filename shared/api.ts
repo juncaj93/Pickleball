@@ -202,6 +202,8 @@ export interface GroupView {
   seatDots?: boolean;
   /** Zip 38 "Christmas skin" (shared/christmasSkin.ts): the switch is on for this phone AND today is inside the window. Missing: exactly as before. */
   christmasSkin?: true;
+  /** Zip 38: the test mode (private link, or the organizer's own player with the test mark): the phone starts with the theme ON and says nothing about it. */
+  christmasSkinTest?: true;
   /** Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): this phone may show the Add to Home Screen card (the phone decides when). Missing: exactly as before. */
   homeScreenTip?: true;
   /**

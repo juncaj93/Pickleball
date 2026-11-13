@@ -270,14 +270,13 @@ html[data-skin='christmas'] .schedule > .sched:not(.off) .tile.ptile.ts-booked .
     opacity: 1;
   }
 }
-@keyframes xglow {
+@keyframes xsway {
   0%,
-  25%,
   100% {
-    filter: none;
+    transform: rotate(-2.5deg);
   }
-  12.5% {
-    filter: drop-shadow(0 0 4px rgb(242 179 61 / 50%));
+  50% {
+    transform: rotate(2.5deg);
   }
 }
 @keyframes xpop {
@@ -327,11 +326,11 @@ html[data-skin-anim='in'][data-skin='christmas'] .schedule > .sched.xs-top::befo
   transform-origin: 50% 50%;
   animation: xspin 0.3s ease-in-out both;
 }
-/* Game day cards: the filled ornaments glow softly gold ONE BY ONE, slowly, for as long as the page is open (1.8 s each, a pass of
-   four about 7 s). Empty seats never glow, and a seat that is joining or jingling waits its turn. */
-html[data-skin='christmas'] .schedule > .sched.gd .dots .xorn:not(.xempty):not(.xin):not(.xjoin):not(.xjingle) {
-  animation: xglow 7.2s ease-in-out infinite;
-  animation-delay: var(--pd, 0s);
+/* My own ornament, and only mine: a very faint gold glow and a tiny slow left-right sway (a few degrees, calm, always while it is on screen).
+   Nothing is drawn around it, so nothing can clip. Everyone else's ornaments stay still. A seat that is joining or jingling waits its turn. */
+html[data-skin='christmas'] .dots .xorn.me:not(.xin):not(.xjoin):not(.xjingle) {
+  filter: drop-shadow(0 0 3px rgb(242 179 61 / 32%));
+  animation: xsway 5.5s ease-in-out infinite;
 }
 
 /* "Game on" toast badge and the burst: an ornament where the ball was. */
@@ -358,8 +357,7 @@ html[data-skin='christmas'] .schedule > .sched.gd .dots .xorn:not(.xempty):not(.
   .skin-logo .brand-logo,
   .xorn,
   .ball.xspinb,
-  html[data-skin='christmas'] .schedule > .sched.xs-top::before,
-  html[data-skin='christmas'] .schedule > .sched.gd .dots .xorn {
+  html[data-skin='christmas'] .schedule > .sched.xs-top::before {
     animation: none !important;
   }
 }

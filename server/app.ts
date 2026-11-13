@@ -62,6 +62,8 @@ route('POST', '/api/access', enterGroupWord);
 route('GET', '/api/group', (ctx) => player.groupView(ctx));
 route('GET', '/api/group/version', (ctx) => player.groupVersion(ctx));
 route('POST', '/api/me', player.pickName);
+// Zip 38: the private Christmas skin link tells the server (the organizer's own player only; see server/player.ts).
+route('POST', '/api/christmas-skin-tester', player.christmasSkinTester);
 route('DELETE', '/api/me', (ctx) => player.forgetName(ctx));
 route('POST', '/api/players/self', player.addSelf);
 route('PUT', '/api/me/days', player.setMyDays);

@@ -115,7 +115,8 @@ import { seatDotsFor } from './seatDots';
 import { goToAdminFor } from './zip13';
 import { gameDayCardFor, gameDayTestFor } from './gameDay';
 import { homeScreenTipFor } from './homeScreenTip';
-import { christmasSkinFor } from './christmasSkin';
+import { christmasSkinFor, setChristmasSkinTester } from './christmasSkin';
+import { christmasSkinAllowed } from '../shared/christmasSkin';
 import { previewCalmFor, previewSiteFor } from './secondChance';
 import { afterGameCardFor, afterGameCredits } from './afterGame';
 import { courtOrNull } from '../shared/gameDay';
@@ -189,6 +190,8 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
   const me = (viewAsName ? allPlayers : players).find((p) => p.id === meId) ?? null;
   // The organizer pays the venue, so they never owe, pay or earn credit as a player.
   const meIsOrganizer = !!me && me.id === (await organizerIdOf(ctx.db, group));
+  // Zip 38 "Christmas skin": one read for the organizer's own player only (the test mark); every other player's answer is as it was.
+  const skin = await christmasSkinFor(ctx, group.id, meIsOrganizer && !viewAsName);
   const timeShift = await timeShiftFor(ctx, group.id);
   const lateFees = await lateFeesFor(ctx, group.id);
   // Canceled games the organizer removed from the player screen (ADMIN_V2). Nothing else about them changes.
@@ -330,7 +333,9 @@ export async function groupView(ctx: Ctx): Promise<GroupView> {
     ...(meIsOrganizer && !viewAsName && (await goToAdminFor(ctx, group.id)) ? { goToAdmin: true as const } : {}),
     ...(gameDay ? { gameDayCard: true as const } : {}),
     // Zip 38 "Christmas skin": one true flag, only while the switch is on for this phone AND today is inside the window (the phone keeps its own theme on/off). Never in admin answers. Off: exactly main's.
-    ...((await christmasSkinFor(ctx, group.id)) ? { christmasSkin: true as const } : {}),
+    ...(skin.on ? { christmasSkin: true as const } : {}),
+    // The test mode (private link, or the organizer's own player with the organizer's test mark): the phone starts with the theme ON.
+    ...(skin.test ? { christmasSkinTest: true as const } : {}),
     // Zip 37 "Home Screen tip": one true flag (the phone decides when to draw the card). Never for the organizer's own page; View as carries it like the player's own phone and the screen never draws it there. Off: exactly main's.
     ...(me && !meIsOrganizer && (await homeScreenTipFor(ctx, group.id)) ? { homeScreenTip: true as const } : {}),
     // Zip 17, Unpaid nudge: only while on (off: this answer is exactly main's). The screen counts from `owed` with shared/unpaidNudge.ts.
@@ -410,6 +415,21 @@ export async function pickName(ctx: Ctx, body: Record<string, unknown>) {
   if (!player) throw new HttpError(404, 'player_not_found', 'That name is not on the list.');
   await rememberPlayer(ctx, group, player.id);
   return { me: { id: player.id, name: player.display_name } };
+}
+
+/**
+ * POST /api/christmas-skin-tester { on } (Zip 38): the private link tells the server, so the organizer's own player gets the test mode on every
+ * phone, a Home Screen app included (an iPhone Home Screen app keeps its own storage, apart from Safari's). Only the organizer's own player
+ * (the name set in Settings) can set or clear it, never in View as, never against the kill switch; anyone else gets a quiet "marked: false"
+ * and nothing is saved. Look only: it changes how the organizer's own player sees the player screens, nobody else's.
+ */
+export async function christmasSkinTester(ctx: Ctx, body: Record<string, unknown>) {
+  const { group, playerId, viewAsName } = await viewer(ctx);
+  const on = v.bool(body.on, 'on');
+  const mine = !!playerId && !viewAsName && playerId === (await organizerIdOf(ctx.db, group));
+  if (!mine || !christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return { ok: true, marked: false };
+  await setChristmasSkinTester(ctx.db, group.id, on, ctx.nowIso);
+  return { ok: true, marked: on };
 }
 
 /** Lowercase letters and single spaces, for comparing names. */

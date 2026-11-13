@@ -10,8 +10,15 @@
 //
 // The server answers ONE flag ("christmasSkin": true) that already means "switch on for this phone AND inside the window". The phone only
 // keeps the theme's own on/off memory (localStorage, every call wrapped: a phone that blocks storage never crashes).
+//
+// The PRIVATE LINK (?christmasskin=on, =off ends it) is the organizer's own test mode: the whole skin (Christmas logo AND the theme itself)
+// is on every time the site opens, whatever the date and whatever the Settings row says for everyone else, until ?christmasskin=off. The
+// answer then also carries "christmasSkinTest": true, which makes the phone start with the theme ON and say nothing about it. An iPhone Home
+// Screen app keeps its own storage, separate from Safari's, so the link also tells the SERVER (a single group-level mark, task
+// "christmas_skin_tester"): the organizer's OWN player (the name set in Settings, whichever phone picked it) then gets the test mode too.
+// Nobody else's answer, page or pictures change.
 
-export const CHRISTMAS_SKIN = { task: 'christmas_skin_on', header: 'X-Christmas-Skin', dateHeader: 'X-Christmas-Date', link: 'christmasskin', dateLink: 'xmasdate', env: 'CHRISTMAS_SKIN', name: 'Christmas skin' } as const;
+export const CHRISTMAS_SKIN = { task: 'christmas_skin_on', testerTask: 'christmas_skin_tester', header: 'X-Christmas-Skin', dateHeader: 'X-Christmas-Date', link: 'christmasskin', dateLink: 'xmasdate', env: 'CHRISTMAS_SKIN', name: 'Christmas skin' } as const;
 
 /** A wrangler.toml kill switch: allowed unless it says "off". Who sees it is Settings' call. */
 export function christmasSkinAllowed(flag: string | undefined | null): boolean {
@@ -75,6 +82,8 @@ export function parsePretendDate(text: string | null | undefined): number | null
 
 export const THEME_KEY = 'pb_xmas_theme'; // 'on' when this phone turned the theme on; anything else (or nothing) = off
 export const HINT_KEY = 'pb_xmas_hint'; // '1' once the first-visit bubble has been shown on this phone
+export const BACK_KEY = 'pb_xmas_back'; // '1' once the "Tap to switch back" bubble has been shown on this phone (the first ON only)
+export const SERVER_KEY = 'pb_xmas_server'; // 'on' / 'off': the private link was just opened and the server still has to be told (see server/christmasSkin.ts)
 
 /** Reads and writes that never throw (a phone that blocks storage still works; it just forgets). */
 export interface Memory {
@@ -113,6 +122,13 @@ export function writeTheme(m: Memory, on: boolean): void {
 export function takeFirstVisitHint(m: Memory): boolean {
   if (safeGet(m, HINT_KEY) === '1') return false;
   safeSet(m, HINT_KEY, '1');
+  return true;
+}
+
+/** The "Tap to switch back" bubble: true exactly once per phone, the first time the theme is turned ON (the same rules as the first-visit bubble). */
+export function takeFirstOnHint(m: Memory): boolean {
+  if (safeGet(m, BACK_KEY) === '1') return false;
+  safeSet(m, BACK_KEY, '1');
   return true;
 }
 

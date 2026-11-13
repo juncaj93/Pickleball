@@ -9,7 +9,7 @@
 //             Never anything but idle with "reduce motion" on a phone.
 //   bubble    which speech bubble under the logo is showing right now.
 import { useSyncExternalStore } from 'react';
-import { BUBBLE_MS, readTheme, takeFirstVisitHint, writeTheme, type Memory } from '../../shared/christmasSkin';
+import { BUBBLE_MS, readTheme, takeFirstOnHint, takeFirstVisitHint, writeTheme, type Memory } from '../../shared/christmasSkin';
 
 export type SkinPhase = 'idle' | 'in' | 'out';
 export type SkinBubble = null | 'first' | 'back';
@@ -25,8 +25,11 @@ export interface SkinState {
 const IDLE: SkinState = { inWindow: false, on: false, phase: 'idle', seq: 0, bubble: null };
 let state: SkinState = IDLE;
 let demo = false;
+/** The test mode (private link / the organizer's own player): the theme is ON at every open, nothing is remembered, no bubbles. */
+let forced = false;
 /** The first-visit bubble was already shown in this page load (a phone that blocks storage cannot remember it, so this keeps it to once). */
 let hintShown = false;
+let backShown = false;
 let timers: ReturnType<typeof setTimeout>[] = [];
 const listeners = new Set<() => void>();
 
@@ -97,16 +100,17 @@ function closeOnTap() {
  * The server's answer for this screen. Called on every refresh; it only does something when the answer changes.
  * `isDemo` = the organizer's "View as" copy: no first-visit bubble, nothing remembered, the theme starts off.
  */
-export function setSkinAvailable(available: boolean, isDemo: boolean) {
-  if (available === state.inWindow && isDemo === demo) return;
+export function setSkinAvailable(available: boolean, isDemo: boolean, isForced = false) {
+  if (available === state.inWindow && isDemo === demo && isForced === forced) return;
   demo = isDemo;
+  forced = isForced && !isDemo;
   clearTimers();
   if (!available) {
     emit(IDLE);
     return;
   }
-  const on = isDemo ? false : readTheme(memory);
-  const hint = !isDemo && !on && !hintShown && takeFirstVisitHint(memory);
+  const on = forced ? true : isDemo ? false : readTheme(memory);
+  const hint = !isDemo && !forced && !on && !hintShown && takeFirstVisitHint(memory);
   if (hint) hintShown = true;
   emit({ inWindow: true, on, phase: 'idle', seq: state.seq, bubble: hint ? 'first' : null });
   if (hint) {
@@ -119,18 +123,22 @@ export function setSkinAvailable(available: boolean, isDemo: boolean) {
 export function toggleSkin() {
   if (!state.inWindow) return;
   const on = !state.on;
-  if (!demo) writeTheme(memory, on);
+  if (!demo && !forced) writeTheme(memory, on);
   clearTimers();
   const still = reducedMotion();
-  emit({ ...state, on, phase: still ? 'idle' : on ? 'in' : 'out', seq: state.seq + 1, bubble: on ? 'back' : null });
+  // "Tap to switch back" shows only the first time the theme is turned ON on a phone (and never in View as or the test mode).
+  const back = on && !demo && !forced && !backShown && takeFirstOnHint(memory);
+  if (back) backShown = true;
+  emit({ ...state, on, phase: still ? 'idle' : on ? 'in' : 'out', seq: state.seq + 1, bubble: back ? 'back' : null });
   if (!still) later(on ? IN_MS : OUT_MS, () => emit({ ...state, phase: 'idle' }));
-  if (on) later(BUBBLE_MS, () => state.bubble === 'back' && emit({ ...state, bubble: null }));
+  if (back) later(BUBBLE_MS, () => state.bubble === 'back' && emit({ ...state, bubble: null }));
 }
 
 /** The Home screen went away (admin, another page): nothing of the theme is left behind. */
 export function resetSkin() {
   clearTimers();
   demo = false;
+  forced = false;
   if (state !== IDLE) emit(IDLE);
 }
 

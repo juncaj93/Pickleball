@@ -9,7 +9,7 @@ import { CHEAPER_FIX } from '../shared/cheaperFix';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
 import { PLAYERS_SHEET_REDO } from '../shared/playersSheetRedo';
 import { HOME_SCREEN_TIP } from '../shared/homeScreenTip';
-import { CHRISTMAS_SKIN, HINT_KEY, THEME_KEY, parsePretendDate } from '../shared/christmasSkin';
+import { BACK_KEY, CHRISTMAS_SKIN, HINT_KEY, SERVER_KEY, THEME_KEY, parsePretendDate } from '../shared/christmasSkin';
 import { CHECKIN_PAY_LINE } from '../shared/checkInPay';
 import { TAP_GUARD_FIX } from '../shared/tapGuard';
 import { phoneTag } from './phoneTag';
@@ -817,11 +817,15 @@ if (typeof window !== 'undefined') {
   {
     const q = new URLSearchParams(window.location.search);
     const day = q.get(CHRISTMAS_SKIN.dateLink);
+    // The private link also has to reach the server (once a name is picked): src/skin/useSkinRoot.ts.
+    const link = q.get(CHRISTMAS_SKIN.link);
+    if (link === 'on' || link === 'off') storageSet(SERVER_KEY, link);
     if (day && parsePretendDate(day) !== null) storageSet(`pb_${CHRISTMAS_SKIN.dateLink}`, day);
     else if (day === 'off') storageRemove(`pb_${CHRISTMAS_SKIN.dateLink}`);
     if (q.get('xmasreset') === '1') {
       storageRemove(THEME_KEY);
       storageRemove(HINT_KEY);
+      storageRemove(BACK_KEY);
       // Used once: taken off the address so a reload does not forget the choice again.
       try {
         const url = new URL(window.location.href);

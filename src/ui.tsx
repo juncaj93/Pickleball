@@ -959,7 +959,7 @@ export function SpotDots({ names, me, celebrate, oneRow, first }: { names: strin
     if (!filled) return <THEME.Seat key={i} index={i} empty style={{ ['--i' as string]: i }} />;
     const fresh = freshFrom !== null && i >= freshFrom;
     const moment = fresh ? (jingle ? 'xjoin xjoin-j' : 'xjoin') : jingle ? 'xjingle xjingle-j' : popIn ? (first ? 'xin xin-j' : 'xin') : '';
-    return <THEME.Seat key={i} index={i} me={names[i] === me} className={moment} style={{ ['--i' as string]: i, ['--pd' as string]: `${(i % 4) * 1.8}s` }} />;
+    return <THEME.Seat key={i} index={i} me={names[i] === me} className={moment} style={{ ['--i' as string]: i }} />;
   };
   return (
     <span

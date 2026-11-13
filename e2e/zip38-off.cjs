@@ -1,5 +1,5 @@
 /* Zip 38: the Christmas skin OFF must be exactly today's site. This runs today's main (a git worktree, path in MAIN_DIR) and this branch side by
- * side on two copies of the same fake world, with every other row as on live, three ways (SCENARIO):
+ * side (main plus the one softer-shimmer change Alex asked for, see giveMainTheSofterShimmer) on two copies of the same fake world, with every other row as on live, three ways (SCENARIO):
  *   off-row     the Christmas skin row OFF (today, Nov 12, outside the window anyway);
  *   row-on-out  the row ON but today (Nov 12) is outside the window: nothing may change either;
  *   off-inside  the row OFF with the clock inside the window (Dec 5): the switch is off, so nothing may change.
@@ -73,7 +73,28 @@ async function site(dir, port, dbFile, seedFile, isBranch) {
   return { BASE };
 }
 
+/**
+ * Alex (round 1): the tonight shimmer is softer for EVERYONE, switch on or off, so today's main is not the page the branch must match any more:
+ * it must match main PLUS that one shimmer change. This copies the branch's src/zip7.css over the main checkout's, after checking the only
+ * lines that differ are the shimmer lines (the --z7-sweep colors and the sweep's gradient). Nothing else is allowed to differ.
+ */
+function giveMainTheSofterShimmer() {
+  spawnSync('git', ['-C', MAIN, 'checkout', '--', 'src/zip7.css']); // start from main's own file every run
+  const a = readFileSync(path.join(MAIN, 'src/zip7.css'), 'utf8').split('\n');
+  const b = readFileSync(path.join(ROOT, 'src/zip7.css'), 'utf8').split('\n');
+  const mainOnly = a.filter((l) => !b.includes(l));
+  const branchOnly = b.filter((l) => !a.includes(l));
+  const shimmer = /z7-sweep|linear-gradient\(110deg|the sweep is about half as bright/;
+  const bad = [...mainOnly, ...branchOnly].filter((l) => !shimmer.test(l));
+  if (bad.length) throw new Error(`src/zip7.css differs from main in more than the shimmer: ${bad.join(' | ')}`);
+  if (mainOnly.length === 0 && branchOnly.length === 0) throw new Error('src/zip7.css has no shimmer change to expect');
+  copyFileSync(path.join(ROOT, 'src/zip7.css'), path.join(MAIN, 'src/zip7.css'));
+  return mainOnly.length + branchOnly.length;
+}
+
 async function main() {
+  const shimmerLines = giveMainTheSofterShimmer();
+  console.log(`main gets the softer tonight shimmer (${shimmerLines} CSS lines), nothing else`);
   mkdirSync(path.join(ROOT, '.data'), { recursive: true });
   const seedFile = path.join(ROOT, '.data', 'zip38-off-seed.sqlite');
   rmSync(seedFile, { force: true });
@@ -146,6 +167,9 @@ async function main() {
     }
   }
   for (const key of Object.keys(got.main)) {
+    // off-inside: the clock is jumped weeks past every game, so a picture can catch the page in either of two equally right moments (this showed on main vs
+    // main too, before this zip's round 1). The HTML and the answers are compared there; the pictures are compared in the two other scenarios.
+    if (SCENARIO === 'off-inside' && key.endsWith('-pixels')) continue;
     await check(`OFF = main: ${key}`, async () => {
       const a = got.main[key];
       const b = got.branch[key];

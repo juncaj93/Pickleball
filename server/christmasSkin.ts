@@ -34,19 +34,33 @@ export async function setChristmasSkinForAll(db: D1Database, groupId: string, on
 /** Is this a preview that may pretend a date and has its own switch? Only [env.preview.vars] has CHRISTMAS_SKIN_PREVIEW. */
 const isPreview = (ctx: Ctx) => (ctx.env.CHRISTMAS_SKIN_PREVIEW ?? '').trim().toLowerCase() === 'on';
 
+/** The organizer's test mark (one group-level row): "the organizer's own player sees the whole skin on every phone". Read only for that one player. */
+export async function christmasSkinTesterOn(db: D1Database, groupId: string): Promise<boolean> {
+  const row = await db.prepare(SWITCH_READ).bind(groupId, CHRISTMAS_SKIN.testerTask).first().catch(() => null);
+  return !!row;
+}
+export async function setChristmasSkinTester(db: D1Database, groupId: string, on: boolean, nowIso: string): Promise<void> {
+  await db.prepare("DELETE FROM task_log WHERE group_id = ? AND session_id IS NULL AND task = ? AND kind = 'mark'").bind(groupId, CHRISTMAS_SKIN.testerTask).run();
+  if (on) {
+    await db.prepare("INSERT INTO task_log (id, group_id, session_id, task, kind, at) VALUES (?, ?, NULL, ?, 'mark', ?)").bind(newId(), groupId, CHRISTMAS_SKIN.testerTask, nowIso).run();
+  }
+}
+
 /**
- * "Christmas skin" for this screen: the kill switch allows it, the switch is on for this phone, and today is inside the window.
- * The date is checked first, so outside the window nothing is read from the database at all (the answer and the trip count are main's).
+ * "Christmas skin" for this screen. `on`: the skin shows (the kill switch allows it, and either the test mode below, or the switch is on for
+ * this phone AND today is inside the window). `test`: the test mode: this phone opened the private link (X-Christmas-Skin: on), or this is the
+ * organizer's own player and the organizer's test mark is set. The test mode ignores the date AND the Settings row (one phone, one player);
+ * the kill switch beats it. The date is checked before any database read, so outside the window nobody but the organizer's own player costs a read.
  */
-export async function christmasSkinFor(ctx: Ctx, groupId: string): Promise<boolean> {
-  if (!christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return false;
-  const priv = (ctx.req.headers.get(CHRISTMAS_SKIN.header) ?? '').toLowerCase() === 'on';
+export async function christmasSkinFor(ctx: Ctx, groupId: string, meIsOrganizer = false): Promise<{ on: boolean; test: boolean }> {
+  const off = { on: false, test: false };
+  if (!christmasSkinAllowed(ctx.env.CHRISTMAS_SKIN)) return off;
+  if ((ctx.req.headers.get(CHRISTMAS_SKIN.header) ?? '').toLowerCase() === 'on') return { on: true, test: true };
+  if (meIsOrganizer && (await christmasSkinTesterOn(ctx.db, groupId))) return { on: true, test: true };
   const preview = isPreview(ctx);
-  // The private test link ignores the date (this phone only), so the real-phone check can happen before Nov 27.
-  if (priv) return true;
   const pretend = preview ? parsePretendDate(ctx.req.headers.get(CHRISTMAS_SKIN.dateHeader)) : null;
   const nowMs = pretend ?? Date.parse(ctx.nowIso);
-  if (!inChristmasWindow(nowMs)) return false;
-  if (preview) return true;
-  return forAll(ctx.db, groupId);
+  if (!inChristmasWindow(nowMs)) return off;
+  if (preview) return { on: true, test: false };
+  return { on: await forAll(ctx.db, groupId), test: false };
 }

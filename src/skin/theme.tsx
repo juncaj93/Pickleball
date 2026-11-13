@@ -27,7 +27,7 @@ const COLS: [string, string][] = [['#e5483f', '#b3261e'], ['#37b873', '#1f7a4a']
 
 /**
  * One Christmas ornament, 22 x 26: a gold cap and a glossy ball (a filled seat), or a dashed outline of the same shape (an empty seat).
- * My own seat keeps the site's usual ring (the primary green) around the ball.
+ * My own seat has no ring: it has a very faint gold glow and a tiny slow sway instead (CSS, `.xorn.me`, src/skin/christmas.css).
  */
 export function Ornament({ index, empty, me, className = '', style }: SeatProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -40,7 +40,6 @@ export function Ornament({ index, empty, me, className = '', style }: SeatProps)
       </svg>
     );
   }
-  const r = me ? 7.8 : 9;
   return (
     <svg className={`xorn${me ? ' me' : ''} ${className}`.trim()} style={style} viewBox="0 0 22 26" aria-hidden="true">
       <defs>
@@ -52,9 +51,8 @@ export function Ornament({ index, empty, me, className = '', style }: SeatProps)
       </defs>
       <rect x="8.5" y="1" width="5" height="4.5" rx="1" fill="#d9a53a" />
       <rect x="9.7" y="4.6" width="2.6" height="2" fill="#b98424" />
-      <circle cx="11" cy="16" r={r} fill={`url(#xg${uid})`} />
+      <circle cx="11" cy="16" r="9" fill={`url(#xg${uid})`} />
       <ellipse cx="7.8" cy="12.3" rx="2.4" ry="1.5" fill="#fff" opacity=".6" transform="rotate(-30 7.8 12.3)" />
-      {me && <circle cx="11" cy="16" r="9.9" fill="none" stroke="var(--primary)" strokeWidth="1.8" />}
     </svg>
   );
 }
