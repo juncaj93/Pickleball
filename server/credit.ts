@@ -518,7 +518,8 @@ export function splitSeatStatements(
             .prepare(
               `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason)
                SELECT ?1, ?2, ?3, '${kind}', ?4, ?5, ?6, 'cash'
-               WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND reason = 'cash' AND ended_at = ?6 AND ended_reason = '${why}') AND ${guard}`,
+               WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND reason = 'cash' AND ended_at = ?6 AND ended_reason = '${why}') AND ${guard}
+                 AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND reason = 'cash' AND kind = '${kind}' AND ended_at IS NULL)`,
             )
             .bind(newId(), groupId, seat.playerId, keep, sessionId, nowIso),
         );
@@ -544,7 +545,8 @@ export function splitSeatStatements(
           .prepare(
             `INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at)
              SELECT ?1, ?2, ?3, 'used', ?4, ?5, ?6
-             WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE id = ${first} AND ended_at = ?6 AND ended_reason = '${why}') AND ${guard}`,
+             WHERE EXISTS (SELECT 1 FROM credit_ledger WHERE id = ${first} AND ended_at = ?6 AND ended_reason = '${why}') AND ${guard}
+               AND NOT EXISTS (SELECT 1 FROM credit_ledger WHERE session_id = ?5 AND player_id = ?3 AND kind = 'used' AND COALESCE(reason, '') <> 'cash' AND ended_at IS NULL)`,
           )
           .bind(newId(), groupId, seat.playerId, stays, sessionId, nowIso),
       );

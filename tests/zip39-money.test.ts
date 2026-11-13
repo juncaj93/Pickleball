@@ -13,13 +13,16 @@ import { join as pjoin } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { CHEAPER_FIX, cheaperFixAllowed } from '../shared/cheaperFix';
 import { applyFinalize } from '../server/finalize';
+import { splitSeatStatements } from '../server/credit';
 import { makeCtx } from '../server/context';
 import { getGroup, getSession } from '../server/repo';
 import { withShortGames } from '../server/zip9';
 import { HOUR, ORIGIN, playerPhone, setupGroup } from './harness';
+import { buildWorld, flipPriceRules, moneyDump, settledPart } from './zip27-world';
 
 vi.setConfig({ testTimeout: 120_000 });
 
+const MAIN_DUMP = JSON.parse(readFileSync(pjoin(process.cwd(), 'tests/fixtures/zip27-main-dump.json'), 'utf8'));
 const INTEGRITY = readFileSync(pjoin(process.cwd(), 'scripts/integrity-checks.sql'), 'utf8');
 
 type W = Awaited<ReturnType<typeof setupGroup>>;
@@ -99,6 +102,20 @@ describe('the switch "Made cheaper after paying" (CHEAPER_FIX, ships OFF)', () =
     // A player can not turn it on: the route is the organizer's.
     expect((await (await phone(w, 'Blair')).call('PUT', '/api/admin/cheaper-fix-switch', { on: true })).status).toBe(401);
   });
+});
+
+// ---------- Normal games: nothing changes with the switch ON ----------
+
+describe('switch ON, normal games: Zip 27\'s fake world (every length, cash and credit, late cancel, late drop, no-show) reads exactly like main', () => {
+  for (const [key, bookingHours] of [['live switches', false], ['booking hours on', true]] as const) {
+    it(`${key}: every game, month, player screen and Spent equal main's (tests/fixtures/zip27-main-dump.json); after every price rule changes, every settled number still does`, async () => {
+      const w = await buildWorld({ bookingHours, extraSwitches: ['cheaper-fix-switch'] });
+      const dump = await moneyDump(w);
+      expect(dump).toEqual(MAIN_DUMP[key]);
+      await flipPriceRules(w, { bookingHours });
+      expect(settledPart(await moneyDump(w))).toEqual(settledPart(dump));
+    });
+  }
 });
 
 // ---------- 1. Made cheaper after paying ----------
@@ -324,6 +341,94 @@ describe('1. a game made cheaper after people paid, then a late fee: the extra c
     expect(await pot(w, 'Casey')).toBe(300);
     expect(health(w)).toEqual({});
   });
+});
+
+describe('double taps on the late cancel and the late drop (same millisecond, credit-paid seat): nothing moves twice', () => {
+  // Blair's seat is paid with $14 of credit. Both phones read the game before either writes (Promise.all in one process), and the
+  // clock is the same to the millisecond, so a second batch's "this cancel / this drop" check reads true.
+  const scene = async (switches: string[], count: number) => {
+    const w = await group(switches);
+    const old = await addGame(w, '2026-11-11', 120);
+    await joinAll(w, old.id, ['Blair']);
+    await pay(w, old.id, ['Blair']);
+    expect((await w.organizer.call('POST', `/api/admin/sessions/${old.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
+    const g = await addGame(w, '2026-11-10', 120);
+    const names = ['Blair', 'Casey', 'Devon', 'Emery', 'Frankie', 'Gale'].slice(0, count);
+    await joinAll(w, g.id, names);
+    await pay(w, g.id, names.slice(1));
+    await setLength(w, g.id, g.start, 90);
+    w.app.now = g.start - 3 * HOUR;
+    return { w, g };
+  };
+  for (const [label, switches, count] of [
+    ['made cheaper, no split (4 in)', ['short-games-switch', 'late-fees'], 4],
+    ['the fee split (6 in, as on main)', ['short-games-switch', 'late-fees', 'late-fee-split'], 6],
+  ] as const) {
+    it(`late cancel, ${label}: two taps leave exactly what one tap leaves`, async () => {
+      const once = await scene([...switches], count);
+      await lateCancel(once.w, once.g.id);
+      const twice = await scene([...switches], count);
+      const tap = () => twice.w.organizer.call('POST', `/api/admin/sessions/${twice.g.id}/decision`, { decision: 'cancel', confirm: true, venueWaived: false });
+      await Promise.all([tap(), tap()]);
+      for (const n of ['Blair', 'Casey']) {
+        expect([n, await pot(twice.w, n)]).toEqual([n, await pot(once.w, n)]);
+        expect((await seat(twice.w, twice.g.id, n)).creditCents).toBe((await seat(once.w, once.g.id, n)).creditCents);
+      }
+      expect((await books(twice.w)).total).toBe((await books(once.w)).total);
+      expect(health(twice.w)).toEqual({});
+    });
+  }
+  it('late drop, made cheaper: two Drop out taps leave exactly what one leaves', async () => {
+    const once = await scene(['short-games-switch', 'late-fees'], 4);
+    expect((await (await phone(once.w, 'Blair')).call('POST', `/api/sessions/${once.g.id}/withdraw`, {})).status).toBe(200);
+    const twice = await scene(['short-games-switch', 'late-fees'], 4);
+    const b = await phone(twice.w, 'Blair');
+    await Promise.all([b.call('POST', `/api/sessions/${twice.g.id}/withdraw`, {}), b.call('POST', `/api/sessions/${twice.g.id}/withdraw`, {})]);
+    expect(await pot(twice.w, 'Blair')).toBe(await pot(once.w, 'Blair'));
+    expect(await pot(twice.w, 'Blair')).toBe(300);
+    expect((await books(twice.w)).total).toBe((await books(once.w)).total);
+    expect(health(twice.w)).toEqual({});
+  });
+});
+
+describe('the seat trim (shared by the fee split and this fix), built from one old read and run twice: the second run moves nothing', () => {
+  for (const [label, cashPaid] of [['a seat paid with $14 of credit', false], ['a seat with $14 cash held on it (a Reopen made a pair)', true]] as const) {
+    it(label, async () => {
+      const w = await group();
+      const old = await addGame(w, '2026-11-11', 120);
+      await joinAll(w, old.id, ['Blair']);
+      await pay(w, old.id, ['Blair']);
+      expect((await w.organizer.call('POST', `/api/admin/sessions/${old.id}/decision`, { decision: 'cancel', confirm: true })).status).toBe(200);
+      const g = await addGame(w, '2026-11-10', 120);
+      await joinAll(w, g.id, ['Blair']);
+      const raw = (w.app.db as any).raw;
+      if (cashPaid) {
+        // Turn the credit on the seat into a held cash pair, the shape a Reopen leaves (+kept/-used 'cash', the seat unpaid).
+        raw.prepare("UPDATE credit_ledger SET reason = 'cash' WHERE session_id = ? AND kind = 'used'").run(g.id);
+        raw.prepare("INSERT INTO credit_ledger (id, group_id, player_id, kind, amount_cents, session_id, created_at, reason) SELECT 'pair-kept', group_id, player_id, 'kept', amount_cents, session_id, created_at, 'cash' FROM credit_ledger WHERE session_id = ? AND kind = 'used'").run(g.id);
+        raw.prepare('DELETE FROM credit_ledger WHERE session_id = ? AND player_id = ?').run(old.id, w.byName.Blair); // the $14 is cash now, not credit
+        raw.prepare("UPDATE session_players SET payment_status = 'unpaid', payment_amount_cents = NULL WHERE session_id = ?").run(g.id);
+      }
+      const rows = raw.prepare("SELECT id, amount_cents AS c, reason FROM credit_ledger WHERE session_id = ? AND player_id = ? AND kind = 'used' AND ended_at IS NULL ORDER BY created_at, rowid").all(g.id, w.byName.Blair);
+      const sp = raw.prepare('SELECT payment_status AS ps, payment_amount_cents AS amt FROM session_players WHERE session_id = ?').get(g.id);
+      const seatRead = {
+        playerId: w.byName.Blair,
+        paid: sp.ps === 'paid',
+        paymentCents: sp.ps === 'paid' ? sp.amt : 0,
+        used: rows.filter((r: any) => r.reason !== 'cash').map((r: any) => ({ id: r.id, cents: r.c })),
+        heldCashCents: rows.filter((r: any) => r.reason === 'cash').reduce((t: number, r: any) => t + r.c, 0),
+      };
+      const nowIso = new Date(w.app.now).toISOString();
+      const run = () => w.app.env.DB.batch(splitSeatStatements(w.app.env.DB, { groupId: raw.prepare('SELECT id FROM groups').get().id, sessionId: g.id, seat: seatRead, priceCents: 1100, nowIso, guard: '1 = 1' }).statements);
+      await run();
+      const after = raw.prepare('SELECT player_id, kind, amount_cents, reason, ended_at FROM credit_ledger ORDER BY rowid').all();
+      const seatAfter = raw.prepare('SELECT payment_status, payment_amount_cents FROM session_players WHERE session_id = ?').all(g.id);
+      await run();
+      expect(raw.prepare('SELECT player_id, kind, amount_cents, reason, ended_at FROM credit_ledger ORDER BY rowid').all()).toEqual(after);
+      expect(raw.prepare('SELECT payment_status, payment_amount_cents FROM session_players WHERE session_id = ?').all(g.id)).toEqual(seatAfter);
+      expect(await pot(w, 'Blair')).toBe(300);
+    });
+  }
 });
 
 // ---------- 2. Double Finalize ----------

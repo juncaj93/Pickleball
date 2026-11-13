@@ -17,12 +17,12 @@ export const LIVE_SWITCHES = ['short-games-switch', 'late-fees', 'late-fee-split
 
 const ok = (res: { status: number; text: string }, what: string) => expect(res.status, `${what}: ${res.text}`).toBe(200);
 
-export async function buildWorld(opts: { bookingHours: boolean }): Promise<World> {
+export async function buildWorld(opts: { bookingHours: boolean; extraSwitches?: string[] }): Promise<World> {
   const ctx = (await setupGroup()) as World;
   ctx.app.now = Date.parse('2026-10-05T16:00:00.000Z'); // Mon Oct 5, 12:00 PM Eastern
   for (const name of MORE) ok(await ctx.organizer.call('POST', '/api/admin/players', { name, phone: `(313) 555-02${MORE.indexOf(name)}0` }), `add ${name}`);
   ok(await ctx.organizer.call('PUT', '/api/admin/group', { organizerName: 'Alex' }), 'organizer name');
-  for (const sw of [...LIVE_SWITCHES, ...(opts.bookingHours ? ['booking-hours-switch'] : [])]) ok(await ctx.organizer.call('PUT', `/api/admin/${sw}`, { on: true }), sw);
+  for (const sw of [...LIVE_SWITCHES, ...(opts.bookingHours ? ['booking-hours-switch'] : []), ...(opts.extraSwitches ?? [])]) ok(await ctx.organizer.call('PUT', `/api/admin/${sw}`, { on: true }), sw);
   const dash = (await ctx.organizer.call('GET', '/api/admin/dashboard')).data;
   ctx.byName = Object.fromEntries(dash.players.map((p: { name: string; id: string }) => [p.name, p.id]));
   ctx.phones = {};
