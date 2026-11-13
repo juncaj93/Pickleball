@@ -41,6 +41,7 @@ import { BLOCKED_CODE, blockSheet, NUDGE_TOAST_MS, nudgeState, nudgeToast, oweLi
 import { registerCant, TileBorders, TimeBars, tsClass, tsKind, tsTime, useCourtFlip, type TsKind } from '../timeShift';
 import { gameCreditBackNote, gameMinutes, lengthWords, viewFlat, viewPrice } from '../../shared/gameLength';
 import { CalendarDirections } from '../CardButtons';
+import { HomeScreenTip } from '../homeScreenTip';
 import { GameDayButtons, isGameDayCard } from '../GameDay';
 import { asOfText, clearLastScreen, measureLayout, readLastScreen, saveLastScreen, type SavedScreen } from '../lastScreen';
 import { navigate, rememberDirectLoad, takeEarly } from '../lib';
@@ -255,7 +256,7 @@ export function PlayerHome({
     [groupKey, viewAs?.id, pretend, demo],
     tracker,
   );
-  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker);
+  const instant = useInstantRoot(load.data?.instantTaps === true, load.data, load.reload, tracker, load.data?.tapGuardFix === true);
   useRefreshOnReturn(load.refresh);
   const [switching, setSwitching] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -702,6 +703,8 @@ export function PlayerHome({
           </div>
         )}
         {showSaved && <SavedScreenView saved={saved!} />}
+        {/* Zip 37 "Home Screen tip" (only while on for this phone; iPhone Safari, second visit): the card above everything, THIS WEEK included. Always mounted so it sees whether a name was already picked when the page opened. */}
+        <HomeScreenTip g={g} blocked={!ownPhone || pickName} />
         {load.loading && !g && !load.error && !showSaved && <ScheduleSkeleton />}
         {load.error && load.error.status !== 404 && (!g || !!viewAs) && <ErrorState error={load.error} onRetry={load.reload} />}
 

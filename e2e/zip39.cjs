@@ -121,7 +121,7 @@ async function main() {
       await check(`Settings at ${width} ${scheme}: "Made cheaper after paying" is the top Feature switches row, fits, and is off`, async () => {
         const { ctx, page, errors } = await openSettings({ width, scheme });
         const first = await page.locator('#switches [data-row], [data-switches-tidy] [data-row]').evaluateAll((els) => els.slice(0, 2).map((e) => e.getAttribute('data-row')));
-        assert(first.join('|') === 'cheaperFixAll|extendedTimeAll', `newest first: ${first}`);
+        assert(first.join('|') === 'cheaperFixAll|homeScreenTipAll', `newest first: ${first}`);
         const row = page.locator('[data-row="cheaperFixAll"]');
         assert((await row.locator('.set-name').innerText()).includes('Made cheaper after paying'), 'its name');
         assert(!(await row.locator('input').isChecked()), 'off at ship');

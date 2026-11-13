@@ -16,6 +16,7 @@ import * as alerts from './alerts';
 import * as tasks from './tasks';
 import * as errorAlerts from './errorAlerts';
 import { goText } from './go';
+import { gameDayTextPage } from './gameDayText';
 import { afterTap as secondChanceAfterTap, tapWatch as secondChanceWatch } from './secondChance';
 import { type FewerQueriesDb, withFewerQueries } from './speed';
 import { isWrite, VIEW_ONLY_ALLOWED_WRITES, VIEW_ONLY_MESSAGE, viewOnlyCookie, viewOnlyDb } from './viewOnly';
@@ -169,6 +170,8 @@ route('PUT', '/api/admin/spent-totals-switch', admin.setSpentTotalsSwitch);
 // Zip 39 (server/cheaperFix.ts): Made cheaper after paying.
 route('PUT', '/api/admin/cheaper-fix-switch', admin.setCheaperFixSwitch);
 route('PUT', '/api/admin/booking-hours-switch', admin.setBookingHoursSwitch);
+// Zip 35 (server/tapGuardFix.ts): Tap guard fix.
+route('PUT', '/api/admin/tap-guard-switch', admin.setTapGuardFixSwitch);
 // Zip 34 (server/checkInPay.ts): Check-in pay line.
 route('PUT', '/api/admin/checkin-pay-switch', admin.setCheckInPaySwitch);
 // Zip 32 (server/playersSheetRedo.ts): Players sheet redo.
@@ -176,6 +179,9 @@ route('PUT', '/api/admin/players-sheet-redo-switch', admin.setPlayersSheetRedoSw
 // Zip 30 (server/actingForOthers.ts): Acting for others.
 route('PUT', '/api/admin/acting-others-switch', admin.setActingOthersSwitch);
 route('PUT', '/api/admin/extended-time-switch', admin.setExtendedTimeSwitch);
+// Zip 37: Home Screen tip and Game day text.
+route('PUT', '/api/admin/home-screen-tip-switch', admin.setHomeScreenTipSwitch);
+route('PUT', '/api/admin/game-day-text-switch', admin.setGameDayTextSwitch);
 route('POST', '/api/admin/sessions/:id/second-chance', admin.secondChanceTap);
 // Zip 13 (server/zip13.ts): Players redo, Swap to Alex, Undo on admin toasts.
 route('PUT', '/api/admin/players-redo-switch', admin.setZip13Switch('playersRedo'));
@@ -197,6 +203,8 @@ route('POST', '/api/admin/sessions/:id/task-mark', tasks.taskMark);
 
 // The direct text link from a night-before Telegram alert (signed token, no sign-in).
 route('POST', '/api/go', goText);
+// Zip 37 (server/gameDayText.ts): the "Text the players" page's numbers and words, by private token.
+route('POST', '/api/gdt', gameDayTextPage);
 
 // The cron Worker's 5-minute tick (secret header; anyone else gets Not found).
 route('POST', '/api/cron/tick', (ctx) => tasks.cronTick(ctx));

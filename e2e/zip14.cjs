@@ -286,7 +286,7 @@ async function main() {
     });
   }
 
-  await check('Directions: Apple Maps on an iPhone, Google Maps elsewhere, the one court address, on every game day card (court or not)', async () => {
+  await check('Directions: Apple Maps on an iPhone, Google Maps elsewhere, the club name, on every game day card (court or not)', async () => {
     for (const [ua, host] of [
       [IPHONE, 'https://maps.apple.com/?daddr='],
       [ANDROID, 'https://www.google.com/maps/dir/?api=1&destination='],
@@ -294,7 +294,7 @@ async function main() {
       const { ctx, page } = await openPlayer('Indy', 390, 'light', { ua });
       const hrefs = await page.locator('article.gd [data-gd-directions]').evaluateAll((as) => as.map((a) => a.getAttribute('href')));
       assert(hrefs.length >= 3, `directions on every tonight card (${hrefs.length})`);
-      for (const h of hrefs) assert(h.startsWith(host) && h.includes('40100%20Six%20Mile%20Rd'), h);
+      for (const h of hrefs) assert(h.startsWith(host) && h.endsWith('Northville+Pickleball+Club'), h);
       await ctx.close();
     }
     // A player who is NOT in tonight's game sees Directions on it too (and Court 3).

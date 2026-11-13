@@ -1,4 +1,4 @@
-import { COURT_ADDRESS, directionsUrl } from '../shared/zip9';
+import { COURT_NAME, directionsUrl } from '../shared/zip9';
 
 // Zip 9, "Card time and buttons" (CARD_TIME_BUTTONS). Player cards only, display only.
 //
@@ -32,7 +32,7 @@ export function CalendarDirections({ calendarHref, dayLabel }: { calendarHref: s
       <a className="z9-half" href={calendarHref} aria-label="Add to calendar" data-card-calendar>
         <CalendarOutlineIcon />
       </a>
-      <a className="z9-half" href={directionsUrl(COURT_ADDRESS, ua)} target="_blank" rel="noopener noreferrer" aria-label="Directions" data-card-directions>
+      <a className="z9-half" href={directionsUrl(COURT_NAME, ua)} target="_blank" rel="noopener noreferrer" aria-label="Directions" data-card-directions>
         <DirectionsArrowIcon />
       </a>
     </span>

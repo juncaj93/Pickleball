@@ -8,7 +8,9 @@ import { SPENT_TOTALS } from '../shared/spentTotals';
 import { CHEAPER_FIX } from '../shared/cheaperFix';
 import { ACTING_OTHERS, PHONE_TAG_HEADER } from '../shared/actingForOthers';
 import { PLAYERS_SHEET_REDO } from '../shared/playersSheetRedo';
+import { HOME_SCREEN_TIP } from '../shared/homeScreenTip';
 import { CHECKIN_PAY_LINE } from '../shared/checkInPay';
+import { TAP_GUARD_FIX } from '../shared/tapGuard';
 import { phoneTag } from './phoneTag';
 import { BOOKING_HOURS } from '../shared/bookingHours';
 import { EXTENDED_TIME } from '../shared/extension';
@@ -228,6 +230,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(CHEAPER_FIX.link)) headers[CHEAPER_FIX.header] = 'on';
   // Zip 30 "Acting for others" private test switch for this phone (/admin?actingothers=on, =off ends it). See server/actingForOthers.ts.
   if (gameDayTest(ACTING_OTHERS.link)) headers[ACTING_OTHERS.header] = 'on';
+  // Zip 35 "Tap guard fix" private test switch for this phone (?tapguard=on on any page, =off ends it). See server/tapGuardFix.ts.
+  if (gameDayTest(TAP_GUARD_FIX.link)) headers[TAP_GUARD_FIX.header] = 'on';
   // Zip 34 "Check-in pay line" private test switch for this phone (/admin?checkinpay=on, =off ends it). See server/checkInPay.ts.
   if (gameDayTest(CHECKIN_PAY_LINE.link)) headers[CHECKIN_PAY_LINE.header] = 'on';
   // Zip 32 "Players sheet redo" private test switch for this phone (/admin?playerssheet=on, =off ends it). See server/playersSheetRedo.ts.
@@ -236,6 +240,8 @@ export async function api<T>(method: string, path: string, body?: unknown, opts:
   if (gameDayTest(BOOKING_HOURS.link)) headers[BOOKING_HOURS.header] = 'on';
   // Zip 31 "Extended time" private test switch for this phone (?extendedtime=on, =off ends it). See server/extension.ts.
   if (gameDayTest(EXTENDED_TIME.link)) headers[EXTENDED_TIME.header] = 'on';
+  // Zip 37 "Home Screen tip" private test switch for this phone (?homescreentip=on, =off ends it). See server/homeScreenTip.ts.
+  if (gameDayTest(HOME_SCREEN_TIP.link)) headers[HOME_SCREEN_TIP.header] = 'on';
   // Zip 15 "Second Chance" private test switch for this phone (/admin?secondchance=on: the Home cards, never a Telegram), and the
   // preview-only "pretend it's noon on game day" (?noontest=on; the server ignores it unless SECOND_CHANCE_TEST is set, only on previews).
   if (gameDayTest(SECOND_CHANCE.link)) headers[SECOND_CHANCE.header] = 'on';
@@ -793,7 +799,7 @@ export function gameDayTest(link: string): boolean {
 if (typeof window !== 'undefined') {
   // Zip 15 too: ?secondchance=on and the preview-only ?noontest=on (the same word with =off ends it).
   // Zip 16 too: ?aftergame=on.
-  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link]) {
+  for (const link of [GAME_DAY_CARD.link, GAME_DAY_TEST.link, SECOND_CHANCE.link, SECOND_CHANCE_TEST.link, AFTER_GAME_CARD.link, UNPAID_NUDGE.link, TOTALS_REFRESH.link, SPENT_TOTALS.link, CHEAPER_FIX.link, BOOKING_HOURS.link, ACTING_OTHERS.link, PLAYERS_SHEET_REDO.link, CHECKIN_PAY_LINE.link, EXTENDED_TIME.link, HOME_SCREEN_TIP.link, TAP_GUARD_FIX.link]) {
     const want = new URLSearchParams(window.location.search).get(link);
     if (want === 'on') storageSet(`pb_${link}`, 'on');
     else if (want === 'off') storageRemove(`pb_${link}`);

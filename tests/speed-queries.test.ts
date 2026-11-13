@@ -45,7 +45,7 @@ async function world(at: number, zip910: boolean, extraEnv: Record<string, strin
       if (k !== 'set-cookie') headersOut.push([k, v]);
     });
     // mainTrips: what main asks (main has no Zip 12 or Zip 13 rows: the reads of `speed_...` and the three Zip 13 rows are taken out; Zip 14 to 17, Zip 21, Zip 23, Zip 24, Zip 27, Zip 30, Zip 31 and Zip 32 rows too).
-    const speedReads = (c.seq ?? []).filter((x) => x.includes('"speed_') || /"(players_redo_on|swap_button_on|admin_undo_on|game_day_card_on|second_chance_on|after_game_card_on|unpaid_nudge_on|error_alerts_on|totals_refresh_on|spent_totals_on|booking_hours_on|acting_others_on|players_sheet_redo_on|checkin_pay_line_on|extended_time_on)"/.test(x)).length;
+    const speedReads = (c.seq ?? []).filter((x) => x.includes('"speed_') || /"(players_redo_on|swap_button_on|admin_undo_on|game_day_card_on|second_chance_on|after_game_card_on|unpaid_nudge_on|error_alerts_on|totals_refresh_on|spent_totals_on|booking_hours_on|acting_others_on|players_sheet_redo_on|checkin_pay_line_on|extended_time_on|home_screen_tip_on|game_day_text_on|tap_guard_fix_on)"/.test(x)).length;
     return { status: res.status, text, headers: headersOut, trips: c.trips, mainTrips: c.trips - speedReads, cookie: res.headers.getSetCookie().map((x) => x.split(';')[0]).join('; ') };
   };
   const login = await call('POST', '/api/admin/login', '', { pin: previewPin() });

@@ -8,5 +8,5 @@
 
 export const PREVIEW_CALM = { header: 'X-Preview-Alerts', link: 'alerts', env: 'PREVIEW_CALM' } as const;
 
-/** What the calm admin Home still shows (Zip 15: the Second Chance cards and the Mark paid card). */
-export const ADMIN_CALM_SHOWS = ['secondChance', 'markPaidTonight'] as const;
+/** What the calm admin Home still shows (Zip 35: the Second Chance cards only; Zip 15 also showed the Mark paid card, which piled up unpaid rows). */
+export const ADMIN_CALM_SHOWS = ['secondChance'] as const;

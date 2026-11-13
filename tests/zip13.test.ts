@@ -259,7 +259,7 @@ describe('the preview seed', () => {
     expect([...ZIP13_SWITCHES_ON].sort()).toEqual(Object.values(ZIP13).map((z) => z.task).sort());
     const src = (await import('node:fs')).readFileSync('scripts/seed-preview.ts', 'utf8');
     // The preview database is the small world now (Alex, Nov 8); its rows: tests/preview-small.test.ts.
-    expect(src).toContain('buildSmallPreview(Date.now())');
+    expect(src).toContain('buildSmallPreview(Date.now()');
     const at = Date.parse('2026-11-07T17:00:00.000Z');
     const rows = (sql: string) => ZIP13_SWITCHES_ON.filter((t) => sql.includes(`'preview-${t}'`));
     expect(rows((await buildSeed(at, { zip13: true })).sql)).toHaveLength(3);

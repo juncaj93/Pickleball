@@ -15,16 +15,22 @@ export function zip9Allowed(flag: string | undefined | null): boolean {
   return (flag ?? 'on').trim().toLowerCase() !== 'off';
 }
 
-/** The court, in ONE place (the Directions half of the joined button). */
+/** The court's street address (kept for anything that needs it, such as the calendar). Maps links search the club's NAME instead (below). */
 export const COURT_ADDRESS = '40100 Six Mile Rd, Northville, MI 48168, United States';
 
 /**
- * A plain https maps link for directions to the court. An iPhone or iPad gets the maps.apple.com link, which iOS opens in Apple
- * Maps (or the maps app set as the default). Everything else (Android, a computer) gets Google's directions link, which Android
- * opens in Google Maps (or asks which maps app) and a computer opens in the browser.
+ * The club's name, in ONE place. Every Maps link the site builds searches this name (the Directions buttons on the cards and the game day
+ * text), so renaming or re-pointing it is this one line. A constant on purpose: it is not read from Settings.
  */
-export function directionsUrl(address: string = COURT_ADDRESS, ua = ''): string {
-  const q = encodeURIComponent(address);
+export const COURT_NAME = 'Northville Pickleball Club';
+
+/**
+ * A plain https maps link for directions to the club, searching its name. An iPhone or iPad gets the maps.apple.com link, which iOS opens in
+ * Apple Maps (or the maps app set as the default). Everything else (Android, a computer) gets Google's directions link with the same name,
+ * which Android opens in Google Maps (or asks which maps app) and a computer opens in the browser.
+ */
+export function directionsUrl(place: string = COURT_NAME, ua = ''): string {
+  const q = encodeURIComponent(place).replace(/%20/g, '+');
   if (/iPhone|iPad|iPod/i.test(ua)) return `https://maps.apple.com/?daddr=${q}`;
   return `https://www.google.com/maps/dir/?api=1&destination=${q}`;
 }

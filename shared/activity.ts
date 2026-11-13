@@ -244,10 +244,22 @@ function lineText(e: ActivityEntry, tz: string, organizer: string, opts: { names
       return `${who} confirmed extra time paid with the next game`;
     case 'extension_unmarked_with_seat':
       return `${who} unmarked extra time paid with the next game`;
+    case 'tap_guard_fix_on':
+      return `${who} switched "Tap guard fix" on`;
+    case 'tap_guard_fix_off':
+      return `${who} switched "Tap guard fix" off`;
     case 'checkin_pay_line_on':
       return `${who} switched "Check-in pay line" on`;
     case 'checkin_pay_line_off':
       return `${who} switched "Check-in pay line" off`;
+    case 'home_screen_tip_on':
+      return `${who} switched "Home Screen tip" on`;
+    case 'home_screen_tip_off':
+      return `${who} switched "Home Screen tip" off`;
+    case 'game_day_text_on':
+      return `${who} switched "Game day text" on`;
+    case 'game_day_text_off':
+      return `${who} switched "Game day text" off`;
     case 'players_sheet_redo_on':
       return `${who} switched "Players sheet redo" on`;
     case 'players_sheet_redo_off':

@@ -176,6 +176,8 @@ export interface GroupView {
   paySheet?: boolean;
   /** "Instant taps" is on for this screen (server/instantTaps.ts): taps draw at once and save in the background. Missing: every tap works exactly as before. */
   instantTaps?: boolean;
+  /** Zip 35 "Tap guard fix" is on for this screen (server/tapGuardFix.ts). Missing: the fast-tap guard is exactly as before. */
+  tapGuardFix?: boolean;
   /** "Home collapse" is on for this screen (server/homeCollapse.ts): Home shows this week and next week, later games behind one button. Missing: Home is exactly as before. */
   homeCollapse?: boolean;
   /** "Tonight glow" is on for this screen (server/zip7.ts): TONIGHT / TOMORROW tags and the badge glow. Missing: tiles are exactly as before. */
@@ -198,6 +200,8 @@ export interface GroupView {
   lastScreen?: boolean;
   /** "Seat dots" is on for this screen (server/seatDots.ts): every empty seat a dashed ring. Missing: exactly as before. */
   seatDots?: boolean;
+  /** Zip 37 "Home Screen tip" (shared/homeScreenTip.ts): this phone may show the Add to Home Screen card (the phone decides when). Missing: exactly as before. */
+  homeScreenTip?: true;
   /**
    * Swap to Alex (Zip 13): this phone is signed in as the organizer (real PIN), the switch is on, and the page shows the organizer's own
    * name (Zip 18): the title "Alex" + swap icon goes to Admin. Missing for everyone else, and always in View as.
@@ -560,6 +564,10 @@ export interface AdminDashboard {
   lastCallTexts?: boolean;
   /** Settings > Feature switches > "Last call texts" is on (for everyone). */
   lastCallTextsForAll?: boolean;
+  /** Zip 35 "Tap guard fix" is on for this screen (server/tapGuardFix.ts): the page ignores only a repeat tap on the same button, or a tap on another button when the first one went away. Missing: the guard is exactly as before. */
+  tapGuardFix?: boolean;
+  /** The Settings > Feature switches row for the Tap guard fix: on for every phone, player and organizer. */
+  tapGuardFixForAll?: boolean;
   /** Zip 34 "Check-in pay line" is on for this screen (server/checkInPay.ts): the Check-in text carries a soft pay line while somebody signed up still owes. Missing: the words are exactly as before. */
   checkInPay?: boolean;
   /** The Settings > Feature switches row for the Check-in pay line: on for every organizer phone and the texted Telegram link. */
@@ -617,6 +625,9 @@ export interface AdminDashboard {
   gameDayCardForAll?: true;
   /** Zip 16 "After-game cards" (shared/afterGame.ts): its Settings row. */
   afterGameCardForAll?: true;
+  /** Zip 37 "Home Screen tip" and "Game day text" (shared/homeScreenTip.ts, shared/gameDayText.ts): their Settings rows, only while on. */
+  homeScreenTipForAll?: true;
+  gameDayTextForAll?: true;
   /** Zip 23 "Totals refresh" (shared/totalsRefresh.ts), only while on (off: the answer is exactly as before): the new Money > Totals look; and its Settings row. */
   totalsRefresh?: true;
   totalsRefreshForAll?: true;

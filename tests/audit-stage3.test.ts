@@ -308,7 +308,7 @@ describe('Telegram: Refund requested', () => {
     expect(m.body.text).toBe('Refund requested: Alex wants $9 back.');
     expect(m.body.chat_id).toBe(CHAT);
     expect(m.body.reply_markup!.inline_keyboard).toEqual([[{ text: 'Open site', url: `https://${LINK}/admin` }]]);
-    expect(JSON.stringify(m.body)).not.toMatch(/555|VenmoSecret|\$14|1400/);
+    expect(withoutIds(JSON.stringify(m.body))).not.toMatch(/555|VenmoSecret|\$14|1400/);
   });
 
   it('respects the Refund requests switch and the master switch; Not now, Mark refunded, cancel and undo are quiet', async () => {

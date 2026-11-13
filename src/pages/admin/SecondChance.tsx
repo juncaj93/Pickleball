@@ -58,8 +58,13 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
   const own = localParts(Date.parse(c.startsAt), tz);
   // Every half hour in the range, none left out (Alex, Nov 8). A time another game already starts at is refused by the server, with a
   // message that says so; nothing is hidden here.
-  const times = pickTimes(c.startsAt, tz, nowMs);
-  const [minutes, setMinutes] = useState(own.hour * 60 + own.minute);
+  // Booking hours on (Zip 35): only a start whose end is inside the venue hours. The server checks too, before it reopens anything.
+  const lengthMs = Date.parse(c.endsAt) - Date.parse(c.startsAt);
+  const times = pickTimes(c.startsAt, tz, nowMs, ctx.d.bookingHours === true ? { lengthMs } : undefined);
+  const ownMin = own.hour * 60 + own.minute;
+  const [picked, setMinutes] = useState(ownMin);
+  const minutes = times.includes(picked) ? picked : (times[0] ?? picked);
+  const noTime = times.length === 0;
   const dismiss = () => act.run(() => tap(c.sessionId, { action: 'dismiss' }), 'Hidden for today');
   const when = dayTime(c.startsAt, tz);
   if (c.step === 1) {
@@ -96,12 +101,13 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
       tone="blue"
       icon="clock"
       title="Court open tonight?"
-      sub={`Reopen ${when}, or pick a new time.`}
+      sub={noTime ? 'No time fits inside the venue hours for a game this long. Nothing was reopened.' : `Reopen ${when}, or pick a new time.`}
       onX={dismiss}
       xLabel="Court open tonight?"
       data={{ 'data-sc-card': 'chance', 'data-sc-step': '2', 'data-session': c.sessionId }}
       actions={
         <>
+          {!noTime && (
           <label className="ac-btn sc-time" data-sc-time>
             <span aria-hidden="true">{minutesLabel(minutes)}</span>
             <ChevIcon />
@@ -113,12 +119,13 @@ function ChanceCard({ ctx, c }: { ctx: AdminCtx; c: Extract<ScCard, { kind: 'cha
               ))}
             </select>
           </label>
+          )}
           <button
             type="button"
             className="ac-btn"
             data-ac-tone="green"
             data-sc-reopen
-            disabled={act.busy}
+            disabled={act.busy || noTime}
             onClick={() => act.run(() => tap(c.sessionId, { action: 'reopen', minutes }), `Reopened for ${minutesLabel(minutes)}`)}
           >
             Reopen game
